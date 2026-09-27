@@ -1,0 +1,55 @@
+<svg viewBox="0 0 900 372" role="img" aria-labelledby="l84f1-t l84f1-d">
+  <title id="l84f1-t">The shadow test</title>
+  <desc id="l84f1-d">Two convex shapes projected onto two different directions, one of which shows a gap, and a non-convex pair that are apart while every shadow overlaps.</desc>
+  <defs>
+    <marker id="e-i-l84f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="372" class="fill-bg" stroke="none"/>
+<text x="161.0" y="46" class="sm" text-anchor="middle">a direction with a gap</text>
+<text x="161.0" y="62" class="xs muted" text-anchor="middle">the shadows do not meet — apart, proved</text>
+<line x1="39.0" y1="248.0" x2="283.0" y2="248.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<text x="295.0" y="252.0" class="xs mono muted" text-anchor="middle">L</text>
+<path d="M 145.00,136.00 L 131.00,160.25 L 103.00,160.25 L 89.00,136.00 L 103.00,111.75 L 131.00,111.75 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<line x1="89.0" y1="248.0" x2="145.0" y2="248.0" stroke="#5082e6" stroke-width="6.0" fill="none"/>
+<line x1="89.0" y1="136.0" x2="89.0" y2="248.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="145.0" y1="136.0" x2="145.0" y2="248.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<path d="M 191.00,122.00 L 235.00,150.00 L 197.00,186.00 Z" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<line x1="191.0" y1="248.0" x2="235.0" y2="248.0" stroke="#5ac878" stroke-width="6.0" fill="none"/>
+<line x1="191.0" y1="122" x2="191.0" y2="248.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="235.0" y1="150" x2="235.0" y2="248.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="161" y="330" class="xs mono t-ok" text-anchor="middle">gap on this L  +0.74 m</text>
+<text x="161" y="346" class="xs muted" text-anchor="middle">one witness is a complete proof</text>
+<text x="451.0" y="46" class="sm" text-anchor="middle">a direction without one</text>
+<text x="451.0" y="62" class="xs muted" text-anchor="middle">this lamp says nothing at all</text>
+<line x1="333.2" y1="58.7" x2="389.8" y2="296.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<text x="392.5701030694654" y="311.67711476912757" class="xs mono muted" text-anchor="middle">L</text>
+<path d="M 435.00,136.00 L 421.00,160.25 L 393.00,160.25 L 379.00,136.00 L 393.00,111.75 L 421.00,111.75 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<line x1="348.4" y1="122.4" x2="360.9" y2="174.6" stroke="#5082e6" stroke-width="6.0" fill="none"/>
+<line x1="393.0" y1="111.75128869403572" x2="348.4109408929222" y2="122.3774005628139" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="421.0" y1="160.2487113059643" x2="360.8520913678237" y2="174.5826851237052" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<path d="M 481.00,122.00 L 525.00,150.00 L 487.00,186.00 Z" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<line x1="355.5" y1="151.9" x2="370.2" y2="213.8" stroke="#5ac878" stroke-width="6.0" fill="none"/>
+<line x1="481.0" y1="122" x2="355.4512483690446" y2="151.91978540323615" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="487.0" y1="186" x2="370.2060156763803" y2="213.83341850840065" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="451" y="330" class="xs mono muted" text-anchor="middle">overlap on this L  −0.38 m</text>
+<text x="451" y="346" class="xs muted" text-anchor="middle">no conclusion — try another direction</text>
+<text x="743.0" y="46" class="sm" text-anchor="middle">and why CONVEX is in the theorem</text>
+<text x="743.0" y="62" class="xs muted" text-anchor="middle">apart, yet EVERY shadow overlaps</text>
+<path d="M 685.00,106.00 L 801.00,106.00 L 801.00,188.00 L 771.00,188.00 L 771.00,138.00 L 715.00,138.00 L 715.00,188.00 L 685.00,188.00 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 761.00,160.00 L 758.59,169.00 L 752.00,175.59 L 743.00,178.00 L 734.00,175.59 L 727.41,169.00 L 725.00,160.00 L 727.41,151.00 L 734.00,144.41 L 743.00,142.00 L 752.00,144.41 L 758.59,151.00 Z" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<line x1="685.0" y1="232.0" x2="801.0" y2="232.0" stroke="#5082e6" stroke-width="6.0" fill="none"/>
+<line x1="725.0" y1="239.0" x2="761.0" y2="239.0" stroke="#e05c5c" stroke-width="6.0" fill="none"/>
+<line x1="625.0" y1="228.0" x2="861.0" y2="228.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<line x1="849.0" y1="106.0" x2="849.0" y2="188.0" stroke="#5082e6" stroke-width="6.0" fill="none"/>
+<line x1="856.0" y1="142.0" x2="856.0" y2="178.0" stroke="#e05c5c" stroke-width="6.0" fill="none"/>
+<line x1="845.0" y1="90.0" x2="845.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<text x="743.0" y="266" class="xs muted" text-anchor="middle">the ball sits in the cup's mouth,</text>
+<text x="743.0" y="280" class="xs muted" text-anchor="middle">touching nothing — and no direction</text>
+<text x="743.0" y="294" class="xs muted" text-anchor="middle">can say so, because the gap is not</text>
+<text x="743.0" y="308" class="xs muted" text-anchor="middle">between the two SHAPES, it is inside</text>
+<text x="743.0" y="322" class="xs muted" text-anchor="middle">one of them</text>
+</svg>

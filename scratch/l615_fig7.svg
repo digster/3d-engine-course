@@ -1,0 +1,30 @@
+<svg viewBox="0 0 720 320" role="img" aria-labelledby="f615g-t f615g-d">
+  <title id="f615g-t">An unconverged Monte Carlo estimate against a converged one</title>
+  <desc id="f615g-d">Two pairs of bars. With a bright sun disc in the environment, 8,192 importance samples give a result nearly twice the converged one-million-sample answer; with the sun removed the same two sample counts agree to four hundredths of a per cent.</desc>
+  <defs>
+    <marker id="e-i-f615g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">The first version of this measurement was wrong, and it looked completely reasonable</text>
+<text x="210.0" y="58" class="xs" text-anchor="middle">SUN PRESENT (6000:1)</text>
+<rect x="110" y="72" width="198.0" height="34" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="116" y="94" class="xs" text-anchor="start">8,192 samples</text>
+<rect x="110" y="124" width="100.0" height="34" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="116" y="146" class="xs" text-anchor="start">1,000,000</text>
+<text x="210.0" y="198" class="xs" text-anchor="middle">a factor of 1.98 apart,</text>
+<text x="210.0" y="216" class="xs" text-anchor="middle">at roughness 0.75, n·v 0.6</text>
+<text x="520.0" y="58" class="xs" text-anchor="middle">SUN REMOVED (smooth sky)</text>
+<rect x="420" y="72" width="100.03999999999999" height="34" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="426" y="94" class="xs" text-anchor="start">8,192 samples</text>
+<rect x="420" y="124" width="100.0" height="34" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="426" y="146" class="xs" text-anchor="start">1,000,000</text>
+<text x="520.0" y="198" class="xs" text-anchor="middle">0.040% apart — the same</text>
+<text x="520.0" y="216" class="xs" text-anchor="middle">estimator, converged</text>
+<rect x="60" y="236" width="600" height="74" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="360.0" y="256" class="xs" text-anchor="middle">THE SAMPLE COUNT WAS NEVER THE PROBLEM — THE DYNAMIC RANGE WAS.</text>
+<text x="360.0" y="276" class="xs" text-anchor="middle">Lesson 6.14’s rule was to check a measurement CAN produce a non-null result before believing a</text>
+<text x="360.0" y="296" class="xs" text-anchor="middle">null one. This is its mirror: check a non-null result has CONVERGED before believing it.</text>
+</svg>

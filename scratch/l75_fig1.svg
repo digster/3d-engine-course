@@ -1,0 +1,66 @@
+<svg viewBox="0 0 760 396" role="img" aria-labelledby="f75a-t f75a-d">
+  <title id="f75a-t">One formula in three algebras</title>
+  <desc id="f75a-d">The three steps of slerp shown once, then the same three steps written for mat3, for complex numbers and for quaternions, with the measured agreement between them.</desc>
+  <defs>
+    <marker id="e-i-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-gold-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d678"/></marker></defs>
+<defs><marker id="e-blue-f75a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7ebcf8"/></marker></defs>
+<text x="380.0" y="22" class="sm mono t-hi" text-anchor="middle">slerp(a, b, t)  =  a · (a⁻¹ b)ᵗ</text>
+<text x="380.0" y="40" class="xs muted" text-anchor="middle">undo a  —  take t of the difference  —  redo a</text>
+<rect x="119.0" y="56" width="150.0" height="44" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="194.0" y="78" class="sm mono t-hi" text-anchor="middle">a⁻¹ b</text>
+<text x="194.0" y="93" class="xs muted" text-anchor="middle">the single turn from a to b</text>
+<line x1="273.00" y1="78.00" x2="301.00" y2="78.00" stroke="#f8d678" stroke-width="1.5" marker-end="url(#e-gold-f75a)"/>
+<rect x="305.0" y="56" width="150.0" height="44" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="380.0" y="78" class="sm mono t-hi" text-anchor="middle">( · )ᵗ</text>
+<text x="380.0" y="93" class="xs muted" text-anchor="middle">a fraction of that turn</text>
+<line x1="459.00" y1="78.00" x2="487.00" y2="78.00" stroke="#f8d678" stroke-width="1.5" marker-end="url(#e-gold-f75a)"/>
+<rect x="491.0" y="56" width="150.0" height="44" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="566.0" y="78" class="sm mono t-hi" text-anchor="middle">a · ( · )</text>
+<text x="566.0" y="93" class="xs muted" text-anchor="middle">start where a is</text>
+<rect x="23.0" y="126.0" width="226.0" height="146.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="136.0" y="143.0" class="xs muted" text-anchor="middle">Lesson 7.2  —  mat3</text>
+<text x="33.0" y="170.0" class="xs muted" text-anchor="start">a⁻¹</text>
+<text x="239.0" y="170.0" class="xs mono" text-anchor="end">transpose(A)</text>
+<text x="33.0" y="200.0" class="xs muted" text-anchor="start">the turn</text>
+<text x="239.0" y="200.0" class="xs mono" text-anchor="end">axis_angle_from_rotation</text>
+<text x="33.0" y="230.0" class="xs muted" text-anchor="start">the power</text>
+<text x="239.0" y="230.0" class="xs mono" text-anchor="end">scale the angle, Rodrigues</text>
+<line x1="31.0" y1="246.0" x2="241.0" y2="246.0" class="grid" stroke-width="1.0"/>
+<text x="33.0" y="263.0" class="xs mono t-hi" text-anchor="start">rotation_slerp</text>
+<text x="239.0" y="263.0" class="xs muted" text-anchor="end">9 floats, 3 trig calls</text>
+<rect x="267.0" y="126.0" width="226.0" height="146.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="380.0" y="143.0" class="xs muted" text-anchor="middle">Lesson 7.3  —  complex</text>
+<text x="277.0" y="170.0" class="xs muted" text-anchor="start">a⁻¹</text>
+<text x="483.0" y="170.0" class="xs mono" text-anchor="end">conjugate(z)</text>
+<text x="277.0" y="200.0" class="xs muted" text-anchor="start">the turn</text>
+<text x="483.0" y="200.0" class="xs mono" text-anchor="end">conj(a) * b</text>
+<text x="277.0" y="230.0" class="xs muted" text-anchor="start">the power</text>
+<text x="483.0" y="230.0" class="xs mono" text-anchor="end">complex_from_angle(t · arg)</text>
+<line x1="275.0" y1="246.0" x2="485.0" y2="246.0" class="grid" stroke-width="1.0"/>
+<text x="277.0" y="263.0" class="xs mono t-hi" text-anchor="start">complex_slerp</text>
+<text x="483.0" y="263.0" class="xs muted" text-anchor="end">2 floats, 1 atan2</text>
+<rect x="511.0" y="126.0" width="226.0" height="146.0" rx="3" fill="none" stroke="#7ebcf8" stroke-width="1.4"/>
+<text x="624.0" y="143.0" class="xs t-hi" text-anchor="middle">Lesson 7.5  —  quat</text>
+<text x="521.0" y="170.0" class="xs muted" text-anchor="start">a⁻¹</text>
+<text x="727.0" y="170.0" class="xs mono" text-anchor="end">conjugate(q)</text>
+<text x="521.0" y="200.0" class="xs muted" text-anchor="start">the turn</text>
+<text x="727.0" y="200.0" class="xs mono" text-anchor="end">conj(a) * nearest(a, b)</text>
+<text x="521.0" y="230.0" class="xs muted" text-anchor="start">the power</text>
+<text x="727.0" y="230.0" class="xs mono" text-anchor="end">quat_pow_unit</text>
+<line x1="519.0" y1="246.0" x2="729.0" y2="246.0" class="grid" stroke-width="1.0"/>
+<text x="521.0" y="263.0" class="xs mono t-hi" text-anchor="start">quat_slerp</text>
+<text x="727.0" y="263.0" class="xs muted" text-anchor="end">4 floats, 1 atan2</text>
+<text x="380.0" y="294.0" class="sm" text-anchor="middle">and the three are the same function, measured</text>
+<text x="33.0" y="318.0" class="xs muted" text-anchor="start">7.2's mat3 slerp vs ours, worst matrix entry</text>
+<text x="727.0" y="318.0" class="xs mono t-ok" text-anchor="end">4.172e−07</text>
+<text x="33.0" y="335.0" class="xs muted" text-anchor="start">7.3's complex slerp vs ours, worst angle</text>
+<text x="727.0" y="335.0" class="xs mono t-ok" text-anchor="end">2.384e−07 rad</text>
+<text x="380.0" y="370.0" class="xs t-bad" text-anchor="middle">CONTROL  —  average the two matrices entrywise instead: det = 0.00007, not 1</text>
+<text x="380.0" y="385.0" class="xs muted" text-anchor="middle">a matrix cannot be interpolated at all, which is why the storage had to change</text>
+</svg>

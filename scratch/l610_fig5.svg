@@ -1,0 +1,32 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="f610c-t f610c-d">
+  <title id="f610c-t">sRGB averaging against linear-light averaging</title>
+  <desc id="f610c-d">A 2x2 block of two white and two black texels. Averaged as sRGB bytes it gives code 127, which is 0.2122 of white. Averaged in linear light it gives code 188, which is 0.5029 — half the light, as it should be. The naive answer delivers 42 per cent of the light it should.</desc>
+  <defs>
+    <marker id="e-i-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f610c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Half of black and white, computed two ways</text>
+<rect x="130" y="90" width="34" height="34" fill="#f2f2f2" stroke="#8f918a" stroke-width="1"/>
+<rect x="164" y="90" width="34" height="34" fill="#141414" stroke="#8f918a" stroke-width="1"/>
+<rect x="130" y="124" width="34" height="34" fill="#141414" stroke="#8f918a" stroke-width="1"/>
+<rect x="164" y="124" width="34" height="34" fill="#f2f2f2" stroke="#8f918a" stroke-width="1"/>
+<text x="164" y="78" class="xs" text-anchor="middle">one 2x2 block</text>
+<text x="164" y="176" class="xs" text-anchor="middle">codes 255, 0, 0, 255</text>
+<text x="300" y="144" class="xs" text-anchor="start">averaged as sRGB BYTES</text>
+<rect x="300" y="152" width="52" height="34" fill="#7d7d7d" stroke="#8f918a" stroke-width="1"/>
+<text x="372" y="166" class="xs" text-anchor="start">code 127</text>
+<text x="450" y="166" class="xs" text-anchor="start">= 0.2122 of white</text>
+<text x="300" y="200" class="xs" text-anchor="start">(255+0+0+255)/4 = 127</text>
+<line x1="296" y1="148" x2="296" y2="206" class="#e05c5c" stroke-width="2.4"/>
+<text x="300" y="229" class="xs" text-anchor="start">averaged in LINEAR LIGHT</text>
+<rect x="300" y="237" width="52" height="34" fill="#bcbcbc" stroke="#8f918a" stroke-width="1"/>
+<text x="372" y="251" class="xs" text-anchor="start">code 188</text>
+<text x="450" y="251" class="xs" text-anchor="start">= 0.5029 of white</text>
+<text x="300" y="285" class="xs" text-anchor="start">decode, average, re-encode</text>
+<line x1="296" y1="233" x2="296" y2="291" class="#5ac878" stroke-width="2.4"/>
+<text x="360.0" y="312" class="xs" text-anchor="middle">the naive average delivers 42.2% of the light it should — 57.8% TOO DARK at level 1 alone</text>
+<text x="360.0" y="332" class="xs" text-anchor="middle">and it compounds down the chain, so the surface dims as it recedes</text>
+</svg>

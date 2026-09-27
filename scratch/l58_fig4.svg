@@ -1,0 +1,92 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l58f4-t l58f4-d">
+  <title id="l58f4-t">Erasing a component with swap and pop</title>
+  <desc id="l58f4-d">Before and after erasing entity 4's component from a five-element pool. The last element moves into the hole and the sparse entry of the entity that moved is patched to its new position.</desc>
+  <defs>
+    <marker id="e-i-l58f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l58f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l58f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l58f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l58f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">erase(e=4) from a pool of five. Four arrays change; ONE of the changes is the one people forget.</text>
+<text x="24" y="46" class="xs t-hi" text-anchor="start">BEFORE</text>
+<text x="112" y="72" class="xs mono muted" text-anchor="end">sparse[entity]</text>
+<rect x="120" y="58" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="153" y="72" class="xs mono" text-anchor="middle">7→0</text>
+<rect x="194" y="58" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="227" y="72" class="xs mono" text-anchor="middle">4→1</text>
+<rect x="268" y="58" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="301" y="72" class="xs mono" text-anchor="middle">91→2</text>
+<rect x="342" y="58" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="375" y="72" class="xs mono" text-anchor="middle">30→3</text>
+<rect x="416" y="58" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="449" y="72" class="xs mono" text-anchor="middle">12→4</text>
+<text x="112" y="102" class="xs mono muted" text-anchor="end">dense[i]</text>
+<rect x="120" y="88" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="102" class="xs mono" text-anchor="middle">e=7</text>
+<rect x="194" y="88" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="227" y="102" class="xs mono" text-anchor="middle">e=4</text>
+<rect x="268" y="88" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="301" y="102" class="xs mono" text-anchor="middle">e=91</text>
+<rect x="342" y="88" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="375" y="102" class="xs mono" text-anchor="middle">e=30</text>
+<rect x="416" y="88" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="449" y="102" class="xs mono" text-anchor="middle">e=12</text>
+<text x="112" y="132" class="xs mono muted" text-anchor="end">data[i]</text>
+<rect x="120" y="118" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="132" class="xs mono" text-anchor="middle">T(7)</text>
+<rect x="194" y="118" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="227" y="132" class="xs mono" text-anchor="middle">T(4)</text>
+<rect x="268" y="118" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="301" y="132" class="xs mono" text-anchor="middle">T(91)</text>
+<rect x="342" y="118" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="375" y="132" class="xs mono" text-anchor="middle">T(30)</text>
+<rect x="416" y="118" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="449" y="132" class="xs mono" text-anchor="middle">T(12)</text>
+<text x="153" y="154" class="xs mono muted" text-anchor="middle">i=0</text>
+<text x="227" y="154" class="xs mono muted" text-anchor="middle">i=1</text>
+<text x="301" y="154" class="xs mono muted" text-anchor="middle">i=2</text>
+<text x="375" y="154" class="xs mono muted" text-anchor="middle">i=3</text>
+<text x="449" y="154" class="xs mono muted" text-anchor="middle">i=4</text>
+<line x1="370" y1="164" x2="370" y2="190" class="hi" stroke-width="1.6" marker-end="url(#e-h-l58f4)"/>
+<text x="384" y="182" class="xs muted" text-anchor="start">sparse[4] says the row is i=1. The LAST row (i=4) moves into it.</text>
+<text x="24" y="214" class="xs t-hi" text-anchor="start">AFTER</text>
+<text x="112" y="240" class="xs mono muted" text-anchor="end">sparse[entity]</text>
+<rect x="120" y="226" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="153" y="240" class="xs mono" text-anchor="middle">7→0</text>
+<rect x="194" y="226" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="227" y="240" class="xs mono" text-anchor="middle">91→2</text>
+<rect x="268" y="226" width="66" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="301" y="240" class="xs mono" text-anchor="middle">30→3</text>
+<rect x="342" y="226" width="66" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="375" y="240" class="xs mono" text-anchor="middle">12→1</text>
+<rect x="339" y="223" width="72" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.4" stroke-dasharray="4 3"/>
+<text x="112" y="270" class="xs mono muted" text-anchor="end">dense[i]</text>
+<rect x="120" y="256" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="270" class="xs mono" text-anchor="middle">e=7</text>
+<rect x="194" y="256" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="227" y="270" class="xs mono" text-anchor="middle">e=12</text>
+<rect x="268" y="256" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="301" y="270" class="xs mono" text-anchor="middle">e=91</text>
+<rect x="342" y="256" width="66" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="375" y="270" class="xs mono" text-anchor="middle">e=30</text>
+<text x="112" y="300" class="xs mono muted" text-anchor="end">data[i]</text>
+<rect x="120" y="286" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="300" class="xs mono" text-anchor="middle">T(7)</text>
+<rect x="194" y="286" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="227" y="300" class="xs mono" text-anchor="middle">T(12)</text>
+<rect x="268" y="286" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="301" y="300" class="xs mono" text-anchor="middle">T(91)</text>
+<rect x="342" y="286" width="66" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="375" y="300" class="xs mono" text-anchor="middle">T(30)</text>
+<text x="153" y="322" class="xs mono muted" text-anchor="middle">i=0</text>
+<text x="227" y="322" class="xs mono muted" text-anchor="middle">i=1</text>
+<text x="301" y="322" class="xs mono muted" text-anchor="middle">i=2</text>
+<text x="375" y="322" class="xs mono muted" text-anchor="middle">i=3</text>
+<text x="449" y="270" class="xs muted" text-anchor="middle">popped</text>
+<line x1="24" y1="340" x2="696" y2="340" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="24" y="358" class="xs t-hi" text-anchor="start">THE PATCH: entity 12 did not ask to move, and its sparse entry still said 4. One line fixes it — and without that line the pool is</text>
+<text x="24" y="372" class="xs muted" text-anchor="start">silently corrupt in a way that surfaces frames later, in a different system, as one entity reading another’s data.</text>
+<text x="24" y="394" class="xs muted" text-anchor="start">EDGE CASE: erase the LAST row and the entity that “moves” IS the one being erased. The patch writes its entry back to where it already</text>
+<text x="24" y="408" class="xs muted" text-anchor="start">was, and the next line marks it absent. Harmless — because of the ORDER, not because it was skipped.</text>
+</svg>

@@ -1,0 +1,34 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l82f9-t l82f9-d">
+  <title id="l82f9-t">A one-second fall measured in a scaled parent's space and in world space</title>
+  <desc id="l82f9-d">The left arrow drops 4.987 local units; the right arrow, the same fall carried out through a parent scaled by two, drops 9.973 metres — twice as far.</desc>
+  <defs>
+    <marker id="e-i-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-loc-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-wld-l82f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="40" y="30" class="sm t-hi" text-anchor="start">ONE SECOND OF FALLING, IN TWO SPACES</text>
+<text x="250" y="46" class="xs t-hi" text-anchor="middle">LOCAL, under a parent scaled by 2</text>
+<text x="250" y="62" class="xs muted" text-anchor="middle">what the integrator sees</text>
+<line x1="140" y1="76" x2="360" y2="76" class="grid" stroke-width="1.0"/>
+<circle cx="250" cy="76" r="5" fill="#8f918a" fill-opacity="0.5"/>
+<text x="560" y="46" class="xs t-hi" text-anchor="middle">WORLD, where the player is</text>
+<text x="560" y="62" class="xs muted" text-anchor="middle">what the frame produced</text>
+<line x1="450" y1="76" x2="670" y2="76" class="grid" stroke-width="1.0"/>
+<circle cx="560" cy="76" r="5" fill="#8f918a" fill-opacity="0.5"/>
+<line x1="250.00" y1="84.00" x2="250.00" y2="153.07" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-loc-l82f9)"/>
+<line x1="140" y1="153.06793909090908" x2="360" y2="153.06793909090908" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="268" y="158.06793909090908" class="xs mono" text-anchor="start">-4.986749 units</text>
+<line x1="560.00" y1="84.00" x2="560.00" y2="230.14" stroke="#e05c5c" stroke-width="2.4" marker-end="url(#e-wld-l82f9)"/>
+<line x1="450" y1="230.13587818181819" x2="670" y2="230.13587818181819" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="578" y="235.13587818181819" class="xs mono" text-anchor="start">-9.973498 m</text>
+<text x="250" y="290" class="xs muted" text-anchor="middle">the integrator ran once,</text>
+<text x="250" y="308" class="xs mono muted" text-anchor="middle">with g = 9.81</text>
+<text x="560" y="290" class="xs t-bad" text-anchor="middle">ratio 2.0000 — the body fell</text>
+<text x="560" y="308" class="xs t-bad" text-anchor="middle">at 2 g and nothing reported it</text>
+<text x="40" y="352" class="xs" text-anchor="start">And a SPINNING parent passes every test a matrix can answer: a body with no forces on it at all, which must travel in a straight line, ends up 3.7963 m away after one second.</text>
+<text x="40" y="372" class="xs mono muted" text-anchor="start">Straight line (1.0000, 2.0333); integrated locally and mapped out, (1.4024, -1.7416). A matrix has no time derivative.</text>
+</svg>

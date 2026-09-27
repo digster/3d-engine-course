@@ -1,0 +1,46 @@
+<svg viewBox="0 0 760 340" role="img" aria-labelledby="l42f3-t l42f3-d">
+  <title id="l42f3-t">The three copies between a CPU pixel and the display</title>
+  <desc id="l42f3-d">Four boxes left to right: the engine framebuffer in CPU memory, the transfer buffer in memory both processors can see, an SDL_GPUTexture in device memory, and the swapchain texture owned by the display. Three arrows join them. The first, a memcpy, is marked NOW on the CPU and measured at 0.0028 milliseconds. The second and third, SDL_UploadToGPUTexture and SDL_BlitGPUTexture, are marked LATER on the GPU and are only recorded when called. A dashed vertical line separates the two time frames.</desc>
+  <defs>
+    <marker id="e-i-l42f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l42f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l42f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">one pixel of a 320&#215;180 framebuffer, on its way to the screen</text>
+<text x="24" y="46" class="xs muted">230,400 bytes per frame, three copies, two time frames</text>
+<rect x="26.0" y="112.0" width="120.0" height="74.0" rx="5" fill="#5ac878" opacity="0.16" stroke="#5ac878" stroke-width="1.6"/>
+<text x="86.0" y="140.0" class="xs mono" text-anchor="middle">engine::</text>
+<text x="86.0" y="155.0" class="xs mono" text-anchor="middle">framebuffer</text>
+<text x="86.0" y="176.0" class="xs muted" text-anchor="middle">CPU memory</text>
+<line x1="154.0" y1="149.0" x2="214.0" y2="149.0" class="hi" stroke-width="1.8" marker-end="url(#e-h-l42f3)"/>
+<text x="184.0" y="82.0" class="xs mono" text-anchor="middle">std::memcpy</text>
+<text x="184.0" y="96.0" class="xs t-hi" text-anchor="middle">NOW, on the CPU</text>
+<text x="184.0" y="204.0" class="xs mono muted" text-anchor="middle">0.0028 ms</text>
+<rect x="222.0" y="112.0" width="120.0" height="74.0" rx="5" fill="#5acdd7" opacity="0.16" stroke="#5acdd7" stroke-width="1.6"/>
+<text x="282.0" y="140.0" class="xs mono" text-anchor="middle">transfer</text>
+<text x="282.0" y="155.0" class="xs mono" text-anchor="middle">buffer</text>
+<text x="282.0" y="176.0" class="xs muted" text-anchor="middle">both can see</text>
+<line x1="350.0" y1="149.0" x2="410.0" y2="149.0" class="ink-soft" stroke-width="1.8" marker-end="url(#e-s-l42f3)"/>
+<text x="380.0" y="82.0" class="xs mono" text-anchor="middle">SDL_UploadToGPUTexture</text>
+<text x="380.0" y="96.0" class="xs muted" text-anchor="middle">LATER, on the GPU</text>
+<text x="380.0" y="204.0" class="xs mono muted" text-anchor="middle">recorded</text>
+<rect x="418.0" y="112.0" width="120.0" height="74.0" rx="5" fill="#5082e6" opacity="0.16" stroke="#5082e6" stroke-width="1.6"/>
+<text x="478.0" y="140.0" class="xs mono" text-anchor="middle">SDL_GPU</text>
+<text x="478.0" y="155.0" class="xs mono" text-anchor="middle">Texture</text>
+<text x="478.0" y="176.0" class="xs muted" text-anchor="middle">device memory</text>
+<line x1="546.0" y1="149.0" x2="606.0" y2="149.0" class="ink-soft" stroke-width="1.8" marker-end="url(#e-s-l42f3)"/>
+<text x="576.0" y="82.0" class="xs mono" text-anchor="middle">SDL_BlitGPUTexture</text>
+<text x="576.0" y="96.0" class="xs muted" text-anchor="middle">LATER, on the GPU</text>
+<text x="576.0" y="204.0" class="xs mono muted" text-anchor="middle">recorded</text>
+<rect x="614.0" y="112.0" width="120.0" height="74.0" rx="5" fill="#f0961e" opacity="0.16" stroke="#f0961e" stroke-width="1.6"/>
+<text x="674.0" y="140.0" class="xs mono" text-anchor="middle">swapchain</text>
+<text x="674.0" y="155.0" class="xs mono" text-anchor="middle">texture</text>
+<text x="674.0" y="176.0" class="xs muted" text-anchor="middle">the display's</text>
+<line x1="352.0" y1="106.0" x2="352.0" y2="226.0" class="ink" stroke-width="1.2" stroke-dasharray="3 4"/>
+<text x="344.0" y="244.0" class="xs" text-anchor="end">happens when you call it</text>
+<text x="360.0" y="244.0" class="xs">happens when the GPU gets to it</text>
+<text x="380.0" y="272.0" class="xs mono muted" text-anchor="middle">whole round trip, measured with a fence: 0.2084 ms</text>
+</svg>

@@ -1,0 +1,484 @@
+
+  <h2 id="spatial">6. Where a sound is, in two numbers</h2>
+
+  <p>
+    Everything so far would work in a game with no world in it. This section is 3D audio, and the
+    entire model is: <strong>take a listener and an emitter, produce two gains</strong>. One for the
+    left channel, one for the right. Occlusion, reverb, HRTFs, ambisonics — every refinement that
+    exists is a refinement <em>of these two numbers</em>, and every one of them still multiplies by
+    them.
+  </p>
+
+  <h3>6.1 A listener is a transform</h3>
+
+  <p>
+    Six modules of this course have used a placement to decide what is <em>drawn</em>. A camera is a
+    <code>transform</code>, a light is a <code>transform</code>, a joint is a <code>transform</code>.
+    Here a placement decides what is <em>heard</em>, and nothing about <code>transform</code> needs to
+    change for it:
+  </p>
+
+  <pre><code class="lang-cpp">listener listener_from(const transform&amp; placement)
+{
+    listener l;
+    l.position = placement.position;
+    l.right    = rotate(placement.rotation, vec3{1.0f, 0.0f, 0.0f});
+    l.up       = rotate(placement.rotation, vec3{0.0f, 1.0f, 0.0f});
+    // THE MINUS. conventions.html §2: this course's world space is right-handed,
+    // Y-up, -Z forward, so the direction a placement faces is where -ẑ lands.
+    l.forward  = rotate(placement.rotation, vec3{0.0f, 0.0f, -1.0f});
+    return l;
+}</code></pre>
+
+  <p>
+    That the subsystem sharing nothing with graphics shares its most basic type with graphics is the
+    clearest evidence this course can offer that <code>transform</code> was the right thing to build
+    back in Module 2. It is also the first time in this course that a placement is used for something
+    that is not drawing.
+  </p>
+
+  <p>
+    One warning, which is a real bug in real games: <strong>the listener is usually the camera and
+    must not be assumed to be</strong>. A third-person game looks from behind the character and hears
+    from the character, and a game that conflates the two has footsteps arriving from six metres
+    away. So <code>listener</code> is its own struct, built by a named function, and the demo
+    deliberately drives it from something that is not a camera.
+  </p>
+
+  <h3>6.2 The pan parameter is one dot product</h3>
+
+  <p>
+    Where is the sound, left to right? Take the direction from the listener to the emitter and dot it
+    with the listener's <em>right</em> axis:
+  </p>
+
+  <div class="eq">\[ \mathrm{pan} \;=\; \hat{d} \cdot \hat{r} \;\in\; [-1, 1] \]</div>
+
+  <p class="eq-plain">
+    …pan is the component of the direction-to-source along the listener's right axis.
+  </p>
+
+  <p>
+    Which is the <em>sine of the angle off the median plane</em>, and is therefore already the
+    quantity a pan law wants — no <code>atan2</code>, no normalisation of an angle, no special cases.
+    Two consequences fall out for free, and both are visible in the right-hand panel of figure 5.
+  </p>
+
+@@FIG_PAN@@
+
+  <p>
+    <strong>Elevation collapses to the centre, correctly.</strong> A sound directly overhead is
+    perpendicular to <code>right</code>, so its pan is 0 — which is exactly where two speakers can
+    put it. Had you projected onto the ground plane and taken an <code>atan2</code>, a sound at the
+    zenith would have had an undefined azimuth and you would have needed a special case for it.
+  </p>
+
+  <p>
+    <strong>Front and back are indistinguishable.</strong> The 45° and 135° rows of the orbit table
+    both give pan +0.71; the sound in front and the sound behind produce identical gains. That is not
+    a bug in the dot product, it is what a stereo pair can express — with two speakers in front of
+    you there is no gain pair that says "behind". Real systems fix it with head-related transfer
+    functions, which need a measured impulse response per ear per direction and a convolution per
+    voice, and are named in the header as the beginning of the missing ten percent.
+  </p>
+
+  <h3>6.3 Two pan laws, and the hole in the middle of one</h3>
+
+  <p>
+    Now turn the pan value into two gains. The first rule anybody writes is the one that makes the
+    gains sum to one:
+  </p>
+
+  <div class="eq">\[ L = 1 - u, \qquad R = u, \qquad u = \tfrac{\mathrm{pan}+1}{2} \]</div>
+
+  <p>
+    It is correct at both ends — hard left is (1, 0), hard right is (0, 1) — and it is wrong
+    everywhere in between, for a reason that is the same one as §5.1. <strong>The two speakers are
+    playing the same signal, so they are perfectly correlated, so they add in amplitude at your
+    ear — but their <em>powers</em> are what determines how loud that is.</strong> Compute the power
+    the pair delivers:
+  </p>
+
+  <div class="eq">\[ P(u) \;=\; L^2 + R^2 \;=\; (1-u)^2 + u^2 \]</div>
+
+  <p>
+    At the ends, <code>P = 1</code>. At the centre, <code>P = 0.25 + 0.25 = 0.5</code>. Half the
+    power is <strong>−3.01 dB</strong>, and it is a hole in the middle of your stereo image: a sound
+    swept from left to right audibly ducks as it crosses. Measured across a 201-point sweep:
+  </p>
+
+  <pre>E.2  over a full sweep, worst deviation from unity power:
+       linear           3.010 dB   (min power 0.5000)
+       constant power   0.000 dB   (min power 1.0000)</pre>
+
+  <p>
+    So ask for the law that keeps <code>L² + R² = 1</code> instead. That is the equation of a circle,
+    and the parameterisation of a circle is a cosine and a sine:
+  </p>
+
+  <div class="eq">\[ L = \cos\theta, \qquad R = \sin\theta, \qquad
+      \theta = \frac{\pi}{4}\,(\mathrm{pan} + 1) \]</div>
+
+  <p class="eq-plain">
+    …sweep θ from 0 to π/2 as pan goes −1 to +1, and L² + R² = cos²θ + sin²θ = 1 identically.
+  </p>
+
+  <p>
+    The whole of the difference is one number. At the centre, <code>θ = π/4</code> and both gains are
+    <code>cos(π/4) = 0.7071</code> rather than 0.5. If you ever wondered why audio people write
+    <code>0.707</code> everywhere, that is the reason: it is the gain that puts half the
+    <em>power</em> in each of two speakers, and half the power is not half the amplitude.
+  </p>
+
+  <p>
+    The control is the one that makes the comparison mean anything: at hard left and hard right the
+    two laws must agree <em>exactly</em>, because both are (1, 0) and (0, 1). Measured difference
+    0.000e+00 and 4.371e−08 — the second being <code>cos(π/2)</code>, which is not quite zero in
+    floating point. Worth a sentence, because a gain of −4.4×10⁻⁸ is technically a phase inversion;
+    at that magnitude it is 147 dB below the signal and nothing can hear it.
+  </p>
+
+  <h3>6.4 Distance: the exponent is 1, not 2</h3>
+
+  <p>
+    Now the other number. A sound gets quieter with distance, and everybody remembers the inverse
+    square law. Everybody is right about the law and wrong about what it applies to.
+  </p>
+
+  <p>
+    Energy radiating from a point spreads over the surface of an expanding sphere. The area of that
+    sphere is <code>4πd²</code>, so the energy per unit area — the <strong>intensity</strong> — falls
+    as:
+  </p>
+
+  <div class="eq">\[ I \;\propto\; \frac{1}{d^{2}} \]</div>
+
+  <p>
+    That part is correct and is the part people quote. But a sample is not an intensity. A sample is
+    a <strong>pressure</strong>, and intensity is proportional to pressure <em>squared</em> — the
+    same relationship as power to amplitude, and the same factor of two that put the 20 rather than
+    the 10 in the decibel formula. So:
+  </p>
+
+  <div class="eq">\[ p \;\propto\; \sqrt{I} \;\propto\; \frac{1}{d} \]</div>
+
+  <p class="eq-plain">
+    …the number you multiply a sample by falls as 1/d, not 1/d².
+  </p>
+
+  <p>
+    Get this wrong and every sound in your game falls off twice as fast in decibels. Measured:
+  </p>
+
+  <pre>F.2  dB per doubling of distance, 2 m -&gt; 32 m:
+       2.0 -&gt;   4.0   1/d  -6.02 dB    1/d^2 -12.04 dB
+       4.0 -&gt;   8.0   1/d  -6.02 dB    1/d^2 -12.04 dB</pre>
+
+  <p>
+    <strong>−6 dB per doubling</strong> is the physical answer and is the number to keep in your
+    head; −12 is what a plausible-sounding mistake costs, and it sounds like every sound in the game
+    is at the bottom of a well.
+  </p>
+
+@@FIG_FALLOFF@@
+
+  <h3>6.5 …and then the physical law has to be made to end</h3>
+
+  <p>
+    Figure 6 also shows the problem with being physically correct. <code>1/d</code> never reaches
+    zero. At fifty metres a sound is at <code>ref/d = 1/50 = 0.0200</code>, which is
+    <strong>−33.98 dB</strong> — quiet, certainly, and <em>audible</em>, and still costing a voice
+    slot and a trip through the inner loop.
+  </p>
+
+  <p>
+    So every engine puts a <code>max_distance</code> on it, and the obvious implementation — clamp
+    the curve and cull past the edge — creates exactly the artefact this whole lesson is about. The
+    sound is at −34 dB, and then it is at −∞, and the difference between them happens between one
+    buffer and the next. That is a step. A step is a click. It is quiet, and it is a click.
+  </p>
+
+  <p>
+    <code>falloff::inverse_ranged</code> is this engine's default and is four lines: take the inverse
+    curve, subtract what it would have been at <code>max_distance</code>, and rescale so the value at
+    <code>ref_distance</code> is still 1.
+  </p>
+
+  <div class="eq">\[ g_{\text{ranged}}(d) \;=\;
+      \frac{g_{\text{inv}}(d) - g_{\text{inv}}(d_{\max})}{1 - g_{\text{inv}}(d_{\max})} \]</div>
+
+  <p>
+    It is 1 at the reference distance, exactly 0 at the maximum, and physical in between. What it
+    costs is honest and visible in the figure: subtracting a constant <em>steepens the far field</em>
+    — at 32 m the bare inverse law is at 0.0312 and the ranged one at 0.0115, which is 8.7 dB
+    quieter. That is the price of a curve that ends, and the harness prints both so the choice is
+    made with the number in front of you rather than behind you:
+  </p>
+
+  <pre>F.3  bare `inverse` at max_distance = 50 m:
+       gain 0.0200 = -33.98 dB, then cut to silence.
+       `inverse_ranged` there: 0.000000 = -120.00 dB
+       and at 49.0 m: 0.000416  (approach, not a cliff)</pre>
+
+  <h3>6.6 The whole thing, with real numbers</h3>
+
+  <p>
+    Put it together on one emitter. Listener at the origin, unrotated, so <code>right</code> is
+    <code>(1, 0, 0)</code>. Emitter at <code>(3, 0, −4)</code> with a gain of 0.8, the default
+    reference and maximum distances of 1 m and 50 m, and the ranged inverse law.
+  </p>
+
+  <p>
+    <strong>Distance.</strong> <code>|(3, 0, −4)| = √(9 + 16) = 5</code>.
+  </p>
+
+  <p>
+    <strong>Attenuation.</strong> The bare inverse law at 5 m with <code>ref = 1</code> is
+    <code>1/(1 + 1·(5 − 1)) = 0.2</code>. At 50 m it would be <code>1/(1 + 49) = 0.02</code>. So the
+    ranged value is <code>(0.2 − 0.02)/(1 − 0.02) = 0.18/0.98 = 0.1837</code>.
+  </p>
+
+  <p>
+    <strong>Pan.</strong> The unit direction is <code>(0.6, 0, −0.8)</code>, and its dot product with
+    <code>(1, 0, 0)</code> is <code>0.6</code>.
+  </p>
+
+  <p>
+    <strong>Gains.</strong> <code>θ = (0.6 + 1)·π/4 = 1.2566 rad = 72°</code>, so
+    <code>L = cos(72°) = 0.3090</code> and <code>R = sin(72°) = 0.9511</code>. Multiply both by
+    <code>emitter.gain × attenuation = 0.8 × 0.1837 = 0.14696</code>:
+  </p>
+
+  <div class="eq">\[ L = 0.0454, \qquad R = 0.1397 \]</div>
+
+  <p>
+    And the harness agrees to every digit it prints:
+  </p>
+
+  <pre>F.5  worked example: emitter at (3, 0, -4), gain 0.8
+       distance 5.0000   attenuation 0.1837
+       pan 0.6000  ->  L 0.0454  R 0.1397
+       power 0.0216 = -16.66 dB</pre>
+
+  <h2 id="ramp">7. The gain is a lossy reconstruction too</h2>
+
+  <p>
+    §6 produces a pair of gains. The game recomputes them once a frame, because that is when things
+    move. The mixer needs a gain <em>per sample</em>, and there are 800 samples in a frame.
+  </p>
+
+  <p>
+    That sentence should look familiar, because it is Lesson 7.7's, transposed. There the rule was:
+  </p>
+
+  <blockquote>
+    <p>
+      A lossy transformation must be fitted with its consumer's exact reconstruction.
+    </p>
+  </blockquote>
+
+  <p>
+    7.7 found it in keyframe reduction — a curve fitted with slerp and played back with nlerp
+    overshoots its budget by 4.5×, and nothing reports it. Here the same structure appears in a
+    subsystem that has never heard of animation. <strong>The gain curve is sampled at 60 Hz and
+    reconstructed at 48 kHz</strong>, and the reconstruction is either a zero-order hold or a linear
+    one. Writing the setter the obvious way —
+  </p>
+
+  <pre><code class="lang-cpp">v-&gt;gain = g;   // and the mix multiplies by v-&gt;gain</code></pre>
+
+  <p>
+    — chooses the zero-order hold, which means the gain is constant for 800 samples and then jumps.
+    Figure 7 is what that sounds like.
+  </p>
+
+@@FIG_RAMP@@
+
+  <h3>7.1 How big is the jump, really?</h3>
+
+  <p>
+    The size of the discontinuity is <code>Δg × |v|</code>: the change in gain times whatever the
+    waveform happened to be at that instant. So it is worst when the gain is changing fastest and the
+    signal is near a peak — which is exactly the moment an emitter passes closest to the listener.
+    The harness flies one past at 20 m/s with a closest approach of one metre:
+  </p>
+
+  <pre>G.1  the gains a 60 Hz game would push, near the pass:
+       t(s)    x      dist    L       R     dL/frame
+      1.983  -0.33   1.054  0.8144  0.4849   0.0354
+      2.000   0.00   1.000  0.7071  0.7071   0.1073
+      2.017   0.33   1.054  0.4849  0.8144   0.2222
+       worst gain change in one frame: 0.2222</pre>
+
+  <p>
+    A gain change of 0.2222 in a single frame. And here is what it does to the samples, measured
+    against the only honest yardstick — <strong>the largest step the waveform itself ever
+    takes</strong>:
+  </p>
+
+  <pre>G.2  largest jump between adjacent samples (left):
+       the signal's own slope   0.013088
+       gain applied as a step   0.100745  (7.70x)
+       gain applied as a ramp   0.013072  (1.00x)</pre>
+
+  <p>
+    The step injects a jump <strong>7.7 times larger than anything in the signal</strong>. The ramp
+    injects nothing at all: 1.00×, which is to say the ramped render's largest sample-to-sample
+    change is the waveform's own motion and the gain has become invisible.
+  </p>
+
+  <h3>7.2 Where the energy goes</h3>
+
+  <p>
+    A 7.7× jump sounds like it should be obvious, but "7.7 times a small number" is still a small
+    number, and the interesting question is why you can hear it at all when it is a fifth of full
+    scale for one sample out of eight hundred. Subtract the two renders and look at the difference:
+  </p>
+
+  <pre>G.3  step minus ramp, over one second:
+       rms of the difference    2.608e-02
+       at the tone's own 200 Hz 2.847e-03  (1.2% of it)
+       the rest is broadband: that is the click.</pre>
+
+  <p>
+    <strong>1.2%.</strong> Only a fiftieth of the injected energy sits at the frequency of the sound
+    being played; the other 98.8% is spread across every frequency there is, which is what a step
+    discontinuity contains and what the ear is exquisitely good at noticing. You are not hearing a
+    level change. You are hearing sixty impulses a second, and impulses sixty times a second is a
+    200 Hz buzz riding on top of your sound effect.
+  </p>
+
+  <p>
+    The fix is four lines in the inner loop, and it is a linear reconstruction instead of a
+    zero-order one:
+  </p>
+
+  <pre><code class="lang-cpp">const float dl = (v.tgt_left - v.cur_left) * inv_frames;
+const float dr = (v.tgt_right - v.cur_right) * inv_frames;
+float gl = v.cur_left;
+float gr = v.cur_right;
+// ... and inside the per-sample loop:
+gl += dl;
+gr += dr;</code></pre>
+
+  <p>
+    Spread the same change over every sample in the buffer and the largest step any single sample
+    sees is <code>1/512</code> of it. That is the entire fix, it costs two adds per sample, and it is
+    why <code>mixer::set_gain</code> does not simply assign.
+  </p>
+
+  <p>
+    The control is the one that makes G.2 believable: <strong>hold the gain constant</strong>, where
+    a ramp has nothing to interpolate and the two paths must agree bit for bit. Worst difference
+    8.941e−09, which is float rounding on a multiply. So the difference measured in G.2 is a
+    difference between two <em>reconstructions</em>, not between two code paths.
+  </p>
+
+  <h3>7.3 The same argument one level up: a sound that starts on a peak</h3>
+
+  <p>
+    The ramp fixes discontinuities the <em>mixer</em> creates. It cannot fix one that is in the
+    content — and the most common one in any game is a sample that does not begin at zero:
+  </p>
+
+  <pre>G.5  a sound that starts on a peak:
+       first sample value       0.2500000
+       worst step, no fade      0.2500000  (38.2x)
+       worst step, 5 ms fade    0.0065443  (1.00x)
+       the waveform's own slope 0.0065450</pre>
+
+  <p>
+    Before a voice starts, the mixer's buffer holds silence. Its first sample is therefore preceded
+    by zero, so a sound whose first sample is 0.25 steps by 0.25 — <strong>38 times the largest step
+    the waveform itself ever takes</strong>. A five-millisecond fade brings that to 0.0065443, and
+    the row underneath is the point: 0.0065450 is <code>A·2πf/rate</code>, the waveform's own slope.
+    <em>The fade does not make the step small. It removes the step, and what is left is the
+    sound.</em>
+  </p>
+
+  <p>
+    Which is why <code>apply_fade</code> is in the public header despite being three lines, and why
+    every looping tone in the demo is faded at both ends: a one-second 440 Hz tone does not end where
+    it began, so the loop point is a step, once a second, forever.
+  </p>
+
+  <h2 id="pitch">8. Pitch and rate: one cursor, two jobs</h2>
+
+  <p>
+    A voice's playhead is a <code>double</code> counting source frames, and it advances by
+  </p>
+
+  <div class="eq">\[ \mathrm{step} \;=\; \mathrm{pitch} \times
+      \frac{f_{\text{source}}}{f_{\text{device}}} \]</div>
+
+  <p>
+    per output frame. One number carries both jobs, because <em>they are the same job</em>: playing a
+    44.1 kHz file on a 48 kHz device means reading 0.91875 source frames per output frame, and
+    playing a sound an octave up means reading 2 of them. Neither lands on an integer, so both need
+    the same thing — a value <em>between</em> two samples.
+  </p>
+
+@@FIG_RESAMPLE@@
+
+  <p>
+    Linear interpolation is the two-tap answer: take the two neighbours and weight them by how far
+    between them you are. It is what <code>fetch()</code> does in the mixer and what
+    <code>resample_linear()</code> does at load, deliberately written once and used twice, because
+    two copies of an interpolation rule is two copies that will eventually disagree.
+  </p>
+
+  <h3>8.1 And it is not very good, with a number</h3>
+
+  <p>
+    This is the place where a course can either say "linear interpolation is fine" and move on, or
+    measure it. Measured, on a 1 kHz tone resampled from 44.1 to 48 kHz:
+  </p>
+
+  <pre>H.1  a 1 kHz tone, 44100 -&gt; 48000, measured in the middle:
+       ours (linear, 2 taps)      62.40 dB SNR
+       SDL_ConvertAudioSamples         85.05 dB SNR
+H.2  CONTROL  no resample at all        91.67 dB SNR</pre>
+
+  <p>
+    The control is what makes the other two readable. Loading the same file at its own rate — no
+    resampling at all — gives 91.67 dB, which is the 16-bit quantisation floor and nothing else:
+    <code>6.02 × 16 = 96.3 dB</code> for a full-scale sine, minus 1.76 dB for the sine's crest
+    factor, minus 6 dB because this tone is at half scale. About 88–92 dB is the arithmetic, 91.67 is
+    the measurement, and now we know what the meter reads when the answer is "perfect".
+  </p>
+
+  <p>
+    Against that, <strong>our resampler throws away 29 dB and SDL's throws away 7</strong>. That gap
+    is real and it is the difference between a two-tap filter and a properly designed one — a good
+    resampler is a windowed sinc with dozens of taps and a design procedure, and it is an entire
+    subject rather than a paragraph.
+  </p>
+
+  <h3>8.2 The number is a fact about your content, not about your code</h3>
+
+  <p>
+    The honest version of that result is the one that shows how much it moves:
+  </p>
+
+  <pre>H.3  the same resampler at four frequencies:
+       tone      SNR
+         200 Hz    89.00 dB
+        1000 Hz    62.40 dB
+        4000 Hz    38.01 dB
+       10000 Hz    20.43 dB</pre>
+
+  <p>
+    Same code, same rates, same everything — and the answer ranges from "indistinguishable from
+    perfect" to "audibly wrong". Linear interpolation is a low-pass filter: it draws a chord between
+    two samples, the chord is a poor fit when the signal moves a lot between them, and how much it
+    moves depends on frequency relative to the sample rate. At 200 Hz there are 220 samples per
+    cycle and the chords are indistinguishable from the curve. At 10 kHz there are four, and joining
+    four points with straight lines does not make a sine.
+  </p>
+
+  <p>
+    Which gives the practical rule this engine follows, stated as a preference rather than as a
+    guarantee: <strong>ship files at the device's rate</strong>. A sound that does not need
+    resampling does not pay for it, and the only reliable way to get a good resample is to do it
+    offline in a tool that can afford the taps.
+  </p>

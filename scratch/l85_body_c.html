@@ -1,0 +1,428 @@
+
+  <h2 id="algorithm">6. The algorithm, in four lines — and worked</h2>
+
+  <p>
+    We have one set, and we want the point of it nearest the origin. The set can have hundreds of
+    vertices and we can only ask it questions of the form "which way is farthest that way?". GJK
+    is the descent that answers anyway.
+  </p>
+
+  <p>
+    Keep a <strong>simplex</strong>: between one and four points of <code>A ⊖ B</code> — a point, a
+    segment, a triangle, a tetrahedron. Four, because four is the most a simplex in three
+    dimensions can have, and because a tetrahedron is the smallest thing that can enclose a point.
+    Let <code>v</code> be the point of that simplex nearest the origin. Then:
+  </p>
+
+  <ol>
+    <li>Ask the difference set for its farthest point in direction <code>−v</code>. Call it
+        <code>w</code>.</li>
+    <li>If the two bounds below have met, stop — the distance is proven.</li>
+    <li>Add <code>w</code> to the simplex, then reduce the simplex to the smallest face that still
+        contains its own nearest point.</li>
+    <li><code>v</code> is that nearest point. Repeat.</li>
+  </ol>
+
+  <h3>6.1 The two bounds, which are the whole design</h3>
+
+  <p>
+    Step 2 is where the algorithm stops being a plausible descent and becomes something you can
+    trust, so it deserves its own derivation.
+  </p>
+
+  <p>
+    <strong>The upper bound is <code>|v|</code>.</strong> The simplex is made of points of
+    <code>A ⊖ B</code>; the set is convex; so any convex combination of them is also in the set,
+    and <code>v</code> is one. It is therefore an <em>actual point of the set</em>, at distance
+    <code>|v|</code> from the origin, so the true distance cannot be larger than that. You get
+    this bound for free, and it only ever improves.
+  </p>
+
+  <p>
+    <strong>The lower bound is <code>dot(v, w) / |v|</code>.</strong> This one is the interesting
+    half. <code>w</code> was chosen to maximise <code>dot(x, −v)</code> over the whole set, which
+    is the same as <em>minimising</em> <code>dot(x, v)</code>. So every point <code>x</code> of
+    <code>A ⊖ B</code> satisfies
+  </p>
+
+  <p class="eq-plain">
+    dot(x, v) ≥ dot(w, v)
+  </p>
+
+  <p>
+    Divide by <code>|v|</code> and the left side is the signed distance of <code>x</code> from the
+    plane through the origin with normal <code>v̂</code>. So the entire set lies at least
+    <code>dot(w, v)/|v|</code> beyond that plane, and the origin is on the plane. Nothing in the
+    set can be nearer the origin than that. Note what this gives you when it is positive: a
+    <strong>complete proof that the shapes are apart</strong>, from one dot product.
+  </p>
+
+  <p>
+    The gap between the bounds is <code>|v| − dot(v, w)/|v| = (|v|² − dot(v, w)) / |v|</code>.
+    Stop when it is small compared with <code>|v|</code>, which after multiplying through is
+  </p>
+
+  <pre><code class="lang-cpp">const float vw = dot(v, w.w);
+if (v2 - vw &lt;= tol * v2)
+{
+    break;
+}</code></pre>
+
+  <p>
+    Dividing by <code>|v|</code> a second time is what makes the test <strong>scale free</strong>:
+    multiply the whole scene by a thousand and both sides scale by a million, and the test says
+    exactly the same thing. §11 measures what an absolute tolerance would have cost instead.
+  </p>
+
+  <h3>6.2 The search, run for real</h3>
+
+  <p>
+    Figure 4 runs it on figure 2's difference set. Nothing in it is drawn: the figure script
+    implements the same loop as <code>engine/src/phys/gjk.cpp</code> with the tetrahedron case
+    removed, so every point is searched rather than placed.
+  </p>
+
+  @@FIG_LOOP@@
+
+  <p>
+    Read the tables under the panels. The first iteration starts from a single support point at
+    <code>|v| = 1.8358</code>, with the supporting plane only proving <code>0.8117</code>: a
+    bracket a metre wide. The second brings them to <code>1.7112</code> and <code>1.5839</code>.
+    The third closes it entirely, and the way it closes is worth noticing — the support function
+    returns a point the simplex already has, which on a polytope is how the search
+    <em>finishes</em> rather than how it fails. There is nothing further out to find.
+  </p>
+
+  @@FIG_BOUNDS@@
+
+  <p>
+    Figure 5 is the same run as a chart, and the shape is the point: the purple line only falls,
+    the green line only rises, and where they meet is the answer — <strong>1.653025 m from both
+    sides, with a slack of exactly zero</strong>. That number is also the distance figure 2
+    measured by brute force between the original two shapes. Three iterations, six support calls,
+    and an answer that carries its own proof.
+  </p>
+
+  <h3>6.3 Getting the witness points back</h3>
+
+  <p>
+    <code>v</code> is a convex combination of the reduced simplex's vertices: there are weights
+    <code>λᵢ ≥ 0</code> summing to 1 with <code>v = Σ λᵢ wᵢ</code>. Those are
+    <strong>barycentric coordinates</strong> — 2.3's construction, back for a third time in this
+    course after deciding which pixels are inside a triangle and how to interpolate across one.
+  </p>
+
+  <p>
+    Each <code>wᵢ</code> was built as <code>paᵢ − pbᵢ − delta</code>. Apply the same weights to the
+    two halves separately:
+  </p>
+
+  <p class="eq-plain">
+    p<sub>A</sub> = Σ λᵢ paᵢ ∈ A,  p<sub>B</sub> = Σ λᵢ pbᵢ ∈ B
+  </p>
+
+  <p>
+    Both are convex combinations of points of their own shapes, so both are <em>in</em> those
+    shapes — that is what convexity means. And because the weights sum to one,
+  </p>
+
+  <p class="eq-plain">
+    p<sub>A</sub> − p<sub>B</sub> = Σ λᵢ (paᵢ − pbᵢ) − delta·Σλᵢ = Σ λᵢ wᵢ = v
+  </p>
+
+  <p>
+    so <code>|p<sub>A</sub> − p<sub>B</sub>| = |v|</code>. The two witness points are a real pair
+    of surface points whose separation is the reported distance, and they cost one weighted sum
+    each. §E.4 of the harness checks that they are genuinely on their shapes by comparing them
+    against a fresh support call along the reported direction: <strong>worst overshoot 4.67e−07 m
+    over 20,000 pairs</strong>, which is float noise at metre scale.
+  </p>
+
+  <h3>6.4 The seed matters, and its sign is not arbitrary</h3>
+
+  <p>
+    The loop has to start from some point of the difference set, and any will do for correctness.
+    Not any will do for speed. The difference set is centred near <code>−delta</code>, where
+    <code>delta = b.origin − a.origin</code>, so the direction from the set <em>toward the
+    origin</em> is <code>+delta</code>, and the support point that way is already close to the
+    answer. Seeding with <code>−delta</code> instead picks the point of the set
+    <strong>farthest</strong> from the origin — perfectly legal, and it costs a whole iteration
+    on every query for ever.
+  </p>
+
+  <p>
+    That is not a hypothetical. It is what this lesson's first draft did, and the measurement is
+    what caught it: mean iterations over 117,413 separated box pairs went from <strong>4.52 to
+    3.52</strong>, and sphere-against-sphere went from two iterations to <strong>one</strong>,
+    because for two spheres the second support point <em>is</em> the answer. A sign on a seed,
+    worth 22% of the whole algorithm.
+  </p>
+
+  <h3>6.5 And warm starting, which is worth less than you would think</h3>
+
+  <p>
+    If the seed matters, last frame's answer should be a better seed than the centre line — two
+    bodies that have barely moved have barely moved their nearest features either. §G measures it
+    over 234,197 queries, 2,000 pairs drifting past each other for 120 frames each:
+  </p>
+
+  <pre><code class="lang-text">  G.1  234197 queries, 2000 pairs drifting over 120 frames
+       mean iterations
+         cold  (centre to centre)   2.219
+         warm  (last frame's axis)  2.152   1.03x
+         CONTROL (random axis)      3.414   0.65x</code></pre>
+
+  <p>
+    <strong>Read the control first.</strong> A random seed costs 54% more passes than the centre
+    line, so the seed really does matter a great deal — and then warm starting buys only 3% on top
+    of the free heuristic, because two bodies that have not moved much have not moved their centre
+    line much either. Reporting the 3% without the 54% would suggest the seed is unimportant;
+    reporting the 54% without the 3% would suggest warm starting is a major win. Neither is true
+    on its own.
+  </p>
+
+  <p>
+    Warm starting stays in the API anyway, and 8.7 will want it for a reason that has nothing to
+    do with iteration counts: keeping the <em>same contact feature</em> from frame to frame is
+    what makes a persistent manifold persistent, and that is about stability rather than speed.
+  </p>
+
+  <h2 id="simplex">7. The simplex solver: compute, don't decide</h2>
+
+  <p>
+    Step 3 of the four-line sketch — "reduce the simplex to the smallest face that still contains
+    its own nearest point" — is where GJK's correctness lives, where its bugs live, and where most
+    write-ups get vague. It is the only part of this lesson that needed rewriting after it was
+    measured, so it gets the space.
+  </p>
+
+  <p>
+    The job: given up to four points, find the one nearest the origin and discard the vertices
+    that do not contribute. Discarding matters because the simplex has only four slots, and a
+    vertex that contributes nothing to <code>v</code> still occupies one and makes the next
+    simplex thinner than it needs to be.
+  </p>
+
+  <h3>7.1 The triangle case, four candidates</h3>
+
+  <p>
+    Start with the triangle, because it is the case that decides everything. The nearest point of
+    a triangle to the origin is either in its interior or on one of its three edges. A
+    <strong>clamped</strong> edge — one where the parameter is held in <code>[0, 1]</code> —
+    already includes its own two endpoints, so three clamped edges cover all six boundary regions
+    (three edges, three vertices). Add the interior projection and you have four candidates that
+    cover everything:
+  </p>
+
+  <ul>
+    <li><strong>the interior:</strong> project the origin onto the triangle's plane; if its
+        barycentric coordinates are all non-negative, that point is in the triangle and is a
+        candidate;</li>
+    <li><strong>three clamped edges:</strong> for each pair of vertices, project the origin onto
+        the line, clamp the parameter into <code>[0, 1]</code>, take the point.</li>
+  </ul>
+
+  <p>
+    Evaluate all four, take the smallest. There is no case analysis because there is nothing to
+    decide.
+  </p>
+
+  @@FIG_SIMPLEX@@
+
+  <p>
+    The interior candidate's barycentric coordinates come from <strong>signed areas</strong>,
+    which is 2.3's construction exactly. With the origin as the query point the three cross
+    products collapse pleasantly: for a triangle <code>abc</code> with normal
+    <code>n = (b − a) × (c − a)</code>,
+  </p>
+
+  <p class="eq-plain">
+    λ<sub>a</sub> = dot(b × c, n) / n·n,  λ<sub>b</sub> = dot(c × a, n) / n·n,
+    λ<sub>c</sub> = dot(a × b, n) / n·n
+  </p>
+
+  <p>
+    and those three numerators sum to <code>n·n</code> exactly, which is why one reciprocal does
+    all three divisions. If any of them comes out negative the origin's projection is outside the
+    triangle and the interior candidate is simply skipped — which covers both "the origin projects
+    outside" and "this triangle is too thin to have an inside", with no separate test for the
+    second.
+  </p>
+
+  <h3>7.2 The textbook version, and why we do not ship it</h3>
+
+  <p>
+    There is a faster way, and it is the one every implementation copies — Ericson's
+    <code>ClosestPtPointTriangle</code>, which this lesson's first draft shipped. It identifies
+    which of the triangle's seven Voronoi regions the query point lies in, using six dot products
+    and three 2×2 determinants, and then evaluates only that one region. Fewer square roots, fewer
+    divisions, one branch instead of four comparisons. In exact arithmetic it is correct.
+  </p>
+
+  <p>
+    The three determinants are <strong>signed areas</strong>: differences of nearly equal products.
+    On a thin triangle they are noise, so the region the test selects can be the wrong one — and
+    when it is, the point it returns is the foot of the perpendicular on the triangle's
+    <em>plane</em>, which can be arbitrarily nearer the origin than the triangle itself is. The
+    right-hand panel of figure 6 shows the same failure one dimension down, where it can be drawn:
+    the nearest point of a segment is 1.252 m away, the foot of the perpendicular on its infinite
+    line is <strong>0.350 m</strong> away, and a solver that reports the second has not made a
+    small error — it has reported a point that is not on the simplex at all.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Slivers are not an edge case in GJK. They are where the algorithm spends its
+      time.</strong> The search's entire job is to drive the simplex onto the closest feature, so
+      by the last two iterations of every query the triangle is as thin as the problem allows and
+      the origin is a fraction of a millimetre from it. The failure mode lives exactly where the
+      algorithm converges, which is why it survives any test suite written against uniform random
+      data.
+    </p>
+  </div>
+
+  <p>
+    §C.5 measures both populations, 200,000 triangles each, counting how often the textbook
+    version claims a point <em>closer</em> than ours — which on a triangle is only possible if its
+    point is not on the triangle:
+  </p>
+
+  <pre><code class="lang-text">  C.5  FAT triangles, origin anywhere, 200000 of them:
+       textbook answer claims to beat ours  3
+       worst relative               4.1796e-03
+
+  C.5  SLIVERS with the origin 10um-10mm away, 200000 of them:
+       textbook answer claims to beat ours  1048
+       worst relative               1.4540e-01</code></pre>
+
+  <p>
+    Three failures on fat triangles and <strong>1,048 on slivers</strong>, with a worst case
+    <strong>14.5% wrong</strong>. And §C.6 prices the alternative: computing all four candidates
+    costs <strong>21.7 ns per triangle</strong>, against roughly 115 ns for a whole box-against-box
+    query of which the solver runs two or three times. Refusing to decide costs a few percent of a
+    collision test and buys an answer that cannot be wrong.
+  </p>
+
+  <h3>7.3 The tetrahedron, and the one thing that must be decided</h3>
+
+  <p>
+    A tetrahedron is four triangles plus one question the triangles cannot answer: <em>is the
+    origin inside?</em> If it is, the distance is zero and the search is over. If it is not, the
+    nearest point is on one of the four faces and §7.1 finds it.
+  </p>
+
+  <p>
+    Containment is decided by asking, for each face, whether the origin is on the same side as the
+    fourth vertex. That is a sign comparison of two dot products — and it has exactly the
+    conditioning problem §7.2 just described, because GJK's tetrahedra are as flat as its
+    triangles are thin. §C.3 makes it concrete with a tetrahedron whose four vertices lie on the
+    plane <code>y = 1</code> and an origin a metre below it: the reference vertex is
+    <em>on</em> every face's plane, so <code>sp · sd</code> is exactly zero, <code>0 &lt; 0</code>
+    is false, and all four faces report "not outside". Without a guard, two things a metre apart
+    are reported as touching.
+  </p>
+
+  <p>
+    So <code>outside_plane</code> carries a relative degeneracy test, and it is relative for 8.4
+    §11's reason — a threshold with units must be scaled by something with the same units, or it
+    means a different thing on every scene:
+  </p>
+
+  <pre><code class="lang-cpp">const float scale = length_squared(n) * length_squared(d - a);
+if (sd * sd &lt;= 1e-12f * scale) { return true; }</code></pre>
+
+  <p>
+    Reporting "outside" for a degenerate face is both the conservative answer and the
+    <em>correct</em> one: a flat tetrahedron has no interior, so nothing can be inside it, and the
+    caller goes on to find a nearest point on the face instead of claiming contact.
+  </p>
+
+  <h3>7.4 The invariant that catches what the guards miss</h3>
+
+  <p>
+    That guard is not enough on its own, and the thing that saves the algorithm is not another
+    guard but a <strong>theorem you can check</strong>.
+  </p>
+
+  <p>
+    After a reduction, the simplex is the minimal face containing its own nearest point, so the
+    reduced simplex and the full one have the same <code>v</code>. The next iteration adds
+    <code>w</code> to that reduced simplex, and the new simplex therefore <em>contains</em> the
+    old one. The nearest point of a superset cannot be farther away than the nearest point of a
+    subset. So:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong><code>|v|</code> is monotonically non-increasing for the whole search, by
+      construction.</strong> A step that fails to decrease it cannot be the algorithm converging
+      slowly. It is float arithmetic having run out of room, and one more pass will produce the
+      same non-decrease for ever.
+    </p>
+  </div>
+
+  <p>
+    Two lines test it, and they catch two completely different failures.
+  </p>
+
+  <p>
+    <strong>The first is the loop cycling</strong>, and it happens on ordinary input rather than
+    adversarial. Two 3 m boxes 2 mm apart reached the 64-iteration cap with the distance already
+    correct to six digits, because the termination test's threshold falls as the gap
+    <em>squared</em> while its rounding error falls only as the gap — §11 measures that floor
+    exactly.
+  </p>
+
+  <p>
+    <strong>The second is the simplex solver going backwards</strong>, which is how the sliver
+    problem was found in the first place. A sphere against a turned box: eighteen iterations
+    converging cleanly toward <code>0.0233827 m</code> against a true <code>0.0233828</code>, and
+    then one reduction returning <strong>0.0674522</strong> — three times too far, from a triangle
+    two of whose vertices agreed to six digits. The monotonicity check noticed, restored the last
+    good state, and reported the answer it already had.
+  </p>
+
+  <p>
+    An invariant you can check is worth more than one you believe, and this one costs a comparison
+    and a 160-byte copy against two support calls.
+  </p>
+
+  <h3>7.5 And a proof outranks a decision</h3>
+
+  <p>
+    There is one more place the same idea applies, and it is the reason 8.4's certificate habit
+    was worth forming. §6.1 noted that a single positive <code>dot(v, w)</code> is a complete
+    proof that the shapes are apart: the supporting plane with normal <code>v̂</code> has the whole
+    difference set strictly beyond it, and the origin is not.
+  </p>
+
+  <p>
+    Now consider what happens when a later, flatter tetrahedron's sign test reports "the origin is
+    inside". Those two claims cannot both be true, and they are not equally trustworthy: one is a
+    theorem about a maximum, the other is the sign of a signed volume computed on a degenerate
+    shape. So the loop banks the best lower bound it has proven and refuses any containment that
+    contradicts it:
+  </p>
+
+  <pre><code class="lang-cpp">if (reduce_simplex(s, v, weights))
+{
+    if (lower2 &gt; tol * tol * scale2)
+    {
+        s = previous;
+        v = previous_v;
+        for (int i = 0; i &lt; 4; ++i) { weights[i] = previous_weights[i]; }
+        r.stalled = true;
+        break;
+    }
+
+    r.status = gjk_status::intersecting;
+    r.terminal = s;
+    return r;
+}</code></pre>
+
+  <p>
+    Measured on the case that motivated it: a sphere and a turned box <strong>55 mm apart</strong>,
+    fourteen clean iterations converging to <code>0.0553297 m</code>, and then a tetrahedron whose
+    four face tests all reported containment — turning a 55 mm gap into a contact. The proof was
+    already in hand, and a proof does not become false because a later determinant changed sign.
+  </p>

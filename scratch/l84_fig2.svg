@@ -1,0 +1,51 @@
+<svg viewBox="0 0 900 402" role="img" aria-labelledby="l84f2-t l84f2-d">
+  <title id="l84f2-t">The radius of a box's shadow</title>
+  <desc id="l84f2-d">A box turned 30 degrees, its projection onto the x axis, and the three terms of the projected-radius formula worked through with numbers.</desc>
+  <defs>
+    <marker id="e-i-l84f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="402" class="fill-bg" stroke="none"/>
+<path d="M 133.93,176.97 L 185.93,267.03 L 366.07,163.03 L 314.07,72.97 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<text x="250" y="164" class="xs muted" text-anchor="middle">box</text>
+<line x1="250.00" y1="170.00" x2="340.07" y2="118.00" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-u0-l84f2)"/>
+<line x1="250.00" y1="170.00" x2="276.00" y2="215.03" stroke="#9b7ede" stroke-width="1.6" marker-end="url(#e-u1-l84f2)"/>
+<line x1="154.0" y1="350.0" x2="174.0" y2="350.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="182" y="354" class="xs" text-anchor="start">h₀ u₀  — 2.0 m along the first axis</text>
+<line x1="154.0" y1="367.0" x2="174.0" y2="367.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="182" y="371" class="xs" text-anchor="start">h₁ u₁  — 1.0 m along the second</text>
+<line x1="60.0" y1="302.0" x2="440.0" y2="302.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<text x="452" y="306" class="xs mono muted" text-anchor="start">L = x</text>
+<line x1="133.9" y1="302.0" x2="366.1" y2="302.0" stroke="#5ac878" stroke-width="6.0" fill="none"/>
+<line x1="133.9333580064184" y1="176.96667900320918" x2="133.9333580064184" y2="302" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="185.93335800641836" y1="267.0333209967908" x2="185.93335800641836" y2="302" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="314.06664199358164" y1="72.9666790032092" x2="314.06664199358164" y2="302" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="366.0666419935816" y1="163.03332099679082" x2="366.0666419935816" y2="302" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="250.0" y1="286.0" x2="250.0" y2="318.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<text x="308.0333209967908" y="326" class="xs mono" text-anchor="middle">radius</text>
+<text x="308.0333209967908" y="340" class="xs mono t-hi" text-anchor="middle">2.2321 m</text>
+<text x="540" y="62" class="sm mono" text-anchor="start">r(L)  =  Σᵢ hᵢ |uᵢ · L|</text>
+<text x="540" y="84" class="xs muted" text-anchor="start">the three terms, for this box and this L:</text>
+<text x="540" y="108" class="xs muted" text-anchor="start">term</text>
+<text x="794" y="108" class="xs muted" text-anchor="end">value</text>
+<text x="886" y="108" class="xs muted" text-anchor="end">metres</text>
+<line x1="540" y1="116.0" x2="892" y2="116.0" class="grid" stroke-width="1.0"/>
+<text x="540" y="133.0" class="xs" text-anchor="start">h₀ |u₀·L|</text>
+<text x="794" y="133.0" class="xs mono" text-anchor="end">2.0 × |0.8660|</text>
+<text x="886" y="133.0" class="xs mono" text-anchor="end">1.732050</text>
+<text x="540" y="150.0" class="xs" text-anchor="start">h₁ |u₁·L|</text>
+<text x="794" y="150.0" class="xs mono" text-anchor="end">1.0 × |-0.5000|</text>
+<text x="886" y="150.0" class="xs mono" text-anchor="end">0.500000</text>
+<text x="540" y="167.0" class="xs" text-anchor="start">h₂ |u₂·L|</text>
+<text x="794" y="167.0" class="xs mono" text-anchor="end">0.5 × |0.0000|</text>
+<text x="886" y="167.0" class="xs mono" text-anchor="end">0.000000</text>
+<line x1="540" y1="169.5" x2="892" y2="169.5" class="grid" stroke-width="1.0"/>
+<text x="540" y="187.5" class="xs" text-anchor="start">sum</text>
+<text x="886" y="187.5" class="xs mono t-hi" text-anchor="end">2.232051</text>
+<text x="540" y="219.5" class="xs muted" text-anchor="start">THE THIRD TERM IS ZERO BECAUSE u₂ ⟂ L, not</text>
+<text x="540" y="233.5" class="xs muted" text-anchor="start">because the box is flat. Turn it out of the page</text>
+<text x="540" y="247.5" class="xs muted" text-anchor="start">and that 0.5 starts contributing.</text>
+</svg>

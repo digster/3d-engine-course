@@ -1,0 +1,410 @@
+  <h2 id="persistence">9. Identity, and what survives a frame</h2>
+
+  <p>
+    The manifold is built. Now the second half of the lesson's title, and the reason for it is
+    8.10's solver rather than 8.7's geometry.
+  </p>
+
+  <p>
+    A sequential-impulse solver converges over many iterations, and sixty times a second it gets to
+    run a handful. <strong>Warm starting</strong> — beginning each contact from the impulse that held
+    it last frame — is what turns “not converged yet” into “converged four frames ago and still is”,
+    and it is the single largest difference between a stack that settles and a stack that sinks. 8.10
+    builds it. This lesson builds the thing it needs: a way to say that <em>this</em> contact is
+    <em>that</em> contact, one frame later.
+  </p>
+
+@@FIG_PERSIST@@
+
+  <h3>Why not position</h3>
+
+  <p>
+    The obvious answer is to match contacts by where they are. It fails, and it fails in the way
+    that is hardest to catch: it works perfectly right up until the scene gets interesting.
+  </p>
+
+  <p>
+    §9 runs a crate landing on a floor for 600 frames at 60 Hz and asks, on each frame, how many of
+    that frame's contact points can be matched to the previous frame's:
+  </p>
+
+  <pre><code class="lang-text">     frames with a contact on both sides : 591
+     contact points to match             : 1969
+     matched by ID                       : 1620  (82.28%)
+     matched by position, 10 microns     : 0  (0.00%)
+     matched by position, 10 millimetres : 1618  (82.17%)</code></pre>
+
+  <p>
+    Zero at ten micrometres. A crate falling at walking pace travels centimetres per frame, so no
+    tolerance that is tight enough to distinguish two corners of the same face is loose enough to
+    follow one corner across a frame. Widen it to ten millimetres and it works — on this fixture, at
+    this speed, on a crate one metre wide. Halve the crate or double the speed and it stops.
+  </p>
+
+  <p>
+    And the version of the experiment that looks like a success is the one to be suspicious of. Hold
+    the same crate at rest and jitter it by a hundred nanometres a frame, which is what a settled
+    body in a real solver does:
+  </p>
+
+  <pre><code class="lang-text">     frames                              : 1999
+     matched by ID                       : 100.00%
+     matched by position, 10 microns     : 100.00%</code></pre>
+
+  <p>
+    A position matcher works perfectly on a body that is not moving. That is exactly why it is a
+    trap: it passes the test you would write for it, and the failure arrives with the motion.
+  </p>
+
+  <p>
+    The deeper reason is 8.6 §7's, and this is its third appearance in the module. A contact point's
+    position is a <code>float</code> computed by a different route through the same code on each of
+    the two frames — different clip parameters, a different <code>t</code>, a different reference
+    vertex to subtract from. Asking whether two such numbers are equal is asking a question that has
+    no correct answer in floating point.
+  </p>
+
+  <h3>What an id is made of</h3>
+
+  <div class="callout">
+    <p>
+      <strong>Every field of a <code>contact_id</code> is a discrete index into geometry that does
+      not move.</strong> A face's own identity — 0–5 for a box, a hash of the coplanar vertex set
+      for a hull. A vertex's own index on its shape — 0–7 in <code>obb::corners</code>' order. None
+      of them is computed from a position, so none of them can change because a body moved by a
+      micron. They change when the <em>contact</em> changes, which is the definition of what an id
+      is for.
+    </p>
+  </div>
+
+  <pre><code class="lang-cpp">struct contact_id
+{
+    std::uint16_t reference_face = 0;
+    std::uint16_t incident_face = 0;
+    std::uint8_t reference_index = 0xff;
+    std::uint8_t incident_index = 0xff;
+    contact_feature kind = contact_feature::point;
+    std::uint8_t flipped = 0;
+};</code></pre>
+
+  <p>
+    Six bytes of named fields rather than a packed integer. Box2D famously folds the equivalent into
+    four, and it is right to: it stores one per contact point in a structure it copies constantly.
+    Here the id sits inside a 40-byte <code>contact_point</code> that already carries three impulses
+    and a position, so the two bytes buy nothing and cost every reader a shift and a mask. Pack when
+    the packing pays; name the fields when it does not.
+  </p>
+
+  <p>
+    The 8.4 connection is worth noticing. <code>obb::corners</code>' doc comment, written a lesson
+    before any of this existed, says: “8.7's manifolds identify contact features by index, and two
+    conventions for corner 3 would be a bug that only appears when a box changes type.” It is
+    honoured literally — corner 3 of a box's face is corner 3 of the box — which is why
+    <code>contact_face</code> carries a per-vertex <code>id</code> array at all rather than relying
+    on the local index within the face.
+  </p>
+
+  <h3>Matching, and why a linear scan</h3>
+
+  <pre><code class="lang-cpp">int carry_impulses(contact_manifold&amp; fresh, const contact_manifold&amp; previous)
+{
+    int matched = 0;
+    for (int i = 0; i &lt; fresh.count; ++i)
+    {
+        for (int j = 0; j &lt; previous.count; ++j)
+        {
+            if (!(fresh.points[i].id == previous.points[j].id)) { continue; }
+            fresh.points[i].normal_impulse = previous.points[j].normal_impulse;
+            fresh.points[i].tangent_impulse[0] = previous.points[j].tangent_impulse[0];
+            fresh.points[i].tangent_impulse[1] = previous.points[j].tangent_impulse[1];
+            fresh.points[i].warm = true;
+            ++matched;
+            break;
+        }
+    }
+    fresh.warm_points = matched;
+    return matched;
+}</code></pre>
+
+  <p>
+    Four against four, in two arrays that are already in cache because the caller just wrote one of
+    them. Sixteen comparisons of six bytes. A map keyed on the id would be correct, slower, and would
+    allocate.
+  </p>
+
+  <h3>The control that was wrong, and what it taught</h3>
+
+  <p>
+    §9's first control teleported the crate two metres sideways between two frames, expected zero id
+    matches, and got <strong>four out of four</strong>. The manifold was right and the control was
+    wrong.
+  </p>
+
+  <p>
+    A <code>contact_id</code> names <em>features</em>: the floor's top face, the crate's bottom face,
+    corners 0 to 3. Move the crate anywhere on that floor and the same corner really is on the same
+    face, so the same id is the correct answer to the question an id asks. Ids cannot detect a
+    teleport and should not be asked to — a body that was <em>moved</em> rather than simulated is a
+    discontinuity, and invalidating its cached manifolds is the <em>cache's</em> job.
+  </p>
+
+  <p>
+    The control that does work is the one that changes the feature:
+  </p>
+
+  <pre><code class="lang-text">     slid 2 m along the same face : 4 of 4 matched
+     rolled onto its side         : 0 of 4 matched</code></pre>
+
+  <div class="callout">
+    <p>
+      <strong>A control that convicts the code of the test's own mistake is the most expensive kind
+      there is</strong>, because it looks like a finding. 8.6 §A.2 had the happy version of this —
+      a control that fired and was right — and 7.8 §G had the other one, a starvation counter that
+      fired on the healthy case. The tell here was that the “failure” was too clean: four of four is
+      not what a broken matcher looks like.
+    </p>
+  </div>
+
+  <h3>The tie that does not fire, and the knob that came back out</h3>
+
+  <p>
+    Every 2D physics engine carries a bias on the reference choice, and the reasoning is sound: two
+    equally parallel faces make the choice a coin toss, a bare <code>&gt;</code> decides it on
+    rounding, and a flip renames all four contacts at once because <code>flipped</code> is part of
+    the identity. This lesson shipped that knob in draft, and §9 measured it:
+  </p>
+
+  <pre><code class="lang-text">     population        pairs   cos tie   flips   ids kept
+     free boxes        67955    0.00%      0   100.00%
+     crates on crates 120000  100.00%      0   100.00%
+     hex prisms        20000  100.00%      0   100.00%
+
+     207955 pairs, 0 flips.</code></pre>
+
+  <p>
+    Zero. And the third column says why: on a face contact <strong>both cosines are exactly
+    <code>1.0f</code></strong>, because each face really <em>is</em> perpendicular to the contact
+    normal. The tie is <em>exact</em>, and an exact tie is resolved deterministically —
+    <code>a</code> wins, this frame and every frame. A quantity that merely <em>ought</em> to be
+    equal would be a coin toss; one that <em>is</em> equal is not. The hazard belongs to the
+    quantity, not to the comparison.
+  </p>
+
+  <p>
+    A measurement of zero needs a control more than any other kind, because “it never happened” and
+    “I was not measuring anything” produce the same number. The flip cannot be provoked by a nudge —
+    that is the result — so §9's control forces one the only way it can, by swapping the two
+    arguments:
+  </p>
+
+  <pre><code class="lang-text">     cos_a = 1.000000000   cos_b = 1.000000000
+     bit-identical                   : yes
+     ids that survive the swap       : 0 of 4</code></pre>
+
+  <p>
+    So the flip is not harmless — it costs every warm start on the pair — and it does not fire. The
+    knob came out, under 8.6 §12's rule that a change buying nothing still costs a reader.
+  </p>
+
+  <p>
+    That control doubles as a warning about argument order, and it is the one thing in this file most
+    likely to bite. <code>pair_key(a, b)</code> is deliberately order-<em>independent</em>, because a
+    broadphase has no reason to report a pair the same way round twice. The <em>manifold</em> is not:
+    hand the same pair to <code>collide_manifold</code> the other way round on one frame and the
+    normal reverses, the reference moves to the other shape, and every id changes. Generate with the
+    same shape as <code>a</code> every frame, and 8.8's broadphase adopts “lower index first” for
+    exactly this reason.
+  </p>
+
+  <h3>Where the manifolds live</h3>
+
+  <p>
+    <code>carry_impulses</code> knows how to match two manifolds. Something has to remember which
+    manifold belonged to which pair, across a frame in which the set of pairs changed completely.
+  </p>
+
+  <p>
+    <code>manifold_cache</code> is an open-addressed table with linear probing and <strong>no
+    tombstones</strong>: <code>end_frame</code> rebuilds from the entries that were touched. That is
+    O(capacity) once a frame, against O(pairs) of work the caller already spent walking them, and it
+    buys a table that never rots. A deleted-marker scheme degrades until a rehash, and a physics
+    cache deletes on most frames, because pairs are born and die as things move.
+  </p>
+
+  <pre><code class="lang-cpp">    cache.begin_frame();
+    for (pair : pairs) {
+        manifold m = collide_manifold(a, b);
+        if (const contact_manifold* old = cache.find(key)) { carry_impulses(m, *old); }
+        solve(m);
+        cache.store(key, m);
+    }
+    cache.end_frame();</code></pre>
+
+  <p>
+    Three calls, and skipping the last one is a leak that presents as a slow frame every few seconds.
+    §9 runs 400 frames of a 60-body scene where pairs are born and die every frame:
+  </p>
+
+  <pre><code class="lang-text">     stores / hits / drops : 22807 / 990 / 21766
+     peak live pairs       : 79
+     slots at the end      : 128
+     worst load factor     : 0.500
+     allocations           : 749, over 400 frames</code></pre>
+
+  <p>
+    The table grows at half full, which is where linear probing stops being cheap: the expected probe
+    length is <code>(1 + 1/(1−load)²)/2</code>, which is 2 at half full and 13 at ninety per cent. A
+    physics cache is walked once per pair per frame, so the probe length is multiplied by everything
+    touching everything.
+  </p>
+
+  <p>
+    And the hash is SplitMix64's finaliser rather than the key itself, which matters here more than
+    it usually does. A pair key is two small integers side by side, so its low bits are one body's
+    index; a table indexed by <code>key &amp; mask</code> would put every pair involving the same
+    body into the same handful of slots. Every body in a stack collides with its neighbour, so that
+    is not a hypothetical — it is the arrangement the cache exists for.
+  </p>
+
+  <h2 id="demo">10. Watching it, and breaking it on purpose</h2>
+
+  <p>
+    <code>demos/manifold</code> draws two panels. The left one is the world: the two shapes, the
+    contact points as filled dots, and the <em>support polygon</em> they span drawn as a closed loop,
+    with its area printed. The right one is the same contact seen <strong>face on</strong>, in the
+    reference face's own plane — and <kbd>S</kbd> applies one Sutherland–Hodgman side plane at a
+    time, with the plane about to be applied drawn dashed and its outward normal as a short stub.
+  </p>
+
+  <p>
+    As with <code>gjk</code> and <code>epa</code>, it runs its own clipper. A single-stepping
+    visualiser needs the iteration, not the answer — and it uses only <code>support_face</code> and
+    <code>collide_manifold</code>, both public, so 5.1's boundary is intact. The engine's own answer
+    is printed beside the picture, so the two can be seen to agree.
+  </p>
+
+  <p>
+    Four things to do with it, in order:
+  </p>
+
+  <ol>
+    <li><strong>Press <kbd>1</kbd> and look at the left panel.</strong> Four points, a square support
+        polygon, an area of 1.0 m². Then <kbd>4</kbd>: a ball on the same floor gets
+        <em>one</em> point and an area of zero, and that is not a shortfall.</li>
+    <li><strong>Press <kbd>2</kbd> and hold <kbd>Z</kbd>.</strong> The crate tilts, and somewhere
+        around a degree the manifold drops from four points to two — the two corners still below the
+        floor's plane. The support polygon collapses to a line and its area goes to zero. §2's
+        “a crate on two points is a crate on a hinge”, happening.</li>
+    <li><strong>Press <kbd>A</kbd> to stop the auto-run, then <kbd>S</kbd> four times.</strong> The
+        right panel applies one side plane per press. On preset 1 nothing is cut, because the crate's
+        face is wholly inside the floor's; drag it to the floor's edge with the arrow keys and watch
+        the crossings appear.</li>
+    <li><strong>Press <kbd>W</kbd>, then drive the crate around with the arrows.</strong> The panel
+        reports how many of this frame's points matched last frame's by id. It stays at full while
+        the crate slides, because the ids name features. Tip it far enough with <kbd>Z</kbd> and it
+        drops to zero for exactly one frame, which is correct.</li>
+  </ol>
+
+  <p>
+    Preset 5 is the one that shows §5's truncation: a twelve-sided prism on a floor clips to eight
+    points, and the four the reduction keeps are spread around the octagon rather than bunched.
+    Preset 3 is two crates crossed at 45°, which is an <em>edge</em> contact — the panel says so, and
+    deliberately does not draw a clip that did not happen.
+  </p>
+
+  <h2 id="budget">11. The budget, and a knob that came back out</h2>
+
+@@FIG_BUDGET@@
+
+  <p>
+    Twenty thousand overlapping box pairs, on a release library:
+  </p>
+
+  <pre><code class="lang-text">     GJK distance only            :    87.3 ns/pair
+     GJK + EPA                    :   252.0 ns/pair
+     build_manifold alone         :   142.9 ns/pair
+     the whole narrow phase       :   395.1 ns/pair
+     one support_face             :     5.2 ns</code></pre>
+
+  <p>
+    The manifold is 36% of the narrow phase and the penetration depth is still what costs. That
+    ordering is worth internalising, because the instinct is the other way round: clipping
+    <em>feels</em> like the expensive part, and it is four passes over at most eight vertices with no
+    square roots, while EPA is eight to sixteen expansions each rebuilding a chunk of a surface.
+  </p>
+
+  <p>
+    Nothing allocates. Measured by replacing the global <code>operator new</code> and counting —
+    6.17 §9's method, for the third lesson running — twenty thousand whole narrow-phase queries make
+    <strong>zero</strong> allocations. Both <code>contact_face</code>s, the clip buffers and the
+    manifold live on the stack.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>8.6 §12 deleted four default member initialisers and bought 20.5%. The same question
+      here buys nothing, and the reason is the one 8.6 named: the tell was the ARRAY, not the
+      struct.</strong> <code>polytope</code> held 128 faces, so one initialiser on one member made
+      <code>polytope p;</code> write four kilobytes that the next line overwrote, and
+      <code>expand</code> rebuilt a three-kilobyte horizon array once per pass. A
+      <code>contact_face</code> is 124 bytes, a query builds exactly two of them once, and there is
+      no array of them anywhere. So <code>vec3</code>'s own initialisers are left alone and
+      <code>v</code> is documented as written-before-read.
+    </p>
+  </div>
+
+  <p>
+    And the other thing that came out. §9's <code>reference_bias</code> was written for a real hazard,
+    measured at zero over 208,000 pairs across three shape mixes, and removed — leaving a
+    <code>&gt;</code> and a comment explaining why it is safe here and would not be in a formulation
+    that compared two separations. That is 8.6's discipline applied to a feature rather than to a
+    micro-optimisation, and it is the harder half of it: deleting something that <em>works</em>
+    because it does not do anything.
+  </p>
+
+  <h2 id="notyet">12. What this does not do</h2>
+
+  <p>
+    Five honest gaps, each named rather than discovered later.
+  </p>
+
+  <p>
+    <strong>Nothing consumes the manifold yet.</strong> <code>normal_impulse</code> and
+    <code>tangent_impulse</code> are declared, carried across frames, and written by nobody. 8.9
+    resolves a contact with an impulse and 8.10 accumulates and warm-starts. They are declared here
+    rather than later because the whole point of the id is to make them survive, and retrofitting
+    them would mean rewriting the matching.
+  </p>
+
+  <p>
+    <strong>There is no speculative margin.</strong> A pair a micron short of touching produces
+    nothing at all — <code>collide_manifold</code> returns a manifold with
+    <code>status == none</code>. That is the honest answer to “are these in contact” and the wrong
+    answer for a solver, which would rather see the contact one frame early so that it arrives with a
+    warm impulse already on it. <code>keep_slop</code> is the hook; 8.9 turns it up, in the one place
+    that should own the decision.
+  </p>
+
+  <p>
+    <strong>A <code>hull</code> still has no faces.</strong> §5 measured both ends of the gather
+    tolerance and there is no value that is right, because the question is topological. A real fix
+    is a face list on the collider — computed offline by a hull builder, which 8.5 §13 already said
+    was out of scope and named the algorithm for. Until then, hand-authored colliders with genuinely
+    flat faces work well and tessellated curved ones are approximated.
+  </p>
+
+  <p>
+    <strong>An edge contact's point is not on either surface at depth.</strong> §7 measured it: the
+    midpoint of two crossed edges is within a few millimetres of both at the depths a solver
+    maintains, and half a metre from one on a deep overlap. There is no convention that does better,
+    because there is no single point where two deeply crossed boxes touch — but a solver that lets
+    overlaps get deep will see it, and that is one more reason not to.
+  </p>
+
+  <p>
+    <strong>And the normal still jumps.</strong> §1 measured the ninety-degree swing and this lesson
+    does not remove it, because it cannot: it is a property of a minimum. What has changed is that
+    the swing is now a discrete event that renames a handful of ids, rather than four points
+    re-derived from scratch every frame. 8.10's solver will need to survive it, and knowing that it
+    is a feature change rather than noise is what makes that possible.
+  </p>

@@ -1,0 +1,78 @@
+<svg viewBox="0 0 640 336" role="img" aria-labelledby="f416-t f416-d">
+  <title id="f416-t">fill_style beside SDL_GPUGraphicsPipelineCreateInfo</title>
+  <desc id="f416-d">Two field lists side by side. On the left engine fill_style with ten fields: interp, shade, space, cull, lights, surface, model, eye, albedo and encode. On the right SDL_GPUGraphicsPipelineCreateInfo with nine: vertex_shader, fragment_shader, vertex_input_state, primitive_type, rasterizer_state, multisample_state, depth_stencil_state, target_info and props, which expand to 53 leaf fields. The two structs are the same size at the top level.</desc>
+  <defs>
+    <marker id="e-i-f416" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f416" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f416" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="16.0" y="26" class="sm">engine::fill_style</text>
+  <text x="16.0" y="42" class="xs muted">src/gfx/raster.hpp, Lessons 3.2 &#8211; 4.1</text>
+  <text x="330.0" y="26" class="sm">SDL_GPUGraphicsPipelineCreateInfo</text>
+  <text x="330.0" y="42" class="xs muted">SDL3/SDL_gpu.h, release-3.4.12</text>
+  <rect x="12.0" y="49.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="62.0" class="xs mono muted">interpolation</text>
+  <text x="184.0" y="62.0" class="xs mono">interp</text>
+  <rect x="12.0" y="68.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="81.0" class="xs mono muted">shading</text>
+  <text x="184.0" y="81.0" class="xs mono">shade</text>
+  <rect x="12.0" y="87.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="100.0" class="xs mono muted">blend_space</text>
+  <text x="184.0" y="100.0" class="xs mono">space</text>
+  <rect x="12.0" y="106.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="119.0" class="xs mono muted">cull_mode</text>
+  <text x="184.0" y="119.0" class="xs mono">cull</text>
+  <rect x="12.0" y="125.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="138.0" class="xs mono muted">const lighting*</text>
+  <text x="184.0" y="138.0" class="xs mono">lights</text>
+  <rect x="12.0" y="144.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="157.0" class="xs mono muted">specular</text>
+  <text x="184.0" y="157.0" class="xs mono">surface</text>
+  <rect x="12.0" y="163.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="176.0" class="xs mono muted">specular_model</text>
+  <text x="184.0" y="176.0" class="xs mono">model</text>
+  <rect x="12.0" y="182.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="195.0" class="xs mono muted">vec3</text>
+  <text x="184.0" y="195.0" class="xs mono">eye</text>
+  <rect x="12.0" y="201.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="214.0" class="xs mono muted">texture_binding</text>
+  <text x="184.0" y="214.0" class="xs mono">albedo</text>
+  <rect x="12.0" y="220.0" width="292" height="17.0" fill="#78b4eb" opacity="0.14"/>
+  <text x="16.0" y="233.0" class="xs mono muted">encode_mode</text>
+  <text x="184.0" y="233.0" class="xs mono">encode</text>
+  <rect x="326.0" y="49.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="62.0" class="xs mono muted">SDL_GPUShader*</text>
+  <text x="482.0" y="62.0" class="xs mono">vertex_shader</text>
+  <rect x="326.0" y="68.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="81.0" class="xs mono muted">SDL_GPUShader*</text>
+  <text x="482.0" y="81.0" class="xs mono">fragment_shader</text>
+  <rect x="326.0" y="87.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="100.0" class="xs mono muted">…VertexInputState</text>
+  <text x="482.0" y="100.0" class="xs mono">vertex_input_state</text>
+  <rect x="326.0" y="106.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="119.0" class="xs mono muted">…PrimitiveType</text>
+  <text x="482.0" y="119.0" class="xs mono">primitive_type</text>
+  <rect x="326.0" y="125.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="138.0" class="xs mono muted">…RasterizerState</text>
+  <text x="482.0" y="138.0" class="xs mono">rasterizer_state</text>
+  <rect x="326.0" y="144.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="157.0" class="xs mono muted">…MultisampleState</text>
+  <text x="482.0" y="157.0" class="xs mono">multisample_state</text>
+  <rect x="326.0" y="163.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="176.0" class="xs mono muted">…DepthStencilState</text>
+  <text x="482.0" y="176.0" class="xs mono">depth_stencil_state</text>
+  <rect x="326.0" y="182.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="195.0" class="xs mono muted">…PipelineTargetInfo</text>
+  <text x="482.0" y="195.0" class="xs mono">target_info</text>
+  <rect x="326.0" y="201.0" width="298" height="17.0" fill="#eb786e" opacity="0.14"/>
+  <text x="330.0" y="214.0" class="xs mono muted">SDL_PropertiesID</text>
+  <text x="482.0" y="214.0" class="xs mono">props</text>
+  <text x="16.0" y="260.0" class="xs mono t-hi">10 fields</text>
+  <text x="330.0" y="260.0" class="xs mono t-hi">9 fields (53 once the nested state is expanded)</text>
+  <text x="16.0" y="286.0" class="sm">We did not approximate a pipeline object. <tspan class="t-hi">We built one</tspan>, and it is the same size.</text>
+  <text x="16.0" y="304.0" class="sm muted">Every field on the left has a home on the right: <tspan class="mono">cull</tspan> in rasterizer_state, <tspan class="mono">shade</tspan> in fragment_shader,</text>
+  <text x="16.0" y="320.0" class="sm muted"><tspan class="mono">albedo</tspan> split between a binding and a sampler. The port is a rename, and Lesson 4.8 is where it happens.</text>
+</svg>

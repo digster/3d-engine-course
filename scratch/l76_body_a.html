@@ -1,0 +1,266 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-05-slerp.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.5 — Slerp, and the Storage Swap</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-07-sampling-blending.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.7 — Sampling and Blending Animations</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.6</div>
+    <h1>Skeletal Animation: The Skinning Math</h1>
+    <p class="deck">
+      Skinning has more vocabulary than mathematics. <em>Bind pose</em>, <em>inverse bind matrix</em>,
+      <em>matrix palette</em>, <em>skin cluster</em>, <em>linear blend skinning</em> — six terms for
+      four multiply-adds and one matrix product, and the terms are what make it sound hard.
+      <strong>This lesson throws the vocabulary away and derives the one matrix that matters from
+      the naming convention Lesson 2.8 established</strong>: a skinning matrix is
+      <code>model_from_joint</code> times <code>joint_from_model</code>, the inner labels cancel
+      because they name the same joint at two different <em>times</em>, and the outer labels are the
+      same space — so a skinning matrix is <code>model_from_model</code>, which is both why four of
+      them may be added together and why the sum is not a rotation. Everything else follows.
+      Building the inverse bind matrices turns out to need <strong>no matrix inversion at all</strong>,
+      because inverting a product reverses it and the inverse chain composes with the same flat loop
+      as the forward one — which finally writes the function Lesson 2.8 deliberately left out.
+      <strong>At the bind pose every skinning matrix is exactly the identity</strong>, which is the
+      cheapest complete test of a rig that exists and needs no reference image. Then the artifact:
+      linear blend skinning collapses a twisted limb to <code>cos(θ/2)</code> of its radius —
+      <em>exactly</em> zero at a half-turn, the same half-angle Lesson 7.3 found between two mirrors —
+      and spreading the twist over <code>n</code> joints opens it back to <code>cos(θ/2n)</code>,
+      which is what a forearm twist bone <em>is</em>. A bend obeys the same cosine on the minor axis
+      of an ellipse. And the one-line summary everybody repeats, that linear blend skinning is nlerp
+      without the normalise, turns out to be <strong>wrong in both directions</strong>: it is worse,
+      because its schedule error uses the whole angle rather than the half angle, and it is better,
+      because a rotation matrix is unique so the double cover cannot bite.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-08-space-chain.html">2.8 — The Space Chain: Model to World</a>,
+          <a href="05-09-transform-hierarchy.html">5.9 — Transform Hierarchy</a>,
+          <a href="07-04-quaternions.html">7.4 — Quaternions, Derived</a>,
+          <a href="07-05-slerp.html">7.5 — Slerp, and the Storage Swap</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/anim/skeleton.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/anim/skin.hpp</code> <em>(new)</em>,
+            <code>engine/src/anim/skeleton.cpp</code> <em>(new)</em>,
+            <code>engine/src/anim/skin.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/math/transform.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/rig/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_76.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_76.sh</code> <em>(new)</em>,
+            <code>scratch/golden_76.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine gains its first subsystem that is neither graphics nor entities:
+            <strong><code>engine::anim</code></strong>, with a skeleton, a bind pose, a matrix
+            palette and linear blend skinning. <strong>32 checks green</strong>, eleven of them
+            controls — including one that deletes the inverse bind matrices and demands the mesh
+            leave the frame in return, and one that builds a general 4×4 inverse from scratch so
+            that the chain can be checked against something sharing no code with it. A new
+            <code>rig</code> demo bends and twists a skinned tube and prints the radius of its
+            narrowest ring beside the radius the derivation predicts; the two agree to six figures
+            in both modes. The golden render is <strong>byte-identical</strong> across the new
+            <code>local_from_parent</code> — hash <code>E917C06C</code>, unchanged since Lesson 5.2.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say exactly why a transform hierarchy cannot animate a character, in terms of the
+          geometry rather than the mathematics.</li>
+      <li>…derive the skinning matrix from the space-naming convention alone, and read off from its
+          labels both why the blend is well-typed and why its result is not a rotation.</li>
+      <li>…build a skeleton's inverse bind matrices with no matrix inversion anywhere, and explain
+          why the inverse chain composes on the opposite side from the forward one.</li>
+      <li>…test a whole rig with one number, before any geometry exists, by posing it at its own
+          bind pose and measuring how far each skinning matrix is from the identity.</li>
+      <li>…implement linear blend skinning for positions and for directions, and say precisely which
+          of the two the translation column applies to and why.</li>
+      <li>…predict the candy-wrapper collapse as <code>cos(θ/2)</code> from an isoceles triangle,
+          extend it to <code>cos(θ/2n)</code> for a chain of twist joints, and explain a bend's
+          elliptical version of the same law.</li>
+      <li>…state what linear blend skinning gets wrong that nlerp does not, and what it gets right
+          that nlerp cannot.</li>
+      <li>…recognise that a flag on a harness's command line does not reach the library the harness
+          links, and check a build type before believing a timing.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a hierarchy moves objects, not surfaces</a></li>
+      <li><a href="#intuition">Building intuition: write down where the vertex was</a></li>
+      <li><a href="#skin-matrix">The skinning matrix, from its labels</a></li>
+      <li><a href="#bake">Baking the inverse binds, without inverting anything</a></li>
+      <li><a href="#skeleton">Implementation: the skeleton and the palette</a></li>
+      <li><a href="#weights">The weights, and the law they obey</a></li>
+      <li><a href="#lbs">Implementation: four multiply-adds</a></li>
+      <li><a href="#candy">The candy wrapper, derived and measured</a></li>
+      <li><a href="#normals">Normals, and the rule we are not using</a></li>
+      <li><a href="#cost">What it costs, and a flag that did not reach</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a hierarchy moves objects, not surfaces</h2>
+
+  <p>
+    Lesson 5.9 built a transform hierarchy, and it is already most of a skeleton. It walks parents
+    before children, it composes <code>parent_from_local</code> down the chain, and one line of it —
+  </p>
+
+  <div class="eq">\[ \begin{aligned}
+      \mathrm{world\_from\_local}(\text{child}) \;=\;\;
+      &amp;\mathrm{world\_from\_local}(\text{parent}) \\[2pt]
+      \cdot\;\; &amp;\mathrm{parent\_from\_local}(\text{child})
+      \end{aligned} \]</div>
+
+  <p class="eq-plain">
+    …a child's world matrix is its parent's world matrix times its own local one.
+  </p>
+
+  <p>
+    …is the whole of a scene graph. A tank's turret follows its hull with that and nothing else. So
+    does a robot arm, a gun on a mount, a wheel on an axle, a camera on a boom. Every one of those
+    is a set of <em>rigid</em> parts, and a rigid part is exactly what a <code>transform</code> and a
+    mesh handle describe.
+  </p>
+
+  <p>
+    Now try a character's elbow. The upper arm turns one way, the forearm turns another, and the
+    skin over the joint is <strong>one continuous surface</strong>. Ask the hierarchy where a vertex
+    two centimetres above the elbow crease should go and it has no answer to give: that vertex does
+    not belong to the upper arm, and it does not belong to the forearm. Assign it to either and the
+    surface tears open at the seam as soon as the joint bends. Assign it to a third rigid part and
+    you have made the problem smaller and not different.
+  </p>
+
+  @@FIG_RIGID_FAILS@@
+
+  <p>
+    <strong>The difficulty is not the mathematics. It is the geometry.</strong> Nothing about
+    composing matrices got harder between a turret and an elbow; what changed is that the object
+    stopped being a set of objects. A character is one mesh, and the thing that moves it has to be
+    able to move <em>parts of one mesh by different amounts</em>.
+  </p>
+
+  <p>
+    Skinning is the answer and it is one sentence: <strong>let every vertex be moved by several
+    joints at once, and blend the results by weight.</strong>
+  </p>
+
+  <div class="eq">\[ v' \;=\; \sum_i w_i \, S_i \, v \]</div>
+
+  <p class="eq-plain">
+    …the deformed vertex is the weighted sum of what each influencing joint would have done to it on
+    its own.
+  </p>
+
+  <p>
+    That equation is the entire technique. Everything in this lesson is either an explanation of
+    what <code>S_i</code> has to be, or a consequence of the fact that a weighted sum of rotations is
+    not a rotation. Neither of those is difficult; both of them are routinely presented in a
+    vocabulary that makes them sound as if they are.
+  </p>
+
+  <div class="callout">
+    <span class="label">The vocabulary, translated once, and then dropped</span>
+    <p>
+      <em>Bind pose</em>: the pose the mesh was modelled in. <em>Rest pose</em>: usually the same
+      thing; occasionally a rig distinguishes them and then <em>rest</em> means the pose a joint
+      returns to when nothing animates it. <em>Inverse bind matrix</em>: the matrix that carries a
+      point from model space into a joint's space, measured at bind time. <em>Matrix palette</em>:
+      the array of one skinning matrix per joint, rebuilt every frame. <em>Skin cluster</em>,
+      <em>skin deformer</em>, <em>skin modifier</em>: three tools' names for the weighting.
+      <em>Linear blend skinning</em>, <em>smooth skinning</em>, <em>vertex blending</em>,
+      <em>matrix palette skinning</em>: four names for the sum above.
+    </p>
+    <p>
+      Notice how many of those name the thing by <em>how it was made</em> rather than by what it
+      does. "Inverse bind matrix" tells you it was obtained by inverting something at bind time. In
+      this engine's convention it is called <code>joint_from_model</code>, which tells you what it
+      is for — and, as §3 shows, makes the formula it belongs in unmistakable.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: write down where the vertex was</h2>
+
+  <p>
+    Before any algebra, here is the whole idea in a sentence you can check against your own arm.
+  </p>
+
+  <p>
+    A vertex on your forearm has a fixed position <em>relative to your forearm bone</em>. Bend your
+    elbow and the vertex moves through the room, but its position relative to the bone does not
+    change at all — that is what "attached to the bone" means. So if you knew where the vertex sat
+    in the bone's own frame, and you knew where the bone is now, you could put the vertex back:
+    carry it out of the bone's frame with the bone's current placement.
+  </p>
+
+  <p>
+    The trouble is that <strong>nobody ever told you where the vertex sits in the bone's frame.</strong>
+    The artist modelled the character in one pose, and every vertex's coordinates are in
+    <em>model space</em> — the character's own frame, the one its origin sits at, the one its
+    exported file is written in. No vertex has ever been expressed in any joint's coordinates.
+  </p>
+
+  <p>
+    So write it down once. Pick the pose the mesh was modelled in, call it the <strong>bind
+    pose</strong>, and in that pose compute where each joint is. Then each vertex's position in a
+    joint's frame is just its model-space position carried backwards through that joint's placement —
+    and that is a fixed matrix per joint, computed once, never again.
+  </p>
+
+  <p>
+    That is the inverse bind matrix and there is nothing else to it. It is not a correction, or a
+    compensation, or a trick. It is the answer to "where was this joint when the mesh was built", so
+    that the mesh's coordinates can be re-expressed relative to it.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Two frames of the same joint, and the whole of skinning between them</span>
+    <p>
+      There are exactly two joint placements in play and they are the same joint at different
+      <em>times</em>: <strong>where the joint was when the mesh was modelled</strong>, and
+      <strong>where the joint is now</strong>. Take the vertex backwards through the first and
+      forwards through the second. Every difficulty people have with skinning is a failure to
+      notice that these are two different matrices for one joint — which is exactly what the
+      vocabulary hides, because "inverse bind matrix" and "bone matrix" sound like two unrelated
+      objects rather than one object at two times.
+    </p>
+  </div>
+
+  <p>
+    And now the blend. A vertex near the elbow is written down relative to <em>both</em> bones — two
+    different frames, two different fixed positions, both computed at bind time. Ask each bone where
+    that vertex should be now and you get two answers. Take a weighted average. The crease vertex is
+    90% forearm and 10% upper arm; the one above it is 50/50; the one further up is 10/90. The
+    surface stays continuous because the weights vary continuously, and it stays attached to both
+    bones because it is attached to both bones.
+  </p>

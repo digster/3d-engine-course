@@ -1,0 +1,43 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="l53f4-t l53f4-d">
+  <title id="l53f4-t">Error or assertion</title>
+  <desc id="l53f4-d">A decision box asking whether a correct program on a working machine could hit this, branching to error on the left and assertion on the right, with examples and the three assertion macros beneath.</desc>
+  <defs>
+    <marker id="e-i-l53f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One question tells you which of the two you are holding</text>
+<rect x="180" y="44" width="360" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="360" y="65" class="xs t-inv" text-anchor="middle">Could a CORRECT program, on a WORKING machine, hit this?</text>
+<line x1="280" y1="82" x2="190" y2="116" class="ink-soft" stroke-width="1.3" marker-end="url(#e-s-l53f4)"/>
+<line x1="440" y1="82" x2="530" y2="116" class="ink-soft" stroke-width="1.3" marker-end="url(#e-s-l53f4)"/>
+<text x="198" y="100" class="xs mono t-hi" text-anchor="middle">yes</text>
+<text x="528" y="100" class="xs mono t-hi" text-anchor="middle">no</text>
+<rect x="30" y="120" width="320" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="190" y="140" class="xs t-inv" text-anchor="middle">AN ERROR — the world did it to you</text>
+<rect x="370" y="120" width="320" height="30" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2"/>
+<text x="530" y="140" class="xs t-inv" text-anchor="middle">AN ASSERTION — your own code is wrong</text>
+<text x="30" y="172" class="xs muted" text-anchor="start">a file is missing</text>
+<text x="30" y="187" class="xs muted" text-anchor="start">a GPU refuses a format</text>
+<text x="30" y="202" class="xs muted" text-anchor="start">the user typed nonsense</text>
+<text x="30" y="217" class="xs muted" text-anchor="start"></text>
+<text x="30" y="232" class="xs" text-anchor="start">→ RETURN a failure the caller can act on</text>
+<text x="30" y="247" class="xs" text-anchor="start">→ survives into release: the world stays hostile</text>
+<text x="30" y="262" class="xs" text-anchor="start">→ engine::image_report, gpu_report, obj_report</text>
+<text x="370" y="172" class="xs muted" text-anchor="start">an index is out of range</text>
+<text x="370" y="187" class="xs muted" text-anchor="start">a pointer that cannot be null is</text>
+<text x="370" y="202" class="xs muted" text-anchor="start">a function called before start()</text>
+<text x="370" y="217" class="xs muted" text-anchor="start"></text>
+<text x="370" y="232" class="xs" text-anchor="start">→ STOP: nothing sensible can be done, because</text>
+<text x="370" y="247" class="xs muted" text-anchor="start">   the code that would do it was written by the</text>
+<text x="370" y="262" class="xs muted" text-anchor="start">   same person who was already wrong</text>
+<line x1="20" y1="288" x2="700" y2="288" class="grid" stroke-width="1"/>
+<text x="20" y="306" class="xs t-hi" text-anchor="start">and if it IS an assertion, three macros and one rule each:</text>
+<text x="20" y="320" class="xs mono t-hi" text-anchor="start">ENGINE_ASSERT</text>
+<text x="150" y="320" class="xs muted" text-anchor="start">debug only. The default. Condition must have no side effects.</text>
+<text x="20" y="334" class="xs mono t-hi" text-anchor="start">ENGINE_CHECK</text>
+<text x="150" y="334" class="xs muted" text-anchor="start">every build. Only where continuing is worse than stopping.</text>
+<text x="20" y="348" class="xs mono t-hi" text-anchor="start">ENGINE_VERIFY</text>
+<text x="150" y="348" class="xs muted" text-anchor="start">the expression ALWAYS runs; the check is debug only.</text>
+</svg>

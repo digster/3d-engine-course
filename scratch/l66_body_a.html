@@ -1,0 +1,442 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-05-material-system.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.5 — A Material System</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-07-normal-mapping.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.7 — Normal Mapping and the TBN Derivation</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.6</div>
+    <h1>glTF 2.0 Loading</h1>
+    <p class="deck">
+      Lesson 3.5 wrote an OBJ parser by hand, three hundred lines of it, and that was the right
+      call — OBJ is six keywords of text and writing it taught the index problem, fan
+      triangulation and vertex unification. This lesson does the opposite and takes a library, and
+      the interesting part is <strong>why the two answers differ</strong>. It is not that glTF is
+      harder. It is that glTF is a <em>container</em>, and the hard part of a container is byte
+      offsets. What the format gives back is the thing OBJ never could: <strong>materials that
+      mean something</strong> — base colour, metallic and roughness, in physical units, which are
+      precisely the four numbers Lesson 6.4 built <code>microsurface</code> out of. Along the way
+      this lesson settles a claim the engine has been carrying, unverified, since 6.4.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="05-05-asset-system.html">5.5 — Asset System v1</a>,
+          <a href="06-04-cook-torrance.html">6.4 — Cook–Torrance PBR, Derived</a>,
+          <a href="06-05-material-system.html">6.5 — A Material System</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/gltf.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/gltf.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/asset/asset_store.hpp</code>,
+            <code>engine/src/asset/asset_store.cpp</code>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/src/gfx/texture.cpp</code>,
+            <code>engine/include/engine/gfx/microfacet.hpp</code>,
+            <code>demos/gltf_view/main.cpp</code> <em>(new)</em>,
+            <code>CMakeLists.txt</code>, <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>assets/cube.gltf</code>, <code>assets/cube.bin</code>,
+            <code>assets/shapes.glb</code> <em>(all new)</em>,
+            <code>scratch/make_gltf_assets.py</code> <em>(new)</em>,
+            <code>scratch/verify_66.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A <code>.gltf</code> and a <code>.glb</code> load, with their geometry, their node
+            placements, their textures and their PBR materials, through one call on the asset
+            store — and the reference render is still <strong>byte-identical</strong>. 58 checks
+            green, including the one that discharges a ⚠ VERIFY two lessons old.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the test that decides whether to write a parser or take a library, and apply it to
+          a format you have never seen.</li>
+      <li>…read a glTF file's structure aloud — scene, node, mesh, primitive, accessor, buffer view,
+          buffer — and say what each layer is for.</li>
+      <li>…explain why a loader must report a URI rather than a handle, and what that buys.</li>
+      <li>…check a new format's conventions against your own <em>before</em> writing a conversion,
+          and recognise that three of the four checks here come out as "do nothing".</li>
+      <li>…map a published material model onto your own term by term, find the terms that differ,
+          and decide whether the difference is a bug or a permitted variation.</li>
+      <li>…extend an asset system with a <em>derived</em> asset type whose lifetime is bound to its
+          source, and say why that is a dependency edge rather than a reference count.</li>
+      <li>…name the one thing this engine's material cannot represent that glTF can, and where the
+          report of that gap belongs.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem: A Format Nobody Hand-Writes</a></li>
+      <li><a href="#write-or-take">Write It or Take It: The Test</a></li>
+      <li><a href="#anatomy">The Anatomy of a glTF File</a></li>
+      <li><a href="#conventions">Four Conventions, Three of Which Agree</a></li>
+      <li><a href="#materials">The Payoff: Materials That Mean Something</a></li>
+      <li><a href="#brdf">The ⚠ VERIFY, Discharged</a></li>
+      <li><a href="#layers">Where a Reference Stops Being a String</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#store">Textures and Materials Become Assets</a></li>
+      <li><a href="#gap">The One Thing We Cannot Represent</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run, and What You Should See</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem: A Format Nobody Hand-Writes</h2>
+
+  <p>
+    Open <code>assets/torus.obj</code> in a text editor and you can read it. Lines beginning
+    <code>v</code> are positions, <code>vt</code> are texture coordinates, <code>f</code> are faces.
+    If a model came out wrong you could find the bad line by eye. That readability is not
+    incidental — it is why Lesson 3.5 could write a parser for it in an afternoon and learn
+    something from every line.
+  </p>
+
+  <p>
+    Now try to get a model out of Blender, or Maya, or Substance Painter, or Sketchfab, or a
+    photogrammetry scanner, or any asset store on the internet. You will be handed a
+    <code>.glb</code>. Open it in a text editor and you will see the four bytes
+    <code>glTF</code> followed by a screenful of mojibake.
+  </p>
+
+  <p>
+    That, on its own, is not an argument for anything. Plenty of binary formats are worth writing a
+    reader for. The argument is in <em>what the two formats are describing</em>, and it is worth
+    looking at before writing a line of code.
+  </p>
+
+  @@FIG_FORMATS@@
+
+  <p>
+    An OBJ file is a bag of triangles. It has exactly one thing in it and the thing has no
+    structure: no placement, no hierarchy, no notion that this run of faces is the windscreen and
+    that one is the bonnet. It has a <code>usemtl</code> keyword, and <code>usemtl</code> names a
+    string that OBJ <em>cannot itself define</em> — you are supposed to go and find a
+    <code>.mtl</code> file, in a format nobody agrees about, whose parameters
+    (<code>Ns</code>, <code>Ks</code>, <code>illum</code>) belong to a lighting model from 1992.
+  </p>
+
+  <p>
+    A glTF file is a <strong>scene</strong>. There is a node tree with transforms; each node may
+    hold a mesh; each mesh is a <em>list of primitives</em>; each primitive names a material out of
+    a table the file itself defines, in units that mean something. Loading one does not produce a
+    mesh. It produces several objects, in several places, wearing several materials.
+  </p>
+
+  <div class="callout">
+    <span class="label">Why this lesson is here, and here specifically</span>
+    <p>Module 6's curriculum puts glTF after the PBR arc rather than before it, and after Lesson
+       6.5's material system, and both orderings are load-bearing.</p>
+    <p>Before 6.4 there was nowhere to <em>put</em> a metallic-roughness material: the engine's
+       surface description was a specular colour and a shininess, and importing physical values
+       into it would have required a fitted conversion curve — a guess, applied to every asset
+       forever. Before 6.5 there was no <code>material</code> type at all, so the loader would have
+       had to invent one, which is exactly the failure 6.5 diagnosed in <code>ecs_swarm</code>.</p>
+    <p>Coming <em>after</em> both, the import is a copy. That is what it feels like when the
+       parameters were derived rather than chosen.</p>
+  </div>
+
+  <!-- =================================================================
+       2 — WRITE IT OR TAKE IT
+       ================================================================= -->
+  <h2 id="write-or-take"><span class="num">2</span>Write It or Take It: The Test</h2>
+
+  <p>
+    This course has now made the call four times, and it is worth writing down the rule it has
+    actually been using, because it is not the rule people usually state.
+  </p>
+
+  <p>
+    The usual rule is <em>"is it hard?"</em> That rule is useless here. The software rasterizer was
+    hard and we wrote it. The ECS was hard and we wrote it. Perspective-correct interpolation is
+    subtle enough that most people get it wrong once, and we derived it.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule this course actually uses</span>
+    <p><strong>Is the hard part the subject?</strong></p>
+    <p>If the difficult, time-consuming, error-prone core of the problem is a thing you came here to
+       learn — geometry, transforms, shading, memory, architecture — write it. If the difficult
+       core is a thing from a <em>different</em> discipline that happens to stand between you and
+       the subject, take the library and understand what you took.</p>
+  </div>
+
+  <p>
+    Run the four decisions through it:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The four library-or-hand-roll decisions this course has made,
+        and the hard part of each</caption>
+      <thead>
+        <tr><th>Problem</th><th>The hard part</th><th>Is it the subject?</th><th>Verdict</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OBJ parsing (3.5)</td><td>unifying <code>v/vt/vn</code> triples into vertices</td>
+            <td><strong>Yes</strong> — that <em>is</em> the index problem</td><td>write it</td></tr>
+        <tr><td>PNG decoding (4.7)</td><td>DEFLATE, five filter modes, interlacing, palettes</td>
+            <td>No — compression</td><td><code>stb_image</code></td></tr>
+        <tr><td>Debug UI (5.11)</td><td>text layout, input routing, focus and capture</td>
+            <td>No — four other disciplines</td><td>Dear ImGui</td></tr>
+        <tr><td>glTF parsing (here)</td><td>strided, typed, optionally-sparse views into buffers</td>
+            <td>No — byte offsets</td><td><code>cgltf</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The last row deserves the detail, because "byte offsets" sounds like something you could knock
+    out in a morning. Here is what a single <code>POSITION</code> attribute actually is.
+  </p>
+
+  @@FIG_ACCESSOR@@
+
+  <p>
+    An <strong>accessor</strong> says "eight elements, each a <code>VEC3</code> of
+    <code>float</code>". It points at a <strong>buffer view</strong>, which says "bytes 0 through 96
+    of buffer 0, and by the way they might be interleaved with two other attributes at a stride of
+    32". The buffer view points at a <strong>buffer</strong>, which might be an external
+    <code>.bin</code> file, a base64 <code>data:</code> URI embedded in the JSON, or a binary chunk
+    glued onto the end of a <code>.glb</code>.
+  </p>
+
+  <p>
+    And every one of the accessor's fields is a choice. The component type may be
+    <code>float32</code>, <code>uint8</code>, <code>uint16</code>, <code>int8</code> or
+    <code>int16</code>. Any of the integer ones may be <em>normalized</em>, meaning the value is a
+    fixed-point fraction rather than an integer. The data may be tightly packed or interleaved. And
+    the accessor may be <em>sparse</em>, which means the values you want are a base array plus a
+    patch list of index/value pairs applied on top.
+  </p>
+
+  <p>
+    Multiply those out and there are roughly forty legal encodings of the same eight positions,
+    every one of which some exporter somewhere emits. A loader that handles only the ones you
+    happened to test is worse than no loader at all, because it fails on a customer's file rather
+    than on yours. <code>cgltf_accessor_read_float</code> is one function that collapses the whole
+    matrix, and writing our own version of it would teach byte offsets, not rendering.
+  </p>
+
+  <div class="callout">
+    <span class="label">Why cgltf and not tinygltf</span>
+    <p>Both are approved by this course's conventions. <code>cgltf</code> is one C header with no
+       dependencies. <code>tinygltf</code> is C++ and pulls in a JSON library and <em>stb</em> —
+       and we already have stb, pinned at a different commit, so we would end up with two copies of
+       <code>stb_image</code> in one binary. That is a diagnosable problem, but it is a problem
+       we can decline to have.</p>
+    <p><code>cgltf</code> also matches the shape we already use: header-only, <code>PRIVATE</code>
+       to exactly one translation unit, wrapped behind our own types. Look at
+       <code>engine/CMakeLists.txt</code> and you will see the same three lines stb got, with the
+       same justification — the dependency stops at the library boundary, so swapping the glTF
+       library is a one-file change.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — ANATOMY
+       ================================================================= -->
+  <h2 id="anatomy"><span class="num">3</span>The Anatomy of a glTF File</h2>
+
+  <p>
+    Before writing the loader it is worth reading a whole file, in full, small enough to fit on a
+    page. Here is <code>assets/cube.gltf</code> — generated by
+    <code>scratch/make_gltf_assets.py</code>, which this course ships so that no third-party
+    geometry is needed and every number below is reproducible.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">assets/cube.gltf</span>
+      <span class="lang" data-lang="json">JSON</span>
+    </figcaption>
+    <pre><code class="lang-json">{
+  "asset": { "version": "2.0", "generator": "3d-engine-course …" },
+  "scene": 0,
+  "scenes":   [ { "name": "cube scene", "nodes": [0] } ],
+  "nodes":    [ { "name": "cube", "mesh": 0 } ],
+  "meshes":   [ { "name": "unit cube", "primitives": [ {
+                    "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+                    "indices": 3,
+                    "material": 0,
+                    "mode": 4 } ] } ],
+  "materials": [ {
+      "name": "grid",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [1.0, 1.0, 1.0, 1.0],
+        "baseColorTexture": { "index": 0 },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.4 },
+      "doubleSided": false } ],
+  "textures": [ { "source": 0, "sampler": 0 } ],
+  "images":   [ { "uri": "uv_grid.png" } ],
+  "samplers": [ { "magFilter": 9729, "minFilter": 9729,
+                  "wrapS": 33071, "wrapT": 33071 } ],
+  "buffers":  [ { "uri": "cube.bin", "byteLength": 328 } ],
+  "bufferViews": [ … ],
+  "accessors":   [ … ]
+}</code></pre>
+  </figure>
+
+  <p>
+    Read it top-down and it is a chain of indirections, every link of which exists for a reason:
+  </p>
+
+  <ul>
+    <li><strong>scene → nodes.</strong> The file may contain several scenes and a default; a node
+        may have children. This is a tree, and a node's world transform is the product down from
+        the root.</li>
+    <li><strong>node → mesh → primitives.</strong> A <em>mesh</em> is a name for a group; a
+        <em>primitive</em> is a draw. The split exists because one logical object usually needs more
+        than one material, and a material is per-draw.</li>
+    <li><strong>primitive → material</strong>, by index into the file's own table. Two primitives
+        naming index 0 are the <em>same</em> material and must end up as one.</li>
+    <li><strong>material → texture → image → sampler.</strong> Three levels for what feels like one
+        thing, and they are three because the same image is legitimately read two ways in one frame
+        (clamped for a decal, repeated for a floor). Lesson 3.9 made exactly this argument about
+        <code>texture_binding</code> being a pair; here is the format agreeing.</li>
+    <li><strong>attributes → accessors → buffer views → buffers.</strong> Figure 2.</li>
+  </ul>
+
+  <div class="callout warn">
+    <span class="label">Those numbers are GLenum values, and that is history showing through</span>
+    <p><code>"mode": 4</code> is <code>GL_TRIANGLES</code>. <code>9729</code> is
+       <code>GL_LINEAR</code>. <code>33071</code> is <code>GL_CLAMP_TO_EDGE</code>. glTF was
+       designed as a transmission format for WebGL, and its enumerants are literally OpenGL's.</p>
+    <p>Ours are SDL_GPU's, which is why <code>filter_of</code> and <code>address_of</code> in the
+       loader are <em>switches</em> and not casts. A cast would compile and would be silently wrong
+       for every value.</p>
+  </div>
+
+  <p>
+    The <code>.glb</code> form is the same JSON with the buffer glued on. Twelve bytes of header
+    (<code>glTF</code>, a version, a total length), then chunks: a <code>JSON</code> chunk and a
+    <code>BIN</code> chunk, each with its own length prefix. Both chunks are padded to a four-byte
+    boundary — and the padding <em>byte</em> differs, which is a detail worth knowing because it
+    bites people: JSON pads with spaces so the chunk stays parseable text, BIN pads with zeros. A
+    zero byte inside the JSON chunk is a parse error in most readers.
+  </p>
+
+  <p>
+    Our loader never has to care which form it was handed. <code>cgltf</code> sniffs the first four
+    bytes, and <code>load_gltf</code> takes a path either way. <code>verify_66</code> §C asserts
+    that <code>shapes.glb</code> was detected as binary and <code>cube.gltf</code> as text, from the
+    same call with no flag.
+  </p>
+
+  <!-- =================================================================
+       4 — CONVENTIONS
+       ================================================================= -->
+  <h2 id="conventions"><span class="num">4</span>Four Conventions, Three of Which Agree</h2>
+
+  <p>
+    Here is the part of importing a format that actually goes wrong. Not the parsing — the parsing
+    either works or throws an error you can read. What goes wrong is the <em>conventions</em>,
+    because a convention mismatch produces a picture that is plausible.
+  </p>
+
+  <p>
+    A cube with its z axis negated still looks like a cube. A model with its texture flipped
+    vertically still looks textured. A mesh with its winding reversed still draws, until the day you
+    turn on back-face culling and half of it vanishes. Every one of those failures survives review,
+    because the reviewer is looking at a picture and the picture is <em>fine</em>.
+  </p>
+
+  <p>
+    So before writing any conversion code, we check. Four questions, and the answers come out of the
+    specification rather than out of experiment.
+  </p>
+
+  @@FIG_CONVENTIONS@@
+
+  <p>
+    <strong>Handedness.</strong> glTF §3.5 says, verbatim: <em>"glTF uses a right-handed coordinate
+    system. glTF defines +Y as up; the front side of a glTF asset faces +Z."</em> Our world space
+    (the Conventions page, §2) is right-handed, Y-up, −Z forward. The <em>axes</em> are identical.
+    There is no conversion.
+  </p>
+
+  <p>
+    That is not luck. It is Lesson 2.6 having argued the choice rather than picking one, and it is
+    worth appreciating how easily it could have gone the other way: FBX and 3ds Max are Z-up, Unity
+    is left-handed, Unreal is left-handed and Z-up. Any of those would have cost a basis change
+    here — and a basis change that <em>mirrors</em>, which reverses winding, which then needs a
+    second correction, which is how importers acquire the reputation they have.
+  </p>
+
+  <p>
+    <strong>Winding.</strong> glTF: counter-clockwise is front-facing. This course, Conventions §7:
+    counter-clockwise is front-facing. No index reversal.
+  </p>
+
+  <p>
+    <strong>Texture origin.</strong> This is the one that catches people, and it catches them in
+    the opposite direction from the one they expect. glTF §3.9.3: <em>"The origin of the texture
+    coordinates (0, 0) corresponds to the upper left corner of a texture image."</em> That is
+    <code>engine::texture</code>'s convention exactly (Lesson 3.9, which quotes SDL_GPU's header
+    for the same rule).
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The trap: <code>mesh_import::flip_uv_v</code> defaults to <code>true</code></span>
+    <p>OBJ puts <code>(0,0)</code> at the <em>lower</em> left, so Lesson 3.9 established that the
+       import step flips <code>v</code>, and the default in <code>mesh_import</code> is
+       <code>true</code> because every mesh this engine had ever loaded was an OBJ.</p>
+    <p>Apply that flag to a glTF and every asset comes in upside down — for everyone who left the
+       default alone, which is everyone. <strong>The flip belongs to the FORMAT, not to the
+       caller's preference.</strong> So <code>asset_store::load_model</code> takes no import
+       settings at all, and the header says why in as many words.</p>
+    <p><code>verify_66</code> §B asserts vertex 0's uv arrives as <code>(0.0, 1.0)</code>, exactly
+       as the file wrote it. If anything had flipped it we would read <code>(0.0, 0.0)</code>.</p>
+  </div>
+
+  <p>
+    <strong>Asset facing.</strong> The fourth row is the one that differs, and the useful thing
+    about it is that it is <em>not a conversion</em>. glTF says an asset's front faces +Z; our
+    camera looks down −Z. So a model dropped into the world unrotated presents its back to you.
+  </p>
+
+  <p>
+    That is a fact about how content is authored, not about how numbers are stored. The fix is a yaw
+    on the object. Putting it in the loader — negating x and z, say — would also mirror the
+    geometry, which turns every asymmetric model into its own reflection and reverses every
+    triangle. Two wrongs, and the second one hides the first.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The receipt</span>
+    <p><strong><code>engine/src/gfx/gltf.cpp</code> contains zero conversion code.</strong> No
+       negated coordinate, no swapped axis, no basis matrix, no <code>1 - v</code>. The three
+       floats of a position are copied into a <code>vec3</code> in the order they were written.</p>
+    <p><code>verify_66</code> §B asserts it <em>bit-exactly</em>: vertex 6 of the loaded cube is
+       <code>(+0.5, +0.5, +0.5)</code>, and every one of the eight positions matches
+       <code>k_cube_vertices</code> to the last bit — no tolerance, because every coordinate in the
+       file is exactly representable.</p>
+  </div>

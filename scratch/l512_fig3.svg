@@ -1,0 +1,28 @@
+<svg viewBox="0 0 720 300" role="img" aria-labelledby="l512f3-t l512f3-d">
+  <title id="l512f3-t">Compile cost of the umbrella before and after completing it</title>
+  <desc id="l512f3-d">Four horizontal bars: an empty file at 0.01 seconds, the umbrella as shipped at 0.28, the game's own 23 explicit includes at 0.37, and the completed umbrella at 0.39. The incomplete umbrella was cheaper than including what you use, because it omitted the ECS, the asset store and the action map.</desc>
+  <defs>
+    <marker id="e-i-l512f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l512f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l512f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l512f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l512f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">What it costs to compile one translation unit — and the surprise.</text>
+<text x="288" y="72" class="xs" text-anchor="end">nothing at all (baseline)</text>
+<rect x="300" y="58" width="8.717948717948717" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="316.71794871794873" y="72" class="xs mono" text-anchor="start">0.01 s</text>
+<text x="288" y="114" class="xs" text-anchor="end">#include &lt;engine/engine.hpp&gt;  — as shipped, 40 headers</text>
+<rect x="300" y="100" width="244.1025641025641" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="552.1025641025641" y="114" class="xs mono" text-anchor="start">0.28 s</text>
+<text x="288" y="156" class="xs" text-anchor="end">the game's own 23 explicit includes</text>
+<rect x="300" y="142" width="322.56410256410254" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="630.5641025641025" y="156" class="xs mono" text-anchor="start">0.37 s</text>
+<text x="288" y="198" class="xs" text-anchor="end">#include &lt;engine/engine.hpp&gt;  — completed, 54 headers</text>
+<rect x="300" y="184" width="340.0" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="648.0" y="198" class="xs mono" text-anchor="start">0.39 s</text>
+<line x1="24" y1="238" x2="696" y2="238" class="grid" stroke-width="1.0"/>
+<text x="24" y="256" class="xs t-hi" text-anchor="start">THE INCOMPLETE UMBRELLA LOOKED CHEAP BECAUSE IT WAS MISSING THE EXPENSIVE HALF.</text>
+<text x="24" y="272" class="xs muted" text-anchor="start">The ECS, the asset store and the action map are the templated headers a game actually needs;</text>
+<text x="24" y="286" class="xs muted" text-anchor="start">completing the file costs +39%, and lands 5% above including exactly what you use.</text>
+</svg>

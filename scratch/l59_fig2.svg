@@ -1,0 +1,95 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l59f2-t l59f2-d">
+  <title id="l59f2-t">Three visit orders over one small tree</title>
+  <desc id="l59f2-d">A six-node tree, and the sequences produced by depth-first recursion, by level order through an index, and by level order with the rows packed.</desc>
+  <defs>
+    <marker id="e-i-l59f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l59f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l59f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l59f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l59f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The same tree, three visit orders. Every one computes the same matrices.</text>
+<line x1="360" y1="71" x2="250" y2="97" class="ink-soft" stroke-width="1.0"/>
+<line x1="360" y1="71" x2="470" y2="97" class="ink-soft" stroke-width="1.0"/>
+<line x1="250" y1="119" x2="190" y2="145" class="ink-soft" stroke-width="1.0"/>
+<line x1="250" y1="119" x2="310" y2="145" class="ink-soft" stroke-width="1.0"/>
+<line x1="470" y1="119" x2="470" y2="145" class="ink-soft" stroke-width="1.0"/>
+<rect x="338" y="49" width="44" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="360" y="64" class="xs mono" text-anchor="middle">0</text>
+<rect x="228" y="97" width="44" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="250" y="112" class="xs mono" text-anchor="middle">1</text>
+<rect x="448" y="97" width="44" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="470" y="112" class="xs mono" text-anchor="middle">2</text>
+<rect x="168" y="145" width="44" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="190" y="160" class="xs mono" text-anchor="middle">3</text>
+<rect x="288" y="145" width="44" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="310" y="160" class="xs mono" text-anchor="middle">4</text>
+<rect x="448" y="145" width="44" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="470" y="160" class="xs mono" text-anchor="middle">5</text>
+<text x="24" y="46" class="xs t-hi" text-anchor="start">the tree</text>
+<text x="120" y="66" class="xs muted" text-anchor="start">depth 0</text>
+<text x="120" y="114" class="xs muted" text-anchor="start">depth 1</text>
+<text x="120" y="162" class="xs muted" text-anchor="start">depth 2</text>
+<line x1="24" y1="188" x2="696" y2="188" class="grid" stroke-width="1.2"/>
+<text x="24" y="212" class="xs t-hi" text-anchor="start">A  recurse from roots</text>
+<rect x="250" y="200" width="38" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="269" y="213" class="xs mono" text-anchor="middle">0</text>
+<line x1="289" y1="209" x2="295" y2="209" class="ink-soft" stroke-width="1.0"/>
+<rect x="296" y="200" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="315" y="213" class="xs mono" text-anchor="middle">1</text>
+<line x1="335" y1="209" x2="341" y2="209" class="ink-soft" stroke-width="1.0"/>
+<rect x="342" y="200" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="361" y="213" class="xs mono" text-anchor="middle">3</text>
+<line x1="381" y1="209" x2="387" y2="209" class="ink-soft" stroke-width="1.0"/>
+<rect x="388" y="200" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="407" y="213" class="xs mono" text-anchor="middle">4</text>
+<line x1="427" y1="209" x2="433" y2="209" class="ink-soft" stroke-width="1.0"/>
+<rect x="434" y="200" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="453" y="213" class="xs mono" text-anchor="middle">2</text>
+<line x1="473" y1="209" x2="479" y2="209" class="ink-soft" stroke-width="1.0"/>
+<rect x="480" y="200" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="499" y="213" class="xs mono" text-anchor="middle">5</text>
+<text x="24" y="230" class="xs muted" text-anchor="start">depth first. The parent was written one call ago, so it is certainly in L1 —</text>
+<text x="24" y="242" class="xs muted" text-anchor="start">the best temporal locality any arm can have. Pays in stack traffic and a jumping write.</text>
+<text x="24" y="274" class="xs t-hi" text-anchor="start">B  level order, via an index</text>
+<rect x="250" y="262" width="38" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="269" y="275" class="xs mono" text-anchor="middle">0</text>
+<line x1="289" y1="271" x2="295" y2="271" class="ink-soft" stroke-width="1.0"/>
+<rect x="296" y="262" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="315" y="275" class="xs mono" text-anchor="middle">1</text>
+<line x1="335" y1="271" x2="341" y2="271" class="ink-soft" stroke-width="1.0"/>
+<rect x="342" y="262" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="361" y="275" class="xs mono" text-anchor="middle">2</text>
+<line x1="381" y1="271" x2="387" y2="271" class="ink-soft" stroke-width="1.0"/>
+<rect x="388" y="262" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="407" y="275" class="xs mono" text-anchor="middle">3</text>
+<line x1="427" y1="271" x2="433" y2="271" class="ink-soft" stroke-width="1.0"/>
+<rect x="434" y="262" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="453" y="275" class="xs mono" text-anchor="middle">4</text>
+<line x1="473" y1="271" x2="479" y2="271" class="ink-soft" stroke-width="1.0"/>
+<rect x="480" y="262" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="499" y="275" class="xs mono" text-anchor="middle">5</text>
+<text x="24" y="292" class="xs muted" text-anchor="start">breadth first. One flat loop per level, and everything a level reads was written</text>
+<text x="24" y="304" class="xs muted" text-anchor="start">by an EARLIER level — so within a level nothing depends on anything else.</text>
+<text x="24" y="336" class="xs t-hi" text-anchor="start">C  level order, rows packed</text>
+<rect x="250" y="324" width="38" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="269" y="337" class="xs mono" text-anchor="middle">0</text>
+<line x1="289" y1="333" x2="295" y2="333" class="ink-soft" stroke-width="1.0"/>
+<rect x="296" y="324" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="315" y="337" class="xs mono" text-anchor="middle">1</text>
+<line x1="335" y1="333" x2="341" y2="333" class="ink-soft" stroke-width="1.0"/>
+<rect x="342" y="324" width="38" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="361" y="337" class="xs mono" text-anchor="middle">2</text>
+<line x1="381" y1="333" x2="387" y2="333" class="ink-soft" stroke-width="1.0"/>
+<rect x="388" y="324" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="407" y="337" class="xs mono" text-anchor="middle">3</text>
+<line x1="427" y1="333" x2="433" y2="333" class="ink-soft" stroke-width="1.0"/>
+<rect x="434" y="324" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="453" y="337" class="xs mono" text-anchor="middle">4</text>
+<line x1="473" y1="333" x2="479" y2="333" class="ink-soft" stroke-width="1.0"/>
+<rect x="480" y="324" width="38" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="499" y="337" class="xs mono" text-anchor="middle">5</text>
+<text x="24" y="354" class="xs muted" text-anchor="start">the same order, with the rows physically moved into it. Reads and writes go</text>
+<text x="24" y="366" class="xs muted" text-anchor="start">straight down the arrays; only the parent lookup still jumps.</text>
+<text x="24" y="392" class="xs t-hi" text-anchor="start">B and C visit in the same ORDER and differ only in where the rows LIVE. That is the whole of §5.</text>
+</svg>

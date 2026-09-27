@@ -1,0 +1,474 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-12-checkpoint-game.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.12 — Checkpoint: A Small 3D Game on the Public API</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-02-what-a-brdf-is.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.2 — Radiometry-Lite: What a BRDF Is</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.1</div>
+    <h1>Linear and sRGB: The Gamma Lesson</h1>
+    <p class="deck">
+      The lesson every graphics programmer needs exactly once and then has for ever — and it opens
+      Module 6 for a reason that is not ceremonial: <em>every lighting result in this module is
+      wrong until the colour space is settled</em>, so there is no point deriving a BRDF first.
+      Lesson 1.6 gave you the idea. This lesson turns it into a <strong>pipeline</strong>, audits
+      every conversion the engine performs, and finds that one of them has been missing since
+      Module 4. The engine you have been looking at for nine lessons is too dark, by up to
+      <strong>thirteen times in shadow</strong>, and the fix is one call.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-06-colour.html">1.6 — Colour, and the First Sight of sRGB</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping</a>,
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Textures, Samplers, and Depth</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/gpu_device.hpp</code>,
+            <code>engine/src/gfx/gpu_device.cpp</code>,
+            <code>engine/src/gfx/gpu_present.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>demos/sandbox/main.cpp</code>, <code>scratch/verify_61.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A renderer whose output stage is correct on both surfaces, and a harness that proves
+            it by rendering the same light into two target formats and getting two different
+            numbers. 34 checks green; the reference shot byte-identical for the
+            <strong>twelfth</strong> lesson — which this lesson predicted it would not be, and
+            the reason it survived is the finding.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say precisely what a stored colour channel <em>is</em>, and why arithmetic on it is
+          arithmetic on the wrong quantity.</li>
+      <li>…explain why an encoding exists at all, in terms of a budget rather than of old
+          hardware, and quantify what it buys.</li>
+      <li>…write the sRGB transfer function from its definition, including the linear toe, and
+          say what each of its four constants is for.</li>
+      <li>…derive why the toe has to be there, from the slope of a power function at zero.</li>
+      <li>…state the two-conversion rule, locate both conversions in a renderer, and audit a
+          codebase for the ones that are missing or doubled.</li>
+      <li>…recognise the three fingerprints — too dark, milky, muddy — and say which mistake
+          each one is.</li>
+      <li>…choose a swapchain composition deliberately, and say what SDL's default means for a
+          shader that returns light.</li>
+      <li>…explain why encoding in the fragment shader is the <em>second</em>-best answer, using
+          the position of the blend stage.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Two Different Things Called Colour</a>
+        <ol>
+          <li><a href="#intuition-adds">Light adds; codes do not</a></li>
+          <li><a href="#intuition-budget">Why an encoding exists at all</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Transfer Function</a>
+        <ol>
+          <li><a href="#theory-def">The definition, and its four constants</a></li>
+          <li><a href="#theory-toe">Why there has to be a straight piece</a></li>
+          <li><a href="#theory-worked">Numbers through it, by hand</a></li>
+          <li><a href="#theory-gamma">Why not <code>pow(x, 1/2.2)</code></a></li>
+        </ol>
+      </li>
+      <li><a href="#pipeline">Two Conversions, at the Edges</a></li>
+      <li><a href="#audit">The Audit, and the Hole</a></li>
+      <li><a href="#measured">The Bug, Measured</a></li>
+      <li><a href="#fix">The Fix</a>
+        <ol>
+          <li><a href="#fix-swapchain">Asking SDL for a linear swapchain</a></li>
+          <li><a href="#fix-fallback">The fallback, and why it is second best</a></li>
+        </ol>
+      </li>
+      <li><a href="#notdone">What This Lesson Does Not Do</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is a claim, and it is about the code you have been running since Lesson 4.8:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The engine is displaying the wrong picture</span>
+    <p>Every pixel the GPU path has drawn since Module 4 has been too dark. At mid grey it is
+       wrong by a factor of <strong>2.3</strong>; in shadow, by <strong>thirteen</strong>. The
+       software renderer, meanwhile, has been correct the whole time.</p>
+  </div>
+
+  <p>
+    That is not a rhetorical opening. It is measured, in <code>verify_61</code> §E, by rendering
+    one quad of known brightness twice and reading back what was stored:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_61 §E — the same shader, two target formats</span></figcaption>
+    <pre><code class="lang-bash">SUMMARY at linear 0.5: raw 128, hardware-encoded 188, shader-encoded 188.
+Two of the three agree to within a code; the third is 60 codes away</code></pre>
+  </figure>
+
+  <p>
+    Sixty codes out of 256, on every pixel, for four modules. And nobody noticed — not while
+    writing Module 4, not while porting the scene in 4.8, not while comparing the two renderers
+    pixel by pixel in the same lesson. §6 explains exactly how a comparison that measured
+    <em>87% byte-identical agreement between the two renderers</em> managed to sit directly on
+    top of this and report success.
+  </p>
+
+  <p>
+    The reason to open Module 6 here is that this is not a cosmetic defect you can come back to.
+    Everything the module is about — a BRDF, an energy-conserving material, an image-based light,
+    a bloom threshold — is arithmetic on quantities of light. If the number leaving your renderer
+    is not a quantity of light, then a physically-based shading model is a physically-based
+    calculation of the wrong thing, and it will be tuned by hand until it looks acceptable,
+    which is how "PBR that never quite looks right" happens.
+  </p>
+
+  <p>
+    Lesson 1.6 introduced all of this and was honest about what it was leaving:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Lesson 1.6 — the promissory note, now due</span></figcaption>
+    <pre><code class="lang-bash">NOT YET LINEAR: we convert per-operation (slow + lossy). A real pipeline
+decodes once in, encodes once out, and needs a float/half framebuffer,
+headroom above 1.0, and tonemapping = Module 6.</code></pre>
+  </figure>
+
+  <p>
+    This lesson pays the first two clauses — decode once in, encode once out — and hands the
+    other three to the HDR lesson later in this module, for reasons §8 gives. Along the way it
+    does the thing that turns a rule into an engineering practice: it <strong>audits</strong>. Not
+    "be careful about colour spaces" but "here are the eleven places this engine converts, here
+    is what each one is for, and here is the one that is missing."
+  </p>
+
+  <!-- =================================================================
+       2 — INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Two Different Things Called Colour</h2>
+
+  <h3 id="intuition-adds">2.1 Light adds; codes do not</h3>
+
+  <p>
+    Put two identical lamps in a room and turn them both on. The room is twice as bright. That
+    sentence is true in the strongest possible sense: photons from one lamp and photons from the
+    other simply coexist, and a sensor pointed at the wall receives the sum. Nothing in physics
+    negotiates.
+  </p>
+
+  <p>
+    Everything a renderer computes lives in that world. A surface's albedo is a
+    <em>reflectance</em> — the fraction of arriving light that leaves again — so it
+    <strong>multiplies</strong>. Two lights <strong>add</strong>. A pixel covered half by a red
+    triangle and half by a green one emits the <strong>average</strong> of their light. Lambert's
+    cosine law is a multiplication; a specular lobe is a multiplication; an accumulation buffer is
+    a sum. All of it is ordinary arithmetic, and it is only meaningful because the numbers are
+    quantities of light.
+  </p>
+
+  <p>
+    Now look at the byte in your framebuffer. It is not a quantity of light. It is an
+    <strong>index into a scale</strong> — a code that a display converts into light by a rule, and
+    the rule is not the identity. That is the entire subject, and Figure 1 is it in one picture.
+  </p>
+
+  @@FIG_TWO_THINGS@@
+
+  <p>
+    The two readings marked on that curve are worth memorising, because they turn a vague unease
+    into two integers you can check against:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Two readings of the sRGB curve</caption>
+    <thead><tr><th>Question</th><th>Intuition says</th><th>The truth</th></tr></thead>
+    <tbody>
+      <tr><td>How much light does code 128 emit?</td><td>half</td>
+          <td><strong>0.2159</strong> — about a fifth</td></tr>
+      <tr><td>What code emits half the light?</td><td>128</td>
+          <td><strong>188</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Sixty codes apart. And notice the shape of the disagreement — the curve sags <em>below</em>
+    the diagonal everywhere, and most in the darks. Any mistake made here will therefore be an
+    error that is small near white and enormous in shadow, which is a shape worth carrying around
+    because it is exactly the shape that hides.
+  </p>
+
+  <h3 id="intuition-budget">2.2 Why an encoding exists at all</h3>
+
+  <p>
+    A reasonable objection: if light is the honest quantity, why is anything stored any other way?
+    Why not just store light and be done?
+  </p>
+
+  <p>
+    The answer is a <strong>budget</strong>, and it is worth deriving rather than asserting,
+    because the usual explanation — "CRTs had a nonlinear response" — is historically true and
+    completely useless. CRTs are gone; the encoding is not, and it would have been invented
+    anyway.
+  </p>
+
+  <p>
+    Start from how eyes work. Your ability to tell two intensities apart depends roughly on their
+    <em>ratio</em>, not their difference. The step from 1% of white to 2% is obvious — it is a
+    doubling. The step from 90% to 91% is invisible, and it is the same 1% of light. A useful
+    encoding therefore spends its codes so that each <em>step</em> is a similar ratio, which means
+    packing them close together in the darks and letting them spread out near white.
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    Count them, which <code>verify_61</code> §B does rather than taking anybody's word for it. Of
+    256 codes, spent evenly in light:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">How 256 codes are spent under two schemes</caption>
+    <thead>
+      <tr><th>Codes falling in…</th><th>evenly spaced in light</th><th>spaced by sRGB</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>the darkest tenth of the range</td><td>26</td><td><strong>90</strong></td></tr>
+      <tr><td>the brightest half of the range</td><td>128</td><td><strong>68</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The even scheme spends half its budget — 128 codes — on the top half of the range, where the
+    eye can barely distinguish two neighbours, and leaves 26 for the darkest tenth, where it can
+    distinguish dozens. The result is visible banding in every shadow and every gradient. Storing
+    <em>linear</em> light in 8 bits needs roughly <strong>12 bits</strong> to look as smooth as
+    sRGB does in 8.
+  </p>
+
+  <div class="callout note">
+    <span class="label">So the encoding is a compression scheme</span>
+    <p>It is perceptual compression, in the same family as everything else in a codec: spend bits
+       where a person can tell, save them where nobody can. That framing is more useful than the
+       CRT story because it tells you the encoding will still be here when displays change again
+       — and it explains why HDR formats, which have bits to spare, use a <em>different</em>
+       curve rather than none at all.</p>
+  </div>
+
+  <p>
+    Which leaves the working rule, and it is a rule about <em>where</em> rather than about care:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The rule</span>
+    <p><strong>Storage is encoded. Arithmetic is linear.</strong> Convert on the way in, convert
+       on the way out, and do everything in between on real quantities of light.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE TRANSFER FUNCTION
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Transfer Function</h2>
+
+  <h3 id="theory-def">3.1 The definition, and its four constants</h3>
+
+  <p>
+    Here is the sRGB encoding function, from linear light to a stored value, both in [0,&nbsp;1].
+    It is a <em>definition</em> rather than a derivation — a standards committee chose these
+    numbers — so this course states it plainly and derives only the part that has a reason
+    (§3.2), rather than pretending the constants fall out of something.
+  </p>
+
+  <div class="eq">
+    \[
+    \mathrm{encode}(x) =
+    \begin{cases}
+      12.92\,x & x \le 0.0031308 \\[4pt]
+      1.055\,x^{1/2.4} - 0.055 & \text{otherwise}
+    \end{cases}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In prose, so this survives the CDN being unreachable: below a linear value of 0.0031308 the
+    encoded value is 12.92 times the linear one; above it, the encoded value is 1.055 times the
+    linear value raised to the power 1/2.4, minus 0.055.
+  </p>
+
+  <p>And the inverse, which is what a decode does:</p>
+
+  <div class="eq">
+    \[
+    \mathrm{decode}(c) =
+    \begin{cases}
+      c / 12.92 & c \le 0.04045 \\[4pt]
+      \left(\dfrac{c + 0.055}{1.055}\right)^{2.4} & \text{otherwise}
+    \end{cases}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: below an encoded value of 0.04045 the linear value is the encoded one divided by
+    12.92; above it, the linear value is (c + 0.055) / 1.055, all raised to the power 2.4.
+  </p>
+
+  <p>
+    Four constants — 12.92, 0.0031308, 1.055 and 0.055 — and all four matter. They are not
+    independent: 0.04045 is 12.92 × 0.0031308, and 1.055 and 0.055 are chosen so that the two
+    pieces <strong>meet</strong>. <code>verify_61</code> §A checks that they do, and reports the
+    step at the join as <strong>8.02 × 10⁻⁵</strong>, which is a fiftieth of a code — as close to
+    continuous as a piecewise definition with rounded published constants can be.
+  </p>
+
+  @@FIG_CURVE@@
+
+  <h3 id="theory-toe">3.2 Why there has to be a straight piece</h3>
+
+  <p>
+    The piecewise definition looks like a committee compromise. It is not: the straight piece is
+    load-bearing, and the reason is one line of calculus.
+  </p>
+
+  <p>
+    Take the derivative of the power part near zero. For <em>f</em>(<em>x</em>) = <em>x</em><sup>1/2.4</sup>,
+  </p>
+
+  <div class="eq">
+    \[ f'(x) = \tfrac{1}{2.4}\,x^{1/2.4 - 1} = \tfrac{1}{2.4}\,x^{-0.583} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the derivative is (1/2.4) times x to the power −0.583.
+  </p>
+
+  <p>
+    A negative exponent, so as <em>x</em> → 0 the derivative goes to <strong>infinity</strong>. A
+    pure power curve has <em>infinite gain at black</em>. Three practical consequences follow
+    immediately:
+  </p>
+
+  <ul>
+    <li><strong>Noise is amplified without limit.</strong> A camera sensor's darkest readings are
+        mostly noise, and an encoding with unbounded gain there turns that noise into visible,
+        structured banding.</li>
+    <li><strong>The inverse is numerically unstable.</strong> Decoding near zero divides by
+        something approaching infinity; small errors in the encoded value become large errors in
+        light.</li>
+    <li><strong>Fixed-point arithmetic falls apart.</strong> An 8-bit encode must map many
+        distinct linear values to code 0 or code 1, and with infinite slope the boundary between
+        them is arbitrarily sensitive.</li>
+  </ul>
+
+  <p>
+    Replacing the bottom with a straight line of finite slope fixes all three at once. The slope,
+    12.92, is chosen so that the line and the curve meet smoothly at 0.0031308 —
+    <code>verify_61</code> §A measures it back out of the shipped function as
+    <strong>12.9200</strong> to four decimals.
+  </p>
+
+  <p>
+    That slope has a consequence worth keeping, because it explains where every disagreement about
+    this subject ends up: near black, <strong>one step of linear light crosses codes about twelve
+    times faster than it does elsewhere</strong>. Lesson 4.8 met exactly this when it compared our
+    encoder against the GPU's and found the floor was one code, worst in the darks. It is not that
+    the darks are mysterious; it is that the function is steep there, so two implementations that
+    round slightly differently part company sooner.
+  </p>
+
+  <h3 id="theory-worked">3.3 Numbers through it, by hand</h3>
+
+  <div class="worked">
+    <span class="label">Worked example — half the light, and half the code</span>
+    <p><strong>What code stores half the light?</strong> Linear <em>x</em> = 0.5, which is well above
+       the join, so use the power branch:</p>
+    <p class="mono">1.055 × 0.5<sup>1/2.4</sup> − 0.055 = 1.055 × 0.7402 − 0.055 = 0.7354</p>
+    <p>Multiply by 255 and round: <strong>188</strong>. Not 128.</p>
+    <p><strong>And what does code 128 emit?</strong> Encoded <em>c</em> = 128/255 = 0.5020, above
+       0.04045, so the power branch of the decode:</p>
+    <p class="mono">((0.5020 + 0.055) / 1.055)<sup>2.4</sup> = (0.5280)<sup>2.4</sup> = 0.2159</p>
+    <p>So the code everyone reaches for when they want "half" emits <strong>21.6%</strong> of
+       white's light. This is the single most useful pair of numbers in the whole subject: if a
+       50% grey looks too dark in your renderer, you have just found this bug.</p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — the toe, where the other branch lives</span>
+    <p>Linear <em>x</em> = 0.002, which is <em>below</em> 0.0031308, so the straight branch:</p>
+    <p class="mono">12.92 × 0.002 = 0.02584 → × 255 = 6.6 → code 7</p>
+    <p>Had we used the power branch anyway, we would get
+       1.055 × 0.002<sup>1/2.4</sup> − 0.055 = 1.055 × 0.0705 − 0.055 = 0.0194, i.e. code
+       <strong>5</strong>. Two codes apart at a brightness where two codes is a
+       <strong>40% error in light</strong>. The toe is not a rounding detail.</p>
+  </div>
+
+  <h3 id="theory-gamma">3.4 Why not <code>pow(x, 1/2.2)</code></h3>
+
+  <p>
+    You will see <em>x</em><sup>1/2.2</sup> everywhere — in tutorials, in shader snippets, in engine code. It
+    is a different curve. It has no toe, its exponent is not 2.4, and it lacks the 1.055/0.055
+    scaling, so it does not even agree with sRGB in the middle where it is supposed to be a good
+    approximation.
+  </p>
+
+  <p>
+    <code>verify_61</code> §A sweeps a thousand linear values through both and reports the worst
+    disagreement: <strong>8 codes, near linear 0.0010</strong> — down in the toe, exactly where
+    §3.2 said the trouble would be, and exactly where the eye has the most codes to notice it
+    with.
+  </p>
+
+  <div class="callout note">
+    <span class="label">When the approximation is fine, stated honestly</span>
+    <p>If you are writing a colour grade for a stylised game and you want a rough
+       brightness knob, <em>x</em><sup>1/2.2</sup> is perfectly serviceable. What it must never be is the
+       <em>output transfer function</em> — because that one has to agree, to the code, with what
+       every texture decode and every hardware sampler in the pipeline is doing. Two curves in one
+       pipeline is a bug that appears only as a diff.</p>
+  </div>
+
+  <p>
+    One more property, and it is the one that makes the whole scheme usable:
+    <strong>decode-then-encode is lossless for all 256 codes</strong>. <code>verify_61</code> §A
+    checks every one and reports a worst error of zero. That matters because the engine converts
+    in both directions constantly, and an encoding that lost a code per round trip would grind an
+    image down every time it passed through.
+  </p>

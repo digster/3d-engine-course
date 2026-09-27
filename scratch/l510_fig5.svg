@@ -1,0 +1,57 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f5-t l510f5-d">
+  <title id="l510f5-t">A frame-scoped edge compared with a queued one across variable steps</title>
+  <desc id="l510f5-d">Reading a frame edge inside the fixed step double-fires on a two-step frame and loses the press on a zero-step frame; consuming a queued press fires exactly once in both cases.</desc>
+  <defs>
+    <marker id="e-i-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l510f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Why a fixed-timestep engine needs a second kind of edge.</text>
+<text x="24" y="46" class="xs t-bad" text-anchor="start">READING pressed() INSIDE THE STEP</text>
+<text x="24" y="64" class="xs t-hi" text-anchor="start">a TWO-step frame</text>
+<rect x="60" y="76" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="120" y="91" class="xs mono" text-anchor="middle">one press</text>
+<line x1="182" y1="87" x2="206" y2="87" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+<rect x="212" y="76" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="252" y="91" class="xs mono" text-anchor="middle">step 1</text>
+<rect x="300" y="76" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="340" y="91" class="xs mono" text-anchor="middle">step 2</text>
+<rect x="452" y="76" width="216" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="560" y="91" class="xs mono" text-anchor="middle">jumps TWICE</text>
+<text x="60" y="114" class="xs muted" text-anchor="start">the edge is true for the whole frame, and the frame ran the step twice</text>
+<text x="24" y="130" class="xs t-hi" text-anchor="start">a ZERO-step frame</text>
+<rect x="60" y="142" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="120" y="157" class="xs mono" text-anchor="middle">one press</text>
+<line x1="182" y1="153" x2="206" y2="153" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+<rect x="212" y="142" width="168" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="296" y="157" class="xs muted" text-anchor="middle">no step ran</text>
+<rect x="452" y="142" width="216" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="560" y="157" class="xs mono" text-anchor="middle">jump LOST</text>
+<text x="60" y="180" class="xs muted" text-anchor="start">the edge came and went during a frame in which nothing was listening</text>
+<line x1="24" y1="196" x2="696" y2="196" class="grid" stroke-width="1.2"/>
+<text x="24" y="218" class="xs t-ok" text-anchor="start">READING consume_pressed() INSTEAD</text>
+<text x="24" y="236" class="xs t-hi" text-anchor="start">a TWO-step frame</text>
+<rect x="60" y="248" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="120" y="263" class="xs mono" text-anchor="middle">one press</text>
+<line x1="182" y1="259" x2="206" y2="259" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+<rect x="212" y="248" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="252" y="263" class="xs mono" text-anchor="middle">step 1</text>
+<rect x="300" y="248" width="80" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="340" y="263" class="xs mono" text-anchor="middle">step 2</text>
+<rect x="452" y="248" width="216" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="560" y="263" class="xs mono" text-anchor="middle">jumps ONCE</text>
+<text x="60" y="286" class="xs muted" text-anchor="start">the first step takes the queued press; the second finds the queue empty</text>
+<text x="24" y="302" class="xs t-hi" text-anchor="start">a ZERO-step frame</text>
+<rect x="60" y="314" width="120" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="120" y="329" class="xs mono" text-anchor="middle">one press</text>
+<line x1="182" y1="325" x2="206" y2="325" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l510f5)"/>
+<rect x="212" y="314" width="168" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="296" y="329" class="xs muted" text-anchor="middle">no step ran</text>
+<rect x="452" y="314" width="216" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="560" y="329" class="xs mono" text-anchor="middle">queued, not lost</text>
+<text x="60" y="352" class="xs muted" text-anchor="start">the press waits in the queue until a step actually runs</text>
+<text x="24" y="372" class="xs muted" text-anchor="start">The queue is FOUR deep and presses past that are dropped, which is a decision: an unbounded queue replays a burst of jumps</text>
+<text x="24" y="386" class="xs muted" text-anchor="start">after the player has stopped asking, and that feels worse than losing them. A fighting game would raise the number and call it design.</text>
+</svg>

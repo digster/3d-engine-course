@@ -1,0 +1,81 @@
+<svg viewBox="0 0 900 500" role="img" aria-labelledby="l82f2-t l82f2-d">
+  <title id="l82f2-t">The map from mass to inverse mass, and the two questions body kind answers</title>
+  <desc id="l82f2-d">Two parallel number lines show mass running from zero to infinity above and its reciprocal running from infinity to zero below, with immovable landing on an exact zero. Below them a two-by-two grid separates whether a force can move a body from whether it moves at all.</desc>
+  <defs>
+    <marker id="e-i-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-map-l82f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="40" y="30" class="sm t-hi" text-anchor="start">WHY THE RECIPROCAL IS THE ONE THAT GETS STORED</text>
+<line x1="80" y1="92" x2="500" y2="92" class="ink-soft" stroke-width="1.4"/>
+<line x1="80" y1="190" x2="500" y2="190" class="ink-soft" stroke-width="1.4"/>
+<text x="68" y="96" class="xs mono" text-anchor="end">m</text>
+<text x="68" y="194" class="xs mono" text-anchor="end">1/m</text>
+<line x1="80.0" y1="86" x2="80.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="80.0" y1="184" x2="80.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="80.0" y="80" class="xs mono" text-anchor="middle">0</text>
+<text x="80.0" y="210" class="xs mono" text-anchor="middle">∞</text>
+<line x1="80.0" y1="100" x2="80.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<line x1="164.0" y1="86" x2="164.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="164.0" y1="184" x2="164.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="164.0" y="80" class="xs mono" text-anchor="middle">0.1</text>
+<text x="164.0" y="210" class="xs mono" text-anchor="middle">10</text>
+<line x1="164.0" y1="100" x2="164.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<line x1="248.0" y1="86" x2="248.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="248.0" y1="184" x2="248.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="248.0" y="80" class="xs mono" text-anchor="middle">1</text>
+<text x="248.0" y="210" class="xs mono" text-anchor="middle">1</text>
+<line x1="248.0" y1="100" x2="248.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<line x1="332.0" y1="86" x2="332.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="332.0" y1="184" x2="332.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="332.0" y="80" class="xs mono" text-anchor="middle">10</text>
+<text x="332.0" y="210" class="xs mono" text-anchor="middle">0.1</text>
+<line x1="332.0" y1="100" x2="332.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<line x1="416.0" y1="86" x2="416.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="416.0" y1="184" x2="416.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="416.0" y="80" class="xs mono" text-anchor="middle">1000</text>
+<text x="416.0" y="210" class="xs mono" text-anchor="middle">0.001</text>
+<line x1="416.0" y1="100" x2="416.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<line x1="500.0" y1="86" x2="500.0" y2="98" class="ink-soft" stroke-width="1.2"/>
+<line x1="500.0" y1="184" x2="500.0" y2="196" class="ink-soft" stroke-width="1.2"/>
+<text x="500.0" y="80" class="xs mono" text-anchor="middle">∞</text>
+<text x="500.0" y="210" class="xs mono" text-anchor="middle">0</text>
+<line x1="500.0" y1="100" x2="500.0" y2="182" class="grid" stroke-width="0.9" stroke-dasharray="2 3"/>
+<circle cx="500" cy="190" r="5.5" fill="#5ac878"/>
+<circle cx="80" cy="190" r="5.5" fill="#e05c5c" fill-opacity="0.35" stroke="#e05c5c"/>
+<text x="500" y="234" class="xs t-ok" text-anchor="middle">IMMOVABLE</text>
+<text x="500" y="250" class="xs muted" text-anchor="middle">a float, exactly</text>
+<text x="80" y="234" class="xs t-bad" text-anchor="middle">massless</text>
+<text x="80" y="250" class="xs muted" text-anchor="middle">no divide happens</text>
+<text x="500" y="52" class="xs muted" text-anchor="end">the floor, every wall and every rock live at this end →</text>
+<text x="500" y="68" class="xs muted" text-anchor="end">which is most of the bodies in a real scene</text>
+<text x="540" y="96" class="xs t-hi" text-anchor="start">AND THE ARITHMETIC THE SOLVER ACTUALLY DOES</text>
+<text x="540" y="118" class="xs mono t-bad" text-anchor="start">mass_of(floor) − mass_of(wall)  =  NaN</text>
+<text x="540" y="138" class="xs mono t-ok" text-anchor="start">inv_a + inv_b                   =  0</text>
+<text x="540" y="158" class="xs mono" text-anchor="start">1 / (inv_a + inv_b)             =  ∞</text>
+<text x="540" y="176" class="xs muted" text-anchor="start">…which is the reduced mass, and is right.</text>
+<text x="40" y="294" class="sm t-hi" text-anchor="start">TWO QUESTIONS, NOT ONE — WHICH IS WHY body_kind IS NOT A BOOL</text>
+<text x="325.0" y="326" class="xs muted" text-anchor="middle">moves?  no</text>
+<text x="525.0" y="326" class="xs muted" text-anchor="middle">moves?  yes</text>
+<text x="220" y="365.0" class="xs muted" text-anchor="end">a force can move it: no</text>
+<text x="220" y="441.0" class="xs muted" text-anchor="end">a force can move it: yes</text>
+<rect x="230" y="334" width="190" height="62" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="325.0" y="360" class="xs mono" text-anchor="middle">fixed</text>
+<text x="325.0" y="380" class="xs muted" text-anchor="middle">the ground, a wall</text>
+<rect x="430" y="334" width="190" height="62" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="525.0" y="360" class="xs mono" text-anchor="middle">kinematic</text>
+<text x="525.0" y="380" class="xs muted" text-anchor="middle">a lift, a door</text>
+<rect x="230" y="410" width="190" height="62" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="4 4"/>
+<text x="325.0" y="445.0" class="xs muted" text-anchor="middle">nothing is this</text>
+<rect x="430" y="410" width="190" height="62" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="525.0" y="436" class="xs mono" text-anchor="middle">dynamic</text>
+<text x="525.0" y="456" class="xs muted" text-anchor="middle">a crate, a ragdoll</text>
+<text x="640" y="360" class="xs" text-anchor="start">inv_mass answers the row.</text>
+<text x="640" y="378" class="xs" text-anchor="start">body_kind answers the column.</text>
+<text x="640" y="436" class="xs muted" text-anchor="start">Conflate them and a lift either</text>
+<text x="640" y="454" class="xs muted" text-anchor="start">sags under load or leaves its</text>
+<text x="640" y="472" class="xs muted" text-anchor="start">passengers behind.</text>
+</svg>

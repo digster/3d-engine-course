@@ -1,0 +1,49 @@
+<svg viewBox="0 0 720 404" role="img" aria-labelledby="f616g-t f616g-d">
+  <title id="f616g-t">The batch key and the byte accounting</title>
+  <desc id="f616g-d">Left: the five components of a batch key - mesh, textures, surface style, blend style and the material block - each annotated with the kind of decision that changes it. Right: for sixteen identical cubes, the uniform road pushes 3152 bytes across sixteen draws while the instanced road pushes 640 and uploads 1792 instance bytes, for 2432 total across one draw. The 720-byte difference is fifteen material blocks not pushed.</desc>
+  <defs>
+    <marker id="e-i-f616g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f616g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f616g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f616g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f616g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">What every instance in one draw must agree about — and what batching actually saves</text>
+<text x="210.0" y="54" class="xs" text-anchor="middle">THE BATCH KEY</text>
+<rect x="60" y="72" width="300" height="32" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="70" y="92" class="xs" text-anchor="start">mesh</text>
+<text x="350" y="92" class="xs" text-anchor="end">modelling</text>
+<rect x="60" y="114" width="300" height="32" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="70" y="134" class="xs" text-anchor="start">albedo + normal map</text>
+<text x="350" y="134" class="xs" text-anchor="end">atlasing</text>
+<rect x="60" y="156" width="300" height="32" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="70" y="176" class="xs" text-anchor="start">surface style</text>
+<text x="350" y="176" class="xs" text-anchor="end">pipeline</text>
+<rect x="60" y="198" width="300" height="32" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="70" y="218" class="xs" text-anchor="start">blend style</text>
+<text x="350" y="218" class="xs" text-anchor="end">pipeline</text>
+<rect x="60" y="240" width="300" height="32" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="70" y="260" class="xs" text-anchor="start">material (32 B)</text>
+<text x="350" y="260" class="xs" text-anchor="end">parameters</text>
+<rect x="60" y="288" width="300" height="58" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3" stroke-dasharray="4 3"/>
+<text x="210.0" y="308" class="xs" text-anchor="middle">Differ in ANY of these and the run</text>
+<text x="210.0" y="324" class="xs" text-anchor="middle">ends. Which is why the demo scene's</text>
+<text x="210.0" y="340" class="xs" text-anchor="middle">12 objects make 12 batches.</text>
+<text x="564" y="54" class="xs" text-anchor="middle">SIXTEEN CUBES, TWO ROADS (§K)</text>
+<rect x="434" y="80" width="236.0" height="22" rx="2" fill="#e05c5c" fill-opacity="0.45" stroke="#e05c5c" stroke-width="1.1"/>
+<text x="434" y="74" class="xs" text-anchor="start">uniform push</text>
+<text x="682" y="96" class="xs" text-anchor="start">3,152 B</text>
+<rect x="434" y="142" width="47.9" height="22" rx="2" fill="#5ac878" fill-opacity="0.45" stroke="#5ac878" stroke-width="1.1"/>
+<rect x="481.9" y="142" width="134.2" height="22" rx="2" fill="#9b7ede" fill-opacity="0.45" stroke="#9b7ede" stroke-width="1.1"/>
+<text x="434" y="136" class="xs" text-anchor="start">instanced</text>
+<text x="682" y="158" class="xs" text-anchor="start">2,432 B</text>
+<text x="434" y="214" class="xs" text-anchor="start">█ uniform pushes</text>
+<text x="556" y="214" class="xs" text-anchor="start">█ instance buffer</text>
+<rect x="426" y="234" width="274" height="112" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3" stroke-dasharray="4 3"/>
+<text x="563" y="254" class="xs" text-anchor="middle">16 draw calls became 1.</text>
+<text x="563" y="272" class="xs" text-anchor="middle">The 112-byte matrix block did not</text>
+<text x="563" y="290" class="xs" text-anchor="middle">shrink — it changed road. The whole</text>
+<text x="563" y="308" class="xs" text-anchor="middle">720-byte saving is 15 materials</text>
+<text x="563" y="326" class="xs" text-anchor="middle">not pushed. Instancing saves</text>
+<text x="563" y="344" class="xs" text-anchor="middle">SUBMISSION, not bandwidth.</text>
+</svg>

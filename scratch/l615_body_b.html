@@ -1,0 +1,654 @@
+  <!-- =================================================================
+       4 — THE SPLIT
+       ================================================================= -->
+  <h2 id="split"><span class="num">4</span>The two integrals, and only one of them is exact</h2>
+
+  <p>
+    We have the environment stored and we know how to weight its texels. Now the integral, which we
+    established in §2.1 cannot be evaluated at run time. Both halves of the BRDF get moved offline,
+    and they get moved offline in <em>completely different ways</em>, because one of them permits it
+    and the other does not.
+  </p>
+
+  @@FIG_SPLIT@@
+
+  <h3>4.1 The diffuse half factors, exactly</h3>
+
+  <p>
+    Start with Lambert, because Lambert is the easy case and the reason it is easy is worth naming.
+    Lesson 6.2 derived its BRDF:
+  </p>
+
+  <div class="eq">\[ f_r = \frac{\text{albedo}}{\pi} \]</div>
+
+  <p>
+    Look at what is <em>not</em> in that expression: <span class="eq-plain"><b>l</b></span>. The
+    Lambert BRDF does not depend on the incoming direction at all — that is what "diffuse" means.
+    So it is a constant with respect to the integration variable, and a constant comes straight out
+    of an integral:
+  </p>
+
+  <div class="eq">\[ L_o = \int_\Omega \frac{\text{albedo}}{\pi} L_i(\mathbf{l}) (\mathbf{n} \cdot \mathbf{l}) \, d\omega
+         = \frac{\text{albedo}}{\pi} \underbrace{\int_\Omega L_i(\mathbf{l}) (\mathbf{n} \cdot \mathbf{l}) \, d\omega}_{E(\mathbf{n})} \]</div>
+
+  <div class="eq-plain">
+    (pull the constant out, and what is left is the irradiance <code>E(n)</code>)
+  </div>
+
+  <p>
+    And now look at what <span class="eq-plain">E(<b>n</b>)</span> depends on: the environment, which
+    is fixed, and <span class="eq-plain"><b>n</b></span>. <strong>Only the normal.</strong> Not the
+    view, not the material, not the position. So it is a function on the sphere of directions, which
+    is to say it is another cube map, which we can compute once and look up with one fetch.
+  </p>
+
+  <p>
+    <strong>There is no approximation anywhere in that paragraph.</strong> That is the sentence to
+    take away. People say "IBL is approximate" and it is half true; the diffuse half is not
+    approximate at all, it is a change in the order of two exact operations. The only error is
+    discretisation, and we can measure it.
+  </p>
+
+  <h4>The measurement, and the identity it confirms</h4>
+
+  <p>
+    Feed the convolution a uniform environment of radiance 1 and it must return exactly π — because
+    that is the integral of the cosine over the hemisphere and we did that arithmetic by hand in
+    §2.2. Here is what the code returns:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>face size</th><th>E</th><th>relative error</th><th>× previous</th></tr></thead>
+    <tbody>
+      <tr><td>8</td><td>3.14378262</td><td>6.971 × 10⁻⁴</td><td>—</td></tr>
+      <tr><td>16</td><td>3.14212966</td><td>1.709 × 10⁻⁴</td><td>4.08</td></tr>
+      <tr><td>32</td><td>3.14172959</td><td>4.359 × 10⁻⁵</td><td>3.92</td></tr>
+      <tr><td>64</td><td>3.14162707</td><td>1.096 × 10⁻⁵</td><td>3.98</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read the last column. Every doubling of the face divides the error by <strong>four</strong>,
+    which is second-order convergence — exactly what a midpoint rule does on a smooth integrand.
+    That is not just a nice number; it is <em>evidence that nothing else is wrong</em>. A missing
+    solid-angle weight would show up as a floor the refinement could not get under (§3.3), and a sign
+    error somewhere would not converge to π at all.
+  </p>
+
+  <p>
+    Then the identity, end to end, through the shipped <code>image_based_light</code> rather than
+    through the integral in isolation. Albedo (0.80, 0.60, 0.40), a uniform environment of
+    (0.30, 0.40, 0.50):
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_615 §C</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">[PASS] and END TO END: image_based_light's diffuse half is (0.24000, 0.24000,
+       0.20000) where Lesson 6.2's `albedo * ambient` is (0.24000, 0.24000,
+       0.20000) — agreeing to 1.291e-05. THE OLD TERM IS A SPECIAL CASE OF THE
+       NEW ONE
+
+[PASS] THE SENTENCE scene.frag.hlsl HAS CARRIED SINCE LESSON 6.4 IS CLOSED: a
+       mirror in a uniform room of radiance 0.30 now reflects 0.2850 instead of
+       0.0000, because the ambient term finally has a specular lobe</code></pre>
+  </figure>
+
+  <p>
+    The first of those is the regression test that lets us trust everything else. The second is the
+    debt, paid.
+  </p>
+
+  <h3>4.2 The specular half does not factor, and we pretend it does</h3>
+
+  <p>
+    Now try the same move on the specular lobe. The Cook–Torrance BRDF from Lesson 6.4 is
+  </p>
+
+  <div class="eq">\[ f_r(\mathbf{l}, \mathbf{v}) = \frac{D(\mathbf{h}) \, G(\mathbf{l}, \mathbf{v}) \, F(\mathbf{v} \cdot \mathbf{h})}
+                                        {4 (\mathbf{n} \cdot \mathbf{l})(\mathbf{n} \cdot \mathbf{v})} \]</div>
+
+  <p>
+    and <span class="eq-plain"><b>h</b></span> is the halfway vector between
+    <span class="eq-plain"><b>l</b></span> and <span class="eq-plain"><b>v</b></span>. Every term
+    depends on <span class="eq-plain"><b>l</b></span>, and on
+    <span class="eq-plain"><b>l</b></span> and <span class="eq-plain"><b>v</b></span>
+    <em>together</em>. Nothing comes out of the integral. There is no
+    <span class="eq-plain">E(<b>n</b>)</span> to precompute.
+  </p>
+
+  <p>
+    The <strong>split-sum approximation</strong> (Karis, 2013) factors it anyway:
+  </p>
+
+  <div class="eq">\[ \int_\Omega f_r L_i (\mathbf{n} \cdot \mathbf{l}) \, d\omega \;\approx\;
+     \underbrace{\left[ \frac{\sum_k L_i(\mathbf{l}_k)(\mathbf{n} \cdot \mathbf{l}_k)}{\sum_k (\mathbf{n} \cdot \mathbf{l}_k)} \right]}_{\text{prefiltered environment}}
+     \times
+     \underbrace{\left[ \int_\Omega f_r (\mathbf{n} \cdot \mathbf{l}) \, d\omega \right]}_{\text{BRDF integral}} \]</div>
+
+  <div class="eq-plain">
+    (a weighted average of the environment over the lobe, times the integral of the BRDF alone)
+  </div>
+
+  <p>
+    <strong>Say plainly what just happened: an integral of a product was replaced by a product of
+    integrals.</strong> That is not an identity. It is exactly true when one factor is constant over
+    the region the other one cares about, and approximately true when it is nearly so — which for a
+    narrow lobe on a smooth environment it very nearly is, and for a wide lobe on an environment
+    with a sun in it very much is not. We will measure both cases.
+  </p>
+
+  <p>
+    What each bracket buys:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The left bracket is a blur.</strong> It is the environment averaged over the specular
+      lobe's footprint, which is a function of roughness — so it becomes a <em>mip chain indexed by
+      roughness</em> rather than by screen footprint. That is the direct connection to Lesson 6.10,
+      and §5 makes the indexing derivable rather than chosen.
+    </li>
+    <li>
+      <strong>The right bracket is a two-dimensional table, and this is the part that is
+      genuinely surprising.</strong> It contains no <span class="eq-plain">L<sub>i</sub></span>, so
+      it does not depend on the environment. And — see below — Schlick's Fresnel makes it independent
+      of F0 too. What is left depends only on <span class="eq-plain">(<b>n</b>·<b>v</b>)</span> and
+      roughness. <em>One 64×64 image serves every material in every scene this engine will ever
+      render.</em>
+    </li>
+  </ul>
+
+  <h4>Why the table is two-dimensional and not five</h4>
+
+  <p>
+    Schlick's approximation to Fresnel, from Lesson 6.4:
+  </p>
+
+  <div class="eq">\[ F = F_0 + (1 - F_0)(1 - \mathbf{v} \cdot \mathbf{h})^5 \]</div>
+
+  <p>
+    Write <span class="eq-plain">f<sub>c</sub> = (1 − v·h)⁵</span> and rearrange:
+  </p>
+
+  <div class="eq">\[ F = F_0 (1 - f_c) + f_c \]</div>
+
+  <p>
+    <strong>It is <em>linear</em> in F0</strong>, with the two coefficients depending only on the
+    geometry. So the integral splits into a part that multiplies F0 and a part that does not, and
+    neither of them mentions F0:
+  </p>
+
+  <div class="eq">\[ \int f_r (\mathbf{n}\cdot\mathbf{l}) \, d\omega
+     = F_0 \underbrace{\int w (1 - f_c)}_{\text{scale}} + \underbrace{\int w f_c}_{\text{bias}} \]</div>
+
+  <p>
+    and the shader does <code>specular = prefiltered × (F0 × scale + bias)</code>. Gold, chrome and
+    plastic differ only in F0, which never entered the table. This is the single nicest consequence
+    of Schlick's approximation and it is a large part of why that approximation is universal.
+  </p>
+
+  <h4>Where D went</h4>
+
+  <p>
+    One detail in the implementation surprises everybody the first time: <strong>the BRDF integrator
+    contains no NDF at all.</strong> Here is the estimator, and the whole of the algebra behind it:
+  </p>
+
+  <p>
+    We sample directions from GGX's own distribution — the inverse CDF is
+    <code>ggx_importance_sample</code> — so the probability density of a sample is proportional to
+    <span class="eq-plain">D(h)(n·h)</span>, times the Jacobian
+    <span class="eq-plain">1/(4 v·h)</span> of the change of variables from half-vectors to light
+    directions. A Monte Carlo estimator divides the integrand by the pdf, so
+  </p>
+
+  <div class="eq">\[ \frac{f_r (\mathbf{n}\cdot\mathbf{l})}{p(\mathbf{l})}
+     = \frac{\dfrac{D G F}{4(\mathbf{n}\cdot\mathbf{l})(\mathbf{n}\cdot\mathbf{v})}(\mathbf{n}\cdot\mathbf{l})}
+            {\dfrac{D (\mathbf{n}\cdot\mathbf{h})}{4(\mathbf{v}\cdot\mathbf{h})}}
+     = \frac{G F (\mathbf{v}\cdot\mathbf{h})}{(\mathbf{n}\cdot\mathbf{h})(\mathbf{n}\cdot\mathbf{v})} \]</div>
+
+  <p>
+    <strong>The D cancels exactly.</strong> So does the 4, and so do both
+    <span class="eq-plain">(n·l)</span> factors. What is left is four dot products and the geometry
+    term — which is why the reference implementations of this function look like they forgot the
+    most important part of the BRDF. They did not; importance sampling ate it.
+  </p>
+
+  <h3>4.3 The price, measured and decomposed</h3>
+
+  @@FIG_SHAPE@@
+
+  <p>
+    Now we make good on §4.2's promise. The harness runs the <em>true</em> integral by brute-force
+    importance sampling at a million samples, and compares it against what the engine's shipped
+    <code>image_based_light</code> returns. The environment is our procedural sky at 128×128 per face.
+  </p>
+
+  <p>
+    <strong>But it reports three numbers per row, not two</strong>, and the third is the point. The
+    brute force is run twice: once against the analytic sky, and once against the <em>baked cube map
+    the engine actually reads</em>. That separates two error sources that are normally reported as
+    one:
+  </p>
+
+  <ul>
+    <li><strong>truth → cube-truth</strong> is what the bake lost, which you can buy back with texels.</li>
+    <li><strong>cube-truth → split-sum</strong> is the approximation, which you cannot.</li>
+  </ul>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>roughness</th><th>n·v</th><th>truth</th><th>cube-truth</th><th>split-sum</th><th>bake</th><th>split</th></tr></thead>
+    <tbody>
+      <tr><td>0.10</td><td>0.9</td><td>0.019015</td><td>0.019016</td><td>0.019054</td><td>1.0000</td><td>1.0020</td></tr>
+      <tr><td>0.10</td><td>0.4</td><td>0.068871</td><td>0.068871</td><td>0.068817</td><td>1.0000</td><td>0.9992</td></tr>
+      <tr><td>0.25</td><td>0.9</td><td>0.019177</td><td>0.019177</td><td>0.019118</td><td>1.0000</td><td>0.9969</td></tr>
+      <tr><td>0.25</td><td>0.4</td><td>0.067442</td><td>0.067441</td><td>0.066044</td><td>1.0000</td><td>0.9793</td></tr>
+      <tr><td>0.50</td><td>0.9</td><td>0.018627</td><td>0.018627</td><td>0.018099</td><td>1.0000</td><td>0.9717</td></tr>
+      <tr><td>0.50</td><td>0.4</td><td>0.042710</td><td>0.042708</td><td>0.037936</td><td>1.0000</td><td>0.8882</td></tr>
+      <tr><td>0.75</td><td>0.9</td><td>0.013536</td><td>0.013536</td><td>0.012746</td><td>1.0000</td><td>0.9417</td></tr>
+      <tr><td>0.75</td><td>0.4</td><td>0.023234</td><td>0.023233</td><td>0.020140</td><td>1.0000</td><td>0.8669</td></tr>
+      <tr><td>1.00</td><td>0.9</td><td>0.007219</td><td>0.007219</td><td>0.006896</td><td>1.0000</td><td>0.9554</td></tr>
+      <tr><td>1.00</td><td>0.4</td><td>0.013964</td><td>0.013964</td><td>0.009915</td><td>1.0000</td><td>0.7101</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The bake column is 1.0000 all the way down, on a smooth sky: at 128×128 a gradient is captured
+    perfectly. So every deviation in the last column belongs to the approximation, and now look at
+    its <strong>shape</strong>:
+  </p>
+
+  <ul>
+    <li><strong>At roughness 0.10 it is essentially exact</strong> — 0.08% at worst. A narrow lobe
+        barely notices which direction it was centred on. <em>The technique degrades smoothly away
+        from a mirror</em>, which is the opposite of how most approximations behave and is why it is
+        used.</li>
+    <li><strong>At near-normal incidence it never exceeds 5.8%</strong> at any roughness.</li>
+    <li><strong>At a grazing view it reaches 29.0% dark.</strong> More than four times the error, on
+        exactly the same material.</li>
+  </ul>
+
+  <p>
+    That asymmetry is not noise. It is the <em>second</em> approximation, which most treatments
+    mention in passing and which does most of the visible damage.
+  </p>
+
+  <h4>The second assumption: n = v = r</h4>
+
+  <p>
+    The prefiltered chain is a cube map, so a lookup into it is indexed by <em>one</em> direction.
+    But the true integral depends on two — the normal and the view. There is no way to index a cube
+    map by a pair of directions, so the prefilter has to assume they coincide:
+  </p>
+
+  <div class="eq">\[ \mathbf{n} = \mathbf{v} = \mathbf{r} \]</div>
+
+  <p>
+    which is exactly true when you look straight down at a surface and progressively wronger as you
+    look along it. Two things go wrong at a grazing view, and the measurement above shows both:
+  </p>
+
+  <ol>
+    <li>
+      <strong>The lobe is baked round when it should be stretched.</strong> A rough surface seen at a
+      grazing angle shows a long, comet-shaped smear, not a disc. The prefilter cannot represent
+      that, so you get a disc.
+    </li>
+    <li>
+      <strong>The lobe is centred on the wrong thing.</strong> It is baked around the reflection
+      direction, and at a grazing view the reflection points nearly along the horizon — so the
+      prefilter's lobe reaches <em>below</em> it and averages in ground the real surface, whose
+      normal points up, never sees at all. Our ground is dark, so the answer comes out dark. That is
+      precisely the 29% in the last row.
+    </li>
+  </ol>
+
+  <h4>And a third cause, which only appears with a sun</h4>
+
+  <p>
+    Run the same table with the sun disc in the sky and the error grows to <strong>73.0%</strong>.
+    That is a different mechanism again, and it is visible in the left bracket of the split sum:
+    the prefilter weights radiance by <span class="eq-plain">(n·l)</span> alone, where the true
+    integral weights it by the whole BRDF. Those two weightings disagree most where the environment
+    is nearly a delta function — which is exactly what a sun is.
+  </p>
+
+  <p>
+    <strong>So the error of this technique depends on the environment, not only on the
+    material.</strong> That is not something you can read off the paper, and it is the practical
+    reason production renderers keep the sun as a separate analytic light rather than baking it into
+    the environment map. Our own engine already does that — the key light in
+    <code>scene_light_uniforms</code> is separate — so in practice you would bake a sky <em>without</em>
+    its sun and let the directional light handle it. The exercises ask you to measure the difference.
+  </p>
+
+  <!-- =================================================================
+       5 — THE LEVEL
+       ================================================================= -->
+  <h2 id="level"><span class="num">5</span>Which level? Deriving what everybody guesses</h2>
+
+  <p>
+    The prefiltered chain has levels, each blurred by a different roughness. A shader with a material
+    of roughness <em>r</em> has to pick one. Open any engine and you will find
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">the folklore</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">float level = roughness * (level_count - 1);</code></pre>
+</figure>
+
+  <p>
+    …with no argument attached. It is a reasonable-looking line and it is in every reference
+    implementation. <strong>Where does it come from, and how wrong is it?</strong>
+  </p>
+
+  <p>
+    Lesson 6.14 gives us the tools to answer that, which is the nicest piece of continuity in this
+    module. It derived the GGX lobe's half-width in closed form:
+  </p>
+
+  <div class="eq">\[ \sin t = \alpha \sqrt{\frac{\sqrt2 - 1}{1 - \alpha^2}} \]</div>
+
+  <p>
+    Three lines of algebra, no fitting, exact at every roughness. What we need now is to compare that
+    against a texel — and a half-angle is not commensurable with a texel. <strong>A solid angle
+    is.</strong>
+  </p>
+
+  <h3>5.1 The derivation</h3>
+
+  <p>
+    The cap of a cone of half-angle <em>t</em> subtends
+  </p>
+
+  <div class="eq">\[ \Omega_{\text{lobe}} = 2\pi (1 - \cos t) \]</div>
+
+  <div class="eq-plain">
+    (the spherical-cap area — the one piece of solid-angle geometry worth memorising; at
+    <em>t</em> = 90° it gives 2π, the whole hemisphere, which is the check to run first)
+  </div>
+
+  <p>
+    And a texel at level <em>k</em> of a cube whose base face is <em>n</em> across: each level halves
+    the side, so it <em>quadruples</em> the solid angle.
+  </p>
+
+  <div class="eq">\[ \Omega_{\text{texel}}(k) = \omega_0 \cdot 4^k \]</div>
+
+  <p>
+    Set them equal — <em>which level's texels are about as wide as this lobe?</em> — and take logs:
+  </p>
+
+  <div class="eq">\[ k = \log_4\!\left( \frac{\Omega_{\text{lobe}}}{\omega_0} \right)
+       = \tfrac12 \log_2\!\left( \frac{\Omega_{\text{lobe}}}{\omega_0} \right) \]</div>
+
+  <p>
+    That is <code>prefilter_level_for</code>, and it is three lines of code with no free parameters
+    in it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>One choice inside it has to be stated.</strong> <span class="eq-plain">ω<sub>0</sub></span>
+      is the solid angle of <em>which</em> level-0 texel? §3.2 showed they differ by 5.196. The code
+      uses the <strong>centre</strong> texel, and the reason is that we are asking what resolution
+      the map achieves where it is best: a level that cannot resolve the lobe even at the face centre
+      certainly cannot at the corner. Using the corner instead would shift every answer by
+      <span class="eq-plain">log₄(5.196) = 1.19</span> levels — which is more than the entire
+      disagreement we are about to measure, so the choice is not a detail.
+    </p>
+  </div>
+
+  <h3>5.2 The comparison</h3>
+
+  @@FIG_LEVEL@@
+
+  <p>
+    Here are both, for a 128-base chain of eight levels:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>roughness</th><th>α</th><th>half-angle</th><th>lobe (sr)</th><th>derived level</th><th>shipped level</th><th>difference</th></tr></thead>
+    <tbody>
+      <tr><td>0.00</td><td>0.0010</td><td>0.04°</td><td>0.000001</td><td>0.000</td><td>0.000</td><td>+0.000</td></tr>
+      <tr><td>0.10</td><td>0.0100</td><td>0.37°</td><td>0.000130</td><td>0.000</td><td>0.700</td><td><strong>+0.700</strong></td></tr>
+      <tr><td>0.20</td><td>0.0400</td><td>1.48°</td><td>0.002086</td><td>1.548</td><td>1.400</td><td>−0.148</td></tr>
+      <tr><td>0.30</td><td>0.0900</td><td>3.33°</td><td>0.010636</td><td>2.723</td><td>2.100</td><td>−0.623</td></tr>
+      <tr><td>0.40</td><td>0.1600</td><td>5.99°</td><td>0.034282</td><td>3.567</td><td>2.800</td><td>−0.767</td></tr>
+      <tr><td>0.50</td><td>0.2500</td><td>9.57°</td><td>0.087360</td><td>4.242</td><td>3.500</td><td>−0.742</td></tr>
+      <tr><td>0.60</td><td>0.3600</td><td>14.38°</td><td>0.196842</td><td>4.828</td><td>4.200</td><td>−0.628</td></tr>
+      <tr><td>0.70</td><td>0.4900</td><td>21.21°</td><td>0.425571</td><td>5.384</td><td>4.900</td><td>−0.484</td></tr>
+      <tr><td>0.80</td><td>0.6400</td><td>32.42°</td><td>0.979074</td><td>5.985</td><td>5.600</td><td>−0.385</td></tr>
+      <tr><td>0.90</td><td>0.8100</td><td>62.74°</td><td>3.405552</td><td>6.884</td><td>6.300</td><td>−0.584</td></tr>
+      <tr><td>1.00</td><td>1.0000</td><td>90.00°</td><td>6.283185</td><td>7.000</td><td>7.000</td><td>+0.000</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The folklore is not arbitrary.</strong> Over the whole range the two never differ by more
+    than <strong>0.770 of a level</strong> (worst at roughness 0.45), and they agree exactly at both
+    ends. For a line with no derivation attached, that is a good line. For comparison,
+    <code>sqrt(roughness)</code> — which also circulates — is off by <strong>2.214 levels</strong>,
+    nearly three times as much.
+  </p>
+
+  <p>
+    But we now know something the folklore does not tell you, which is the <em>direction</em> of the
+    error:
+  </p>
+
+  <ul>
+    <li>
+      <strong>At low roughness it over-blurs.</strong> At 0.10 the lobe wants level 0 and the mapping
+      reads 0.700 — most of a level of blur applied to a near-mirror, which is exactly where you
+      would notice it.
+    </li>
+    <li>
+      <strong>From 0.3 to 0.9 it under-blurs</strong>, by up to 0.77 of a level. Less visible, because
+      a rough reflection has no detail to lose.
+    </li>
+  </ul>
+
+  <p>
+    There is also a hard limit hiding in that table. At roughness 0.10 the lobe subtends
+    0.000130 sr, while a level-0 texel on a 128 face subtends about 0.000244 sr — <em>the lobe is
+    smaller than one texel.</em> Below roughness ≈0.11 the base resolution, not the prefilter, is
+    what limits the reflection. If you want a crisper mirror, the answer is a bigger cube, not a
+    deeper chain.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So which one does the engine ship?</strong> The <em>fitted</em> one — and the engine
+      ships the derived one too, as a separate function, with the boundary marked. This is 6.14's
+      discipline applied again: that lesson kept its closed-form lobe width and Tokuyoshi &amp;
+      Kaplanyan's fitted constants in the same file with a comment saying which was which. The reason
+      the lookup must use the linear mapping is not taste: <em>the chain was built with roughness
+      spread linearly across its levels</em>, so reading it any other way would ask for level 4.2 of
+      a table whose level 4.2 means something else. <code>prefilter_level_for</code>'s job is to tell
+      you whether your chain is <em>deep enough</em>, not to index it.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">6</span>Implementation</h2>
+
+  <p>
+    Everything above lands in one new pair of files, <code>engine/gfx/cubemap.{hpp,cpp}</code>, plus
+    two small additions to headers that already exist. We will build it in the order the argument was
+    made: the faces, the environment, the two integrals, and then the function that puts them
+    together.
+  </p>
+
+  <h3>6.1 The face table, as data</h3>
+
+  <p>
+    §3.1's table is written once, as an array of index-and-sign triples, and <em>both</em> directions
+    read it:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/cubemap.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">struct face_rule
+{
+    int sc_index, tc_index, ma_index;
+    float sc_sign, tc_sign;
+};
+
+constexpr face_rule k_rules[k_cube_faces] = {
+    { 2, 1, 0, -1.0f, -1.0f },   // +X : sc = -z, tc = -y
+    { 2, 1, 0, +1.0f, -1.0f },   // -X : sc = +z, tc = -y
+    { 0, 2, 1, +1.0f, +1.0f },   // +Y : sc = +x, tc = +z
+    { 0, 2, 1, +1.0f, -1.0f },   // -Y : sc = +x, tc = -z
+    { 0, 1, 2, +1.0f, -1.0f },   // +Z : sc = +x, tc = -y
+    { 0, 1, 2, -1.0f, -1.0f },   // -Z : sc = -x, tc = -y
+};</code></pre>
+</figure>
+
+  <p>
+    Writing it as data rather than as a switch over six cases is not tidiness. It means
+    <code>direction_to_cube</code> reads the table forwards and <code>cube_to_direction</code> reads
+    it backwards, so <strong>a typo cannot appear in only one of them</strong> — and the round-trip
+    test in §A of the harness would catch it either way. That test reports 8.560 × 10⁻⁸ worst error
+    over 1,734 directions and zero face mismatches.
+  </p>
+
+  <p>
+    One line in the reverse direction is worth pointing at:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/cubemap.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">c[r.ma_index] = (index &amp; 1) ? -1.0f : 1.0f;</code></pre>
+</figure>
+
+  <p>
+    The major axis is +1 on even face indices and −1 on odd ones, which is a free gift from SDL's
+    enum ordering (+X, −X, +Y, −Y, +Z, −Z): the sign <em>is</em> the low bit. That is a small thing
+    to lean on, which is why §A asserts the enum against SDL's rather than trusting it.
+  </p>
+
+  <h3>6.2 A cube map is six <code>hdr_buffer</code>s, and that is not a detail</h3>
+
+  <p>
+    The faces are <code>hdr_buffer</code> — Lesson 6.12's float container — and not
+    <code>engine::texture</code>. The reason is the one number §D of the harness measures:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_615 §D</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">[PASS] the sun disc survives the bake at 5601 — a dynamic range of 11201:1
+       against the sky around it, which is why a cube map face is an hdr_buffer
+       and not a texture</code></pre>
+  </figure>
+
+  <p>
+    Radiance has no upper bound. The sky is around 0.5 and the sun in the same image is five thousand
+    times brighter. Storing that in a [0,1] container clips the sun to white <em>before any integral
+    runs</em>, and the prefilter then faithfully integrates a lie. This is the same argument
+    <code>gpu_post.hpp</code> made for the HDR framebuffer in 6.12, arriving at the other end of the
+    pipeline.
+  </p>
+
+  <h3>6.3 The irradiance convolution, and the one line it turns on</h3>
+
+  <p>
+    The diffuse integral is a double loop over output texels and input texels. The body is four lines;
+    here is the part that matters:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/cubemap.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">for (const sample_point&amp; p : points)
+{
+    const float cosine = dot(n, p.dir);
+    if (cosine &lt;= 0.0f) { continue; }
+    const double w = static_cast&lt;double&gt;(cosine) * p.weight;
+    r += p.radiance.r * w;
+    g += p.radiance.g * w;
+    b += p.radiance.b * w;
+}</code></pre>
+</figure>
+
+  <p>
+    <code>p.weight</code> is <code>cube_texel_solid_angle</code>, precomputed. Remove it and you have
+    the 1.01% bias of §3.3, permanently.
+  </p>
+
+  <p>
+    Two implementation decisions in there are worth the words:
+  </p>
+
+  <p>
+    <strong>The input is precomputed into a flat array first.</strong> Every output texel integrates
+    over every input texel, so anything depending only on the input — its direction and its solid
+    angle — is hoisted. At 32 out and 128 in, that turns 6.0 × 10⁸ calls to
+    <code>cube_to_direction</code> into 98,304 of them, and the convolution goes from minutes to
+    about four seconds.
+  </p>
+
+  <p>
+    <strong>The accumulator is <code>double</code>.</strong> A sun disc contributes single samples
+    around 6,000 into a sum whose other terms are around 10⁻⁴. In <code>float</code>, once the
+    running total is large enough, the small terms are lost entirely — the classic catastrophic
+    accumulation failure. The symptom would be an irradiance map that is correct near the sun and
+    quietly too dark away from it, which is very hard to attribute.
+  </p>
+
+  <h3>6.4 Importance sampling, and why not <code>rand()</code></h3>
+
+  <p>
+    The prefilter and the BRDF table both need to sample the GGX distribution. Sampling uniformly
+    over the hemisphere would be catastrophic: at roughness 0.10 the lobe is 0.37° wide, so all but
+    roughly one sample in 100,000 lands where <em>D</em> is numerically zero.
+  </p>
+
+  <p>
+    GGX's inverse CDF is a closed form — one square root, no rejection and no iteration — and that is
+    a large part of why GGX won:
+  </p>
+
+  <div class="eq">\[ \cos t = \sqrt{\frac{1 - u_2}{1 + (\alpha^2 - 1) u_2}}, \qquad \phi = 2\pi u_1 \]</div>
+
+  <p>
+    The pair <span class="eq-plain">(u₁, u₂)</span> comes from <code>hammersley</code>, not from
+    <code>rand()</code>, and the difference is a convergence rate. Random sampling converges as
+    <span class="eq-plain">1/√N</span>; a low-discrepancy sequence, which fills the square evenly
+    rather than randomly, converges close to <span class="eq-plain">1/N</span> on these smooth
+    integrands. §G of the harness shows the table converged to 8 × 10⁻⁴ at 1,024 samples and
+    3.7 × 10⁻⁴ at 4,096 — where random sampling would want roughly sixteen times as many for the
+    same error.
+  </p>
+
+  <p>
+    The <em>y</em> coordinate is the radical inverse in base 2: write the index in binary and reflect
+    it about the binary point, so 1 → 0.1₂ = 0.5, 2 → 0.01₂ = 0.25, 3 → 0.11₂ = 0.75. Consecutive
+    points keep landing in the largest remaining gap, which is the whole idea, and the standard
+    five-step bit twiddle does the reflection without a loop.
+  </p>
+
+  <h3>6.5 The one honest fudge in the prefilter</h3>
+
+  <p>
+    §4.2 said the prefilter averages radiance weighted by <span class="eq-plain">(n·l)</span>. Where
+    does that weight come from? Importance sampling GGX already accounts for <em>D</em> and the
+    Jacobian, and <em>G</em> and Fresnel belong to the <em>other</em> bracket of the split sum — so
+    putting them here would double-count. What is left is <span class="eq-plain">(n·l)</span>, and
+    the original 2013 course notes document it as producing a visibly better result than uniform
+    weighting rather than as a consequence of anything.
+  </p>
+
+  <p>
+    So it is fitted, not derived, and the code says so at the point where it is applied. That is the
+    second fitted step in this lesson — the first being the linear roughness-to-level mapping — and
+    both are marked in the source, which is the habit 6.14 established when it separated its exact
+    lobe width from Tokuyoshi &amp; Kaplanyan's fitted constants.
+  </p>

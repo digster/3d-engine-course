@@ -1,0 +1,63 @@
+<svg viewBox="0 0 720 412" role="img" aria-labelledby="l512f2-t l512f2-d">
+  <title id="l512f2-t">The umbrella header lists 40 of 55 public headers</title>
+  <desc id="l512f2-d">A bar showing 40 of 55 public headers listed in engine.hpp and 15 missing, a list of the missing headers labelled with the lesson that added each, and a history showing the file was updated in Lessons 5.1, 5.2 and 5.11 and in no other lesson.</desc>
+  <defs>
+    <marker id="e-i-l512f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l512f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l512f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l512f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l512f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">engine.hpp calls itself “the whole public API, in one include”. It is not.</text>
+<rect x="24" y="44" width="488.72727272727275" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.28"/>
+<rect x="512.7272727272727" y="44" width="183.27272727272725" height="30" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.28"/>
+<rect x="24" y="44" width="672" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="268.3636363636364" y="63" class="xs mono" text-anchor="middle">40 listed</text>
+<text x="604.3636363636364" y="63" class="xs mono" text-anchor="middle">15 missing</text>
+<text x="24" y="130" class="xs" text-anchor="middle"></text>
+<text x="696" y="38" class="xs muted" text-anchor="end">55 public headers for it to list</text>
+<text x="24" y="100" class="xs t-bad" text-anchor="start">WHAT IS MISSING — and the lesson that shipped it</text>
+<text x="32" y="120" class="xs mono muted" text-anchor="start">5.8</text>
+<text x="66" y="120" class="xs mono" text-anchor="start">ecs/registry.hpp</text>
+<text x="32" y="140" class="xs mono muted" text-anchor="start">5.8</text>
+<text x="66" y="140" class="xs mono" text-anchor="start">ecs/view.hpp</text>
+<text x="32" y="160" class="xs mono muted" text-anchor="start">5.8</text>
+<text x="66" y="160" class="xs mono" text-anchor="start">ecs/entity.hpp</text>
+<text x="32" y="180" class="xs mono muted" text-anchor="start">5.8</text>
+<text x="66" y="180" class="xs mono" text-anchor="start">ecs/pool.hpp</text>
+<text x="32" y="200" class="xs mono muted" text-anchor="start">5.9</text>
+<text x="66" y="200" class="xs mono" text-anchor="start">ecs/hierarchy.hpp</text>
+<text x="32" y="220" class="xs mono muted" text-anchor="start">5.9</text>
+<text x="66" y="220" class="xs mono" text-anchor="start">ecs/camera.hpp</text>
+<text x="32" y="240" class="xs mono muted" text-anchor="start">5.10</text>
+<text x="66" y="240" class="xs mono" text-anchor="start">core/actions.hpp</text>
+<text x="372" y="120" class="xs mono muted" text-anchor="start">5.4</text>
+<text x="406" y="120" class="xs mono" text-anchor="start">core/handle.hpp</text>
+<text x="372" y="140" class="xs mono muted" text-anchor="start">5.4</text>
+<text x="406" y="140" class="xs mono" text-anchor="start">core/pool.hpp</text>
+<text x="372" y="160" class="xs mono muted" text-anchor="start">5.3</text>
+<text x="406" y="160" class="xs mono" text-anchor="start">core/log.hpp</text>
+<text x="372" y="180" class="xs mono muted" text-anchor="start">5.3</text>
+<text x="406" y="180" class="xs mono" text-anchor="start">core/assert.hpp</text>
+<text x="372" y="200" class="xs mono muted" text-anchor="start">5.6</text>
+<text x="406" y="200" class="xs mono" text-anchor="start">core/bench.hpp</text>
+<text x="372" y="220" class="xs mono muted" text-anchor="start">5.5</text>
+<text x="406" y="220" class="xs mono" text-anchor="start">asset/asset_store.hpp</text>
+<text x="372" y="240" class="xs mono muted" text-anchor="start">5.5</text>
+<text x="406" y="240" class="xs mono" text-anchor="start">asset/search_path.hpp</text>
+<text x="32" y="260" class="xs mono muted" text-anchor="start">5.2</text>
+<text x="66" y="260" class="xs mono" text-anchor="start">platform/main.hpp</text>
+<text x="200" y="260" class="xs t-ok" text-anchor="start">— deliberate, and documented</text>
+<line x1="24" y1="292" x2="696" y2="292" class="grid" stroke-width="1.0"/>
+<text x="24" y="312" class="xs" text-anchor="start">THE HISTORY OF THIS FILE, WHICH EXPLAINS ITSELF</text>
+<text x="32" y="332" class="xs mono muted" text-anchor="start">5.1</text>
+<text x="110" y="332" class="xs t-ok" text-anchor="start">created, 38 headers</text>
+<text x="32" y="347" class="xs mono muted" text-anchor="start">5.2</text>
+<text x="110" y="347" class="xs t-ok" text-anchor="start">remembered: platform/, app/</text>
+<text x="32" y="362" class="xs mono muted" text-anchor="start">5.3 – 5.10</text>
+<text x="110" y="362" class="xs t-bad" text-anchor="start">seven lessons, fourteen headers, none added</text>
+<text x="32" y="377" class="xs mono muted" text-anchor="start">5.11</text>
+<text x="110" y="377" class="xs t-ok" text-anchor="start">remembered: debug_lines, debug_ui</text>
+<text x="32" y="392" class="xs mono muted" text-anchor="start">Module 6</text>
+<text x="110" y="392" class="xs t-bad" text-anchor="start">twenty-two more headers, none added</text>
+</svg>

@@ -1,0 +1,62 @@
+<svg viewBox="0 0 720 360" role="img" aria-labelledby="l58f2-t l58f2-d">
+  <title id="l58f2-t">Per-pool key spaces compared with one shared entity id</title>
+  <desc id="l58f2-d">Above, two engine::pool containers each minting their own handle 7, which cannot be related. Below, one entity allocator minting id 7, which every component pool is keyed by.</desc>
+  <defs>
+    <marker id="e-i-l58f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l58f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l58f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l58f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l58f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The one thing Lesson 5.4’s pool does not have, drawn twice.</text>
+<text x="24" y="46" class="xs t-hi" text-anchor="start">engine::pool&lt;T&gt; — EVERY POOL MINTS ITS OWN KEYS.</text>
+<rect x="150" y="58" width="130" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="215" y="71" class="xs mono" text-anchor="middle">mesh_pool</text>
+<text x="142" y="71" class="xs muted" text-anchor="end">its own free list</text>
+<rect x="292" y="58" width="56" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="320" y="71" class="xs mono" text-anchor="middle">slot 0</text>
+<rect x="354" y="58" width="56" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="382" y="71" class="xs mono" text-anchor="middle">slot 1</text>
+<rect x="416" y="58" width="56" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="444" y="71" class="xs mono" text-anchor="middle">slot 2</text>
+<rect x="478" y="58" width="56" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="506" y="71" class="xs mono" text-anchor="middle">slot 3</text>
+<text x="560" y="71" class="xs mono muted" text-anchor="start">handle&lt;mesh_data&gt;{7,1}</text>
+<rect x="150" y="116" width="130" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="215" y="129" class="xs mono" text-anchor="middle">texture_pool</text>
+<text x="142" y="129" class="xs muted" text-anchor="end">its own free list</text>
+<rect x="292" y="116" width="56" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="320" y="129" class="xs mono" text-anchor="middle">slot 0</text>
+<rect x="354" y="116" width="56" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="382" y="129" class="xs mono" text-anchor="middle">slot 1</text>
+<rect x="416" y="116" width="56" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="444" y="129" class="xs mono" text-anchor="middle">slot 2</text>
+<rect x="478" y="116" width="56" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="506" y="129" class="xs mono" text-anchor="middle">slot 3</text>
+<text x="560" y="129" class="xs mono muted" text-anchor="start">handle&lt;texture&gt;{7,1}</text>
+<line x1="360" y1="84" x2="360" y2="108" stroke="#e05c5c" stroke-width="1.4" marker-end="url(#e-b-l58f2)"/>
+<text x="372" y="100" class="xs t-bad" text-anchor="start">these two 7s have NOTHING to do with each other</text>
+<text x="24" y="152" class="xs muted" text-anchor="start">“Does the thing in mesh slot 7 also have a texture?” is not a slow question here. It is not a QUESTION — the two sevens</text>
+<text x="24" y="166" class="xs muted" text-anchor="start">were minted by different free lists and mean different things.</text>
+<line x1="24" y1="182" x2="696" y2="182" class="grid" stroke-width="1.2"/>
+<text x="24" y="204" class="xs t-hi" text-anchor="start">engine::ecs — ONE ALLOCATOR MINTS THE ID; EVERY POOL IS KEYED BY IT.</text>
+<rect x="255" y="216" width="200" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="355" y="231" class="xs mono" text-anchor="middle">entity_allocator</text>
+<text x="355" y="252" class="xs mono t-hi" text-anchor="middle">entity e = {index 7, generation 1}</text>
+<line x1="355" y1="258" x2="168" y2="282" class="hi" stroke-width="1.2" marker-end="url(#e-h-l58f2)"/>
+<rect x="84" y="286" width="168" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="168" y="299" class="xs mono" text-anchor="middle">pool&lt;placement&gt;</text>
+<rect x="84" y="306" width="168" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="168" y="318" class="xs mono" text-anchor="middle">sparse[7] → its row, or none</text>
+<line x1="355" y1="258" x2="362" y2="282" class="hi" stroke-width="1.2" marker-end="url(#e-h-l58f2)"/>
+<rect x="278" y="286" width="168" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="362" y="299" class="xs mono" text-anchor="middle">pool&lt;geometry&gt;</text>
+<rect x="278" y="306" width="168" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="362" y="318" class="xs mono" text-anchor="middle">sparse[7] → its row, or none</text>
+<line x1="355" y1="258" x2="556" y2="282" class="hi" stroke-width="1.2" marker-end="url(#e-h-l58f2)"/>
+<rect x="472" y="286" width="168" height="18" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="556" y="299" class="xs mono" text-anchor="middle">pool&lt;material&gt;</text>
+<rect x="472" y="306" width="168" height="16" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="556" y="318" class="xs mono" text-anchor="middle">sparse[7] → its row, or none</text>
+<text x="24" y="344" class="xs t-hi" text-anchor="start">Three answers to one question, and the question is now well formed. That sentence is the whole of Lesson 5.7’s rule 2.</text>
+</svg>

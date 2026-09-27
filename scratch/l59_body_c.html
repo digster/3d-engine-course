@@ -1,0 +1,409 @@
+
+  <!-- =================================================================
+       8 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Every file this lesson creates or modifies.</caption>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/ecs/hierarchy.hpp</code></td><td>new</td>
+          <td><code>parent</code>, <code>world_transform</code>, <code>set_parent</code>,
+              <code>destroy_subtree</code>, and the level-order resolver</td></tr>
+      <tr><td><code>engine/include/engine/ecs/camera.hpp</code></td><td>new</td>
+          <td><code>camera</code>, <code>active_camera</code>, <code>look_along</code>, and the
+              three functions that read a camera entity</td></tr>
+      <tr><td><code>engine/include/engine/math/mat4.hpp</code></td><td>modified</td>
+          <td><code>rigid_inverse</code> and <code>is_rigid</code> — Lesson 2.9's derivation,
+              extracted</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td>
+          <td>three levels, a camera entity, and four new keys</td></tr>
+      <tr><td><code>scratch/hier_probe.hpp</code></td><td>new</td>
+          <td>the four candidate orders, over three plain arrays</td></tr>
+      <tr><td><code>scratch/bench_59.cpp</code></td><td>new</td>
+          <td>five measurements</td></tr>
+      <tr><td><code>scratch/verify_59.cpp</code></td><td>new</td>
+          <td>73 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    No change to <code>engine/CMakeLists.txt</code> or <code>demos/CMakeLists.txt</code>: both new
+    headers are header-only and the demo target already exists. The engine's public header count
+    goes from 51 to <strong>53</strong>.
+  </p>
+
+  @@LISTING:engine/include/engine/ecs/hierarchy.hpp@@
+  @@LISTING:engine/include/engine/ecs/camera.hpp@@
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+  @@LISTING:scratch/hier_probe.hpp@@
+  @@LISTING:scratch/bench_59.cpp@@
+  @@LISTING:scratch/verify_59.cpp@@
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">9</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">macOS / Linux</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+./build/demos/ecs_swarm                            # a window
+./build/demos/ecs_swarm --shot swarm.ppm           # one frame, no window, no display
+
+sh scratch/build_verify_59.sh                              # correctness, -O0
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_59.sh # …and optimised
+sh scratch/build_bench_59.sh                               # the five measurements</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (PowerShell, MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo
+
+.\build\demos\RelWithDebInfo\ecs_swarm.exe
+.\build\demos\RelWithDebInfo\ecs_swarm.exe --shot swarm.ppm</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> A golden torus tumbling at the origin, ringed by
+    ninety-six small cubes and icosahedra on tilted orbits at three radii — and, clustered tightly
+    around every sixth of them, <strong>pairs of small white moons</strong>. Those moons are the
+    new thing: they are two composes deep, and nothing computes where they are.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the HUD at rest</span></figcaption>
+    <pre><code class="lang-bash">ECS  entities 154   components  906   pools 10
+hierarchy  rows 154  roots   2  levels 3  orphans 0  cycles 0
+render view  lead 1   candidates 129   drawn 129   tris 3776
+camera free orbit   sun still   fps  60.0</code></pre>
+  </figure>
+
+  <p>
+    Check the arithmetic by hand, because it is checkable: 1 sun + 96 ring + 32 moons + 24
+    waypoints + 1 camera = <strong>154</strong>. Two roots — the sun and the free camera. Three
+    levels — sun, ring, moon. And 1 + 96 + 32 = <strong>129</strong> entities carry a geometry,
+    which is exactly what got drawn; the twenty-four waypoints are moving and invisible, which was
+    Lesson 5.8's argument and still holds.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The demo's keys and what each one demonstrates.</caption>
+    <thead><tr><th>key</th><th>what it does</th><th>what to watch</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>F</kbd></td><td>drift the sun</td>
+          <td><strong>everything follows</strong> — ring, moons, waypoints and all — and no code
+              anywhere says so. This is the whole lesson in one keypress.</td></tr>
+      <tr><td><kbd>C</kbd></td><td>parent the camera to a ring member</td>
+          <td>the view rides along. The renderer is not told; the camera type does not change;
+              nothing holds a pointer to a “current camera”.</td></tr>
+      <tr><td><kbd>H</kbd></td><td>detach the outer half of the ring from the sun</td>
+          <td>they keep orbiting — but around the <em>world origin</em>, because their placement
+              is now relative to nothing. Press <kbd>F</kbd> too and the split is unmistakable.</td></tr>
+      <tr><td><kbd>X</kbd></td><td>destroy every fourth ring member <em>and its moons</em></td>
+          <td><code>destroy_subtree</code>, not <code>destroy</code>. Swap one for the other and
+              the moons survive as orphans, orbiting the origin, with the count on the HUD saying
+              why.</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>spawn 32 short-lived sparks</td>
+          <td><code>rows</code> jumps and settles as they expire; each burst marks the topology
+              dirty, so watch that a rebuild costs nothing you can see at this scale.</td></tr>
+      <tr><td><kbd>M</kbd> / <kbd>O</kbd></td><td>strip materials / orbits</td>
+          <td>Lesson 5.8's demonstrations, unchanged and still working.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The headless run prints the same numbers plus the hierarchy report:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the reproducible frame</span></figcaption>
+    <pre><code class="lang-bash">ecs_swarm: 154 entities, 906 components, 10 pools, 129 drawn, 3776 triangles
+ecs_swarm: hierarchy 154 rows, 2 roots, 3 levels, 0 orphans, 0 cycles</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">One object lags a frame behind its parent</span>
+    <p><strong>Symptom.</strong> A turret trails its tank by exactly one frame — worse when the
+       tank is fast, invisible when it is stopped.</p>
+    <p><strong>Cause.</strong> The child was resolved before the parent, so it composed against
+       last frame's matrix. Either the resolve is walking dense order, or the level index is stale.</p>
+    <p><strong>Fix.</strong> Call <code>rebuild()</code> whenever the shape changes. To
+       <em>find</em> it, walk <code>tree.level(i)</code> and assert
+       <code>depth_of(parent) + 1 == i</code> for every entity — verify_59 §C is exactly that loop,
+       and it fails immediately on a stale order.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A re-parented object teleports</span>
+    <p><strong>Symptom.</strong> Dropping an object onto a new parent in the editor moves it.</p>
+    <p><strong>Cause.</strong> Not a bug — <code>set_parent</code> keeps the <em>local</em>
+       transform, so a new parent means a new world position. §B of the harness asserts this
+       explicitly: an entity at world 3 under a chain of ones lands at world 2 when re-parented one
+       level up.</p>
+    <p><strong>Fix.</strong> Decide which behaviour you want and be explicit. “Keep world
+       position” means computing a new local transform —
+       <code>local' = rigid_inverse(world(new_parent)) * world(child)</code> — which needs the
+       resolve to have run first. Editors offer both; this engine offers the simple one and
+       <a href="#exercises">Exercise 11.3</a> adds the other.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The program hangs after loading a scene</span>
+    <p><strong>Symptom.</strong> No crash, no error, no frame. A profiler shows one thread at 100%
+       inside the transform update.</p>
+    <p><strong>Cause.</strong> A parent cycle. <code>set_parent</code> refuses to create one, but
+       <code>parent</code> is a public component and a scene file, a serializer bug or a direct
+       <code>add&lt;parent&gt;</code> can write one anyway.</p>
+    <p><strong>Fix.</strong> This engine cannot hang on it — <code>rebuild()</code> marks nodes
+       <code>k_in_progress</code>, breaks the chain, counts it in
+       <code>hierarchy_report::cycles</code> and logs a warning naming the entity. <strong>Put that
+       count on your HUD.</strong> It is zero forever in a healthy program, and the frame it stops
+       being zero is the frame you want to know.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A child keeps following a parent that is dead</span>
+    <p><strong>Symptom.</strong> Or the opposite — a child stops following and you expected it to
+       be deleted.</p>
+    <p><strong>Cause.</strong> The orphan policy, working as designed: a child whose parent died
+       becomes a root and keeps its local transform, so it stays where it was.</p>
+    <p><strong>Fix.</strong> If you wanted the subtree gone, say so with
+       <code>destroy_subtree()</code>. If you wanted it kept but re-parented to the grandparent,
+       that is a third policy and about six lines — but decide it in <em>your</em> code rather than
+       expecting the transform system to guess. <code>hierarchy_report::orphans</code> is how you
+       notice you have not decided.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A “1-metre” object is not 1 metre</span>
+    <p><strong>Symptom.</strong> A prop authored at unit scale is 20 cm in game, and scaling it up
+       by 5 “fixes” it until somebody re-parents it.</p>
+    <p><strong>Cause.</strong> Scale composes down the chain like everything else. A child under a
+       parent of scale 0.16 is 0.16 of its authored size, and under two such parents it is 0.0256.</p>
+    <p><strong>Fix.</strong> Keep scale on the leaves and out of the intermediate nodes wherever
+       you can — a common convention is that only the geometry-carrying node scales. This is worth
+       knowing rather than fixing: the demo's moons are deliberately built this way, and the
+       comment beside them does the arithmetic.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything vanishes after destroying the camera</span>
+    <p><strong>Symptom.</strong> A black frame, no error.</p>
+    <p><strong>Cause.</strong> <code>find_active_camera</code> returned <code>null_entity</code>,
+       which is a state a scene can legitimately be in — before the camera is spawned, or after it
+       dies.</p>
+    <p><strong>Fix.</strong> Branch on it, as the demo does. Note what did <em>not</em> happen:
+       nothing dangled and nothing crashed, because the tag went with the entity. That is Lesson
+       5.4's argument reaching the renderer.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>11.1 — Find your own crossover.</strong> §4.3 says the permutation (arm C) costs
+         about 1.6 resolves and buys about 30% at 100,000 scrambled entities. Solve for the number
+         of frames a world must go <em>without</em> a topology change before packing pays for
+         itself, at 10,000 and at 100,000 entities, using your machine's numbers. Then decide
+         whether any game you have played would clear it.</p>
+      <details><summary>Hint</summary>
+         <p>Packing costs <code>P</code> once and saves <code>(B − C)</code> per frame. Break-even
+            is <code>P / (B − C)</code> frames. Use the scrambled rows — in creation order the
+            saving is zero and the answer is “never”.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>With this machine's numbers at 100,000 scrambled, depth 16: B = 7.63, C = 4.91, so the
+            saving is 2.72 ns/entity/frame; the permutation is 7.96. Break-even is <strong>≈ 3
+            frames</strong> — which sounds like packing always wins, until you notice that a
+            spawn is a topology change and that a game spawning anything at all resets the clock
+            every frame. At 10,000 entities the saving is 6.15 − 4.79 = 1.36 and break-even is
+            ≈ 5.8 frames, but the absolute total is 60 µs a frame either way. <strong>The honest
+            conclusion is that the crossover is not the interesting number — the absolute one
+            is.</strong></p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.2 — Ship the dirty flag, and find where it stops paying on your scene.</strong>
+         Add a <code>dirty</code> flag to the resolver: a per-entity byte, set when a local
+         transform is written, propagated to children during the level walk, cleared at the end.
+         Then measure it on the demo (which moves 100% of its entities) and on a modified demo
+         where only the sparks move. Report both.</p>
+      <details><summary>Hint</summary>
+         <p>The propagation is free in level order — mark a child as you pass its parent, because
+            the parent has always been visited first. The hard part is not the resolver, it is
+            <em>setting</em> the flag: every write to a <code>transform</code> has to go through
+            something that knows to mark it, which is an argument for an accessor and against
+            handing out <code>transform&amp;</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>Expect §6's table shape: a big win below ~10% moved, a crossover around 25%, and a
+            loss above it. The interesting part is the second measurement — a scene where only
+            sparks move should land in the 0.08–0.15× band, which is where the optimisation is
+            genuinely worth its complexity. Note also what the flag costs when you get it wrong:
+            a missed mark is an object that silently stops following, which is strictly worse than
+            a slow frame.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.3 — Re-parent while keeping world position.</strong> Add
+         <code>set_parent_keep_world(registry&amp;, hierarchy&amp;, entity child, entity new_parent)</code>,
+         which computes a new local transform so the object does not move. Then use it in the demo
+         so <kbd>H</kbd> detaches the outer ring <em>without</em> the objects jumping.</p>
+      <details><summary>Hint</summary>
+         <p><code>local' = inverse(world(new_parent)) × world(child)</code>. The parent's world
+            matrix may have scale, so <code>rigid_inverse</code> is <em>not</em> enough — this is
+            the first place in the course that genuinely needs a general affine inverse, which is
+            most of the exercise.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>An affine inverse is <code>affine(inverse(L), −inverse(L)·t)</code> where <code>L</code>
+            is the 3×3 linear part — and <code>mat3.hpp</code> already has
+            <code>inverse(mat3)</code>, so it is four lines rather than a 4×4 cofactor expansion.
+            Then decompose the resulting matrix back into a <code>transform</code>, which is where
+            it gets interesting: the general case needs a polar or QR decomposition, and a
+            hierarchy with shear has no exact <code>transform</code> representation at all.
+            <strong>That is worth discovering</strong> — it is the reason production engines store
+            a matrix rather than a TRS on the resolved side.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.4 — Cache the dense rows and measure the container's tax away.</strong> §4.4
+         measured the shipped resolver at 1.22–1.40× the probe, and the gap is three sparse
+         lookups per entity. Since <code>rebuild()</code> already runs whenever the pools change
+         shape, it could record each entity's dense position in the transform and world-transform
+         pools, letting <code>resolve()</code> index arrays directly. Implement it, measure it, and
+         then write down the invariant it depends on and one way to violate it.</p>
+      <details><summary>Hint</summary>
+         <p>The invariant is that no pool's dense order changes between <code>rebuild()</code> and
+            <code>resolve()</code>. Adding <em>any</em> component to <em>any</em> entity is safe;
+            adding or removing a <code>transform</code> is not.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>Expect most of the 1.22–1.40× back, since the remaining work is two array reads and a
+            matrix multiply. The violation to write down is the dangerous one: a cached row is a
+            stale <em>index</em>, and a stale index does not fail — it silently reads a different
+            entity's transform. This is Lesson 5.4's whole argument arriving inside the engine's
+            own code, and the honest answer is that the cache needs the same generation check the
+            pools already have, at which point you have re-invented the lookup you were avoiding.
+            <strong>Deciding not to ship it is a legitimate outcome of this exercise.</strong></p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.5 — A second camera, and a cut between them.</strong> Add a second camera
+         entity parented to the sun, and a key that switches which one is tagged
+         <code>active_camera</code>. Then add a third that is parented to a <em>moon</em>, and
+         explain — before running it — what the view will do and why.</p>
+      <details><summary>Solution sketch</summary>
+         <p>The switch is <code>set_active_camera</code> and nothing else: no pointer, no
+            re-initialisation, no renderer change. The moon camera is the interesting one — it
+            inherits the moon's scale as well as its placement, so unless the chain's scale is 1
+            the camera's placement is <em>not rigid</em> and
+            <code>view_from_camera</code>'s assertion fires. That is the assertion doing its job,
+            and the fix is to give the camera a local scale that cancels its parents' — or, better,
+            to attach cameras only to unscaled nodes, which is why real engines keep a scale-free
+            “socket” convention.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now express “this is attached to that”, and the camera stopped being a special
+    case. What it gained:
+  </p>
+
+  <ul>
+    <li><strong>A hierarchy, in two components.</strong> <code>parent</code> is four bytes and
+        <code>world_transform</code> is the composed result. No child list, deliberately — children
+        are derivable, and a stored list is a second source of truth.</li>
+    <li><strong>A resolve order that is flat in depth.</strong> Level order, chosen by measurement
+        over depth-first recursion, which ran 3.34 → 13.55 ns/entity from depth 1 to 32 while level
+        order ran 3.39 → 4.94. And a level is independent work, so Module 9's job system has its
+        unit of parallelism already.</li>
+    <li><strong>A split between shape and motion.</strong> <code>rebuild()</code> costs about one
+        resolve and runs when the shape changes; <code>resolve()</code> runs every frame. That
+        split is worth more than any choice of visit order.</li>
+    <li><strong>Two policies, both stated.</strong> An orphan becomes a root and is counted; a
+        cycle is broken, counted and logged, because a hang is not a recoverable failure.
+        <code>destroy_subtree()</code> is the explicit tool for callers who want the other
+        behaviour.</li>
+    <li><strong>A camera that is an entity.</strong> Parentable, switchable by moving a tag,
+        findable by a query — and its view matrix is <code>rigid_inverse</code> of its placement,
+        which is bit-for-bit Lesson 2.9's <code>look_at</code>.</li>
+  </ul>
+
+  <p>
+    And two things it deliberately did not gain, each with a number attached: <strong>no packed
+    rows</strong> (1.6 resolves per topology change to buy 30% at a scale this engine does not
+    have) and <strong>no dirty flags</strong> (1.29× slower on a scene that animates everything,
+    which is this one). Both holes are named in the source.
+  </p>
+
+  <p>
+    The reference shot from Lesson 5.1 is byte-identical for the <strong>ninth</strong> lesson.
+    5.9 added two headers and two functions to <code>mat4.hpp</code> and touched no line the
+    reference scene executes — and the two things that made the whole lesson cheap were decided
+    long before it: <code>parent_from_local</code> was named for this in Lesson 2.8, and Lesson
+    2.9 derived the rigid inverse that <code>rigid_inverse</code> is a copy of.
+  </p>
+
+  <p>
+    <strong>Next: 5.10 — Input Mapping, ImGui, and Debug Draw.</strong> The demo currently reads
+    <code>SDL_SCANCODE_C</code> in a switch, which is fine for a demo and wrong for a game: a
+    player wants to rebind, a gamepad has no scancodes, and a replay system wants to record
+    intentions rather than keys. Actions, not keycodes. Then Dear ImGui for tooling — the first
+    third-party UI in the course, with the “why we don't hand-roll this” justification the rules
+    require — and a debug-draw system that the rest of the course leans on constantly, starting
+    with drawing this lesson's hierarchy as lines between parents and children.
+  </p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Jason Gregory, <em>Game Engine Architecture</em>, ch. 15</strong> — scene graphs
+        and transform hierarchies as a shipping engine treats them, including the world-matrix
+        caching this lesson measured and declined.</li>
+    <li><strong>Unity's <code>TransformHierarchy</code> / DOTS <code>LocalToWorld</code></strong> —
+        a production system built on exactly the level-order idea, with the parallel-per-level
+        execution this lesson's §5 predicts. Their docs on <code>Parent</code>,
+        <code>LocalTransform</code> and <code>LocalToWorld</code> map one-to-one onto
+        <code>parent</code>, <code>transform</code> and <code>world_transform</code>.</li>
+    <li><strong>Bobby Anguelov, “Hierarchical transform update”</strong> — a working engine
+        programmer's treatment of the same ordering problem, arriving at the same answer from a
+        different direction.</li>
+    <li><strong>Ken Shoemake &amp; Tom Duff, “Matrix Animation and Polar Decomposition” (1992)</strong>
+        — what Exercise 11.3 runs into: decomposing a composed matrix back into
+        translation/rotation/scale is not always possible, and this is the paper about doing it as
+        well as it can be done.</li>
+    <li><strong>Lesson 2.8</strong> for why <code>parent_from_local</code> has that name,
+        <strong>2.9</strong> for the rigid inverse, <strong>5.7</strong> for why a pool's dense
+        order is nobody's business, and <strong>5.8</strong> for the registry this is built on.</li>
+  </ul>

@@ -1,0 +1,679 @@
+  <!-- =================================================================
+       9 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implement"><span class="num">9</span>Implementation: the compiler</h2>
+
+  <p>
+    Everything above is now about six hundred lines, most of which is comment. The types come first,
+    because they are the design.
+  </p>
+
+  <h3>9.1 — A handle is a resource <em>and</em> a version</h3>
+
+  <pre><code class="lang-cpp">struct fg_texture
+{
+    static constexpr Uint16 k_none = 0xFFFFu;
+
+    Uint16 index = k_none;   ///&lt; which resource
+    Uint16 version = 0;      ///&lt; which value of it
+
+    [[nodiscard]] bool valid() const { return index != k_none; }
+};</code></pre>
+
+  <p>
+    Four bytes, copied by value everywhere, and the version is what makes the type earn its keep.
+    <code>hdr@1</code> and <code>hdr@2</code> are different C++ values, so sampling the pre-skybox
+    image where you meant the post-skybox one is a different variable name rather than an identical
+    pointer. That is Lesson 5.4's handle argument — an index is not a pointer, and being unable to
+    dereference it is the feature — with a second field carrying time.
+  </p>
+
+  <h3>9.2 — Three verbs for a write, one for a read</h3>
+
+  <pre><code class="lang-cpp">void       sample(int pass, fg_texture h);
+fg_texture discard_write(int pass, fg_texture h, Uint32 layer = 0);
+fg_texture clear(int pass, fg_texture h, SDL_FColor colour, Uint32 layer = 0);
+fg_texture keep(int pass, fg_texture h, Uint32 layer = 0);</code></pre>
+
+  <p>
+    A write takes a version and returns the next one. That return value is the entire ordering
+    mechanism: you cannot name a version you were not handed, so the only way for a later pass to
+    read this pass's output is to have received the handle from it. The dependency graph is built
+    out of ordinary C++ data flow, which is why it is hard to write a cycle and impossible to write
+    a dangling read.
+  </p>
+
+  <p>
+    The version bump lives on the <em>resource</em>, not on the handle — it counts writes to the
+    resource rather than adding one to whatever the caller passed. That matters in exactly one case
+    and it is the case you want caught: writing an <em>old</em> version, <code>hdr@0</code> after
+    <code>hdr@1</code> already exists, means "throw away the scene and start again", and counting on
+    the resource makes it a second producer rather than two passes both claiming to have made
+    <code>hdr@1</code>.
+  </p>
+
+  <h3>9.3 — <code>compile</code> is four passes over two arrays</h3>
+
+  <p><strong>Step 1 — validate.</strong> Three rules, each of which is a currently-silent bug:</p>
+
+  <ul>
+    <li>A <code>sample</code> or a <code>keep</code> on version 0 of a <em>transient</em>. Version 0
+        is undefined contents; today that reads whatever the pool's previous tenant left behind,
+        which in a real engine is last frame's bloom, faintly, in this frame's image.</li>
+    <li>Two writes from the same input version — the ambiguity §3 defined the model to exclude.
+        Both passes are named in the message, because "there is an ambiguity" is useless.</li>
+    <li>Attachments that disagree about dimensions or sample count. Lesson 6.14 established that
+        every attachment in a pass shares its sample positions, so a 4× colour target beside a 1×
+        depth target is a pass that cannot begin. The driver says so too — at
+        <code>SDL_BeginGPURenderPass</code>, by which point the frame is half recorded.</li>
+  </ul>
+
+  <p><strong>Step 2 — cull</strong>, by backward reachability from imported writes (§5).</p>
+
+  <p><strong>Step 3 — order</strong>, by Kahn with a declaration-order tie-break (§6).</p>
+
+  <p><strong>Step 4 — derive.</strong> Load ops from the declared <code>fg_init</code>; store ops
+     from "does any live pass consume this version"; lifetimes from first and last scheduled touch;
+     and then the pool.</p>
+
+  <h3>9.4 — Why a function pointer and not <code>std::function</code></h3>
+
+  <pre><code class="lang-cpp">using fg_execute_fn = void (*)(const fg_pass_context&amp; ctx, void* user);</code></pre>
+
+  <p>
+    <code>std::function</code> is the obvious choice and it is the wrong one here, for a reason that
+    is measurable rather than stylistic. <code>std::function</code> type-erases: it stores any
+    callable, which means it must either fit the callable in a small internal buffer or put it on
+    the heap. The buffer is typically two or three pointers. The lambdas you would actually write
+    here — capturing a renderer, a settings block, a draw list, a handle or two — do not fit, so
+    every one of them allocates.
+  </p>
+
+  <p>
+    A frame graph is rebuilt <em>every frame</em>. That is one allocation per pass per frame,
+    invisible, inside something whose whole purpose is organisation. §8 of the harness replaces the
+    global <code>operator new</code> and counts:
+  </p>
+
+  <pre><code class="lang-text">heap allocations across 200 declare+compile cycles : 0</code></pre>
+
+  <p>
+    Zero, because the graph's arrays are fixed-capacity members of an object the caller keeps across
+    frames, and because a function pointer plus a <code>void*</code> is two words that never
+    allocate. The cost of that choice is real and should be stated: the context structs must outlive
+    the graph, because it points at them. In the harness they live in one <code>frame_decl</code>
+    beside the graph, for exactly one frame.
+  </p>
+
+  <p>
+    The compile itself costs <strong>8.62&nbsp;µs</strong> in the steady state — 0.05% of a 16.67 ms
+    frame, and roughly one three-hundredth of what Lesson 6.16's culling test costs on a scene of
+    45,512 boxes. It is <em>O(P² × A²)</em>, because <code>producer_of</code> is a linear scan called
+    from inside two more loops. That is fine at fourteen passes and would not be at two hundred; the
+    fix is an index from <code>(resource, version)</code> to its producer, built once per compile,
+    and it is Exercise 3.
+  </p>
+
+  <h3>9.5 — The declaration, in full</h3>
+
+  <p>
+    Here is the fourteen-pass frame as <code>verify_617</code> declares it, with the bloom chain
+    trimmed to one representative stage of each kind. Read it for what is <em>not</em> in it.
+  </p>
+
+  <pre><code class="lang-cpp">// ---- Pass 1: the shadow map -------------------------------------------
+d.pass_shadow = fg.add_pass("shadow", &amp;exec_shadow, &amp;d.shadow);
+const fg_texture shadow1 = fg.clear_depth(d.pass_shadow, shadow0, 1.0f);
+
+// ---- Pass 2: the scene -------------------------------------------------
+d.pass_scene = fg.add_pass("scene", &amp;exec_scene, &amp;d.scene);
+fg.sample(d.pass_scene, shadow1);
+const fg_texture hdr1   = fg.clear(d.pass_scene, hdr0, black);
+const fg_texture depth1 = fg.clear_depth(d.pass_scene, depth0, 1.0f);
+
+// ---- Pass 3: the bright pass -------------------------------------------
+fg.sample(bright, hdr1);
+level[0] = fg.discard_write(bright, level[0]);
+
+// ---- Passes 4..8: the downsamples --------------------------------------
+fg.sample(down_i, level[i - 1]);
+level[i] = fg.discard_write(down_i, level[i]);
+
+// ---- Passes 9..13: the upsamples ---------------------------------------
+fg.sample(up_i, level[i]);
+level[i - 1] = fg.keep(up_i, level[i - 1]);
+
+// ---- Pass 14: the resolve ----------------------------------------------
+fg.sample(resolve, hdr1);
+fg.sample(resolve, level[0]);
+d.h_ldr = fg.clear(resolve, ldr0, black);</code></pre>
+
+  <p>
+    No <code>SDL_BeginGPURenderPass</code>. No load op. No store op. No statement of order — and yet
+    the order is fully determined, because <code>level[i]</code> is a C++ variable that gets
+    reassigned by each write and every pass names the value it actually wants. The one line carrying
+    real judgement is <code>fg.keep</code> in the upsample, and it says something about arithmetic
+    rather than about SDL.
+  </p>
+
+  <!-- =================================================================
+       10 — THE SPLITS
+       ================================================================= -->
+  <h2 id="splits"><span class="num">10</span>Two functions that had to be cut in half</h2>
+
+  <p>
+    A pass under the graph is recorded into an attachment the graph opened. Two of this engine's
+    types opened their own, so both needed splitting — and how that split was done matters more than
+    it looks.
+  </p>
+
+  <h3>10.1 — <code>gpu_shadow_map::render_into</code></h3>
+
+  <p>
+    The easy one. Everything from the viewport onwards moved into a new
+    <code>render_into(cb, pass, items, count, cam, log)</code>, and the old <code>render</code>
+    became a begin, a call to it, and an end. One copy of the viewport, the pipeline bind and the
+    draw loop.
+  </p>
+
+  <p>
+    The interesting detail is what did <em>not</em> come along: the <code>layer</code> parameter.
+    Under the graph, which cascade a pass writes is part of the write declaration, because that is
+    the only place that can also know whether the previous cascade's contents must survive. Pulling
+    it out of the function signature is the split doing its job.
+  </p>
+
+  <h3>10.2 — <code>gpu_bloom::record_stage</code></h3>
+
+  <p>
+    The harder one, and the more instructive. The bloom's eleven passes are three kinds — a bright
+    pass, <em>n−1</em> downsamples, <em>n−1</em> upsamples — differing in pipeline and source. So:
+  </p>
+
+  <pre><code class="lang-cpp">enum class bloom_stage { bright, down, up };
+
+void record_stage(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                  bloom_stage kind,
+                  SDL_GPUTexture* source, Uint32 source_w, Uint32 source_h,
+                  const bloom_settings&amp; s, float exposure) const;</code></pre>
+
+  <p>
+    Note what is absent: the destination. A stage does not know where it is writing, because the
+    destination is the pass's attachment. <strong>A function that never sees a load op cannot get
+    one wrong</strong>, which is the same move as the shadow map's missing layer and is the whole
+    shape of this refactor.
+  </p>
+
+  <p>
+    The source's dimensions are parameters rather than being read off the texture, and that is not
+    fussiness. The bright pass's <code>texel_size</code> is the <em>scene's</em> — one texel of the
+    thing being sampled, not of the thing being written, and its target is half its source's size.
+    Confusing the two produces a glow of the wrong radius and no error, so the signature keeps the
+    distinction explicit exactly where 6.13's uniform packing did.
+  </p>
+
+  <h3>10.3 — And the old path now goes through the new one</h3>
+
+  <p>
+    <code>gpu_bloom::render</code> was not left alone beside <code>record_stage</code>. It was
+    rewritten to <em>call</em> it eleven times, with a begin and an end around each. That is not
+    tidiness, it is what makes §11's comparison mean anything: if the hand-written chain and the
+    graph chain were two separate copies of the same draw code, a bug in one would probably be in
+    both, and a bit-identical result would prove nothing. Sharing the draw code means the comparison
+    tests exactly what it claims to test — the <em>assembly</em>, not the drawing.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>This is the rule this engine has now paid for three times.</strong> Lesson 5.1 found
+      four hand-transcribed test harnesses that had drifted. Lesson 6.15 found two spellings of one
+      ARGB packing. Lesson 6.16 split <code>begin_frame</code> out rather than copy ninety lines
+      into a second draw loop. Two copies of one rule is how a shadow behaves differently on two
+      renderers for a reason nobody can find.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       11 — THE INSTRUMENT
+       ================================================================= -->
+  <h2 id="golden"><span class="num">11</span>The instrument, and proving it can fail</h2>
+
+  <p>
+    A refactor this size needs a test whose failure would be unmissable, and the course's usual one
+    is no use here. <code>golden_617</code> renders through the <em>software</em> rasterizer, and
+    this lesson touched <code>frame_graph.*</code>, <code>gpu_shadow.*</code> and
+    <code>gpu_post.*</code> — none of which <code>soft_renderer.cpp</code> or <code>raster.cpp</code>
+    includes. So it is structurally incapable of noticing anything, for the third lesson running. It
+    was run anyway, and it is byte-identical for the twenty-sixth lesson, and that is a null result
+    rather than a pass.
+  </p>
+
+  <p>
+    The real instrument had to be built, and its shape is the obvious one once stated: render the
+    <em>same frame</em> twice — once assembled by hand exactly as Lesson 6.13's harness did, once
+    compiled from the declaration in §9.5 — and compare the pixels.
+  </p>
+
+  @@FIG_GOLDEN@@
+
+  <pre><code class="lang-text">channels compared : 262144
+differing         : 0
+largest delta     : 0
+centre pixel      : hand 252   graph 252</code></pre>
+
+  <p>
+    Bit-identical, which is the strongest result available: not "within tolerance", not "looks the
+    same", but every one of 262,144 channels equal. Fourteen passes, four of them with load ops that
+    differ from their neighbours', eleven of them bloom, and the compiled schedule produced exactly
+    the frame the hand-written one did.
+  </p>
+
+  <h3>And the control, which is the part 6.16 taught us to add</h3>
+
+  <p>
+    One lesson ago, <code>golden_615.cpp</code> was found to compare two files as strings and print
+    <code>identical=YES</code> when <em>both reads failed</em> — two empty strings are equal. It had
+    been run from the right directory every time, so the bug never fired, and it had been reported as
+    evidence for a whole lesson.
+  </p>
+
+  <p>
+    So this comparison is made to fail on purpose. The same routine is pointed at the graph frame
+    rendered with the bloom disabled:
+  </p>
+
+  <pre><code class="lang-text">control: the same comparison against a bloom-less frame
+differing         : 196608</code></pre>
+
+  <p>
+    196,608 of 262,144 channels differ — three quarters, which is the RGB channels of every pixel,
+    the alpha channel being 255 in both. The instrument can report a difference. <em>Now</em> the
+    zero above means something.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>A test that can pass without testing anything is worse than no test</strong>, because
+      it is believed. The habit worth taking from this — and it is the third member of a family this
+      course has been building since 6.14 — is: <em>establish what your instrument can see before
+      you read it</em>. 6.14 checked that a measurement could produce a non-null result; 6.15 checked
+      that a non-null result had converged; 6.16 checked that a swept axis could show the effect at
+      all. This one checks that a comparison can report a difference.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       12 — LIMITS
+       ================================================================= -->
+  <h2 id="limits"><span class="num">12</span>The ninety-percent picture</h2>
+
+  <p>
+    Four things this graph deliberately does not do. Each is a real limitation with a real
+    consequence, and knowing them is what separates using one of these from being surprised by one.
+  </p>
+
+  <h3>12.1 — No subresource versions</h3>
+
+  <p>
+    A version covers the whole texture. So four cascade passes writing four different <em>layers</em>
+    of one array serialise into <code>sm@1 → sm@2 → sm@3 → sm@4</code>, even though they are
+    completely independent — each has its own camera and writes its own slice.
+  </p>
+
+  <p>
+    It costs nothing today, because a command buffer submits its passes in order regardless and the
+    driver is free to overlap them. It would cost something on an API with parallel queues, where
+    the graph's false serialisation would prevent real overlap. The fix is a version per
+    <code>(layer, mip)</code> rather than per resource, and it roughly doubles the bookkeeping — it
+    is Exercise 4.
+  </p>
+
+  <h3>12.2 — No async compute, no queues, no split barriers</h3>
+
+  <p>
+    SDL_GPU presents one graphics timeline to this API, so there is nothing to schedule across. A
+    Vulkan or D3D12 frame graph spends much of its complexity deciding what can run on the compute
+    queue alongside the graphics queue and where the semaphores go. None of that exists here, and
+    pretending otherwise would be building machinery for a capability the API does not have.
+  </p>
+
+  <h3>12.3 — Textures only</h3>
+
+  <p>
+    Every cross-pass resource in this engine is a texture. Buffers would be the same machinery with
+    a different descriptor and a different creation call; nothing about versions, culling or
+    ordering changes. When Module 9's job system and compute work arrive, that is the extension
+    to make.
+  </p>
+
+  <h3>12.4 — One command buffer</h3>
+
+  <p>
+    <code>execute</code> records into the command buffer it is handed. Splitting a frame across
+    several buffers, for parallel recording, is a Module 9 concern and it interacts with the job
+    system rather than with this file.
+  </p>
+
+  <!-- =================================================================
+       13 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">13</span>Complete code listings</h2>
+
+  <p>
+    Every file this lesson created or changed, in full. The two new ones first.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/frame_graph.hpp@@
+  @@LISTING:engine/src/gfx/frame_graph.cpp@@
+
+  <p>
+    Then the two splits. In <code>gpu_shadow.hpp</code> and <code>gpu_shadow.cpp</code> the change is
+    <code>render_into</code>; in <code>gpu_post.hpp</code> and <code>gpu_post.cpp</code> it is
+    <code>bloom_stage</code>, <code>record_stage</code>, and <code>render</code> rewritten to go
+    through it.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/gpu_shadow.hpp@@
+  @@LISTING:engine/src/gfx/gpu_shadow.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_post.hpp@@
+  @@LISTING:engine/src/gfx/gpu_post.cpp@@
+
+  <p>
+    The build, and the harness that produced every number above.
+  </p>
+
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:scratch/verify_617.cpp@@
+
+  <!-- =================================================================
+       14 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">14</span>Build &amp; run</h2>
+
+  <p>Configure and build as always:</p>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>Then the harness. §8 is a timing section, so build it optimised before quoting it:</p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_617.sh                                # as configured
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617.sh   # for §H</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    Forty checks, all green, and no window: every section is either pure bookkeeping or renders
+    offscreen. The sections that matter are §C, which prints the compiled schedule beside the
+    hand-written order and finds them identical name for name; §D, which prints every derived load
+    and store op beside what the engine chose by hand; §E, which culls eleven passes and names them;
+    §F, which refuses five graphs and logs why for each; and §I, the bit-identical comparison with
+    its control.
+  </p>
+
+  <p>
+    The last line should read <code>0 failure(s)</code>. On a machine with no GPU device — a
+    headless CI runner, say — §A and §B still run and everything from §C onward reports
+    <code>no GPU device / shaders on this machine; §C-§I skipped</code> and exits zero, which is
+    deliberate: a missing device is not a failed test.
+  </p>
+
+  <p>
+    If you want to <em>see</em> the deduction rather than read the harness's tables, call
+    <code>dump_frame_graph(fg)</code> after a successful compile. It prints one line per scheduled
+    pass with its attachments and their derived ops, then one line per resource with its lifetime
+    interval — which is the debug view you will reach for the first time a pass you expected does
+    not appear.
+  </p>
+
+  <!-- =================================================================
+       15 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">15</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfalls">
+
+  <h3>A pass you wrote does not run, and its body never executes</h3>
+  <p>
+    <strong>Symptom:</strong> a black target, an empty RenderDoc capture for that pass, breakpoints
+    in the callback never hit.<br>
+    <strong>Cause:</strong> it was culled. Nothing reads what it produced, transitively, all the way
+    out to an imported resource.<br>
+    <strong>Fix:</strong> call <code>dump_frame_graph</code> and look for it in the culled list. The
+    usual mistake is sampling the wrong <em>version</em> downstream — reading <code>hdr1</code> when
+    the pass you care about produced <code>hdr2</code> — which leaves the producing pass feeding
+    nothing.
+  </p>
+
+  <h3>The picture has last frame's content faintly in it</h3>
+  <p>
+    <strong>Symptom:</strong> ghosting, or a target that is almost right but tinted.<br>
+    <strong>Cause:</strong> a <code>discard_write</code> on a pass that does not in fact cover every
+    texel. <code>DONT_CARE</code> is a promise, and a pooled texture's previous tenant is whatever
+    was there.<br>
+    <strong>Fix:</strong> use <code>clear</code>. It costs a full-target write and it is the right
+    default until you have checked the coverage claim. This is the one load-op mistake the graph
+    cannot catch for you, and §4.2 says so.
+  </p>
+
+  <h3><code>compile</code> returns false and the log says "which result did later passes mean?"</h3>
+  <p>
+    <strong>Symptom:</strong> two passes named, both writing one resource.<br>
+    <strong>Cause:</strong> you reused a handle. Both passes wrote from the same input version, so
+    each produced a different output and nothing downstream can say which it wanted.<br>
+    <strong>Fix:</strong> thread the handle through. The second writer should take the
+    <em>first writer's return value</em>, not the value they both started from — which also tells
+    the graph the order you meant.
+  </p>
+
+  <h3>The bloom is far too soft and far too dim</h3>
+  <p>
+    <strong>Symptom:</strong> a glow that looks like one wide blur instead of a sum of scales.<br>
+    <strong>Cause:</strong> the upsample declared <code>discard_write</code> instead of
+    <code>keep</code>. The additive blend had nothing to add to, so the pyramid collapsed to its
+    widest level.<br>
+    <strong>Fix:</strong> <code>keep</code>. This is exactly Lesson 6.13's warning surviving into
+    the new world in a new spelling — with the improvement that the symptom now has a named cause
+    you can grep for, and that a <code>keep</code> on an unwritten version is caught at compile
+    time.
+  </p>
+
+  <h3>Everything renders, then the app crashes or renders garbage next frame</h3>
+  <p>
+    <strong>Symptom:</strong> the first frame is correct; later frames are not, or it crashes in
+    <code>execute</code>.<br>
+    <strong>Cause:</strong> a context struct went out of scope. The graph stores a <code>void*</code>
+    and calls back into it; nothing keeps those objects alive.<br>
+    <strong>Fix:</strong> put the contexts in one struct that lives beside the graph, as
+    <code>frame_decl</code> does. This is the cost of the function-pointer design and it is worth
+    knowing rather than discovering.
+  </p>
+
+  <h3>A pass cannot begin, and the driver blames the attachment</h3>
+  <p>
+    <strong>Symptom:</strong> <code>SDL_BeginGPURenderPass</code> returns null mid-frame.<br>
+    <strong>Cause:</strong> attachments that disagree about dimensions or sample count.<br>
+    <strong>Fix:</strong> <code>compile</code> now catches this before anything is recorded and
+    prints both sizes. If you see the driver's version instead, you are on a path that bypasses the
+    graph.
+  </p>
+
+  <h3>The golden fails one run in five</h3>
+  <p>
+    <strong>Symptom:</strong> intermittent pixel differences with no code change.<br>
+    <strong>Cause:</strong> a non-deterministic schedule. Ties between ready passes were broken by
+    something that is not stable across runs.<br>
+    <strong>Fix:</strong> break ties by declaration index, as §6.1 does. If you replace the ready
+    scan with a priority queue for speed, the comparator must be a total order, and declaration
+    index is what makes it one.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       16 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">16</span>Exercises</h2>
+
+  <div class="exercises">
+
+  <h3>1 — Make a pass disappear, then explain it (guided)</h3>
+  <p>
+    Take the declaration in §9.5 and delete the <code>fg.sample(resolve, level[0])</code> line
+    without touching anything else. Predict, before running, how many passes will be culled and
+    which. Then run it and check with <code>dump_frame_graph</code>.
+  </p>
+  <p>
+    <em>Hint:</em> the answer is not eleven. <em>Solution sketch:</em> it is eleven, but only because
+    the six pyramid textures are transient. Ask yourself what would happen if <code>bloom 3</code>
+    had been <em>imported</em> — because somebody wanted to inspect it in a debug view — and then
+    try it. One import re-roots half the chain, and the passes that come back are exactly the
+    downsamples.
+  </p>
+
+  <h3>2 — Add a depth prepass (guided)</h3>
+  <p>
+    Declare a pass before the scene pass that writes only the depth target with the same draw list,
+    then have the scene pass <code>keep_depth</code> instead of <code>clear_depth</code>. Check what
+    the derived store op on the prepass's depth becomes, and why.
+  </p>
+  <p>
+    <em>Solution sketch:</em> STORE, because the scene pass now consumes that version — where before
+    the depth's only version was consumed by nobody and got DONT_CARE. You have just made the engine
+    pay a tile-memory write-out, automatically, because you declared a dependency. That is the store
+    rule doing exactly its job, and it is also the honest cost of a prepass on tiled hardware that
+    nobody mentions.
+  </p>
+
+  <h3>3 — Kill the quadratic (engine challenge)</h3>
+  <p>
+    <code>producer_of</code> is a linear scan called from inside two loops, making
+    <code>compile</code> <em>O(P² × A²)</em>. Build an index from <code>(resource, version)</code> to
+    producing pass once at the start of <code>compile</code> and use it everywhere. Measure before
+    and after with §8's timing, and then measure again with a synthetic 200-pass graph.
+  </p>
+  <p>
+    <em>Hint:</em> <code>k_max_fg_resources × k_max_fg_versions</code> is 384 entries — a flat
+    <code>Uint8</code> array, no hashing. <em>Watch for:</em> the index must be rebuilt if you ever
+    let a pass be added after compilation begins, which is why <code>compile</code> should assert
+    that it is not.
+  </p>
+
+  <h3>4 — Subresource versions (engine challenge)</h3>
+  <p>
+    Give the four cascade passes independent versions by keying a version on
+    <code>(resource, layer)</code> rather than on the resource. Confirm that the compiled schedule
+    no longer serialises them, and then explain — in writing, honestly — what that bought on
+    SDL_GPU. §12.1 has the answer and it is "nothing yet"; the exercise is worth doing for the
+    bookkeeping, and the write-up is worth doing because knowing when an optimisation buys nothing
+    is the harder skill.
+  </p>
+
+  <h3>5 — A graph that actually saves memory (engine challenge)</h3>
+  <p>
+    Add a second post effect — a cheap radial blur, or a downsampled depth-of-field — that needs its
+    own half-resolution scratch target and finishes before the bloom begins. Predict from the
+    lifetimes how many bytes the pool will save, then measure it with
+    <code>transient_bytes_naive()</code> and <code>transient_bytes_pooled()</code>.
+  </p>
+  <p>
+    <em>Watch for:</em> "finishes before the bloom begins" has to be true of the <em>schedule</em>,
+    not of your intentions. If the composite reads both, the graph is free to order them either way,
+    and it will pick declaration order — so the saving depends on a tie-break. Making it depend on a
+    real dependency instead is the actual lesson.
+  </p>
+
+  <h3>6 — Break the determinism on purpose (guided)</h3>
+  <p>
+    Change the ready-pass scan in step 3 to iterate <em>backwards</em>. Confirm the compiled
+    schedule changes, confirm §I is still bit-identical, and then say why both of those are true at
+    once. Then find a change to the frame that would make the second one stop being true.
+  </p>
+  <p>
+    <em>Solution sketch:</em> any topological order is legal, so the picture survives. It stops
+    surviving the moment two passes write the same resource without one reading the other's output
+    — which §5's validation forbids, so you will have to reach for an imported resource to build it.
+    That is the validation rule earning its place.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       17 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">17</span>Recap &amp; next</h2>
+
+  <p>
+    The engine gained a frame graph, and lost four sets of hand-maintained facts.
+  </p>
+
+  <ul>
+    <li><strong>A resource is a sequence of versions</strong>, not a texture. Every deduction in the
+        lesson is downstream of that one move, and it is single static assignment applied to render
+        targets.</li>
+    <li><strong>One statement yields four facts.</strong> <code>keep</code>, <code>clear</code> and
+        <code>discard_write</code> say what a pass does with what was already in a target; the
+        ordering edge, the load op, the producer's store op and the resource's lifetime all follow.
+        Every derived op matches what the engine chose by hand across eight attachments.</li>
+    <li><strong>Culling is backward reachability from imports.</strong> Eleven bloom passes vanish
+        because nothing reads them, with no flag anywhere.</li>
+    <li><strong>Determinism is correctness.</strong> Ties broken by declaration index, because a
+        scheduler that wanders produces a golden that fails one run in five.</li>
+    <li><strong>The memory pitch does not apply here, and the two reasons are different.</strong>
+        SDL_GPU 3.4.12 cannot express aliasing at all, and our frame is a chain with a peak equal to
+        88% of its sum. The prize is 14.3% — 5.27 MB at 1920×1080 — and we collect none of it. The
+        pool works, on a frame shaped for it, and §7 builds one to prove it.</li>
+    <li><strong>The graph orders passes, not draws</strong>, which is why 6.11's back-to-front tail
+        and 6.16's batching are structurally out of its reach.</li>
+    <li><strong>8.62 µs and zero allocations</strong> per frame, measured with a replaced global
+        <code>operator new</code>, which is why the arrays are fixed-capacity.</li>
+    <li><strong>Bit-identical across 262,144 channels</strong>, with a control proving the comparison
+        can report a difference.</li>
+  </ul>
+
+  <p>
+    <strong>Next:</strong> Lesson 6.18, <em>Text and 2D Overlay Rendering</em> — glyph atlases via
+    <code>stb_truetype</code>, and a 2D overlay that survives contact with a 3D renderer. It arrives
+    at a good moment: an overlay is a pass that reads nothing, writes the backbuffer after the
+    resolve, and must not be culled. Declaring it will take one line, and the fact that it is the
+    <em>last</em> writer of an imported resource is now something the frame says rather than
+    something you remember.
+  </p>
+
+  <!-- =================================================================
+       18 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">18</span>Further reading</h2>
+
+  <div class="reading">
+  <ul>
+    <li><strong>Yuriy O'Donnell, "FrameGraph: Extensible Rendering Architecture in Frostbite"</strong>
+        (GDC 2017). The talk that put this design into general circulation, and the source of the
+        version-per-write idea in §3. Read it for the parts we left out: transient memory aliasing
+        done properly, async compute scheduling, and what a graph looks like at two hundred
+        passes.</li>
+    <li><strong>Hans-Kristian Arntzen, "Render graphs and Vulkan — a deep dive"</strong>
+        (Themaister's blog, 2017). The implementation counterpart: barriers, image layouts and
+        semaphores, all of which SDL_GPU handles for us and none of which goes away.</li>
+    <li><strong>Graham Wihlidal, "Halcyon + Vulkan"</strong> (2018) and the accompanying render-graph
+        material. Good on the cost side — what the bookkeeping actually costs per frame in a shipped
+        engine, which is the question §8 asks at our scale.</li>
+    <li><strong><code>SDL3/SDL_gpu.h</code></strong>, the sections on
+        <code>SDL_GPUColorTargetInfo</code>, <code>SDL_GPUDepthStencilTargetInfo</code> and the
+        "cycling" discussion near the top. Every field this lesson fills in is documented there, and
+        the absence of any placed-resource API — the finding in §7.1 — is something you should
+        confirm yourself rather than take from us.</li>
+    <li><strong>Cormen, Leiserson, Rivest &amp; Stein, <em>Introduction to Algorithms</em></strong>,
+        §22.4 on topological sort. Kahn's algorithm in its original setting, including the
+        cycle-detection argument §6.2 leans on.</li>
+    <li><strong>Real-Time Rendering, 4th edition</strong>, §18.4 on framebuffer bandwidth and tiled
+        architectures. The reason load and store ops are worth deriving correctly rather than
+        guessing, with the numbers for why <code>DONT_CARE</code> matters far more on a phone than
+        on a desktop GPU.</li>
+  </ul>
+  </div>

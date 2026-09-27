@@ -1,0 +1,380 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-03-angular-dynamics.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.3 — Angular Dynamics: Torque and the Inertia Tensor</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-05-gjk.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.5 — GJK: Convex Distance from a Support Function</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.4</div>
+    <h1>Collision Primitives: Spheres, AABBs, OBBs, and the SAT</h1>
+    <p class="deck">
+      Eighty-six lessons in, nothing in this engine has a <em>size</em> the simulation knows about.
+      A body has a mass, an inertia tensor, a position and an orientation, and every one of those
+      describes how it <em>moves</em>; drop two of 8.2's crates on the same spot and they arrive at
+      the same spot and stay there, sharing one cubic metre of the world forever. This lesson gives
+      them shapes, and then answers the one question every physics engine is organised around: are
+      these two things touching? The answer is <strong>one genuinely beautiful idea</strong>. Hold
+      two objects up to a lamp: if their shadows are apart, the objects are apart, and that half
+      needs no argument at all. The other half — that if they really are apart then <em>some</em>
+      lamp position shows you the gap — is the Separating Axis Theorem, it is true only for convex
+      shapes, and it turns an infinite search over directions into <strong>fifteen
+      candidates</strong> for two boxes. We derive where the fifteen come from, and then build the
+      configuration that proves six of them are not enough: two planks crossed in mid-air with
+      <strong>5 cm of daylight between them</strong>, where all six face normals report an overlap
+      of up to 3.13 metres and the only direction that can see the gap is the cross product of one
+      edge from each. On random pairs that case is <strong>4.6% of everything six axes call a
+      collision</strong> — and when boxes genuinely do overlap, the shallowest way out is an
+      edge-edge axis <strong>49.8%</strong> of the time. Then the things nobody tells you. The
+      minimum translation vector is the shallowest escape, which stops being the <em>right</em>
+      escape the moment an object is half buried: two cubes 10 cm out of alignment are corrected by
+      <strong>1.9 metres</strong>. The clamp that finds the closest point on a box collapses 27
+      cases to three lines — and returns a <strong>zero normal</strong> on the 8,829 of 100,000
+      spheres whose centre is inside, which is exactly what a sphere looks like the frame after it
+      tunnels through a wall. Two crates standing on the same floor have parallel up axes at
+      <em>every</em> yaw, so one of the nine cross products is degenerate in the most common
+      arrangement a game ever produces — and the folklore about guarding it turns out to be true of
+      a formulation we are not using: with the guard removed our version produces
+      <strong>zero</strong> false separations, because an axis made of pure rounding error is still
+      a direction and no direction separates overlapping bodies. The formulation in the books fails
+      <strong>188 times in 400</strong> on the same fixture. And a 1 mm gap measured a kilometre
+      from the origin is wrong by 2.3%, at 10 km is unresolvable, and at 100 km reports
+      <strong>exactly zero</strong> — the algorithm unchanged, the boxes unchanged, only where they
+      are. Every separated pair in this lesson is checked by <strong>re-proving its own
+      certificate</strong> in double precision rather than by trusting a second implementation.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="03-04-back-face-culling.html">3.4 — Back-Face Culling and the Cross Product</a>,
+          <a href="06-16-frustum-culling.html">6.16 — Frustum Culling with AABBs</a>,
+          <a href="07-04-quaternions.html">7.4 — Quaternions, Derived</a>,
+          <a href="08-03-angular-dynamics.html">8.3 — Angular Dynamics: Torque and the Inertia Tensor</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/bounds.hpp</code> <em>(moved)</em>,
+            <code>engine/include/engine/phys/shape.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/shape.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/collide.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/collide.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/include/engine/gfx/frustum.hpp</code>,
+            <code>engine/include/engine/gfx/shadow.hpp</code>,
+            <code>engine/include/engine/gfx/cascade.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/collide/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_84.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_84.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can answer <strong>“are these two touching, and if so how do I fix
+            it?”</strong> for spheres, axis-aligned boxes and oriented boxes, in every
+            combination. <code>engine/phys/shape.hpp</code> gives geometry its own type — one that
+            knows what it weighs, so a body's inertia tensor and its collider can no longer describe
+            two different objects — and <code>collide.hpp</code> returns a
+            <code>separation</code> rather than a <code>bool</code>: a direction, a signed distance,
+            and which of the fifteen candidates produced it. <strong>Nine measured sections,
+            seventeen of them controls</strong>, including one that re-proves every reported gap in
+            double precision from the box data alone, and one that hunts for a witness point inside
+            both boxes on a 41³ grid. The <code>collide</code> demo draws all fifteen candidate axes
+            as bars against a zero line, and a single key throws nine of them away so you can watch
+            two visibly separated planks be called a collision.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the Separating Axis Theorem in both directions, say which half is obvious and
+          which half does the work, and explain precisely where convexity enters.</li>
+      <li>…derive the projected radius of a box onto an arbitrary direction, and say what the three
+          absolute values are doing.</li>
+      <li>…derive why two boxes need fifteen candidate axes rather than six, and construct a
+          configuration in which only an edge-edge axis finds the gap.</li>
+      <li>…explain why a separating axis is a <em>certificate</em>, and check one by hand.</li>
+      <li>…compute a minimum translation vector, say which direction it points and why, and name
+          the regime in which it is the wrong answer.</li>
+      <li>…find the closest point on a box to a point in three clamps, and say what the clamp does
+          when the point is inside.</li>
+      <li>…predict which formulations of the edge-edge test are vulnerable to nearly-parallel edges
+          and which are not, from the arithmetic rather than from folklore.</li>
+      <li>…estimate the precision floor of a collision test from the distance to the world origin,
+          and explain why large worlds recentre.</li>
+      <li>…read a histogram of how many candidate axes a real query examines, and use it to decide
+          where a cheaper test belongs.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine in which nothing has a size</a></li>
+      <li><a href="#intuition">Building intuition: hold it up to the light</a></li>
+      <li><a href="#theorem">The theorem, and the word “convex”</a></li>
+      <li><a href="#primitives">Three primitives, and what each of them knows</a></li>
+      <li><a href="#spheres">Two spheres, and the shape of an answer</a></li>
+      <li><a href="#projection">Projecting a box: the radius of its shadow</a></li>
+      <li><a href="#fifteen">Fifteen candidates, and why six is not enough</a></li>
+      <li><a href="#mtv">The minimum translation, and where it stops being an answer</a></li>
+      <li><a href="#sphere-box">A sphere against a box, including from inside</a></li>
+      <li><a href="#parallel">When two edges are parallel</a></li>
+      <li><a href="#precision">Where the precision floor is</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine in which nothing has a size</h2>
+
+  <p>
+    Here is a program you can write today with everything Module 8 has built. Make two crates. Give
+    them mass, give them inertia tensors, give them gravity. Drop them from the same height, a metre
+    apart in <code>x</code>, and give the second one a sideways nudge so that it drifts into the
+    first.
+  </p>
+
+  <p>
+    They pass through each other.
+  </p>
+
+  <p>
+    Not dramatically — there is no glitch, no jitter, nothing that looks like a bug. They occupy the
+    same volume for a while and then continue on their separate parabolas, exactly as Newton says
+    two points should. The simulation is doing precisely what it was told. It has simply never been
+    told that a crate is a metre wide.
+  </p>
+
+  <p>
+    The gap is visible in a function signature we have been using for three lessons:
+  </p>
+
+  <pre><code class="lang-cpp">rigid_body make_box(vec3 position, float mass, vec3 half_extents);</code></pre>
+
+  <p>
+    That takes half extents, uses them to build an inertia tensor, and <strong>throws them
+    away</strong>. The body it returns knows exactly how hard it is to spin a 0.5 × 1.0 × 1.5 metre
+    box, and has no idea that it is 0.5 × 1.0 × 1.5 metres. Everything the simulation knows about a
+    body — <code>inv_mass</code>, <code>inv_inertia_local</code>, <code>state.position</code>,
+    <code>orientation</code>, <code>angular_velocity</code> — answers the question <em>how does this
+    thing respond to being pushed?</em> Nothing answers <em>where is its surface?</em>
+  </p>
+
+  <p>
+    So this lesson is in two halves, and the second one is much larger than the first. The small
+    half is a type: a <code>shape</code>, which is geometry, deliberately separate from the body,
+    which is dynamics. The large half is the query — <em>are these two touching?</em> — which turns
+    out to rest on one of the most satisfying arguments in computational geometry, and on a pile of
+    consequences that nobody warns you about.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A shape is not a mesh, and the two are separate assets in every engine that
+      ships.</strong> A barrel drawn with 4,000 triangles collides as a cylinder, because a cylinder
+      is six floats and a convex primitive and 4,000 triangles are neither. This is not a corner
+      being cut: a player cannot see the difference, and the solver in 8.10 can. The visual model
+      and the collision model diverge on purpose, and the moment you accept that, the whole of
+      collision detection becomes a question about a small number of simple shapes rather than about
+      arbitrary geometry.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: hold it up to the light</h2>
+
+  <p>
+    Before any formalism, an experiment you can perform with two objects on your desk.
+  </p>
+
+  <p>
+    Pick them up, hold them in front of a lamp, and look at the shadows on the wall. Sometimes the
+    two shadows are separate — a strip of light between them. Sometimes they touch or overlap. Move
+    around the room, changing where the light comes from, and the shadows change with you.
+  </p>
+
+  <p>
+    Now the observation that starts everything:
+  </p>
+
+  <p class="eq-plain">
+    <strong>If the shadows are apart, the objects are apart.</strong>
+  </p>
+
+  <p>
+    That is not an approximation and it is not a heuristic — it is a proof, and a one-line one. If
+    some point belonged to both objects, it would cast a point belonging to both shadows, and the
+    shadows would meet. They do not meet. So no such point exists. Done, with no arithmetic and no
+    conditions on the shapes: it works for a teapot and a bicycle as well as it works for two boxes.
+  </p>
+
+  <p>
+    A single lamp position that shows a gap is therefore a complete and checkable <em>proof</em>
+    that two objects do not touch. Hold on to the word "checkable", because it becomes this lesson's
+    testing strategy in §7 and its verification strategy throughout.
+  </p>
+
+  <h3>2.1 From a lamp to a direction to a number</h3>
+
+  <p>
+    Strip the physical picture down. The lamp's position is really just a <em>direction</em>: what
+    matters is which way the light travels, not where the bulb is. And a shadow on a wall
+    perpendicular to that direction is exactly what you get by taking every point of the object and
+    recording how far along the direction it sits.
+  </p>
+
+  <p>
+    "How far along a direction" is a dot product — Lesson 1.6 built it as precisely this, the length
+    of a vector's shadow on another. So for a unit direction <code>L</code>, an object's shadow is
+    the set of numbers <code>{ p · L : p in the object }</code>, and for any shape that is not full
+    of holes that set is an <strong>interval</strong>: a lowest value and a highest one, with
+    everything in between.
+  </p>
+
+  <p>
+    Two objects, one direction, two intervals. And two intervals on a line either overlap or they do
+    not, which is a comparison a nine-year-old can do:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      overlap = min(a.hi, b.hi) − max(a.lo, b.lo), and they are apart exactly when that is negative.
+    </p>
+  </div>
+
+  <p>
+    Figure 1's left panel is that, for two convex shapes and a direction that happens to see the
+    gap. Its middle panel is the same two shapes under a different lamp, where the shadows overlap
+    and the test tells you <em>nothing</em> — not that they are touching, only that this particular
+    direction has failed to prove otherwise.
+  </p>
+
+  @@FIG_SHADOW@@
+
+  <p>
+    That asymmetry is the whole subject. A gap is <em>evidence</em>; an overlap is the
+    <em>absence</em> of evidence. Which raises the question the rest of the lesson is about: how
+    many directions do you have to try before the absence of evidence becomes evidence of absence?
+  </p>
+
+  <h2 id="theorem">3. The theorem, and the word “convex”</h2>
+
+  <p>
+    The answer, for the shapes we care about, is one of those results that sounds too good to be
+    true the first time you read it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The Separating Axis Theorem.</strong> Two <em>convex</em> sets are disjoint if and
+      only if there is some direction <code>L</code> on which their projections do not overlap.
+    </p>
+  </div>
+
+  <p>
+    The "if" half is the lamp argument from §2, and we have already proved it. The "only if" half is
+    the one doing real work, and it says: <strong>if they really are apart, a direction that sees
+    the gap exists.</strong> A search that tries every direction and finds nothing is therefore not
+    an inconclusive search — it is a proof of contact.
+  </p>
+
+  <h3>3.1 Why convexity is not decoration</h3>
+
+  <p>
+    A set is <strong>convex</strong> when the straight line between any two of its points stays
+    inside it. A ball is convex. A box is convex. A banana is not; neither is a cup, a doughnut, a
+    chair, or the letter C.
+  </p>
+
+  <p>
+    The sketch of the "only if" half runs like this. Take two disjoint convex sets and find the
+    closest pair of points, one in each — call them <code>p</code> and <code>q</code>. Since the
+    sets are apart, <code>p ≠ q</code>. Now take <code>L</code> to be the direction from
+    <code>p</code> to <code>q</code>, and consider the plane through <code>p</code> perpendicular to
+    <code>L</code>. Convexity is what guarantees that the whole of the first set stays on one side
+    of that plane: if any point of it were on the far side, the segment from <code>p</code> to that
+    point would be <em>inside the set</em> (that is what convex means) and would contain points
+    closer to <code>q</code> than <code>p</code> is — contradicting that <code>p</code> and
+    <code>q</code> were the closest pair. The same argument pins the second set on the other side.
+    So the two projections onto <code>L</code> are separated by the distance <code>|pq|</code>, and
+    <code>L</code> is a separating axis.
+  </p>
+
+  <p>
+    That is the ninety-percent picture. The missing ten percent is that "take the closest pair"
+    needs the sets to be closed and at least one of them bounded for the minimum to be attained, and
+    the general statement is the <em>hyperplane separation theorem</em>, proved for arbitrary convex
+    sets without ever mentioning distance. Boyd and Vandenberghe's <em>Convex Optimization</em> §2.5
+    does it properly. Nothing in this engine needs the general version: every shape we collide is
+    closed, bounded and convex by construction.
+  </p>
+
+  <p>
+    Figure 1's right-hand panel is the counterexample, and it is worth staring at. A ball resting in
+    the mouth of a cup, touching nothing. They are genuinely apart — you could slide a sheet of
+    paper between them everywhere — and yet on <em>every</em> direction their shadows overlap,
+    because the cup's shadow is solid while the cup is not. The gap between them is not
+    <em>between</em> the shapes in any direction; it is tucked inside the concavity of one of them,
+    and a projection cannot see inside a shape.
+  </p>
+
+  <p>
+    This is why every collision system you will ever meet is built on convex pieces. Concave
+    geometry is handled by <em>decomposing</em> it — a level's collision mesh is a list of convex
+    hulls, a character is a handful of capsules, a chair is four boxes and a slab. The decomposition
+    is an offline problem and often a hard one; the runtime problem is always convex-against-convex.
+  </p>
+
+  <h3>3.2 An infinite search, made finite</h3>
+
+  <p>
+    There is still something impossible about the theorem as stated. It says a separating direction
+    exists; it does not say how to find one, and there are infinitely many directions to try.
+  </p>
+
+  <p>
+    The bridge is a change of view that we will use twice more in this module. Consider the set of
+    all differences <code>a − b</code> with <code>a</code> in the first shape and <code>b</code> in
+    the second. That set is called the <strong>Minkowski difference</strong>, it is itself convex,
+    and it contains the origin exactly when some <code>a</code> equals some <code>b</code> — that
+    is, exactly when the shapes overlap. So "do these two shapes touch?" is the same question as
+    "does this one shape contain the origin?", and a separating axis is a direction in which the
+    whole Minkowski difference sits to one side of zero.
+  </p>
+
+  <p>
+    For polytopes — boxes included — the Minkowski difference is itself a polytope, with finitely
+    many faces. And a direction that separates a polytope from the origin can always be taken to be
+    one of that polytope's <em>face normals</em>: if a face's plane does not have the origin on its
+    outside, no direction near it does either. So the infinite search collapses to a finite list,
+    and the only question left is where the faces of <code>A ⊖ B</code> come from. §7 answers that,
+    and the answer is fifteen.
+  </p>
+
+  <p>
+    Lesson 8.5 takes the same picture in the other direction: instead of enumerating the faces of
+    the Minkowski difference, GJK <em>searches</em> it, using nothing but a support function, and
+    gets the actual distance rather than just a yes or no. It is the same object seen twice, which
+    is why the two lessons sit next to each other.
+  </p>

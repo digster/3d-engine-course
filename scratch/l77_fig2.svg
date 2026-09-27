@@ -1,0 +1,88 @@
+<svg viewBox="0 0 760 460" role="img" aria-labelledby="f77b-t f77b-d">
+  <title id="f77b-t">Finding the two keys that bracket a time</title>
+  <desc id="f77b-d">A timeline of six keyframes with a sample falling inside the third interval, the normalised parameter computed from real numbers, and the same lookup done by binary search and by a remembered cursor.</desc>
+  <defs>
+    <marker id="e-i-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-teal-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60c4ce"/></marker></defs>
+<defs><marker id="e-amber-f77b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2ba5c"/></marker></defs>
+<text x="380.0" y="32" class="sm" text-anchor="middle">one channel, one lookup</text>
+<text x="380.0" y="49" class="xs muted" text-anchor="middle">six keys of a 30 Hz track, and a sample that falls between two of them</text>
+<line x1="60.0" y1="118.0" x2="700.0" y2="118.0" class="ink-soft" stroke-width="1.2"/>
+<line x1="60.0" y1="109.0" x2="60.0" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="60.0" y="102.0" class="xs muted" text-anchor="middle">k0</text>
+<text x="60.0" y="144.0" class="xs mono" text-anchor="middle">0.0000</text>
+<line x1="188.07680768076807" y1="109.0" x2="188.07680768076807" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="188.07680768076807" y="102.0" class="xs muted" text-anchor="middle">k1</text>
+<text x="188.07680768076807" y="144.0" class="xs mono" text-anchor="middle">0.0667</text>
+<line x1="315.96159615961597" y1="109.0" x2="315.96159615961597" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="315.96159615961597" y="102.0" class="xs muted" text-anchor="middle">k2</text>
+<text x="315.96159615961597" y="144.0" class="xs mono" text-anchor="middle">0.1333</text>
+<line x1="444.03840384038403" y1="109.0" x2="444.03840384038403" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="444.03840384038403" y="102.0" class="xs muted" text-anchor="middle">k3</text>
+<text x="444.03840384038403" y="144.0" class="xs mono" text-anchor="middle">0.2000</text>
+<line x1="572.1152115211521" y1="109.0" x2="572.1152115211521" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="572.1152115211521" y="102.0" class="xs muted" text-anchor="middle">k4</text>
+<text x="572.1152115211521" y="144.0" class="xs mono" text-anchor="middle">0.2667</text>
+<line x1="700.0" y1="109.0" x2="700.0" y2="127.0" class="ink-soft" stroke-width="1.2"/>
+<text x="700.0" y="102.0" class="xs muted" text-anchor="middle">k5</text>
+<text x="700.0" y="144.0" class="xs mono" text-anchor="middle">0.3333</text>
+<rect x="315.96159615961597" y="111.0" width="128.07680768076807" height="14" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.2" fill-opacity="0.18"/>
+<line x1="405.63" y1="72.00" x2="405.63" y2="106.00" stroke="#f2ba5c" stroke-width="1.6" marker-end="url(#e-amber-f77b)"/>
+<text x="405.63456345634563" y="64.0" class="xs mono" text-anchor="middle">t = 0.1800</text>
+<text x="380.0" y="170.0" class="xs mono" text-anchor="middle">cursor = 2</text>
+<text x="380.0" y="186.0" class="xs mono" text-anchor="middle">u = (0.1800 − 0.1333) / (0.2000 − 0.1333) = 0.7000</text>
+<text x="380.0" y="230.0" class="sm" text-anchor="middle">two ways to find that 2</text>
+<text x="200.0" y="258.0" class="xs" text-anchor="middle">binary search</text>
+<text x="200.0" y="274.0" class="xs muted" text-anchor="middle">2 comparisons here, log2(n) in general</text>
+<rect x="59.0" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="68.0" y="301.0" class="xs mono" text-anchor="middle">0</text>
+<rect x="111.8" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="120.8" y="301.0" class="xs mono" text-anchor="middle">1</text>
+<rect x="164.6" y="288.0" width="18" height="18" rx="3" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.5"/>
+<text x="173.6" y="301.0" class="xs mono" text-anchor="middle">2</text>
+<rect x="217.4" y="288.0" width="18" height="18" rx="3" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.5"/>
+<text x="226.4" y="301.0" class="xs mono" text-anchor="middle">3</text>
+<rect x="270.2" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="279.2" y="301.0" class="xs mono" text-anchor="middle">4</text>
+<rect x="323.0" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="332.0" y="301.0" class="xs mono" text-anchor="middle">5</text>
+<text x="200.0" y="324.0" class="xs mono" text-anchor="middle">touches k2, k3</text>
+<text x="560.0" y="258.0" class="xs" text-anchor="middle">a cursor</text>
+<text x="560.0" y="274.0" class="xs muted" text-anchor="middle">2 comparisons here, and 2 for any n</text>
+<rect x="419.0" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="428.0" y="301.0" class="xs mono" text-anchor="middle">0</text>
+<rect x="471.8" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="480.8" y="301.0" class="xs mono" text-anchor="middle">1</text>
+<rect x="524.6" y="288.0" width="18" height="18" rx="3" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.5"/>
+<text x="533.6" y="301.0" class="xs mono" text-anchor="middle">2</text>
+<rect x="577.4" y="288.0" width="18" height="18" rx="3" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.5"/>
+<text x="586.4" y="301.0" class="xs mono" text-anchor="middle">3</text>
+<rect x="630.2" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="639.2" y="301.0" class="xs mono" text-anchor="middle">4</text>
+<rect x="683.0" y="288.0" width="18" height="18" rx="3" class="fill-soft grid" stroke-width="1.0"/>
+<text x="692.0" y="301.0" class="xs mono" text-anchor="middle">5</text>
+<text x="560.0" y="324.0" class="xs mono" text-anchor="middle">touches k2, k3</text>
+<text x="150.0" y="358.0" class="xs muted" text-anchor="start">one lookup per key interval</text>
+<text x="418.0" y="358.0" class="xs muted" text-anchor="end">two walks</text>
+<text x="514.0" y="358.0" class="xs muted" text-anchor="end">walk+search</text>
+<text x="588.0" y="358.0" class="xs muted" text-anchor="end">binary</text>
+<text x="674.0" y="358.0" class="xs muted" text-anchor="end">cursor wins</text>
+<line x1="150.0" y1="366.0" x2="680.0" y2="366.0" class="grid" stroke-width="1.0"/>
+<text x="150.0" y="383.0" class="xs" text-anchor="start">31 keys</text>
+<text x="418.0" y="383.0" class="xs mono" text-anchor="end">1.548</text>
+<text x="514.0" y="383.0" class="xs mono" text-anchor="end">1.324</text>
+<text x="588.0" y="383.0" class="xs mono" text-anchor="end">3.626</text>
+<text x="674.0" y="383.0" class="xs mono" text-anchor="end">2.74×</text>
+<text x="150.0" y="400.0" class="xs" text-anchor="start">301 keys</text>
+<text x="418.0" y="400.0" class="xs mono" text-anchor="end">1.729</text>
+<text x="514.0" y="400.0" class="xs mono" text-anchor="end">0.985</text>
+<text x="588.0" y="400.0" class="xs mono" text-anchor="end">10.183</text>
+<text x="674.0" y="400.0" class="xs mono" text-anchor="end">10.34×</text>
+<text x="380.0" y="424.5" class="xs muted" text-anchor="middle">at six keys the two do the same work — which is the point: the cursor is flat in n and the search is not.</text>
+<text x="380.0" y="440.5" class="xs muted" text-anchor="middle">nanoseconds per lookup, best of three.</text>
+</svg>

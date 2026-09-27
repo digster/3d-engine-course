@@ -1,0 +1,94 @@
+<svg viewBox="0 0 720 384" role="img" aria-labelledby="l53f5-t l53f5-d">
+  <title id="l53f5-t">The build matrix, measured</title>
+  <desc id="l53f5-d">A table of seven macros against four build configurations, giving the bytes of code each emits, with the cells that emitted nothing highlighted.</desc>
+  <defs>
+    <marker id="e-i-l53f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">What survives which build — measured, not assumed</text>
+<text x="20" y="38" class="xs muted" text-anchor="start">One translation unit, compiled four ways; each function's code size read out of the object file.</text>
+<text x="220.0" y="66" class="xs mono" text-anchor="middle">-O0</text>
+<text x="316.0" y="66" class="xs mono" text-anchor="middle">-O0 -DNDEBUG</text>
+<text x="412.0" y="66" class="xs mono" text-anchor="middle">-O2</text>
+<text x="508.0" y="66" class="xs mono" text-anchor="middle">-O2 -DNDEBUG</text>
+<line x1="20" y1="72" x2="700" y2="72" class="grid" stroke-width="1"/>
+<text x="20" y="94" class="xs mono" text-anchor="start">empty function</text>
+<rect x="178" y="78" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="92" class="xs mono" text-anchor="middle">20 B</text>
+<rect x="274" y="78" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="92" class="xs mono" text-anchor="middle">20 B</text>
+<rect x="370" y="78" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="92" class="xs mono" text-anchor="middle">4 B</text>
+<rect x="466" y="78" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="508.0" y="92" class="xs mono" text-anchor="middle">4 B</text>
+<text x="20" y="120" class="xs mono" text-anchor="start">ENGINE_LOG_TRACE</text>
+<rect x="178" y="104" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="118" class="xs mono" text-anchor="middle">80 B</text>
+<rect x="274" y="104" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="118" class="xs mono" text-anchor="middle">28 B</text>
+<rect x="370" y="104" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="118" class="xs mono" text-anchor="middle">44 B</text>
+<rect x="466" y="104" width="84" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="508.0" y="118" class="xs mono t-inv" text-anchor="middle">4 B</text>
+<text x="564" y="118" class="xs muted" text-anchor="start">gated on NDEBUG (ours)</text>
+<text x="20" y="146" class="xs mono" text-anchor="start">ENGINE_LOG_DEBUG</text>
+<rect x="178" y="130" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="144" class="xs mono" text-anchor="middle">80 B</text>
+<rect x="274" y="130" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="144" class="xs mono" text-anchor="middle">28 B</text>
+<rect x="370" y="130" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="144" class="xs mono" text-anchor="middle">44 B</text>
+<rect x="466" y="130" width="84" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="508.0" y="144" class="xs mono t-inv" text-anchor="middle">4 B</text>
+<text x="564" y="144" class="xs muted" text-anchor="start">gated on NDEBUG (ours)</text>
+<text x="20" y="172" class="xs mono" text-anchor="start">ENGINE_LOG_INFO</text>
+<rect x="178" y="156" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="170" class="xs mono" text-anchor="middle">80 B</text>
+<rect x="274" y="156" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="170" class="xs mono" text-anchor="middle">80 B</text>
+<rect x="370" y="156" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="170" class="xs mono" text-anchor="middle">44 B</text>
+<rect x="466" y="156" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="508.0" y="170" class="xs mono" text-anchor="middle">44 B</text>
+<text x="564" y="170" class="xs muted" text-anchor="start">never compiled out</text>
+<text x="20" y="198" class="xs mono" text-anchor="start">ENGINE_ASSERT</text>
+<rect x="178" y="182" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="196" class="xs mono" text-anchor="middle">148 B</text>
+<rect x="274" y="182" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="196" class="xs mono" text-anchor="middle">148 B</text>
+<rect x="370" y="182" width="84" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="412.0" y="196" class="xs mono t-inv" text-anchor="middle">4 B</text>
+<rect x="466" y="182" width="84" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="508.0" y="196" class="xs mono t-inv" text-anchor="middle">4 B</text>
+<text x="564" y="196" class="xs muted" text-anchor="start">gated on __OPTIMIZE__ (SDL)</text>
+<text x="20" y="224" class="xs mono" text-anchor="start">ENGINE_CHECK</text>
+<rect x="178" y="208" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="222" class="xs mono" text-anchor="middle">148 B</text>
+<rect x="274" y="208" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="222" class="xs mono" text-anchor="middle">148 B</text>
+<rect x="370" y="208" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="222" class="xs mono" text-anchor="middle">100 B</text>
+<rect x="466" y="208" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="508.0" y="222" class="xs mono" text-anchor="middle">100 B</text>
+<text x="564" y="222" class="xs muted" text-anchor="start">survives everything</text>
+<text x="20" y="250" class="xs mono" text-anchor="start">ENGINE_VERIFY</text>
+<rect x="178" y="234" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="220.0" y="248" class="xs mono" text-anchor="middle">180 B</text>
+<rect x="274" y="234" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="316.0" y="248" class="xs mono" text-anchor="middle">180 B</text>
+<rect x="370" y="234" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="412.0" y="248" class="xs mono" text-anchor="middle">16 B</text>
+<rect x="466" y="234" width="84" height="20" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="508.0" y="248" class="xs mono" text-anchor="middle">16 B</text>
+<text x="564" y="248" class="xs muted" text-anchor="start">expression always runs</text>
+<line x1="20" y1="266" x2="700" y2="266" class="grid" stroke-width="1"/>
+<text x="20" y="284" class="xs t-hi" text-anchor="start">GREEN = identical to an empty function: nothing was emitted at all.</text>
+<text x="20" y="302" class="xs" text-anchor="start">READ COLUMN 3. `-O2` with no -DNDEBUG kills ENGINE_ASSERT — SDL decides its level from</text>
+<text x="20" y="315" class="xs muted" text-anchor="start">__OPTIMIZE__, not from NDEBUG — while our trace and debug logging is still fully compiled in.</text>
+<text x="20" y="328" class="xs muted" text-anchor="start">Column 2 is the exact inverse: live assertions, dead trace logging.</text>
+<text x="20" y="341" class="xs muted" text-anchor="start">Two gates, two different switches, and neither configuration is the one you would guess.</text>
+<text x="20" y="354" class="xs" text-anchor="start">That mismatch is also a real bug this lesson shipped and then fixed: ENGINE_VERIFY was</text>
+<text x="20" y="367" class="xs muted" text-anchor="start">guarded on NDEBUG, so at -O2 it compiled to 4 bytes and stopped evaluating its expression.</text>
+</svg>

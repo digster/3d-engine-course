@@ -1,0 +1,95 @@
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="l78f1-t l78f1-d">
+  <title id="l78f1-t">A pressure wave sampled 24 times, and the arithmetic of one second of audio</title>
+  <desc id="l78f1-d">Left: a continuous pressure wave with 25 sample points marked, one every 20.83 microseconds at 48 kHz. Right: a table of the sizes involved, from one frame to 22 MB for a minute of stereo music.</desc>
+  <defs>
+    <marker id="e-i-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-blue-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-grey-l78f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<rect x="46" y="54" width="400" height="200" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="46" y1="154.0" x2="446" y2="154.0" class="grid" stroke-width="1.0"/>
+<text x="46" y="40" class="xs muted" text-anchor="start">a pressure wave, and 24 measurements of it</text>
+<text x="38" y="158.0" class="xs muted" text-anchor="end">0</text>
+<text x="38" y="64" class="xs muted" text-anchor="end">+1</text>
+<text x="38" y="254" class="xs muted" text-anchor="end">-1</text>
+<path d="M 46.00,154.00 L 47.11,150.89 L 48.22,147.80 L 49.33,144.72 L 50.44,141.66 L 51.56,138.65 L 52.67,135.67 L 53.78,132.75 L 54.89,129.89 L 56.00,127.09 L 57.11,124.37 L 58.22,121.73 L 59.33,119.18 L 60.44,116.72 L 61.56,114.37 L 62.67,112.12 L 63.78,109.99 L 64.89,107.96 L 66.00,106.06 L 67.11,104.29 L 68.22,102.64 L 69.33,101.12 L 70.44,99.73 L 71.56,98.47 L 72.67,97.34 L 73.78,96.35 L 74.89,95.49 L 76.00,94.76 L 77.11,94.16 L 78.22,93.69 L 79.33,93.35 L 80.44,93.12 L 81.56,93.02 L 82.67,93.03 L 83.78,93.15 L 84.89,93.38 L 86.00,93.71 L 87.11,94.14 L 88.22,94.65 L 89.33,95.25 L 90.44,95.92 L 91.56,96.66 L 92.67,97.47 L 93.78,98.33 L 94.89,99.24 L 96.00,100.19 L 97.11,101.18 L 98.22,102.20 L 99.33,103.24 L 100.44,104.29 L 101.56,105.35 L 102.67,106.40 L 103.78,107.45 L 104.89,108.49 L 106.00,109.51 L 107.11,110.51 L 108.22,111.47 L 109.33,112.40 L 110.44,113.29 L 111.56,114.13 L 112.67,114.93 L 113.78,115.68 L 114.89,116.37 L 116.00,117.00 L 117.11,117.58 L 118.22,118.09 L 119.33,118.55 L 120.44,118.94 L 121.56,119.27 L 122.67,119.53 L 123.78,119.74 L 124.89,119.89 L 126.00,119.98 L 127.11,120.01 L 128.22,120.00 L 129.33,119.93 L 130.44,119.83 L 131.56,119.68 L 132.67,119.49 L 133.78,119.28 L 134.89,119.03 L 136.00,118.77 L 137.11,118.49 L 138.22,118.21 L 139.33,117.92 L 140.44,117.64 L 141.56,117.37 L 142.67,117.11 L 143.78,116.88 L 144.89,116.67 L 146.00,116.51 L 147.11,116.39 L 148.22,116.31 L 149.33,116.30 L 150.44,116.34 L 151.56,116.46 L 152.67,116.64 L 153.78,116.91 L 154.89,117.26 L 156.00,117.69 L 157.11,118.23 L 158.22,118.85 L 159.33,119.58 L 160.44,120.41 L 161.56,121.35 L 162.67,122.39 L 163.78,123.54 L 164.89,124.80 L 166.00,126.18 L 167.11,127.66 L 168.22,129.26 L 169.33,130.96 L 170.44,132.77 L 171.56,134.69 L 172.67,136.71 L 173.78,138.82 L 174.89,141.04 L 176.00,143.34 L 177.11,145.73 L 178.22,148.20 L 179.33,150.75 L 180.44,153.36 L 181.56,156.04 L 182.67,158.78 L 183.78,161.56 L 184.89,164.38 L 186.00,167.24 L 187.11,170.12 L 188.22,173.02 L 189.33,175.93 L 190.44,178.84 L 191.56,181.74 L 192.67,184.62 L 193.78,187.48 L 194.89,190.30 L 196.00,193.08 L 197.11,195.81 L 198.22,198.48 L 199.33,201.08 L 200.44,203.61 L 201.56,206.05 L 202.67,208.40 L 203.78,210.65 L 204.89,212.80 L 206.00,214.84 L 207.11,216.76 L 208.22,218.56 L 209.33,220.23 L 210.44,221.77 L 211.56,223.18 L 212.67,224.45 L 213.78,225.57 L 214.89,226.55 L 216.00,227.39 L 217.11,228.08 L 218.22,228.62 L 219.33,229.02 L 220.44,229.26 L 221.56,229.36 L 222.67,229.32 L 223.78,229.14 L 224.89,228.81 L 226.00,228.35 L 227.11,227.76 L 228.22,227.04 L 229.33,226.20 L 230.44,225.23 L 231.56,224.16 L 232.67,222.98 L 233.78,221.70 L 234.89,220.32 L 236.00,218.86 L 237.11,217.32 L 238.22,215.71 L 239.33,214.03 L 240.44,212.30 L 241.56,210.51 L 242.67,208.69 L 243.78,206.83 L 244.89,204.94 L 246.00,203.04 L 247.11,201.12 L 248.22,199.21 L 249.33,197.29 L 250.44,195.39 L 251.56,193.51 L 252.67,191.65 L 253.78,189.82 L 254.89,188.03 L 256.00,186.29 L 257.11,184.59 L 258.22,182.95 L 259.33,181.36 L 260.44,179.83 L 261.56,178.37 L 262.67,176.98 L 263.78,175.65 L 264.89,174.40 L 266.00,173.23 L 267.11,172.12 L 268.22,171.10 L 269.33,170.14 L 270.44,169.27 L 271.56,168.46 L 272.67,167.73 L 273.78,167.07 L 274.89,166.47 L 276.00,165.94 L 277.11,165.47 L 278.22,165.05 L 279.33,164.69 L 280.44,164.38 L 281.56,164.11 L 282.67,163.87 L 283.78,163.67 L 284.89,163.50 L 286.00,163.35 L 287.11,163.21 L 288.22,163.09 L 289.33,162.96 L 290.44,162.83 L 291.56,162.69 L 292.67,162.54 L 293.78,162.36 L 294.89,162.15 L 296.00,161.91 L 297.11,161.63 L 298.22,161.30 L 299.33,160.93 L 300.44,160.49 L 301.56,159.99 L 302.67,159.43 L 303.78,158.80 L 304.89,158.09 L 306.00,157.31 L 307.11,156.44 L 308.22,155.50 L 309.33,154.47 L 310.44,153.35 L 311.56,152.15 L 312.67,150.86 L 313.78,149.49 L 314.89,148.03 L 316.00,146.48 L 317.11,144.85 L 318.22,143.14 L 319.33,141.35 L 320.44,139.48 L 321.56,137.55 L 322.67,135.54 L 323.78,133.48 L 324.89,131.36 L 326.00,129.18 L 327.11,126.96 L 328.22,124.70 L 329.33,122.40 L 330.44,120.08 L 331.56,117.74 L 332.67,115.39 L 333.78,113.04 L 334.89,110.69 L 336.00,108.35 L 337.11,106.03 L 338.22,103.74 L 339.33,101.49 L 340.44,99.28 L 341.56,97.12 L 342.67,95.03 L 343.78,93.00 L 344.89,91.05 L 346.00,89.18 L 347.11,87.41 L 348.22,85.73 L 349.33,84.16 L 350.44,82.70 L 351.56,81.36 L 352.67,80.14 L 353.78,79.05 L 354.89,78.09 L 356.00,77.26 L 357.11,76.58 L 358.22,76.04 L 359.33,75.65 L 360.44,75.41 L 361.56,75.31 L 362.67,75.37 L 363.78,75.57 L 364.89,75.93 L 366.00,76.44 L 367.11,77.09 L 368.22,77.90 L 369.33,78.84 L 370.44,79.93 L 371.56,81.16 L 372.67,82.52 L 373.78,84.01 L 374.89,85.62 L 376.00,87.35 L 377.11,89.19 L 378.22,91.14 L 379.33,93.19 L 380.44,95.33 L 381.56,97.55 L 382.67,99.86 L 383.78,102.23 L 384.89,104.66 L 386.00,107.15 L 387.11,109.68 L 388.22,112.25 L 389.33,114.84 L 390.44,117.46 L 391.56,120.09 L 392.67,122.72 L 393.78,125.35 L 394.89,127.96 L 396.00,130.55 L 397.11,133.11 L 398.22,135.64 L 399.33,138.12 L 400.44,140.56 L 401.56,142.94 L 402.67,145.25 L 403.78,147.50 L 404.89,149.68 L 406.00,151.77 L 407.11,153.79 L 408.22,155.72 L 409.33,157.56 L 410.44,159.31 L 411.56,160.97 L 412.67,162.53 L 413.78,164.00 L 414.89,165.37 L 416.00,166.64 L 417.11,167.82 L 418.22,168.90 L 419.33,169.89 L 420.44,170.78 L 421.56,171.59 L 422.67,172.31 L 423.78,172.94 L 424.89,173.50 L 426.00,173.98 L 427.11,174.39 L 428.22,174.74 L 429.33,175.02 L 430.44,175.25 L 431.56,175.43 L 432.67,175.57 L 433.78,175.67 L 434.89,175.74 L 436.00,175.78 L 437.11,175.80 L 438.22,175.82 L 439.33,175.83 L 440.44,175.83 L 441.56,175.85 L 442.67,175.88 L 443.78,175.93 L 444.89,176.00 L 446.00,176.10" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<line x1="46.0" y1="154.0" x2="46.0" y2="154.0" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="46.0" cy="154.0" r="2.6" fill="#f0961e"/>
+<line x1="62.7" y1="154.0" x2="62.7" y2="112.1" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="62.7" cy="112.1" r="2.6" fill="#f0961e"/>
+<line x1="79.3" y1="154.0" x2="79.3" y2="93.3" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="79.3" cy="93.3" r="2.6" fill="#f0961e"/>
+<line x1="96.0" y1="154.0" x2="96.0" y2="100.2" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="96.0" cy="100.2" r="2.6" fill="#f0961e"/>
+<line x1="112.7" y1="154.0" x2="112.7" y2="114.9" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="112.7" cy="114.9" r="2.6" fill="#f0961e"/>
+<line x1="129.3" y1="154.0" x2="129.3" y2="119.9" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="129.3" cy="119.9" r="2.6" fill="#f0961e"/>
+<line x1="146.0" y1="154.0" x2="146.0" y2="116.5" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="146.0" cy="116.5" r="2.6" fill="#f0961e"/>
+<line x1="162.7" y1="154.0" x2="162.7" y2="122.4" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="162.7" cy="122.4" r="2.6" fill="#f0961e"/>
+<line x1="179.3" y1="154.0" x2="179.3" y2="150.7" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="179.3" cy="150.7" r="2.6" fill="#f0961e"/>
+<line x1="196.0" y1="154.0" x2="196.0" y2="193.1" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="196.0" cy="193.1" r="2.6" fill="#f0961e"/>
+<line x1="212.7" y1="154.0" x2="212.7" y2="224.4" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="212.7" cy="224.4" r="2.6" fill="#f0961e"/>
+<line x1="229.3" y1="154.0" x2="229.3" y2="226.2" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="229.3" cy="226.2" r="2.6" fill="#f0961e"/>
+<line x1="246.0" y1="154.0" x2="246.0" y2="203.0" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="246.0" cy="203.0" r="2.6" fill="#f0961e"/>
+<line x1="262.7" y1="154.0" x2="262.7" y2="177.0" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="262.7" cy="177.0" r="2.6" fill="#f0961e"/>
+<line x1="279.3" y1="154.0" x2="279.3" y2="164.7" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="279.3" cy="164.7" r="2.6" fill="#f0961e"/>
+<line x1="296.0" y1="154.0" x2="296.0" y2="161.9" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="296.0" cy="161.9" r="2.6" fill="#f0961e"/>
+<line x1="312.7" y1="154.0" x2="312.7" y2="150.9" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="312.7" cy="150.9" r="2.6" fill="#f0961e"/>
+<line x1="329.3" y1="154.0" x2="329.3" y2="122.4" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="329.3" cy="122.4" r="2.6" fill="#f0961e"/>
+<line x1="346.0" y1="154.0" x2="346.0" y2="89.2" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="346.0" cy="89.2" r="2.6" fill="#f0961e"/>
+<line x1="362.7" y1="154.0" x2="362.7" y2="75.4" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="362.7" cy="75.4" r="2.6" fill="#f0961e"/>
+<line x1="379.3" y1="154.0" x2="379.3" y2="93.2" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="379.3" cy="93.2" r="2.6" fill="#f0961e"/>
+<line x1="396.0" y1="154.0" x2="396.0" y2="130.5" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="396.0" cy="130.5" r="2.6" fill="#f0961e"/>
+<line x1="412.7" y1="154.0" x2="412.7" y2="162.5" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="412.7" cy="162.5" r="2.6" fill="#f0961e"/>
+<line x1="429.3" y1="154.0" x2="429.3" y2="175.0" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="429.3" cy="175.0" r="2.6" fill="#f0961e"/>
+<line x1="446.0" y1="154.0" x2="446.0" y2="176.1" stroke="#f0961e" stroke-width="1.0" fill="none"/>
+<circle cx="446.0" cy="176.1" r="2.6" fill="#f0961e"/>
+<line x1="179.33" y1="272.00" x2="196.00" y2="272.00" stroke="#f0961e" stroke-width="1.2" marker-end="url(#e-amber-l78f1)"/>
+<line x1="196.00" y1="272.00" x2="179.33" y2="272.00" stroke="#f0961e" stroke-width="1.2" marker-end="url(#e-amber-l78f1)"/>
+<text x="187.66666666666666" y="288" class="xs mono" text-anchor="middle">1 / 48000 s = 20.83 us</text>
+<text x="246.0" y="308" class="xs muted" text-anchor="middle">the samples ARE the sound. There is nothing else in the file.</text>
+<text x="516" y="36" class="xs muted" text-anchor="start">the arithmetic, once</text>
+<text x="516" y="56" class="xs muted" text-anchor="start"></text>
+<text x="868" y="56" class="xs muted" text-anchor="end"></text>
+<line x1="516" y1="64.0" x2="874" y2="64.0" class="grid" stroke-width="1.0"/>
+<text x="516" y="81.0" class="xs" text-anchor="start">1 frame</text>
+<text x="868" y="81.0" class="xs mono" text-anchor="end">1 sample per channel</text>
+<text x="516" y="98.0" class="xs" text-anchor="start">48,000</text>
+<text x="868" y="98.0" class="xs mono" text-anchor="end">frames per second</text>
+<text x="516" y="115.0" class="xs" text-anchor="start">2</text>
+<text x="868" y="115.0" class="xs mono" text-anchor="end">channels, interleaved: L R L R</text>
+<text x="516" y="132.0" class="xs" text-anchor="start">4 bytes</text>
+<text x="868" y="132.0" class="xs mono" text-anchor="end">one float sample</text>
+<text x="516" y="149.0" class="xs" text-anchor="start">384 KB</text>
+<text x="868" y="149.0" class="xs mono" text-anchor="end">one second of stereo</text>
+<text x="516" y="166.0" class="xs" text-anchor="start">22 MB</text>
+<text x="868" y="166.0" class="xs mono" text-anchor="end">one minute of music</text>
+<line x1="516" y1="184.5" x2="874" y2="184.5" class="grid" stroke-width="1.0"/>
+<text x="516" y="206.5" class="xs" text-anchor="start">A device consumes frames on a clock it owns.</text>
+<text x="516" y="224.5" class="xs muted" text-anchor="start">Nothing you do changes the rate; you can only</text>
+<text x="516" y="240.5" class="xs muted" text-anchor="start">be ready or be late.</text>
+</svg>

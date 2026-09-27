@@ -1,0 +1,66 @@
+<svg viewBox="0 0 980 398" role="img" aria-labelledby="f3-t f3-d">
+  <title id="f3-t">A bob on a rope and on a rod, swung up past the horizontal</title>
+  <desc id="f3-d">Left: a circle of radius L about a pin. The rope's path follows the circle to the height L/2 above the pin and then leaves on a parabola; the rod's continues to 3L/4. Right: the measured release height, turning height and peak at 60, 240 and 960 Hz, with the energy left.</desc>
+  <defs>
+    <marker id="e-i-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="34" class="sm" text-anchor="start">Swung up with v₀² = 3.5 g L from the bottom</text>
+<circle cx="220" cy="190" r="120" fill="none" class="grid" stroke-width="1"/>
+<circle cx="220.0" cy="190.0" r="3.5" fill="#8f918a"/>
+<text x="210" y="194" class="xs muted" text-anchor="end">pin</text>
+<line x1="90.0" y1="130.0" x2="400.0" y2="130.0" stroke="#f0961e" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<text x="404" y="134.0" class="xs mono" text-anchor="start">L/2</text>
+<line x1="90.0" y1="100.0" x2="400.0" y2="100.0" stroke="#9b7ede" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<text x="404" y="104.0" class="xs mono" text-anchor="start">3L/4</text>
+<path d="M 220.00,310.00 L 224.84,309.90 L 229.66,309.61 L 234.48,309.12 L 239.27,308.44 L 244.03,307.57 L 248.74,306.51 L 253.42,305.25 L 258.03,303.81 L 262.59,302.19 L 267.08,300.38 L 271.49,298.39 L 275.81,296.23 L 280.05,293.89 L 284.19,291.39 L 288.22,288.72 L 292.15,285.89 L 295.95,282.90 L 299.64,279.77 L 303.19,276.49 L 306.61,273.06 L 309.88,269.50 L 313.02,265.82 L 316.00,262.01 L 318.82,258.08 L 321.48,254.04 L 323.98,249.90 L 326.31,245.66 L 328.47,241.33 L 330.45,236.92 L 332.25,232.43 L 333.87,227.87 L 335.30,223.25 L 336.55,218.57 L 337.61,213.85 L 338.47,209.09 L 339.14,204.30 L 339.62,199.49 L 339.91,194.66 L 340.00,189.82 L 339.90,184.99 L 339.60,180.16 L 339.10,175.35 L 338.41,170.56 L 337.54,165.80 L 336.46,161.09 L 335.20,156.42 L 333.76,151.80 L 332.13,147.25 L 330.31,142.76 L 328.32,138.35 L 326.15,134.03 L 323.81,129.80 L 321.30,125.66 L 318.62,121.63 L 315.78,117.71 L 312.79,113.91 L 309.65,110.23 L 306.36,106.69 L 302.94,103.27 L 299.37,100.00" fill="none" stroke="#9b7ede" stroke-width="1.6"/>
+<path d="M 220.00,310.00 L 225.03,309.89 L 230.04,309.58 L 235.04,309.05 L 240.01,308.32 L 244.95,307.38 L 249.84,306.23 L 254.68,304.88 L 259.46,303.33 L 264.17,301.57 L 268.81,299.63 L 273.36,297.49 L 277.81,295.16 L 282.16,292.64 L 286.41,289.95 L 290.53,287.08 L 294.54,284.04 L 298.41,280.84 L 302.15,277.48 L 305.74,273.96 L 309.18,270.30 L 312.46,266.49 L 315.58,262.55 L 318.54,258.49 L 321.32,254.30 L 323.92,250.00 L 326.34,245.60 L 328.58,241.09 L 330.62,236.50 L 332.47,231.83 L 334.13,227.08 L 335.58,222.27 L 336.83,217.40 L 337.87,212.49 L 338.71,207.53 L 339.34,202.54 L 339.76,197.53 L 339.97,192.51 L 339.97,187.49 L 339.76,182.47 L 339.34,177.46 L 338.71,172.47 L 337.87,167.51 L 336.83,162.60 L 335.58,157.73 L 334.13,152.92 L 332.47,148.17 L 330.62,143.50 L 328.58,138.91 L 326.34,134.40 L 323.92,130.00" fill="none" stroke="#f0961e" stroke-width="2.2"/>
+<path d="M 323.92,130.00 L 322.59,127.76 L 321.27,125.63 L 319.94,123.62 L 318.61,121.74 L 317.28,119.96 L 315.95,118.31 L 314.62,116.77 L 313.29,115.35 L 311.96,114.05 L 310.63,112.87 L 309.31,111.80 L 307.98,110.86 L 306.65,110.03 L 305.32,109.31 L 303.99,108.72 L 302.66,108.24 L 301.33,107.88 L 300.00,107.64 L 298.68,107.52 L 297.35,107.51 L 296.02,107.62 L 294.69,107.85 L 293.36,108.20 L 292.03,108.66 L 290.70,109.25 L 289.37,109.95 L 288.04,110.77 L 286.72,111.70 L 285.39,112.75 L 284.06,113.93 L 282.73,115.21 L 281.40,116.62 L 280.07,118.15 L 278.74,119.79 L 277.41,121.55 L 276.09,123.42 L 274.76,125.42 L 273.43,127.53 L 272.10,129.76 L 270.77,132.11 L 269.44,134.58 L 268.11,137.16 L 266.78,139.86 L 265.45,142.68 L 264.13,145.62 L 262.80,148.67 L 261.47,151.85 L 260.14,155.14 L 258.81,158.54 L 257.48,162.07 L 256.15,165.71 L 254.82,169.47 L 253.49,173.35 L 252.17,177.35 L 250.84,181.46 L 249.51,185.69 L 248.18,190.04 L 246.85,194.51 L 245.52,199.10 L 244.19,203.80 L 242.86,208.62 L 241.54,213.56 L 240.21,218.61 L 238.88,223.79 L 237.55,229.08 L 236.22,234.49 L 234.89,240.01 L 233.56,245.66 L 232.23,251.42 L 230.90,257.30 L 229.58,263.30 L 228.25,269.41 L 226.92,275.65 L 225.59,282.00 L 224.26,288.47 L 222.93,295.05 L 221.60,301.76 L 220.27,308.58 L 218.95,315.52" fill="none" stroke="#f0961e" stroke-width="2.2" stroke-dasharray="6 4"/>
+<circle cx="323.9" cy="130.0" r="4.2" fill="#f0961e"/>
+<text x="333.92304845413264" y="148.00000000000003" class="xs" text-anchor="start">the rope lets go</text>
+<text x="263.92304845413264" y="47.599999999999994" class="xs muted" text-anchor="middle">…and the bob flies</text>
+<text x="234" y="332" class="xs muted" text-anchor="start">…and lands exactly here</text>
+<circle cx="220.0" cy="310.0" r="4.2" fill="#5082e6"/>
+<line x1="220.00" y1="310.00" x2="266.00" y2="310.00" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-blue-f3)"/>
+<text x="270" y="314" class="xs" text-anchor="start">v₀</text>
+<line x1="26.0" y1="350.0" x2="46.0" y2="350.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="54" y="354" class="xs" text-anchor="start">rope: the circle, then a parabola — lets go at L/2, where tension reaches zero</text>
+<line x1="26.0" y1="367.0" x2="46.0" y2="367.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="54" y="371" class="xs" text-anchor="start">rod: carries on in compression, to its peak at 3L/4</text>
+<text x="560" y="56" class="xs muted" text-anchor="start">Measured, a 1 m joint</text>
+<text x="560" y="76" class="xs muted" text-anchor="start">rate</text>
+<text x="706" y="76" class="xs muted" text-anchor="end">rope lets go</text>
+<text x="786" y="76" class="xs muted" text-anchor="end">rod turns</text>
+<text x="866" y="76" class="xs muted" text-anchor="end">rod peaks</text>
+<text x="944" y="76" class="xs muted" text-anchor="end">energy left</text>
+<line x1="560" y1="84.0" x2="950" y2="84.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="101.0" class="xs" text-anchor="start">60 Hz</text>
+<text x="706" y="101.0" class="xs mono" text-anchor="end">0.4134 m</text>
+<text x="786" y="101.0" class="xs mono" text-anchor="end">0.4134 m</text>
+<text x="866" y="101.0" class="xs mono" text-anchor="end">0.5574 m</text>
+<text x="944" y="101.0" class="xs mono" text-anchor="end">89.87%</text>
+<text x="560" y="118.0" class="xs" text-anchor="start">240 Hz</text>
+<text x="706" y="118.0" class="xs mono" text-anchor="end">0.4819 m</text>
+<text x="786" y="118.0" class="xs mono" text-anchor="end">0.4819 m</text>
+<text x="866" y="118.0" class="xs mono" text-anchor="end">0.6990 m</text>
+<text x="944" y="118.0" class="xs mono" text-anchor="end">97.32%</text>
+<text x="560" y="135.0" class="xs" text-anchor="start">960 Hz</text>
+<text x="706" y="135.0" class="xs mono" text-anchor="end">0.4956 m</text>
+<text x="786" y="135.0" class="xs mono" text-anchor="end">0.4956 m</text>
+<text x="866" y="135.0" class="xs mono" text-anchor="end">0.7371 m</text>
+<text x="944" y="135.0" class="xs mono" text-anchor="end">99.32%</text>
+<text x="560" y="152.0" class="xs" text-anchor="start">exact</text>
+<text x="706" y="152.0" class="xs mono" text-anchor="end">0.5000 m</text>
+<text x="786" y="152.0" class="xs mono" text-anchor="end">0.5000 m</text>
+<text x="866" y="152.0" class="xs mono" text-anchor="end">0.7500 m</text>
+<text x="944" y="152.0" class="xs mono" text-anchor="end">100.00%</text>
+<text x="560" y="184.5" class="xs muted" text-anchor="start">The rope lets go EXACTLY where the rod's row changes sign from</text>
+<text x="560" y="199.5" class="xs muted" text-anchor="start">tension to compression, at every rate — two instruments, one</text>
+<text x="560" y="214.5" class="xs muted" text-anchor="start">fact. Both read low at 60 Hz because the bob arrives with 10%</text>
+<text x="560" y="229.5" class="xs muted" text-anchor="start">less energy than it started with, and that is not the rope; it</text>
+<text x="560" y="244.5" class="xs muted" text-anchor="start">is §5.</text>
+</svg>

@@ -1,0 +1,92 @@
+<svg viewBox="0 0 900 563" role="img" aria-labelledby="f88i-t f88i-d">
+  <title id="f88i-t">The teapot in the stadium</title>
+  <desc id="f88i-d">A ground plate claiming tens of thousands of cells it is alone in.</desc>
+  <defs>
+    <marker id="e-i-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grn-f88i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="50" y="42" class="sm" text-anchor="start">one proxy, alone in tens of thousands of cells</text>
+<line x1="50" y1="60" x2="50" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="67" y1="60" x2="67" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="84" y1="60" x2="84" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="101" y1="60" x2="101" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="118" y1="60" x2="118" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="135" y1="60" x2="135" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="152" y1="60" x2="152" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="169" y1="60" x2="169" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="186" y1="60" x2="186" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="203" y1="60" x2="203" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="220" y1="60" x2="220" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="237" y1="60" x2="237" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="254" y1="60" x2="254" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="271" y1="60" x2="271" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="288" y1="60" x2="288" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="305" y1="60" x2="305" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="322" y1="60" x2="322" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="339" y1="60" x2="339" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="356" y1="60" x2="356" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="373" y1="60" x2="373" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="390" y1="60" x2="390" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="407" y1="60" x2="407" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="424" y1="60" x2="424" y2="230" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="60" x2="424" y2="60" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="77" x2="424" y2="77" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="94" x2="424" y2="94" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="111" x2="424" y2="111" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="128" x2="424" y2="128" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="145" x2="424" y2="145" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="162" x2="424" y2="162" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="179" x2="424" y2="179" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="196" x2="424" y2="196" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="213" x2="424" y2="213" class="grid" stroke-width="0.5"/>
+<line x1="50" y1="230" x2="424" y2="230" class="grid" stroke-width="0.5"/>
+<rect x="50" y="162" width="374" height="34" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="237.0" y="184" class="xs" text-anchor="middle">the ground plate</text>
+<rect x="104" y="97" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="121" y="97" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="206" y="131" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="308" y="80" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="359" y="114" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="172" y="148" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<rect x="257" y="97" width="11" height="11" rx="1" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="470" y="42" class="sm" text-anchor="start">entries, 2000 crates at a 1 m cell</text>
+<text x="470" y="60" class="xs" text-anchor="start">crates only — 30,225 entries, 1,090 pairs</text>
+<rect x="470" y="66" width="103.44780999216407" height="18" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.0" fill-opacity="0.35"/>
+<text x="470" y="104" class="xs" text-anchor="start">+ plate, guard off — 111,027 entries, 1,127 pairs</text>
+<rect x="470" y="110" width="380.0" height="18" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.0" fill-opacity="0.35"/>
+<text x="470" y="148" class="xs" text-anchor="start">+ plate, guard on — 30,225 entries, 1,127 pairs</text>
+<rect x="470" y="154" width="103.44780999216407" height="18" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.0" fill-opacity="0.35"/>
+<text x="50" y="290" class="xs muted" text-anchor="start">cells the 200 × 0.2 × 200 m plate wants</text>
+<text x="424" y="290" class="xs muted" text-anchor="end">count</text>
+<line x1="50" y1="298.0" x2="430" y2="298.0" class="grid" stroke-width="1.0"/>
+<text x="50" y="315.0" class="xs" text-anchor="start">4 m</text>
+<text x="424" y="315.0" class="xs mono" text-anchor="end">5,202</text>
+<text x="50" y="332.0" class="xs" text-anchor="start">2 m</text>
+<text x="424" y="332.0" class="xs mono" text-anchor="end">20,402</text>
+<text x="50" y="349.0" class="xs" text-anchor="start">1 m</text>
+<text x="424" y="349.0" class="xs mono" text-anchor="end">80,802</text>
+<text x="50" y="366.0" class="xs" text-anchor="start">0.5 m</text>
+<text x="424" y="366.0" class="xs mono" text-anchor="end">321,602</text>
+<text x="50" y="383.0" class="xs" text-anchor="start">0.25 m</text>
+<text x="424" y="383.0" class="xs mono" text-anchor="end">1,283,202</text>
+<text x="520" y="290" class="xs muted" text-anchor="start">for comparison</text>
+<text x="874" y="290" class="xs muted" text-anchor="end">entries</text>
+<line x1="520" y1="298.0" x2="880" y2="298.0" class="grid" stroke-width="1.0"/>
+<text x="520" y="315.0" class="xs" text-anchor="start">crates only</text>
+<text x="874" y="315.0" class="xs mono" text-anchor="end">30,225</text>
+<text x="520" y="332.0" class="xs" text-anchor="start">the plate alone, 1 m cell</text>
+<text x="874" y="332.0" class="xs mono" text-anchor="end">80,802</text>
+<text x="50" y="411" class="xs muted" text-anchor="start">The plate is not exotic. It is the floor. At a 1 m cell it wants 80,802 cells for itself, nearly three times what the</text>
+<text x="50" y="428" class="xs muted" text-anchor="start">entire scene of two thousand crates wants, and it is alone in almost every one of them — so the grid pays to insert it</text>
+<text x="50" y="445" class="xs muted" text-anchor="start">and gains nothing. The cliff is cubic in the reciprocal of the cell size, which is why the table above quadruples and</text>
+<text x="50" y="462" class="xs muted" text-anchor="start">then quadruples again. A uniform grid has no structural answer to this: the answer is hierarchical, and this engine</text>
+<text x="50" y="479" class="xs muted" text-anchor="start">will not build one. What it does instead is NOTICE — past max_cells_per_proxy a proxy stops being gridded and is</text>
+<text x="50" y="496" class="xs muted" text-anchor="start">tested against everything, which keeps the contract exactly (the pair sets with the guard on and off are equal) and is</text>
+<text x="50" y="513" class="xs muted" text-anchor="start">linear in the number of such proxies times n. With one floor that is free. With sixty-four large objects it is most of</text>
+<text x="50" y="530" class="xs muted" text-anchor="start">the broadphase, and that is the grid telling you to use a tree.</text>
+</svg>

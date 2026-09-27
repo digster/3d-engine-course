@@ -1,0 +1,34 @@
+<svg viewBox="0 0 720 252" role="img" aria-labelledby="l52f5-t l52f5-d">
+  <title id="l52f5-t">Ownership across the C boundary</title>
+  <desc id="l52f5-d">Four steps: make_unique in the macro, release, SDL holding a raw void pointer for the life of the program, and app_runner::quit wrapping it back into a unique_ptr.</desc>
+  <defs>
+    <marker id="e-i-l52f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l52f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l52f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l52f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One C++ object, handed through a C API and back</text>
+<rect x="20" y="58" width="150" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="95.0" y="77" class="xs mono t-inv" text-anchor="middle">make_unique&lt;my_app&gt;</text>
+<text x="95.0" y="91" class="xs t-inv" text-anchor="middle">ENGINE_MAIN</text>
+<rect x="190" y="58" width="130" height="44" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="255.0" y="77" class="xs mono t-inv" text-anchor="middle">release()</text>
+<text x="255.0" y="91" class="xs t-inv" text-anchor="middle">we let go</text>
+<line x1="173" y1="80" x2="186" y2="80" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f5)"/>
+<rect x="350" y="58" width="150" height="44" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2"/>
+<text x="425.0" y="77" class="xs mono t-inv" text-anchor="middle">SDL holds a void*</text>
+<text x="425.0" y="91" class="xs t-inv" text-anchor="middle">for the program's life</text>
+<line x1="323" y1="80" x2="346" y2="80" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f5)"/>
+<rect x="540" y="58" width="160" height="44" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="620.0" y="77" class="xs mono t-inv" text-anchor="middle">unique_ptr(ptr)</text>
+<text x="620.0" y="91" class="xs t-inv" text-anchor="middle">app_runner::quit</text>
+<line x1="503" y1="80" x2="536" y2="80" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f5)"/>
+<rect x="350" y="112" width="180" height="3" fill="#e05c5c"/>
+<text x="350" y="134" class="xs t-bad" text-anchor="start">unowned — and this window contains</text>
+<text x="350" y="148" class="xs t-bad" text-anchor="start">NO BRANCHES AT ALL.</text>
+<line x1="20" y1="172" x2="700" y2="172" class="grid" stroke-width="1"/>
+<text x="20" y="194" class="xs" text-anchor="start">app_runner::init publishes the pointer BEFORE anything can fail, which is the part that looks wrong and is not.</text>
+<text x="20" y="210" class="xs muted" text-anchor="start">The alternative — publish only on success — means a failed start must destroy the instance itself, and SDL then calls</text>
+<text x="20" y="226" class="xs muted" text-anchor="start">SDL_AppQuit(nullptr) with no way to tell “never built” from “already cleaned up”. One owner, one teardown path.</text>
+<text x="20" y="242" class="xs muted" text-anchor="start">This is the one place in the engine where a raw pointer owns something, and it owns it for exactly as long as C is holding it.</text>
+</svg>

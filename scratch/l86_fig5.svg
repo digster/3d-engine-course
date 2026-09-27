@@ -1,0 +1,66 @@
+<svg viewBox="0 0 900 420" role="img" aria-labelledby="l86f5-t l86f5-d">
+  <title id="l86f5-t">Why the flat case needs two support points rather than one, and why the resulting solid must be built by the same expansion the loop uses.</title>
+  <desc id="l86f5-d">Left, a triangle with a single apex above it forming a tetrahedron, with the origin marked lying exactly on the triangle: the closest face is at distance zero. Middle, the same triangle with apexes above and below, enclosing the origin. Right, the measurements: on 30,000 flat simplices the one-apex seed gives a lower bound below 1e-6 every single time, and 52.85 percent of hand-stitched bipyramids are not convex at all.</desc>
+  <defs>
+    <marker id="e-i-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-purple-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-red-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-l86f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The simplex arrives flat, so the seed has to leave the plane — and one way out is not enough.</text>
+<text x="190" y="56" class="xs" text-anchor="middle">one apex: a tetrahedron</text>
+<line x1="144.0" y1="187.5" x2="268.6" y2="212.7" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="268.6" y1="212.7" x2="161.0" y2="233.4" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="161.0" y1="233.4" x2="144.0" y2="187.5" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="144.0" y1="187.5" x2="198.8" y2="136.0" stroke="#f0961e" stroke-width="1.4" fill="none"/>
+<line x1="268.6" y1="212.7" x2="198.8" y2="136.0" stroke="#f0961e" stroke-width="1.4" fill="none"/>
+<line x1="161.0" y1="233.4" x2="198.8" y2="136.0" stroke="#f0961e" stroke-width="1.4" fill="none"/>
+<line x1="183.03440073424477" y1="211.19299923526" x2="197.03440073424477" y2="211.19299923526" class="ink" stroke-width="2.0"/>
+<line x1="190.03440073424477" y1="204.19299923526" x2="190.03440073424477" y2="218.19299923526" class="ink" stroke-width="2.0"/>
+<line x1="196.03440073424477" y1="215.19299923526" x2="220.03440073424477" y2="245.19299923526" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="224.03440073424477" y="249.19299923526" class="xs t-hi" text-anchor="start">the origin is ON the base</text>
+<text x="190" y="330" class="xs muted" text-anchor="middle">so the closest face is at distance ZERO,</text>
+<text x="190" y="344" class="xs muted" text-anchor="middle">and the lower bound starts — and stays — at 0.</text>
+<text x="490" y="56" class="xs" text-anchor="middle">two apexes: the origin is enclosed</text>
+<line x1="444.0" y1="187.5" x2="568.6" y2="212.7" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="568.6" y1="212.7" x2="461.0" y2="233.4" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="461.0" y1="233.4" x2="444.0" y2="187.5" stroke="#f0961e" stroke-width="1.8" fill="none"/>
+<line x1="444.0" y1="187.5" x2="498.8" y2="136.0" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="568.6" y1="212.7" x2="498.8" y2="136.0" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="461.0" y1="233.4" x2="498.8" y2="136.0" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="444.0" y1="187.5" x2="479.6" y2="280.9" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="568.6" y1="212.7" x2="479.6" y2="280.9" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="461.0" y1="233.4" x2="479.6" y2="280.9" stroke="#5ac878" stroke-width="1.3" fill="none"/>
+<line x1="483.0344007342448" y1="211.19299923526" x2="497.0344007342448" y2="211.19299923526" class="ink" stroke-width="2.0"/>
+<line x1="490.0344007342448" y1="204.19299923526" x2="490.0344007342448" y2="218.19299923526" class="ink" stroke-width="2.0"/>
+<text x="490" y="330" class="xs muted" text-anchor="middle">one support call along each side of the plane,</text>
+<text x="490" y="344" class="xs muted" text-anchor="middle">and now every face has the origin behind it.</text>
+<text x="640" y="66" class="xs" text-anchor="start">Over 30,000 flat simplices, crates on a floor:</text>
+<text x="640" y="92" class="xs muted" text-anchor="start"></text>
+<text x="894" y="92" class="xs muted" text-anchor="end"></text>
+<line x1="640" y1="100.0" x2="900" y2="100.0" class="grid" stroke-width="1.0"/>
+<text x="640" y="117.0" class="xs" text-anchor="start">triangle covers the origin</text>
+<text x="894" y="117.0" class="xs mono" text-anchor="end">30,000 / 30,000</text>
+<text x="640" y="134.0" class="xs" text-anchor="start">one apex: bound below 1e−6</text>
+<text x="894" y="134.0" class="xs mono" text-anchor="end">30,000 / 30,000</text>
+<text x="640" y="151.0" class="xs" text-anchor="start">two apexes: mean bound</text>
+<text x="894" y="151.0" class="xs mono" text-anchor="end">0.0904 m</text>
+<text x="640" y="168.0" class="xs" text-anchor="start">the true depth, mean</text>
+<text x="894" y="168.0" class="xs mono" text-anchor="end">0.4908 m</text>
+<text x="640" y="202.5" class="xs t-hi" text-anchor="start">AND THE SIX FACES MUST NOT BE</text>
+<text x="640" y="217.5" class="xs t-hi" text-anchor="start">STITCHED BY HAND.</text>
+<text x="640" y="236.5" class="xs" text-anchor="start">A bipyramid is convex only when</text>
+<text x="640" y="251.5" class="xs" text-anchor="start">each apex projects INSIDE the</text>
+<text x="640" y="266.5" class="xs" text-anchor="start">triangle, and a support point</text>
+<text x="640" y="281.5" class="xs" text-anchor="start">has no reason to:</text>
+<text x="640" y="304.5" class="xs muted" text-anchor="start"></text>
+<text x="884" y="304.5" class="xs muted" text-anchor="end"></text>
+<line x1="640" y1="312.5" x2="890" y2="312.5" class="grid" stroke-width="1.0"/>
+<text x="640" y="329.5" class="xs" text-anchor="start">not convex</text>
+<text x="884" y="329.5" class="xs mono" text-anchor="end">15,855  (52.85%)</text>
+</svg>

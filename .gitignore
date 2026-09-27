@@ -85,3 +85,7 @@ scratch/
 # browser (see docs/_template/README.md — the preview pane is not trustworthy
 # for computed styles, so verification always goes through Chromium).
 .playwright-mcp/
+
+# Bytecode from the authoring checkers in docs/_template/ (and their unit tests
+# in docs/_template/tests/): output, never source.
+__pycache__/

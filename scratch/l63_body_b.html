@@ -1,0 +1,435 @@
+  <!-- =================================================================
+       4 — BLINN-PHONG WAS A MICROFACET MODEL
+       ================================================================= -->
+  <h2 id="blinn"><span class="num">4</span>Blinn-Phong Was a Microfacet Model</h2>
+
+  <p>
+    The worked example above did something worth noticing. It put Lesson 3.7's specular lobe
+    through the NDF identity — and the integral came out finite, and a single constant fixes it.
+    That is not a coincidence and it is not a curiosity:
+  </p>
+
+  <div class="callout note">
+    <span class="label">Blinn-Phong's lobe <em>is</em> a microfacet distribution</span>
+    <p>Give <code>cos<sup>s</sup>(θ<sub>h</sub>)</code> the constant <code>(s+2)/2π</code> and it
+       satisfies the identity exactly, for every exponent. It has always been a distribution over
+       microfacet normals. What it has never had is its normalisation.</p>
+  </div>
+
+  <p>
+    This is the spiral paying off, and it is worth being precise about what is being claimed.
+    Lesson 3.7 introduced <code>dot(n, h)</code> raised to a power as a shape that looked right,
+    and <em>said so</em> — it called the halfway vector "the normal this surface would need", and
+    noted that "Blinn-Phong is the first, crudest microfacet model". Three modules later that
+    sentence turns out to have been literally true. 3.7 was not wrong. It was
+    <strong>un-normalised</strong>, which is a much more specific and much more fixable complaint.
+  </p>
+
+  <p>
+    So: what constant <em>is</em> the engine using? Lesson 6.2 divided the specular lobe by π, so
+    that both lobes shared the light's units — and was careful to say that this was a scale
+    choice and explicitly not a normalisation. Now we can price that choice.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the ratio, and there is no π in it</span>
+    <p>The engine multiplies the lobe by <code>1/π</code>. A distribution requires
+       <code>(s+2)/2π</code>. The ratio is</p>
+    <p class="mono">((s + 2) / 2π) ÷ (1 / π) = (s + 2) / 2</p>
+    <p>Both constants carry a π and it cancels, so the answer is a plain integer arithmetic in the
+       exponent. At the demo's default shininess of 32:</p>
+    <p class="mono">(32 + 2) / 2 = <strong>17</strong></p>
+    <p><code>verify_63</code> §B checks the identity across five exponents and finds the ratio is
+       exactly <code>(s+2)/2</code> to 1e−4 — which is float noise, because the relation is
+       algebraic.</p>
+  </div>
+
+  @@FIG_CONSTANT@@
+
+  <p>
+    <strong>So this engine's highlights have been seventeen times dimmer than the distribution
+    says</strong>, at the default material, since Lesson 3.7. And nothing looked wrong — which is
+    the part worth dwelling on, because it is how this class of error survives.
+  </p>
+
+  <p>
+    The reason is that <code>specular::colour</code> absorbed it. An artist setting up a shiny
+    surface turns the specular colour up until the highlight looks right, and the value they land
+    on is seventeen times what a physically plausible reflectance would be. The picture is fine.
+    The parameter is nonsense, and it is nonsense in a way that only shows up when you try to
+    <em>author</em> against physical values, or load a material from another renderer, or ask
+    whether the surface conserves energy — which is exactly what Lesson 6.2 tried to do and why it
+    found 1.1386.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Reading the old materials into the new vocabulary</span>
+    <p>The mapping runs both ways, and the reverse direction is the useful one right now. Inverting
+       <code>s = 2/α² − 2</code> gives <code>α = √(2/(s+2))</code>, so the demo's shininess of 32
+       means <strong>α = 0.2425</strong> — a perceptual roughness of <strong>0.49</strong>.</p>
+    <p>Almost exactly half way, which is a perfectly reasonable thing for a default material to be,
+       and was arrived at by nobody choosing it. <code>verify_63</code> §B also checks that
+       shininess → α → shininess round-trips to 1e−5 relative, because a material that changes when
+       you convert it to the new vocabulary and back is not a conversion, it is a bug.</p>
+  </div>
+
+  <!-- =================================================================
+       5 — BECKMANN, GGX, AND THE TAIL
+       ================================================================= -->
+  <h2 id="tail"><span class="num">5</span>Beckmann, GGX, and the Tail</h2>
+
+  <p>
+    Blinn-Phong's exponent lobe is <em>a</em> distribution. It is not one that any surface actually
+    has, and the reason is that it was chosen for being cheap to evaluate rather than for
+    describing a slope histogram. Two distributions that were chosen for the second reason:
+  </p>
+
+  <p>
+    <strong>Beckmann's</strong> assumes the microfacet <em>slopes</em> are Gaussian — the natural
+    assumption for a surface produced by a large number of small independent processes, which is
+    what grinding, weathering and casting are. It is the distribution physical-optics derivations
+    arrive at, and for thirty years it was what "physically based" meant.
+  </p>
+
+  <div class="eq">
+    \[ D_{\text{Beckmann}}(\mathbf{h}) =
+       \frac{\exp\!\left(-\tan^2\theta_h / \alpha^2\right)}
+            {\pi \alpha^2 \cos^4\theta_h} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: e to the minus tangent-squared of θₕ over α², all divided by π α² cos⁴θₕ.
+  </p>
+
+  <p>
+    <strong>GGX</strong> — also called Trowbridge–Reitz, after the 1975 paper that got there
+    first and was forgotten for thirty years — replaces the exponential with a rational function:
+  </p>
+
+  <div class="eq">
+    \[ D_{\text{GGX}}(\mathbf{h}) =
+       \frac{\alpha^2}{\pi \left( \cos^2\theta_h (\alpha^2 - 1) + 1 \right)^2} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: α² divided by π times the square of (cos²θₕ times (α²−1), plus 1). §9 is about why
+    the implementation does not compute that denominator the way it is written here.
+  </p>
+
+  <p>
+    Both integrate to 1. Both peak at the same height for the same α — <code>verify_63</code> §C
+    checks that, and gets <strong>3.5368</strong> for each at α = 0.3. So they are not "a bright
+    one and a dim one". Every difference between them is a difference of <em>shape</em>.
+  </p>
+
+  @@FIG_TAIL@@
+
+  <p>
+    And the shape difference is dramatic, in a way a linear plot completely hides — which is why
+    the figure is on a log axis. Read the measured table:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>θ<sub>h</sub></th><th>Beckmann</th><th>GGX</th><th>GGX / Beckmann</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>10°</td><td>2.6618</td><td>2.0771</td><td>0.78</td></tr>
+      <tr><td>20°</td><td>1.0409</td><td>0.7423</td><td>0.71</td></tr>
+      <tr><td>30°</td><td>0.1549</td><td>0.2842</td><td>1.83</td></tr>
+      <tr><td>45°</td><td>2.11 × 10⁻⁴</td><td>9.64 × 10⁻²</td><td><strong>456</strong></td></tr>
+      <tr><td>60°</td><td>1.9 × 10⁻¹³</td><td>4.80 × 10⁻²</td><td>2.5 × 10¹¹</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>GGX is <em>lower</em> near the peak</strong> — 0.71× Beckmann at 20° — and then
+    crosses over and is 456× higher at 45°. It has taken energy out of the shoulder and put it in
+    the tail. It has to: both integrate to 1, so anything one gains somewhere it loses elsewhere.
+  </p>
+
+  <p>
+    The mechanism is visible in the two formulas. Beckmann's exponential dies faster than any
+    power, so by 60° it is <strong>1.9 × 10⁻¹³</strong> — numerically zero in a shader, and a hard
+    edge to the highlight where a real surface has a soft one. GGX's denominator is a polynomial,
+    so its tail is a power law: it falls off and never quite stops.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why this won, and what it says about how graphics research goes</span>
+    <p>Real surfaces have a faint glow around a highlight, extending much further than a Gaussian
+       slope distribution predicts. Everybody could see it; the standard answer for years was to
+       add a second, broader lobe and tune the mix. Walter et al. pointed out in 2007 that a
+       distribution with a heavier tail reproduces it with no extra lobe and no extra parameter —
+       and that Trowbridge and Reitz had published exactly such a distribution in 1975 by fitting
+       measured data rather than deriving from optics.</p>
+    <p>The lesson is not "GGX is better". It is that <strong>the distribution is where the
+       physical claim lives</strong>, so when a model looks wrong, the distribution is the first
+       place to look and the last place people looked.</p>
+  </div>
+
+  <!-- =================================================================
+       6 — MATCHING THE PEAK IS NOT MATCHING THE LOBE
+       ================================================================= -->
+  <h2 id="fit"><span class="num">6</span>Matching the Peak Is Not Matching the Lobe</h2>
+
+  <p>
+    Every reference that mentions both gives you the same conversion from a GGX roughness to a
+    Blinn exponent:
+  </p>
+
+  <div class="eq">
+    \[ s = \frac{2}{\alpha^2} - 2 \]
+  </div>
+
+  <p>
+    It is easy to derive, and deriving it shows immediately what it is and is not. Set the two
+    distributions equal <em>at the peak</em>, where <strong>h</strong> = <strong>n</strong> and
+    both cosines are 1:
+  </p>
+
+  <div class="eq">
+    \[ \frac{s+2}{2\pi} = \frac{\alpha^2}{\pi \left(\alpha^2\right)^2}
+       = \frac{1}{\pi \alpha^2}
+       \quad\Longrightarrow\quad s + 2 = \frac{2}{\alpha^2} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: Blinn's peak value is (s+2)/2π, GGX's is 1/(πα²), and setting them equal gives
+    s + 2 = 2/α².
+  </p>
+
+  <p>
+    <code>verify_63</code> §E confirms the mapping does exactly what it was derived to do: the two
+    peaks agree to a relative <strong>5.99e−08</strong>, which is one float ULP. So it is correct —
+    for the question it answers, which is <em>"which exponent gives the same peak height?"</em>
+  </p>
+
+  <p>
+    Now ask a different question — <em>"which exponent gives the most similar lobe?"</em> — and fit
+    it numerically, minimising the difference over the whole hemisphere. §E scans the exponent on a
+    log grid and reports:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>α</th><th>peak-match <em>s</em></th><th>fitted <em>s</em></th><th>ratio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.10</td><td>198.0</td><td>159.5</td><td>0.806</td></tr>
+      <tr><td>0.20</td><td>48.0</td><td>38.6</td><td>0.803</td></tr>
+      <tr><td>0.30</td><td>20.2</td><td>16.1</td><td>0.794</td></tr>
+      <tr><td>0.50</td><td>6.0</td><td>4.6</td><td>0.759</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Consistently about <strong>0.80×</strong>, drifting further apart as the surface roughens. And
+    the fit is not converging on the "true" answer with the peak match as a bad approximation —
+    <em>both numbers are exactly right</em>, for the two different questions. A lobe fit trades
+    peak height for tail coverage, because GGX has a tail Blinn cannot reproduce at any exponent
+    whatsoever, and the least-bad compromise is to sit slightly wider than the peak match.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This is what folklore is, and how to handle it</span>
+    <p>The formula is not wrong. What is missing, in every place it is quoted, is the
+       <em>criterion</em> — and without the criterion you cannot know whether it is the right
+       conversion for your problem. Matching a legacy asset's peak intensity? Use it. Matching how
+       an old material <em>looked</em>? You want the 0.80×.</p>
+    <p>The transferable habit is small and worth keeping: <strong>when you meet a conversion
+       formula, derive it far enough to see what it optimised.</strong> Two minutes of algebra
+       here revealed that a widely-quoted mapping answers a narrower question than the one people
+       use it for.</p>
+  </div>
+
+  <!-- =================================================================
+       7 — SHADOWING AND MASKING
+       ================================================================= -->
+  <h2 id="masking"><span class="num">7</span>Shadowing and Masking</h2>
+
+  <p>
+    <em>D</em> counts the facets that face <strong>h</strong>. It does not ask whether they can be
+    seen, or whether the light can reach them — and on a landscape, both questions have real
+    answers. A facet down in a valley may face exactly the right way and be completely hidden
+    behind the ridge in front of it.
+  </p>
+
+  <p>
+    Two effects, and they are the same effect from the two ends of the light path.
+    <strong>Shadowing</strong> is a facet the light cannot reach. <strong>Masking</strong> is a
+    facet the eye cannot see. Together they are the <strong>geometry term</strong>, <em>G</em>,
+    and the crucial thing about it is that it is not a correction bolted onto the model to make
+    the numbers behave — it is a <em>consequence</em> of the picture in §2. Once you have said
+    "landscape", you have said "some of it is hidden".
+  </p>
+
+  @@FIG_MASKING@@
+
+  <p>
+    Smith's formulation is the standard one, and its idea is that the fraction of the surface
+    visible from a direction can be derived from the same slope distribution that produced
+    <em>D</em> — which is what makes it a consequence rather than a second model. For GGX the
+    result is exact and compact:
+  </p>
+
+  <div class="eq">
+    \[ G_1(\mathbf{x}) = \frac{2 (\mathbf{n}\cdot\mathbf{x})}
+       {(\mathbf{n}\cdot\mathbf{x}) + \sqrt{\alpha^2 + (1-\alpha^2)(\mathbf{n}\cdot\mathbf{x})^2}} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: twice the cosine, divided by the cosine plus the square root of (α² plus (1−α²) times
+    the cosine squared).
+  </p>
+
+  <p>
+    It is 1 looking straight down — nothing hides from directly above — and falls toward 0 at
+    grazing incidence. <strong>How fast it falls is entirely a question of roughness</strong>, and
+    that is the whole content of the term:
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the term 6.2 was missing</span>
+    <p>At <strong>75° from the normal</strong>, measured in <code>verify_63</code> §D:</p>
+    <p class="mono">roughness 0.22 → G₁ = 0.9920<br>
+                    roughness 1.00 → G₁ = 0.4112</p>
+    <p>A near-smooth surface still shows you 99% of itself at a glancing angle; a fully rough one
+       shows you 41%. <strong>That is what Lesson 6.2's unexplained 5.36× view-angle swing
+       was.</strong> A rough surface genuinely does hide more of itself as you move round to the
+       side — but Blinn-Phong has no term that can say so, so its own swing came out of the lobe's
+       geometry by accident, in an amount nobody chose and no parameter controls.</p>
+    <p>Note what changed: the effect is still there, and it is still large. It has stopped being
+       arbitrary.</p>
+  </div>
+
+  <h3>7.1 The assumption in the multiplication</h3>
+
+  <p>
+    The obvious way to combine the two is to multiply: mask for the light, then mask for the eye.
+    <code>smith_g_separable</code> does exactly that, and its name is a warning label.
+  </p>
+
+  <p>
+    Multiplying two probabilities assumes they are <strong>independent</strong> — that whether a
+    facet is lit tells you nothing about whether it is visible. That is plainly false: both depend
+    on the facet's height in the <em>same</em> landscape, so a facet down in a valley tends to be
+    hidden from both directions at once, and the separable form counts it as hidden twice.
+  </p>
+
+  <p>
+    Heitz's height-correlated form resolves the two together over the shared height distribution.
+    The usual presentation treats the choice as a matter of taste. <code>verify_63</code> §D
+    measures it instead:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>α</th><th>both directions at</th><th>separable</th><th>height-correlated</th><th>ratio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.1</td><td>20°</td><td>0.9993</td><td>0.9993</td><td>1.000</td></tr>
+      <tr><td>0.4</td><td>60°</td><td>0.8141</td><td>0.8220</td><td>1.010</td></tr>
+      <tr><td>0.8</td><td>60°</td><td>0.5451</td><td>0.5852</td><td>1.074</td></tr>
+      <tr><td>0.8</td><td>80°</td><td>0.1255</td><td>0.2152</td><td><strong>1.715</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Identical to four decimals on smooth surfaces and at steep angles — and <strong>1.715×
+    apart</strong> on a rough surface at grazing incidence, where the separable form throws away
+    nearly half the light. Rough materials seen at glancing angles are sunsets, wet roads, worn
+    metal and the rim of every object in every scene. "Either is fine" would have been a
+    comfortable sentence to write, and measuring it made it an untrue one.
+  </p>
+
+  <!-- =================================================================
+       8 — THE ENERGY BUDGET
+       ================================================================= -->
+  <h2 id="energy"><span class="num">8</span>The Energy Budget</h2>
+
+  <p>
+    Lesson 6.2 built a hemisphere integrator to answer "does this model conserve energy?" as a
+    number. Point it at the new machinery — and point it at the <em>same</em> integrator, character
+    for character, because a test rewritten for each new subject is a test of the test:
+  </p>
+
+  <div class="eq">
+    \[ R(\mathbf{v}) = \int_{\Omega} \frac{D\,G}{4(\mathbf{n}\cdot\mathbf{l})(\mathbf{n}\cdot\mathbf{v})}
+       \cos\theta \, d\omega \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the directional-hemispherical reflectance of the specular microfacet BRDF — D times
+    G, over four times the two cosines — with Fresnel set to 1, so nothing is absorbed and any
+    shortfall is light the model itself loses. (The <em>4</em> in the denominator is a Jacobian
+    from changing variables between the light direction and the halfway vector; Lesson 6.4 derives
+    it, because it belongs with the assembly rather than with the parts.)
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    <strong>The first result is the one this whole lesson was for.</strong> It never exceeds 1.
+    Not at any roughness, not at any view angle. Compare Lesson 6.2's table, where Blinn-Phong went
+    over at <em>every</em> shininess — 1.1386 at 32, 1.7333 at 2. The model can no longer emit more
+    light than arrives, and it cannot because <em>D</em> is a distribution and <em>G</em> is a
+    fraction, which are properties we can check rather than hope for.
+  </p>
+
+  <p>
+    <strong>The second result is a surprise, and it is large.</strong> Read the other end of the
+    table:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>roughness</th><th>R(v), eye at 0°</th><th>light lost</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.22</td><td>0.9976</td><td>0.2%</td></tr>
+      <tr><td>0.50</td><td>0.9158</td><td>8%</td></tr>
+      <tr><td>0.71</td><td>0.6838</td><td>32%</td></tr>
+      <tr><td>0.87</td><td>0.4587</td><td>54%</td></tr>
+      <tr><td>1.00</td><td>0.3069</td><td><strong>69%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A fully rough surface returns <strong>30.7%</strong> of the light that hits it, with Fresnel
+    set to 1 — with, that is, a surface that absorbs nothing. Where did the other 69% go?
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Single scattering forgets the second bounce</span>
+    <p><em>G</em> removes the light that hits a facet the eye cannot see. It does not then ask what
+       happened to that light — and what happened is that it hit <em>another facet</em> and
+       carried on. The model lets light bounce once and then loses interest in it.</p>
+    <p>On a smooth surface there is barely a second bounce to miss, which is why the error is 0.2%
+       at roughness 0.22. On a rough one, most of the light that leaves has bounced several times,
+       which is why it is 69% at roughness 1.0.</p>
+    <p>The visible symptom is specific and you will recognise it once named: <strong>rough metal
+       rendered this way is too dark</strong>, and it gets darker the rougher it is, in a way no
+       amount of turning the light up fixes because it is a fraction rather than an offset.</p>
+  </div>
+
+  <p>
+    This is not a bug in the implementation and it is not quadrature error. It is what
+    <em>single-scattering</em> microfacet theory <em>is</em>, and every engine that ships GGX
+    ships this deficit unless it also ships a multiple-scattering compensation term. §11 says what
+    those look like and why this course does not build one.
+  </p>
+
+  <p>
+    It is worth noticing what just happened, though: a model that is honest enough to be measured
+    told us the size of its own remaining error. Blinn-Phong could not have done that, because
+    there was no quantity to compare against.
+  </p>

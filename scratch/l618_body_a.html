@@ -1,0 +1,511 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-17-frame-graph.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-01-euler-angles.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.1 — Euler Angles and Their Pathologies</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.18</div>
+    <h1>Text and 2D Overlay Rendering</h1>
+    <p class="deck">
+      This engine can light a surface with a microfacet BRDF, sample an irradiance cube, cascade a
+      shadow map, bloom its highlights, tonemap to a display and deduce its own frame order. It
+      cannot put a single character on the screen. Every number the last seventeen lessons measured
+      went to a terminal, which means <strong>the picture and the measurement have never once been
+      on the same surface</strong>. Fixing that turns out to be three problems and only one of them
+      is about drawing. The first is <em>arithmetic</em>: a pen, a baseline, a bearing, an advance,
+      and the question of what to round — where we find that snapping a glyph's <em>position</em>
+      has an error bounded at half a pixel forever while rounding its <em>advance</em> drifts
+      <strong>4.32&nbsp;px</strong> by the end of one line, from the same rounding applied to a
+      different quantity. The second is <em>packing</em>: ninety-five glyphs into one texture, with
+      the padding argument from Lesson 6.10 arriving at magnification instead of minification — and
+      an occupancy figure that looks like a verdict on the packer and is really a fact about the
+      font. The third is the one this course has been building toward for eighteen lessons.
+      Compositing a glyph is <code>over</code>, <code>over</code> is a lerp, and a lerp must happen
+      in linear light. Get it wrong and light text on dark looks thin while dark text on light looks
+      fat — <strong>62.2%</strong> and <strong>137.8%</strong> of the correct ink, measured — and
+      both are blamed on the font. Then a second, entirely separate bug (uploading a coverage atlas
+      as <code>_SRGB</code>) turns out to produce the <em>identical number</em> on a dark background,
+      because it is the same function applied in a different file. The two are told apart by one
+      test, which this lesson derives. And the overlay is declared as a frame-graph pass — the first
+      external use of Lesson 6.17's API — with an honest report of what that did and did not catch.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-11-transparency.html">6.11 — Transparency: Masking, Blending, and Order</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear vs sRGB: The Gamma Lesson</a>,
+          <a href="06-10-mipmaps.html">6.10 — Mipmaps, Trilinear Filtering, and Anisotropy</a>,
+          <a href="06-17-frame-graph.html">6.17 — A Lightweight Frame Graph</a>,
+          <a href="04-05-vertex-buffers.html">4.5 — Vertex Buffers and Layouts</a>,
+          <a href="01-06-colour.html">1.6 — Colour, and a First Look at sRGB</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/font.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/font.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/overlay.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/overlay.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_overlay.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/gpu_overlay.cpp</code> <em>(new)</em>,
+            <code>shaders/overlay.vert.hlsl</code> <em>(new)</em>,
+            <code>shaders/overlay.frag.hlsl</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>CMakeLists.txt</code>,
+            <code>demos/hello_cube/main.cpp</code>,
+            <code>assets/fonts/Karla-Regular.ttf</code> <em>(new)</em>,
+            <code>scratch/verify_618.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can say something. <strong>98 checks green</strong>; a glyph atlas baked
+            deterministically from a real outline font; a layout whose arithmetic is checked against
+            hand arithmetic glyph by glyph; a UTF-8 decoder that refuses over-long forms; the
+            stem-weight error measured in four blend configurations with a diagnostic that
+            distinguishes two bugs which look identical; the overlay declared as a frame-graph pass
+            in one word; and the same overlay rendered by the software compositor and by SDL_GPU
+            agreeing on <strong>every pixel to within one sRGB code</strong>, with a control that
+            reports 934 differing pixels so the agreement means something. The reference render is
+            unchanged for the <strong>twenty-seventh</strong> lesson — and §12 says, for the fourth
+            time, why that is a null result and what was built instead.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a glyph is a coverage mask rather than a picture, and name the three design
+          decisions that follow from it.</li>
+      <li>…place a glyph from its metrics: pen, baseline, side bearing, advance — and say why the
+          ink box and the advance box are different rectangles.</li>
+      <li>…decide what to round in a text layout, and prove that one choice has a bounded error and
+          another accumulates.</li>
+      <li>…pack glyphs into an atlas, choose the padding from the filtering, and measure a packer
+          against something it could not have beaten.</li>
+      <li>…write a UTF-8 decoder that refuses over-long forms, surrogates and out-of-range
+          codepoints, and say why the first of those is a security bug.</li>
+      <li>…state where alpha compositing must happen in linear light, measure what the wrong space
+          costs, and recognise the artefact by name.</li>
+      <li>…distinguish two independent gamma bugs that produce identical output on a dark
+          background.</li>
+      <li>…decide whether an overlay composites before or after the tonemap, with a number rather
+          than a preference.</li>
+      <li>…declare a 2D pass in a frame graph, and report honestly what the declaration did and did
+          not buy.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine with nothing to say</a></li>
+      <li><a href="#split">What we build, and what we borrow</a></li>
+      <li><a href="#anatomy">The anatomy of a glyph</a></li>
+      <li><a href="#round">What to round, and when</a></li>
+      <li><a href="#atlas">The atlas, and measuring a packer honestly</a></li>
+      <li><a href="#utf8">Decoding, and three rules that are security bugs</a></li>
+      <li><a href="#gamma">Stem weight: the colour space of a glyph</a></li>
+      <li><a href="#where">Before the curve or after it</a></li>
+      <li><a href="#implement">Implementation: quads, a pipeline, one draw call</a></li>
+      <li><a href="#graph">The overlay as a frame-graph pass</a></li>
+      <li><a href="#instrument">The instrument, and proving it can fail</a></li>
+      <li><a href="#limits">The ninety-percent picture</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine with nothing to say</h2>
+
+  <p>
+    Count what this engine can do. It imports glTF and OBJ. It evaluates a Cook–Torrance BRDF with a
+    GGX distribution, a Smith geometry term and a Schlick Fresnel. It renders four shadow cascades
+    with percentage-closer filtering. It prefilters an environment map into a mip chain and splits
+    the specular integral in two. It runs a six-level bloom pyramid, an ACES tonemapper, 4× MSAA,
+    a frustum culler, an instanced submission path and — as of last lesson — a frame graph that
+    deduces its own pass order.
+  </p>
+
+  <p>
+    Now count what it can tell you. Nothing. Every measurement in this module went to
+    <code>stdout</code>: the cull rate in 6.16, the compile time in 6.17, the convergence of the
+    split-sum approximation in 6.15. You have been reading numbers in one window and looking at a
+    picture in another, and correlating them by hand. <strong>That is not a missing feature, it is a
+    missing sense.</strong>
+  </p>
+
+  <p>
+    There is a second absence, and it is older. Module 1 owned the 2D case completely — a
+    framebuffer, <code>put_pixel</code>, <code>fill_rect</code>, a blit — and every one of those was
+    written by hand and understood to the byte. Then Module 4 moved the renderer to the GPU and the
+    2D path did not come along, because nothing needed it. Every demo since has been a camera
+    looking at a mesh. The engine has been three-dimensional-only for fourteen lessons, and a
+    three-dimensional-only engine cannot draw a health bar, a crosshair, a menu, a subtitle or a
+    frame-time graph.
+  </p>
+
+  <div class="callout note">
+    <p class="label">What about Dear ImGui?</p>
+    <p>
+      Lesson 5.11 integrated Dear ImGui and that integration stands. But read what it is for: ImGui
+      is <em>tooling</em> — an inspector, a profiler window, a set of sliders for a developer. Its
+      own documentation is emphatic that it is not a game UI library, and the reasons are structural
+      rather than stylistic: immediate-mode widgets own their layout, their font and their style,
+      and a shipped game's HUD needs to be laid out by an artist, localised, and rendered in the
+      game's own colour pipeline. An engine that shipped ImGui as its UI would be shipping a debug
+      tool to players.
+    </p>
+    <p>
+      There is also a narrower reason that matters for this lesson specifically. ImGui bakes its own
+      atlas and composites in its own way, and both of those decisions are exactly the ones we are
+      about to examine. Using it here would mean reading somebody else's answers instead of deriving
+      them.
+    </p>
+  </div>
+
+  <h2 id="split">2. What we build, and what we borrow</h2>
+
+  <p>
+    This course applies one test to every third-party library, stated once in <code>image.hpp</code>
+    at Lesson 4.7 and applied every time since: <strong>is the hard part the subject?</strong> The
+    OBJ parser was written by hand because the hard part of OBJ is the mismatch between how a file
+    describes a vertex and how hardware fetches one, and that <em>is</em> the subject. The PNG
+    decoder was not, because the hard part of PNG is DEFLATE and five scanline filter modes, and
+    there is nothing about an engine in the fifth filter mode.
+  </p>
+
+  <p>
+    Fonts fall on the second side, and it is worth being specific, because "fonts are hard" is not
+    an argument. Turning an outline into coverage is a weekend's work: quadratic B-splines, flatten
+    to line segments, scanline fill under the non-zero winding rule, antialias by exact area. That
+    part is graphics, and if it were the whole job we would write it. It is not. The rest of the job
+    is <em>file format</em>:
+  </p>
+
+  <ul>
+    <li><code>cmap</code> subtable formats 0, 4, 6, 12 and 13 — five different encodings of "which
+        glyph is this character", any of which a font in the wild may carry, sometimes several at
+        once under different platform ids.</li>
+    <li>Composite glyphs: <code>glyf</code> entries that are <em>other</em> glyphs under a 2×2
+        affine transform with a point-matching rule, nested.</li>
+    <li>Hinting: a stack-based bytecode virtual machine, executed per glyph, whose job is to move
+        control points onto the pixel grid at small sizes.</li>
+    <li><code>GPOS</code>: a lookup-table language for pair positioning with class-based coverage,
+        which is where every font shipped in the last fifteen years puts its kerning.</li>
+  </ul>
+
+  <p>
+    So <code>stb_truetype</code> does the decode and the rasterization, in exactly one translation
+    unit, exactly as <code>stb_image</code> and <code>cgltf</code> do — and <code>font.hpp</code>
+    names no third-party type, which is the receipt that the isolation worked.
+  </p>
+
+  <p>
+    Three things we do write, because all three <em>are</em> the subject:
+  </p>
+
+  <ol>
+    <li><strong>The atlas packer.</strong> Where glyphs land in one texture, and why the padding
+        between them is not optional — Lesson 6.10's bleed argument arriving in a place where it
+        bites at magnification rather than minification.</li>
+    <li><strong>The layout.</strong> Pen, baseline, bearing, advance, kerning, and the question of
+        what to round. This is where text is won or lost.</li>
+    <li><strong>The compositing.</strong> Which is a blend equation and a colour space, and this
+        course has spent six lessons earning opinions about both.</li>
+  </ol>
+
+  @@FIG_SPLIT@@
+
+  <p>
+    Figure 1 shows the shape the three files take, and the shape is load-bearing rather than tidy.
+    <code>font.hpp</code> produces a grid of coverage bytes and some metrics.
+    <code>overlay.hpp</code> turns strings and rectangles into quads in pixel space. Neither of them
+    mentions SDL_GPU. Only the third file does — and that is why <code>hello_cube</code>, a
+    two-hundred-line demo with no GPU device at all, gets text by adding twenty lines, and why §11
+    can render the same batch two ways and compare every channel.
+  </p>
+
+  <h2 id="anatomy">3. The anatomy of a glyph</h2>
+
+  <p>
+    Start with what a font actually stores, because almost every early text bug is a confusion
+    between two rectangles that happen to have the same size.
+  </p>
+
+  <p>
+    A glyph, rasterized at a size, is a small bitmap of <em>coverage</em>: one number per texel
+    saying what fraction of that texel is inside the outline. Zero is outside, 255 is fully inside,
+    and everything between is an edge. That bitmap has a position in the atlas — a rectangle in
+    texels — and it has a position <em>on the line</em>, which is an entirely separate rectangle
+    described relative to a moving point called the <strong>pen</strong>.
+  </p>
+
+  <p>
+    The pen sits on the <strong>baseline</strong>, the invisible line letters stand on. Three numbers
+    carry the glyph from the pen to the page:
+  </p>
+
+  <ul>
+    <li><code>offset_x</code>, the <em>left side bearing</em>: how far right of the pen the ink
+        starts. Usually small and positive; <em>negative</em> for glyphs that lean out of their own
+        box.</li>
+    <li><code>offset_y</code>: how far <em>below</em> the pen the ink starts, with +y pointing down.
+        Almost always negative, because a letter's ink is above the baseline. This is the single
+        most surprising number in the file.</li>
+    <li><code>advance</code>: how far the pen moves afterwards. <strong>Not the width of the
+        ink.</strong></li>
+  </ul>
+
+  @@FIG_GLYPH@@
+
+  <p>
+    Here are four real glyphs from the font this engine ships — Karla, at a requested 16 px —
+    printed by the harness rather than transcribed from a drawing:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>glyph</th><th>ink w</th><th>ink h</th><th><code>offset_x</code></th>
+          <th><code>offset_y</code></th><th><code>advance</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>H</code></td><td>7</td><td>9</td><td>+1.0</td><td>−9.0</td><td>9.1565</td></tr>
+      <tr><td><code>g</code></td><td>8</td><td>12</td><td>0.0</td><td>−8.0</td><td>7.7331</td></tr>
+      <tr><td><code>j</code></td><td>5</td><td>14</td><td><strong>−2.0</strong></td><td>−10.0</td>
+          <td>4.2977</td></tr>
+      <tr><td><code>.</code></td><td>3</td><td>3</td><td>0.0</td><td>−2.0</td><td>2.4500</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read the row for <code>j</code>. Its advance is 4.2977 px and its ink is 5 px wide, starting
+    2 px <em>left</em> of the pen. A <code>j</code> therefore draws outside its own advance box in
+    both directions. Any code that sizes a background panel from a string's advance width and then
+    clips to it will clip the descender off the <code>j</code> in "adjust", and the bug will look
+    like a font problem.
+  </p>
+
+  <p>
+    That is why <code>text_metrics</code> reports two widths. <code>width</code> is where the pen
+    ended up; <code>ink_x0</code> and <code>ink_x1</code> are where the pixels actually went. For
+    the string <code>"AVIi"</code> the harness measures an advance width of 23.1172 px and an ink
+    extent of 22.0248 px, and those are different numbers for a reason, not by rounding.
+  </p>
+
+  <h3>3.1 The size you asked for is not the size you got</h3>
+
+  <p>
+    Ask <code>stb_truetype</code> for a "16 px" font and it scales the outlines so that
+    <em>ascent minus descent</em> is 16 px. That is what <code>stbtt_ScaleForPixelHeight</code>
+    means, and it is what a UI toolkit means by a 16 px font. It is <em>not</em> the em square.
+  </p>
+
+  <p>
+    Karla's <code>hhea</code> table says ascent 917 and descent −252 in a 1000-unit em. So
+    ascent − descent is 1169 units, which is 1.169 em, and:
+  </p>
+
+  <p class="eq-plain">
+    em square = 16 px × 1000 / 1169 = <strong>13.6869 px</strong>
+  </p>
+
+  <p>
+    A font whose ascent and descent happened to sum to exactly one em would give 16 px for the same
+    request, and its glyphs would look noticeably larger beside Karla's at the same nominal size.
+    This is the whole explanation for "why does 14 pt look different in every application", and it
+    is not a bug in any of them. The harness asserts both numbers.
+  </p>
+
+  <p>
+    While we are in the vertical metrics: Karla's suggested <code>line_gap</code> is <strong>zero
+    </strong>. A great many fonts report zero here, so a renderer that computes line spacing as
+    <code>line_gap</code> alone produces lines that touch. The correct expression is
+    <code>ascent − descent + line_gap</code>, and the subtraction is not a typo — <code>descent</code>
+    is negative.
+  </p>
+
+  <h3>3.2 Kerning, and where the data actually lives</h3>
+
+  <p>
+    Some pairs of letters look wrong at their nominal advances. <code>AV</code> is the canonical
+    example: the diagonal of the <code>A</code> and the diagonal of the <code>V</code> leave a
+    visible gap that neither letter is responsible for. A font ships a table of corrections, and
+    ours moves <code>AV</code> together by <strong>0.3832 px</strong> at 16 px.
+  </p>
+
+  <p>
+    The interesting part is where that table lives, because there are two mechanisms and one of them
+    is dead. The legacy <code>kern</code> table is what every tutorial written before about 2010
+    reads. <code>GPOS</code> — the OpenType layout table — is where every font shipped since puts
+    it. <strong>The font this engine ships has no <code>kern</code> table at all</strong>, which we
+    verified by reading its table directory. A naive reader of <code>kern</code>, or a version of
+    <code>stb_truetype</code> before 1.19, returns zero for every pair in it, and the symptom is
+    "kerning does nothing" with no error anywhere to chase.
+  </p>
+
+  <p>
+    The table is <strong>sparse, and the sparsity was measured rather than assumed</strong>. Over
+    printable ASCII there are 95 × 95 = 9,025 ordered pairs; 186 of them are non-zero. That is
+    2.06%, so a dense table would be 97.9% zeros — 36,100 bytes against 2,232 for a sorted list of
+    pairs, and the dense form grows as the <em>square</em> of the character set the moment anybody
+    wants Cyrillic.
+  </p>
+
+  <h3>3.3 Digits are not tabular, and a HUD is the case where that matters</h3>
+
+  <p>
+    Here is a thing about proportional fonts that almost no text-rendering tutorial mentions and
+    that bites immediately when the first thing you draw is a frame-time readout. Karla's digit
+    advances at 16 px:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th>
+          <th>8</th><th>9</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>8.130</td><td><strong>4.530</strong></td><td>7.938</td><td>8.089</td><td>7.651</td>
+          <td>7.733</td><td>7.843</td><td>6.433</td><td><strong>8.418</strong></td>
+          <td>7.952</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The spread from <code>1</code> to <code>8</code> is 3.887 px — on a 16 px font, nearly a quarter
+    of the line height. So <code>"11.1 ms"</code> measures 39.2951 px and <code>"88.8 ms"</code>
+    measures 50.9564 px, and a counter that moves between them <strong>changes width by 11.66 px,
+    sixty times a second</strong>. The effect is that your frame-time display appears to breathe,
+    and if it is right-aligned, every character in it jitters.
+  </p>
+
+  <p>
+    The fix is one option flag. <code>text_layout_options::tabular_digits</code> lays digits out on
+    a fixed pitch equal to the widest digit's advance, and centres each digit inside its cell so a
+    narrow <code>1</code> does not hug the left of its column. With it on, the two strings measure
+    the same to the last bit — the harness asserts a difference of exactly 0.0000. Most text has no
+    business being laid out this way; a numeric readout is precisely the case that does.
+  </p>
+
+  <div class="callout note">
+    <p class="label">Why not just use a monospace font?</p>
+    <p>
+      You can, and for a debug overlay it is a reasonable call — the engine's own
+      <code>font_bake_options</code> is happy to bake one. But notice that "monospace" solves this
+      problem by making <em>every</em> glyph the same width, which is a much larger hammer than the
+      problem needs and costs you the readability of proportional text for the labels beside the
+      numbers. Tabular figures give you both, and most professionally-drawn fonts ship a tabular
+      variant of the digits for exactly this reason, selectable through an OpenType feature that we
+      do not read and <code>stb_truetype</code> does not expose. Our version computes the pitch from
+      the widest digit, which is the same idea implemented at the layout instead of in the font.
+    </p>
+  </div>
+
+  <h2 id="round">4. What to round, and when</h2>
+
+  <p>
+    A glyph's bitmap is a grid of texels. The screen is a grid of pixels. If those two grids line up
+    — one texel per pixel, both on integer boundaries — the blit copies coverage values directly and
+    the text is exactly as crisp as the rasterizer made it. If they do not line up, the sampler
+    interpolates, and interpolation is a low-pass filter applied to an image whose entire value is
+    its high frequencies. The text goes soft.
+  </p>
+
+  <p>
+    So glyph quads should land on integer pixel boundaries. The question is <em>how</em> you achieve
+    that, and there are two ways that look equivalent and are not.
+  </p>
+
+  <p class="eq-plain">
+    <strong>Snap the position:</strong> let the pen accumulate in floating point, and round each
+    glyph's top-left corner as you emit its quad.<br>
+    <strong>Round the advance:</strong> round each glyph's advance to a whole number of pixels, so
+    the pen is always integral.
+  </p>
+
+  <p>
+    The second is tempting because it is simpler — if the pen is always an integer, nothing else
+    needs rounding. It is also wrong, and the reason is that <strong>the two roundings apply to
+    different quantities and therefore compose differently</strong>. Snapping the position discards
+    the fraction <em>for display only</em>; the pen keeps it, so the error at glyph <em>n</em> is
+    independent of the error at glyph <em>n</em>−1 and is bounded by half a pixel forever. Rounding
+    the advance discards the fraction <em>from the accumulator</em>, so each error is added to the
+    next one. It is a random walk.
+  </p>
+
+  @@FIG_SNAP@@
+
+  <p>
+    Figure 3 is that prediction, measured over a real line — 45 glyphs of
+    <code>"the quick brown fox jumps over the lazy dog, and again."</code> at 16 px. The green
+    series never leaves the shaded half-pixel band, worst case 0.4765 px. The red series wanders
+    down past four pixels by glyph 25 and is still <strong>4.3216 px</strong> out at the end of the
+    line — which reads as a word that has drifted away from the column you carefully lined it up
+    with, and which gets worse the longer the line.
+  </p>
+
+  <p>
+    The implementation is three lines, and they are worth reading for what is <em>not</em> in them:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">engine/src/gfx/font.cpp — the snap</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">float qx = x + centring + g-&gt;offset_x;
+float qy = y + g-&gt;offset_y;
+if (options.snap_to_pixel)
+{
+    qx = std::floor(qx + 0.5f);
+    qy = std::floor(qy + 0.5f);
+}
+// ... emit the quad at (qx, qy) ...
+x += advance + options.tracking;   // &lt;- `x` was never rounded
+</code></pre>
+</figure>
+
+  <p>
+    <code>x</code> is the pen and it is never touched. <code>qx</code> is a local derived from it and
+    thrown away. That is the entire difference between the two curves in Figure 3.
+  </p>
+
+  <div class="callout warn">
+    <p class="label">The half-texel offset that fixes the wrong thing</p>
+    <p>
+      There is a famous "fix" for blurry text, usually written as adding 0.5 to the texture
+      coordinates or subtracting 0.5 from the vertex positions. It comes from Direct3D 9's
+      pixel-centre convention and it survives in tutorials thirty years later. It is
+      <em>correct</em> for a renderer whose pixel centres are at integers — and wrong for every
+      modern API, where they are at half-integers, including SDL_GPU.
+    </p>
+    <p>
+      Our quads carry no offset at all: a glyph spans exactly <code>width()</code> pixels and
+      exactly <code>width()</code> texels, and the half-open texel range divided by the atlas size
+      puts the sampler's pixel centres exactly on texel centres. If your text is blurry, the
+      question to ask is not "am I missing a half-texel" but <strong>"is my quad on the pixel
+      grid"</strong> — and if the answer is no, adding half a texel moves the blur around rather
+      than removing it.
+    </p>
+  </div>

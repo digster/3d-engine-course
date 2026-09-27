@@ -1,0 +1,79 @@
+<svg viewBox="0 0 980 560" role="img" aria-labelledby="f89e-t f89e-d">
+  <title id="f89e-t">The friction cone, and the square that circumscribes it</title>
+  <desc id="f89e-d">Left: the admissible set for the tangential impulse. Coulomb's condition is a disc of radius mu times the normal impulse; clipping each tangent component independently gives a square that circumscribes it, so up to the square root of two times as much friction is available along the diagonals. Right: a polar plot of measured sliding distance against sliding direction. The cone model is a perfect circle; the box model is a four-lobed figure whose shortest radius is 0.70 of its longest, matching one over root two.</desc>
+  <defs>
+    <marker id="e-i-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-grey-f89e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="66" y="40" class="sm" text-anchor="start">The admissible set for the tangential impulse</text>
+<text x="66" y="58" class="xs muted" text-anchor="start">in the contact plane, in units of μ·j_n</text>
+<line x1="50.0" y1="262.0" x2="390.0" y2="262.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<line x1="220.0" y1="92.0" x2="220.0" y2="432.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<text x="396" y="266" class="xs muted" text-anchor="start">t₁</text>
+<text x="220" y="84" class="xs muted" text-anchor="middle">t₂</text>
+<rect x="90" y="132" width="260" height="260" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<circle cx="220" cy="262" r="130" fill="none" stroke="#5ac878" stroke-width="2.4"/>
+<line x1="220.00" y1="262.00" x2="350.00" y2="132.00" stroke="#f0961e" stroke-width="2.0" marker-end="url(#e-amber-f89e)"/>
+<text x="360" y="124" class="xs" text-anchor="start">√2 · μ·j_n</text>
+<line x1="220.00" y1="262.00" x2="350.00" y2="262.00" stroke="#8f918a" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-grey-f89e)"/>
+<text x="360" y="282" class="xs muted" text-anchor="start">μ·j_n</text>
+<line x1="66.0" y1="444.0" x2="86.0" y2="444.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="94" y="448" class="xs" text-anchor="start">cone: |j_t| ≤ μ·j_n — a disc, and round</text>
+<line x1="66.0" y1="461.0" x2="86.0" y2="461.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="94" y="465" class="xs" text-anchor="start">box: each axis clipped alone — a square, and not</text>
+<text x="540" y="48" class="sm" text-anchor="start">What that costs, measured</text>
+<text x="540" y="66" class="xs muted" text-anchor="start">sliding distance of a 5 kg crate at 4 m/s, μ = 0.50, by direction</text>
+<circle cx="700" cy="252" r="93.3" fill="none" stroke="#8f918a" stroke-width="1.0" stroke-dasharray="4 4"/>
+<line x1="544.0" y1="252.0" x2="856.0" y2="252.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<line x1="700.0" y1="96.0" x2="700.0" y2="408.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<circle cx="700" cy="252" r="132.0" fill="none" stroke="#5ac878" stroke-width="2.4"/>
+<path d="M 832.00,252.00 L 824.58,227.33 L 805.34,208.37 L 782.54,196.75 L 765.44,186.56 L 755.11,169.37 L 743.63,146.66 L 724.67,127.42 L 700.00,120.00 L 675.33,127.42 L 656.37,146.66 L 644.75,169.46 L 634.56,186.56 L 617.37,196.89 L 594.66,208.37 L 575.42,227.33 L 568.00,252.00 L 575.42,276.67 L 594.66,295.63 L 617.46,307.25 L 634.56,317.44 L 644.89,334.63 L 656.37,357.34 L 675.33,376.58 L 700.00,384.00 L 724.67,376.58 L 743.63,357.34 L 755.25,334.54 L 765.44,317.44 L 782.63,307.11 L 805.34,295.63 L 824.58,276.67 Z" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<circle cx="832.0" cy="252.0" r="2.4" fill="#e05c5c"/>
+<circle cx="824.6" cy="227.3" r="2.4" fill="#e05c5c"/>
+<circle cx="805.3" cy="208.4" r="2.4" fill="#e05c5c"/>
+<circle cx="782.5" cy="196.7" r="2.4" fill="#e05c5c"/>
+<circle cx="765.4" cy="186.6" r="2.4" fill="#e05c5c"/>
+<circle cx="755.1" cy="169.4" r="2.4" fill="#e05c5c"/>
+<circle cx="743.6" cy="146.7" r="2.4" fill="#e05c5c"/>
+<circle cx="724.7" cy="127.4" r="2.4" fill="#e05c5c"/>
+<circle cx="700.0" cy="120.0" r="2.4" fill="#e05c5c"/>
+<circle cx="675.3" cy="127.4" r="2.4" fill="#e05c5c"/>
+<circle cx="656.4" cy="146.7" r="2.4" fill="#e05c5c"/>
+<circle cx="644.7" cy="169.5" r="2.4" fill="#e05c5c"/>
+<circle cx="634.6" cy="186.6" r="2.4" fill="#e05c5c"/>
+<circle cx="617.4" cy="196.9" r="2.4" fill="#e05c5c"/>
+<circle cx="594.7" cy="208.4" r="2.4" fill="#e05c5c"/>
+<circle cx="575.4" cy="227.3" r="2.4" fill="#e05c5c"/>
+<circle cx="568.0" cy="252.0" r="2.4" fill="#e05c5c"/>
+<circle cx="575.4" cy="276.7" r="2.4" fill="#e05c5c"/>
+<circle cx="594.7" cy="295.6" r="2.4" fill="#e05c5c"/>
+<circle cx="617.5" cy="307.3" r="2.4" fill="#e05c5c"/>
+<circle cx="634.6" cy="317.4" r="2.4" fill="#e05c5c"/>
+<circle cx="644.9" cy="334.6" r="2.4" fill="#e05c5c"/>
+<circle cx="656.4" cy="357.3" r="2.4" fill="#e05c5c"/>
+<circle cx="675.3" cy="376.6" r="2.4" fill="#e05c5c"/>
+<circle cx="700.0" cy="384.0" r="2.4" fill="#e05c5c"/>
+<circle cx="724.7" cy="376.6" r="2.4" fill="#e05c5c"/>
+<circle cx="743.6" cy="357.3" r="2.4" fill="#e05c5c"/>
+<circle cx="755.3" cy="334.5" r="2.4" fill="#e05c5c"/>
+<circle cx="765.4" cy="317.4" r="2.4" fill="#e05c5c"/>
+<circle cx="782.6" cy="307.1" r="2.4" fill="#e05c5c"/>
+<circle cx="805.3" cy="295.6" r="2.4" fill="#e05c5c"/>
+<circle cx="824.6" cy="276.7" r="2.4" fill="#e05c5c"/>
+<text x="842.0" y="242" class="xs" text-anchor="start">1.598 m</text>
+<line x1="634.6" y1="317.4" x2="552.0" y2="390.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<text x="548" y="394" class="xs" text-anchor="end">1.120 m</text>
+<text x="767.2037344" y="178.7962656" class="xs muted" text-anchor="middle">1/√2 predicted</text>
+<text x="540" y="438" class="xs" text-anchor="start">Over 361 directions the box model spreads 42.68%</text>
+<text x="540" y="454" class="xs" text-anchor="start">and the cone 0.00%. The extreme ratio is 0.70085</text>
+<text x="540" y="470" class="xs" text-anchor="start">against a predicted 1/√2 = 0.70711. The tangent</text>
+<text x="540" y="486" class="xs" text-anchor="start">basis was chosen from the normal's smallest</text>
+<text x="540" y="502" class="xs" text-anchor="start">component, so under the box model a floor</text>
+<text x="540" y="518" class="xs" text-anchor="start">decides which way is slippery.</text>
+<text x="66" y="546" class="xs muted" text-anchor="start">§7 and harness §F. The cone costs 8.9 ns per manifold more than the box — 6.8% — to remove a 43% anisotropy.</text>
+</svg>

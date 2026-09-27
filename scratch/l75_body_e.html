@@ -1,0 +1,430 @@
+  <h2 id="listings">9. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. It is a long list because a storage change
+    is a long list — that is the honest cost of narrowing a type that fifteen files touch, and
+    showing it is more useful than describing it. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/math/quat.hpp</code></td><td>modified</td>
+          <td><code>nearest</code>, <code>quat_pow_unit</code>, <code>quat_slerp</code>,
+              <code>quat_nlerp</code> — and <code>angle_between</code> rewritten with
+              <code>atan2</code>, with <code>angle_between_by_cosine</code> kept beside it so §7.3
+              can measure the two.</td></tr>
+      <tr><td><code>engine/include/engine/math/transform.hpp</code></td><td>modified</td>
+          <td><code>rotation</code> becomes a <code>quat</code>; <code>parent_from_local</code> gains
+              one line; and <code>transform_from_affine</code> arrives, because three places were
+              doing that job and two were doing it wrong.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/renderable.hpp</code></td><td>modified</td>
+          <td><code>renderable_report::skewed</code>, and a doc comment that no longer describes a
+              trick as a design.</td></tr>
+      <tr><td><code>engine/src/gfx/renderable.cpp</code></td><td>modified</td>
+          <td>One call to the new decomposition, and the shear counted.</td></tr>
+      <tr><td><code>engine/include/engine/ecs/camera.hpp</code></td><td>modified</td>
+          <td><code>look_along</code> narrows its three columns. One function call, no
+              arithmetic.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/scene.hpp</code></td><td>modified</td>
+          <td><code>model_matrix</code>'s R factor is built the way
+              <code>parent_from_local</code> builds it.</td></tr>
+      <tr><td><code>demos/common/demo_scene.cpp</code></td><td>modified</td>
+          <td>Eight placements. The golden render's subject, so the one that had to be checked
+              rather than reasoned about.</td></tr>
+      <tr><td><code>demos/hello_cube/main.cpp</code></td><td>modified</td>
+          <td>Two composed turns, now 16 multiplies instead of 27.</td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>transform_of</code> loses its body to the engine and keeps its comment — it was
+              the version that was already right — and now warns when it drops shear.</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td>
+          <td>The <code>mat3</code> trick, second instance, replaced by the engine's
+              decomposition.</td></tr>
+      <tr><td><code>demos/collector/main.cpp</code></td><td>modified</td>
+          <td>The camera boom becomes two entities — §8.4 — and the carousel gains a
+              <code>renormalised_fast</code>.</td></tr>
+      <tr><td><code>demos/gimbal/main.cpp</code></td><td>modified</td>
+          <td><kbd>S</kbd>: the schedule mode, plus <code>--schedule</code> for reproducible
+              stills.</td></tr>
+      <tr><td><code>scratch/verify_75.cpp</code></td><td>new</td>
+          <td>Forty-two checks in nine sections, twelve of them controls.</td></tr>
+      <tr><td><code>scratch/build_verify_75.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness. It links nothing.</td></tr>
+      <tr><td><code>scratch/golden_75.cpp</code></td><td>new</td>
+          <td>The reference render, byte-compared. A real instrument this time: four of the files
+              above are in its closure.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/quat.hpp@@
+
+  @@LISTING:engine/include/engine/math/transform.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/renderable.hpp@@
+
+  @@LISTING:engine/src/gfx/renderable.cpp@@
+
+  @@LISTING:engine/include/engine/ecs/camera.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/scene.hpp@@
+
+  @@LISTING:demos/common/demo_scene.cpp@@
+
+  @@LISTING:demos/hello_cube/main.cpp@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+
+  @@LISTING:demos/collector/main.cpp@@
+
+  @@LISTING:demos/gimbal/main.cpp@@
+
+  @@LISTING:scratch/verify_75.cpp@@
+
+  @@LISTING:scratch/build_verify_75.sh@@
+
+  @@LISTING:scratch/golden_75.cpp@@
+
+  <h2 id="run">10. Build &amp; run</h2>
+
+  <h3>10.1 Everything</h3>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+
+# Windows (MSVC), from a Developer Command Prompt
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>
+    <strong>Build everything, not just one target.</strong> This is the one lesson in Module 7 where
+    that matters: the swap touches five demos, and a demo that is not built is a demo whose call
+    sites have not been checked. The whole tree must compile clean at <code>-Wall -Wextra</code>
+    (<code>/W4</code>).
+  </p>
+
+  <p>
+    No header was added, so the configure-time umbrella lint has nothing to say this time. It still
+    prints its line, and it is still worth reading:
+  </p>
+
+  <pre>-- engine: umbrella lists 82 of 83 public headers
+--   (1 documented exception)</pre>
+
+  <h3>10.2 The demo</h3>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/gimbal
+
+# the schedule, frozen at the worst t
+./build/demos/gimbal --schedule 0.229 --shot out.ppm
+
+# and at the midpoint, where the two interpolations are one function
+./build/demos/gimbal --schedule 0.5 --shot out.ppm</code></pre>
+
+  <p><strong>What you should see.</strong> The demo opens exactly as Lesson 7.4 left it. Then:</p>
+
+  <ul>
+    <li>Press <kbd>S</kbd>. The rings disappear, the camera pulls back, and a circle appears with
+        two rows of ticks on it. <strong>Look at the two rows before anything moves.</strong> The
+        outward row is evenly spaced; the inward row is bunched at both ends and spread through the
+        middle. That is the whole of the difference between slerp and nlerp, and it is a picture
+        rather than a paragraph.</li>
+    <li>Watch the blend run. The pale blue and amber markers travel the same circle at different
+        speeds, meet <em>exactly</em> at the halfway point, and part again. The panel prints the gap
+        as it goes: it peaks at <code>4.5140°</code> around <code>t = 0.229</code>, returns to
+        <code>0.0000°</code> at <code>t = 0.5</code>, and peaks again at <code>t = 0.771</code>.</li>
+    <li>Find the magenta marker. It is going the other way round, and it arrives at the same place
+        having turned <strong>210°</strong> instead of 150 — one missing comparison, drawn.</li>
+    <li>The teal axis line is a <em>dot</em> at the centre of the circle. That is not a bug: the
+        axis points at the camera on purpose, so that the ticks can be read with a ruler (§7.1).</li>
+    <li>Press <kbd>S</kbd> again to leave, then <kbd>B</kbd>, <kbd>C</kbd>, <kbd>D</kbd> for the
+        earlier modes. All four are mutually exclusive and each restores its own camera.</li>
+  </ul>
+
+  <h3>10.3 The harness</h3>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_75.sh</code></pre>
+
+  <p>
+    It links nothing — everything this lesson adds to <code>math/</code> is <code>inline</code> in a
+    header — and takes a few seconds, most of it in §D's 20,000-pair sweeps. The last two lines
+    should read:
+  </p>
+
+  <pre>42 / 42 checks passed</pre>
+
+  <p>
+    Lesson 7.4's and 7.3's harnesses must still pass too, and that is not a formality this time:
+    <code>angle_between</code> changed, and both of them use it.
+  </p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_74.sh   # 42 / 42
+sh scratch/build_verify_73.sh   # 43 / 43</code></pre>
+
+  <h3>10.4 The golden, and it is a real instrument</h3>
+
+  <pre><code class="lang-bash">python3 scratch/closure_75.py \
+    engine/include/engine/math/transform.hpp \
+    engine/include/engine/math/quat.hpp \
+    demos/common/demo_scene.cpp
+
+cmake --build build --target demo_common engine
+c++ -std=c++20 -Wall -Wextra -O2 \
+    -I engine/include -I demos/common -I build/_deps/sdl3-src/include \
+    scratch/golden_75.cpp \
+    build/demos/libdemo_common.a build/engine/libengine.a build/libimgui.a \
+    -L build/_deps/sdl3-build -lSDL3 \
+    -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/demos/golden_75
+./build/demos/golden_75          # FROM THE REPOSITORY ROOT</code></pre>
+
+  <p>
+    <strong>The binary goes in <code>build/demos/</code> and the command is run from the root</strong>,
+    and those are two separate requirements that have each cost a lesson. The binary's location is
+    the asset search path (<code>SDL_GetBasePath</code>, Lesson 3.5), and the working directory is
+    where <code>scratch/</code> is. Expect:
+  </p>
+
+  <pre>golden_75: rc=0  ours=1382416 bytes  reference=1382416 bytes
+golden_75: identical=YES</pre>
+
+  <h2 id="pitfalls">11. Common pitfalls &amp; debugging</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>A character spins nearly all the way round between two adjacent keyframes, once, and
+            then carries on normally.</td>
+        <td>The two keyframes are stored with opposite signs, and the blend has no shortest-arc
+            comparison. <code>q</code> and <code>−q</code> are the same pose and opposite
+            points.</td>
+        <td><code>nearest(a, b)</code> before the difference is formed. §6.3. Half of all pairs need
+            it, so if you have hit it once you will hit it again.</td>
+      </tr>
+      <tr>
+        <td>A blend looks fine in the unit tests and lurches on screen.</td>
+        <td>The tests sample <code>t = 0</code>, <code>0.5</code> and <code>1</code>, which are
+            precisely the three values at which nlerp and slerp are the same function.</td>
+        <td>Sample <code>t = 0.229</code> and <code>0.771</code>, where the gap is maximal. §7.1.</td>
+      </tr>
+      <tr>
+        <td>An entire character vanishes for one frame.</td>
+        <td>A <code>NaN</code> pose propagating down the skeleton. The textbook slerp divides by
+            <code>sin Ω</code>, and <code>Ω</code> comes from an <code>acos</code> that returns
+            exactly 0 below an arc of <strong>0.0280°</strong>.</td>
+        <td>Use the <code>a·(a⁻¹b)ᵗ</code> form, whose ratio <code>sin(tθ/2)/sin(θ/2)</code> tends
+            to <code>t</code> and needs no guard. §7.4.</td>
+      </tr>
+      <tr>
+        <td>A path-length or error measurement reports a number that is impossible (a geodesic
+            shorter than the straight line between its ends).</td>
+        <td>An <code>acos</code>-based metric being asked for small angles. Its floor is
+            <code>2√(2·eps) = 0.0560°</code> and its error is biased, so it accumulates.</td>
+        <td>Measure with <code>atan2(|v|, |w|)</code>, or with a chord. §7.3. This is the fourth
+            appearance of this trap in Module 7.</td>
+      </tr>
+      <tr>
+        <td>A test table shows a broken function scoring a perfect <code>0.0000e+00</code>.</td>
+        <td>The worst error is accumulated with <code>std::max</code>, and every comparison against
+            <code>NaN</code> is false, so <code>std::max(x, NaN) == x</code>.</td>
+        <td>Count non-finite results separately; never let one into a maximum. §7.4.</td>
+      </tr>
+      <tr>
+        <td>After the swap, an object is inside-out.</td>
+        <td>A negative scale. The decomposition read the column lengths, which are non-negative, and
+            threw the determinant's sign away.</td>
+        <td>Check <code>determinant(linear) &lt; 0</code> and put the sign back on one scale
+            component. §8.5, step 2.</td>
+      </tr>
+      <tr>
+        <td>A flattened object (scale 0 on one axis) comes back rotated as well as flat.</td>
+        <td>The zero column was replaced by the <em>parent's</em> axis, which is not perpendicular to
+            the other two, so the extraction is wrong in all three columns.</td>
+        <td>Rebuild the missing column as the cross product of the surviving pair. §8.6.</td>
+      </tr>
+      <tr>
+        <td>A child object is subtly the wrong shape, and only when its parent is scaled.</td>
+        <td>Shear. A non-uniformly scaled parent with a rotated child produces a world matrix that is
+            not (rotation × axis-aligned scale), and no <code>transform</code> can hold it.</td>
+        <td>Read <code>renderable_report::skewed</code>. Then either make the parent's scale uniform,
+            or split the node in two (§8.4), or bake the scale into the mesh.</td>
+      </tr>
+      <tr>
+        <td>An orientation stepped every frame slowly stops being a rotation.</td>
+        <td>Accumulated rounding. The field is an accumulator, so its own previous value is an
+            input.</td>
+        <td><code>renormalised_fast</code> once per step — one subtract, five multiplies, no
+            <code>sqrt</code>. Only for accumulators; a field rebuilt from an angle each frame needs
+            nothing. §8.2.</td>
+      </tr>
+      <tr>
+        <td>The blend takes the right path but arrives early or late.</td>
+        <td>nlerp on too large an arc. Its schedule error peaks at <code>t ≈ 0.23</code> and
+            <code>0.77</code>.</td>
+        <td>Under <strong>73.50°</strong> of arc it stays within half a degree — use it. Over that,
+            use slerp, or subdivide the arc. §5.4.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="exercises">12. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Take the long way on purpose.</strong> A turntable that has to spin 350° the
+        <em>long</em> way cannot use <code>quat_slerp</code>, because <code>nearest</code> will turn
+        it into 10° the short way. Write <code>quat_slerp_long(a, b, t)</code>, which takes the
+        other arc.</p>
+      <p><em>Hint:</em> it is <code>quat_slerp</code> with <code>nearest(a, b)</code> replaced by
+        its opposite. <em>Sketch:</em> <code>const quat away = -nearest(a, b);</code> then the same
+        three steps. Check with <code>travelled()</code> that the two versions sum to 360°, and think
+        about what happens when the poses are identical. Lesson 7.3's Exercise 4 asked for the same
+        function in the plane; compare the two and note that the plane's version had no sign to
+        remove.</p>
+    </li>
+    <li>
+      <p><strong>Find the crossover for your own budget.</strong> §5.4 reports 73.50° for a
+        half-degree budget. Write a loop that finds the arc for budgets of 0.1°, 0.25°, 1° and 2°,
+        and plot arc against budget.</p>
+      <p><em>Hint:</em> the harness's <code>H.3</code> does the 0.5° case; generalise it.
+        <em>What to notice:</em> the relationship is not linear, and it is not quite a square root
+        either. Derive why from §5.3's <code>φ(t)</code> and check your derivation against the
+        table.</p>
+    </li>
+    <li>
+      <p><strong>Break the metric deliberately.</strong> Rebuild the harness with
+        <code>angle_between</code> swapped for <code>angle_between_by_cosine</code> throughout, and
+        record which checks fail and by how much.</p>
+      <p><em>What to notice:</em> §C's path integral fails loudly and §D's table barely moves,
+        because D measures a <em>separation</em> and C measures a sum of <em>steps</em>. That is the
+        whole of §7.3's lesson, arrived at from the other end: the formula is fine for the question
+        7.4 was asking and wrong for the question 7.5 asks.</p>
+    </li>
+    <li>
+      <p><strong>Interpolate a whole transform.</strong> Write
+        <code>transform_slerp(const transform&amp; a, const transform&amp; b, float t)</code>:
+        <code>lerp</code> the position, <code>quat_slerp</code> the rotation,
+        <code>lerp</code> the scale.</p>
+      <p><em>Why it is not in the engine yet:</em> nothing has asked for it. Lesson 7.7 will, when it
+        blends two animation clips, and it will want to know whether scale should be lerped or
+        <em>geometrically</em> interpolated (<code>a·(b/a)ᵗ</code>) — try both on a scale going from
+        1 to 8 and say which looks like a smooth growth.</p>
+    </li>
+    <li>
+      <p><strong>Make the shear visible.</strong> Build a scene with a parent scaled
+        <code>(2, 0.5, 1)</code> and a child yawed 40°, and put a cube on the child. Read
+        <code>renderable_report::skewed</code>, then render it twice — once through the software
+        renderer (which goes through <code>transform</code>) and once through Module 6's GPU path
+        (which keeps the <code>mat4</code>).</p>
+      <p><em>What to notice:</em> the two pictures differ, and the GPU one is the correct one. That
+        is §8.7's argument as a pair of screenshots rather than a paragraph — and it is the strongest
+        case for <code>scene_object</code> holding a matrix.</p>
+    </li>
+    <li>
+      <p><strong>Engine challenge: detect the sign problem at load time.</strong> Write a pass over
+        an animation clip's quaternion keyframes that makes their signs consistent — for each
+        keyframe after the first, negate it if its dot product with the previous one is negative.</p>
+      <p><em>Why this is the real fix:</em> <code>nearest</code> inside <code>quat_slerp</code>
+        repairs the symptom at every call, for ever. One pass at load time repairs the cause once.
+        Then ask the harder question: is the pass always correct? Construct a clip where it is
+        <em>not</em> — one that genuinely rotates more than 180° between two keyframes — and say what
+        an exporter should have done instead.</p>
+    </li>
+  </ol>
+
+  <h2 id="recap">13. Recap &amp; next</h2>
+
+  <p>
+    <strong>The engine can blend two orientations.</strong> That sentence is the whole of Module 7's
+    purpose, and everything before it was construction: 7.1 showed why three angles cannot do it,
+    7.2 found the single turn and the geodesic, 7.3 proved in the plane that four components are
+    forced, and 7.4 built them. This lesson spent three lines cashing that in, and the other five
+    hours on the two things three lines do not cover.
+  </p>
+
+  <p><strong>What the engine gained:</strong></p>
+  <ul>
+    <li><code>quat_slerp</code> and <code>quat_nlerp</code>, with <code>nearest</code> and
+        <code>quat_pow_unit</code> underneath — the shortest arc, at constant speed, with no
+        singularity and no small-angle special case.</li>
+    <li>A metric that works at the scale a path integral asks questions at, and the old one kept
+        beside it as an instrument rather than deleted.</li>
+    <li><code>transform::rotation</code> as four floats, which is what Lesson 7.6's skeleton will
+        hold a hundred of per character.</li>
+    <li><code>transform_from_affine</code>, and a runtime count of the objects whose placement the
+        struct cannot express.</li>
+  </ul>
+
+  <p><strong>What was learned that nobody planned:</strong></p>
+  <ul>
+    <li><strong>The double cover bounds the error.</strong> <code>nearest</code> forces the sphere
+        arc under 90°, so <code>sec²(Ω/2) ≤ 2</code> exactly and the positional gap ≤ 8.1491°. The
+        plane, with no double cover, could reach 13,131 and 26.34°. The cost and the guarantee are
+        the same fact.</li>
+    <li><strong>An instrument has a scale.</strong> <code>2·acos|a·b|</code> is the right formula for
+        a separation and a broken one for a step, and the difference is not visible in the name, the
+        type, or the doc comment. It failed slerp's own geodesic by 41%.</li>
+    <li><strong>A <code>NaN</code> never wins a maximum</strong>, so a table of worst-case errors can
+        certify a function that is failing in every sample.</li>
+    <li><strong>"Finite" is not "right."</strong> A guard that returns a plausible wrong answer is
+        harder to find than the <code>NaN</code> it prevented.</li>
+    <li><strong>A narrower type finds existing bugs, not just future ones</strong> — three of them
+        this time, one shipping in the engine since 5.11 and one in a published demo since 5.12.</li>
+  </ul>
+
+  <p>
+    <strong>Next: Lesson 7.6, skeletal animation and the skinning maths.</strong> A skeleton is a
+    transform hierarchy — the one Lesson 5.9 built — with a hundred joints instead of six, and a
+    pose is a hundred of the four-float rotations this lesson just made the engine store. The two
+    things 7.6 needs from here are exactly the two things it now has: somewhere cheap to keep a pose,
+    and a way to be between two of them. What it adds is the bind pose and the inverse bind matrix,
+    which are the only genuinely confusing part of skinning and are confusing for a reason we can
+    now name precisely: they are a change of basis, and Lesson 2.8's naming convention makes them
+    read correctly the moment you write the space names down.
+  </p>
+
+  <h2 id="reading">14. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Ken Shoemake, "Animating Rotation with Quaternion Curves", SIGGRAPH 1985.</strong>
+        The paper that introduced slerp to graphics, and still the clearest statement of why the
+        interpolation has to happen on the sphere. It is also where the trig form of §7.4 comes from,
+        and reading it with this lesson's §7.4 in hand is instructive: the numerical objection is not
+        the paper's fault, it is what happens when a formula written for exposition is typed into a
+        <code>float</code>.</li>
+    <li><strong>Jonathan Blow, "Understanding Slerp, Then Not Using It", <em>Game Developer</em>,
+        2004.</strong> The classic argument for nlerp, and worth reading against §5 and §6.4: it is
+        right about the path, right about the cost, and predates the framing this lesson gives the
+        schedule error — which now has a closed form <em>and</em> a hard bound.</li>
+    <li><strong>David Eberly, "Quaternion Algebra and Calculus" (Geometric Tools).</strong> Careful,
+        complete treatment of <code>q^t</code>, the logarithm and the exponential, including the
+        small-angle analysis §3.2 waves at. The right next step if you want squad and higher-order
+        curves.</li>
+    <li><strong>Ken Shoemake, "Uniform Random Rotations", <em>Graphics Gems III</em>.</strong> The
+        sampling used by §D and §E of this lesson's harness. Worth knowing because a "random
+        rotation" generated from three uniform Euler angles is <em>not</em> uniform, and a worst-case
+        measurement taken over a clustered sample understates the worst case.</li>
+    <li><strong>Real-Time Rendering (4th ed.), §4.3.</strong> Quaternions, slerp, and the
+        matrix conversions, with the standard formulas laid out for reference. Section 4.3.2 covers
+        the <code>q</code>/<code>−q</code> choice in two sentences; this lesson's §6 is those two
+        sentences with the measurements attached.</li>
+    <li><strong>Ken Shoemake and Tom Duff, "Matrix Animation and Polar Decomposition", Graphics
+        Interface 1992.</strong> What to do when §8.7's shear is not acceptable: polar decomposition
+        splits <em>any</em> linear map into a rotation and a symmetric stretch, which is strictly more
+        general than column lengths and costs an iteration. The right reading if Exercise 5 leaves you
+        unsatisfied.</li>
+    <li><strong>The SDL3 wiki on <code>SDL_GetBasePath</code>.</strong> Unrelated to rotation, and
+        relevant every time the golden harness is run from the wrong directory (§10.4).</li>
+  </ul>

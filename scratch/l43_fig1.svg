@@ -1,0 +1,44 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="l43f1-t l43f1-d">
+  <title id="l43f1-t">The shader toolchain, and why SPIR-V is in the middle</title>
+  <desc id="l43f1-d">A flow diagram. On the left, a .hlsl file — what you write. Two possible front ends carry it to SPIR-V: shadercross built with DirectXShaderCompiler, the sanctioned path, drawn dashed because this machine does not have it; and glslc with the -x hlsl flag, the fallback, which took 12.3 milliseconds. In the middle sits the .spv file, the hub. From it three arrows lead right: .msl for Metal at 1.5 ms, .dxil for D3D12 drawn dashed because it needs DXC, and .json at 1.5 ms carrying the resource counts SDL requires. Everything on the right is translated from SPIR-V, which is why losing the front end costs the whole toolchain rather than one backend.</desc>
+  <defs>
+    <marker id="e-i-l43f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l43f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l43f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">one source language, four outputs, and one hub in the middle</text>
+<text x="24" y="46" class="xs muted">times are this machine&#8217;s, minimum of 15 runs, for one shader</text>
+<rect x="30.0" y="168.0" width="128.0" height="58.0" rx="5" fill="#5ac878" opacity="0.18" stroke="#5ac878" stroke-width="1.6"/>
+<text x="94.0" y="194.0" class="xs mono" text-anchor="middle">.hlsl</text>
+<text x="94.0" y="210.0" class="xs muted" text-anchor="middle">what you write</text>
+<rect x="76.0" y="126.0" width="202.0" height="34" rx="4" class="fill-soft ink-soft" stroke-dasharray="4 4" stroke-width="1"/>
+<text x="177.0" y="141.0" class="xs mono muted" text-anchor="middle">shadercross + DXC</text>
+<text x="177.0" y="154.0" class="xs" text-anchor="middle">the sanctioned path</text>
+<rect x="76.0" y="234.0" width="202.0" height="34" rx="4" fill="#5ac878" opacity="0.14" stroke="#5ac878" stroke-width="1.4"/>
+<text x="177.0" y="249.0" class="xs mono" text-anchor="middle">glslc -x hlsl</text>
+<text x="177.0" y="262.0" class="xs" text-anchor="middle">the fallback, used here</text>
+<line x1="164.0" y1="197.0" x2="284.0" y2="197.0" class="hi" stroke-width="2" marker-end="url(#e-h-l43f1)"/>
+<text x="225.0" y="189.0" class="xs mono t-hi" text-anchor="middle">12.3 ms</text>
+<rect x="292.0" y="168.0" width="128.0" height="58.0" rx="5" fill="#5acdd7" opacity="0.20" stroke="#5acdd7" stroke-width="2"/>
+<text x="356.0" y="194.0" class="xs mono" text-anchor="middle">.spv</text>
+<text x="356.0" y="210.0" class="xs muted" text-anchor="middle">SPIR-V &#8212; the hub</text>
+<rect x="566.0" y="96.0" width="162.0" height="58.0" rx="5" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.6"/>
+<text x="647.0" y="121.0" class="xs mono" text-anchor="middle">.msl</text>
+<text x="647.0" y="137.0" class="xs muted" text-anchor="middle">Metal</text>
+<line x1="426.0" y1="197.0" x2="558.0" y2="125.0" class="ink-soft" stroke-width="1.5" marker-end="url(#e-s-l43f1)"/>
+<text x="493.0" y="147.0" class="xs mono muted" text-anchor="middle">1.5 ms</text>
+<rect x="566.0" y="184.0" width="162.0" height="58.0" rx="5" fill="#eb786e" opacity="0.1" stroke="#eb786e" stroke-width="1.6" stroke-dasharray='4 4'/>
+<text x="647.0" y="209.0" class="xs mono muted" text-anchor="middle">.dxil</text>
+<text x="647.0" y="225.0" class="xs muted" text-anchor="middle">D3D12</text>
+<line x1="426.0" y1="197.0" x2="558.0" y2="213.0" class="ink-soft" stroke-width="1.5" stroke-dasharray='3 3' marker-end="url(#e-s-l43f1)"/>
+<text x="493.0" y="191.0" class="xs mono muted" text-anchor="middle">needs DXC</text>
+<rect x="566.0" y="272.0" width="162.0" height="58.0" rx="5" fill="#f0961e" opacity="0.18" stroke="#f0961e" stroke-width="1.6"/>
+<text x="647.0" y="297.0" class="xs mono" text-anchor="middle">.json</text>
+<text x="647.0" y="313.0" class="xs muted" text-anchor="middle">the counts SDL wants</text>
+<line x1="426.0" y1="197.0" x2="558.0" y2="301.0" class="ink-soft" stroke-width="1.5" marker-end="url(#e-s-l43f1)"/>
+<text x="493.0" y="235.0" class="xs mono muted" text-anchor="middle">1.5 ms</text>
+<text x="24" y="384" class="xs">Everything on the right is translated <tspan class="t-hi">from SPIR-V</tspan>, so a missing front end costs the whole toolchain &#8212; not one backend.</text>
+</svg>

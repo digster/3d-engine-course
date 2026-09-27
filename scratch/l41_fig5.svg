@@ -1,0 +1,67 @@
+<svg viewBox="0 0 640 316" role="img" aria-labelledby="f415-t f415-d">
+  <title id="f415-t">The GPU pipeline, stage by stage, against the code this course already wrote</title>
+  <desc id="f415-d">A four column table listing eleven GPU pipeline stages - vertex shader, primitive assembly, clipping, perspective divide, viewport transform, face culling, rasterization, interpolation, depth test, fragment shader and blend - each paired with the function in this engine that already performs it and the lesson that built it. Every stage has an entry.</desc>
+  <defs>
+    <marker id="e-i-f415" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f415" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f415" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="16.0" y="26" class="sm muted">GPU pipeline stage</text>
+  <text x="172.0" y="26" class="sm muted">what you already wrote</text>
+  <text x="348.0" y="26" class="sm muted">doing what</text>
+  <text x="566.0" y="26" class="sm muted">lesson</text>
+  <line x1="16.0" y1="32" x2="624" y2="32" class="ink-soft" stroke-width="1"/>
+  <text x="16.0" y="46.0" class="xs">vertex shader</text>
+  <text x="172.0" y="46.0" class="xs mono t-hi">collect_triangles()</text>
+  <text x="348.0" y="46.0" class="xs muted">model &#8594; clip, per vertex</text>
+  <text x="566.0" y="46.0" class="xs mono muted">2.8 &#8211; 2.10</text>
+  <rect x="12.0" y="54.0" width="628" height="22.0" class="fill-soft" stroke="none"/>
+  <text x="16.0" y="68.0" class="xs">primitive assembly</text>
+  <text x="172.0" y="68.0" class="xs mono t-hi">index triples</text>
+  <text x="348.0" y="68.0" class="xs muted">three vertices become a triangle</text>
+  <text x="566.0" y="68.0" class="xs mono muted">2.12</text>
+  <text x="16.0" y="90.0" class="xs">clipping</text>
+  <text x="172.0" y="90.0" class="xs mono t-hi">clip_polygon_near()</text>
+  <text x="348.0" y="90.0" class="xs muted">against the near plane</text>
+  <text x="566.0" y="90.0" class="xs mono muted">3.3</text>
+  <rect x="12.0" y="98.0" width="628" height="22.0" class="fill-soft" stroke="none"/>
+  <text x="16.0" y="112.0" class="xs">perspective divide</text>
+  <text x="172.0" y="112.0" class="xs mono t-hi">&#247; w</text>
+  <text x="348.0" y="112.0" class="xs muted">clip &#8594; NDC</text>
+  <text x="566.0" y="112.0" class="xs mono muted">2.10</text>
+  <text x="16.0" y="134.0" class="xs">viewport transform</text>
+  <text x="172.0" y="134.0" class="xs mono t-hi">viewport::to_screen()</text>
+  <text x="348.0" y="134.0" class="xs muted">NDC &#8594; pixels, and the y-flip</text>
+  <text x="566.0" y="134.0" class="xs mono muted">2.11</text>
+  <rect x="12.0" y="142.0" width="628" height="22.0" class="fill-soft" stroke="none"/>
+  <text x="16.0" y="156.0" class="xs">face culling</text>
+  <text x="172.0" y="156.0" class="xs mono t-hi">is_front_facing()</text>
+  <text x="348.0" y="156.0" class="xs muted">the sign of the signed area</text>
+  <text x="566.0" y="156.0" class="xs mono muted">3.4</text>
+  <text x="16.0" y="178.0" class="xs">rasterization</text>
+  <text x="172.0" y="178.0" class="xs mono t-hi">edge functions + quads</text>
+  <text x="348.0" y="178.0" class="xs muted">which lanes are covered</text>
+  <text x="566.0" y="178.0" class="xs mono muted">2.2, 4.1</text>
+  <rect x="12.0" y="186.0" width="628" height="22.0" class="fill-soft" stroke="none"/>
+  <text x="16.0" y="200.0" class="xs">interpolation</text>
+  <text x="172.0" y="200.0" class="xs mono t-hi">barycentric &#215; 1/w</text>
+  <text x="348.0" y="200.0" class="xs muted">the varyings arrive</text>
+  <text x="566.0" y="200.0" class="xs mono muted">2.4, 3.2</text>
+  <text x="16.0" y="222.0" class="xs">depth test</text>
+  <text x="172.0" y="222.0" class="xs mono t-hi">depth_buffer</text>
+  <text x="348.0" y="222.0" class="xs muted">an attachment, not a branch</text>
+  <text x="566.0" y="222.0" class="xs mono muted">3.1</text>
+  <rect x="12.0" y="230.0" width="628" height="22.0" class="fill-soft" stroke="none"/>
+  <text x="16.0" y="244.0" class="xs">fragment shader</text>
+  <text x="172.0" y="244.0" class="xs mono t-hi">the fragment lambda</text>
+  <text x="348.0" y="244.0" class="xs muted">colour from varyings</text>
+  <text x="566.0" y="244.0" class="xs mono muted">3.6 &#8211; 3.9</text>
+  <text x="16.0" y="266.0" class="xs">blend / write</text>
+  <text x="172.0" y="266.0" class="xs mono t-hi">row[x] = colour</text>
+  <text x="348.0" y="266.0" class="xs muted">the only write there is</text>
+  <text x="566.0" y="266.0" class="xs mono muted">1.5</text>
+  <text x="16.0" y="300.0" class="sm">Eleven stages. <tspan class="t-hi">You have written all eleven.</tspan> Module 4 does not teach you a pipeline &#8212; it hands yours to hardware.</text>
+</svg>

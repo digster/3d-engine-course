@@ -1,0 +1,97 @@
+<svg viewBox="0 0 980 470" role="img" aria-labelledby="f89b-t f89b-d">
+  <title id="f89b-t">The geometry of one contact, and the three demands on it</title>
+  <desc id="f89b-d">Left: a tilted box resting on a floor, with the contact point marked, the lever arm from the box's centre of mass to it, the contact normal pointing up from the floor toward the box, the two tangent directions spanning the contact plane, and the relative velocity at the point decomposed into its normal and tangential parts. Right: the three demands a contact makes — non-penetration, restitution and friction — each one linear equation in one scalar unknown, with friction's limit set by the normal impulse.</desc>
+  <defs>
+    <marker id="e-i-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-amber-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-f89b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="70" y="36" class="sm" text-anchor="start">The geometry of one contact point</text>
+<line x1="60.0" y1="280.0" x2="400.0" y2="280.0" stroke="#8f918a" stroke-width="2.2" fill="none"/>
+<line x1="60.0" y1="280.0" x2="53.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="70.0" y1="280.0" x2="63.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="80.0" y1="280.0" x2="73.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="90.0" y1="280.0" x2="83.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="100.0" y1="280.0" x2="93.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="110.0" y1="280.0" x2="103.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="120.0" y1="280.0" x2="113.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="130.0" y1="280.0" x2="123.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="140.0" y1="280.0" x2="133.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="150.0" y1="280.0" x2="143.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="160.0" y1="280.0" x2="153.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="170.0" y1="280.0" x2="163.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="180.0" y1="280.0" x2="173.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="190.0" y1="280.0" x2="183.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="200.0" y1="280.0" x2="193.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="210.0" y1="280.0" x2="203.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="220.0" y1="280.0" x2="213.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="230.0" y1="280.0" x2="223.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="240.0" y1="280.0" x2="233.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="250.0" y1="280.0" x2="243.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="260.0" y1="280.0" x2="253.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="270.0" y1="280.0" x2="263.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="280.0" y1="280.0" x2="273.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="290.0" y1="280.0" x2="283.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="300.0" y1="280.0" x2="293.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="310.0" y1="280.0" x2="303.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="320.0" y1="280.0" x2="313.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="330.0" y1="280.0" x2="323.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="340.0" y1="280.0" x2="333.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="350.0" y1="280.0" x2="343.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="360.0" y1="280.0" x2="353.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="370.0" y1="280.0" x2="363.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="380.0" y1="280.0" x2="373.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<line x1="390.0" y1="280.0" x2="383.0" y2="288.0" stroke="#8f918a" stroke-width="0.8" fill="none"/>
+<text x="60" y="336" class="xs muted" text-anchor="start">body a — the floor, immovable</text>
+<path d="M 117.95,168.40 L 297.93,130.14 L 322.05,243.60 L 142.07,281.86 Z" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="220" cy="206" r="3.5" fill="#5082e6"/>
+<text x="324" y="176" class="xs" text-anchor="start">centre of mass of b</text>
+<line x1="225.0" y1="203.0" x2="320.0" y2="172.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<circle cx="118.0" cy="280.0" r="4.5" fill="#5ac878"/>
+<line x1="114.0" y1="284.0" x2="84.0" y2="310.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<text x="79.95154266505983" y="314" class="xs" text-anchor="end">contact point p</text>
+<line x1="220.00" y1="206.00" x2="117.95" y2="280.00" stroke="#5082e6" stroke-width="1.5" marker-end="url(#e-blue-f89b)"/>
+<text x="152.97577133252992" y="247.0" class="xs" text-anchor="end">r_b</text>
+<line x1="117.95" y1="280.00" x2="117.95" y2="192.00" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-green-f89b)"/>
+<text x="107.95154266505983" y="222" class="xs" text-anchor="end">n (a → b)</text>
+<line x1="117.95" y1="280.00" x2="201.95" y2="280.00" stroke="#f0961e" stroke-width="2.0" marker-end="url(#e-amber-f89b)"/>
+<text x="205.95154266505983" y="294" class="xs" text-anchor="start">t₁</text>
+<line x1="117.95" y1="280.00" x2="73.95" y2="306.00" stroke="#f0961e" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-amber-f89b)"/>
+<text x="209.95154266505983" y="314" class="xs muted" text-anchor="start">t₂ points out of the page</text>
+<line x1="117.95" y1="280.00" x2="169.95" y2="234.00" stroke="#e05c5c" stroke-width="2.0" marker-end="url(#e-red-f89b)"/>
+<line x1="174.0" y1="230.0" x2="263.0" y2="113.0" stroke="#8f918a" stroke-width="0.9" fill="none"/>
+<text x="267.95154266505983" y="105" class="xs" text-anchor="start">u = velocity of b's point,</text>
+<text x="267.95154266505983" y="120" class="xs" text-anchor="start">relative to a's</text>
+<line x1="170.0" y1="234.0" x2="170.0" y2="280.0" stroke="#e05c5c" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="118.0" y1="234.0" x2="170.0" y2="234.0" stroke="#e05c5c" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="470" y="40" class="sm" text-anchor="start">Three demands on one number each</text>
+<line x1="470.0" y1="62.0" x2="488.0" y2="62.0" stroke="#5ac878" stroke-width="3.0" fill="none"/>
+<text x="496" y="66" class="xs" text-anchor="start">NON-PENETRATION</text>
+<text x="496" y="84" class="xs muted" text-anchor="start">u·n must not be negative afterwards. The impulse that</text>
+<text x="496" y="100" class="xs muted" text-anchor="start">enforces it may only PUSH: j ≥ 0. That clamp is the</text>
+<text x="496" y="116" class="xs muted" text-anchor="start">only nonlinearity in the whole normal solve.</text>
+<line x1="470.0" y1="150.0" x2="488.0" y2="150.0" stroke="#5082e6" stroke-width="3.0" fill="none"/>
+<text x="496" y="154" class="xs" text-anchor="start">RESTITUTION</text>
+<text x="496" y="172" class="xs muted" text-anchor="start">u·n must be −e times the speed it arrived with. It</text>
+<text x="496" y="188" class="xs muted" text-anchor="start">rides on the SAME equation: change the target from 0</text>
+<text x="496" y="204" class="xs muted" text-anchor="start">to −e·(arrival) and nothing else moves. So e never</text>
+<text x="496" y="220" class="xs muted" text-anchor="start">appears in the solver at all — only in the target.</text>
+<line x1="470.0" y1="254.0" x2="488.0" y2="254.0" stroke="#f0961e" stroke-width="3.0" fill="none"/>
+<text x="496" y="258" class="xs" text-anchor="start">FRICTION</text>
+<text x="496" y="276" class="xs muted" text-anchor="start">u·t₁ and u·t₂ both want to be zero, which is what 'not</text>
+<text x="496" y="292" class="xs muted" text-anchor="start">sliding' means — but only as far as |j_t| ≤ μ·j_n</text>
+<text x="496" y="308" class="xs muted" text-anchor="start">allows. The cone's RADIUS is the answer to the demand</text>
+<text x="496" y="324" class="xs muted" text-anchor="start">above it, which is why the two cannot be solved</text>
+<text x="496" y="340" class="xs muted" text-anchor="start">independently.</text>
+<text x="470" y="384" class="xs" text-anchor="start">Each is one linear equation in one scalar unknown, because</text>
+<text x="470" y="400" class="xs" text-anchor="start">the change in u along any direction is proportional to the</text>
+<text x="470" y="416" class="xs" text-anchor="start">impulse along it. That constant of proportionality is the</text>
+<text x="470" y="432" class="xs" text-anchor="start">effective mass — Figure 3.</text>
+<text x="70" y="454" class="xs muted" text-anchor="start">§3. The sign convention is collide.hpp's, unchanged since 8.4: n points from a toward b, so u·n &lt; 0 means approaching.</text>
+</svg>

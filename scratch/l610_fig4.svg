@@ -1,0 +1,37 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="f610e-t f610e-d">
+  <title id="f610e-t">The screen-space uv derivative</title>
+  <desc id="f610e-d">On the left, a GPU shades fragments in 2x2 quads so a neighbour is always available and ddx is a subtraction. On the right, a scanline rasterizer has no neighbour, so the derivative is computed from the triangle analytically by the quotient rule, agreeing with a numerical difference to 5.79e-06.</desc>
+  <defs>
+    <marker id="e-i-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f610e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Where the footprint comes from</text>
+<text x="170" y="58" class="xs" text-anchor="middle">GPU: shade in 2x2 quads</text>
+<rect x="140" y="74" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<rect x="140" y="104" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<rect x="170" y="74" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<rect x="170" y="104" width="30" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<circle cx="155.0" cy="89.0" r="4" fill="#e05c5c" stroke="none"/>
+<line x1="155.0" y1="89.0" x2="185.0" y2="89.0" class="hi" stroke-width="1.2" marker-end="url(#e-h-f610e)"/>
+<line x1="155.0" y1="89.0" x2="155.0" y2="119.0" class="hi" stroke-width="1.2" marker-end="url(#e-h-f610e)"/>
+<text x="170" y="156" class="xs" text-anchor="middle">ddx / ddy are a SUBTRACTION:</text>
+<text x="170" y="172" class="xs" text-anchor="middle">the neighbour is always there</text>
+<text x="520" y="58" class="xs" text-anchor="middle">CPU: one fragment at a time</text>
+<rect x="455" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<rect x="485" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<rect x="515" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<rect x="545" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<rect x="575" y="74" width="30" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<circle cx="530.0" cy="89.0" r="4" fill="#e05c5c" stroke="none"/>
+<text x="520" y="126" class="xs" text-anchor="middle">no neighbour to subtract —</text>
+<text x="520" y="142" class="xs" text-anchor="middle">the row above is long gone</text>
+<line x1="90" y1="196" x2="630" y2="196" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="220" class="xs" text-anchor="middle">so the CPU computes it from the TRIANGLE, exactly:</text>
+<text x="360.0" y="246" class="xs" text-anchor="middle">u = U / W,  with U and W both AFFINE in screen space</text>
+<text x="360.0" y="268" class="xs" text-anchor="middle">du/dx = (dU/dx  −  u · dW/dx) / W</text>
+<text x="360.0" y="294" class="xs" text-anchor="middle">dU/dx and dW/dx are constant over the triangle, so they hoist out of the loop</text>
+<text x="360.0" y="316" class="xs" text-anchor="middle">measured against a central difference of the real interpolation: 5.79e-06</text>
+</svg>

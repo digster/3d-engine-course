@@ -1,0 +1,55 @@
+<svg viewBox="0 0 720 350" role="img" aria-labelledby="l54f5-t l54f5-d">
+  <title id="l54f5-t">Removal by swap and patch</title>
+  <desc id="l54f5-d">Before: four items packed in the dense array, the second of which is being removed. Step one moves the last item into the hole and patches its slot to point at the new dense index. Step two bumps the removed slot's generation and pushes it on the free list.</desc>
+  <defs>
+    <marker id="e-i-l54f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l54f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l54f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l54f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l54f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">remove(handle 1:1) — the two steps, and why the SURVIVOR moves.</text>
+<text x="24" y="44" class="xs t-hi" text-anchor="start">BEFORE   items_, four live meshes</text>
+<rect x="24" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<rect x="24" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="85" y="78" class="sm mono" text-anchor="middle">torus</text>
+<text x="85" y="54" class="xs muted" text-anchor="middle">dense 0</text>
+<text x="85" y="104" class="xs mono muted" text-anchor="middle">slot 0</text>
+<rect x="154" y="56" width="122" height="34" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="215" y="78" class="sm mono" text-anchor="middle">cube</text>
+<text x="215" y="54" class="xs muted" text-anchor="middle">dense 1</text>
+<text x="215" y="104" class="xs mono muted" text-anchor="middle">slot 1</text>
+<rect x="284" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<rect x="284" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="345" y="78" class="sm mono" text-anchor="middle">floor</text>
+<text x="345" y="54" class="xs muted" text-anchor="middle">dense 2</text>
+<text x="345" y="104" class="xs mono muted" text-anchor="middle">slot 2</text>
+<rect x="414" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<rect x="414" y="56" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="475" y="78" class="sm mono" text-anchor="middle">quad</text>
+<text x="475" y="54" class="xs muted" text-anchor="middle">dense 3</text>
+<text x="475" y="104" class="xs mono muted" text-anchor="middle">slot 3</text>
+<text x="24" y="124" class="xs muted" text-anchor="start">handle 1:1 names slot 1, whose dense field is 1 — the cube.</text>
+<line x1="360" y1="136" x2="360" y2="168" class="hi" stroke-width="1.4" marker-end="url(#e-h-l54f5)"/>
+<text x="376" y="158" class="xs t-hi" text-anchor="start">1. move the LAST item into the hole and patch ITS slot (3 → dense 1)</text>
+<text x="24" y="178" class="xs t-hi" text-anchor="start">AFTER    items_, three live meshes, still packed</text>
+<rect x="24" y="190" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<rect x="24" y="190" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="85" y="212" class="sm mono" text-anchor="middle">torus</text>
+<text x="85" y="188" class="xs muted" text-anchor="middle">dense 0</text>
+<text x="85" y="238" class="xs mono muted" text-anchor="middle">slot 0</text>
+<rect x="154" y="190" width="122" height="34" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="215" y="212" class="sm mono" text-anchor="middle">quad</text>
+<text x="215" y="188" class="xs muted" text-anchor="middle">dense 1</text>
+<text x="215" y="238" class="xs mono muted" text-anchor="middle">slot 3</text>
+<rect x="284" y="190" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<rect x="284" y="190" width="122" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="345" y="212" class="sm mono" text-anchor="middle">floor</text>
+<text x="345" y="188" class="xs muted" text-anchor="middle">dense 2</text>
+<text x="345" y="238" class="xs mono muted" text-anchor="middle">slot 2</text>
+<text x="24" y="258" class="xs muted" text-anchor="start"></text>
+<line x1="24" y1="276" x2="696" y2="276" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="296" class="xs t-hi" text-anchor="start">2. bump slot 1's generation 1 → 2 and push it on the free list.</text>
+<text x="24" y="314" class="xs" text-anchor="start">The quad's ADDRESS changed and nobody outside the pool cares — its handle still says slot 3, and slot 3 now says dense 1.</text>
+<text x="24" y="332" class="xs t-ok" text-anchor="start">That is the whole proof that a handle is not a pointer with extra steps.</text>
+</svg>

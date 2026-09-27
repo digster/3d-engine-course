@@ -1,0 +1,65 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l81f8-t l81f8-d">
+  <title id="l81f8-t">Position error against time under constant gravity for three integrators</title>
+  <desc id="l81f8-d">Explicit Euler falls short by half g h t and semi-implicit Euler overshoots by the same amount, both growing linearly. Velocity Verlet sits on zero because the half a h squared term it keeps is exactly the one the others drop.</desc>
+  <defs>
+    <marker id="e-i-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grey-l81f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<rect x="62" y="56" width="380" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">E.2  position error against time, from rest, g = 9.81</text>
+<line x1="62.0" y1="56" x2="62.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="322" class="xs mono" text-anchor="middle">0</text>
+<line x1="157.0" y1="56" x2="157.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="157.0" y="322" class="xs mono" text-anchor="middle">2</text>
+<line x1="252.0" y1="56" x2="252.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="252.0" y="322" class="xs mono" text-anchor="middle">4</text>
+<line x1="347.0" y1="56" x2="347.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="347.0" y="322" class="xs mono" text-anchor="middle">6</text>
+<line x1="442.0" y1="56" x2="442.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="442.0" y="322" class="xs mono" text-anchor="middle">8</text>
+<line x1="62" y1="298.6470588235294" x2="442" y2="298.6470588235294" class="grid" stroke-width="1.0"/>
+<text x="54" y="302.6470588235294" class="xs muted" text-anchor="end">-0.8</text>
+<line x1="62" y1="239.8235294117647" x2="442" y2="239.8235294117647" class="grid" stroke-width="1.0"/>
+<text x="54" y="243.8235294117647" class="xs muted" text-anchor="end">-0.4</text>
+<line x1="62" y1="181.0" x2="442" y2="181.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="185.0" class="xs muted" text-anchor="end">+0.0</text>
+<line x1="62" y1="122.17647058823529" x2="442" y2="122.17647058823529" class="grid" stroke-width="1.0"/>
+<text x="54" y="126.17647058823529" class="xs muted" text-anchor="end">+0.4</text>
+<line x1="62" y1="63.35294117647058" x2="442" y2="63.35294117647058" class="grid" stroke-width="1.0"/>
+<text x="54" y="67.35294117647058" class="xs muted" text-anchor="end">+0.8</text>
+<text x="252.0" y="342" class="xs muted" text-anchor="middle">simulated seconds</text>
+<text x="16" y="52" class="xs muted" text-anchor="middle">m</text>
+<path d="M 62.00,181.00 L 109.50,168.98 L 157.00,156.95 L 252.00,132.91 L 442.00,84.93" fill="none" stroke="#eb6060" stroke-width="2.2"/>
+<path d="M 62.00,181.00 L 109.50,193.02 L 157.00,205.04 L 252.00,229.09 L 442.00,277.29" fill="none" stroke="#78dca0" stroke-width="2.2"/>
+<path d="M 62.00,181.00 L 109.50,181.00 L 157.00,181.00 L 252.00,181.00 L 442.00,181.12" fill="none" stroke="#aa96ff" stroke-width="2.2"/>
+<line x1="62.0" y1="181.0" x2="442.0" y2="181.0" stroke="#969eaf" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<text x="356.5" y="99.47058823529412" class="xs mono" text-anchor="middle">+½·g·h·t</text>
+<text x="356.5" y="270.52941176470586" class="xs mono" text-anchor="middle">−½·g·h·t</text>
+<text x="271.0" y="167.11764705882354" class="xs mono t-ok" text-anchor="middle">velocity Verlet: exact</text>
+<text x="500" y="68" class="xs muted" text-anchor="start">E.1  after 1 second</text>
+<text x="730" y="68" class="xs muted" text-anchor="end">fallen (m)</text>
+<text x="830" y="68" class="xs muted" text-anchor="end">error</text>
+<line x1="500" y1="76.0" x2="836" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="93.0" class="xs" text-anchor="start">explicit Euler</text>
+<text x="730" y="93.0" class="xs mono" text-anchor="end">4.823249</text>
+<text x="830" y="93.0" class="xs mono" text-anchor="end">-0.081751</text>
+<text x="500" y="110.0" class="xs" text-anchor="start">semi-implicit</text>
+<text x="730" y="110.0" class="xs mono" text-anchor="end">4.986749</text>
+<text x="830" y="110.0" class="xs mono" text-anchor="end">+0.081749</text>
+<text x="500" y="127.0" class="xs" text-anchor="start">velocity Verlet</text>
+<text x="730" y="127.0" class="xs mono" text-anchor="end">4.904999</text>
+<text x="830" y="127.0" class="xs mono" text-anchor="end">-0.000001</text>
+<text x="500" y="157.5" class="xs muted" text-anchor="start">Exact: 4.9050 m. Predicted error</text>
+<text x="500" y="173.5" class="xs muted" text-anchor="start">½·g·h·t = 0.081750 m — one rule short</text>
+<text x="500" y="189.5" class="xs muted" text-anchor="start">by it, one long by it. The SPEED is the</text>
+<text x="500" y="205.5" class="xs muted" text-anchor="start">same to the last bit in all three.</text>
+<text x="500" y="237.5" class="sm" text-anchor="start">LINEAR in t, not exponential. Gravity is</text>
+<text x="500" y="257.5" class="sm" text-anchor="start">forgiving, and that is why this bug ships:</text>
+<text x="500" y="277.5" class="sm t-hi" text-anchor="start">your first falling-cube demo is FINE.</text>
+<text x="500" y="301.5" class="xs muted" text-anchor="start">It stops being fine the moment a force</text>
+<text x="500" y="317.5" class="xs muted" text-anchor="start">depends on WHERE the body is.</text>
+</svg>

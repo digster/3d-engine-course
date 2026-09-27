@@ -1,0 +1,332 @@
+  <h2 id="skin-matrix">3. The skinning matrix, from its labels</h2>
+
+  <p>
+    Lesson 2.8 fixed a naming convention and then spent five modules proving it was worth having:
+    every matrix in this engine is named <code>target_from_source</code>, and composing two of them
+    is only legal when the inner labels agree.
+  </p>
+
+  <div class="eq">\[ \mathrm{view\_from\_model} \;=\;
+      \underbrace{\mathrm{view\_from\_world}}_{\text{inner: world}} \cdot
+      \underbrace{\mathrm{world\_from\_model}}_{\text{inner: world}} \]</div>
+
+  <p>
+    Apply it here and the skinning matrix writes itself. §2 said: carry the vertex backwards into
+    joint <code>j</code>'s frame as it stood at bind time, then forwards using where joint
+    <code>j</code> is now. Those two sentences are two matrices, and each one has a name:
+  </p>
+
+  <div class="eq">\[ S_j \;=\;
+      \underbrace{\mathrm{model\_from\_joint}_j\,(\text{posed})}_{\text{where joint } j \text{ is NOW}}
+      \cdot
+      \underbrace{\mathrm{joint\_from\_model}_j\,(\text{bind})}_{\text{where joint } j \text{ WAS}} \]</div>
+
+  <p class="eq-plain">
+    …the skinning matrix for joint j is its posed placement times the inverse of its bind placement.
+  </p>
+
+  @@FIG_SPACES@@
+
+  <p>
+    <strong>Read the inner labels.</strong> They agree — both say <code>joint</code> — so the
+    product is legal. But the two <code>joint</code>s are the same joint at two different
+    <em>times</em>, and no naming convention can carry that for you. It is the one piece of the
+    vocabulary you have to hold in your head, and it is the piece every confused explanation of
+    skinning has silently dropped.
+  </p>
+
+  <p>
+    <strong>Now read the outer labels.</strong> They agree too, and with each other:
+    <code>model</code> on the left, <code>model</code> on the right. A skinning matrix is
+    <code>model_from_model</code>. It takes model space to model space and never leaves.
+  </p>
+
+  <p>
+    That is not a curiosity. Two consequences fall straight out of it, and they are the two halves
+    of this lesson:
+  </p>
+
+  <ol>
+    <li><strong>It is why the blend is legal at all.</strong> You may add two linear maps only when
+        they share a domain and a codomain — adding a <code>view_from_world</code> to a
+        <code>world_from_model</code> is not wrong arithmetic, it is a category error, and there is
+        no space the result acts on. Four skinning matrices all take model space to model space, so
+        their weighted sum does too. The sum in §1 is well-typed, and it is well-typed
+        <em>because</em> of the inverse bind matrices, not in spite of them.</li>
+    <li><strong>It is also why the blend is not a rotation.</strong> The set of maps from model space
+        to model space is closed under addition. The set of <em>rotations</em> is not — Lesson 7.5
+        opened by measuring exactly that, with the entrywise average of two poses coming out at a
+        determinant of 0.00007. So the sum lands inside the larger set and outside the smaller one,
+        and §8 measures precisely how far outside.</li>
+  </ol>
+
+  <h3 id="bind-identity">3.1 At the bind pose, every skinning matrix is the identity</h3>
+
+  <p>
+    Pose the skeleton at its own bind pose. Then <code>model_from_joint(posed)</code> <em>is</em>
+    <code>model_from_joint(bind)</code>, and the second factor is that matrix's inverse, so:
+  </p>
+
+  <div class="eq">\[ S_j \;=\; M_j M_j^{-1} \;=\; I \]</div>
+
+  <p>
+    Every skinning matrix is the identity, exactly. The blend of four identities weighted to sum to
+    one is the identity. <strong>So skinning a mesh at its bind pose must reproduce the mesh,
+    vertex for vertex.</strong>
+  </p>
+
+  <p>
+    That sentence is the cheapest complete test of a rig that exists, and it is worth pausing on how
+    much it covers. It needs no reference image, no artist, no eye. It catches a transposed matrix,
+    a chain composed in the wrong order, an inverse bind array baked from a different skeleton, a
+    joint whose parent index is wrong, and a skeleton edited after baking. It fails only for rigs
+    that are correct. The engine's <code>skeleton_report::worst_bind_residual</code> is that number,
+    and the harness measures it at <strong>4.768e−07</strong> for a six-joint chain — float noise
+    through six matrix products, five orders below anything a rig's own dimensions would notice.
+  </p>
+
+  <p>
+    The control is what makes that number mean something. Nudge one joint's bind transform by 0.01
+    <em>after</em> baking — which is precisely what a rig edited without a re-export looks like —
+    and the residual goes to <strong>1.056e−02</strong>, four orders louder. Delete the inverse
+    binds entirely and <code>validate</code> reports <code>unbaked</code> rather than quietly
+    building a palette of identities and shipping a character that renders in its bind pose forever.
+  </p>
+
+  <h3 id="worked-skin">3.2 A worked example, by hand</h3>
+
+  <p>
+    Two joints. Joint 0 at the model origin with no rotation; joint 1 one unit above it, also with
+    no rotation. A vertex at <code>(0.38, 1.00, 0)</code> — on the surface of a tube of radius 0.38,
+    level with joint 1.
+  </p>
+
+  <p>
+    <strong>The bind placements.</strong> Joint 0's is the identity. Joint 1's is a pure translation
+    by <code>(0, 1, 0)</code>, so
+  </p>
+
+  <div class="eq">\[ M_1(\text{bind}) = \begin{pmatrix} 1&amp;0&amp;0&amp;0\\ 0&amp;1&amp;0&amp;1\\
+      0&amp;0&amp;1&amp;0\\ 0&amp;0&amp;0&amp;1 \end{pmatrix} \]</div>
+
+  <div class="eq">\[ \mathrm{joint\_from\_model}_1 = M_1^{-1}
+      = \begin{pmatrix} 1&amp;0&amp;0&amp;0\\
+      0&amp;1&amp;0&amp;-1\\ 0&amp;0&amp;1&amp;0\\ 0&amp;0&amp;0&amp;1 \end{pmatrix} \]</div>
+
+  <p>
+    Carry the vertex through it: <code>(0.38, 1.00, 0) − (0, 1, 0) = (0.38, 0.00, 0)</code>. That is
+    the vertex <em>in joint 1's frame</em>, and it says something you can check against the picture:
+    the vertex is level with joint 1 and 0.38 to its side. Nothing was computed that you did not
+    already know — which is the point. The inverse bind matrix is bookkeeping, not magic.
+  </p>
+
+  <p>
+    <strong>Now pose it.</strong> Rotate joint 1 by 90° about <code>+z</code>, keeping it one unit
+    above joint 0. Its posed placement is that rotation with the same translation:
+  </p>
+
+  <div class="eq">\[ M_1(\text{posed}) = \begin{pmatrix} 0&amp;-1&amp;0&amp;0\\ 1&amp;0&amp;0&amp;1\\
+      0&amp;0&amp;1&amp;0\\ 0&amp;0&amp;0&amp;1 \end{pmatrix} \]</div>
+
+  <p>
+    Multiply the two to get the skinning matrix, and then push the vertex through:
+  </p>
+
+  <div class="eq">\[ S_1\,v \;=\; M_1(\text{posed})\,(0.38, 0, 0)
+      \;=\; (0,\, 0.38,\, 0) + (0,1,0) \;=\; (0,\, 1.38,\, 0) \]</div>
+
+  <p>
+    The vertex was 0.38 to the <em>side</em> of joint 1 and it is now 0.38 <em>above</em> it,
+    because joint 1 turned a quarter turn. That is right, and you can see it is right without
+    trusting the arithmetic.
+  </p>
+
+  <p>
+    <strong>And now the part that shows why the first factor alone will not do.</strong> Suppose you
+    skipped the inverse bind matrix and used <code>model_from_joint(posed)</code> as the skinning
+    matrix — the single most common first attempt at this, and the reason is understandable: it is
+    called the "bone matrix" and it is sitting right there. Then
+  </p>
+
+  <div class="eq">\[ \begin{aligned}
+      M_1(\text{posed})\,v \;&amp;=\; R_z(90^\circ)\,(0.38,\,1.00,\,0) + (0,1,0) \\[2pt]
+      &amp;=\; (-1.00,\, 0.38,\, 0) + (0,1,0) \\[2pt]
+      &amp;=\; (-1.00,\, 1.38,\, 0)
+      \end{aligned} \]</div>
+
+  <p>
+    …which is <strong>one whole unit</strong> from where the vertex belongs, on a model one unit
+    tall. Note where the error came from: the rotation was applied to the vertex's <em>model-space</em>
+    height of 1.00 as though that were a distance from the joint, when the distance from the joint
+    is zero. The reason is
+    not an arithmetic slip: <code>model_from_joint</code> expects a point <em>expressed in joint
+    space</em>, and <code>(0.38, 1.00, 0)</code> is expressed in model space. The two are different
+    numbers for different questions, and the matrix cannot tell. §5.1 shows what that looks like on
+    a whole mesh, where the harness measures the worst vertex displacement at
+    <strong>4.4366 units on a tube 5.00 units long</strong>.
+  </p>
+
+  <h2 id="bake">4. Baking the inverse binds, without inverting anything</h2>
+
+  <p>
+    The obvious way to build <code>joint_from_model</code> for every joint is to compose the forward
+    chain and then invert each result. It works, it costs a general 4×4 inverse per joint —
+    cofactors, a determinant and a divide, about forty operations — and it is unnecessary.
+  </p>
+
+  <p>
+    <strong>Inverting a product reverses it.</strong> That is one of the few pieces of matrix algebra
+    worth memorising, and the proof is a line:
+  </p>
+
+  <div class="eq">\[ (AB)(B^{-1}A^{-1}) = A(BB^{-1})A^{-1} = AA^{-1} = I \]</div>
+
+  <p>
+    So the forward chain, which multiplies the parent on the <em>left</em>,
+  </p>
+
+  <div class="eq">\[ \mathrm{model\_from\_joint}[j] \;=\;
+      \mathrm{model\_from\_joint}[p] \cdot \mathrm{parent\_from\_local}(j) \]</div>
+
+  <p>
+    has an inverse chain that multiplies the same parent on the <em>right</em>:
+  </p>
+
+  <div class="eq">\[ \mathrm{joint\_from\_model}[j] \;=\;
+      \mathrm{local\_from\_parent}(j) \cdot \mathrm{joint\_from\_model}[p] \]</div>
+
+  <p class="eq-plain">
+    …a joint's inverse bind matrix is its own local inverse times its parent's inverse bind matrix.
+  </p>
+
+  @@FIG_TWO_CHAINS@@
+
+  <p>
+    Both loops walk the array in the same direction — index 0 upward, parents before children — and
+    both read the parent's finished entry. Only the side of the multiplication differs. So the
+    inverse binds cost exactly what the forward chain costs, and the only inverse anywhere is
+    <code>local_from_parent</code>, one node at a time.
+  </p>
+
+  <h3 id="local-from-parent">4.1 The function Lesson 2.8 declined to write</h3>
+
+  <p>
+    There has been a comment sitting in <code>math/transform.hpp</code> since Module 2:
+  </p>
+
+  <pre><code class="lang-cpp">// There is deliberately no `local_from_parent`
+// here yet.
+//
+// It exists, it is useful, and it is cheap for
+// this particular shape — undoing `T * R * S` is
+// `S⁻¹ * Rᵀ * T⁻¹`, with no general 4x4 inversion
+// needed… It is left out because nothing needs it
+// yet…</code></pre>
+
+  <p>
+    This is the caller it was waiting for. A skeleton's inverse bind matrices are nothing but that
+    function composed down the chain, and the derivation the comment sketched is four lines:
+  </p>
+
+  <div class="eq">\[ (T R S)^{-1} \;=\; S^{-1} R^{-1} T^{-1} \;=\; S^{-1} R^{\mathsf{T}} T^{-1} \]</div>
+
+  <p>
+    Every one of those three is free. A rotation's inverse is its transpose, because its columns are
+    orthonormal and <code>RᵀR = I</code> by inspection (Lesson 2.6). A scale's inverse is the
+    reciprocals. A translation's inverse is the negation. Written out, the linear part is
+    <code>Rᵀ</code> with row <code>k</code> divided by <code>scale[k]</code> — so it unrotates and
+    then unscales, in that order — and the offset is whatever sends <code>position</code> back to the
+    origin:
+  </p>
+
+  <div class="eq">\[ L \;=\; S^{-1} R^{\mathsf{T}}, \qquad
+      \mathrm{local\_from\_parent}(t)\,v \;=\; L\,(v - p) \;=\; L v - L p \]</div>
+
+  <p>
+    <strong>A type that knows how it was built knows how to undo itself.</strong> A general inverse
+    would be answering a question this struct already has the answer to, more slowly and less
+    accurately.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A zero scale has no inverse, and this returns something anyway</span>
+    <p>
+      A scale of 0 on an axis collapses a dimension, and nothing un-collapses one: the information
+      is gone. The reciprocal is taken as 0 rather than as an infinity, which makes the result the
+      <em>pseudo</em>-inverse — it projects onto the surviving axes instead of inverting, so
+      <code>local_from_parent(t) * parent_from_local(t)</code> is a projection and not the identity.
+      The harness measures it: for a scale of <code>(1, 0, 1)</code> the round trip differs from
+      the identity by exactly <strong>1.0000</strong> in one entry, and every entry is finite.
+    </p>
+    <p>
+      That is Lesson 7.5's rule in full — <em>finite is not right</em> — so the value is finite only
+      so that one degenerate joint cannot spray <code>NaN</code> across a whole skeleton, and the
+      caller is expected to have been told. <code>skeleton_report::singular_binds</code> is what
+      tells it.
+    </p>
+  </div>
+
+  <h3 id="worked-bake">4.2 Checking the chain against something that shares no code</h3>
+
+  <p>
+    A claim of the form "these two routes agree" is worth exactly as much as the independence of
+    the two routes. Composing exact per-node inverses and then comparing against… a rearrangement of
+    the same per-node inverses would prove nothing at all. So the harness contains a
+    <strong>general 4×4 inverse written from scratch</strong> — Gauss-Jordan with partial pivoting,
+    in <code>double</code>, forty lines, sharing not one line with the engine — and compares the
+    composed chain against it directly.
+  </p>
+
+  <pre>   8-joint chain, deepest worst entry vs a
+   general inverse of the composed matrix     4.768e-07
+  [PASS] B.1  composed inverses == inverse of the composition
+   depth  2   vs general inverse 2.384e-07   bind 1.192e-07
+   depth  4   vs general inverse 2.384e-07   bind 2.384e-07
+   depth  8   vs general inverse 4.768e-07   bind 6.557e-07
+   depth 16   vs general inverse 1.907e-06   bind 2.027e-06
+   depth 32   vs general inverse 1.550e-06   bind 6.676e-06</pre>
+
+  <p>
+    The fixture deserves a note, because a tidy one would have made half of this pass for the wrong
+    reason. The chain the harness builds has an awkward rotation on every joint and a non-uniform
+    scale on one of them: <code>local_from_parent</code> of a pure translation is a pure negation
+    and never exercises the transpose at all, so a chain of identity rotations would test the easy
+    half of the function and report success.
+  </p>
+
+  <h3 id="ordering">4.3 One precondition instead of an algorithm</h3>
+
+  <p>
+    Both loops above assume something: <strong>a joint's parent appears earlier in the array than it
+    does.</strong> Lesson 5.9 could not assume that. A component pool's dense order is insertion
+    order disturbed by every swap-and-pop, so the resolver had to compute depths, counting-sort into
+    level buckets, and keep a dirty flag to know when the order had gone stale — three passes and a
+    piece of state.
+  </p>
+
+  <p>
+    A skeleton is different in kind, in two ways that both point the same way. It is
+    <strong>authored</strong> rather than accumulated: a rig arrives whole from an exporter and its
+    joints never move afterwards. And it is <strong>small</strong>: hundreds of joints, not the
+    hundred thousand entities 5.9 was measured at. So the order can simply be a requirement on the
+    data, checked once at load time — and <code>compose_pose</code> becomes a single flat loop over
+    an array with no sorting, no bookkeeping and no staleness to track.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A precondition the producer can satisfy beats an algorithm the consumer must run</span>
+    <p>
+      This is the same trade the engine keeps making, and it is worth naming because the two halves
+      look so different. 5.9's hierarchy pays every frame for an order it cannot demand. 7.6's
+      skeleton demands the order and pays nothing, and the cost lands on whoever imports a rig —
+      glTF's <code>skins.joints</code> is an arbitrary permutation of node indices, so an importer
+      owes one topological sort at load time. Paid once, by the party that can afford it.
+    </p>
+    <p>
+      The failure it prevents is worth knowing too, because it is not a broken picture. A child
+      whose parent comes later composes against the parent's matrix <em>from the previous frame</em>,
+      which looks like a one-frame lag that grows with depth, appears only when the character moves
+      fast, and gets blamed on the animation. <code>skeleton_report::out_of_order</code> counts it,
+      and the harness's control swaps two joints and checks that it does.
+    </p>
+  </div>

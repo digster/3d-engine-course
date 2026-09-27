@@ -1,0 +1,99 @@
+<svg viewBox="0 0 980 522.5" role="img" aria-labelledby="h3-t h3-d">
+  <title id="h3-t">Conservative advancement on two balls, as geometry and as Newton's method</title>
+  <desc id="h3-d">Left: a ball moving along +x toward another at (3, 0.6), drawn at the start, at the first Newton iterate and at contact, with the separating plane of each iterate dashed, and a table of the iterates and their errors. Right: the distance f(t) as a convex curve with Newton's tangent steps landing short of the root at t = 0.55, and the same near the root, magnified.</desc>
+  <defs>
+    <marker id="e-i-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grey-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">Two balls: from the origin along (4, 0), toward one at (3, 0.6)</text>
+<line x1="20.00" y1="200.00" x2="470.00" y2="200.00" stroke="#8f918a" stroke-width="1.0" marker-end="url(#e-grey-h3)"/>
+<text x="470.0" y="216" class="xs mono" text-anchor="end">d = (4, 0)</text>
+<circle cx="380.0" cy="140.0" r="50.0" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<text x="436.0" y="105.0" class="xs" text-anchor="start">obstacle</text>
+<circle cx="80.0" cy="200.0" r="50.0" fill="none" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="80.0" y="266.0" class="xs mono" text-anchor="middle">t₀ = 0</text>
+<circle cx="290.0" cy="200.0" r="50.0" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="290.01960972" y="266.0" class="xs mono" text-anchor="middle">t₁ = 0.5250</text>
+<circle cx="300.0" cy="200.0" r="50.0" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<text x="300.0" y="280.0" class="xs mono" text-anchor="middle">t = 0.55: contact</text>
+<line x1="344.7" y1="218.4" x2="317.2" y2="81.2" stroke="#5082e6" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="377.2" y1="226.0" x2="299.6" y2="109.5" stroke="#5082e6" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="26" y="320.0" class="xs" text-anchor="start">Each dashed line is the plane GJK's direction separates the pair</text>
+<text x="26" y="335.0" class="xs" text-anchor="start">by at that iterate. The next ball goes where the mover, sliding</text>
+<text x="26" y="350.0" class="xs" text-anchor="start">along d, would first touch that plane — never further. t₂ and t₃</text>
+<text x="26" y="365.0" class="xs" text-anchor="start">are within half a millimetre of contact and are drawn as one.</text>
+<text x="530" y="30" class="sm" text-anchor="start">f(t) = |(4t − 3, −0.6)| − 1, and Newton's tangents</text>
+<rect x="560" y="58" width="380" height="150" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="560" y1="201.47826086956522" x2="940" y2="201.47826086956522" class="grid" stroke-width="0.8"/>
+<text x="554" y="205.47826086956522" class="xs mono" text-anchor="end">0</text>
+<text x="554" y="140.26086956521738" class="xs mono" text-anchor="end">1</text>
+<text x="554" y="75.04347826086956" class="xs mono" text-anchor="end">2</text>
+<text x="560.0" y="223" class="xs mono" text-anchor="middle">0</text>
+<text x="686.6666666666667" y="223" class="xs mono" text-anchor="middle">0.2</text>
+<text x="813.3333333333334" y="223" class="xs mono" text-anchor="middle">0.4</text>
+<text x="940.0" y="223" class="xs mono" text-anchor="middle">0.6</text>
+<path d="M 560.00,67.17 L 561.58,67.81 L 563.17,68.45 L 564.75,69.09 L 566.33,69.73 L 567.92,70.37 L 569.50,71.00 L 571.08,71.64 L 572.67,72.28 L 574.25,72.92 L 575.83,73.56 L 577.42,74.20 L 579.00,74.84 L 580.58,75.48 L 582.17,76.11 L 583.75,76.75 L 585.33,77.39 L 586.92,78.03 L 588.50,78.67 L 590.08,79.30 L 591.67,79.94 L 593.25,80.58 L 594.83,81.22 L 596.42,81.85 L 598.00,82.49 L 599.58,83.13 L 601.17,83.77 L 602.75,84.40 L 604.33,85.04 L 605.92,85.68 L 607.50,86.31 L 609.08,86.95 L 610.67,87.59 L 612.25,88.22 L 613.83,88.86 L 615.42,89.50 L 617.00,90.13 L 618.58,90.77 L 620.17,91.40 L 621.75,92.04 L 623.33,92.67 L 624.92,93.31 L 626.50,93.94 L 628.08,94.58 L 629.67,95.21 L 631.25,95.85 L 632.83,96.48 L 634.42,97.12 L 636.00,97.75 L 637.58,98.39 L 639.17,99.02 L 640.75,99.66 L 642.33,100.29 L 643.92,100.92 L 645.50,101.56 L 647.08,102.19 L 648.67,102.82 L 650.25,103.46 L 651.83,104.09 L 653.42,104.72 L 655.00,105.36 L 656.58,105.99 L 658.17,106.62 L 659.75,107.25 L 661.33,107.89 L 662.92,108.52 L 664.50,109.15 L 666.08,109.78 L 667.67,110.41 L 669.25,111.04 L 670.83,111.68 L 672.42,112.31 L 674.00,112.94 L 675.58,113.57 L 677.17,114.20 L 678.75,114.83 L 680.33,115.46 L 681.92,116.09 L 683.50,116.72 L 685.08,117.35 L 686.67,117.98 L 688.25,118.61 L 689.83,119.24 L 691.42,119.86 L 693.00,120.49 L 694.58,121.12 L 696.17,121.75 L 697.75,122.38 L 699.33,123.00 L 700.92,123.63 L 702.50,124.26 L 704.08,124.89 L 705.67,125.51 L 707.25,126.14 L 708.83,126.77 L 710.42,127.39 L 712.00,128.02 L 713.58,128.64 L 715.17,129.27 L 716.75,129.89 L 718.33,130.52 L 719.92,131.14 L 721.50,131.77 L 723.08,132.39 L 724.67,133.01 L 726.25,133.64 L 727.83,134.26 L 729.42,134.88 L 731.00,135.51 L 732.58,136.13 L 734.17,136.75 L 735.75,137.37 L 737.33,137.99 L 738.92,138.62 L 740.50,139.24 L 742.08,139.86 L 743.67,140.48 L 745.25,141.10 L 746.83,141.72 L 748.42,142.34 L 750.00,142.95 L 751.58,143.57 L 753.17,144.19 L 754.75,144.81 L 756.33,145.43 L 757.92,146.04 L 759.50,146.66 L 761.08,147.28 L 762.67,147.89 L 764.25,148.51 L 765.83,149.12 L 767.42,149.74 L 769.00,150.35 L 770.58,150.97 L 772.17,151.58 L 773.75,152.19 L 775.33,152.81 L 776.92,153.42 L 778.50,154.03 L 780.08,154.64 L 781.67,155.25 L 783.25,155.86 L 784.83,156.47 L 786.42,157.08 L 788.00,157.69 L 789.58,158.30 L 791.17,158.91 L 792.75,159.51 L 794.33,160.12 L 795.92,160.73 L 797.50,161.33 L 799.08,161.94 L 800.67,162.54 L 802.25,163.15 L 803.83,163.75 L 805.42,164.35 L 807.00,164.96 L 808.58,165.56 L 810.17,166.16 L 811.75,166.76 L 813.33,167.36 L 814.92,167.96 L 816.50,168.56 L 818.08,169.15 L 819.67,169.75 L 821.25,170.35 L 822.83,170.94 L 824.42,171.54 L 826.00,172.13 L 827.58,172.73 L 829.17,173.32 L 830.75,173.91 L 832.33,174.50 L 833.92,175.09 L 835.50,175.68 L 837.08,176.27 L 838.67,176.86 L 840.25,177.44 L 841.83,178.03 L 843.42,178.61 L 845.00,179.20 L 846.58,179.78 L 848.17,180.36 L 849.75,180.94 L 851.33,181.52 L 852.92,182.10 L 854.50,182.68 L 856.08,183.26 L 857.67,183.83 L 859.25,184.41 L 860.83,184.98 L 862.42,185.55 L 864.00,186.12 L 865.58,186.69 L 867.17,187.26 L 868.75,187.83 L 870.33,188.39 L 871.92,188.96 L 873.50,189.52 L 875.08,190.08 L 876.67,190.64 L 878.25,191.20 L 879.83,191.76 L 881.42,192.31 L 883.00,192.86 L 884.58,193.42 L 886.17,193.97 L 887.75,194.52 L 889.33,195.06 L 890.92,195.61 L 892.50,196.15 L 894.08,196.69 L 895.67,197.23 L 897.25,197.77 L 898.83,198.31 L 900.42,198.84 L 902.00,199.37 L 903.58,199.90 L 905.17,200.43 L 906.75,200.96 L 908.33,201.48 L 909.92,202.00 L 911.50,202.52 L 913.08,203.03 L 914.67,203.55 L 916.25,204.06 L 917.83,204.56 L 919.42,205.07 L 921.00,205.57 L 922.58,206.07 L 924.17,206.57 L 925.75,207.06 L 927.33,207.55" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<line x1="560.0" y1="67.2" x2="892.5" y2="201.5" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="5 3"/>
+<circle cx="560.0" cy="67.2" r="3.2" fill="#5ac878"/>
+<line x1="892.5" y1="196.2" x2="908.0" y2="201.5" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="5 3"/>
+<circle cx="892.5" cy="196.2" r="3.2" fill="#5ac878"/>
+<line x1="908.0" y1="201.4" x2="908.3" y2="201.5" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="5 3"/>
+<circle cx="908.0" cy="201.4" r="3.2" fill="#5ac878"/>
+<circle cx="908.3" cy="201.5" r="3.6" fill="#9b7ede"/>
+<text x="530" y="244" class="xs muted" text-anchor="start">near the root, magnified: the tangent and the curve all but coincide</text>
+<text x="530" y="396" class="xs muted" text-anchor="start">— and that closeness IS quadratic convergence</text>
+<rect x="560" y="256" width="380" height="110" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="560" y1="355.0" x2="940" y2="355.0" class="grid" stroke-width="0.8"/>
+<text x="554" y="359.0" class="xs mono" text-anchor="end">0</text>
+<text x="554" y="271.0" class="xs mono" text-anchor="end">0.08</text>
+<text x="598.0000000000001" y="381" class="xs mono" text-anchor="middle">0.52</text>
+<text x="674.0000000000002" y="381" class="xs mono" text-anchor="middle">0.53</text>
+<text x="750.0000000000005" y="381" class="xs mono" text-anchor="middle">0.54</text>
+<text x="826.0000000000006" y="381" class="xs mono" text-anchor="middle">0.55</text>
+<text x="902.0000000000008" y="381" class="xs mono" text-anchor="middle">0.56</text>
+<path d="M 618.58,256.77 L 620.17,257.53 L 621.75,258.29 L 623.33,259.06 L 624.92,259.82 L 626.50,260.59 L 628.08,261.35 L 629.67,262.12 L 631.25,262.88 L 632.83,263.64 L 634.42,264.41 L 636.00,265.17 L 637.58,265.93 L 639.17,266.69 L 640.75,267.46 L 642.33,268.22 L 643.92,268.98 L 645.50,269.74 L 647.08,270.50 L 648.67,271.26 L 650.25,272.02 L 651.83,272.78 L 653.42,273.54 L 655.00,274.30 L 656.58,275.06 L 658.17,275.82 L 659.75,276.58 L 661.33,277.34 L 662.92,278.10 L 664.50,278.86 L 666.08,279.62 L 667.67,280.38 L 669.25,281.14 L 670.83,281.89 L 672.42,282.65 L 674.00,283.41 L 675.58,284.17 L 677.17,284.92 L 678.75,285.68 L 680.33,286.44 L 681.92,287.19 L 683.50,287.95 L 685.08,288.71 L 686.67,289.46 L 688.25,290.22 L 689.83,290.97 L 691.42,291.73 L 693.00,292.48 L 694.58,293.24 L 696.17,293.99 L 697.75,294.74 L 699.33,295.50 L 700.92,296.25 L 702.50,297.01 L 704.08,297.76 L 705.67,298.51 L 707.25,299.26 L 708.83,300.02 L 710.42,300.77 L 712.00,301.52 L 713.58,302.27 L 715.17,303.02 L 716.75,303.77 L 718.33,304.53 L 719.92,305.28 L 721.50,306.03 L 723.08,306.78 L 724.67,307.53 L 726.25,308.28 L 727.83,309.03 L 729.42,309.78 L 731.00,310.52 L 732.58,311.27 L 734.17,312.02 L 735.75,312.77 L 737.33,313.52 L 738.92,314.27 L 740.50,315.01 L 742.08,315.76 L 743.67,316.51 L 745.25,317.25 L 746.83,318.00 L 748.42,318.75 L 750.00,319.49 L 751.58,320.24 L 753.17,320.98 L 754.75,321.73 L 756.33,322.47 L 757.92,323.22 L 759.50,323.96 L 761.08,324.71 L 762.67,325.45 L 764.25,326.20 L 765.83,326.94 L 767.42,327.68 L 769.00,328.43 L 770.58,329.17 L 772.17,329.91 L 773.75,330.65 L 775.33,331.40 L 776.92,332.14 L 778.50,332.88 L 780.08,333.62 L 781.67,334.36 L 783.25,335.10 L 784.83,335.84 L 786.42,336.58 L 788.00,337.32 L 789.58,338.06 L 791.17,338.80 L 792.75,339.54 L 794.33,340.28 L 795.92,341.02 L 797.50,341.76 L 799.08,342.49 L 800.67,343.23 L 802.25,343.97 L 803.83,344.71 L 805.42,345.44 L 807.00,346.18 L 808.58,346.92 L 810.17,347.65 L 811.75,348.39 L 813.33,349.12 L 814.92,349.86 L 816.50,350.60 L 818.08,351.33 L 819.67,352.06 L 821.25,352.80 L 822.83,353.53 L 824.42,354.27 L 826.00,355.00 L 827.58,355.73 L 829.17,356.47 L 830.75,357.20 L 832.33,357.93 L 833.92,358.66 L 835.50,359.40 L 837.08,360.13 L 838.67,360.86 L 840.25,361.59 L 841.83,362.32 L 843.42,363.05 L 845.00,363.78 L 846.58,364.51 L 848.17,365.24 L 849.75,365.97" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<line x1="636.4" y1="265.3" x2="822.5" y2="355.0" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="5 3"/>
+<circle cx="636.4" cy="265.3" r="3.2" fill="#5ac878"/>
+<line x1="822.5" y1="353.4" x2="826.0" y2="355.0" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="5 3"/>
+<circle cx="822.5" cy="353.4" r="3.2" fill="#5ac878"/>
+<circle cx="826.0" cy="355.0" r="3.6" fill="#9b7ede"/>
+<line x1="530.0" y1="418.0" x2="550.0" y2="418.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="558" y="422" class="xs" text-anchor="start">the true distance: convex, so every tangent lies below it</text>
+<line x1="530.0" y1="435.0" x2="550.0" y2="435.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="558" y="439" class="xs" text-anchor="start">Newton's steps: each lands short of the root, never past</text>
+<line x1="530.0" y1="452.0" x2="550.0" y2="452.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="558" y="456" class="xs" text-anchor="start">the root, t = 0.55</text>
+<text x="26" y="406.0" class="xs muted" text-anchor="start">by hand, in double precision; the ratio tends to f''/2|f'| = 0.9</text>
+<text x="26" y="426.0" class="xs muted" text-anchor="start">n</text>
+<text x="154" y="426.0" class="xs muted" text-anchor="end">t</text>
+<text x="258" y="426.0" class="xs muted" text-anchor="end">gap</text>
+<text x="334" y="426.0" class="xs muted" text-anchor="end">error</text>
+<text x="424" y="426.0" class="xs muted" text-anchor="end">err / prev²</text>
+<line x1="26" y1="434.0" x2="430" y2="434.0" class="grid" stroke-width="1.0"/>
+<text x="26" y="451.0" class="xs" text-anchor="start">0</text>
+<text x="154" y="451.0" class="xs mono" text-anchor="end">0.0000000000</text>
+<text x="258" y="451.0" class="xs mono" text-anchor="end">2.0594117082</text>
+<text x="334" y="451.0" class="xs mono" text-anchor="end">5.500e-01</text>
+<text x="424" y="451.0" class="xs mono" text-anchor="end"></text>
+<text x="26" y="468.0" class="xs" text-anchor="start">1</text>
+<text x="154" y="468.0" class="xs mono" text-anchor="end">0.5250490243</text>
+<text x="258" y="468.0" class="xs mono" text-anchor="end">0.0815022253</text>
+<text x="334" y="468.0" class="xs mono" text-anchor="end">2.495e-02</text>
+<text x="424" y="468.0" class="xs mono" text-anchor="end">0.08248</text>
+<text x="26" y="485.0" class="xs" text-anchor="start">2</text>
+<text x="154" y="485.0" class="xs mono" text-anchor="end">0.5495390376</text>
+<text x="258" y="485.0" class="xs mono" text-anchor="end">0.0014756908</text>
+<text x="334" y="485.0" class="xs mono" text-anchor="end">4.610e-04</text>
+<text x="424" y="485.0" class="xs mono" text-anchor="end">0.74044</text>
+<text x="26" y="502.0" class="xs" text-anchor="start">3</text>
+<text x="154" y="502.0" class="xs mono" text-anchor="end">0.5499998095</text>
+<text x="258" y="502.0" class="xs mono" text-anchor="end">0.0000006097</text>
+<text x="334" y="502.0" class="xs mono" text-anchor="end">1.905e-07</text>
+<text x="424" y="502.0" class="xs mono" text-anchor="end">0.89661</text>
+</svg>

@@ -1,0 +1,74 @@
+<svg viewBox="0 0 900 372" role="img" aria-labelledby="l84f8-t l84f8-d">
+  <title id="l84f8-t">The degenerate candidate axis</title>
+  <desc id="l84f8-d">Two objects on the same floor always have a parallel edge pair, and the two formulations of the edge-edge test respond to it completely differently.</desc>
+  <defs>
+    <marker id="e-i-l84f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="372" class="fill-bg" stroke="none"/>
+<text x="190" y="46" class="sm" text-anchor="middle">the parallel pair is the DEFAULT</text>
+<text x="190" y="62" class="xs muted" text-anchor="middle">two things on one floor, at any yaw</text>
+<rect x="60" y="206" width="260" height="22" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<rect x="116" y="146" width="62" height="60" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<rect x="210" y="156" width="52" height="50" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<line x1="147.00" y1="200.00" x2="147.00" y2="118.00" stroke="#f0961e" stroke-width="1.6" marker-end="url(#e-up147-l84f8)"/>
+<line x1="236.00" y1="200.00" x2="236.00" y2="118.00" stroke="#f0961e" stroke-width="1.6" marker-end="url(#e-up236-l84f8)"/>
+<text x="190" y="102" class="xs mono" text-anchor="middle">both up axes point the same way</text>
+<text x="190" y="256" class="xs muted" text-anchor="middle">so a₁ × b₁ ≈ 0 — and never exactly 0,</text>
+<text x="190" y="270" class="xs muted" text-anchor="middle">because both came through a quaternion</text>
+<text x="190" y="284" class="xs muted" text-anchor="middle">conversion. Measured at 1.22e−07.</text>
+<text x="452" y="46" class="sm" text-anchor="start">false separations, 400 overlapping pairs each</text>
+<text x="452" y="74" class="xs muted" text-anchor="start">tilt, rad</text>
+<text x="658" y="74" class="xs muted" text-anchor="end">min |aᵢ×bⱼ|</text>
+<text x="750" y="74" class="xs muted" text-anchor="end">normalised</text>
+<text x="816" y="74" class="xs muted" text-anchor="end">absR</text>
+<text x="894" y="74" class="xs muted" text-anchor="end">absR + ε</text>
+<line x1="452" y1="82.0" x2="900" y2="82.0" class="grid" stroke-width="1.0"/>
+<text x="452" y="99.0" class="xs" text-anchor="start">1e-01</text>
+<text x="658" y="99.0" class="xs mono" text-anchor="end">9.980e-02</text>
+<text x="750" y="99.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="99.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="99.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="116.0" class="xs" text-anchor="start">1e-02</text>
+<text x="658" y="116.0" class="xs mono" text-anchor="end">1.000e-02</text>
+<text x="750" y="116.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="116.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="116.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="133.0" class="xs" text-anchor="start">1e-03</text>
+<text x="658" y="133.0" class="xs mono" text-anchor="end">1.000e-03</text>
+<text x="750" y="133.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="133.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="133.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="150.0" class="xs" text-anchor="start">1e-04</text>
+<text x="658" y="150.0" class="xs mono" text-anchor="end">1.000e-04</text>
+<text x="750" y="150.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="150.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="150.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="167.0" class="xs" text-anchor="start">1e-05</text>
+<text x="658" y="167.0" class="xs mono" text-anchor="end">1.000e-05</text>
+<text x="750" y="167.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="167.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="167.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="184.0" class="xs" text-anchor="start">1e-06</text>
+<text x="658" y="184.0" class="xs mono" text-anchor="end">1.100e-06</text>
+<text x="750" y="184.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="184.0" class="xs mono" text-anchor="end">0</text>
+<text x="894" y="184.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="201.0" class="xs" text-anchor="start">1e-07</text>
+<text x="658" y="201.0" class="xs mono" text-anchor="end">2.580e-07</text>
+<text x="750" y="201.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="201.0" class="xs mono" text-anchor="end">188</text>
+<text x="894" y="201.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="218.0" class="xs" text-anchor="start">exactly shared</text>
+<text x="658" y="218.0" class="xs mono" text-anchor="end">1.220e-07</text>
+<text x="750" y="218.0" class="xs mono" text-anchor="end">0</text>
+<text x="816" y="218.0" class="xs mono" text-anchor="end">89</text>
+<text x="894" y="218.0" class="xs mono" text-anchor="end">0</text>
+<text x="452" y="248.5" class="xs muted" text-anchor="start">THE NORMALISED FORM NEVER FAILS, and that is a</text>
+<text x="452" y="262.5" class="xs muted" text-anchor="start">theorem: if two convex bodies overlap then NO</text>
+<text x="452" y="276.5" class="xs muted" text-anchor="start">direction separates them, so an axis made of pure</text>
+<text x="452" y="290.5" class="xs muted" text-anchor="start">rounding error reports an overlap like any other.</text>
+</svg>

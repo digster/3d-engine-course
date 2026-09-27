@@ -1,0 +1,855 @@
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-bench"><span class="num">4.1</span>The harness</h3>
+
+  <p>
+    <code>engine/core/bench.hpp</code> is §3.1's four rules, mechanised. It is header-only and
+    it is deliberately small: the point is not that timing is hard to write, it is that writing
+    it three times produces three subtly different things.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/bench.hpp — what a run reports</span></figcaption>
+    <pre><code class="lang-cpp">struct bench_result
+{
+    double median_ns = 0.0;   ///&lt; the number to quote
+    double min_ns = 0.0;      ///&lt; …and the two that say whether to believe it
+    double max_ns = 0.0;
+    int samples = 0;
+    std::size_t items = 0;
+
+    [[nodiscard]] double spread() const;   // (max - min) / median
+};</code></pre>
+  </figure>
+
+  <p>
+    Per <em>item</em>, not per run, because the comparisons in this lesson are between layouts at
+    different <em>N</em> and a total is not comparable across them. And three numbers rather than
+    one, because rule 2.
+  </p>
+
+  <p>
+    The comparison function is the reason the file exists:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/bench.hpp — alternating</span></figcaption>
+    <pre><code class="lang-cpp">for (int i = 0; i &lt; reps; ++i)
+{
+    const Uint64 t0 = SDL_GetPerformanceCounter();
+    const double va = arm_a();
+    const Uint64 t1 = SDL_GetPerformanceCounter();
+    const double vb = arm_b();
+    const Uint64 t2 = SDL_GetPerformanceCounter();
+
+    bench_keep(va);
+    bench_keep(vb);
+    if (va != vb) { agree = false; /* …and record the relative difference */ }
+
+    a_ns.push_back(elapsed_ns(t0, t1) / items);
+    b_ns.push_back(elapsed_ns(t1, t2) / items);
+}</code></pre>
+  </figure>
+
+  <p>
+    One rep of A, one rep of B, microseconds apart. Both arms see the same thermal state, the
+    same scheduler, the same neighbours on the machine.
+  </p>
+
+  <p>
+    And rule 4, which is carried out in two parts:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/bench.hpp — agreement</span></figcaption>
+    <pre><code class="lang-cpp">struct bench_ab
+{
+    bench_result a;
+    bench_result b;
+    bool agree = false;           ///&lt; bit-identical
+    double max_rel_diff = 0.0;    ///&lt; …and by how much, when not
+
+    [[nodiscard]] double ratio() const;   // b.median / a.median
+};</code></pre>
+  </figure>
+
+  <p>
+    Exact equality is the right default and it is too strict for one real case: an arm that
+    visits the same elements in a <strong>different order</strong> sums the same numbers in a
+    different order, and floating-point addition is not associative. Two of our arms are exactly
+    that, so <code>agree</code> correctly reports <code>false</code> for them and the caller needs
+    the magnitude to decide whether that is rounding or a bug. Anything above about
+    10<sup>−9</sup> is not rounding.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>volatile</code>, and what it does and does not do</span>
+    <p><code>inline volatile double g_bench_sink;</code> plus
+       <code>bench_keep(v) { g_bench_sink = v; }</code> is the whole of rule 3.</p>
+    <p><code>volatile</code> is widely misunderstood as being about threads. It is not — for
+       threads you want <code>std::atomic</code>, and <code>volatile</code> gives you no ordering
+       and no atomicity. What it <em>does</em> mean is that accesses are <strong>observable
+       behaviour of the abstract machine</strong>: the compiler must emit every read and every
+       write, in program order relative to other volatile accesses, and may not invent or elide
+       them. That is exactly the property a benchmark needs — the store must happen, therefore
+       the value must be computed, therefore the loop that computed it must run.</p>
+    <p><code>inline</code> on a namespace-scope variable is C++17's answer to "one definition
+       across every translation unit that includes this header", and it is what lets a
+       header-only sink exist at all.</p>
+  </div>
+
+  <h3 id="impl-layouts"><span class="num">4.2</span>The six layouts, and being fair to them</h3>
+
+  <p>
+    The layouts live in <code>scratch/scene_layouts.hpp</code> rather than inside the benchmark,
+    and the reason is the one this course keeps arriving at: they have <em>two</em> consumers.
+    <code>bench_56.cpp</code> times them; <code>verify_56.cpp</code> checks they all describe the
+    same scene. A benchmark whose subject is transcribed into its own test has tested the
+    transcription.
+  </p>
+
+  <p>
+    Two of the fairness decisions are worth reading, because a benchmark's conclusions are
+    mostly decided by them.
+  </p>
+
+  <p>
+    <strong>The virtual arm gets a polymorphic twin.</strong> With one concrete type the indirect
+    branch is perfectly predicted and the comparison flatters <code>virtual</code>; with two
+    interleaved types it is not. Measuring only the kind version would have been arguing against
+    a straw man in the engine's favour, so both are timed — and §5.3 is what that produced.
+  </p>
+
+  <p>
+    <strong>The tree gets a second child order.</strong> A tree built and immediately walked has
+    its nodes in allocation order, and the addresses still march forward even though pointers are
+    leading the way. That is a real result and it is not the state a tree is in after an hour of
+    play. So <code>tree_node</code> carries <em>two</em> link pairs over one set of nodes:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/scene_layouts.hpp</span></figcaption>
+    <pre><code class="lang-cpp">struct tree_node
+{
+    engine::transform xform;
+    tree_node* first_child = nullptr;
+    tree_node* next_sibling = nullptr;
+
+    // A second child/sibling chain over the same nodes, in a shuffled order. Two
+    // link pairs rather than two node sets, so the two tree arms differ in
+    // VISIT ORDER and in nothing else — not in allocation, not in footprint, not
+    // in which addresses exist.
+    tree_node* alt_child = nullptr;
+    tree_node* alt_sibling = nullptr;
+};</code></pre>
+  </figure>
+
+  <h3 id="impl-fair"><span class="num">4.3</span>The check that makes the numbers mean anything</h3>
+
+  <p>
+    <code>verify_56</code> has six sections; §E is the one Lesson 5.6 stands on. It builds all
+    seven layouts over the same 2,000-object scene and asserts they compute the same answer —
+    bit-identical where the visit order is the same, within 10<sup>−9</sup> where it is not.
+  </p>
+
+  <p>
+    It found two problems. Neither was a bug in the engine; both were the benchmark measuring
+    something other than what it claimed.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">Finding 1 — the fragmentation nobody can promise</span>
+    <p>The pointer layout allocates spacer blocks between its objects, so that "pointer chasing"
+       does not quietly measure a contiguous walk with an extra load. §D checked whether it
+       worked, by counting how many consecutive objects were exactly
+       <code>sizeof(scene_object)</code> apart. The answer was <strong>497 of 499</strong>.</p>
+    <p>The first diagnosis was a size-class mismatch — 24-byte spacers between 96-byte objects go
+       in different allocator runs — and matching the sizes did move
+       <code>ptr_ordered</code> at 100,000 objects from <strong>1.09× to 1.98×</strong>. But
+       chasing it further produced something more useful, and it is the reason this callout
+       exists. The <em>same layout code</em> gives different answers in different processes:</p>
+    <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Adjacency of consecutive heap objects measured in four
+               different processes running identical layout code.</caption>
+      <thead><tr><th>process</th><th>n</th><th>consecutive objects 96 B apart</th></tr></thead>
+      <tbody>
+        <tr><td><code>bench_56</code>, <code>-O2</code></td><td>4 … 100,000</td><td><strong>0</strong> at every size</td></tr>
+        <tr><td><code>bench_56</code>, <code>-fno-vectorize</code></td><td>100,000</td><td>99,411 of 99,999</td></tr>
+        <tr><td>a standalone probe</td><td>100,000</td><td>0 of 99,999</td></tr>
+        <tr><td>a standalone probe</td><td>500</td><td>485 of 499</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p><strong>Adjacency is a property of the process, not of the layout.</strong> macOS's
+       allocator hands same-size blocks out of a run and interleaves them, or does not, depending
+       on that size class's state — which depends on everything the process allocated earlier. No
+       amount of care in the layout code decides it, and no separate harness can assert another
+       program's heap state.</p>
+    <p>So the resolution is not a fix, it is a <em>protocol</em>: <code>bench_56</code>
+       <strong>reports its own layout at every <em>n</em></strong> (0 adjacent throughout, which
+       is why §5.1's table is sound), <code>measure_56.py</code> flags any build whose objects
+       came out contiguous, and <code>verify_56</code> asserts only what the code controls — that
+       three spacers per object were allocated — and prints the adjacency rather than judging it.
+       <strong>A number whose provenance you cannot state is a number you should not
+       publish.</strong></p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Finding 2 — an assertion that was asserting an accident</span>
+    <p>§E originally asserted that <em>at least one</em> reordering arm was not bit-identical to
+       the baseline, to prove the tolerance was earning its keep. It failed: at n = 2,000 with
+       this data, all three reorderings happened to land on the same bits.</p>
+    <p>Whether a reordering differs is a property of the <em>numbers</em>, not of the layout, so
+       asserting it is asserting an accident. The check was replaced with a four-line
+       demonstration of the underlying fact — <code>(a+b)-a</code> against
+       <code>(a-a)+b</code> at 10<sup>16</sup> — which is true regardless of the data and is what
+       the tolerance actually exists for.</p>
+  </div>
+
+  <p>
+    There is a third, quieter correction that changed a headline. The accumulator originally read
+    five of a matrix's sixteen entries, which sounds harmless. <code>parent_from_local</code> is
+    inlined into the flat, pointer, SoA and tree loops, so a compiler that sees only five entries
+    used is free to stop computing the other eleven — and it <em>cannot</em> see through the
+    virtual call. The virtual arm was building whole matrices while its rivals built a third of
+    one, and the resulting "cost of <code>virtual</code>" was partly the cost of doing more work.
+    Reading all sixteen took it from <strong>3.4× down to 1.7×</strong>.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">sh scratch/build_verify_56.sh</span></figcaption>
+    <pre><code class="lang-bash">=== E. All seven layouts describe the SAME scene ===
+  [PASS] ordered pointers: bit-identical
+  [PASS] SoA: bit-identical
+  [PASS] virtual (monomorphic): bit-identical
+  [PASS] virtual (polymorphic): bit-identical
+  [PASS] shuffled pointers: same scene, 0.0e+00 apart (reordered sum)
+  [PASS] tree shuffled: same scene, 0.0e+00 apart
+  [PASS] floating-point addition is not associative: (a+b)-a is 0.0 and (a-a)+b is 1.0
+
+=== D. The layouts are what they claim to be ===
+  [PASS] the flat array strides by exactly sizeof(scene_object): 96
+  [PASS] 1 of 500 pointers are still in their original slot — genuinely shuffled
+        (n=500: 483 of 499 consecutive objects 96 B apart — a property of this
+         process's heap, reported not asserted)
+  [PASS] 1500 spacers for 500 objects — three same-size-class blocks each, which is
+         the part the layout controls
+  [PASS] both tree chains visit the same 499 children — they differ in ORDER and nothing else</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       5 — THE RESULTS
+       ================================================================= -->
+  <h2 id="results"><span class="num">5</span>The Results</h2>
+
+  <p>
+    All of the following is <code>python3 scratch/measure_56.py</code> on an Apple Silicon
+    laptop, <code>-O2 -DNDEBUG</code>, no LTO, medians of 25 alternating reps. Your machine will
+    give different numbers; the <em>shapes</em> are what to compare.
+  </p>
+
+  <p>
+    The script prints one thing before any timing, and it is there because of §4.3: <strong>where
+    each build's objects actually landed</strong>. The <code>-O2</code> build reports 0 of 99,999
+    consecutive objects adjacent at every size, so its pointer arms really are walking scattered
+    memory. The <code>-fno-vectorize</code> build reports 99,411 of 99,999 <em>adjacent</em> —
+    a different heap layout from the same source — so only its <code>soa</code> and
+    <code>flat</code> rows are quoted below, neither of which touches the heap per object.
+  </p>
+
+  <h3 id="res-knee"><span class="num">5.1</span>Where the knee is</h3>
+
+@@FIG_KNEE@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Cost relative to a flat array. Lower is faster; 1.00× means the layout made no
+             difference. Workload: build a model matrix per object.</caption>
+    <thead>
+      <tr><th>layout</th><th>4</th><th>100</th><th>1,000</th><th>10,000</th><th>100,000</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>flat</code> (ns/item)</td><td>1.82</td><td>1.51</td><td>1.52</td><td>1.53</td><td>1.51</td></tr>
+      <tr><td><code>ptr_ordered</code></td><td>1.00×</td><td>1.01×</td><td>1.00×</td><td>1.01×</td><td><strong>1.98×</strong></td></tr>
+      <tr><td><code>ptr_shuffled</code></td><td>0.99×</td><td>1.00×</td><td>1.13×</td><td>1.24×</td><td><strong>2.38×</strong></td></tr>
+      <tr><td><code>soa</code></td><td>1.00×</td><td>0.68×</td><td>0.64×</td><td>0.66×</td><td>0.68×</td></tr>
+      <tr><td><code>virtual_mono</code></td><td>1.55×</td><td>1.55×</td><td>1.55×</td><td>1.57×</td><td>1.70×</td></tr>
+      <tr><td><code>virtual_poly</code></td><td>1.49×</td><td>1.56×</td><td>1.53×</td><td>1.57×</td><td>1.68×</td></tr>
+      <tr><td><code>tree_fresh</code></td><td>1.06×</td><td>1.04×</td><td>1.04×</td><td>1.28×</td><td>1.68×</td></tr>
+      <tr><td><code>tree_shuffled</code></td><td>1.06×</td><td>1.04×</td><td>1.03×</td><td><strong>4.86×</strong></td><td><strong>6.47×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Read the left half of that table first, because it is the half nobody publishes.</strong>
+    Up to a thousand objects, every layout is within 13% of every other one, except the virtual
+    call. Scattering objects across the heap costs <em>nothing</em>. Walking a linked tree costs
+    <em>nothing</em>. All of the cache-hostility everybody warns about is invisible, for the
+    simple reason that 93 KB fits in L2 and a hundred cycles of latency you never pay is a
+    hundred cycles you cannot save.
+  </p>
+
+  <p>
+    <strong>The knee is between 1,000 and 10,000 objects</strong> — which is exactly where 96
+    bytes per object stops fitting in this machine's L2. That is not a coincidence to be noted,
+    it is the mechanism: the number is a property of the cache, and on a machine with a different
+    L2 the knee moves.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What each row is entitled to claim</span>
+    <p>The two <em>shuffled</em> rows and the <code>soa</code> row are the load-bearing ones,
+       because what they vary is under the program's control: visit order, and which arrays exist.
+       <code>ptr_ordered</code> and <code>tree_fresh</code> vary something the program only
+       <em>influences</em> — where the allocator put things — so their numbers are true of this
+       run and their <em>causes</em> are not pinned down. §4.3 is why, and the benchmark prints
+       its own allocation layout so you can check the run you are reading.</p>
+    <p>None of §5.2, §5.3 or §5.4's conclusions rests on them.</p>
+  </div>
+
+  <p>
+    And our scene is <strong>four objects</strong>. Nothing in this table justifies changing the
+    renderer, and §5.5 says so plainly rather than finding a reason.
+  </p>
+
+  <h3 id="res-soa"><span class="num">5.2</span>SoA wins twice, for two different reasons</h3>
+
+  <p>
+    Here is the result that changed how I would explain data-oriented design. SoA is faster on
+    <em>both</em> workloads, and the two wins have nothing in common.
+  </p>
+
+@@FIG_TWO_SOA@@
+
+  <p>
+    On the full transform, SoA is <strong>0.64–0.68×</strong> — a 33% win — and the win is
+    <em>the same at every scene size</em>. At four objects, 384 bytes, entirely inside L1, where
+    there is no memory effect available to have. That alone should make you suspicious of a cache
+    explanation, and one experiment settles it: rebuild with <code>-fno-vectorize
+    -fno-slp-vectorize</code>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>SoA against flat, with and without auto-vectorisation.</caption>
+    <thead><tr><th>workload</th><th>build</th><th>4</th><th>100</th><th>1,000</th><th>10,000</th><th>100,000</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2">full transform<br><small>60 of 96 bytes</small></td>
+          <td><code>-O2</code></td><td>1.00×</td><td>0.68×</td><td>0.64×</td><td>0.66×</td><td>0.68×</td></tr>
+      <tr><td><code>-fno-vectorize</code></td><td>1.00×</td><td><strong>1.00×</strong></td><td><strong>0.99×</strong></td><td><strong>1.00×</strong></td><td><strong>1.00×</strong></td></tr>
+      <tr><td rowspan="2">cull<br><small>12 of 96 bytes</small></td>
+          <td><code>-O2</code></td><td>0.82×</td><td>0.58×</td><td>0.52×</td><td><strong>0.19×</strong></td><td><strong>0.19×</strong></td></tr>
+      <tr><td><code>-fno-vectorize</code></td><td>1.00×</td><td>0.97×</td><td>0.98×</td><td><strong>0.37×</strong></td><td><strong>0.36×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The full-transform win disappears completely.</strong> 1.00× at every size. So it was
+    never a cache effect at all: it is that a contiguous array of <code>mat3</code> vectorises and
+    a 96-byte stride does not. That is a real and useful win — but it is a <em>codegen</em> win,
+    and describing it as "cache-friendly data layout" would be describing the wrong mechanism and
+    predicting the wrong things.
+  </p>
+
+  <p>
+    Both rows of that table compare two <code>std::vector</code>s, so §4.3's allocator problem
+    cannot reach them: <code>flat</code> is one allocation and <code>soa</code> is three, in both
+    builds. That is what makes the scalar column quotable even though the same build's pointer
+    rows are not.
+  </p>
+
+  <p>
+    <strong>The cull win survives</strong>, and it appears exactly where the working set leaves
+    cache: 0.97–0.98× up to a thousand objects, then 0.37× and 0.36×. <em>That</em> is the cache
+    effect, in isolation, and with vectorisation switched back on the two effects compound to
+    0.19×.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule this produces, which is not "use SoA"</span>
+    <p><strong>Split the data a loop does not read away from the data it does, and the size of
+       the prize is the fraction you leave behind.</strong></p>
+    <p>Reading 60 of 96 bytes, splitting buys nothing from the memory system — you were fetching
+       almost all of it anyway. Reading 12 of 96, splitting buys <strong>5×</strong>. That is why
+       an ECS is not "SoA for everything" but "a system declares which components it touches",
+       and it is the number Lesson 5.7 has to design against.</p>
+  </div>
+
+  <h3 id="res-virtual"><span class="num">5.3</span>What <code>virtual</code> costs, and what it does not</h3>
+
+@@FIG_VIRTUAL@@
+
+  <p>
+    A virtual call costs <strong>1.5–1.7×</strong> on this workload, and it costs it everywhere.
+    Two things about that number are more interesting than the number.
+  </p>
+
+  <p>
+    <strong>Monomorphic and polymorphic are the same.</strong> One implementation, perfectly
+    predictable, versus two interleaved by a hash: within 4% at every scene size. I expected the
+    polymorphic case to be substantially worse and it is not. Whatever <code>virtual</code> is
+    costing here, <em>it is not branch misprediction</em> — the CPU predicts an unpredictable
+    indirect call about as well as a trivial one, which is a sentence I would not have written
+    before running this.
+  </p>
+
+  <p>
+    <strong>And it is flat across N.</strong> 1.55× at four objects, in L1, where there is no
+    memory effect to have — so it is not the vtable load either. What is left is <em>inlining</em>:
+    the compiler cannot see through the call, so <code>parent_from_local</code>'s nine multiplies
+    and sixteen stores cannot be fused, reordered or vectorised across iterations. The cost of
+    <code>virtual</code> in a hot loop is mostly the optimisations it prevents, not the
+    instructions it adds.
+  </p>
+
+  <p>
+    That reframes the usual advice. "Virtual calls are slow because of the indirect branch" is
+    the folk explanation and this data does not support it. "Virtual calls in a hot loop cost you
+    inlining, and inlining is where the optimiser lives" does support it — and it predicts the
+    right thing, which is that the cost scales with how much the body <em>would have</em> gained
+    from being inlined.
+  </p>
+
+  <h3 id="res-tree"><span class="num">5.4</span>The tree, judged fairly</h3>
+
+  <p>
+    The lesson is called "why scene trees creak", and the honest answer is: <em>usually they do
+    not.</em>
+  </p>
+
+  <p>
+    A freshly built tree — nodes in allocation order — costs <strong>1.04–1.28×</strong> up to
+    ten thousand objects. The addresses still march forward, the prefetcher does not care that
+    pointers are leading the way, and a scene graph is a perfectly reasonable thing to walk.
+    Anyone who has told you a tree is inherently slow has not measured a fresh one.
+  </p>
+
+  <p>
+    Shuffle the same nodes — same allocations, same footprint, same addresses in existence, only
+    the <em>order</em> of the links changed — and it goes to <strong>4.86×</strong> at ten
+    thousand and <strong>6.47×</strong> at a hundred thousand. That is §3.3's serial dependency
+    chain: each node's address is inside the previous node, so the misses cannot overlap.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The honest statement of the case against scene trees</span>
+    <p>A scene tree is not slow because it is a tree, and it is not slow because it is
+       object-oriented. It is slow <strong>when its nodes are in an order the prefetcher cannot
+       follow</strong>, which is the state every long-lived scene ends up in — objects created
+       and destroyed, allocator holes reused, children re-parented, draw lists re-sorted.</p>
+    <p>The compounding argument is that a tree gives you <em>no way to fix that</em>. You cannot
+       compact it, because the nodes' addresses are the identity. Lesson 5.4's handles exist
+       precisely so an array can be compacted underneath you — and that is the connection between
+       these two lessons that the ECS is built on.</p>
+  </div>
+
+  <h3 id="res-decide"><span class="num">5.5</span>What this justifies, and what it does not</h3>
+
+  <p>
+    A measurement lesson has to be willing to conclude "no". Here is what the data supports.
+  </p>
+
+  <p>
+    <strong>It does not justify changing the renderer.</strong> The scene is four objects. Every
+    layout is within noise of every other at that size, the whole scene is 384 bytes, and the
+    entire per-object transform work for a frame is about six nanoseconds. Rewriting
+    <code>collect_triangles</code> around a different layout would be pure churn, and the golden
+    image staying byte-identical this lesson is not an achievement — it is the consequence of
+    correctly deciding to change nothing.
+  </p>
+
+  <p>
+    <strong>It does justify three things about the ECS</strong>, and each has a number attached:
+  </p>
+
+  <ul>
+    <li><strong>Storage must be dense and contiguous, and it must be compactable.</strong> Not
+        because contiguous is virtuous — <code>ptr_ordered</code> is 1.00× up to ten thousand
+        objects — but because a long-lived scene <em>decays</em> into disorder, and the difference
+        between an array you can compact and a tree you cannot is 6.47× at the scale the decay
+        happens. Lesson 5.4 already paid for this with swap-and-patch removal; 5.6 is the
+        justification arriving after the spend, which is the honest order to admit.</li>
+    <li><strong>A system must declare which components it touches.</strong> The full-transform
+        workload reads 60 of 96 bytes and splitting buys nothing; the cull workload reads 12 and
+        splitting buys 5×. An ECS that hands every system the whole entity has given away the
+        only mechanism that produced a large number in this lesson.</li>
+    <li><strong>Iteration must not be virtual.</strong> A flat 1.5–1.7×, at every scene size,
+        for a call the compiler cannot inline. This is the one cost that is <em>not</em> a
+        function of N, so it is the one that applies to our four-object scene too.</li>
+  </ul>
+
+  <p>
+    <strong>And one thing it explicitly does not settle</strong>: archetype versus sparse-set
+    storage. Nothing here distinguishes them — both are dense, both are contiguous, both allow a
+    system to touch a subset. That question is about how components are <em>grouped</em>, and it
+    needs a different experiment. It is Lesson 5.7's, and it should be argued there rather than
+    smuggled in here on the strength of numbers that do not address it.
+  </p>
+
+  <!-- =================================================================
+       6 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">6</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>File manifest for Lesson 5.6.</caption>
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/core/bench.hpp</code></td><td><span class="tag new">new</span></td>
+          <td>A/B timing: alternate, median, keep, and check agreement.</td></tr>
+      <tr><td><code>scratch/scene_layouts.hpp</code></td><td><span class="tag new">new</span></td>
+          <td>The six layouts and two workloads, shared by the benchmark and the harness.</td></tr>
+      <tr><td><code>scratch/bench_56.cpp</code></td><td><span class="tag new">new</span></td>
+          <td>Times them, at five scene sizes.</td></tr>
+      <tr><td><code>scratch/measure_56.py</code></td><td><span class="tag new">new</span></td>
+          <td>Builds twice — with and without the vectoriser — and tabulates.</td></tr>
+      <tr><td><code>scratch/verify_56.cpp</code></td><td><span class="tag new">new</span></td>
+          <td>36 checks: the harness, the layouts' equivalence, and the golden.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    No engine source changed this lesson, and no <code>CMakeLists.txt</code> — <code>bench.hpp</code>
+    is header-only. That is the manifest telling the same story §5.5 does.
+  </p>
+
+@@LISTING:engine/include/engine/core/bench.hpp@@
+
+@@LISTING:scratch/scene_layouts.hpp@@
+
+@@LISTING:scratch/bench_56.cpp@@
+
+@@LISTING:scratch/verify_56.cpp@@
+
+  <!-- =================================================================
+       7 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">7</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8</code></pre>
+  </figure>
+
+  <p>
+    <strong>Release, and it matters more than usual.</strong> Every number in §5 is from
+    <code>-O2 -DNDEBUG</code>. A debug build measures the optimiser's absence, which is a
+    different and much less interesting experiment — the ratios flatten because everything is
+    slow.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the experiment</span></figcaption>
+    <pre><code class="lang-bash">python3 scratch/measure_56.py</code></pre>
+  </figure>
+
+  <p>
+    It compiles <code>bench_56.cpp</code> twice — once normally, once with
+    <code>-fno-vectorize -fno-slp-vectorize</code> — and prints both tables. The second build is
+    not a curiosity: it is the experiment that separates §5.2's two effects, and without it the
+    SoA result means the opposite of what everybody assumes it means.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the 36 checks</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_56.sh</code></pre>
+  </figure>
+
+  <p>Expected: <code>36 checks, 0 failures</code>, and a golden that is still byte-identical.</p>
+
+  <p>
+    <strong>What to look for on your own machine.</strong> The absolute nanoseconds will differ;
+    four things should not:
+  </p>
+
+  <ul>
+    <li><strong>A flat left-hand side.</strong> If layouts differ at 100 objects on your machine,
+        something is wrong with the measurement — check the spread first.</li>
+    <li><strong>A knee, somewhere.</strong> Its position tells you your L2 size divided by 96
+        bytes. On a machine with a 512 KB L2 it should appear earlier than it does here.</li>
+    <li><strong>The SoA full-transform win vanishing under <code>-fno-vectorize</code>.</strong>
+        If it survives, your compiler is doing something different and that is worth
+        investigating — start with <code>-Rpass=loop-vectorize</code>.</li>
+    <li><strong><code>tree_shuffled</code> being the worst line on the chart</strong>, by a wide
+        margin, at large N.</li>
+  </ul>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the golden, unchanged because nothing rendering changed</span></figcaption>
+    <pre><code class="lang-bash">./build/demos/sandbox --shot /tmp/shot_56.ppm
+cmp /tmp/shot_56.ppm scratch/shot_52.ppm &amp;&amp; echo "0 bytes differ"</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       8 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">8</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">1 · A suspiciously round number, especially zero</span>
+    <p><strong>Symptom.</strong> An arm reports 0.0000 ns, or every result is a multiple of the
+       same value.</p>
+    <p><strong>Cause.</strong> The timer is coarser than the work. On this machine one tick of
+       <code>SDL_GetPerformanceCounter</code> is 41.67 ns.</p>
+    <p><strong>Fix.</strong> Repeat the pass inside the timed region until a sample is worth
+       ~100 µs, and divide back out. Print
+       <code>SDL_GetPerformanceFrequency()</code> once so you know what your quantum is.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">2 · A number that is not physically possible</span>
+    <p><strong>Symptom.</strong> 0.166 ns per item for four matrix builds — 2.3 cycles for nine
+       multiplies and sixteen stores.</p>
+    <p><strong>Cause.</strong> The compiler computed the loop once. Repeating a pure function of
+       nothing is an invitation.</p>
+    <p><strong>Fix.</strong> Make each pass genuinely different work — a per-pass value used in
+       the arithmetic, not just added at the end. <strong>And do the arithmetic on every result
+       you publish:</strong> nanoseconds convert to cycles, cycles to instructions, and
+       instructions are countable. This is the only pitfall in the list that no tool will find
+       for you.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">3 · Two arms that should differ, agreeing exactly</span>
+    <p><strong>Symptom.</strong> A memory-bound comparison comes out 1.00× at every size.</p>
+    <p><strong>Cause.</strong> Something else is the bottleneck — usually the accumulator. A
+       serial chain of <code>double</code> additions is ~4 cycles each and will happily dominate
+       a loop body of three multiplies.</p>
+    <p><strong>Fix.</strong> Accumulate into something cheap (an <code>int</code>), or into
+       several independent accumulators summed at the end. Then re-run and check the difference
+       appeared.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">4 · The fragmentation you carefully arranged did not happen</span>
+    <p><strong>Symptom.</strong> A "scattered heap" benchmark performs exactly like a contiguous
+       array.</p>
+    <p><strong>Cause.</strong> Allocators bin by size class. Spacers of a different size than
+       your objects go in a different run and separate nothing.</p>
+    <p><strong>Fix.</strong> Match the spacer size to the object size — which moved a headline
+       by nearly 2× — and then stop trusting it, because <strong>you cannot control this from
+       your code</strong>. The same source gives different adjacency in different processes
+       (§4.3). Have the benchmark <em>report</em> its own layout at every size, and treat any
+       number from a build whose objects came out contiguous as measuring indirection rather
+       than scattering.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">5 · One arm's baseline moves between pairings</span>
+    <p><strong>Symptom.</strong> The <em>same</em> flat arm reads 0.98 ns/item in one comparison
+       and 1.83 in another.</p>
+    <p><strong>Cause.</strong> At large N the two arms evict each other. Alternation protects
+       against thermal drift and <em>introduces</em> cache interference.</p>
+    <p><strong>Fix.</strong> Pair every arm against its own freshly measured baseline and quote
+       the <strong>ratio within a pairing</strong>, never an absolute from one pairing against an
+       absolute from another. Both arms in a pairing paid the same interference.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">6 · You attributed the win to the wrong mechanism</span>
+    <p><strong>Symptom.</strong> None — this is the one that ships. The number is real, the
+       conclusion is wrong, and it predicts badly ever after.</p>
+    <p><strong>Cause.</strong> A plausible story adopted instead of an experiment. "SoA is faster
+       because of cache lines" fitted our 0.66× perfectly and was completely wrong.</p>
+    <p><strong>Fix.</strong> Find the knob that turns off your hypothesised mechanism and see
+       whether the effect goes with it. <code>-fno-vectorize</code>; a scene small enough to fit
+       in L1; a monomorphic version of a polymorphic call. <strong>An effect that survives the
+       removal of its explanation had a different explanation.</strong></p>
+  </div>
+
+  <!-- =================================================================
+       9 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">9</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>9.1 — Find your knee.</strong> Run the benchmark and locate the scene size at
+         which <code>ptr_shuffled</code> first exceeds 1.2×. Divide by 96 bytes, and compare
+         against your machine's actual L2 size (<code>sysctl -a | grep cachesize</code> on macOS,
+         <code>lscpu</code> on Linux). Then add scene sizes either side to bracket it more
+         tightly.</p>
+      <details><summary>Hint</summary>
+        <p>The sizes are one line in <code>bench_56.cpp</code>'s <code>main</code>. Powers of two
+           between 1,000 and 10,000 will bracket it in three runs.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>You should land within a factor of two of L2 ÷ 96, and the discrepancy is itself
+           informative: the pointer arm's working set is the objects <em>plus</em> the pointer
+           array <em>plus</em> the spacers, so it leaves cache sooner than the flat arm does.
+           Whether you can see the L3 as a second, gentler knee depends on your machine.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.2 — Shrink the object.</strong> <code>scene_object</code> is 96 bytes and the
+         transform loop reads 60. Make a 64-byte variant (drop <code>name</code>,
+         <code>tint</code>, <code>closed</code> and <code>surface</code> — the transform loop
+         reads none of them), add it as an arm, and predict the result before you run it.</p>
+      <details><summary>Hint</summary>
+        <p>96 → 64 bytes is 1.5 → 1.0 cache lines per object. Where on the curve would you expect
+           that to show, and where would you expect it not to?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Little to nothing below the knee, and a real win above it — the effect is a fraction
+           of the memory traffic, so it can only appear where memory traffic is the cost. The
+           general lesson is the one §5.2 states: <em>the prize is the fraction you leave
+           behind</em>, and it is collected only when you are paying for bandwidth. This is also
+           the honest argument for why an ECS component should be small: not tidiness, bandwidth,
+           above a scene size you should be able to name.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.3 — Make the tree fast.</strong> Keep the tree structure — parents, children,
+         siblings — but allocate every node from one contiguous array and link them in index
+         order. Measure. Then shuffle the <em>links</em> without moving the nodes, and measure
+         again.</p>
+      <details><summary>Hint</summary>
+        <p>This is <code>tree_fresh</code> versus <code>tree_shuffled</code> with the allocator
+           removed from the experiment.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Contiguous-and-ordered is close to the flat array; contiguous-and-shuffled is still
+           bad, though less bad than heap-shuffled because the working set is smaller. The
+           conclusion is the useful one: <strong>a hierarchy is not the problem — a traversal
+           order the prefetcher cannot follow is</strong>. Which is why real engines keep the
+           hierarchy and store it as a flat array sorted parent-before-child, and it is exactly
+           what Lesson 5.9 will build.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.4 — Devirtualise it.</strong> Replace the virtual call with a
+         <code>switch</code> on a small type tag, keeping the two node types. Measure against
+         both the virtual version and the flat array.</p>
+      <details><summary>Hint</summary>
+        <p>§5.3 argues the cost is inlining rather than prediction. A <code>switch</code> whose
+           arms are inlinable is the experiment that tests that claim.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>If §5.3 is right, the switch should recover most of the 1.5× because the bodies can be
+           inlined — even though there is still a data-dependent branch per object. If it does
+           not, §5.3 is wrong on your machine and you have found something worth writing down.
+           Either way you have tested a claim rather than believed one, which is the entire point
+           of this lesson.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.5 — Break the harness on purpose.</strong> In <code>bench.hpp</code>, change
+         <code>bench_keep</code> to do nothing. Re-run the benchmark. Then put it back and remove
+         the per-pass <code>bias</code> from one arm instead.</p>
+      <details><summary>Hint</summary>
+        <p>Both changes remove a defence. Predict which numbers become impossible.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Without <code>bench_keep</code> some arms collapse toward zero and the ratios become
+           meaningless — but not uniformly, which is the dangerous part: a partially-deleted
+           benchmark still produces a plausible-looking table. Removing the bias from one arm
+           makes that arm hoistable and it wins enormously, <em>and</em> <code>agree</code> goes
+           false, which is rule 4 doing its job. Keep the second result: it is the clearest
+           demonstration in the course of why a benchmark needs a correctness check.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       10 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">10</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine gained one header — <code>bench.hpp</code>, which is §3.1's four rules mechanised
+    — and this course gained something it needed more: <strong>numbers instead of a story</strong>
+    for the argument the next two lessons are built on.
+  </p>
+
+  <p>
+    What the numbers say, briefly. <strong>Below a thousand objects, layout does not
+    matter</strong> — every arrangement is within 13% except the virtual call, and our scene is
+    four objects. <strong>The knee is where the working set leaves L2</strong>, which makes it a
+    property of your cache and not of your taste. <strong>An array of pointers costs 2.4× and a
+    linked list costs 6.5×</strong>, and the gap between those two is memory-level parallelism:
+    the array's addresses are known in advance so its misses overlap, and the list's are not so
+    they cannot. <strong>A scene tree is not slow because it is a tree</strong>; a freshly built
+    one is 1.04×. It is slow when its order decays, and it gives you no way to fix that.
+  </p>
+
+  <p>
+    And the three that surprised me, all of which survived a correction to the experiment:
+    <strong>SoA's win on a full-struct workload is vectorisation, not cache</strong> — it
+    vanishes entirely with the vectoriser off, at every size. <strong>A polymorphic virtual call
+    costs the same as a monomorphic one</strong>, so the cost is not branch prediction; being
+    flat across N, it is not the vtable load either; what is left is the inlining it prevents.
+    And <strong>the heap fragmentation the benchmark carefully arranged is not something the
+    benchmark can control</strong>: the same layout code produced 0 adjacent objects in one
+    process and 99,411 of 99,999 in another. The fix is not a fix, it is a protocol — the
+    benchmark reports its own allocation layout at every size, and any build whose objects came
+    out contiguous is measuring indirection rather than scattering.
+  </p>
+
+  <p>
+    Two methodological points are worth more than any single number, so they get the last word.
+    <em>An effect that survives the removal of its explanation had a different explanation</em> —
+    three of this lesson's tables exist only because that test was applied. And <em>a number whose
+    provenance you cannot state is a number you should not publish</em>, which is why the
+    benchmark now prints where its own objects landed before it prints a single timing.
+  </p>
+
+  <p>
+    <strong>Next: 5.7 — An ECS from Scratch: Storage Design.</strong> 5.6 established what
+    storage has to <em>do</em>: be dense, be compactable, and let a system declare which
+    components it touches. It deliberately did not settle how components are grouped, because
+    nothing measured here distinguishes archetypes from sparse sets — both satisfy all three.
+    That is 5.7's question, it is a genuine design argument with real trade-offs on both sides,
+    and it deserves to be made on its own evidence rather than inheriting this lesson's.
+  </p>
+
+  <!-- =================================================================
+       11 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">11</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Ulrich Drepper, “What Every Programmer Should Know About Memory” (2007).</strong>
+        Long, old, and still the reference. §3 is the one to read: cache hierarchy, associativity,
+        prefetching, and the measurements that produced the shapes you just reproduced.</li>
+
+    <li><strong>Mike Acton, “Data-Oriented Design and C++” (CppCon 2014).</strong> The talk that
+        put the phrase in circulation. Read it for the <em>questions</em> it insists you ask —
+        where is the data, how much of it, how is it transformed — rather than for the answers,
+        which this lesson suggests are more situational than the talk implies.</li>
+
+    <li><strong>Richard Fabian, <em>Data-Oriented Design</em> (the free book).</strong> The
+        book-length treatment, and better than the talk on when the techniques do <em>not</em>
+        pay.</li>
+
+    <li><strong>Denis Bakhvalov, <em>Performance Analysis and Tuning on Modern CPUs</em>.</strong>
+        The chapter on memory-level parallelism is §3.3 of this lesson, done properly, with the
+        hardware counters to prove it.</li>
+
+    <li><strong>Chandler Carruth, “Efficiency with Algorithms, Performance with Data
+        Structures” (CppCon 2014).</strong> Also the source of the standard
+        <code>escape</code>/<code>clobber</code> benchmarking tricks, which are what
+        <code>bench_keep</code> is a portable simplification of.</li>
+
+    <li><strong>Google Benchmark, and <code>benchmark::DoNotOptimize</code>.</strong> Worth
+        reading the implementation once: it is inline assembly with a memory clobber, which is
+        stronger than a <code>volatile</code> store and less portable. If you outgrow
+        <code>bench.hpp</code>, this is where to go.</li>
+
+    <li><strong>Agner Fog's instruction tables and microarchitecture manual.</strong> When you
+        need to ask "could the hardware physically have done that in this many cycles" — which
+        §3.2 says you should ask of every published number — this is where the answer is.</li>
+  </ul>

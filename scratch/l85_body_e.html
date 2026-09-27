@@ -1,0 +1,327 @@
+
+  <h2 id="converge">10. Polytopes terminate, curves converge</h2>
+
+  <p>
+    GJK is usually described as an iterative algorithm that converges to the distance. That is
+    half true, and the half that is false explains where the cost goes.
+  </p>
+
+  <p>
+    For a <strong>polytope</strong> — a shape with finitely many vertices — GJK does not converge.
+    It <em>finishes</em>. The simplex can only ever improve, there are finitely many vertices to
+    improve onto, so after a bounded number of steps the support function returns a vertex the
+    simplex already has and there is nothing further out to find. The tolerance is never what
+    stopped it.
+  </p>
+
+  <p>
+    For a shape with curvature there is no last vertex, and the search genuinely converges: every
+    decade of tolerance costs more work, for ever.
+  </p>
+
+  @@FIG_ITERATIONS@@
+
+  <p>
+    The left panel is the distribution over 117,417 separated box pairs. The mean is
+    <strong>3.52</strong>, the maximum is <strong>10</strong>, and the shape is what makes a
+    64-iteration cap comfortable rather than generous.
+  </p>
+
+  <p>
+    The right panel is the finding, and the odd one out is not the one you would guess.
+    <strong>Three of the four columns are flat</strong> as the tolerance tightens from 1e−2 to
+    1e−7 — box and hull for the reason just given, and the sphere for a different one:
+  </p>
+
+  <pre><code class="lang-text">  F.2  mean iterations as the tolerance tightens
+       tol      box-box   sph-sph   cap-cap   hull-hull
+       1e-02     2.68      1.00      2.06      1.57
+       1e-03     2.77      1.00      3.14      1.90
+       1e-04     2.78      1.00      4.17      1.97
+       1e-05     2.78      1.00      5.24      1.97
+       1e-06     2.78      1.00      6.33      1.97
+       1e-07     2.80      1.02      7.43      1.98</code></pre>
+
+  <p>
+    A sphere is the most curved shape there is and it costs <strong>one iteration</strong>. The
+    reason is a small piece of geometry: the nearest point of a ball to an exterior point lies on
+    the line joining that point to the centre, so the very first support call — taken in direction
+    <code>delta</code>, which is that line — lands exactly on the answer. The difference of two
+    spheres is another ball, so the same argument covers the pair. GJK does not iterate on a
+    sphere because there is nothing to iterate toward.
+  </p>
+
+  <p>
+    Only the <strong>capsule</strong> genuinely converges, at almost exactly one extra pass per
+    decade of tolerance — 2.06 → 7.43 over five decades. And that fits the shape: the difference of
+    two capsules is <code>(segment ⊖ segment) ⊕ ball</code>, a parallelogram rounded by a ball, so
+    the nearest point can sit on the curved part where neither operand decides the answer alone.
+    A sphere's curvature is trivial because it has no other feature; a capsule's is not.
+  </p>
+
+  <p>
+    The error column tells the same story from the other direction. §F.3 measures GJK against a
+    closed form and the numbers go flat at <strong>2.2e−07 relative</strong> — float's noise
+    floor — rather than at the tolerance. The only row where the tolerance is visible is 1e−2 on
+    the boxes, at 1.8e−4, which is exactly what a 1e−2 relative tolerance permits. For everything
+    tighter than that, the tolerance is not what you are buying.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why an engine keeps specialised tests anyway.</strong> Sphere-against-sphere is one
+      GJK iteration and two support calls, or it is one subtraction and one comparison in 8.4's
+      <code>collide</code>. Generality is worth paying for where it buys something; where a closed
+      form exists it buys nothing. 8.8's broadphase will reach for the cheap test first whatever
+      pair of shapes it is holding.
+    </p>
+  </div>
+
+  <h2 id="floor">11. The resolution floor, and the margin it implies</h2>
+
+  <p>
+    §10 said the error goes flat at float's noise floor. That is true when the gap is comfortable.
+    When the gap gets small relative to the shapes, two separate things give out — at two
+    different gaps — and keeping them apart is the whole of this section.
+  </p>
+
+  @@FIG_FLOOR@@
+
+  <h3>11.1 The proof goes first</h3>
+
+  <p>
+    The termination test asks whether <code>|v|² − dot(v, w) ≤ tol · |v|²</code>. Look at how the
+    two sides behave as the gap shrinks. The right-hand side is proportional to
+    <code>|v|²</code> — the gap <em>squared</em>. The left-hand side is a difference of two
+    products of <code>|v|</code> with <code>|w|</code>, so its rounding error is of order
+    <code>ε·|v|·|w|</code> — the gap times the <em>shape</em>. One falls quadratically and the
+    other linearly, so they cross:
+  </p>
+
+  <p class="eq-plain">
+    |v| ≈ ε · |w| / tol
+  </p>
+
+  <p>
+    For <code>ε = 1.19e−07</code>, a difference set about 4 m across and the default
+    <code>tol = 1e−4</code>, that is <strong>4.8e−03 m</strong> — and the <code>stall</code> column
+    of §F.5 turns over right there. Below it the comparison is noise against noise, and the loop
+    stops because <code>|v|</code> stopped decreasing rather than because the bounds met.
+  </p>
+
+  <p>
+    <strong>What is lost is the certificate, not the answer.</strong> A stalled result still
+    reports <code>|p<sub>A</sub> − p<sub>B</sub>|</code> for two real surface points, so it is
+    still a valid <em>upper</em> bound — the error has a direction, and it is the safe one. §A.5
+    checks exactly that over 36,000 sphere-against-box pairs: worst shortfall below the true
+    distance, <strong>8.5e−06 m</strong>, which is 8.4's own float noise on the reference side.
+  </p>
+
+  <h3>11.2 The answer goes second, and that one is deliberate</h3>
+
+  <p>
+    Further down, GJK stops calling the shapes apart at all. That is a different test:
+  </p>
+
+  <pre><code class="lang-cpp">if (v2 &lt;= tol * tol * scale2 &amp;&amp; lower2 &lt;= tol * tol * scale2)
+{
+    r.status = gjk_status::intersecting;</code></pre>
+
+  <p>
+    which is <code>|v| ≤ tol · |w|</code> — a <strong>contact margin</strong>, and a deliberate
+    one. §F.6 measures where it sits by bisection, on cubes spanning four decades of size:
+  </p>
+
+  <pre><code class="lang-text">  F.6  side S    margin (m)   margin / (tol * S)
+           0.1   2.1115e-05   2.111
+           1.0   2.1116e-04   2.112
+          10.0   2.1120e-03   2.112
+         100.0   2.1102e-02   2.110
+        1000.0   2.1102e-01   2.110</code></pre>
+
+  <p>
+    A fixed multiple of tolerance times size, across four decades. That last column is the finding:
+    <strong><code>tolerance</code> is not a distance and must not be set as one</strong>. It is a
+    relative quantity, which is exactly what makes one default usable on a marble and on a
+    cathedral — and what makes "set the tolerance to a millimetre" a category error. If you want a
+    margin in metres, divide by the size of the shapes you are testing.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Every physics engine has a margin, and this is where ours comes from.</strong> A
+      contact detected only at exactly zero distance is a contact detected one frame too late, and
+      8.7's manifolds will deliberately keep contacts that are <em>within</em> a margin rather than
+      touching, so the solver has something to work with before interpenetration happens. The
+      margin arriving out of the tolerance rather than out of a separate constant is a small piece
+      of luck; the important part is knowing it is there and knowing its units.
+    </p>
+  </div>
+
+  <h2 id="origin">12. Where the origin is</h2>
+
+  <p>
+    8.4 §11 ended on a wall: two boxes a millimetre apart, measured a hundred kilometres from the
+    world origin, reported as touching — because <code>b.centre − a.centre</code> subtracts two
+    world-sized floats to produce a crate-sized one, and the information was gone before
+    <code>collide</code> was called. The section named the disease and said every quantity in a
+    collision test should be a difference taken as early as possible.
+  </p>
+
+  <p>
+    GJK would inherit that intact and make it worse, because it forms
+    <code>support_A(d) − support_B(−d)</code> on <em>every</em> iteration. So this lesson ships the
+    cure, and then measures it — which is the only way to find out whether a cure is a cure.
+  </p>
+
+  @@FIG_ORIGIN@@
+
+  <p>
+    The experiment is one pair of boxes at a fixed diagonal offset, walked away from the origin
+    along <code>(1,1,1)/√3</code>. The distance between them is the same at every stop by
+    construction, so any change in the reported number is arithmetic rather than geometry — and
+    because the boxes are axis aligned there is an <strong>exact reference</strong>: three
+    one-dimensional gaps and a square root, evaluated in double from the boxes as float actually
+    stores them.
+  </p>
+
+  <p>
+    Two arms, and they are not two implementations. <code>gjk.cpp</code> is the same code in both
+    columns; only the <code>convex</code> view differs. The <em>relative</em> arm hands it support
+    points measured from each shape's own centre and one <code>delta</code> formed once; the
+    <em>naive</em> arm hands it world support points and a zero origin, so every iteration
+    subtracts two world-sized numbers. Making the bad version an adapter rather than a fork is what
+    makes the comparison mean anything — 8.4 §3's lesson about harnesses that construct their own
+    configuration, applied on purpose this time.
+  </p>
+
+  <pre><code class="lang-text">   from 0 (m)   relative (m)   naive (m)      exact (m)
+            0   1.552417e+00   1.552417e+00   1.552417e+00
+          100   1.552417e+00   1.552418e+00   1.552417e+00
+         1000   1.552417e+00   1.552428e+00   1.552417e+00
+        10000   1.552512e+00   1.552424e+00   1.552512e+00
+       100000   1.552418e+00   1.551765e+00   1.552418e+00
+      1000000   1.552669e+00   1.542370e+00   1.552669e+00
+
+  H.1  worst departure from the exact distance
+         relative form  1.0698e-07 m
+         naive form     1.0299e-02 m   96270x</code></pre>
+
+  <p>
+    A centimetre of error at a thousand kilometres, against a tenth of a micron:
+    <strong>96,270 times better</strong>. And §H.2 shows it is not luck — the naive column's error
+    tracks <code>ulp(position)</code> at a fixed fraction all the way up, while the relative
+    column's tracks nothing at all and stays at the shape's own resolution wherever the shapes
+    happen to be.
+  </p>
+
+  <p>
+    The mechanism is countable. A box's support point is <code>centre + axes·s</code>, three
+    additions. In world space each rounds to half an ulp of the position, and there are two support
+    points per iteration — six world-sized additions per pass. Taken relative they round to half an
+    ulp of the <em>shape</em>, and the one world-sized subtraction is
+    <code>b.origin − a.origin</code>, which is <strong>exact</strong> whenever the two are within a
+    factor of two of each other. That is Sterbenz's lemma, and two things about to collide always
+    are.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Note carefully what the reference is, and is not.</strong> It is the distance between
+      the boxes <em>float holds</em>, not the distance between the boxes the program meant. Those
+      diverge too, and no arrangement of the arithmetic can fix it: at a thousand kilometres a
+      <code>float</code> position cannot name a centimetre, so the shapes are not where you put
+      them before any algorithm runs. What the relative form buys is that GJK adds nothing of its
+      own to a degradation the input already has — which is everything an algorithm can buy, and
+      exactly the point 8.4 §11 reached from the other side. The real fix for a large world is to
+      stop storing positions as single-precision absolutes, and that is a Module 9 conversation.
+    </p>
+  </div>
+
+  <h2 id="budget">13. The budget</h2>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    Twenty thousand random box pairs, 10,297 of them overlapping, on a release build of the
+    library — the harness refuses to run against a default-configured tree for §I.3's reason
+    alone, since the whole finding there is about inlining:
+  </p>
+
+  <pre><code class="lang-text">  I.1  ns per pair
+       overlaps (SAT, bool)       8.433
+       collide  (SAT, MTV)       49.477
+       gjk_intersects (bool)     73.223   8.68x
+       gjk_distance (metres)    114.744   2.32x</code></pre>
+
+  <p>
+    <strong>GJK is slower on boxes, and it should be.</strong> The SAT knows the shape; GJK
+    searches for it. Fifteen dot-product tests with an early exit beat a loop that calls out
+    through a function pointer six times and runs a four-candidate simplex solver two or three
+    times. Nothing about that is surprising and nothing about it is a problem — what GJK buys is
+    the metres and the generality, not the speed, which is precisely why an engine keeps both tests
+    rather than replacing one with the other.
+  </p>
+
+  <p>
+    The right panel prices generality where it actually costs something. A hull's support function
+    is linear in its vertex count, as a brute-force scan must be: <strong>3.9 ns at 8 vertices,
+    51.5 ns at 128</strong>, and <code>gjk_distance</code> is that line multiplied by roughly twice
+    the iteration count. Hill climbing over an adjacency list would bend that toward
+    <code>√n</code>; §14 says why we have not built it.
+  </p>
+
+  <p>
+    And the abstraction itself is free. §I.3 times the same support call directly and through
+    <code>convex::support</code>: <strong>1.908 ns against 1.906 ns</strong>, with the two arms
+    producing bit-identical floats — a check worth printing, because an arm that is faster because
+    it did less has not won a comparison.
+  </p>
+
+  <h2 id="notyet">14. What this does not do</h2>
+
+  <p>
+    Five things, named rather than discovered later.
+  </p>
+
+  <p>
+    <strong>No penetration depth.</strong> When the shapes overlap, GJK stops with the origin
+    inside the difference set and has nothing more to say. Depth is a distance to the
+    <em>boundary</em> of that set, and the search only ever looks inward. That is 8.6, and
+    <code>gjk_result</code> carries the terminal simplex rather than discarding it precisely so
+    that 8.6 has somewhere to start — though §9 is the warning that what it gets handed is often a
+    triangle.
+  </p>
+
+  <p>
+    <strong>No contact manifold.</strong> Two witness points are one contact. A box resting on a
+    plane needs four, and needs them to be the <em>same</em> four next frame or it will wobble.
+    That is 8.7.
+  </p>
+
+  <p>
+    <strong>No hull builder.</strong> <code>hull</code> takes a point set and computes the support
+    function of its convex hull for free, so passing a cloud works — but nothing here computes the
+    hull itself, which would be a quickhull implementation and an asset-pipeline conversation
+    rather than a physics one. The consequence is that a hull has <strong>no inertia
+    tensor</strong>: the divergence-theorem sum needs faces, and a point set has none. A hull in
+    this engine can collide and cannot yet be simulated, which is why 8.12's ragdolls will be built
+    from capsules.
+  </p>
+
+  <p>
+    <strong>No hill climbing.</strong> A support query over an adjacency list starts from the
+    previous answer and walks downhill, turning <code>O(n)</code> into roughly
+    <code>O(√n)</code>. §13 measured the crossover to be beyond where hand-authored colliders live,
+    and the data structure it needs does not exist in this engine. If a hull ever arrives with
+    hundreds of vertices, this is the first thing to build.
+  </p>
+
+  <p>
+    <strong>No swept or continuous test.</strong> GJK answers a question about two shapes at one
+    instant. A fast-moving object still passes through a wall between frames — 8.4 §9's tunnelling
+    case, unfixed. The distance this lesson computes is one of the two ingredients of a
+    conservative-advancement time-of-impact test, and the other is a bound on closing speed; the
+    combination is out of scope here and is named on 8.13's list, where a character controller
+    needs it most.
+  </p>

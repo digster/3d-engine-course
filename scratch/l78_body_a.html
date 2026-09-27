@@ -1,0 +1,344 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-07-sampling-blending.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.7 — Sampling and Blending Animations</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-01-integrators.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.1 — Integrators: Why One Explodes</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.8</div>
+    <h1>SDL3 Audio: Streams, Mixing, and 3D Sound</h1>
+    <p class="deck">
+      Every subsystem this course has built so far can be judged by looking at it. This one cannot,
+      and that single fact reshapes everything — because a bug you cannot see has to be
+      <em>measured</em>, on a thread you do not own, against a deadline that does not negotiate. The
+      engine gets ears in three files and about a thousand lines, and the arithmetic in them is
+      unreasonably simple: <strong>mixing is addition</strong>, a distance curve is one divide, and
+      panning is two trigonometric functions. What is not simple is everything that follows from
+      addition. Sum sixteen uncorrelated voices and the level grows as <strong>√N, not N</strong> —
+      measured at exactly 0.577·√N — so the obvious <code>1/N</code> headroom throws away
+      <strong>12 dB</strong> you did not have to spend; but the <em>peak</em> follows neither, and it
+      keeps growing the longer you listen (6.98× at ten milliseconds, <strong>10.46× at eight
+      seconds</strong>), which makes headroom a bet rather than a bound. Pan with the first law that
+      occurs to you and a sound sweeping across the image ducks by <strong>3.01 dB</strong> in the
+      middle, because two speakers add in <em>power</em> and 0.5² + 0.5² is not 1. Attenuate with
+      <code>1/d²</code> — the law everyone remembers, and the right law for the wrong quantity —
+      and every sound in the game falls off at <strong>−12 dB per doubling instead of −6</strong>,
+      because a sample is a pressure and pressure is the square root of intensity. And then the
+      finding that is 7.7's rule arriving in a subsystem that had never heard of it: <strong>the gain
+      is a lossy reconstruction too</strong>. Sampled at 60 Hz by the game and reconstructed at
+      48 kHz by the mixer, a zero-order hold injects a step of <strong>0.1007 in one sample</strong>
+      — 7.7× the largest step the waveform itself ever takes — of which <strong>98.8% is
+      broadband</strong>, which is exactly what a click <em>is</em>. Along the way: SDL3's
+      audio-stream model and the resume SDL2 did not need, a WAV loader that is honest about which
+      half is worth hand-rolling, a linear resampler measured at <strong>62.40 dB against SDL's
+      85.05</strong> and falling to 20.43 dB at 10 kHz, generational handles finally meeting the
+      case they were designed for, one mutex on a real-time thread with the compromise stated rather
+      than hidden, and a dropout counter that turned out to be measuring SDL working correctly.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>,
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="07-05-slerp.html">7.5 — Slerp, and the Storage Swap</a>,
+          <a href="07-07-sampling-blending.html">7.7 — Sampling and Blending Animations</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/audio/sound.hpp</code> <em>(new)</em>,
+            <code>engine/src/audio/sound.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/audio/spatial.hpp</code> <em>(new)</em>,
+            <code>engine/src/audio/spatial.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/audio/mixer.hpp</code> <em>(new)</em>,
+            <code>engine/src/audio/mixer.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/core/log.hpp</code>,
+            <code>engine/src/core/log.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/audio/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_78.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_78.sh</code> <em>(new)</em>,
+            <code>scratch/devcheck_78.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>hear</strong>: a WAV loader with format conversion and
+            resampling, a float mixer with a voice table behind generational handles, gain ramping,
+            pitch, looping, constant-power panning, four distance-attenuation laws, and a report that
+            counts everything the audio thread saw. <strong>Nine measured sections, twelve of them
+            controls</strong> — including one that mixes the <em>same</em> voice N times to prove the
+            √N result is not an artefact of the meter, and one that holds the gain constant to prove
+            the ramp and the step are the same code path. The whole harness runs
+            <strong>with no device open</strong>, because <code>mix_into</code> is a pure function
+            from a voice table to an array of floats. A second, four-line check does open a device —
+            and immediately found that the subsystem's own dropout counter was reporting
+            <strong>28 of 58 buffers starved</strong> on a mix using 0.2% of its budget. Sixty-four
+            voices cost <strong>29.76 µs of a 10,667 µs deadline</strong>; one log line costs 1.02 µs
+            and is unbounded, which is why the audio thread does not log. The <code>audio</code> demo
+            walks a listener past three emitters and draws the two gains that fall out.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…describe what a sample <em>is</em>, and say what the device's clock guarantees and what it
+          demands in return.</li>
+      <li>…explain why a late frame is a hitch and a late buffer is a click, in terms of what a
+          discontinuity contains.</li>
+      <li>…load a WAV, convert it to the mixer's one format, and defend which half of that job you
+          hand to SDL and which half you write.</li>
+      <li>…budget headroom for N simultaneous voices from a measurement rather than from a guess, and
+          say why the peak is a statistical question and the RMS is not.</li>
+      <li>…derive the constant-power pan law from the fact that uncorrelated signals add in power,
+          and quantify what the naive law costs.</li>
+      <li>…derive the distance law from a sphere's surface area, and explain why the exponent that
+          applies to a sample is 1 and not 2.</li>
+      <li>…recognise a gain change as a lossy reconstruction, and implement the ramp that fixes it.</li>
+      <li>…write real-time-safe code, list what it may not do and why, and measure the budget it has
+          rather than assuming one.</li>
+      <li>…say honestly what a two-tap resampler costs, with a number that depends on the content.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine with no ears</a></li>
+      <li><a href="#intuition">Building intuition: a sample is a measurement of pressure</a></li>
+      <li><a href="#clocks">The two clocks</a></li>
+      <li><a href="#loading">Loading a sound</a></li>
+      <li><a href="#addition">Mixing is addition, and what addition costs</a></li>
+      <li><a href="#spatial">Where a sound is, in two numbers</a></li>
+      <li><a href="#ramp">The gain is a lossy reconstruction too</a></li>
+      <li><a href="#pitch">Pitch and rate: one cursor, two jobs</a></li>
+      <li><a href="#voices">The voice table, and a thread you do not own</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#limits">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine with no ears</h2>
+
+  <p>
+    Count what this engine can do. It evaluates a microfacet BRDF, cascades a shadow map, prefilters
+    an environment cube, bloom and tonemaps and culls and deduces its own frame order; it skins a
+    character from a keyframed clip, cross-fades two clips without shortening a limb, and puts text
+    on the screen in linear light. Seventy-nine lessons. And if you close your eyes it is
+    indistinguishable from a program that is not running.
+  </p>
+
+  <p>
+    That is the gap this lesson closes, and it is worth being precise about why it has waited until
+    the end of Module 7 rather than appearing in Module 1, where a beep would have been easy. The
+    reason is not that audio is hard. The arithmetic below is the simplest in the course — there is
+    no matrix in this lesson, no derivation longer than four lines, and the entire spatial model is
+    one divide and two trigonometric functions. The reason is that <strong>audio is the first
+    subsystem in this engine whose output you cannot look at</strong>, and that changes what the work
+    <em>is</em>.
+  </p>
+
+  <p>
+    Consider how every bug in Modules 2 through 7 announced itself. The z-buffer bug was triangles
+    fighting. The perspective-correct-interpolation bug was a texture swimming. The gamma bug was a
+    picture too dark, the TBN bug was lighting that moved the wrong way, the matrix-blend bug in 7.7
+    was a limb that got visibly shorter. In every case the symptom told you half of what you needed,
+    because a picture is <em>two-dimensional and persistent</em>: it sits there while you look at it,
+    you can compare it to a reference by subtraction, and you can point at the wrong part.
+  </p>
+
+  <p>
+    A sound is one-dimensional and gone. The symptom is "it sounds a bit wrong", reported by
+    somebody who cannot point. You cannot pause it and look at it. You cannot breakpoint the code
+    that produced it, because stopping at a breakpoint <em>changes the result</em> — the device keeps
+    consuming, finds nothing, and the thing you were trying to debug is replaced by the sound of
+    having stopped at a breakpoint. And you cannot print from it, for reasons §10 measures.
+  </p>
+
+  <p>
+    So the discipline of this lesson is set by that constraint, and it is the same discipline every
+    section of <code>verify_78.cpp</code> follows: <strong>get the samples into an array and look at
+    the array.</strong> Not "listen and adjust" — measure. Every claim below has a number behind it
+    and the number was produced by a program that opened no audio device at all.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A promise with a date on it.</strong> Lesson 5.2 built the application layer and gave
+      <code>app_config</code> a field it did not use:
+    </p>
+    <pre><code class="lang-cpp">/// Subsystems beyond what `draw_to` already implies. Video is initialised
+/// automatically for `renderer` and `gpu` and deliberately NOT for
+/// `headless`; audio arrives in Module 7 and goes here.
+SDL_InitFlags extra_subsystems = 0;</code></pre>
+    <p>
+      Lesson 5.5 made the same bet one directory over, arguing that the asset system belongs outside
+      <code>gfx/</code> because "it loads meshes, images, and in Module 7 sounds — and putting them
+      under <code>gfx/</code> would make the audio loader's home a joke six lessons before it is
+      written." Both predictions come due here, and §4 explains why the second one turns out to have
+      named the wrong directory anyway.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: a sample is a measurement of pressure</h2>
+
+  <p>
+    Start with the physical thing, because every arithmetic decision below is a consequence of it.
+  </p>
+
+  <p>
+    A sound is a travelling variation in air pressure. A speaker cone moves out and the air just in
+    front of it is momentarily compressed; it moves in and that air is rarefied. The compression
+    propagates, your eardrum is pushed and pulled by it, and that is hearing. There is no "sound"
+    hiding in the air as an object — there is only pressure, as a function of time, at a point.
+  </p>
+
+  <p>
+    A <strong>sample</strong> is that function measured once. A recording is the function measured at
+    even intervals, forever. That is the whole of digital audio, and figure 1 is the whole of the
+    idea.
+  </p>
+
+@@FIG_SAMPLES@@
+
+  <p>
+    Three consequences fall straight out of the picture, and each of them decides something later in
+    this lesson.
+  </p>
+
+  <p>
+    <strong>The samples are the sound.</strong> There is nothing else in the file — no envelope, no
+    pitch, no notion of a "note". Everything you might want to do to a sound is therefore an
+    operation on an array of numbers, which is why this subsystem has no geometry in it and why its
+    bugs look like arithmetic rather than like scenes.
+  </p>
+
+  <p>
+    <strong>The interval is fixed and it is short.</strong> At 48,000 samples a second, one sample is
+    <code>1/48000 = 20.83 µs</code>. Hold that number next to a frame: at 60 Hz a frame is 16,667 µs,
+    so <strong>one frame of your game is 800 samples</strong>. Anything the game decides once per
+    frame — a volume, a position, a pan — is a decision the mixer has to spread across 800 samples,
+    and §7 is entirely about what happens if you do not.
+  </p>
+
+  <p>
+    <strong>Amplitude is a number, and its range is a convention.</strong> This engine keeps samples
+    in <code>[-1, 1]</code> as 32-bit floats. Nothing physical happens at 1.0 — it is simply the
+    value the hardware treats as full deflection, and a sample of 1.5 is a perfectly well-formed
+    number that the device cannot play. That is the whole of §5's headroom problem, stated a section
+    early.
+  </p>
+
+  <h3>2.1 A frame is not a sample, and the difference is silent in mono</h3>
+
+  <p>
+    One piece of vocabulary, because getting it wrong produces a bug that is invisible in testing and
+    obvious in shipping. A <strong>sample</strong> is one number. A <strong>frame</strong> is one
+    sample <em>per channel</em>: in stereo, a frame is two samples, left then right, stored next to
+    each other. Duration is counted in frames, buffer sizes are quoted in frames, and the device
+    consumes frames.
+  </p>
+
+  <p>
+    A mono sound has one sample per frame, so the two words mean the same thing and code that
+    confuses them works perfectly. Feed it a stereo file and everything plays at double speed, half
+    length, with the channels swapped on alternate frames — which sounds like a corrupt file rather
+    than like an off-by-two. Every count in <code>audio/sound.hpp</code> says which unit it is in for
+    exactly this reason.
+  </p>
+
+  <h2 id="clocks">3. The two clocks</h2>
+
+  <p>
+    Since Lesson 1.4 this engine has had one clock. The accumulator runs the simulation at a fixed
+    60 Hz and draws whenever it can; frames vary in length; a long frame is absorbed by the
+    accumulator and the next one catches up. That design is <em>built around</em> the assumption
+    that being late is survivable.
+  </p>
+
+  <p>
+    The device has its own clock and it does not negotiate.
+  </p>
+
+@@FIG_CLOCKS@@
+
+  <p>
+    Read the two timelines against each other. On top, the simulation: nine frames, one of them 38 ms
+    instead of 16. The player may notice — probably not — and by the following frame it is over.
+    Nothing is <em>lost</em>; the picture simply held for longer.
+  </p>
+
+  <p>
+    Underneath, the device: a buffer of 512 frames consumed every 10.67 ms, on a crystal oscillator,
+    whatever else is happening on the machine. If the data is not there, the device does not wait. It
+    plays what is in the buffer — silence, usually, or the previous buffer again — and that is a
+    <strong>dropout</strong>.
+  </p>
+
+  <p>
+    Here is the part worth internalising, because it is the reason audio programming has a reputation
+    it does not otherwise deserve. <em>A 21-millisecond gap in a picture is invisible. A
+    21-millisecond gap in a sound is not quiet — it is loud.</em> The gap has an edge at each end: the
+    waveform was at some value, then it is at zero, then it is back. Those are step discontinuities,
+    and a step contains energy at <strong>every frequency</strong>. Your ear, which is a bank of
+    frequency-selective hair cells, hears broadband energy as a click. §7 measures this directly: of
+    the difference between a correct render and one with a gain discontinuity in it,
+    <strong>98.8% of the energy is not at the tone's own frequency</strong>.
+  </p>
+
+  <p>
+    So the audio budget is not "be fast on average". It is "never be late", and those are different
+    engineering problems. The mean does not matter; the tail does. A mixer that takes 30 µs for
+    ninety-nine buffers and 12 ms for the hundredth is a mixer that clicks once a second, and its
+    average load is 0.3%.
+  </p>
+
+  <h3>3.1 What the queue buys you</h3>
+
+  <p>
+    The margin between those two clocks is the <strong>queue</strong>: audio you have already mixed
+    and handed to SDL, which the device will consume before it needs anything else from you. It is
+    the only slack in the system, it is measured in milliseconds, and it is exactly the number at the
+    bottom of figure 2.
+  </p>
+
+  <p>
+    Which makes the buffer size the single most consequential constant in
+    <code>audio/mixer.hpp</code>, and a straight trade with nothing clever available:
+  </p>
+
+  <ul>
+    <li><strong>Small buffers</strong> mean a sound starts sooner after the game asks for it — 128
+        frames is 2.67 ms of latency — and mean less slack before a late mix becomes a dropout, and
+        mean 375 callbacks a second instead of 94.</li>
+    <li><strong>Large buffers</strong> mean margin, and mean a gunshot that fires 43 ms after the
+        trigger, which is about two and a half frames and is perceptible as sloppiness rather than as
+        latency.</li>
+  </ul>
+
+  <p>
+    512 frames — 10.67 ms at 48 kHz — is the usual compromise and is what this engine defaults to. It
+    is roughly two thirds of a frame of latency, and it gives the mixer a deadline it beats by a
+    factor of 358 (§10).
+  </p>

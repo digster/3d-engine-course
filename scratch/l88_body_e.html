@@ -1,0 +1,180 @@
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <p>
+    Every file this lesson creates or changes, in full. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption class="visually-hidden">Files created or modified in Lesson 8.8</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/broadphase.hpp</code></td><td>new</td>
+          <td>The proxy, the pair, the config, the stats, the oracle, and the grid.</td></tr>
+      <tr><td><code>engine/src/phys/broadphase.cpp</code></td><td>modified</td>
+          <td>Four linear passes: classify, count, scatter, pair.</td></tr>
+      <tr><td><code>engine/include/engine/phys/collide.hpp</code></td><td>modified</td>
+          <td><code>overlaps(aabb, aabb)</code> — six comparisons, inline.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>The umbrella header gains the new public header.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>Compiles <code>broadphase.cpp</code>.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>Adds the <code>broadphase</code> target.</td></tr>
+      <tr><td><code>demos/broadphase/main.cpp</code></td><td>new</td>
+          <td>The grid seen from above, with the contract checked live.</td></tr>
+      <tr><td><code>scratch/verify_88.cpp</code></td><td>new</td>
+          <td>Ten measured sections, 51 checks, every one with a control.</td></tr>
+      <tr><td><code>scratch/build_verify_88.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness; refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">Three files changed by one word each, and not reprinted</span>
+    <p>
+      <code>engine/include/engine/phys/shape.hpp</code> (twice),
+      <code>engine/include/engine/phys/rigid_body.hpp</code> and
+      <code>engine/src/phys/rigid_body.cpp</code> each carried a doc comment saying “8.6's
+      broadphase”. They were written when the broadphase was expected to land in 8.6, before GJK and
+      EPA took a lesson each; the broadphase is this one. Every occurrence now reads “8.8's
+      broadphase”, and the change is exactly that — no code, no declarations, no behaviour. The
+      three files are 2,458 lines between them and reprinting all of it to change one digit three
+      times would bury this lesson's own code, so this note is the record instead. It is the only
+      place in this course where a changed file is not listed whole, and it is named here rather
+      than passed over.
+    </p>
+  </div>
+
+  @@LISTING:engine/include/engine/phys/broadphase.hpp@@
+
+  @@LISTING:engine/src/phys/broadphase.cpp@@
+
+  @@LISTING:engine/include/engine/phys/collide.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:demos/broadphase/main.cpp@@
+
+  @@LISTING:scratch/verify_88.cpp@@
+
+  @@LISTING:scratch/build_verify_88.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <p>
+    Configure and build as in every lesson since 0.4. From the repository root:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Linux / macOS</span>
+      <span class="tag">shell</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target broadphase
+./build/demos/broadphase</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="tag">shell</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target broadphase --config Debug
+.\build\demos\Debug\broadphase.exe</code></pre>
+  </figure>
+
+  <p>
+    The harness wants an <em>optimised</em> library, and the script refuses rather than quietly
+    producing numbers from a debug build — the repository's default configure leaves
+    <code>CMAKE_BUILD_TYPE</code> empty, which means no <code>-O</code> flag at all, and 7.6
+    measured the cost of ignoring that at 18.1×:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the harness</span>
+      <span class="tag">shell</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_88.sh</code></pre>
+  </figure>
+
+  <h3>15.1 What you should see</h3>
+
+  <p>
+    The demo opens on a scene of 256 crates seen from directly above, with the grid drawn at the
+    cell size in use. Each cell is tinted by how much work its pair loop is doing — the shade is
+    keyed on <code>C(n, 2)</code> rather than on the occupancy, because the work is quadratic and the
+    picture is meant to show where the work is. Candidate pairs are drawn as amber lines between
+    proxy centres. On the right, the counters.
+  </p>
+
+  <p>
+    Four things to do with it, in order.
+  </p>
+
+  <p>
+    <strong>Leave [B] on and watch the “agree” line.</strong> It runs <code>brute_force_pairs</code>
+    beside the grid every frame and colours the verdict. That is the contract, checked live, sixty
+    times a second, against a function that cannot be wrong.
+  </p>
+
+  <p>
+    <strong>Hold [Up], then [Down].</strong> Entries move by orders of magnitude, bucket tests move
+    the other way, the milliseconds trace §7's cost curve — and the PAIRS line does not move at all.
+    That is the whole of §7.3 in one gesture.
+  </p>
+
+  <p>
+    <strong>Press [3] for the crowd preset.</strong> The heat map concentrates: a few cells glowing
+    while most of the lattice stays dark, and the pair count climbing far faster than the body
+    count. That is why the cost model's second term grows with density.
+  </p>
+
+  <p>
+    <strong>Press [T], then [Y].</strong> A ground plate appears, the entry count jumps by more than
+    the entire rest of the scene, and the milliseconds follow. [Y] turns the guard back on and the
+    number falls back to where it was — with the pair list unchanged. That is §10, watchable.
+  </p>
+
+  <p>
+    A headless run for a reproducible frame:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">headless</span>
+      <span class="tag">shell</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">./build/demos/broadphase --preset 4 --t 1.2 --shot mixed.ppm
+./build/demos/broadphase --ground --no-guard --cell 1.0</code></pre>
+  </figure>
+
+  <p>
+    Preset 4 is “mixed sizes”, and it is the one to look at: one proxy in seventeen is several metres
+    across, and each of those produces a visible <em>star</em> of candidate pairs. That picture is
+    §10's argument in miniature — the cost of a broadphase is dominated by its largest objects, long
+    before any of them is large enough to trip the guard.
+  </p>
+
+  <p>
+    And the harness, whose last line is the one that matters:
+  </p>
+
+  <pre><code class="lang-text">==================================================================
+51 checks, 0 failures</code></pre>

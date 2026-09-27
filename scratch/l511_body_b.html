@@ -1,0 +1,554 @@
+  <!-- =================================================================
+       4 — LIFETIMES
+       ================================================================= -->
+  <h2 id="lifetimes"><span class="num">4</span>Lifetimes, and the Frame That Has No Time</h2>
+
+  <p>
+    A queued line carries a <code>remaining</code> in seconds, and the default is zero. Zero has
+    to mean "draw me on this frame and then forget me", because that is what almost every debug
+    drawing wants: the hierarchy is re-queued from the live data every frame, so a copy that
+    survived would be a copy that could be wrong.
+  </p>
+
+  <p>
+    Ageing the queue is one function, and it is the single easiest thing in this lesson to get
+    subtly wrong — twice over, in two different ways.
+  </p>
+
+  <h3>4.1 The order</h3>
+
+  <p>
+    The frame has three debug-draw events in it and their order is fixed:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — on_frame()</span></figcaption>
+    <pre><code class="lang-cpp">hierarchy_debug_system(world_, debug_, show_links_, show_axes_);   // 1. QUEUE
+…
+debug_drawn_ = engine::draw_debug_lines(fb(), view, proj, debug_); // 2. FLUSH
+…
+debug_.advance(time().dt());                                       // 3. AGE</code></pre>
+  </figure>
+
+  <p>
+    Put <code>advance()</code> first — which is where "clear the buffer at the start of the frame"
+    instinct puts it — and every line queued this frame with the default lifetime is deleted
+    before it is ever drawn. The symptom is not a crash or a warning. It is a debug system that
+    draws <em>nothing</em>, which reads as "my code did not run", which sends you looking in
+    entirely the wrong place. <code>verify_511</code> §B asserts this as a measurement rather
+    than leaving it as a warning: three lines queued, aged, and zero left to draw.
+  </p>
+
+  <h3>4.2 The rule, and the frame with <code>dt == 0</code></h3>
+
+  <p>
+    Now the expiry rule itself. The obvious version is two lines, and it is worth being precise
+    about what is wrong with it, because the honest answer is not "it is broken" — it is
+    "whether it is broken depends on a comparison operator and on <code>dt</code>, and neither of
+    those should be load-bearing."
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">subtract first — the answer depends on two things it should not</span></figcaption>
+    <pre><code class="lang-cpp">entry.remaining -= dt;
+if (entry.remaining &lt;= 0.0f) { drop(entry); }   // works…
+if (entry.remaining &lt;  0.0f) { drop(entry); }   // …and this one leaks forever</code></pre>
+  </figure>
+
+  <p>
+    The first line works. A default-lifetime line has <code>remaining == 0</code>, subtracting any
+    <code>dt</code> leaves it at or below zero, and it is dropped. Good.
+  </p>
+
+  <p>
+    The second is what you write the moment you want a line to survive the frame on which its
+    clock runs out — a reasonable thing to want, and a one-character change. Now put
+    <code>dt = 0</code> through it: <code>0 − 0 = 0</code>, which is not less than zero, so the
+    line is kept. And so is every line queued on every subsequent frame. The queue fills, reaches
+    its bound, and starts refusing the lines you are queueing <em>now</em>.
+  </p>
+
+  <p>
+    And <code>dt == 0</code> is not exotic. It is a paused clock, a single-frame
+    <code>--shot</code>, a program stopped on a breakpoint while you look at it, or a frame the OS
+    delivered in under a microsecond. <strong>Those are exactly the moments you are looking
+    hardest</strong>, which makes this a leak that only appears while you are using the tool.
+  </p>
+
+  <p>
+    Putting the test <em>before</em> the subtraction removes the dependency rather than getting it
+    right. "Has this line had its frame?" is then answered by the stored value alone, with
+    <code>dt</code> playing no part in it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/debug_lines.cpp</span></figcaption>
+    <pre><code class="lang-cpp">if (entry.remaining &lt;= 0.0f) { continue; }   // its clock already ran out: that was its last frame
+entry.remaining -= dt;
+lines_[out++] = entry;                       // survives</code></pre>
+  </figure>
+
+  <p>
+    A zero-second line is queued, drawn, and dropped at the next <code>advance</code> whatever
+    <code>dt</code> is — and so is a two-second line, 120 frames later. The visible cost is that a
+    line asked to live two seconds lives two seconds <em>plus one frame</em>: the frame on which
+    its clock reaches zero is still a frame it is drawn on. That is the right way round to be
+    wrong for a thing whose entire purpose is to be seen.
+  </p>
+
+  <p>
+    <code>verify_511</code> §B pins the <em>behaviour</em>, not the implementation — it asserts
+    that a default line dies with <code>dt = 0</code> and that a half-second line is drawn on 31
+    frames. A future simplification back to subtract-first with <code>&lt;=</code> would pass the
+    first and fail the second, which is the correct amount of pressure: it says "you changed
+    something observable" without pretending there is only one acceptable answer.
+  </p>
+
+  @@FIG_LIFETIME@@
+
+  <div class="worked">
+    <span class="label">Worked example — how many frames is half a second?</span>
+    <p>Queue a line with <code>seconds = 0.5</code> and call <code>advance(1/60)</code> until it
+       is gone. After 29 advances <code>remaining</code> is about 0.0167 — still positive. The
+       <strong>30th</strong> advance therefore keeps it and takes <code>remaining</code> to
+       approximately zero. The <strong>31st</strong> sees a value that is no longer positive and
+       drops it.</p>
+    <p>So the line is present for 31 flushes: 30 frames of the time it asked for, plus the one on
+       which its clock ran out. <code>verify_511</code> §B counts exactly 31.</p>
+    <p><strong>And the same experiment run against the alternatives, in <code>float</code>:</strong>
+       subtract-first with <code>&lt;=</code> gives 30 and correctly drops a default line when
+       <code>dt = 0</code>; subtract-first with <code>&lt;</code> also gives 30 but keeps the
+       default line for <em>ever</em> at <code>dt = 0</code> — the run was cut off at 500
+       advances. Two rules differ by one frame; the third differs by infinity.</p>
+  </div>
+
+  <h3>4.3 The bound, and the counter that makes it honest</h3>
+
+  <p>
+    The queue is capped — 4,096 lines by default — and refuses rather than grows. A debug system
+    that allocates without limit is a debug system that turns "why is this frame 200 ms" into a
+    question whose answer is the debug system.
+  </p>
+
+  <p>
+    A bound on its own would be worse than none, though, because the failure is silent: the
+    4,097th line simply is not there, and a missing line looks exactly like a thing that does not
+    exist. So the queue counts what it refused, and the panel prints it. Three numbers together —
+    <code>queued</code>, <code>drawn</code>, <code>dropped</code> — are what tell you whether the
+    picture you are looking at is the whole picture.
+  </p>
+
+  <p>
+    Every primitive funnels through one private <code>push()</code>, which is where the bound is
+    checked. That is not tidiness: it means a twelve-edge box arriving with two free slots leaves
+    two edges and ten drops, and it means that adding a primitive next month cannot forget to ask.
+  </p>
+
+  <!-- =================================================================
+       5 — IMGUI IN THE FRAME
+       ================================================================= -->
+  <h2 id="frame"><span class="num">5</span>ImGui in the Frame</h2>
+
+  <h3 id="frame-backends">5.1 Two backends, and which one first</h3>
+
+  <p>
+    ImGui separates "what a window looks like" — the core — from two backends you choose
+    independently:
+  </p>
+
+  <ul>
+    <li>a <strong>platform</strong> backend, which turns OS events into ImGui's input state:
+        <code>imgui_impl_sdl3</code>;</li>
+    <li>a <strong>renderer</strong> backend, which turns ImGui's vertex and index draw lists into
+        actual drawing: <code>imgui_impl_sdlrenderer3</code> or
+        <code>imgui_impl_sdlgpu3</code>.</li>
+  </ul>
+
+  <p>
+    This engine has two surfaces (Lesson 4.2), so which renderer backend goes first is a real
+    decision rather than a coin flip. <strong>The SDL_Renderer pair goes first</strong>, for two
+    reasons that are both about scope rather than difficulty:
+  </p>
+
+  <ul>
+    <li><code>ecs_swarm</code> — the demo that needs a panel today, because it is the one with a
+        hierarchy to inspect — is on <code>surface::renderer</code>.</li>
+    <li>Under <code>surface::renderer</code> the platform already owns the presentation, so
+        <code>on_overlay()</code> is a hook that exists at exactly the right moment: after the
+        framebuffer has been blitted, before the frame is presented. On
+        <code>surface::gpu</code> the <em>program</em> owns the device, the command buffer and
+        the render pass, so the UI has to be handed all three by code the engine does not
+        control.</li>
+  </ul>
+
+  <p>
+    §7 says precisely what the GPU path would need, with the real signatures, and why it is not
+    in this lesson.
+  </p>
+
+  <h3 id="frame-order">5.2 Where each call goes</h3>
+
+  <p>
+    Six calls, and one of them has a placement that is not negotiable.
+  </p>
+
+  @@FIG_UIFRAME@@
+
+  <p>
+    <code>start()</code> in <code>on_start</code>, <code>stop()</code> in <code>on_stop</code>,
+    <code>handle_event()</code> per event, and the panels plus <code>render()</code> in
+    <code>on_overlay</code> — all of those are where you would guess. The interesting one is
+    <code>begin_frame()</code>, which wraps ImGui's <code>NewFrame</code>.
+  </p>
+
+  <p>
+    <code>NewFrame</code> is where ImGui computes <code>WantCaptureKeyboard</code> and
+    <code>WantCaptureMouse</code> — the flags that say "the UI is using this device right now" —
+    from the events processed since the last <code>NewFrame</code>. They are the flags §6 masks
+    the game's input with. So the ordering constraint is:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The constraint, and the symptom of breaking it</span>
+    <p><code>begin_frame()</code> must run <strong>before anything reads a capture flag</strong>,
+       which means before the action map is updated, which means at the top of
+       <code>on_input()</code>.</p>
+    <p>Put it in <code>on_overlay</code> next to the panels — where it <em>looks</em> like it
+       belongs, since that is where the UI is — and every read during the frame answers about the
+       <em>previous</em> frame. The symptom is one frame of leakage: the first keystroke after
+       you click into a text field also reaches the game. One frame, every time, and invisible
+       unless you are looking for it.</p>
+  </div>
+
+  <p>
+    Lesson 5.10 added <code>on_input()</code> for a completely different reason — it needed a hook
+    that runs exactly once per frame, after input is published and before the simulation reads it.
+    That is precisely the property this needs, so <strong>5.11 adds no hook</strong>. It is worth
+    noticing when a previous lesson's decision pays for itself; it is the second time in two
+    lessons that 5.10's work has been reused without modification, and §6 is the other.
+  </p>
+
+  <p>
+    One more ordering detail, inside <code>begin_frame</code> itself, because ImGui fixes it and
+    the reason is not obvious:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/ui/debug_ui.cpp</span></figcaption>
+    <pre><code class="lang-cpp">ImGui_ImplSDLRenderer3_NewFrame();   // renderer: rebuild the font texture if it was invalidated
+ImGui_ImplSDL3_NewFrame();          // platform: display size, delta time, this frame's input
+ImGui::NewFrame();                  // core: everything derived from those, incl. the capture flags</code></pre>
+  </figure>
+
+  <p>
+    Renderer, then platform, then core — because the core's computation depends on what the two
+    backends just filled in. Get this order wrong and the failure is not a compile error; it is a
+    frame of stale input or a font texture that is one frame behind.
+  </p>
+
+  <h3 id="frame-absent">5.3 The surface with no renderer</h3>
+
+  <p>
+    Every <code>--shot</code> in this repository runs headless: no window, no renderer, no video
+    subsystem. A UI cannot start there, and the design question is what "cannot start" should
+    feel like from the outside.
+  </p>
+
+  <p>
+    The answer is: <strong>like nothing at all</strong>. <code>start()</code> returns false,
+    <code>running()</code> answers false, and every other call is a safe no-op — including
+    <code>wants_keyboard()</code>, which answers false, so the mask in §6 blocks nothing and the
+    game behaves exactly as it did before this lesson existed. That is what lets one program be
+    written once and run correctly on all three surfaces, and it is what lets Lesson 5.1's
+    reference image survive an eleventh lesson unchanged.
+  </p>
+
+  <p>
+    Note also that <code>start()</code> logs this at <em>info</em>, not error. A program built for
+    a build server is not failing; it is running the way it was asked to. Logging it as an error
+    would put a red line in every headless run in this repository and train the reader to ignore
+    red lines — which is the same argument <code>engine_set_warnings</code> made about compiler
+    warnings in §2.3, one layer up.
+  </p>
+
+  <p>
+    The one genuine wart is worth naming rather than hiding. Every other system Module 5 built is
+    a <em>value</em>: <code>asset_store</code>, <code>registry</code>, <code>action_map</code> and
+    <code>debug_lines</code> can all be held as many times as a program needs, because the engine
+    does not know how many of a thing a game wants and declines to decide.
+    <code>debug_ui</code> cannot be, because ImGui keeps its context in a library global that
+    every <code>ImGui::</code> call reads. Two live instances would silently share one set of
+    windows. We do not pretend otherwise: <code>start()</code> refuses a second instance and says
+    so in the log, because an enforced limit you can read beats an undocumented one you discover.
+  </p>
+
+  <!-- =================================================================
+       6 — THE INPUT SEAM
+       ================================================================= -->
+  <h2 id="seam"><span class="num">6</span>The Input Seam</h2>
+
+  <p>
+    Here is the situation the whole of Lesson 5.10 was quietly waiting for. There is now a text
+    field on screen. Click into it and type <code>spawn</code>. The <code>s</code> must reach the
+    text field. It must <em>not</em> reach the game, where — in a demo with a spawn action bound
+    to the space bar and toggles on half the alphabet — it would fire several of them.
+  </p>
+
+  <p>
+    Two consumers, one keyboard. Somebody has to arbitrate.
+  </p>
+
+  <h3 id="seam-levels">6.1 Arbitrate on levels, never on events</h3>
+
+  <p>
+    The obvious design is to route events: hand each event to the UI first, and if the UI took it,
+    do not hand it on. It is obvious, it is what a lot of code does, and it is wrong in a way that
+    takes a week to find.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">The key that is held down forever</span>
+    <p><strong>Symptom.</strong> After using the debug panel, the character keeps walking
+       forward. Nothing is pressed. Tapping the key again fixes it.</p>
+    <p><strong>Cause.</strong> A key-<em>up</em> event was routed to the UI and not passed on.
+       <code>engine::input</code> tracks <strong>levels</strong> — is this key down — and a level
+       is only ever corrected by the event that contradicts it. Withhold that event and the level
+       is stuck, permanently, and no later event will fix it because the key is not going to be
+       released twice.</p>
+    <p><strong>Fix.</strong> Never withhold events. Feed <em>every</em> event to
+       <em>every</em> consumer, and arbitrate one layer later, on the levels.</p>
+  </div>
+
+  @@FIG_SEAM@@
+
+  <p>
+    So <code>on_event</code> gives every event to ImGui, and the engine has already given the same
+    event to <code>engine::input</code> before the hook runs (Lesson 5.2's ordering guarantee).
+    Both see everything. The arbitration happens in <code>on_input</code>, where the action map is
+    updated — and this is where Lesson 5.10's design pays for itself a second time.
+  </p>
+
+  <p>
+    Recall that <code>action_map::update</code> is a template constrained by a concept rather than
+    a function taking <code>const input&amp;</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — Lesson 5.10, unchanged</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename T&gt;
+concept input_snapshot = requires(const T&amp; t, SDL_Scancode key, int button) {
+    { t.key_down(key) }   -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_down(button) } -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_x() }       -&gt; std::convertible_to&lt;float&gt;;
+    …
+};
+
+template &lt;input_snapshot Source&gt;
+void update(const Source&amp; in);</code></pre>
+  </figure>
+
+  <p>
+    That was written for testability: it let a harness build a six-function fake instead of
+    persuading SDL that a key was held. It turns out to buy something else entirely. A
+    <strong>masked input</strong> is just another type satisfying the same concept — one that
+    wraps a real snapshot and lies about the parts the UI has claimed:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — on_input(), the seam in two lines</span></figcaption>
+    <pre><code class="lang-cpp">gate_.update(in(), ui_.wants_keyboard(), ui_.wants_mouse());
+actions_.update(gate_);</code></pre>
+  </figure>
+
+  <p>
+    <strong>Not one character of <code>action_map</code> changed.</strong> Had
+    <code>update</code> taken a <code>const input&amp;</code>, the only two ways in would have
+    been an <code>if</code> inside the map — the input mapper learning what a UI is — or a copy of
+    <code>input</code> with fields cleared, which is a second source of truth about the keyboard.
+    Depending on a shape rather than a type is what made a third option exist.
+  </p>
+
+  <p>
+    One subtlety that looks like a bug and is not: the map is still <em>updated</em> while the UI
+    has focus. It would seem cheaper to skip the update entirely, but a level that stops being
+    updated is a level that is frozen — hold <code>[Left]</code>, click into the filter box, and
+    the camera would yaw forever. Updating through the mask reports every masked key as
+    <strong>up</strong>, which produces the <em>release</em> edge. And that is not damage
+    limitation, it is the behaviour you want: giving focus to a text field genuinely should let go
+    of the movement keys.
+  </p>
+
+  <h3 id="seam-delta">6.2 You cannot mask a delta</h3>
+
+  <p>
+    Masking a key is a lie told about one frame, and it is complete: a key is a level, the level
+    is <code>false</code>, done. The mouse is not so simple, and this is the subtlest thing in the
+    lesson.
+  </p>
+
+  <p>
+    <code>action_map</code> derives a mouse delta by subtracting the previous frame's cursor
+    position from this frame's. A delta is a difference between two frames — so
+    <strong>suppressing one endpoint of a difference does not suppress the difference</strong>.
+    Consider the cursor sitting at <var>x</var> = 100, the UI taking the mouse for three frames
+    while the cursor travels to 160, and then letting go as it moves on to 170.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Approach</th><th>Delta while blocked</th><th>Delta on the release frame</th><th>What that is</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>report 0 while blocked</td><td>0</td><td><strong>+170</strong></td>
+        <td>the whole screen, in one frame</td>
+      </tr>
+      <tr>
+        <td>freeze the last position</td><td>0</td><td><strong>+70</strong></td>
+        <td>the whole excursion — the version that ships</td>
+      </tr>
+      <tr>
+        <td>virtual cursor</td><td>0</td><td><strong>+10</strong></td>
+        <td>one frame of real movement</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The first is obviously wrong and you will catch it in a minute: reporting 0 makes the
+    <em>next</em> real reading a difference against zero. The second looks right and is the one
+    that ends up in shipped code, because it behaves perfectly until somebody drags a slider — at
+    which point letting go of it whips the camera round by the distance they dragged.
+  </p>
+
+  <p>
+    The fix is to stop thinking of it as masking and start thinking of it as a change of frame of
+    reference. The mask keeps a <strong>virtual cursor</strong>: it reports
+    <code>real − offset</code>, and grows <code>offset</code> by exactly this frame's real
+    movement on every blocked frame.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — masked_input::update</span></figcaption>
+    <pre><code class="lang-cpp">if (!have_previous_)      { have_previous_ = true; }
+else if (block_mouse_)    { offset_x_ += raw_x - previous_raw_x_;
+                            offset_y_ += raw_y - previous_raw_y_; }
+previous_raw_x_ = raw_x;
+previous_raw_y_ = raw_y;
+
+// …and the accessor:
+float mouse_x() const { return source_-&gt;mouse_x() - offset_x_; }</code></pre>
+  </figure>
+
+  @@FIG_CURSOR@@
+
+  <div class="worked">
+    <span class="label">Worked example — the four frames, by hand</span>
+    <p><strong>Frame 0</strong> (unblocked, real 100): offset 0, reported 100. The map latches it;
+       there is no previous, so no delta.</p>
+    <p><strong>Frame 1</strong> (blocked, real 120): offset becomes 0 + (120 − 100) = 20.
+       Reported is 120 − 20 = 100. The previous reported value was also 100, so
+       <strong>Δ = 0</strong>.</p>
+    <p><strong>Frame 2</strong> (blocked, real 145): offset becomes 20 + 25 = 45. Reported is
+       145 − 45 = 100. <strong>Δ = 0</strong>.</p>
+    <p><strong>Frame 3</strong> (blocked, real 160): offset becomes 45 + 15 = 60. Reported is
+       160 − 60 = 100. <strong>Δ = 0</strong>. The reported cursor has not moved since the block
+       began.</p>
+    <p><strong>Frame 4</strong> (unblocked, real 170): the offset does <em>not</em> grow, because
+       the frame is not blocked. Reported is 170 − 60 = 110, the previous reported was 100, so
+       <strong>Δ = +10</strong> — which is exactly how far the mouse moved during a frame the
+       game was listening.</p>
+    <p>The cursor stays 60 pixels behind the real one from now until the program ends, and it is
+       permanently right about how far it moved — which is the only question anybody asked it.
+       <code>verify_511</code> §E runs precisely these five frames.</p>
+  </div>
+
+  <p>
+    The wheel needs none of this, and the reason is worth spotting because it tells you when the
+    machinery is necessary. <code>input</code> publishes the wheel as a <em>per-frame delta</em>
+    already — it is not a position anybody differences — so reporting zero for it is exact rather
+    than a lie about a level. The elaborate treatment is required only where the consumer derives
+    the delta itself.
+  </p>
+
+  <!-- =================================================================
+       7 — WHAT WE DID NOT BUILD
+       ================================================================= -->
+  <h2 id="notbuilt"><span class="num">7</span>What We Did Not Build</h2>
+
+  <p>
+    Three things are deliberately absent, and each is named here rather than discovered later.
+  </p>
+
+  <h3>7.1 The SDL_GPU backend</h3>
+
+  <p>
+    ImGui ships one — <code>imgui_impl_sdlgpu3</code> — and the engine's seam is already the right
+    shape for it: <code>debug_ui</code> would grow a second <code>start()</code> overload and a
+    <code>render()</code> that takes a command buffer and a render pass. The platform half
+    (<code>imgui_impl_sdl3</code>) is shared; only the renderer half changes. These are the actual
+    signatures, read from the header rather than remembered:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">imgui_impl_sdlgpu3.h — what the GPU path would need</span></figcaption>
+    <pre><code class="lang-cpp">struct ImGui_ImplSDLGPU3_InitInfo
+{
+    SDL_GPUDevice*       Device            = nullptr;
+    SDL_GPUTextureFormat ColorTargetFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUSampleCount   MSAASamples       = SDL_GPU_SAMPLECOUNT_1;
+    …
+};
+
+bool ImGui_ImplSDL3_InitForSDLGPU(SDL_Window* window);
+bool ImGui_ImplSDLGPU3_Init(ImGui_ImplSDLGPU3_InitInfo* info);
+void ImGui_ImplSDLGPU3_PrepareDrawData(ImDrawData*, SDL_GPUCommandBuffer*);
+void ImGui_ImplSDLGPU3_RenderDrawData(ImDrawData*, SDL_GPUCommandBuffer*, SDL_GPURenderPass*);</code></pre>
+  </figure>
+
+  <p>
+    Note the shape of it: two calls rather than one, because uploading the vertex data and
+    recording the draw happen at different points in a GPU frame — <code>PrepareDrawData</code>
+    before the render pass begins, <code>RenderDrawData</code> inside it. That is Lesson 4.2's
+    model, and the split is the same one Lesson 4.7 met with texture uploads.
+  </p>
+
+  <p>
+    It is not in this lesson because wiring it means threading a command buffer and a render pass
+    out of <code>sandbox</code>'s own frame — which is 4,700 lines of demo, and a lesson's worth
+    of surgery on somebody else's program to demonstrate a call we can already read. Exercise 11.4
+    does it. Module 6, which lives on the GPU path, does it for real.
+  </p>
+
+  <h3>7.2 Depth-tested debug lines</h3>
+
+  <p>
+    <code>draw_debug_lines</code> draws over the scene, unconditionally. That is right nine times
+    in ten: a contact normal buried inside the two objects that produced it is a contact normal
+    you cannot see. The tenth time you do want occlusion — a hierarchy line passing behind a wall
+    should say so — and that wants a per-line flag plus a depth buffer this function is not given.
+  </p>
+
+  <p>
+    A flag no backend honours is speculative design, so there is no flag. Exercise 11.3 adds one,
+    and the interesting part of that exercise is not the flag: it is that a depth-tested line and
+    an overlaid one must be drawn in two passes, which makes the queue's ordering guarantee
+    suddenly load-bearing.
+  </p>
+
+  <h3>7.3 Batching</h3>
+
+  <p>
+    The flush walks the queue and draws one segment at a time. On the software renderer that is
+    exactly right — there is nothing to batch into. On the GPU it will be badly wrong, and one
+    draw call per line will dominate a frame.
+  </p>
+
+  <p>
+    Say plainly what has been bought anyway: <strong>the queue is what makes batching possible at
+    all.</strong> You cannot batch calls that have already happened. An immediate-mode drawer
+    forecloses the optimisation permanently; a queue defers the decision to the module that has a
+    reason to care.
+  </p>

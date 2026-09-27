@@ -1,0 +1,38 @@
+<svg viewBox="0 0 900 368" role="img" aria-labelledby="f88b-t f88b-d">
+  <title id="f88b-t">The two stages</title>
+  <desc id="f88b-d">A flow diagram of proxies through the broadphase into the narrow phase.</desc>
+  <defs>
+    <marker id="e-i-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grn-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-gry-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-amb-f88b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="40" y="56" width="150" height="64" rx="3" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<text x="115.0" y="82" class="sm" text-anchor="middle">2,000 proxies</text>
+<text x="115.0" y="101" class="xs muted" text-anchor="middle">a box and an index</text>
+<rect x="250" y="56" width="150" height="64" rx="3" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<text x="325.0" y="82" class="sm" text-anchor="middle">broadphase</text>
+<text x="325.0" y="101" class="xs muted" text-anchor="middle">0.091 ms</text>
+<line x1="198.00" y1="88.00" x2="242.00" y2="88.00" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-grn-f88b)"/>
+<rect x="460" y="56" width="150" height="64" rx="3" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<text x="535.0" y="82" class="sm" text-anchor="middle">983 candidate pairs</text>
+<text x="535.0" y="101" class="xs muted" text-anchor="middle">a superset, never a subset</text>
+<line x1="408.00" y1="88.00" x2="452.00" y2="88.00" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-grn-f88b)"/>
+<rect x="670" y="56" width="150" height="64" rx="3" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<text x="745.0" y="82" class="sm" text-anchor="middle">narrow phase</text>
+<text x="745.0" y="101" class="xs muted" text-anchor="middle">0.426 ms</text>
+<line x1="618.00" y1="88.00" x2="662.00" y2="88.00" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-grn-f88b)"/>
+<rect x="250" y="186" width="360" height="64" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="5 4"/>
+<text x="430.0" y="212" class="sm" text-anchor="middle">1,999,000 pairs straight to the narrow phase</text>
+<text x="430.0" y="231" class="xs muted" text-anchor="middle">844 ms — 1632× the whole stage above</text>
+<line x1="115.00" y1="126.00" x2="280.00" y2="178.00" stroke="#8f918a" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#e-gry-f88b)"/>
+<line x1="580.00" y1="178.00" x2="745.00" y2="126.00" stroke="#8f918a" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#e-gry-f88b)"/>
+<text x="40" y="284" class="xs muted" text-anchor="start">The broadphase does not make the narrow phase faster. It makes there be 2034× less of it — 983 pairs instead of</text>
+<text x="40" y="301" class="xs muted" text-anchor="start">1,999,000 — and that is the whole of the arrangement. It costs 18% of the two stages together (§10), which is the</text>
+<text x="40" y="318" class="xs muted" text-anchor="start">price of admission and the reason the stage exists as a separate stage at all: it has to be so much cheaper per pair</text>
+<text x="40" y="335" class="xs muted" text-anchor="start">that running it on everything is still cheaper than running the real test on a fraction.</text>
+</svg>

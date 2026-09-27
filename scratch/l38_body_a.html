@@ -1,0 +1,692 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="03-07-specular-blinn-phong.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">3.7 — Specular and Blinn-Phong</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="03-09-textures.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">3.9 — Texture Mapping and Bilinear Filtering</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 3 — Software Rasterizer II: Depth, Light, Texture · Lesson 3.8</div>
+    <h1>Flat, Gouraud and Per-Pixel Shading</h1>
+    <p class="deck">
+      Lesson 3.7 ended with three tables showing a highlight that flickers, vanishes and
+      arrives in the wrong shape. None of them was a bug in the shading equation. They were all
+      the same bug: evaluating it in the wrong places.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4–5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-07-specular-blinn-phong.html">3.7 — Specular and Blinn-Phong</a>,
+          <a href="03-06-normals-and-lambert.html">3.6 — Normals and Lambert's Cosine Law</a>,
+          <a href="02-04-attribute-interpolation.html">2.4 — Attribute Interpolation</a>,
+          <a href="03-02-perspective-correct.html">3.2 — Perspective-Correct Interpolation</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd>
+          <code>src/gfx/clip.hpp</code>, <code>src/gfx/clip.cpp</code>,
+          <code>src/gfx/raster.hpp</code>, <code>src/gfx/raster.cpp</code>,
+          <code>src/main.cpp</code>
+        </dd>
+
+        <dt>Milestone</dt>
+        <dd>
+          A rasterizer that shades per fragment — the first change in this course to touch
+          <code>raster.cpp</code>'s inner loop since Lesson 3.2 — and a 2×3 grid of shading
+          modes you can step through, two cells of which are provably the same picture.
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…separate two questions that look like one: where a normal <em>comes from</em>, and
+          where the shading equation is <em>evaluated</em>.</li>
+      <li>…predict which cells of the resulting grid produce identical pictures, and state the
+          condition under which that stops being true.</li>
+      <li>…name Gouraud shading as something you already built, and say exactly which two
+          lessons built it.</li>
+      <li>…explain why an interpolated normal is too short, by how much, and where the debt was
+          already paid.</li>
+      <li>…tell Phong <em>shading</em> from the Phong <em>reflection model</em> without
+          hesitating.</li>
+      <li>…recognise Mach banding, and say why it is not fixable with more colour precision.</li>
+      <li>…say when per-pixel shading is more expensive than per-vertex — and when it is
+          <em>cheaper</em>, which is not the answer folklore gives.</li>
+      <li>…say what per-pixel shading cannot fix, and which axis fixes that instead.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-two">One knob that was secretly two</a></li>
+          <li><a href="#intuition-sample">Sampling a function you already have</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-grid">The grid, and its degenerate cells</a></li>
+          <li><a href="#theory-gouraud">Gouraud, named</a></li>
+          <li><a href="#theory-phong">Phong shading is not the Phong model</a></li>
+          <li><a href="#theory-normal">The interpolated normal is too short</a></li>
+          <li><a href="#theory-mach">Mach bands, and why precision cannot fix them</a></li>
+          <li><a href="#theory-cannot">What per-pixel shading cannot fix</a></li>
+          <li><a href="#theory-cost">What it costs, measured</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-varyings">Two varyings, and a vertex that changed meaning</a></li>
+          <li><a href="#impl-clip">The clipper has to carry them too</a></li>
+          <li><a href="#impl-fill">The fragment loop</a></li>
+          <li><a href="#impl-coupling">The dependency this adds, named</a></li>
+          <li><a href="#impl-material">One material per triangle, which a GPU cannot do</a></li>
+          <li><a href="#impl-demo">Two keys for two axes</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 3.7 finished with three tables, and it is worth restating what they showed because
+    this lesson is the answer to all three.
+  </p>
+
+  <ul>
+    <li>Evaluating the shading at vertices and interpolating the answers disagreed with
+        evaluating it at the pixel by up to <strong>0.722 of full strength</strong>, over
+        <strong>87.8%</strong> of the lit area of a 1,225-vertex torus.</li>
+    <li>A coarser mesh did not merely distort the highlight, it <strong>missed</strong> it: an
+        8×6 torus found 0.0% of the true peak.</li>
+    <li>Spinning a 12×8 torus, the highlight was <strong>absent entirely in 58 of 180
+        frames</strong>.</li>
+  </ul>
+
+  <p>
+    Not one of those is a defect in Lambert's law, in the halfway vector, or in the exponent.
+    The equation was right every time. What was wrong was <em>where we asked it</em>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode</span>
+    <p>
+      A highlight that flickers on and off as an object turns, and a curved surface whose
+      shading is subtly faceted — flat-looking bands meeting at visible creases even though the
+      mesh has smooth normals and the numbers across each triangle are continuous.
+    </p>
+    <p>
+      Both come from the same cause and neither is fixable by improving the lighting model. You
+      can implement a full microfacet BRDF and it will still flicker, because the flicker is a
+      <em>sampling</em> artifact: a sharp function evaluated at a few points and joined with
+      straight lines.
+    </p>
+  </div>
+
+  <p>
+    There is a second thing tangled up in this, and untangling it is half the lesson. Lesson 3.6
+    shipped an enum called <code>shade_mode</code> with the values
+    <code>palette / flat / smooth</code>, and its own doc comment admitted the problem:
+  </p>
+
+  <blockquote>
+    <p>
+      "Note what is NOT in this enum: <em>per-pixel</em>. Interpolating the <em>colour</em>
+      across a triangle and interpolating the <em>normal</em> and shading each pixel are
+      different things, and comparing them properly is Lesson 3.8."
+    </p>
+  </blockquote>
+
+  <p>
+    That enum could not be extended, and the reason is not that it needed one more value. It is
+    that it was holding <strong>two independent questions in one list</strong>. Today it becomes
+    two enums, and the grid they span is where the lesson lives.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-two">2.1 One knob that was secretly two</h3>
+
+  <p>
+    Look at what <code>flat</code> and <code>smooth</code> actually differed by in Lesson 3.6.
+    Read the code and you find <em>two</em> differences, moving together:
+  </p>
+
+  <ul>
+    <li><code>flat</code> took the normal from the <strong>triangle</strong> (a cross product of
+        its edges) and evaluated the shading <strong>once per triangle</strong>.</li>
+    <li><code>smooth</code> took the normal from each <strong>vertex</strong> (as the mesh
+        authored it) and evaluated the shading <strong>once per vertex</strong>.</li>
+  </ul>
+
+  <p>
+    Those are two knobs taped together. Nothing forces them to move as one — you can perfectly
+    well take a normal per vertex and evaluate once per triangle, or take one normal for the
+    whole triangle and evaluate per pixel. The two questions are:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The two axes</span>
+    <p>
+      <strong>Where does the normal come from?</strong> A property of the <em>mesh</em> — of how
+      it was authored and where its vertices were split. Lesson 3.5 showed this is decided by the
+      file: a cube's 8 positions become 24 vertices because each corner belongs to three faces
+      that disagree about the normal.
+    </p>
+    <p>
+      <strong>Where is the equation evaluated?</strong> A property of the <em>pipeline</em> — of
+      your renderer, decided at run time and identical for every mesh you draw. Nothing about a
+      mesh says how often to shade it.
+    </p>
+  </div>
+
+  <p>
+    Two independent questions with two and three answers make a grid of six, and Figure 1 is that
+    grid with real pixel counts in it.
+  </p>
+
+@@FIG1@@
+
+  <p>
+    The shaded row is the interesting part and §<a href="#theory-grid">3.1</a> derives it: with a
+    face normal, <em>all three</em> evaluation points give the identical picture — zero pixels
+    differ, not "close". That is a strong statement and it comes with a condition attached, which
+    is exactly the kind of thing worth getting precise about.
+  </p>
+
+  <h3 id="intuition-sample">2.2 Sampling a function you already have</h3>
+
+  <p>
+    Here is the whole lesson in one sentence: <strong>shading a surface is evaluating a function
+    over it, and the three modes differ only in how many samples you take.</strong>
+  </p>
+
+  <p>
+    The function is fixed. It is <code>shade()</code>, unchanged since 3.7, taking a normal and a
+    position and returning a colour. Flat calls it once per triangle. Gouraud calls it three
+    times, at the corners, and lets the rasterizer's interpolation fill in between. Per-pixel
+    calls it for every covered fragment.
+  </p>
+
+@@FIG2@@
+
+  <p>
+    Put that way, two things become obvious that were not obvious before.
+  </p>
+
+  <p>
+    <strong>Interpolating the answer is not the same as interpolating the inputs.</strong>
+    <code>shade()</code> is not a linear function — it contains a clamped cosine and, since 3.7,
+    a cosine raised to the 32nd power. Averaging the outputs of a curved function at two points
+    is not the same as evaluating it at the average of the points, and the gap between those is
+    exactly the chord-under-a-curve error this course has met three times already (2.4's
+    sub-pixel bias, 3.2's affine texturing, 3.7's per-vertex specular).
+  </p>
+
+  <p>
+    <strong>The error grows as the function gets sharper.</strong> A chord approximates a gentle
+    curve well and a sharp one badly, which is why 3.7's Table 5 got <em>worse</em> as shininess
+    went up — 0.048 at exponent 4 and 0.722 at 128. Diffuse shading survives per-vertex
+    evaluation because Lambert is a broad, gentle cosine. A highlight does not, because being
+    sharp is the entire point of it.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-grid">3.1 The grid, and its degenerate cells</h3>
+
+  <p>
+    Six cells, but not six pictures. Work out which coincide, because doing so is the test of
+    whether the two axes are really separate in your head.
+  </p>
+
+  <p>
+    Take the <strong>face-normal</strong> row. The normal is the same at every point of the
+    triangle — that is what "face normal" means. Now ask what the shading equation depends on:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{shade}\bigl(\text{albedo},\ \mathbf{n},\ \mathbf{e} - \mathbf{p}\bigr) \]</span>
+    <span class="eq-plain">shade(albedo, normal, eye − position)</span>
+  </div>
+
+  <p>
+    The albedo is constant over the triangle. The normal is constant, by assumption. That leaves
+    the position — and <strong>with a diffuse-only model the position does not appear in the
+    answer at all</strong>, because Lambert compares two directions and a directional light's
+    direction is the same everywhere (Lesson 3.6). So the function is <em>constant</em> across
+    the triangle, and it makes not the slightest difference whether you sample it once, three
+    times, or ten thousand times. Interpolating equal values returns that value.
+  </p>
+
+  <p>
+    Measured, on the torus, diffuse only:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">scratch/verify_38 — §A</span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">     specular OFF (diffuse only)
+       normal source   evaluation   px differing   worst delta   note
+       face            flat                    0             0   predicted 0
+       face            gouraud                 0             0   predicted 0
+       face            per-pixel               0             0   predicted 0
+       vertex          flat                 5285            41
+       vertex          gouraud              4344            27
+       vertex          per-pixel               0             0   predicted 0</code></pre>
+  </figure>
+
+  <p>
+    Three cells collapse into one. And the bottom row does not: with vertex normals the function
+    genuinely varies across the triangle, and where you sample it changes 5,285 and 4,344 pixels
+    respectively.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">…and the condition, which the first draft of this lesson got wrong</span>
+    <p>
+      The argument above has a load-bearing clause in it: <em>with a diffuse-only model the
+      position does not appear</em>. Lesson 3.7 is precisely where that stopped being true. A
+      specular term needs <code>eye − position</code>, and <strong>the position varies across a
+      face even when the normal does not</strong>.
+    </p>
+    <p>
+      So with the highlight on, the top row separates too:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Cell</th><th>Diffuse only</th><th>With Blinn-Phong, p = 32</th></tr></thead>
+        <tbody>
+          <tr><td>face × flat vs per-pixel</td><td>0 px</td><td><strong>1,231 px</strong> (worst 6/255)</td></tr>
+          <tr><td>face × Gouraud vs per-pixel</td><td>0 px</td><td><strong>761 px</strong> (worst 1/255)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      I wrote <code>is_degenerate</code> the first time claiming <code>face × gouraud</code> was
+      always degenerate. It is not, and <code>verify_38</code> §A found the 761 pixels that say
+      so. The corrected rule is simpler than the wrong one, which is usually the sign:
+      <strong>with a face normal all three evaluation points agree, for exactly as long as the
+      shading is view-independent.</strong>
+    </p>
+  </div>
+
+  <h3 id="theory-gouraud">3.2 Gouraud, named</h3>
+
+  <p>
+    <strong>You have been doing Gouraud shading since Lesson 3.6.</strong> Nothing in this
+    section is new machinery; it is a name for something already built, and knowing that is worth
+    more than the name.
+  </p>
+
+  <p>
+    Henri Gouraud's 1971 contribution was one idea: instead of shading a polygon uniformly,
+    compute the intensity at each <em>vertex</em> and interpolate it linearly across the
+    interior. That is:
+  </p>
+
+  <ul>
+    <li>Lesson <strong>2.4</strong> built the interpolation — barycentric weights carrying an
+        arbitrary attribute across a triangle, in linear light.</li>
+    <li>Lesson <strong>3.6</strong> put a lit colour at each vertex.</li>
+  </ul>
+
+  <p>
+    Put those two together and you have Gouraud shading, complete, without ever having typed the
+    word. That is a pleasant thing to discover and it is also a useful habit: a great deal of
+    graphics vocabulary names combinations of things you can derive, and a named technique you
+    can reconstruct is much harder to forget than one you memorised.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why it mattered so much in 1971</span>
+    <p>
+      Gouraud shading is the reason real-time 3-D looked the way it did for twenty-five years.
+      Its cost is <em>per vertex</em>, and vertices are far fewer than pixels — so on hardware
+      where a multiply was expensive it made curved surfaces affordable when per-pixel lighting
+      was simply out of reach. Every PlayStation-era character is Gouraud-shaded.
+    </p>
+    <p>
+      §<a href="#theory-cost">3.7</a> measures whether that trade still holds. The answer is
+      "sometimes", and the boundary is not where you would guess.
+    </p>
+  </div>
+
+  <h3 id="theory-phong">3.3 Phong shading is not the Phong model</h3>
+
+  <p>
+    This is a naming collision that trips up nearly everyone, and it is worth ten seconds now to
+    save an hour later. <strong>Bui Tuong Phong published two different things</strong>, in the
+    same 1975 paper, and they sit on the two different axes of this lesson.
+  </p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th></th><th>The Phong <em>reflection model</em></th><th>Phong <em>shading</em></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>What it is</td>
+              <td>A formula for how much light leaves a surface: the
+                  <code>cos<sup>p</sup></code> specular lobe.</td>
+              <td>An interpolation scheme: interpolate the <em>normal</em> across a polygon and
+                  evaluate per pixel.</td></tr>
+          <tr><td>Which axis</td>
+              <td>Neither — it is the equation itself.</td>
+              <td>Where the equation is evaluated.</td></tr>
+          <tr><td>This course</td>
+              <td>Lesson <a href="03-07-specular-blinn-phong.html">3.7</a>, and we replaced it
+                  with Blinn's.</td>
+              <td>Lesson 3.8 — this one, and we are adopting it.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 1.</span> Two contributions, one surname. They are orthogonal:
+      you can use either shading scheme with either reflection model.
+    </figcaption>
+  </figure>
+
+  <p>
+    Which means the sentence describing what this engine now does is, correctly and confusingly:
+    <strong>Phong shading with the Blinn-Phong reflection model.</strong> That is the standard
+    modern combination and it sounds like a contradiction until the axes are separated, which is
+    exactly why they are worth separating.
+  </p>
+
+  <h3 id="theory-normal">3.4 The interpolated normal is too short</h3>
+
+  <p>
+    Per-pixel shading interpolates the normal. Interpolation is a weighted average, and here is a
+    fact about averaging unit vectors that catches people: <strong>the average of two unit
+    vectors is not a unit vector.</strong>
+  </p>
+
+  <p>
+    The picture makes it obvious. Two unit vectors have their tips on a circle of radius 1. The
+    straight line between those tips is a <em>chord</em>, and a chord passes <em>inside</em> the
+    circle. Every interpolated value lies on that chord, so every one of them is short.
+  </p>
+
+@@FIG3@@
+
+  <p>
+    How short is exact and worth deriving, because it is one line. Two unit vectors
+    <code>θ</code> apart, averaged: by symmetry the result lies along the bisector, and its
+    length is the component of either vector along that bisector — which is
+    <code>cos(θ/2)</code>.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \left\|\tfrac{1}{2}\left(\mathbf{n}_0 + \mathbf{n}_1\right)\right\| = \cos\!\left(\tfrac{\theta}{2}\right) \]</span>
+    <span class="eq-plain">the length of the average of two unit normals theta apart is cos(theta/2)</span>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — and what it would cost</span>
+    <p>
+      Confirmed at every angle by <code>verify_38</code> §B. An un-normalised normal scales the
+      brightness by its length (Lesson 3.6), so the shortfall is a brightness error directly:
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Angle between the normals</th><th><code>|n|</code> at the midpoint</th><th>Brightness error if unfixed</th></tr></thead>
+        <tbody>
+          <tr><td>5°</td><td>0.99905</td><td>0.1%</td></tr>
+          <tr><td>15°</td><td>0.99144</td><td>0.9%</td></tr>
+          <tr><td>30°</td><td>0.96593</td><td>3.4%</td></tr>
+          <tr><td>60°</td><td>0.86603</td><td>13.4%</td></tr>
+          <tr><td>90°</td><td>0.70711</td><td>29.3%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      On the shipped torus the worst case across all 2,304 triangles is <code>0.99051</code> —
+      0.95% short. Small, but note the shape of it: <strong>zero at the corners and largest in
+      the middle</strong>, which is the signature this course has learned to recognise (3.2 §3.6)
+      and which makes it invisible to anyone checking vertex values.
+    </p>
+  </div>
+
+  <div class="callout ok">
+    <span class="label">A debt that was already paid</span>
+    <p>
+      This engine never suffers it, and not by luck. Lesson 2.4's header booked the debt —
+      "returns an interpolated <em>normal</em> that is no longer unit length (renormalise per
+      pixel, 3.6)" — and Lesson 3.6 paid it in advance by having <code>shade()</code> normalise
+      its own argument, with the reasoning stated at the time: <em>"a caller who forgets gets a
+      brightness scaled by the normal's length, which looks like a lighting bug and is not
+      one."</em>
+    </p>
+    <p>
+      Today is the call site that cashes that in. The cost is one square root per fragment, and
+      it is in §3.7's measurements. Writing a function that cannot be misused two lessons before
+      anyone could misuse it is the cheapest engineering there is.
+    </p>
+  </div>
+
+  <h3 id="theory-mach">3.5 Mach bands, and why precision cannot fix them</h3>
+
+  <p>
+    Gouraud shading has a characteristic artifact, and it is a strange one: <strong>the numbers
+    are continuous and the picture is not.</strong>
+  </p>
+
+  <p>
+    Consider a curved surface approximated by flat facets, with smooth normals at the shared
+    vertices. Gouraud evaluates the intensity at each vertex and joins those samples with
+    straight lines. The result is <em>piecewise linear</em>: continuous everywhere — adjacent
+    facets agree exactly at the vertex they share — but with a <strong>kink</strong> at every
+    join, where the slope changes abruptly.
+  </p>
+
+@@FIG4@@
+
+  <p>
+    Now the strange part. Your visual system does not measure absolute brightness; it enhances
+    <em>edges</em>, through a mechanism called lateral inhibition in which an excited receptor
+    suppresses its neighbours. One consequence is that a discontinuity in the <em>gradient</em>
+    of brightness is exaggerated into an apparent light or dark stripe that <strong>is not in the
+    image at all</strong>. Ernst Mach described these in the 1860s and they are named after him.
+  </p>
+
+  <p>
+    That is why this artifact is worth its own section rather than a footnote:
+  </p>
+
+  <ul>
+    <li><strong>More colour precision does not help.</strong> The bands are not quantisation. Go
+        to 16 bits per channel and they are exactly as visible, because the piecewise-linear ramp
+        is exactly as kinked.</li>
+    <li><strong>More triangles help slowly.</strong> Doubling the tessellation halves the kink
+        at each join but doubles the number of joins. It converges — this is the same
+        <code>O(h²)</code> chord error as 3.2's affine texturing — but never terminates.</li>
+    <li><strong>Per-pixel shading removes them,</strong> because it evaluates the true curve
+        instead of a chord, and the true curve has no kinks.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">Honest scope</span>
+    <p>
+      Two caveats, because this is the kind of claim that gets overstated. First: Mach banding is
+      a <em>perceptual</em> effect, so how visible it is depends on the viewer, the display and
+      the contrast — you cannot count it in a framebuffer diff the way this course counts
+      everything else, and the pixel counts in §3.1 measure the underlying numerical difference,
+      not the perceived one. Second: per-pixel shading removes the banding caused by
+      <em>interpolating the shading</em>; it does nothing about a genuine silhouette crease,
+      because that one really is in the geometry.
+    </p>
+  </div>
+
+  <h3 id="theory-cannot">3.6 What per-pixel shading cannot fix</h3>
+
+  <p>
+    Lesson 3.7 measured a highlight vanishing entirely as an object turned, and this lesson was
+    supposed to fix it. Re-run on the same four meshes, counting frames of a 180-step rotation in
+    which there is no highlight at all:
+  </p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Mesh</th><th>Vertices</th><th>Gouraud: blank frames</th><th>Per-pixel: blank frames</th><th>Normals</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>icosahedron</td><td>12</td><td>50 of 180</td><td>51 of 180</td><td>absent → face</td></tr>
+          <tr><td><code>cube.obj</code></td><td>24</td><td>157 of 180</td><td><strong>157 of 180</strong></td><td>split</td></tr>
+          <tr><td>torus 12 × 8</td><td>117</td><td>58 of 180</td><td><strong>0 of 180</strong></td><td>smooth</td></tr>
+          <tr><td>torus 48 × 24</td><td>1,225</td><td>0 of 180</td><td>0 of 180</td><td>smooth</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 2.</span> Blinn-Phong at shininess 64, one light, one camera.
+      Per-pixel shading takes the 12×8 torus from 58 blank frames to <strong>none</strong>. It
+      does nothing whatsoever for the cube.
+    </figcaption>
+  </figure>
+
+  <p>
+    That second result is the more useful one, and it was not what I expected when I wrote the
+    plan for this lesson. <strong>Per-pixel shading fixes an interpolation error. It cannot
+    invent a normal the mesh does not have.</strong>
+  </p>
+
+  <p>
+    A cube has six distinct normals. Whether a highlight exists anywhere on it is decided before
+    any shading happens, by whether one of those six points near the halfway vector — and if none
+    does, evaluating the equation at ten thousand fragments instead of twenty-four vertices
+    changes nothing, because all ten thousand get the same normal. The icosahedron is the same
+    story with twenty.
+  </p>
+
+  <p>
+    So the two axes fix two different things, and neither substitutes for the other:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Which axis fixes what</span>
+    <p>
+      <strong>The normal source</strong> decides whether the surface has smoothly varying normals
+      at all — a property of the mesh, fixed by welding vertices and averaging (Lesson 3.5) or by
+      authoring them.
+    </p>
+    <p>
+      <strong>The evaluation point</strong> decides how faithfully those normals are turned into
+      pixels — a property of the pipeline.
+    </p>
+    <p>
+      Get the first wrong and no pipeline saves you. Get the second wrong and no mesh saves you.
+      That is a much better reason for two enums than tidiness.
+    </p>
+  </div>
+
+  <p>
+    It also re-confirms Lesson 3.6's result from the other direction. On <code>cube.obj</code>,
+    face normals and vertex normals give <strong>0 differing pixels</strong> — still — because
+    3.5's vertex split already gave each of the cube's 24 vertices its own face's normal. On the
+    welded torus the same comparison gives 4,122. <em>A faceted mesh is faceted because of the
+    split, not the shading model,</em> and that sentence survives this lesson intact.
+  </p>
+
+  <h3 id="theory-cost">3.7 What it costs, measured</h3>
+
+  <p>
+    "Per-vertex is cheaper than per-pixel" is one of those things everyone knows. It is also,
+    at the sizes this engine actually renders, <strong>false</strong> — and finding that out
+    took one sweep.
+  </p>
+
+  <p>
+    The reasoning behind the folklore is sound as far as it goes: a mesh has fewer vertices than
+    the pixels it covers, so shading per vertex is fewer calls. The unstated assumption is that a
+    triangle covers <em>many</em> pixels. Our torus has 2,304 triangles and covers 6,346 pixels
+    at 320×180 — <strong>2.8 pixels per triangle</strong>, which means 6,912 vertex-shading calls
+    against 6,346 fragment ones. The folklore inverts.
+  </p>
+
+  <p>
+    Sweep the resolution with the mesh fixed, so the only thing changing is that ratio:
+  </p>
+
+@@FIG5@@
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Resolution</th><th>Covered px</th><th>Px / triangle</th><th>Gouraud</th><th>Per-pixel</th><th>Ratio</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>320 × 180</td><td>6,346</td><td>2.8</td><td>0.341 ms</td><td>0.312 ms</td><td><strong>0.91×</strong></td></tr>
+          <tr><td>640 × 360</td><td>25,400</td><td>11.0</td><td>0.618 ms</td><td>0.873 ms</td><td>1.41×</td></tr>
+          <tr><td>1280 × 720</td><td>101,701</td><td>44.1</td><td>1.711 ms</td><td>3.149 ms</td><td>1.84×</td></tr>
+          <tr><td>2560 × 1440</td><td>406,687</td><td>176.5</td><td>5.785 ms</td><td>12.250 ms</td><td>2.12×</td></tr>
+          <tr><td>3840 × 2160</td><td>914,492</td><td>396.9</td><td>12.687 ms</td><td>27.242 ms</td><td>2.15×</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 3.</span> <code>torus.obj</code>, 2,304 triangles and 1,225
+      vertices, fixed; resolution swept. Apple M4 Pro, clang, <code>-O2</code>. The ratio
+      asymptotes at about <strong>2.15×</strong> — that is the true steady-state cost of
+      per-pixel Blinn-Phong here — and dips <em>below one</em> when triangles get smaller than
+      about three pixels.
+    </figcaption>
+  </figure>
+
+  <p>
+    Three things worth taking from that table.
+  </p>
+
+  <p>
+    <strong>The asymptote is the real number.</strong> 2.15× is what per-pixel shading costs
+    when triangles are large — a square root, a few dot products and a <code>powf</code> per
+    fragment instead of per vertex. That is the honest headline, and it is a very affordable
+    price for removing the artifacts in §3.1 and §3.5.
+  </p>
+
+  <p>
+    <strong>The crossover is real and modern meshes live near it.</strong> A character model with
+    50,000 triangles occupying a quarter of a 1080p screen averages about ten pixels per triangle
+    — the second row. This is not a curiosity; it is why GPUs shade in 2×2 quads and why
+    "too many small triangles" is a recognised performance problem with a name.
+  </p>
+
+  <p>
+    <strong>The measurement corrected the guess.</strong> I expected a number bigger than one on
+    every row. Half of the value of writing a harness is the rows that come back wrong.
+  </p>

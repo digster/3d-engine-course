@@ -1,0 +1,246 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-09-cascaded-shadows.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.9 — Cascaded Shadow Maps</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-11-transparency.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.11 — Transparency: Alpha Modes, Blending, and Draw Order</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.10</div>
+    <h1>Mipmaps, LOD, and Anisotropic Filtering</h1>
+    <p class="deck">
+      This lesson is a debt being paid. Lesson 3.9 measured the problem exactly — one screen pixel
+      covers 0.60 texels at the bottom of the frame and <strong>62.46</strong> two rows below the
+      horizon, while bilinear reads four texels whatever the pixel covers — then named the fix and
+      moved on. So did 4.7, which created every texture with <code>num_levels = 1</code> and a
+      comment saying Module 6 would change it. So did <code>texture.hpp</code>'s own sampler
+      struct. The fix is one sentence: if a pixel covers sixty texels, read from a copy of the
+      image in which those sixty have <em>already</em> been averaged. What makes it a lesson is the
+      three questions that sentence hides — which copy, what about between copies, and what if the
+      footprint is not square — and one famous bug that makes a surface darken as it recedes.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-09-textures.html">3.9 — Texture Mapping and Bilinear Filtering</a>,
+          <a href="03-02-perspective-correct.html">3.2 — Perspective-Correct Interpolation</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/mipmap.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/mipmap.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/include/engine/gfx/material.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_610.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Mipmapping, trilinear filtering and anisotropy in <strong>both renderers</strong>, with
+            the level derived from an exact analytic derivative rather than a finite difference.
+            24 checks green; the reference render <strong>byte-identical</strong> for the
+            nineteenth lesson — and this time that took a design decision rather than luck.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the mip level from a footprint, and say why the formula is a logarithm.</li>
+      <li>…compute a screen-space uv derivative <em>analytically</em> on a CPU rasterizer that has
+          no neighbouring fragment to subtract.</li>
+      <li>…explain why a mip chain must be averaged in linear light, and quantify what skipping
+          it costs.</li>
+      <li>…say what trilinear filtering buys, in the same vocabulary Lesson 6.9 used for the
+          cascade seam.</li>
+      <li>…explain why isotropic filtering must choose between blurring and aliasing, and what
+          anisotropy does instead.</li>
+      <li>…recognise the two SDL sampler fields that silently disable the feature you just
+          built.</li>
+      <li>…state what mipmapping costs, and when not to pay it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a promise made six times</a></li>
+      <li><a href="#intuition">Building intuition: average it in advance</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: a promise made six times</h2>
+
+  <p>
+    Lesson 3.9 built texture mapping and bilinear filtering, and it ended by measuring something it
+    could not fix. On a floor running to the horizon:
+  </p>
+
+  <blockquote>
+    <p>
+      One screen pixel covers <strong>0.60 texels</strong> at the bottom of the frame and
+      <strong>62.46 texels</strong> two rows below the horizon. Bilinear filtering reads four —
+      always, whatever the pixel covers. They cross near row 103, and past that the sampler is
+      looking at a shrinking fraction of the truth: about <strong>6.4%</strong> of it at the
+      horizon. The gap is the aliasing, and mipmaps (Module 6) are what closes it.
+    </p>
+  </blockquote>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    That is a completely honest description of a bug, and then nothing happened for seven lessons.
+    It is worth listing where the promise was repeated, because the list is the reason this lesson
+    sits at 6.10 and not at the end of the module:
+  </p>
+
+  <ul>
+    <li>3.9's prose, above.</li>
+    <li>3.9's Exercise 8.5, which asks the student to build a chain and warns about the linear-light
+        trap in its hint.</li>
+    <li>3.9's Exercise 8.4, which asks how the sampler would <em>know</em> which filter applies —
+        and answers "it is a fact about the derivative, and Module 6's job properly".</li>
+    <li>4.7's exercise 4.7.5, naming <code>SDL_GenerateMipmapsForGPUTexture</code>.</li>
+    <li>4.7's <code>gpu_texture.cpp</code>, which shipped <code>ti.num_levels = 1;</code> with the
+        comment <code>// no mipmaps yet — Module 6</code>.</li>
+    <li>And worst, <code>texture.hpp</code>'s public sampler struct, whose doc comment reads
+        <em>"Module 6's mipmaps are what fills the gap"</em> — a promise made in a header the
+        student is meant to read.</li>
+  </ul>
+
+  <div class="callout warn">
+    <span class="label">How this got found, which is itself the lesson</span>
+    <p>
+      Two external reviewers read the published curriculum and independently flagged mipmaps as
+      missing — from the <em>outline alone</em>, without access to the code. Neither could see that
+      the engine had promised them six times; they simply noticed that a course teaching texture
+      filtering had no lesson on minification.
+    </p>
+    <p>
+      A deferral is a debt, and a deferral repeated in a shipped header is a debt with the
+      student's name on it. It is worth being deliberate about which ones you are carrying.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: average it in advance</h2>
+
+  <p>
+    The problem is a mismatch between how much of the image a pixel is responsible for and how much
+    of it the sampler looks at. There are two ways to close a gap like that, and only one of them
+    is affordable.
+  </p>
+
+  <p>
+    <strong>Read more texels.</strong> If the pixel covers sixty-two, read sixty-two and average
+    them. This is exactly right and completely unusable: the cost per pixel would rise with
+    distance, so the far half of your screen — the cheap half, the half that covers the least area
+    — would become the expensive half. Worse, the count varies per pixel, so the inner loop gets a
+    variable-length inner loop inside it.
+  </p>
+
+  <p>
+    <strong>Or average them in advance.</strong> The set of texels a distant pixel covers is not
+    arbitrary: it is a contiguous square block. And the blocks that different pixels need are
+    <em>nested</em> — a 4×4 block is four 2×2 blocks. So precompute the averages once, at load time,
+    in a pyramid: the image at half size, then quarter size, and so on to a single texel. At draw
+    time, pick the level whose texels are about the size of the footprint and take the same four
+    taps you always took.
+  </p>
+
+  <p class="lede">
+    <strong>The cost moves from per-pixel-per-frame to per-texture-once</strong>, and the per-pixel
+    cost becomes constant again — which is the whole reason this technique is universal rather than
+    merely correct.
+  </p>
+
+  @@FIG_CHAIN@@
+
+  <p>
+    The memory is a geometric series and it is worth doing in your head once, because the number is
+    quoted everywhere and almost never derived. Each level is a quarter the area of the one above,
+    so the extra storage is
+  </p>
+
+  <div class="eq">\[ \tfrac{1}{4} + \tfrac{1}{16} + \tfrac{1}{64} + \cdots = \sum_{k=1}^{\infty} 4^{-k} = \tfrac{1}{3} \]</div>
+
+  <div class="eq-plain">1/4 + 1/16 + 1/64 + … = 1/3</div>
+
+  <p>
+    <strong>33% more memory, for any image, at any size.</strong> The harness measures 65,536 texels
+    becoming 87,381 — 33.33%, which is the series to four figures.
+  </p>
+
+  <h3>The three questions the one-sentence version hides</h3>
+
+  <ol>
+    <li>
+      <strong>Which level?</strong> The footprint is a <em>derivative</em> — how fast uv changes
+      per screen pixel. On a GPU that is free, because fragments are shaded in 2×2 quads
+      specifically so a neighbour is always available to subtract. <strong>A scanline rasterizer
+      has no neighbour.</strong> The row above was finished and discarded; the pixel to the right
+      has not happened yet. So the CPU has to compute the derivative from the triangle itself, and
+      that is <a href="#gradient">§3.3</a> — the most interesting arithmetic in the lesson.
+    </li>
+    <li>
+      <strong>What about between levels?</strong> Level 3 and level 4 differ by a factor of two,
+      so switching abruptly between them draws a visible line across the floor. You have met this
+      shape of artefact before: it is <a href="06-09-cascaded-shadows.html">6.9</a>'s cascade seam,
+      one lesson later and one dimension down, and it has the same cure — blend across the
+      boundary.
+    </li>
+    <li>
+      <strong>What if the footprint is not square?</strong> A floor at a grazing angle is
+      compressed in one screen direction and not the other. One square average cannot represent
+      that, so choosing a level forces a choice between blurring and aliasing. Anisotropic
+      filtering refuses to choose.
+    </li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="label">And one bug, which is famous enough to have a shape</span>
+    <p>
+      A mip chain built by averaging sRGB <em>bytes</em> gets <strong>darker at every level</strong>.
+      Averaging is a linear operation; sRGB is not a linear encoding; the mean of two codes is not
+      the code of the mean light, and it is always too dark because the curve is convex.
+    </p>
+    <p>
+      The symptom is that a textured surface dims as it recedes — and the usual diagnosis is "the
+      lighting falls off too fast", which sends you to look in entirely the wrong file.
+      <a href="#linear">§3.4</a> measures it: on the harshest case the naive chain delivers
+      <strong>42.2%</strong> of the light it should, at level 1 <em>alone</em>, and it compounds all
+      the way down.
+    </p>
+  </div>

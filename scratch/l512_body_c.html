@@ -1,0 +1,375 @@
+  <h2 id="build">7. Building the world</h2>
+
+  <p>
+    Thirty entities, six game components, five systems. None of the components is the engine's and
+    none of the systems takes a framebuffer, which are the two facts worth checking before reading
+    any of the code.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>entity</th><th>count</th><th>engine components</th><th>game components</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>floor</td><td>1</td><td><code>transform</code>, <code>world_transform</code>, <code>renderable</code></td><td>—</td></tr>
+      <tr><td>kerbs</td><td>4</td><td>same</td><td>—</td></tr>
+      <tr><td>pillars</td><td>8</td><td>same</td><td><code>pillar</code></td></tr>
+      <tr><td>rover</td><td>1</td><td>same</td><td><code>rover</code></td></tr>
+      <tr><td>nose</td><td>1</td><td>same + <code>parent</code></td><td>—</td></tr>
+      <tr><td>orbs, still</td><td>6</td><td>same</td><td><code>collectible</code>, <code>spinner</code>, <code>bobber</code></td></tr>
+      <tr><td>orbs, riding</td><td>6</td><td>same + <code>parent</code></td><td><code>collectible</code>, <code>spinner</code></td></tr>
+      <tr><td>carousel</td><td>1</td><td><code>transform</code>, <code>world_transform</code></td><td><code>carousel</code></td></tr>
+      <tr><td>boom</td><td>1</td><td><code>transform</code>, <code>world_transform</code>, <code>parent</code></td><td>—</td></tr>
+      <tr><td>camera</td><td>1</td><td>same + <code>camera</code>, <code>active_camera</code></td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read the last three rows against the first seven. The carousel, the boom and the camera have no
+    <code>renderable</code>, so they are invisible — <strong>and there is no flag anywhere that says
+    so</strong>. That is Lesson 5.8's argument arriving as a design decision rather than a
+    demonstration: an entity is what it has, the carousel is not a thing you can see, and the
+    renderer's loop has no branch to skip it with because it never visits it. <code>collect_renderables</code>
+    reports <code>drawn = 25</code> out of 30 live entities and nothing anywhere had to subtract.
+  </p>
+
+  <h3 id="units">7.1 One word, two conventions</h3>
+
+  <p>
+    The first thing the game had to get right, and the first thing it got wrong — three times. The
+    arena came out a quarter of its intended area with the pillars floating beside it in the void,
+    which reads as a camera bug for a good ten minutes before it reads as what it is.
+  </p>
+
+  @@FIG_UNIT@@
+
+  <p>
+    <code>cube_mesh()</code>'s eight corners are at ±0.5, so a <code>transform</code>'s
+    <code>scale</code> is the box's <strong>full size</strong>. <code>icosahedron_mesh()</code>'s
+    twelve vertices are at distance 1.0, so its <code>scale</code> is a <strong>radius</strong>.
+    Both are documented and both are reasonable in isolation; together they mean that
+    <code>scale = 1</code> gives you a one-metre cube and a two-metre ball.
+  </p>
+
+  <p>
+    The trap is not the asymmetry, it is that a half-extent is exactly what the <em>rest</em> of the
+    program wants. A collision test wants a half-extent. <code>debug_lines::box</code> takes a
+    half-extent. So the value you have in your hand is the wrong one by a factor of two precisely
+    when you reach for <code>scale</code>. The game's answer is one four-line function, and the
+    factor of two is the entire content of it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/collector/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] engine::transform box_at(engine::vec3 centre, engine::vec3 half,
+                                       engine::mat3 rotation = engine::mat3::identity())
+{
+    return engine::transform{.position = centre,
+                             .rotation = rotation,
+                             .scale = {2.0f * half.x, 2.0f * half.y, 2.0f * half.z}};
+}</code></pre>
+  </figure>
+
+  <p>
+    The third instance is the one that survived longest, because it looked plausible. A pillar's
+    debug box is drawn through its world matrix — which <em>already carries the scale</em> — so the
+    half-extent passed alongside it is in the cube's own space, where it is 0.5 by definition.
+    Passing metres draws a box exactly twice the size of the thing it outlines, and a box slightly
+    too big around a collision proxy looks like a deliberate margin.
+  </p>
+
+  <h3 id="order">7.2 The order the step runs in, and the one line that must not move</h3>
+
+  <p>
+    Five systems, and four of them could run in any order. The fifth cannot:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/collector/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">drive_system(world_, drive, steer, boost, h);
+carousel_system(world_, h);
+spin_system(world_, h);
+bob_system(world_, h);
+
+update_boom();
+
+// RESOLVE BEFORE ANYTHING READS A WORLD MATRIX.
+tree_.rebuild_and_resolve(world_);
+
+last_pick_ = pickup_system(world_, tree_, dead_);</code></pre>
+  </figure>
+
+  <p>
+    <code>pickup_system</code> tests distances in <em>world</em> space, and six of the twelve orbs
+    are children of a carousel that <code>carousel_system</code> just turned. Put the resolve after
+    the pickup and every riding orb is tested against where it was <em>last</em> step. At 0.45 rad/s
+    and a radius of 4.0 m that is 3 cm of error per step — far too small to see, and far too small
+    to blame on anything. It would present as “the moving orbs are slightly harder to catch than the
+    still ones”, which is a sentence a designer would try to fix by changing the pickup radius.
+  </p>
+
+  <div class="callout pitfall">
+    <p class="label">Symptom → cause → fix</p>
+    <p>
+      <strong>Symptom:</strong> a moving object's interactions feel subtly, inconsistently late.<br>
+      <strong>Cause:</strong> a system read <code>world_transform</code> before the hierarchy
+      resolved it this step, so it read last step's composition.<br>
+      <strong>Fix:</strong> one resolve, after everything that writes a local
+      <code>transform</code> and before everything that reads a <code>world_transform</code>. If you
+      cannot arrange that, you need two resolves and you should say why in a comment.
+    </p>
+  </div>
+
+  <p>
+    The other ordering constraint is inside <code>pickup_system</code> and the ECS tells you about it
+    rather than letting you find out: <code>view::each</code> asserts if its lead pool changes during
+    iteration, so an orb cannot be destroyed inside the lambda that found it. Collect ids into a
+    scratch vector, destroy after. That is a restriction the ECS chose deliberately in 5.8, and it
+    is the good kind — a guaranteed assertion instead of an iterator that is sometimes fine.
+  </p>
+
+  <h3 id="shot">7.3 A screenshot of frame zero is a screenshot of a spawn function</h3>
+
+  <p>
+    Every demo in this course has a <code>--shot</code> mode, and for a game the naive version is
+    useless: the first frame is the world before anything has happened. So <code>collector --shot</code>
+    runs 240 fixed steps with two constants held down before it draws:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/collector/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr int   k_shot_steps = 240;
+constexpr float k_shot_drive = 1.0f;
+constexpr float k_shot_steer = 0.55f;</code></pre>
+  </figure>
+
+  <p>
+    Note that this is only possible because the systems take <code>drive</code> and
+    <code>steer</code> as floats rather than reading the action map themselves. A system that reads
+    input directly can only ever be run by a human — it cannot be scripted, replayed, or tested. The
+    interface that makes the screenshot reproducible is the same interface that would make a replay
+    file work, and neither was the reason for choosing it.
+  </p>
+
+  <h2 id="gaps">8. What the game could not find</h2>
+
+  <p>
+    Seven findings. Two are fixed in this lesson and five are not, and the five are more useful than
+    the two — a gap you have named and dated is a gap that stops surprising you.
+  </p>
+
+  @@FIG_FINDINGS@@
+
+  <h3>8.1 There is no collision, and the wall is a lie</h3>
+
+  <p>
+    The rover stops at the arena edge because six lines of arithmetic in <code>drive_system</code>
+    clamp its position. There are four kerbs drawn at that edge, and they are <em>scenery</em> —
+    nothing tests against them, and if you deleted them the rover would still stop. The wall is a
+    picture of a rule enforced somewhere else.
+  </p>
+
+  <p>
+    Meanwhile the eight pillars have no clamp, so you drive straight through them. Press <kbd>G</kbd>
+    and you can see exactly what is missing and exactly what is not: every pillar is outlined with
+    an oriented box, drawn from the same world matrix a collision test would use. <strong>The
+    geometry is present, correctly placed, and already in the ECS.</strong> That is why
+    <code>struct pillar</code> is a tag with no data in it — a unit cube under a
+    <code>world_transform</code> <em>is</em> an oriented bounding box, so storing the half-extent a
+    second time would only have created a copy that drifts.
+  </p>
+
+  <p>
+    What is missing is not the data. It is the solver — and the gulf between the pickup test and a
+    pillar response is the whole of Module 8. A pickup needs a <em>boolean</em>: are these two
+    spheres overlapping. A pillar needs a contact point, a normal, a penetration depth, and a
+    response that slides rather than sticks, applied one normal at a time so that a corner does not
+    stop you dead in both axes at once. That is why the easy one is in the game and the hard one is
+    thirteen lessons away.
+  </p>
+
+  <div class="callout note">
+    <p class="label">And the quadratic nobody can see</p>
+    <p>
+      <code>pickup_system</code> is O(rovers × orbs). There is one rover and there are twelve orbs,
+      so the quadratic is hidden by the constants — which is exactly how this shape survives into a
+      shipped game and then falls over on the level with four hundred pickups. Lesson 8.9's uniform
+      grid is the answer; naming it here is cheaper than discovering it later.
+    </p>
+  </div>
+
+  <h3>8.2 The engine cannot put a character on the screen</h3>
+
+  <p>
+    A game has to say “8 of 12”, and “0:43”, and “you won”. Search <code>engine/</code> for a font,
+    a glyph, or a text call: there is nothing. So the HUD is drawn by <strong>SDL</strong>, with
+    <code>SDL_RenderDebugTextFormat</code> and its built-in 8 × 8 bitmap font — a debugging facility
+    that happens to be in the window.
+  </p>
+
+  <p>
+    Three consequences follow, and they are why this is a finding rather than a shrug:
+  </p>
+
+  <ol>
+    <li>It exists only on <code>surface::renderer</code>. A <code>--shot</code> run is headless and
+        has no <code>SDL_Renderer</code>, so <strong>the expected result in §11 is a picture of the
+        game with no score on it</strong> — the number you most want is the one thing missing.</li>
+    <li>It is unavailable on the GPU path for the same reason, so the engine's <em>real</em>
+        renderer is the one that cannot show a number.</li>
+    <li>It is not composited with the world. It is drawn on top, by a different renderer, at a
+        different scale — so it cannot be tinted, faded, placed in the scene, or measured.</li>
+  </ol>
+
+  <p>
+    Dear ImGui does not rescue this, and the reason is the one Lesson 5.11 gave when it integrated
+    ImGui in the first place: ImGui is tooling. A panel of live counts for a developer is exactly
+    what it is for; a player-facing scoreboard is not. Using it for the latter would be shipping a
+    debug library as a product feature, which is a decision that is very hard to walk back.
+  </p>
+
+  <h3>8.3 A pickup is silent</h3>
+
+  <p>
+    The single most conspicuous absence when you actually play it. Collecting an orb is the only
+    thing the game rewards you for, it takes about a second to set up, and it produces no sound,
+    because SDL3's audio-stream model arrives in Lesson 7.8 and the engine has no audio layer at
+    all. This one needs no analysis; it is recorded because a checkpoint's job is to record what it
+    found, and “the game feels dead” is a finding even when the cause is obvious.
+  </p>
+
+  <h3>8.4 There is no public path from an entity to the GPU renderer</h3>
+
+  <p>
+    The one that decided how this game is rendered. <code>gpu_scene_renderer::render</code> consumes
+    <code>gpu_draw_item</code>s; the ECS produces components; and no public function connects them.
+    <code>sandbox</code> crosses that gap, in about seven hundred lines, <em>inside its own
+    <code>main.cpp</code></em> — which is why nobody had noticed: the only program that ever crossed
+    it was written before the boundary existed and keeps its bridge to itself.
+  </p>
+
+  <p>
+    So <code>collector</code> renders on the CPU, through the software rasterizer, like every
+    program written from outside the boundary since the refactor. That is a sentence worth sitting
+    with. <strong>Three lessons after moving the renderer to the GPU, the GPU renderer is the one a
+    game cannot reach.</strong> Module 9's renderer facade is where this is answered, and §5's
+    <code>collect_renderables</code> is deliberately shaped so that the GPU version is a sibling
+    function rather than a redesign.
+  </p>
+
+  <h3>8.5 <code>view()</code> has no <code>const</code> overload</h3>
+
+  <p>
+    A small one with a wide blast radius. Look at the signature this lesson had to write:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/renderable.hpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] renderable_report collect_renderables(ecs::registry& world,
+                                                    const mesh_pool& meshes,
+                                                    std::vector&lt;scene_object&gt;&amp; out);</code></pre>
+  </figure>
+
+  <p>
+    That first parameter is a mutable reference and the function writes nothing through it.
+    <code>registry::view()</code> is non-<code>const</code> and <code>ecs::view</code> hands out
+    <code>Ts&amp;</code>, so there is no way to spell <em>“I am going to walk this registry and
+    change nothing”</em>. Every read-only system in this engine has to ask for write access it will
+    not use, and <code>const</code> stops being able to tell a reader anything.
+  </p>
+
+  <p>
+    The fix is the one EnTT reaches for — allow <code>view&lt;const renderable&gt;</code> and
+    propagate the constness into <code>each</code>'s parameters — and it is a genuine change to two
+    published headers, so this lesson reports it instead of smuggling it in. The signature is left
+    looking wrong on purpose, with the reason in its doc comment: <strong>a comment nobody reads is a
+    worse bug report than a parameter everybody trips over.</strong>
+  </p>
+
+  <h3>8.6 A program cannot name its own log category</h3>
+
+  <p>
+    The smallest finding, and it half-works in an interesting way. Lesson 5.3's five categories name
+    <em>engine</em> subsystems, and correctly so — a category called <code>log_app</code> inside the
+    library would be the library naming something it knows nothing about. What makes the game's own
+    category possible anyway is the last member of that enum:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/collector/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr int log_game = engine::log_category_count;</code></pre>
+  </figure>
+
+  <p>
+    <code>log_category_count</code> is documented as “not a category; the count, for iteration”, and
+    it is also exactly where a program's own categories begin — an enum that publishes its own end
+    leaves room after it. The half that does not work: the <code>--log</code> spec is parsed against
+    <code>name_of(log_category)</code>, which returns <code>"?"</code> for anything outside the
+    five, so this category can be filtered in code and cannot be named on the command line.
+  </p>
+
+  <p>
+    Which is why the <code>--shot</code> summary is a <code>printf</code> and not a log call at all.
+    A log is a diagnostic: off by default, filtered, aimed at whoever is debugging. The shot's
+    summary is the program's <em>output</em>, and a tool whose result only appears if you pass the
+    right <code>--log</code> spec is a tool with a trapdoor.
+  </p>
+
+  <h2 id="instrument">9. The instrument, and proving it can fail</h2>
+
+  <p>
+    <code>verify_512</code> is six sections and 27 checks. Three of them are controls, and it is
+    worth saying what each control is there to rule out, because “a test that passes” and “a test
+    that can only pass” are indistinguishable from the outside.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>§</th><th>what it checks</th><th>and the control rules out</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>A</td><td>1 drawn, 1 unresolved, 1 dead mesh, 1 invisible — four entities, four outcomes</td><td>a second call appending rather than refilling</td></tr>
+      <tr><td>B</td><td>the matrix round trip differs by exactly 0</td><td>a 1.0 nudge must report 1.0 — so “0” is not a broken comparison</td></tr>
+      <tr><td>C</td><td>the view still leads with the smallest pool: 9 candidates, not 120</td><td>—</td></tr>
+      <tr><td>D</td><td>cube spans ±0.5; icosahedron has radius 1.0; the ratio is 2.0</td><td>—</td></tr>
+      <tr><td>E</td><td>the right boom is rigid; the swapped boom is not</td><td>no boom at all is <em>also</em> not rigid, and differs from the swapped one by 2.7 — so the boom is doing something in the wrong case</td></tr>
+      <tr><td>F</td><td>25 engine includes, 0 quoted; <code>engine.hpp</code> lists all nine headers a game needs</td><td>the file must be &gt; 10,000 bytes — an unreadable file has no bad includes in it</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    §F's last check is the one that took a second pass. The natural completeness test would fail on
+    <code>platform/main.hpp</code>, which is <em>correctly</em> absent — so the harness asserts its
+    absence explicitly. A completeness check with no exceptions would have “fixed” the one thing
+    that was right.
+  </p>
+
+  <div class="callout ok">
+    <p class="label">And the harness compiles the umbrella</p>
+    <p>
+      <code>verify_512.cpp</code> opens with <code>#include &lt;engine/engine.hpp&gt;</code>, which
+      makes it the first thing in this repository ever to compile that file. §3 established that the
+      header had no consumer at all; §F checks its <em>contents</em> as text, and the include checks
+      that the fifteen headers added to it actually compile together, in that order, with no cycle.
+      A list of 55 includes is not obviously correct just because each line is spelled right.
+    </p>
+  </div>

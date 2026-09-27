@@ -1,0 +1,59 @@
+<svg viewBox="0 0 780 400" role="img" aria-labelledby="f71f-t f71f-d">
+  <title id="f71f-t">Conditioning approaching lock</title>
+  <desc id="f71f-d">A log-log plot. The horizontal axis is degrees of pitch remaining before lock, running from 90 on the left down to 0.01 on the right; the vertical axis is the weakest gain, from 1 down to 1e-5. A blue curve falls steadily and straight. Amber dots from a brute-force sweep sit on it. A dashed red line follows the blue one and then plunges to the floor at 0.01 degrees, where the naive formula returns exactly zero.</desc>
+  <defs>
+    <marker id="e-i-f71f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f71f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f71f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f71f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f71f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="390.0" y="24" class="sm" text-anchor="middle">How much turn a unit of knob buys, as the pose approaches lock</text>
+<text x="390.0" y="42" class="xs muted" text-anchor="middle">both axes logarithmic; the curve is σ_min = |cos p| / √(1 + |sin p|)</text>
+<rect x="92.0" y="62.0" width="468.0" height="234.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="92.0" y1="62.0" x2="92.0" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="92.0" y="312.0" class="mono xs muted" text-anchor="middle">90°</text>
+<line x1="204.9383170990506" y1="62.0" x2="204.9383170990506" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="204.9" y="312.0" class="mono xs muted" text-anchor="middle">10°</text>
+<line x1="323.29221139936703" y1="62.0" x2="323.29221139936703" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="323.3" y="312.0" class="mono xs muted" text-anchor="middle">1°</text>
+<line x1="441.6461056996835" y1="62.0" x2="441.6461056996835" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="441.6" y="312.0" class="mono xs muted" text-anchor="middle">0.1°</text>
+<line x1="560.0" y1="62.0" x2="560.0" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="560.0" y="312.0" class="mono xs muted" text-anchor="middle">0.01°</text>
+<line x1="92.0" y1="62.0" x2="560.0" y2="62.0" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="66.0" class="mono xs muted" text-anchor="end">1</text>
+<line x1="92.0" y1="108.79999999999998" x2="560.0" y2="108.79999999999998" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="112.8" class="mono xs muted" text-anchor="end">1e-1</text>
+<line x1="92.0" y1="155.6" x2="560.0" y2="155.6" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="159.6" class="mono xs muted" text-anchor="end">1e-2</text>
+<line x1="92.0" y1="202.39999999999998" x2="560.0" y2="202.39999999999998" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="206.4" class="mono xs muted" text-anchor="end">1e-3</text>
+<line x1="92.0" y1="249.2" x2="560.0" y2="249.2" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="253.2" class="mono xs muted" text-anchor="end">1e-4</text>
+<line x1="92.0" y1="296.0" x2="560.0" y2="296.0" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="300.0" class="mono xs muted" text-anchor="end">1e-5</text>
+<path d="M 92.00,62.00 L 93.95,62.61 L 95.90,63.24 L 97.85,63.87 L 99.80,64.52 L 101.75,65.17 L 103.70,65.84 L 105.65,66.51 L 107.60,67.19 L 109.55,67.87 L 111.50,68.56 L 113.45,69.26 L 115.40,69.97 L 117.35,70.68 L 119.30,71.39 L 121.25,72.11 L 123.20,72.83 L 125.15,73.55 L 127.10,74.28 L 129.05,75.01 L 131.00,75.75 L 132.95,76.48 L 134.90,77.22 L 136.85,77.97 L 138.80,78.71 L 140.75,79.46 L 142.70,80.21 L 144.65,80.95 L 146.60,81.71 L 148.55,82.46 L 150.50,83.21 L 152.45,83.97 L 154.40,84.72 L 156.35,85.48 L 158.30,86.24 L 160.25,87.00 L 162.20,87.76 L 164.15,88.52 L 166.10,89.28 L 168.05,90.05 L 170.00,90.81 L 171.95,91.57 L 173.90,92.34 L 175.85,93.10 L 177.80,93.87 L 179.75,94.63 L 181.70,95.40 L 183.65,96.17 L 185.60,96.93 L 187.55,97.70 L 189.50,98.47 L 191.45,99.23 L 193.40,100.00 L 195.35,100.77 L 197.30,101.54 L 199.25,102.31 L 201.20,103.08 L 203.15,103.84 L 205.10,104.61 L 207.05,105.38 L 209.00,106.15 L 210.95,106.92 L 212.90,107.69 L 214.85,108.46 L 216.80,109.23 L 218.75,110.00 L 220.70,110.77 L 222.65,111.54 L 224.60,112.31 L 226.55,113.08 L 228.50,113.85 L 230.45,114.62 L 232.40,115.39 L 234.35,116.16 L 236.30,116.93 L 238.25,117.70 L 240.20,118.47 L 242.15,119.24 L 244.10,120.02 L 246.05,120.79 L 248.00,121.56 L 249.95,122.33 L 251.90,123.10 L 253.85,123.87 L 255.80,124.64 L 257.75,125.41 L 259.70,126.18 L 261.65,126.95 L 263.60,127.72 L 265.55,128.49 L 267.50,129.26 L 269.45,130.04 L 271.40,130.81 L 273.35,131.58 L 275.30,132.35 L 277.25,133.12 L 279.20,133.89 L 281.15,134.66 L 283.10,135.43 L 285.05,136.20 L 287.00,136.97 L 288.95,137.75 L 290.90,138.52 L 292.85,139.29 L 294.80,140.06 L 296.75,140.83 L 298.70,141.60 L 300.65,142.37 L 302.60,143.14 L 304.55,143.91 L 306.50,144.68 L 308.45,145.46 L 310.40,146.23 L 312.35,147.00 L 314.30,147.77 L 316.25,148.54 L 318.20,149.31 L 320.15,150.08 L 322.10,150.85 L 324.05,151.62 L 326.00,152.40 L 327.95,153.17 L 329.90,153.94 L 331.85,154.71 L 333.80,155.48 L 335.75,156.25 L 337.70,157.02 L 339.65,157.79 L 341.60,158.56 L 343.55,159.33 L 345.50,160.11 L 347.45,160.88 L 349.40,161.65 L 351.35,162.42 L 353.30,163.19 L 355.25,163.96 L 357.20,164.73 L 359.15,165.50 L 361.10,166.27 L 363.05,167.05 L 365.00,167.82 L 366.95,168.59 L 368.90,169.36 L 370.85,170.13 L 372.80,170.90 L 374.75,171.67 L 376.70,172.44 L 378.65,173.21 L 380.60,173.99 L 382.55,174.76 L 384.50,175.53 L 386.45,176.30 L 388.40,177.07 L 390.35,177.84 L 392.30,178.61 L 394.25,179.38 L 396.20,180.15 L 398.15,180.92 L 400.10,181.70 L 402.05,182.47 L 404.00,183.24 L 405.95,184.01 L 407.90,184.78 L 409.85,185.55 L 411.80,186.32 L 413.75,187.09 L 415.70,187.86 L 417.65,188.64 L 419.60,189.41 L 421.55,190.18 L 423.50,190.95 L 425.45,191.72 L 427.40,192.49 L 429.35,193.26 L 431.30,194.03 L 433.25,194.80 L 435.20,195.58 L 437.15,196.35 L 439.10,197.12 L 441.05,197.89 L 443.00,198.66 L 444.95,199.43 L 446.90,200.20 L 448.85,200.97 L 450.80,201.74 L 452.75,202.51 L 454.70,203.29 L 456.65,204.06 L 458.60,204.83 L 460.55,205.60 L 462.50,206.37 L 464.45,207.14 L 466.40,207.91 L 468.35,208.68 L 470.30,209.45 L 472.25,210.23 L 474.20,211.00 L 476.15,211.77 L 478.10,212.54 L 480.05,213.31 L 482.00,214.08 L 483.95,214.85 L 485.90,215.62 L 487.85,216.39 L 489.80,217.17 L 491.75,217.94 L 493.70,218.71 L 495.65,219.48 L 497.60,220.25 L 499.55,221.02 L 501.50,221.79 L 503.45,222.56 L 505.40,223.33 L 507.35,224.11 L 509.30,224.88 L 511.25,225.65 L 513.20,226.42 L 515.15,227.19 L 517.10,227.96 L 519.05,228.73 L 521.00,229.50 L 522.95,230.27 L 524.90,231.04 L 526.85,231.82 L 528.80,232.59 L 530.75,233.36 L 532.70,234.13 L 534.65,234.90 L 536.60,235.67 L 538.55,236.44 L 540.50,237.21 L 542.45,237.98 L 544.40,238.76 L 546.35,239.53 L 548.30,240.30 L 550.25,241.07 L 552.20,241.84 L 554.15,242.61 L 556.10,243.38 L 558.05,244.15 L 560.00,244.92" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<circle cx="92.0" cy="62.0" r="3.4" fill="#f0961e"/>
+<circle cx="127.6" cy="74.5" r="3.4" fill="#f0961e"/>
+<circle cx="148.5" cy="82.4" r="3.4" fill="#f0961e"/>
+<circle cx="204.9" cy="104.6" r="3.4" fill="#f0961e"/>
+<circle cx="323.3" cy="151.3" r="3.4" fill="#f0961e"/>
+<circle cx="441.6" cy="198.1" r="3.4" fill="#f0961e"/>
+<circle cx="560.0" cy="244.9" r="3.4" fill="#f0961e"/>
+<path d="M 92.00,62.00 L 127.63,74.48 L 148.47,82.43 L 204.94,104.55 L 323.29,151.33 L 441.65,197.95" fill="none" stroke="#e05c5c" stroke-width="1.4" stroke-dasharray="4 3"/>
+<line x1="441.6" y1="197.9" x2="560.0" y2="296.0" stroke="#e05c5c" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<circle cx="560.0" cy="296.0" r="4.2" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<line x1="578.0" y1="74.0" x2="600.0" y2="74.0" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<text x="578.0" y="92.0" class="mono xs" text-anchor="start">|cos p| / √(1+|sin p|)</text>
+<text x="578.0" y="104.0" class="xs t-ok" text-anchor="start">stable</text>
+<line x1="578.0" y1="128.0" x2="600.0" y2="128.0" stroke="#e05c5c" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<text x="578.0" y="146.0" class="mono xs" text-anchor="start">√(1 − |sin p|)</text>
+<text x="578.0" y="158.0" class="xs t-bad" text-anchor="start">exactly 0 at 0.01°</text>
+<circle cx="589.0" cy="182.0" r="3.4" fill="#f0961e"/>
+<text x="578.0" y="198.0" class="xs muted" text-anchor="start">measured, by sweeping</text>
+<text x="578.0" y="212.0" class="xs muted" text-anchor="start">a million unit vectors</text>
+<text x="390.0" y="334.0" class="xs muted" text-anchor="middle">degrees of pitch remaining before lock</text>
+<text x="390.0" y="358" class="xs" text-anchor="middle">at 0.01° from lock a knob turning at 1 rad/s moves the body at 0.00012 rad/s — you would need 8,100 rad/s</text>
+<text x="390.0" y="376" class="xs muted" text-anchor="middle">which is 464,000 degrees per second, for one degree-per-second of aircraft</text>
+</svg>

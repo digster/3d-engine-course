@@ -1,0 +1,298 @@
+
+  <h2 id="loading">4. Loading a sound</h2>
+
+  <p>
+    A file on disk becomes an array of floats. Three steps, and only one of them is interesting.
+  </p>
+
+  <h3>4.1 The container, and which half to hand away</h3>
+
+  <p>
+    This course hand-rolls almost everything, and the exceptions have always come with an argument
+    rather than a shrug. Lesson 4.7 wrote it for <code>stb_image</code>: the reason not to write a
+    PNG decoder is not that it is difficult, it is that <em>there is nothing about an engine to be
+    learned from the fifth filter mode</em>. WAV looks like the case where that argument fails,
+    because WAV really is simple — and the harness proves it by writing one:
+  </p>
+
+  <pre><code class="lang-cpp">put_tag(bytes, "RIFF");
+put_u32(bytes, 36u + data_bytes);      // everything after this field
+put_tag(bytes, "WAVE");
+
+put_tag(bytes, "fmt ");
+put_u32(bytes, 16u);                   // PCM fmt chunk is 16 bytes
+put_u16(bytes, 1u);                    // WAVE_FORMAT_PCM
+put_u16(bytes, static_cast&lt;std::uint16_t&gt;(channels));
+put_u32(bytes, static_cast&lt;std::uint32_t&gt;(freq));
+put_u32(bytes, static_cast&lt;std::uint32_t&gt;(freq * channels * 2));   // byte rate
+put_u16(bytes, static_cast&lt;std::uint16_t&gt;(channels * 2));          // block align
+put_u16(bytes, 16u);                                               // bits
+
+put_tag(bytes, "data");
+put_u32(bytes, data_bytes);</code></pre>
+
+  <p>
+    Forty-four bytes. That is a complete, valid, standards-conformant WAV header, and a reader for it
+    is twenty lines. So why does <code>load_wav</code> call <code>SDL_LoadWAV</code> instead?
+  </p>
+
+  <p>
+    Because the twenty-line reader reads files nobody has. A file exported from Audacity has a
+    <code>LIST</code> chunk before the data. A file from a compressor has a <code>fact</code> chunk.
+    Anything with more than two channels is <code>WAVE_FORMAT_EXTENSIBLE</code>, which is a different
+    <code>fmt </code> layout with a GUID in it. Then IEEE float, A-law, µ-law, ADPCM. The
+    twenty-line reader does not <em>fail</em> on these — it reads the header, finds a chunk it does
+    not recognise where it expected <code>data</code>, and either refuses the file or, worse,
+    interprets the chunk's contents as samples. The harness's control section does exactly this on
+    purpose:
+  </p>
+
+  <pre>A.3  CONTROL  junk file loaded: no   samples 0
+     CONTROL  missing file loaded: no</pre>
+
+  <p>
+    That control matters more here than it looks. Forty kilobytes of text interpreted as 16-bit PCM
+    is full-scale white noise — the loudest, most alarming thing a computer can emit — so a loader
+    that returns <code>true</code> on a file it did not understand has handed the mixer a scream. A
+    graphics loader with the same bug produces a wrong picture; this one produces a sound that makes
+    people lunge for the volume knob.
+  </p>
+
+  <h3>4.2 Widening: six formats in, one out</h3>
+
+  <p>
+    SDL hands back bytes in the file's own format. The mixer sees exactly one: interleaved 32-bit
+    float. The conversion is a divide by the format's full scale, and it holds one small trap:
+  </p>
+
+  <pre><code class="lang-cpp">case SDL_AUDIO_S16LE:
+case SDL_AUDIO_S16BE:
+{
+    std::uint16_t raw = 0;
+    std::memcpy(&amp;raw, bytes, sizeof(raw));
+    raw = SDL_AUDIO_ISBIGENDIAN(fmt) ? SDL_Swap16BE(raw) : SDL_Swap16LE(raw);
+    return static_cast&lt;float&gt;(static_cast&lt;std::int16_t&gt;(raw)) / 32768.0f;
+}</code></pre>
+
+  <p>
+    <strong>32768, not 32767.</strong> A signed 16-bit sample runs from −32768 to +32767, so dividing
+    by 32768 maps the most negative value to exactly −1.0 and the most positive to 0.99997. Dividing
+    by 32767 instead maps +full-scale to 1.0 and −full-scale to −1.00003, which is a value outside
+    the stated range produced by a file that did nothing wrong. Every audio API in existence takes
+    the first option; the three-hundred-millionths of a decibel it costs at the top end is the
+    correct thing to spend. And the harness confirms the round trip is exact:
+  </p>
+
+  <pre>A.1  SDL_AUDIO_S16LE 1ch 48000 Hz -&gt; f32 1ch 48000 Hz
+     frames 48000 -&gt; 48000   bytes 96000 -&gt; 192000  (2.00x)
+     peak 0.5000  rms 0.3535  over-unity 0  resampled no
+     round trip worst error  0.000e+00  (1 LSB = 3.052e-05)</pre>
+
+  <p>
+    Zero error, because every 16-bit integer is exactly representable in a float and the divisor is a
+    power of two. Note the other number in that block, though: <strong>2.00×</strong>. Converting to
+    float doubles the file in memory, permanently, and a four-minute music track that was 21 MB on
+    disk is 44 MB resident. That is the honest cost of the one-format rule, it is paid by every
+    engine that mixes in float, and the fix is streaming — decode a buffer at a time rather than a
+    track at a time — which is a Module 9 problem and is named as one in the header.
+  </p>
+
+  <p>
+    The unsigned case is the one that bites people. <code>SDL_AUDIO_U8</code> is centred on 128, not
+    0, because the format predates the idea that silence should be zero. Getting that wrong does not
+    sound quiet; it sounds like a very loud DC offset, which most speakers reproduce as a thump
+    followed by nothing, and which looks in a waveform viewer like the file is fine.
+  </p>
+
+  <h3>4.3 Where this code lives, and the prediction it corrects</h3>
+
+  <p>
+    Lesson 5.5 argued that the asset system deserved its own directory because "it loads meshes,
+    images, and in Module 7 sounds". The prediction was right about the lesson and wrong about the
+    directory. <code>load_wav</code> is not in <code>asset/</code>; it is in <code>audio/</code>,
+    beside the mixer that consumes it, for the same reason <code>gfx/image.cpp</code> decodes a PNG
+    and lives under <code>gfx/</code>. The asset system's job is <em>finding, caching and owning</em>
+    — search paths, handles, reference counts. Turning a particular file format into a particular
+    subsystem's runtime representation is that subsystem's own business, and the division holds
+    because it has held twice already.
+  </p>
+
+  <p>
+    Which makes <code>audio/</code> the fourth new directory since Module 5's refactor, and
+    therefore the fourth time the umbrella lint has had to notice a whole subsystem rather than one
+    more file in a familiar folder. It fired. That is <strong>six catches in five lessons</strong>,
+    and the tally is no longer interesting as a tally — what is interesting is that it keeps firing on
+    people who know it exists. The shape is always identical: you write the header, the build
+    compiles it, your harness links it and passes, and <em>there is no moment at which anything makes
+    you open <code>engine.hpp</code></em>. A check that only catches people who have forgotten the
+    rule catches nobody; this one catches people who remember it.
+  </p>
+
+  <h2 id="addition">5. Mixing is addition, and what addition costs</h2>
+
+  <p>
+    Two sounds arriving at your ear are two pressure variations arriving at your ear, and pressure at
+    a point is a scalar. They add. That is not an approximation or a model — it is superposition, and
+    it is why mixing is one line:
+  </p>
+
+  <pre><code class="lang-cpp">out[f * 2]      += sl * gl;
+out[f * 2 + 1]  += sr * gr;</code></pre>
+
+  <p>
+    The harness checks it literally rather than trusting the sentence, because a mixer that did
+    anything else to a single voice would be doing it to every voice:
+  </p>
+
+  <pre>B.1  one voice, centre: worst error 7.412e-09
+     centre gain per channel 0.707107  (= 1/sqrt(2))
+B.2  two voices vs the arithmetic sum: worst 1.442e-08
+B.3  CONTROL  zero voices: peak 0.0  rms 0.0</pre>
+
+  <p>
+    B.3 is not a joke. A mixer that forgets to clear its scratch buffer between calls replays the
+    previous buffer forever, which is not silence and is not obviously a bug — it is a drone that
+    sounds like something in the scene. <code>std::fill</code> first, then <code>+=</code>, and a
+    mix of zero voices is correctly silent rather than uninitialised.
+  </p>
+
+  <h3>5.1 Sixteen footsteps are not sixteen times as loud</h3>
+
+  <p>
+    So mixing is addition — and now the question that decides your whole gain structure. If one
+    footstep peaks at 0.1, what does sixteen of them peak at?
+  </p>
+
+  <p>
+    The arithmetic bound says 1.6, and if you believe the bound you will divide everything by 16 to
+    stay under full scale. Figure 3 is what actually happens.
+  </p>
+
+@@FIG_HEADROOM@@
+
+  <p>
+    The blue line is the RMS of N uncorrelated voices and it lands on <strong>√N exactly</strong>.
+    Here is why, in three lines. Two uncorrelated signals <code>a</code> and <code>b</code> have
+    <code>E[(a+b)²] = E[a²] + 2E[ab] + E[b²]</code>, and the cross term is zero precisely
+    <em>because</em> they are uncorrelated. So the mean squares add:
+  </p>
+
+  <div class="eq">\[ \mathrm{RMS}_N \;=\; \sqrt{N}\,\cdot\,\mathrm{RMS}_1 \]</div>
+
+  <p class="eq-plain">
+    …energy adds, so amplitude grows as the square root of the count.
+  </p>
+
+  <p>
+    Check it against the table: a voice of amplitude 0.05 uniform noise has RMS
+    <code>0.05/√3 = 0.0289</code>, which is the N = 1 row, and the rms/a column reads 0.58, 0.82,
+    1.16, 1.64, 2.32, 3.24, 4.63 for N = 1…64. Divide each by 0.577 and you get 1.00, 1.42, 2.01,
+    2.84, 4.02, 5.61, 8.02. That is √N to two decimal places, measured, with no fitting.
+  </p>
+
+  <p>
+    And the control is what makes it mean something. Mix the <em>same</em> sound sixteen times — now
+    perfectly correlated, the cross term is not zero, amplitudes add — and the peak column reads
+    exactly 1, 2, 4, 8, 16. If that row had also said √N, the meter would be measuring itself.
+  </p>
+
+  <h3>5.2 …but the peak follows neither, and that is the useful finding</h3>
+
+  <p>
+    Look again at the amber line in figure 3. The peak of N uncorrelated voices is not √N and it is
+    not N: it is 7.68× at sixteen voices, where √N says 4 and N says 16. That is because the peak is
+    not a property of the signals at all. It is <em>the largest coincidence that happened to occur in
+    the window you looked at</em>, and a longer window contains more chances:
+  </p>
+
+  <pre>     16 voices, peak against how long you listen:
+       seconds   peak    peak/a
+          0.01   0.3490    6.98
+          0.10   0.4226    8.45
+          1.00   0.5046   10.09
+          8.00   0.5232   10.46</pre>
+
+  <p>
+    The same sixteen voices, the same code, the same gains: 6.98× after ten milliseconds and 10.46×
+    after eight seconds. It has not stopped growing; it is growing logarithmically, and it will keep
+    doing so for as long as the game runs.
+  </p>
+
+  <p>
+    <strong>So headroom is a bet, not a bound</strong>, and the two obvious policies price out like
+    this:
+  </p>
+
+  <ul>
+    <li><code>1/N</code> — gain 0.0625 at sixteen voices, which is <strong>−24.08 dB</strong>. Safe
+        against a coincidence that will never happen, and it throws away twelve decibels of signal
+        you cannot get back. Everything in your game is quiet, so somebody turns the master up, and
+        you are back where you started with the dynamic range spent.</li>
+    <li><code>1/√N</code> — gain 0.25, which is <strong>−12.04 dB</strong>. Correct on average,
+        occasionally exceeded, and what real engines do — usually with a limiter behind it to catch
+        the occasions.</li>
+  </ul>
+
+  <p>
+    And if you budget for neither, the harness prices that too: thirty-two voices at 0.1 each peak at
+    <strong>1.2675</strong> and clip <strong>33 samples out of 40,960</strong>. Which sounds
+    negligible — 0.08% — and is the subject of the next section.
+  </p>
+
+  <h3>5.3 What clipping actually does</h3>
+
+  <p>
+    The last thing <code>mix_into</code> does is clamp:
+  </p>
+
+  <pre><code class="lang-cpp">if (mag &gt; 1.0f)
+{
+    ++local_clipped;
+    v = v &gt; 0.0f ? 1.0f : -1.0f;
+}</code></pre>
+
+  <p>
+    The clamp is a last resort and not a plan, and figure 4 is why.
+  </p>
+
+@@FIG_CLIP@@
+
+  <p>
+    Clipping replaces the peaks of a waveform with straight lines. A straight line is not part of a
+    sine, so what you now have is a sine <em>plus something else</em> — and because the clipping is
+    symmetric and periodic, that something else is a series of odd harmonics. Measured:
+  </p>
+
+  <pre>  gain  peak   clipped     H3      H5      H7    THD
+  1.00  0.500         0  -166.8  -160.3  -159.7   0.00%
+  2.00  1.000         0  -166.8  -160.3  -159.7   0.00%
+  3.00  1.000     27731   -16.5   -35.7   -32.5  15.22%
+  6.00  1.000     40532   -11.0   -18.5   -27.5  31.00%</pre>
+
+  <p>
+    At gain 3.0 the third harmonic is <strong>16.5 dB below the fundamental</strong>. That is not a
+    subtle artefact; it is a buzz you would describe as "distorted" without needing to be told. Total
+    harmonic distortion is 15.22%, against a specification of about 0.01% for any amplifier you would
+    buy.
+  </p>
+
+  <p>
+    Two rows are controls and both matter. Gain 1.0 and gain 2.0 report harmonics at −160 dB, which
+    is the <em>measurement's</em> floor rather than the signal's — a sine has no harmonics, so those
+    numbers are the Goertzel estimator's numerical noise, and quoting them establishes what "zero"
+    looks like on this instrument. And gain 2.0 is the interesting one: a 0.5-amplitude tone times 2.0
+    is exactly 1.000, the peak column says 1.000, and <strong>nothing clips</strong>. The clamp is
+    <code>&gt;</code>, not <code>&gt;=</code>, and full scale is a legal value.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why 0.08% of samples is audible.</strong> Thirty-two voices clipping 33 samples out of
+      40,960 sounds like a rounding error, and it is not, for the reason §3 gave: each clipped sample
+      is a place where the waveform's <em>slope</em> changes abruptly, and an abrupt slope change is
+      broadband. You do not hear 0.08% of a distortion — you hear 33 clicks. This is the general
+      shape of every audio bug in this lesson: the quantity that matters is almost never the
+      proportion of samples affected, it is whether the affected ones are <em>discontinuous</em> with
+      their neighbours.
+    </p>
+  </div>

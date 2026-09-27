@@ -1,0 +1,385 @@
+
+  <h2 id="listings">15. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest first.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/shape.hpp</code></td><td>modified</td>
+          <td>A capsule joins <code>shape_kind</code>; <code>hull</code> arrives as a non-owning
+              view; <code>support_local</code> for every primitive.</td></tr>
+      <tr><td><code>engine/src/phys/shape.cpp</code></td><td>modified</td>
+          <td>The new placements and support functions, and the centre kept out of the
+              arithmetic.</td></tr>
+      <tr><td><code>engine/include/engine/phys/convex.hpp</code></td><td>new</td>
+          <td>A convex shape reduced to one function pointer, with adapters and deleted rvalue
+              overloads.</td></tr>
+      <tr><td><code>engine/include/engine/phys/gjk.hpp</code></td><td>new</td>
+          <td>The simplex, the result, the config, the two queries and the certificate.</td></tr>
+      <tr><td><code>engine/src/phys/gjk.cpp</code></td><td>new</td>
+          <td>The search, and the simplex solver underneath it.</td></tr>
+      <tr><td><code>engine/include/engine/phys/collide.hpp</code></td><td>modified</td>
+          <td><code>axis_source::witness</code>, and the general <code>collide</code>
+              overload.</td></tr>
+      <tr><td><code>engine/src/phys/collide.cpp</code></td><td>modified</td>
+          <td>The façade over GJK, and two named sentinels where there was one.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>Two more physics headers in the umbrella.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>src/phys/gjk.cpp</code> joins the library.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>gjk</code> target.</td></tr>
+      <tr><td><code>demos/gjk/main.cpp</code></td><td>new</td>
+          <td>The world beside the difference set, one iteration at a time.</td></tr>
+      <tr><td><code>scratch/verify_85.cpp</code></td><td>new</td>
+          <td>Nine sections, thirty-three checks.</td></tr>
+      <tr><td><code>scratch/build_verify_85.sh</code></td><td>new</td>
+          <td>Which refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/phys/shape.hpp@@
+@@LISTING:engine/src/phys/shape.cpp@@
+@@LISTING:engine/include/engine/phys/convex.hpp@@
+@@LISTING:engine/include/engine/phys/gjk.hpp@@
+@@LISTING:engine/src/phys/gjk.cpp@@
+@@LISTING:engine/include/engine/phys/collide.hpp@@
+@@LISTING:engine/src/phys/collide.cpp@@
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/CMakeLists.txt@@
+@@LISTING:demos/gjk/main.cpp@@
+@@LISTING:scratch/verify_85.cpp@@
+@@LISTING:scratch/build_verify_85.sh@@
+
+  <h2 id="build">16. Build &amp; run</h2>
+
+  <p>
+    Nothing new is fetched and no shaders are compiled, so the usual configure is enough.
+  </p>
+
+  <pre><code class="lang-bash"># Linux and macOS
+cmake -S . -B build
+cmake --build build --target gjk -j
+./build/demos/gjk
+
+# Windows (Visual Studio generator)
+cmake -S . -B build
+cmake --build build --target gjk --config Debug
+.\build\demos\Debug\gjk.exe</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> A 960×540 window split down the middle. On the left, two
+    wireframe crates on a one-metre grid, the second drifting slowly through the first and back
+    out; while they are apart, a gold segment joins the two nearest surface points. On the right,
+    the Minkowski difference outlined in grey, a white cross at the origin, the current simplex in
+    gold and a pink line from the origin to <code>v</code>. When the crates overlap the moving one
+    turns red, the gold simplex becomes a tetrahedron around the cross, and the pink line
+    disappears — there is no nearest point to draw when the origin is inside.
+  </p>
+
+  <p>
+    Things to do with it, in order:
+  </p>
+
+  <ul>
+    <li>Press <strong>[S]</strong> a few times. The simplex grows and the pink line shortens, and
+        the panel's <code>|v|</code> readout only ever goes down. Press <strong>[R]</strong> to
+        start the search over, <strong>[A]</strong> to let it run to completion again.</li>
+    <li>Press <strong>[2]</strong>: a capsule against a fourteen-vertex hull. Neither shape has a
+        finite face list, so 8.4's test cannot be applied to either of them, and this one does not
+        notice.</li>
+    <li>Press <strong>[3]</strong> and step the search. The simplex stays in one plane — §9's
+        finding, live. Press <strong>[Z]</strong> to tilt one box and watch it lift out.</li>
+  </ul>
+
+  <p>
+    And the headless form, which is byte-for-byte reproducible because the demo loads nothing:
+  </p>
+
+  <pre><code class="lang-bash">./build/demos/gjk --preset 1 --t 1.2 --shot apart.ppm
+./build/demos/gjk --preset 0 --t 3.2 --shot overlapping.ppm
+./build/demos/gjk --preset 1 --t 1.2 --steps 1 --shot one-step.ppm</code></pre>
+
+  <p>
+    The harness is a separate build, and it wants a release library because §I quotes single-digit
+    nanoseconds:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_85.sh</code></pre>
+
+  <p>
+    It prints nine lettered sections and finishes with <code>33 checks, 0 failures</code>. If it
+    refuses to run at all, read what it says: a tree configured without
+    <code>CMAKE_BUILD_TYPE</code> carries no <code>-O</code> flag, and §I.3's whole finding — that
+    the indirect call costs nothing — is a claim about inlining that a debug library inverts.
+  </p>
+
+  <h2 id="pitfalls">17. Common pitfalls &amp; debugging</h2>
+
+  <h3>The distance is right but the direction is backwards</h3>
+  <p>
+    <strong>Symptom:</strong> objects are pushed together instead of apart, which looks like a
+    solver instability rather than a sign error.<br>
+    <strong>Cause:</strong> <code>v</code> runs from <code>B</code>'s witness to <code>A</code>'s,
+    because <code>v = p<sub>A</sub> − p<sub>B</sub></code>. The axis pointing
+    <em>from <code>a</code> toward <code>b</code></em> — conventions.html §9e, unchanged since
+    8.4 — is therefore <code>−v̂</code>.<br>
+    <strong>Fix:</strong> the negation in <code>gjk_distance</code>'s last lines is deliberate.
+    Check it by translating <code>b</code> by <code>+direction · distance</code> and re-testing:
+    the shapes should touch, not separate further.
+  </p>
+
+  <h3>The loop never terminates on one particular pair</h3>
+  <p>
+    <strong>Symptom:</strong> a hang, or an iteration counter pinned at the cap, always on the same
+    two objects.<br>
+    <strong>Cause:</strong> almost always the gap being tiny compared with the shapes — §11.1's
+    floor — or a simplex solver returning a point that is not on the simplex.<br>
+    <strong>Fix:</strong> the monotonicity check (§7.4). Print <code>|v|</code> per iteration
+    before doing anything else; if it goes <em>up</em>, the solver is the problem and no amount of
+    tolerance tuning will help. If it merely stops going down, you are at the floor and the answer
+    you already have is correct.
+  </p>
+
+  <h3>Two shapes a centimetre apart are reported as touching</h3>
+  <p>
+    <strong>Symptom:</strong> phantom contacts, worse on large objects.<br>
+    <strong>Cause:</strong> the contact margin is <code>tolerance × |w|</code>, so it scales with
+    the shapes. On a 100 m object the default margin is about 2 cm.<br>
+    <strong>Fix:</strong> this is working as designed (§11.2). If you need a tighter margin on
+    large shapes, tighten <code>gjk_config::tolerance</code> — and read §10 first, because on a
+    curved shape that costs iterations, and on a polytope it costs nothing because the tolerance
+    was never what stopped the search.
+  </p>
+
+  <h3>A <code>convex</code> gives garbage after a few frames</h3>
+  <p>
+    <strong>Symptom:</strong> distances that are usually right and occasionally absurd.<br>
+    <strong>Cause:</strong> the view outlived what it viewed — the classic being a
+    <code>std::vector</code> of hull points that reallocated while a <code>hull</code> held a span
+    into it.<br>
+    <strong>Fix:</strong> the deleted rvalue overloads catch the temporary case at compile time.
+    They cannot catch a reallocation, so a hull's points belong in storage that outlives every
+    query against them; the demo keeps them in a member vector that is only rebuilt on
+    <code>reset()</code>.
+  </p>
+
+  <h3>The answer is fine near the origin and wrong far from it</h3>
+  <p>
+    <strong>Symptom:</strong> a level that collides correctly near its centre and produces
+    jittery, imprecise contacts at its edges.<br>
+    <strong>Cause:</strong> §12. If you wrote your own <code>convex</code> adapter and returned
+    world support points with a zero <code>origin</code>, you have built the naive arm.<br>
+    <strong>Fix:</strong> return the support point relative to a point inside the shape, and put
+    that point in <code>origin</code>. Test it by translating both shapes by a kilometre and
+    checking the answer does not move.
+  </p>
+
+  <h3>EPA has nothing to expand</h3>
+  <p>
+    <strong>Symptom:</strong> (a preview of 8.6) a penetration solver that works on tumbling
+    debris and fails on a crate resting on a floor.<br>
+    <strong>Cause:</strong> §9 — a shared up axis confines the search to a plane, so
+    <code>terminal.count</code> is 3 rather than 4 on precisely the arrangement that matters.<br>
+    <strong>Fix:</strong> build the starting polytope rather than assuming one. It is on 8.6's
+    critical path, not its error path.
+  </p>
+
+  <h2 id="exercises">18. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Run the algorithm by hand.</strong> Take <code>A = [3, 5] × [1, 2]</code> and
+        <code>B = [8, 11] × [4, 6]</code> — two axis-aligned rectangles in the plane. Write down
+        the four vertices of each, compute the sixteen pairwise differences, and hull them by
+        inspection. Then run GJK on that set with a pencil, starting from the support point in
+        direction <code>delta</code>, and record <code>|v|</code> and
+        <code>dot(v, w)/|v|</code> at each step until they meet.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the difference of two axis-aligned rectangles is another axis-aligned
+        rectangle, which makes the hull step trivial and the answer checkable against the
+        two-interval formula. The true distance is <code>√(3² + 2²)</code>.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>Add a cylinder.</strong> A cylinder is <code>disc ⊕ segment</code>, so its support
+        function is two terms, like the capsule's — but the disc's term is a projection of
+        <code>d</code> onto the plane perpendicular to the axis, normalised and scaled by the
+        radius. Write <code>support_local(const cylinder&amp;, vec3)</code>, add an
+        <code>as_convex</code> overload with its deleted rvalue partner, and check it against a
+        dense sampling of the surface the way §B.2 checks the capsule.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the degenerate case is a direction exactly along the axis, where the
+        perpendicular component is zero and there is no preferred point on the rim. Return any rim
+        point — the value is a tie, so only reproducibility is at stake. Then ask yourself why 8.4
+        could not have added a cylinder at all.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>Measure the seed.</strong> §6.4 claims the initial direction is worth 22% of the
+        iteration count. Verify it: add a <code>gjk_config</code> whose
+        <code>initial_direction</code> is <code>−delta</code> rather than <code>+delta</code>, run
+        it over the same population as §F.1, and compare the histograms. Then explain, in one
+        sentence, why the sphere column in §F.2 moves from 1.00 to 2.00 under that change and the
+        box column moves by only about one.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> for a ball the first support point in the right direction <em>is</em> the
+        answer; for a box it is a vertex that may or may not be the nearest feature. One seed
+        wastes exactly one iteration; the other wastes one and then still has work to do.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>Break the simplex solver on purpose.</strong> Replace <code>reduce_triangle</code>
+        with the textbook Voronoi-region version reproduced in §C.5 of the harness, run the full
+        verify, and record which sections fail and which do not. Then turn off the monotonicity
+        check in <code>gjk_distance</code> and run it again.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> expect §C.2 and §E to complain and §A.3 to stay green, because an AABB pair
+        rarely produces a sliver. The pair of runs is the point: the second one shows how much of
+        the damage the invariant was absorbing silently, which is the argument for having
+        invariants you can check.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: conservative advancement.</strong> GJK gives a distance; a
+        time-of-impact test needs to know when that distance reaches zero. Implement the simplest
+        form: given two bodies with constant linear velocities over a step, repeatedly compute the
+        distance <code>d</code> and the closing speed along the reported direction, advance time by
+        <code>d / closing_speed</code>, and iterate until the distance is within the contact
+        margin or the step is exhausted. Test it on a bullet fired at a wall thin enough for 8.4
+        §9's tunnelling case.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the step is conservative because nothing can close faster than the maximum
+        closing speed, so advancing by <code>d / v<sub>max</sub></code> can never step past the
+        impact. Rotation makes <code>v<sub>max</sub></code> harder — you need a bound involving the
+        angular velocity and the shape's bounding radius — so start with translation only and say
+        so in the doc comment. Then notice which of this lesson's guarantees you are relying on:
+        the distance must be an <em>upper</em> bound for the advance to stay conservative, which
+        §11.1 measured and §A.5 checked.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">19. Recap &amp; next</h2>
+
+  <p>
+    The engine can now measure the distance between any two convex shapes and say where. Not a
+    bound on it — the distance, with two surface points that realise it and two bounds that prove
+    it. Box, sphere, capsule, arbitrary point set, in any of the ten pairings, through one function
+    that names none of them.
+  </p>
+
+  <p>
+    The pieces, in the order they were needed:
+  </p>
+
+  <ul>
+    <li><strong>The Minkowski difference</strong> turns a question about a pair into a question
+        about a point, through two equivalences that each take two lines to prove.</li>
+    <li><strong>The support function determines a convex set</strong>, so one function pointer is a
+        complete shape interface — and the difference set's support function is two calls to its
+        parents', which is what makes the whole thing computable.</li>
+    <li><strong>GJK descends with a simplex</strong>, carrying an upper bound that only falls and a
+        lower bound that only rises, so its answer arrives with a proof attached.</li>
+    <li><strong>The simplex solver computes four candidates rather than choosing one</strong>,
+        because the shortcut everyone copies fails exactly where the algorithm spends its time —
+        1,048 failures in 200,000 slivers, worst case 14.5% wrong.</li>
+    <li><strong>A monotone invariant does double duty</strong>, terminating the loop and catching a
+        solver that goes backwards; and a proven lower bound outranks a containment test computed
+        on a degenerate tetrahedron.</li>
+  </ul>
+
+  <p>
+    And five measurements worth carrying forward. GJK <em>finishes</em> on polytopes and only
+    <em>converges</em> on curves, so a capsule costs one pass per decade of tolerance and a box
+    costs none. The tolerance is a relative quantity that implies a contact margin of
+    <code>2.11 × tol × size</code> across four decades, which means it is not a distance and must
+    not be set as one. The certificate gives out before the answer does, at
+    <code>ε·|w|/tol</code>, and a stalled answer is still an upper bound. Taking support points
+    relative to each shape's own centre makes the error 96,270× smaller a thousand kilometres from
+    the origin. And two boxes on a floor produce a search trapped in a plane, so the tetrahedron
+    everyone assumes GJK leaves behind is absent from 100,000 consecutive queries.
+  </p>
+
+  <p>
+    <strong>Next:</strong> 8.6 asks the question this lesson refused. When the origin is
+    <em>inside</em> the difference set, how far inside, and which way out? That is a distance to
+    the set's boundary rather than to its interior, so the search has to run the other way —
+    outward, expanding a polytope until it reaches the surface. The Expanding Polytope Algorithm
+    starts from the simplex GJK left behind, and §9 is the reason its first job is to build one.
+  </p>
+
+  <h2 id="reading">20. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Gilbert, Johnson and Keerthi, “A Fast Procedure for Computing the Distance Between
+      Complex Objects in Three-Dimensional Space” (IEEE J. Robotics and Automation, 1988).</strong>
+      The original. Worth reading for its framing rather than its pseudocode — the algorithm is
+      presented as an optimisation over a convex set, which is the view that makes the two bounds
+      obvious.
+    </li>
+    <li>
+      <strong>Gino van den Bergen, “A Fast and Robust GJK Implementation for Collision Detection of
+      Convex Objects” (Journal of Graphics Tools, 1999).</strong> The paper that turned the
+      algorithm into shippable code. Its termination conditions and its treatment of relative
+      error are the direct ancestors of §6.1 and §11.
+    </li>
+    <li>
+      <strong>Gino van den Bergen, <em>Collision Detection in Interactive 3D Environments</em>
+      (2003), chapter 4.</strong> The book-length version, including the separating-axis cache and
+      the ray-cast variant.
+    </li>
+    <li>
+      <strong>Christer Ericson, <em>Real-Time Collision Detection</em> (2005), §5.1 and
+      §9.5.</strong> The closest-point routines, including the
+      <code>ClosestPtPointTriangle</code> this lesson deliberately does not ship — read §7.2 with
+      the book open, because the code is not wrong, it is conditioned differently than a GJK
+      simplex requires.
+    </li>
+    <li>
+      <strong>Montanari, Petrinic and Barbieri, “Improving the GJK Algorithm for Faster and More
+      Reliable Distance Queries Between Convex Objects” (ACM TOG, 2017).</strong> The signed-volume
+      reformulation of the simplex solver, and a careful treatment of exactly the degeneracies §7
+      measures.
+    </li>
+    <li>
+      <strong>Casey Muratori, “Implementing GJK” (2006).</strong> A two-hour whiteboard derivation
+      of the boolean version, and the clearest available explanation of why the search direction
+      constrains which Voronoi regions are reachable — the optimisation §7.1 declines to make.
+    </li>
+    <li>
+      <strong>Erin Catto, “Computing Distance” (GDC 2010).</strong> Box2D's author on GJK in two
+      dimensions, with the barycentric formulation written out and the witness points derived the
+      same way §6.3 does.
+    </li>
+    <li>
+      <strong>Sterbenz, <em>Floating-Point Computation</em> (1974), §4.3.</strong> The lemma §12
+      leans on: if <code>y/2 ≤ x ≤ 2y</code> then <code>x − y</code> is exact in floating point.
+      One paragraph, and it is the reason the relative formulation works at all.
+    </li>
+  </ul>

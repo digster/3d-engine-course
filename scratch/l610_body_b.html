@@ -1,0 +1,311 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3 id="chain">3.1 &nbsp;Building the chain</h3>
+
+  <p>
+    Level 0 is the image. Level <em>k</em>+1 is level <em>k</em> with every 2×2 block replaced by
+    its average, so each level is half as wide and half as tall. The chain stops at 1×1, which takes
+    1&nbsp;+&nbsp;⌊log₂(max side)⌋ levels — nine for a 256-square image, ten for 512.
+  </p>
+
+  <p>
+    Two details that only bite on textures that are not square powers of two:
+  </p>
+
+  <ul>
+    <li>
+      <strong>Stop when <em>both</em> axes reach 1, not either.</strong> A 64×4 texture halves to
+      32×2, 16×1 — and if you stop there, you have thrown away four more halvings of width. The
+      harness checks that a 64×4 strip reaches 1×1 in seven levels.
+    </li>
+    <li>
+      <strong>Odd sizes round down and lose a row.</strong> Real engines box-filter with weights
+      that account for it; the difference is invisible and the code is twice as long, so this is
+      the ninety-percent picture and the missing ten percent is a weighted resample.
+    </li>
+  </ul>
+
+  <h3 id="level">3.2 &nbsp;Choosing the level</h3>
+
+  <p>
+    Level <em>L</em> has texels 2<sup><em>L</em></sup> times as wide as level 0, because each level
+    halved them. We want the level whose texel is about the size of the footprint, so
+  </p>
+
+  <div class="eq">\[ 2^{L} = \rho \qquad\Longrightarrow\qquad L = \log_2 \rho \]</div>
+
+  <div class="eq-plain">2^L = footprint_in_texels &nbsp;⟹&nbsp; L = log2(footprint_in_texels)</div>
+
+  <p>
+    where ρ is the footprint measured in level-0 texels. The logarithm is not a trick — it is the
+    direct consequence of the pyramid halving at each step, which is why the formula has no
+    constants in it to tune.
+  </p>
+
+  @@FIG_LEVEL@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> Push 3.9's own measurement through it.</p>
+    <p>That lesson measured 62.46 texels per pixel two rows below the horizon. So</p>
+    <div class="eq-plain">L = log2(62.46) = 5.965</div>
+    <p>
+      Level 5 of a 256-texture is 8×8; level 6 is 4×4. So the right answer is "level 5, almost all
+      the way to level 6" — and the harness confirms <code>mip_level_for</code> returns 5.965 for
+      that footprint.
+    </p>
+    <p>
+      Note what the level being <em>fractional</em> is telling you: there is no level whose texels
+      are exactly 62.46 across, because the chain only offers powers of two. That fraction is
+      precisely what trilinear filtering interpolates, and it is why the function returns a float
+      rather than an int.
+    </p>
+  </div>
+
+  <p>
+    <strong>ρ is the longer of the two axes</strong>, and that one word is the whole of why plain
+    mipmapping over-blurs. Taking the longer guarantees no aliasing along <em>either</em> axis, at
+    the cost of blurring the shorter one. Taking the shorter would keep the detail and alias. Hold
+    that thought until <a href="#aniso">§3.6</a>.
+  </p>
+
+  <p>
+    And magnification — ρ&nbsp;&lt;&nbsp;1, a pixel covering less than a texel — clamps to level 0.
+    There is no level −1, and the honest answer is that the image simply has no more detail to
+    offer.
+  </p>
+
+  <h3 id="gradient">3.3 &nbsp;The derivative, on a renderer with no neighbours</h3>
+
+  <p>
+    Now the part that is genuinely CPU-specific, and the reason 3.9 could measure the footprint in a
+    demo but not compute it in the fill loop.
+  </p>
+
+  @@FIG_GRADIENT@@
+
+  <p>
+    A GPU shades fragments in 2×2 quads. That is not an efficiency detail — it is <em>why</em>
+    <code>ddx</code> and <code>ddy</code> exist: the neighbouring fragment's value is right there,
+    so a derivative is a subtraction. (It is also why those functions cannot be called from
+    divergent control flow: the neighbour might not have taken your branch.)
+  </p>
+
+  <p>
+    Our rasterizer walks a scanline one pixel at a time. The row above was finished and thrown
+    away; the pixel to the right has not been computed. There is nothing to subtract. So the
+    derivative has to come from the triangle, analytically — and it turns out to be both exact and
+    nearly free.
+  </p>
+
+  <p>
+    Recall from <a href="03-02-perspective-correct.html">Lesson 3.2</a> that perspective-correct
+    interpolation computes
+  </p>
+
+  <div class="eq">\[ u(x,y) \;=\; \frac{U(x,y)}{W(x,y)}, \qquad U = \sum_i f_i \frac{u_i}{w_i}, \qquad W = \sum_i \frac{f_i}{w_i} \]</div>
+
+  <div class="eq-plain">u = U / W, with U = Σ f_i·(u_i/w_i) and W = Σ f_i·(1/w_i)</div>
+
+  <p>
+    <strong>Both <em>U</em> and <em>W</em> are affine in screen space</strong>, because the
+    normalised barycentrics <em>f<sub>i</sub></em> are — they are edge functions, which are linear
+    in <em>x</em> and <em>y</em> by construction (Lesson 2.2). An affine function has a constant
+    gradient. So the quotient rule gives, per screen axis,
+  </p>
+
+  <div class="eq">\[ \frac{\partial u}{\partial x} \;=\; \frac{\dfrac{\partial U}{\partial x} - u \cdot \dfrac{\partial W}{\partial x}}{W} \]</div>
+
+  <div class="eq-plain">du/dx = (dU/dx − u · dW/dx) / W</div>
+
+  <p>
+    and every ingredient is already lying around:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Where each term of the gradient comes from</caption>
+      <thead><tr><th>Term</th><th>Where it already exists</th></tr></thead>
+      <tbody>
+        <tr><td><code>df_i/dx</code></td>
+            <td><code>step_x0/1/2 · inv_area</code> — the edge increments the fill already walks,
+                over the area it already reciprocated</td></tr>
+        <tr><td><code>dU/dx</code>, <code>dW/dx</code></td>
+            <td>a weighted sum of those, <strong>constant over the triangle</strong>, so hoisted
+                out of the pixel loop entirely</td></tr>
+        <tr><td><code>u</code></td>
+            <td>the fragment's uv, which the loop just computed</td></tr>
+        <tr><td><code>1/W</code></td>
+            <td><code>w_recip</code> — the reciprocal Lesson 3.2 already pays one divide for</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    So the per-pixel cost is <strong>two multiplies and a subtract per axis</strong>, and only when
+    a chain is bound. Everything else hoists.
+  </p>
+
+  <div class="callout">
+    <span class="label">It is exact, and the test says so</span>
+    <p>
+      This is a closed form, not an approximation — which is a stronger claim than "it looks right",
+      so it deserves a stronger test than looking at it. §D of the harness computes the gradient
+      analytically and then computes a <em>central difference</em> of the real perspective-correct
+      interpolation at the same point, on a triangle with genuinely different <em>w</em> at each
+      vertex so the divide actually bends things.
+    </p>
+    <p>
+      They agree to <strong>5.79 × 10<sup>−6</sup></strong>, which is the finite difference's own
+      truncation error rather than a disagreement. A test that only checked the analytic form
+      against itself would have proved nothing.
+    </p>
+  </div>
+
+  <h3 id="linear">3.4 &nbsp;The bug that makes things darker</h3>
+
+  <p>
+    Now the trap, and it is worth meeting with real numbers because "average in linear light" is
+    advice that is very easy to nod at and not act on.
+  </p>
+
+  <p>
+    Take one 2×2 block of a black-and-white checker: two texels at code 255, two at code 0. What
+    should their average be? <strong>Half the light</strong> — one of the two texels is emitting
+    all of it and the other none, so the block as a whole emits half.
+  </p>
+
+  <p>
+    Lesson 6.1 established the two integers that answer this. Code 128 is <em>not</em> half the
+    light; it is 0.2159 of it. Half the light is <strong>code 188</strong>. So:
+  </p>
+
+  @@FIG_LINEAR@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The two ways, side by side.</p>
+    <div class="eq-plain">naive:   (255 + 0 + 0 + 255) / 4 = code 127 → 0.2122 of white</div>
+    <div class="eq-plain">correct: decode → (1 + 0 + 0 + 1)/4 = 0.5 → encode → code 188 → 0.5029 of white</div>
+    <p>
+      The naive answer delivers <strong>0.2122 / 0.5029 = 42.2%</strong> of the light it should.
+      That is <strong>57.8% too dark</strong>, at level 1, on one block.
+    </p>
+    <p>
+      And it <em>compounds</em>. Level 2 averages four level-1 texels that are already too dark, so
+      the error accumulates down the chain — which is why the symptom is not "textures are dark" but
+      "textures get darker with distance", and why it is so often mistaken for a lighting falloff
+      problem.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Read the space from the data, not from a parameter</span>
+    <p>
+      <code>build_mips</code> decides by asking the texture: <code>texel_space::srgb</code> decodes,
+      <code>texel_space::linear</code> averages the bytes directly. That field exists because
+      Lesson 6.7 needed normal maps to stop being decoded as colour, and it pays for itself again
+      here — a roughness map or a normal map <em>is</em> linear data, so averaging its bytes is the
+      correct operation rather than the lazy one.
+    </p>
+    <p>
+      Making it a parameter would put the decision back at the call site, which is exactly where
+      6.7 took it from. A caller who has to remember which of their textures is colour will get the
+      third one wrong.
+    </p>
+    <p>
+      Alpha is averaged as bytes on <em>both</em> paths, incidentally: it is a coverage fraction
+      rather than a colour, so it was never sRGB-encoded, and decoding it would be a second bug
+      hiding behind the fix for the first.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The GPU gets this right for free, and it is worth knowing why</span>
+    <p>
+      <code>SDL_GenerateMipmapsForGPUTexture</code> does not need telling about colour spaces,
+      because the texture was created with an <code>_SRGB</code> format. The hardware decodes on
+      read and encodes on write, so the blit chain that generates the levels is <em>already</em>
+      averaging in linear light.
+    </p>
+    <p>
+      That is the clearest case in this course of a format flag doing real work: the same
+      correctness the CPU path arranges by hand in twenty lines is, on the GPU, a consequence of
+      having declared what the data means.
+    </p>
+  </div>
+
+  <h3 id="trilinear">3.5 &nbsp;Trilinear, and a seam you have met before</h3>
+
+  <p>
+    The level is fractional and the chain is not. Round it, and every fragment on one side of an
+    invisible line reads an image twice as detailed as the fragment next to it — so the line becomes
+    visible, running across the floor at a fixed distance from the camera.
+  </p>
+
+  <p>
+    <strong>This is Lesson 6.9's cascade seam.</strong> Same cause: two representations of the same
+    surface, each defensible, meeting at a boundary and disagreeing. Same cure: blend across it.
+    Bilinear within a level, linear between two levels — <em>tri</em>linear.
+  </p>
+
+  <p>
+    The harness sweeps a footprint across a level boundary and measures the largest single-step
+    change:
+  </p>
+
+  <div class="eq-plain">
+    nearest: 0.3470 &nbsp;&nbsp;·&nbsp;&nbsp; trilinear: 0.0124 &nbsp;&nbsp;—&nbsp;&nbsp; 28× smaller
+  </div>
+
+  <p>
+    A 0.347 jump in one step of camera distance is a hard edge; 0.0124 is a gradient. The cost is
+    one extra bilinear fetch, which is why trilinear is the default everywhere and
+    <code>mip_filter = nearest</code> exists mainly so you can see what it is for.
+  </p>
+
+  <h3 id="aniso">3.6 &nbsp;Anisotropy: refusing to choose</h3>
+
+  <p>
+    Back to the word "longer" in §3.2. Consider a floor seen at a grazing angle. Moving one pixel
+    across the screen moves you a long way across the texture; moving one pixel <em>up</em> the
+    screen moves you much further still, or much less, depending on the geometry. The footprint is
+    a long thin ellipse, not a circle.
+  </p>
+
+  @@FIG_ANISO@@
+
+  <p>
+    Take the harness's case: 32 texels along one screen axis, 2 along the other — a 16:1 ratio.
+  </p>
+
+  <ul>
+    <li><strong>Choose by the long axis (32 texels ⟹ level 5).</strong> No aliasing, but the short
+        axis only needed level 1, so it is blurred by a factor of <strong>16</strong>. This is why
+        distant ground in a game without anisotropy looks like it has been smeared.</li>
+    <li><strong>Choose by the short axis (2 texels ⟹ level 1).</strong> The detail survives, and the
+        long axis aliases exactly as it did before we started.</li>
+  </ul>
+
+  <p>
+    <strong>Anisotropic filtering refuses the choice.</strong> Take the level the <em>short</em>
+    axis asked for — so no detail is thrown away — and then take several samples <em>along</em> the
+    long axis and average them, which supplies the averaging the long axis needed. The number of
+    samples is the ratio, clamped: "16× anisotropic" is that clamp, and it is why the setting is
+    quoted as a number rather than on/off.
+  </p>
+
+  <div class="callout">
+    <span class="label">It costs only where it buys</span>
+    <p>
+      On a <em>square</em> footprint the ratio is 1, so there is no long axis and the code takes a
+      single tap. The harness checks this rather than assuming it: with
+      <code>max_anisotropy = 16</code> and a 1:1 footprint the result is identical to the isotropic
+      one to six decimal places.
+    </p>
+    <p>
+      That is worth verifying because the failure would be invisible and expensive — sixteen taps
+      of the same place, on every surface facing the camera squarely, which is most of them.
+    </p>
+  </div>

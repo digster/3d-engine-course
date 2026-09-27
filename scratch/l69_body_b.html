@@ -1,0 +1,396 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <p>
+    Four things to derive, in the order the code needs them: where to cut the frustum, what shape
+    to fit around a cut, how to stop that shape sliding, and what any of it does to the bias.
+  </p>
+
+  <h3 id="splits">3.1 &nbsp;Where to cut: two schemes that are both wrong</h3>
+
+  <p>
+    We need <em>n</em> distances between the near plane and wherever we stop caring. There are two
+    obvious answers and neither survives contact with a picture, which is a good sign that the
+    right answer is between them.
+  </p>
+
+  <p>
+    <strong>Uniform splits</strong> put the cuts at equal world distances:
+  </p>
+
+  <div class="eq-plain">d<sub>i</sub> = near + (far − near) · i/n</div>
+
+  <p>
+    With near = 0.1 m, far = 60 m and n = 4 that is 15.08, 30.05, 45.03 and 60 metres. Every slice
+    is the same depth. This sounds fair and is useless: the near slice — the one filling your
+    screen — now covers fifteen metres, which is most of what you can see, so cascade 0 is barely
+    denser than the single map we are trying to beat.
+  </p>
+
+  <p>
+    <strong>Logarithmic splits</strong> come from an actual argument. A surface at distance
+    <em>d</em> covers screen pixels in proportion to 1/<em>d</em>. To hold <em>texels per screen
+    pixel</em> constant — which is the quantity §1 identified as the one that matters — the slice
+    depths must grow in proportion to <em>d</em>. Something whose growth is proportional to its own
+    size is a geometric series:
+  </p>
+
+  <div class="eq">\[ d_i \;=\; near \cdot \left(\frac{far}{near}\right)^{i/n} \]</div>
+
+  <div class="eq-plain">d_i = near · (far/near)^(i/n)</div>
+
+  <div class="callout">
+    <span class="label">You have met this 1/d before</span>
+    <p>
+      Lesson 4.7 spent its precision section on the fact that a perspective depth buffer spends its
+      codes in proportion to 1/<em>d</em>, so the near field gets a hundred times the depth
+      resolution of the far field. That was the same geometry arriving as a <em>problem</em>. Here
+      it arrives as a <em>prescription</em>: if screen density falls as 1/<em>d</em>, then equal
+      density means slices whose size rises with <em>d</em>. One fact, met twice, from opposite
+      sides.
+    </p>
+  </div>
+
+  <p>
+    Now push the numbers through, which is where the logarithmic scheme falls over. With the same
+    near = 0.1 and far = 60:
+  </p>
+
+  <div class="eq-plain">d<sub>0</sub> = 0.1 · (600)<sup>1/4</sup> = 0.1 · 4.95 = 0.55 m</div>
+
+  <p>
+    Cascade 0 covers from 0.1 m to <strong>0.55 m</strong>. That is your own feet. Three quarters
+    of your shadow budget is spent before you reach the far end of a dining table, and the
+    interesting middle distance — where things you can actually interact with are — is crammed into
+    the last cascade. The scheme is theoretically right and practically miserable, and the reason
+    is that the near plane is an arbitrary number chosen for depth precision, not a statement about
+    where you are looking.
+  </p>
+
+  <p>
+    <strong>The practical scheme</strong> (Zhang et al., 2006) is the blend:
+  </p>
+
+  <div class="eq">\[ d_i \;=\; \lambda \cdot \underbrace{near\left(\tfrac{far}{near}\right)^{i/n}}_{\text{logarithmic}} \;+\; (1-\lambda)\cdot \underbrace{\left(near + (far-near)\tfrac{i}{n}\right)}_{\text{uniform}} \]</div>
+
+  <div class="eq-plain">d_i = lambda · logarithmic_i + (1 − lambda) · uniform_i</div>
+
+  <p>
+    At λ = 0.5 the cuts land at <strong>7.78, 16.25, 28.57</strong> and 60 metres. Cascade 0 now
+    covers the first eight metres — the room you are standing in — and the far cascade absorbs
+    everything beyond thirty. λ is the one number in this lesson chosen by eye rather than derived,
+    and that is worth stating plainly. What makes it defensible is that it interpolates between two
+    schemes that are each explicable: it is not a magic curve, it is a dial between "equal metres"
+    and "equal density", and 0.5 says you believe both arguments about equally.
+  </p>
+
+  @@FIG_SPLITS@@
+
+  <h3 id="corners">3.2 &nbsp;The slice: eight corners from three numbers</h3>
+
+  <p>
+    To fit a box around a slice we need the slice's eight world-space corners. That is an
+    <em>inverse</em> projection — and we do not have one. <code>mat4</code> has no general
+    <code>inverse()</code>: Lesson 2.9 gave us <code>rigid_inverse</code>, which handles a view
+    matrix because a view matrix is a rotation and a translation, and nothing in this engine
+    inverts a perspective matrix.
+  </p>
+
+  <p>
+    We could write it. A perspective matrix's inverse is closed-form and about six lines. But there
+    is a better route, and it is the one most engines take: <strong>the frustum's shape is three
+    numbers, so build the corners directly from them.</strong> At distance <em>d</em>, the
+    frustum's half-height is
+  </p>
+
+  <div class="eq-plain">half_height = tan(fovy / 2) · d,&nbsp;&nbsp;&nbsp; half_width = half_height · aspect</div>
+
+  <p>
+    which is not a re-derivation of anything — it <em>is</em> the definition of a vertical field of
+    view, and it is the same tangent <code>perspective()</code> is built from in
+    <code>mat4.hpp</code>. Going through a matrix to recover numbers we already have would be a
+    round trip that can only lose precision.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> fovy = 60°, aspect = 16/9, and the near plane of a slice at
+    <em>d</em> = 1 m.</p>
+    <div class="eq-plain">tan(30°) = 0.57735</div>
+    <div class="eq-plain">half_height = 0.57735 × 1 = 0.57735 m</div>
+    <div class="eq-plain">half_width = 0.57735 × 1.7778 = 1.02640 m</div>
+    <p>
+      So in view space the four near corners are (±1.02640, ±0.57735, −1). The harness prints
+      corner 0 as <code>(−1.0264, −0.5774, −1.0000)</code>, which is the prediction to five
+      figures.
+    </p>
+    <p>
+      <strong>And the independent check.</strong> Agreeing with my own formula proves nothing, so
+      §B pushes a far corner through the actual <code>perspective()</code> matrix and asks where it
+      lands. It comes out at <code>(1.0000, 1.0000, 1.0000)</code> — exactly the corner of the NDC
+      box, which is what a frustum corner <em>means</em>. That is the test that makes §3.2 a check
+      of the corner builder rather than a restatement of it.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">−z is forward</span>
+    <p>
+      A corner at distance <em>d</em> sits at <em>z</em> = −<em>d</em> (conventions §2). Write
+      +<em>d</em> and you have built the frustum <strong>behind the camera</strong> — and the
+      symptom is not a crash or a blank screen. It is a shadow map that is correct exactly when you
+      turn around, which is one of those bugs that gets diagnosed as "the light direction is wrong"
+      and fixed by negating something unrelated.
+    </p>
+  </div>
+
+  <h3 id="sphere">3.3 &nbsp;Fitting: a sphere, and what it costs</h3>
+
+  <p>
+    Now fit the light's orthographic box around those eight corners. The obvious thing is to
+    transform them into light space and take their axis-aligned bounds. <strong>Do that and the
+    picture boils.</strong>
+  </p>
+
+  <p>
+    Here is why, and it is worth being precise because the mechanism is not obvious. Turn the
+    camera on the spot, changing nothing else. The eight corners sweep around, and an
+    axis-aligned box in <em>light</em> space that contains them has to grow to hold the diagonal
+    and shrink again as they come back into alignment. The harness yaws a camera through 360° and
+    measures the box side varying by <strong>30.2%</strong> — from 24.6 m to 35.3 m.
+  </p>
+
+  <p>
+    Now recall what that side <em>is</em>:
+  </p>
+
+  <div class="eq-plain">world_per_texel = box_side ÷ resolution</div>
+
+  <p>
+    A box side that changes by 30% is a <code>world_per_texel</code> that changes by 30%, which
+    means <em>every texel in the map changes size</em>, which means every shadow edge in the
+    picture moves, while the camera did nothing but turn. That is the shimmer, and no amount of
+    filtering hides it because it is not noise — it is the whole map breathing in and out.
+  </p>
+
+  <p>
+    <strong>A sphere has no orientation.</strong> Take the slice's eight corners, average them for
+    a centre, take the largest distance from that centre for a radius, and make the box the square
+    that contains the sphere. Rotating the camera rotates the corners <em>within their own
+    sphere</em> and the radius does not care. The harness measures the spread across the same 360°
+    yaw as <strong>9.9 × 10<sup>−8</sup></strong> — which is float rounding, not geometry.
+  </p>
+
+  @@FIG_SPHERE@@
+
+  <div class="callout">
+    <span class="label">Be honest about the price</span>
+    <p>
+      A sphere that contains a box is bigger than the box. The harness measures both on the same
+      slice: the corner-fitted box would give <strong>0.01508 m</strong> per texel and the sphere
+      gives <strong>0.01945 m</strong> — so stability costs <strong>29% of the resolution</strong>.
+    </p>
+    <p>
+      That is a real trade and it is worth knowing which side you are on. If your camera is on
+      rails and never rotates, fit the box and keep the 29%. Almost nobody is, so almost everybody
+      pays it — but pay it deliberately, and if a reader works the frustum's dimensions out by hand
+      and expects a bigger win than §1's numbers show, this is where the difference went.
+    </p>
+  </div>
+
+  <h3 id="snap">3.4 &nbsp;Snapping: the grid that jumps</h3>
+
+  <p>
+    The sphere fixed the box's <em>size</em>. Its <em>position</em> still slides continuously as
+    you walk, and a texel grid sliding under stationary geometry is exactly as bad: each shadow
+    edge is quantised to whichever texel it happens to land in, so it jitters back and forth by a
+    texel every frame. Edges crawl.
+  </p>
+
+  <p>
+    The cure is to make the grid land in the same place every frame: round the box's centre, in
+    light space, down to a whole number of texels.
+  </p>
+
+  <div class="eq">\[ centre'_{x} = \left\lfloor \frac{centre_x}{world\_per\_texel} \right\rfloor \cdot world\_per\_texel \]</div>
+
+  <div class="eq-plain">centre'_x = floor(centre_x / world_per_texel) · world_per_texel</div>
+
+  <p>
+    The box now advances in texel-sized jumps rather than sliding, so its grid lands on the same
+    world positions it landed on last frame. A shadow edge either stays exactly where it was or
+    moves exactly one texel — and the eye reads a one-texel step as stability where it reads a
+    continuous slide as crawling.
+  </p>
+
+  @@FIG_SNAP@@
+
+  <p>
+    The harness walks a camera forward in sub-texel steps and watches where a fixed world point
+    falls on the grid. Snapped, it stays within <strong>7.6 × 10<sup>−6</sup></strong> texels of
+    the same position; unsnapped it wanders <strong>0.499</strong> texels, which is the worst it
+    can possibly be — half a texel is the furthest anything can get from the nearest grid line.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Two ways to get this exactly wrong, and both compile</span>
+    <p>
+      <strong>Snapping in the wrong space.</strong> The grid we are rounding to is the map's, and
+      the map's axes are the light's. Round in world space and you round along axes that have
+      nothing to do with the texel grid, which achieves precisely nothing while looking correct.
+    </p>
+    <p>
+      <strong>Anchoring the basis at the thing you are rounding.</strong> This one bit me while
+      writing the lesson, and the test caught it. If you build the light's basis with
+      <code>look_at(centre, centre + fwd, up)</code>, then <code>basis · centre</code> is
+      <em>(0,0,0)</em> by construction — the centre is the eye — so there is nothing left to round
+      and snapping silently does nothing. The grid has to be nailed to the <em>world</em>, so the
+      basis must be anchored at the world origin. The symptom was §E reporting an identical 0.499
+      texels with snapping both on and off, which is a much better error message than a picture
+      that merely looks a bit crawly.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label"><code>floor</code>, not a cast</span>
+    <p>
+      A cast to <code>int</code> truncates <em>toward zero</em>, so it rounds negative coordinates
+      the opposite way from positive ones. Light space straddles the origin by construction, so
+      half the world would snap one way and half the other, with a discontinuity running through
+      the middle — which is roughly where the camera usually is.
+    </p>
+  </div>
+
+  <h3 id="bias">3.5 &nbsp;The bias: the audit, and a surprise</h3>
+
+  <p>
+    Now the question this lesson exists to ask. Lesson 6.8 derived
+  </p>
+
+  <div class="eq">\[ bias \;=\; \frac{reach \cdot world\_per\_texel \cdot \tan\theta}{depth\_range} \]</div>
+
+  <div class="eq-plain">bias = reach · world_per_texel · tan(theta) / depth_range</div>
+
+  <p>
+    and argued that every term was there for a reason. Cascades change
+    <code>world_per_texel</code> by a factor of 7.3 and <code>depth_range</code> along with it. If
+    that derivation was real, nothing needs to change. Here is what the harness reports:
+  </p>
+
+  @@FIG_BIAS@@
+
+  <p>
+    <strong>No line of 6.8's bias code was touched.</strong> Each cascade owns a
+    <code>light_camera</code>, <code>light_camera</code> is where <code>world_per_texel</code> and
+    <code>depth_range</code> live, and <code>shadow_map::visibility</code> already read them from
+    there. A cascade is a fit, not a feature. That is the audit passing.
+  </p>
+
+  <p>
+    But look at the fourth column, because it says something nobody set out to arrange. In
+    <em>world</em> units the biases differ enormously — 0.0413 m for cascade 0 against 0.3005 m for
+    cascade 3, a factor of <strong>7.3</strong>, exactly as <code>world_per_texel</code> does. In
+    <em>device depth</em> — the units the buffer actually stores and the comparison is actually
+    performed in — cascades 1, 2 and 3 all want <strong>the same number</strong>, 2.031 × 10<sup>−3</sup>.
+  </p>
+
+  <p>
+    That is not a coincidence, and it falls out of the sphere fit in three lines:
+  </p>
+
+  <div class="eq">\[ bias = \frac{reach \cdot wpt \cdot \tan\theta}{range}, \quad wpt = \frac{2r}{res}, \quad range \approx 2r \;\Longrightarrow\; bias \approx \frac{reach \cdot \tan\theta}{res} \]</div>
+
+  <div class="eq-plain">
+    bias = reach·wpt·tanθ / range,&nbsp; wpt = 2r/res,&nbsp; range ≈ 2r&nbsp; ⟹&nbsp;
+    bias ≈ reach·tanθ / res
+  </div>
+
+  <p>
+    <strong>The radius cancels.</strong> Both the texel size and the depth range are set by the
+    same sphere, so a sphere-fitted cascade's device-space bias depends on the resolution and the
+    slope and on nothing else — not on which cascade it is, not on how far away it is. Putting the
+    numbers in: reach = 2.1213 texels for a 3×3 kernel, tan θ = 1 for a 45° surface, resolution =
+    1024, giving <strong>2.0716 × 10<sup>−3</sup></strong> against a measured
+    <strong>2.031 × 10<sup>−3</sup></strong> — agreement to 2%, and the 2% is the half-texel
+    padding the fit adds.
+  </p>
+
+  <div class="callout">
+    <span class="label">The exception that confirms the mechanism</span>
+    <p>
+      Cascade 0 does <em>not</em> follow the rule: it needs only <strong>64%</strong> of cascade
+      1's bias. And the reason is exactly the one the derivation predicts. Its depth range is
+      <strong>31.9 m</strong> where its own sphere is only about 19.9 m across — because the range
+      was stretched to reach the <em>casters</em>, not the slice (§3.6 below). The moment something
+      other than the sphere sets the range, the cancellation is spoiled and the bias goes its own
+      way.
+    </p>
+    <p>
+      An exception you can predict from the mechanism is worth more than a rule with no
+      exceptions, because it is the difference between having a formula and having a coincidence.
+    </p>
+  </div>
+
+  <h3 id="casters">3.6 &nbsp;The depth range belongs to the casters</h3>
+
+  <p>
+    One subtlety that is easy to miss and produces a memorable bug. The sphere tells us how wide
+    the box is. It must <em>not</em> tell us how deep it is.
+  </p>
+
+  <p>
+    An occluder standing between the light and a slice is <em>outside</em> that slice — it is above
+    it, or beside it — but it still casts into it. Fit the near plane to the slice and that
+    occluder is clipped out of the depth pass, so it stops casting the moment it leaves the
+    camera's view. The symptom is <strong>shadows blinking out at the edge of the screen</strong>,
+    which reads as a culling bug and is not one.
+  </p>
+
+  <p>
+    So the near and far planes come from the casters' extent along the light's axis. The harness
+    checks both halves of that: a 50-metre caster above a small slice stretches the depth range
+    from 26.1 m to <strong>62.3 m</strong> — and leaves <code>world_per_texel</code> unchanged at
+    0.024999, because a tall caster is a fact about depth, not about texel density.
+  </p>
+
+  <h3 id="seam">3.7 &nbsp;The seam</h3>
+
+  <p>
+    Two cascades meet at a split distance. On one side the texels are 0.0384 m and the bias is one
+    number; on the other they are 0.0670 m and it is another. Both are correct answers to slightly
+    different questions, and they disagree — along a line, at a fixed distance from the camera,
+    which is precisely the shape the eye is best at finding.
+  </p>
+
+  @@FIG_SEAM@@
+
+  <p>
+    The usual cure is to fade. Pick a band at the end of each cascade, look up <em>both</em>
+    cascades inside it, and interpolate. Since both answers are defensible, anything between them
+    is too, and a ramp is invisible where a step is not. It costs a second lookup — but only for
+    the fragments inside the band, which is a small fraction of the screen.
+  </p>
+
+  <p>
+    <code>cascade_settings::blend_fraction</code> is that band, as a fraction of each cascade's own
+    depth. It defaults to <strong>0</strong>, which shows the seam — Lesson 3.5's rule again: the
+    failure has to be reachable, or the fix is folklore.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Selecting on the wrong depth bends the seam</span>
+    <p>
+      The splits are distances along the <em>view axis</em>. A fragment shader knows a world
+      position, and the tempting conversion is <code>length(eye − world)</code> — which is the
+      <em>radial</em> distance, not the axial one. They differ by 1/cos(angle off axis), and at the
+      corner of a 60° frame that is about 22%.
+    </p>
+    <p>
+      Select on radial distance and the corners of the screen land in the wrong cascade, so the
+      seam — which should be a straight line at a fixed distance — bows into a curve that follows
+      the edge of the frame. The fix is to carry the camera's forward axis and use
+      <code>dot(world − eye, forward)</code>: sixteen bytes to keep selection and fitting talking
+      about the same quantity.
+    </p>
+  </div>

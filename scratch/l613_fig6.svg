@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f613f-t f613f-d">
+  <title id="f613f-t">Glow area against source luminance</title>
+  <desc id="f613f-d">Three glows from single pixels of increasing luminance, drawn with radii to scale, above the same three values rendered through a clamp as identical single dots.</desc>
+  <defs>
+    <marker id="e-i-f613f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f613f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f613f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f613f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f613f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">The payoff: a display that cannot show the value shows the AREA</text>
+<circle cx="150" cy="140" r="5.2" fill="#f0961e" fill-opacity="0.3"/>
+<circle cx="150" cy="140" r="3.2" fill="#f0961e" fill-opacity="0.45"/>
+<circle cx="150" cy="140" r="1.8" fill="#f0961e" fill-opacity="0.7"/>
+<circle cx="150" cy="140" r="2.4" fill="#e05c5c"/>
+<text x="150" y="214" class="xs" text-anchor="middle">L = 100</text>
+<text x="150" y="230" class="xs" text-anchor="middle">area 115 texels</text>
+<text x="150" y="246" class="xs" text-anchor="middle">radius 6.05</text>
+<text x="150" y="262" class="xs" text-anchor="middle">area / L = 1.150</text>
+<circle cx="340" cy="140" r="17.1" fill="#f0961e" fill-opacity="0.3"/>
+<circle cx="340" cy="140" r="10.6" fill="#f0961e" fill-opacity="0.45"/>
+<circle cx="340" cy="140" r="5.8" fill="#f0961e" fill-opacity="0.7"/>
+<circle cx="340" cy="140" r="2.4" fill="#e05c5c"/>
+<text x="340" y="214" class="xs" text-anchor="middle">L = 1,000</text>
+<text x="340" y="230" class="xs" text-anchor="middle">area 1,238 texels</text>
+<text x="340" y="246" class="xs" text-anchor="middle">radius 19.85</text>
+<text x="340" y="262" class="xs" text-anchor="middle">area / L = 1.238</text>
+<circle cx="560" cy="140" r="52.0" fill="#f0961e" fill-opacity="0.3"/>
+<circle cx="560" cy="140" r="32.2" fill="#f0961e" fill-opacity="0.45"/>
+<circle cx="560" cy="140" r="17.7" fill="#f0961e" fill-opacity="0.7"/>
+<circle cx="560" cy="140" r="2.4" fill="#e05c5c"/>
+<text x="560" y="214" class="xs" text-anchor="middle">L = 10,000</text>
+<text x="560" y="230" class="xs" text-anchor="middle">area 11,399 texels</text>
+<text x="560" y="246" class="xs" text-anchor="middle">radius 60.24</text>
+<text x="560" y="262" class="xs" text-anchor="middle">area / L = 1.140</text>
+<text x="70" y="296" class="xs" text-anchor="start">under a clamp:</text>
+<circle cx="150" cy="292" r="3.0" fill="#e05c5c"/>
+<text x="150" y="312" class="xs" text-anchor="middle">code 255</text>
+<circle cx="340" cy="292" r="3.0" fill="#e05c5c"/>
+<text x="340" y="312" class="xs" text-anchor="middle">code 255</text>
+<circle cx="560" cy="292" r="3.0" fill="#e05c5c"/>
+<text x="560" y="312" class="xs" text-anchor="middle">code 255</text>
+<text x="360.0" y="332" class="xs" text-anchor="middle">three identical white dots — the information was in the HDR buffer and there was no way to show it</text>
+<text x="360.0" y="356" class="xs" text-anchor="middle">THE PREDICTION AND ITS TEST. If the tail goes as r^-2, the radius at which the glow crosses any fixed visibility</text>
+<text x="360.0" y="374" class="xs" text-anchor="middle">threshold goes as sqrt(L), so the AREA goes as L. Measured over three decades: area/L constant to within 8.6%.</text>
+<text x="360.0" y="392" class="xs" text-anchor="middle">The conversion from an intensity the display cannot represent into an area it can is very nearly exact.</text>
+</svg>

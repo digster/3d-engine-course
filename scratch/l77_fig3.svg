@@ -1,0 +1,48 @@
+<svg viewBox="0 0 760 372" role="img" aria-labelledby="f77d-t f77d-d">
+  <title id="f77d-t">Where nlerp is free and where it is not</title>
+  <desc id="f77d-d">The nlerp-slerp lag plotted against the rotation between two orientations on log axes, with a clip's adjacent keyframes clustered far below the half-degree threshold and a cross-fade's arcs above it.</desc>
+  <defs>
+    <marker id="e-i-f77d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">nlerp is fine inside a clip and not fine between two</text>
+<text x="380.0" y="47" class="xs muted" text-anchor="middle">rotation degrees throughout — the sphere arc a quaternion walks is half of each number</text>
+<rect x="76.0" y="80.0" width="608.0" height="176.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="536.0110267839789" y1="86.0" x2="536.0110267839789" y2="250.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="508.0110267839789" y="98.0" class="xs mono" text-anchor="middle">73.50°</text>
+<text x="542.0110267839789" y="70.0" class="xs muted" text-anchor="start">half a degree of lag</text>
+<path d="M 104.00,230.00 L 108.60,229.01 L 113.20,227.77 L 117.80,226.53 L 122.40,225.29 L 127.00,224.05 L 131.60,222.81 L 136.20,221.57 L 140.80,220.33 L 145.40,219.09 L 150.00,217.85 L 154.60,216.61 L 159.20,215.37 L 163.80,214.13 L 168.40,212.89 L 173.00,211.65 L 177.60,210.41 L 182.20,209.17 L 186.80,207.93 L 191.40,206.69 L 196.00,205.45 L 200.60,204.21 L 205.20,202.97 L 209.80,201.73 L 214.40,200.49 L 219.00,199.25 L 223.60,198.01 L 228.20,196.77 L 232.80,195.53 L 237.40,194.29 L 242.00,193.05 L 246.60,191.81 L 251.20,190.57 L 255.80,189.33 L 260.40,188.09 L 265.00,186.85 L 269.60,185.61 L 274.20,184.37 L 278.80,183.13 L 283.40,181.89 L 288.00,180.65 L 292.60,179.41 L 297.20,178.17 L 301.80,176.93 L 306.40,175.69 L 311.00,174.44 L 315.60,173.20 L 320.20,171.96 L 324.80,170.72 L 329.40,169.48 L 334.00,168.24 L 338.60,167.00 L 343.20,165.76 L 347.80,164.52 L 352.40,163.28 L 357.00,162.04 L 361.60,160.80 L 366.20,159.56 L 370.80,158.32 L 375.40,157.07 L 380.00,155.83 L 384.60,154.59 L 389.20,153.35 L 393.80,152.11 L 398.40,150.87 L 403.00,149.63 L 407.60,148.38 L 412.20,147.14 L 416.80,145.90 L 421.40,144.66 L 426.00,143.41 L 430.60,142.17 L 435.20,140.93 L 439.80,139.69 L 444.40,138.44 L 449.00,137.20 L 453.60,135.95 L 458.20,134.71 L 462.80,133.46 L 467.40,132.22 L 472.00,130.97 L 476.60,129.73 L 481.20,128.48 L 485.80,127.23 L 490.40,125.99 L 495.00,124.74 L 499.60,123.49 L 504.20,122.24 L 508.80,120.99 L 513.40,119.74 L 518.00,118.49 L 522.60,117.23 L 527.20,115.98 L 531.80,114.72 L 536.40,113.47 L 541.00,112.21 L 545.60,110.95 L 550.20,109.69 L 554.80,108.42 L 559.40,107.16 L 564.00,105.89 L 568.60,104.62 L 573.20,103.35 L 577.80,102.07 L 582.40,100.80 L 587.00,99.52 L 591.60,98.23 L 596.20,96.94 L 600.80,95.65 L 605.40,94.35 L 610.00,93.05 L 614.60,91.74 L 619.20,90.43 L 623.80,89.11 L 628.40,87.79 L 633.00,86.45 L 637.60,85.11 L 642.20,83.75 L 646.80,82.39 L 651.40,81.01 L 656.00,79.62" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="152.60" cy="217.14" r="3.4" fill="#60c4ce"/>
+<text x="152.60118749936802" y="234.1408542910284" class="xs mono" text-anchor="middle">90°/s</text>
+<circle cx="235.69" cy="194.74" r="3.4" fill="#60c4ce"/>
+<text x="235.68546630262682" y="211.74422261362818" class="xs mono" text-anchor="middle">180°/s</text>
+<circle cx="318.77" cy="172.35" r="3.4" fill="#60c4ce"/>
+<text x="318.7697451058856" y="189.347590936228" class="xs mono" text-anchor="middle">360°/s</text>
+<circle cx="401.85" cy="149.94" r="3.4" fill="#60c4ce"/>
+<text x="401.8540239091444" y="166.9350345684157" class="xs mono" text-anchor="middle">720°/s</text>
+<circle cx="428.60" cy="142.71" r="3.4" fill="#ec7a8c"/>
+<text x="428.601187499368" y="132.71184567053416" class="xs mono" text-anchor="middle">0.033°</text>
+<circle cx="536.01" cy="113.57" r="3.4" fill="#ec7a8c"/>
+<text x="536.0110267839789" y="130.57033200580014" class="xs mono" text-anchor="middle">0.495°</text>
+<circle cx="560.29" cy="106.91" r="3.4" fill="#ec7a8c"/>
+<text x="560.2866538019948" y="96.91224848094721" class="xs mono" text-anchor="middle">0.919°</text>
+<circle cx="621.52" cy="89.77" r="3.4" fill="#ec7a8c"/>
+<text x="621.5169086961091" y="106.7670428512966" class="xs mono" text-anchor="middle">4.514°</text>
+<text x="104.0" y="272.0" class="xs mono" text-anchor="middle">2°</text>
+<text x="235.68546630262682" y="272.0" class="xs mono" text-anchor="middle">6°</text>
+<text x="401.8540239091444" y="272.0" class="xs mono" text-anchor="middle">24°</text>
+<text x="560.2866538019948" y="272.0" class="xs mono" text-anchor="middle">90°</text>
+<text x="656.0" y="272.0" class="xs mono" text-anchor="middle">200°</text>
+<text x="380.0" y="290.0" class="xs muted" text-anchor="middle">rotation between two keys, or between two poses</text>
+<text x="68.0" y="94.0" class="xs mono" text-anchor="end">1e+0</text>
+<text x="68.0" y="232.0" class="xs mono" text-anchor="end">1e−5</text>
+<text x="68.0" y="74.0" class="xs muted" text-anchor="end">nlerp lag</text>
+<rect x="76.0" y="300.0" width="12" height="9" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="0.8"/>
+<text x="94.0" y="310.0" class="xs muted" text-anchor="start">adjacent keys of a 30 Hz clip, at four limb speeds</text>
+<rect x="76.0" y="318.0" width="12" height="9" rx="2" fill="#ec7a8c" stroke="#ec7a8c" stroke-width="0.8"/>
+<text x="94.0" y="328.0" class="xs muted" text-anchor="start">arcs a cross-fade between two poses can reach</text>
+<text x="380.0" y="354.0" class="xs muted" text-anchor="middle">a limb turning at 720°/s moves 24° between keys and nlerp lags it by 0.0169° — three orders inside the threshold.</text>
+</svg>

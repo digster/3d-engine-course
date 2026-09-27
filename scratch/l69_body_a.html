@@ -1,0 +1,247 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-08-shadow-mapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.8 — Shadow Mapping: Bias, Acne, and PCF</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-10-mipmaps.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.10 — Mipmaps, LOD, and Anisotropic Filtering</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.9</div>
+    <h1>Cascaded Shadow Maps</h1>
+    <p class="deck">
+      Lesson 6.8 fitted one orthographic box around the whole scene and rendered one depth map into
+      it. That box has to contain the far field, so the near field — the part you are actually
+      looking at — gets whatever texels are left over. The fix is a change of question: the scene
+      is not what needs resolving, the <em>camera's frustum</em> is, and a frustum is mostly far
+      away. Split it by distance, fit a box around each slice, give each its own map. What makes
+      this a lesson rather than a loop is that a camera-fitted box <strong>moves</strong>, and
+      6.8's never did — so this lesson is mostly about two artefacts that only exist once it does,
+      and about auditing whether 6.8's bias was really a formula or a fudge with a good story.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>,
+          <a href="02-09-view-matrix.html">2.9 — The View Matrix</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="06-08-shadow-mapping.html">6.8 — Shadow Mapping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/cascade.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/cascade.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/shadow.hpp</code>,
+            <code>engine/src/gfx/shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_shadow.hpp</code>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_69.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Cascades in <strong>both renderers</strong>, with a stable grid derived rather than
+            tuned. 27 checks green; the reference render <strong>byte-identical</strong> for the
+            eighteenth lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the practical split scheme from the two schemes it blends, and say what
+          each end is right about.</li>
+      <li>…build a sub-frustum's eight world-space corners from a field of view, without a
+          matrix inverse you do not have.</li>
+      <li>…explain why a shadow box is fitted to a <em>sphere</em>, and measure what that
+          decision costs and what it buys.</li>
+      <li>…implement texel snapping, and say precisely which artefact it cures and which one
+          it does not.</li>
+      <li>…audit a derived formula by changing the quantity it was derived from — and read the
+          result when the answer is <em>"nothing had to change"</em>.</li>
+      <li>…recognise the cascade seam, and blend it away for the cost of one extra lookup
+          inside a band.</li>
+      <li>…say when cascades are the wrong tool, with a measurement rather than a feeling.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: one box, and where its texels go</a></li>
+      <li><a href="#intuition">Building intuition: resolve what you are looking at</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: one box, and where its texels go</h2>
+
+  <p>
+    Lesson 6.8 ended with shadows in both renderers and a bias derived from the sampling geometry
+    rather than tuned by hand. It also ended with a line in <code>shadow.hpp</code> naming what it
+    had not done, and this is the one we are here to fix:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>One cascade.</strong> A single map stretched over a whole outdoor scene gives the
+      near field far too few texels. Splitting the camera frustum into ranges and giving each its
+      own map is <em>cascaded</em> shadow mapping, and it is an extension of this file rather than
+      a replacement for it.
+    </p>
+  </blockquote>
+
+  <p>
+    Take that seriously as arithmetic. <code>fit_directional</code> squares a box around the whole
+    scene, so a 40-metre scene at 1024 texels gives
+  </p>
+
+  <div class="eq-plain">world_per_texel = 40 m ÷ 1024 ≈ 0.039 m</div>
+
+  <p>
+    — and it gives that <em>everywhere</em>. The rock forty metres away that covers nine pixels of
+    your screen gets 39-millimetre texels. So does the crate two metres from your eye that fills
+    half the frame. The crate needs perhaps a hundred times the density and gets exactly the same,
+    because the box was fitted to the thing that does not matter.
+  </p>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    You can see this without any new code. <code>gltf_view</code> takes a resolution, so starve it
+    deliberately — <a href="#run">§6</a> has the full command — and watch the shadow edge under a
+    nearby object turn into a staircase while the distant one looks fine. That is not a bug in
+    6.8's fit. The fit is doing exactly what it was asked: contain the scene. <strong>The question
+    was wrong.</strong>
+  </p>
+
+  <div class="callout">
+    <span class="label">What "resolution" means for a shadow, and why it is not the map's size</span>
+    <p>
+      It is tempting to answer this by making the map bigger. Doubling a 1024 map to 2048 costs
+      four times the memory and four times the depth-pass fill, and buys a factor of <em>two</em>
+      in <code>world_per_texel</code> — which the crate will spend in the first metre it moves
+      closer. The quantity that matters is not texels, it is <strong>texels per screen pixel</strong>,
+      and that is a ratio between the map's density and the camera's — so it is a fact about
+      <em>where the box is</em> at least as much as about how many texels are in it. Cascades
+      attack the numerator's placement. Raising the resolution attacks the denominator with money.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: resolve what you are looking at</h2>
+
+  <p>
+    Here is the whole idea in one sentence, and it is worth reading twice because everything
+    difficult in this lesson is a consequence of it rather than part of it:
+  </p>
+
+  <p class="lede">
+    <strong>Fit the light's box around a slice of the camera's frustum instead of around the
+    scene, and use several slices.</strong>
+  </p>
+
+  <p>
+    A frustum is a wedge. Near the eye it is small — a few metres across — and far away it is
+    enormous. If you cut it into four pieces by distance and fit a box around each piece
+    separately, the first box is small and its map is dense, and the last box is huge and its map
+    is coarse. Coarse is the right answer at forty metres: a texel out there already covers a
+    fraction of a screen pixel, and spending more on it would be spending it where nobody is
+    looking.
+  </p>
+
+  <p>
+    Notice what this costs before we go further, because it is not free and the lesson should not
+    pretend otherwise. Four cascades means <strong>four depth passes</strong>, four times the map
+    memory, and a shader that has to decide which map to read. The demo below reports 3.22 ms for
+    four cascades against 2.49 ms for one, on the same scene — so roughly 30% more time for
+    <em>four</em> times the passes, because the depth pass is dominated by fixed costs rather than
+    by triangles at this scale. Your scene will differ; measure it.
+  </p>
+
+  <h3>The three things that only exist once the box moves</h3>
+
+  <p>
+    6.8's box was fitted to the <em>scene</em>. Walk the camera around and the scene does not move,
+    so the box does not move, so the map's texel grid is nailed to the world and stays there. That
+    is why 6.8 could get away without a single line about stability, and it said so:
+    <em>"no texel snapping — the fit below depends on the SCENE's bounds and not the camera's, so
+    the grid does not move when the camera does."</em>
+  </p>
+
+  <p>
+    A camera-fitted box moves every frame. Three things follow, and together they are the lesson:
+  </p>
+
+  <ol>
+    <li>
+      <strong>A box that resizes makes every texel resize.</strong> Fit a box tightly to the eight
+      corners of a slice and then turn the camera on the spot: the corners rotate within the box,
+      so the box grows and shrinks — measured below at <strong>30.2%</strong> across a full turn.
+      Since <code>world_per_texel</code> is the box side over the resolution, every texel in the
+      map changes size while you merely looked around, and every shadow edge in the picture
+      breathes. The cure is to fit a <em>sphere</em>, which has no orientation.
+    </li>
+    <li>
+      <strong>A box that slides makes every edge crawl.</strong> Even with a fixed size, the box
+      translates as you walk, so its texel grid slides continuously under stationary geometry and
+      each shadow edge lands on a different texel every frame. The cure is to <em>snap</em> the box
+      to its own grid, so it advances in whole-texel jumps and lands where it landed last frame.
+    </li>
+    <li>
+      <strong>Two cascades meeting is a new artefact with a new name.</strong> They have different
+      texel grids and different biases, so they disagree along their shared distance, and that
+      disagreement draws a straight line across your picture. It is called the
+      <strong>seam</strong>, and the usual cure is to blend a band either side.
+    </li>
+  </ol>
+
+  <div class="callout warn">
+    <span class="label">The claim this lesson is really testing</span>
+    <p>
+      Lesson 6.8 spent its longest section deriving a bias from the sampling geometry — the
+      argument being that shadow acne is not a mystery but a sampling error with a computable
+      magnitude, and every term in that derivation was a multiple of <code>world_per_texel</code>.
+    </p>
+    <p>
+      Cascades change <code>world_per_texel</code>, by a factor of <strong>7.3</strong> across four
+      of them. So this lesson is an <em>audit</em>. If 6.8's derivation was real, cascades need no
+      new bias code at all — only their own <code>light_camera</code>. If it was a fudge with a
+      good story attached, this is where it falls over and starts needing a per-cascade constant
+      somebody tuned. <a href="#bias">§3.4</a> reports which of those happened, and the answer is
+      more interesting than either.
+    </p>
+  </div>

@@ -1,0 +1,41 @@
+<svg viewBox="0 0 720 300" role="img" aria-labelledby="f69a-t f69a-d">
+  <title id="f69a-t">One shadow map over a whole frustum</title>
+  <desc id="f69a-d">A camera frustum drawn on its side with a uniform texel grid over it. A near object and a far object receive the same number of texels, though the near one fills the screen and the far one covers a few pixels.</desc>
+  <defs>
+    <marker id="e-i-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f69a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One map, stretched over everything the camera can see</text>
+<path d="M 70 165 L 620 60 L 620 270 Z" class="fill-soft grid" fill-opacity="0.30" stroke-width="1.2"/>
+<text x="64" y="169" class="xs" text-anchor="end">eye</text>
+<line x1="70.0" y1="60" x2="70.0" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="104.375" y1="60" x2="104.375" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="138.75" y1="60" x2="138.75" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="173.125" y1="60" x2="173.125" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="207.5" y1="60" x2="207.5" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="241.875" y1="60" x2="241.875" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="276.25" y1="60" x2="276.25" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="310.625" y1="60" x2="310.625" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="345.0" y1="60" x2="345.0" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="379.375" y1="60" x2="379.375" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="413.75" y1="60" x2="413.75" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="448.125" y1="60" x2="448.125" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="482.5" y1="60" x2="482.5" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="516.875" y1="60" x2="516.875" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="551.25" y1="60" x2="551.25" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="585.625" y1="60" x2="585.625" y2="270" class="grid" stroke-width="0.6"/>
+<line x1="620.0" y1="60" x2="620.0" y2="270" class="grid" stroke-width="0.6"/>
+<text x="345.0" y="296" class="xs" text-anchor="middle">one box around the SCENE: every texel the same size, everywhere</text>
+<rect x="105" y="140" width="26" height="50" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="118" y="132" class="xs" text-anchor="middle">2 m</text>
+<rect x="545" y="152" width="26" height="26" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="558" y="145" class="xs" text-anchor="middle">40 m</text>
+<text x="118" y="214" class="xs" text-anchor="middle">fills half the screen</text>
+<text x="118" y="228" class="xs" text-anchor="middle">gets 2 texels</text>
+<text x="558" y="200" class="xs" text-anchor="middle">a few pixels</text>
+<text x="558" y="214" class="xs" text-anchor="middle">gets 2 texels</text>
+<text x="360.0" y="274" class="xs" text-anchor="middle">0.0548 m per texel at both ends — the near object is starved and the far one is over-served</text>
+</svg>

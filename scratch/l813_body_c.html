@@ -1,0 +1,260 @@
+  <h2 id="slopes">5. Slopes</h2>
+
+  <p>
+    A controller decides what a surface <em>is</em> from one number, its normal's height. A surface whose
+    normal is within <code>max_slope</code> of straight up is <strong>walkable</strong>, and anything
+    steeper is a <strong>wall</strong>, whatever it is made of:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{walkable}(n) \;\iff\; n_y \;\ge\; \cos\theta_{\max} \]</span>
+    <span class="eq-plain">walkable(n) if and only if n.y &gt;= cos(max_slope); the default max_slope is 45 degrees</span>
+  </div>
+
+  <p>
+    This is the split §1 could not make with friction. A walkable slope is walked at full speed and stood
+    on without sliding, and a steeper one cannot be climbed at all. The two regimes meet at one angle the
+    designer chose, 45° by default, instead of at <code>atan(μ)</code>. Everything in this section is the
+    two halves of that one decision.
+  </p>
+
+  <h3>Laying a step along the ground</h3>
+
+  <p>
+    The stick produces a horizontal step <code>d</code>. On a 30° ramp, the obvious thing is to slide it
+    along the ramp as §4 would slide it along a wall, <code>d&nbsp;−&nbsp;(d·n)n</code>. But that
+    projection keeps only <code>cos²α</code> of the horizontal speed, so a character walking at 3&nbsp;m/s
+    crosses the map at 2.25&nbsp;m/s up any 30° ramp. The controller instead wants the vector that has
+    <em>d's horizontal part</em> and lies in the ground plane. Add a vertical amount <code>λ</code> to
+    <code>d</code> and demand that the result be perpendicular to <code>n</code>:
+    <code>(d&nbsp;+&nbsp;λŷ)·n&nbsp;=&nbsp;0</code>, so <code>λ&nbsp;=&nbsp;−(d·n)/n_y</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \operatorname{along\_ground}(d,\,n) \;=\; d \;-\; \hat{y}\,\frac{d\cdot n}{n_y} \]</span>
+    <span class="eq-plain">along_ground(d, n) = d - y-hat (d . n)/n.y: d's horizontal part, and the rise that keeps it in the plane</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> At 3&nbsp;m/s and 60&nbsp;Hz, <code>d&nbsp;=&nbsp;(0.05,&nbsp;0)</code>
+    per step. A 30° ramp rising toward <code>+x</code> has <code>n&nbsp;=&nbsp;(−0.5,&nbsp;0.8660)</code>, so
+    <code>d·n&nbsp;=&nbsp;−0.025</code> and <code>λ&nbsp;=&nbsp;0.025/0.8660&nbsp;=&nbsp;0.028868</code>. The step
+    is <code>(0.05,&nbsp;0.028868)</code>: rise over run is exactly <code>tan&nbsp;30°&nbsp;=&nbsp;0.5774</code>,
+    and its length is <code>0.05/cos&nbsp;30°</code>, 3.4641&nbsp;m/s along the ramp. §D walks ramps of 10°
+    to 40° and reads <strong>3.0000&nbsp;m/s</strong> horizontally on every one, rising 0.1763, 0.3640,
+    0.5773 and 0.8391 per metre against their tangents. Keeping the speed along the slope instead, a
+    <em>Mario</em>-style slow-down, is a one-line change and just as legitimate. Both are design, and
+    neither is physics.
+  </p>
+
+  <p>
+    The sideways pass keeps laying the step along whatever walkable ground it meets: flat, then a
+    ramp's foot, then the ramp, then a crest. It re-lays after every wall it clips against too, because a
+    clip turns the horizontal direction and the rise must turn with it. Walls are clipped with their
+    normals <strong>flattened</strong>, their vertical part removed and renormalised, so that sliding along
+    something too steep to stand on can move a character sideways but never up.
+  </p>
+
+  <p>
+    That flattening turned out to matter less than it looks, and only in the air. On the ground, a slide
+    up a 50° face <em>is</em> generated, but re-laying the step along the floor throws its climb away:
+    pressed into the slope with and without flattening, the character's centre stays at its resting point
+    at the foot, <code>−0.145</code>, either way. In the air nothing re-lays the step. A character hopping
+    0.5&nbsp;m at a time into a 50° slope gets <strong>0.638&nbsp;m</strong> into it unflattened, against
+    0.257 flattened, the extra 0.38&nbsp;m being slides up the face (60°: 0.328 against 0.099).
+    <code>flatten_walls</code> is the fix for the one case the floor cannot catch.
+  </p>
+
+  @@FIG_SLOPE@@
+
+  <h3>Standing still</h3>
+
+  <p>
+    A grounded character still falls every step. The game zeroes its vertical velocity on landing, adds
+    one step of gravity (<code>−g·h</code>), and hands the controller a drop of <code>g·h²</code>,
+    2.7&nbsp;mm at 60&nbsp;Hz, which the vertical pass stops on the ground. The mistake is to <em>slide</em>
+    that drop along the ground the way §4 slides a sideways move along a wall. A drop of <code>g·h²</code>
+    slid along a slope of angle <code>α</code> has a downhill part <code>g·h²·sin&nbsp;α</code>, every step,
+    so a character told to stand still creeps downhill at
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v_{\text{creep}} \;=\; g\,h\,\sin\alpha \]</span>
+    <span class="eq-plain">creep speed = g h sin(alpha): 8.2 cm/s on a 30-degree slope at 60 Hz</span>
+  </div>
+
+  <p>
+    — 8.18&nbsp;cm/s on 30°, five metres a minute. §D measures it by turning <code>stop_on_ground</code>
+    off: 0.028389, 0.055916, 0.081746 and 0.105092&nbsp;m/s on 10°, 20°, 30° and 40°, against predictions of
+    0.028391, 0.055920, 0.081750 and 0.105096. With it on, all four stand at 0.000000. That is why the
+    vertical pass is separate from the sideways one. A floor stops a fall, and sliding is for walls.
+  </p>
+
+  <p>
+    <strong>Too steep to stand on.</strong> On a surface that is not walkable, the vertical pass does slide
+    the fall along it. That is the intent: a character on a 60° slope should slide off it. And the
+    projection turns out to <em>be</em> the physics. The game's vertical speed grows as <code>g·t</code>
+    while the character is airborne, and a fall of <code>v_y·h</code> slid along the slope moves it
+    <code>|v_y|·h·sin&nbsp;α</code> along the slope, so its speed along the slope is
+    <code>g·t·sin&nbsp;α</code>. That is the frictionless incline, with no force anywhere in the code. After
+    half a second on 60° the harness reads 4.3897&nbsp;m/s against <code>g·t·sin&nbsp;α&nbsp;=&nbsp;4.3895</code>.
+  </p>
+
+  <h2 id="ground">6. Ground, and the round bottom</h2>
+
+  <p>
+    After every move, the controller looks down. It casts two skins' width below where it stands; if that
+    finds walkable ground, the character is <strong>grounded</strong>. It keeps the ground's normal, its
+    contact point and its body index, which the carry (§10) and the next step's
+    <code>along_ground</code> both read. It is one more cast, and it is where the capsule's shape starts to
+    matter.
+  </p>
+
+  <p>
+    A capsule has a <em>round bottom</em>. When it meets an edge, a curb or the lip of a stair, the contact
+    normal is not the normal of any surface in the level. It is the direction from the edge to the centre
+    of the capsule's bottom sphere, and it tilts as the capsule moves. Figure&nbsp;7 draws the three
+    consequences, and all three come from one right triangle whose hypotenuse is
+    <code>r&nbsp;+&nbsp;skin</code>, the radius the casts actually see, because every cast stops a skin
+    short.
+  </p>
+
+  <p>
+    <strong>A free curb.</strong> Walk into a curb of height <code>s</code>. The bottom sphere's centre is
+    <code>r&nbsp;+&nbsp;skin</code> above the floor, and it meets the curb's edge <code>s</code> up, so the
+    contact normal has <code>n_y&nbsp;=&nbsp;(r&nbsp;+&nbsp;skin&nbsp;−&nbsp;s)/(r&nbsp;+&nbsp;skin)</code>. While that
+    is walkable the edge <em>is</em> ground, a little ramp, and the sideways pass lays the step along it
+    and rolls the capsule up and over with no step-up at all:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ s_{\text{free}} \;=\; (r + \text{skin})\,(1 - \cos\theta_{\max}) \]</span>
+    <span class="eq-plain">the tallest curb climbed with no step-up = (r + skin)(1 - cos max_slope) = 0.31 x 0.2929 = 90.8 mm</span>
+  </div>
+
+  <p>
+    With <code>r&nbsp;=&nbsp;0.3</code>, a centimetre of skin and 45°, that is
+    <code>0.31&nbsp;×&nbsp;0.29289&nbsp;=&nbsp;90.80&nbsp;mm</code>. §E turns the step-up off and bisects the
+    tallest curb the character walks onto: <strong>91.83&nbsp;mm</strong>.
+  </p>
+
+  <p>
+    <strong>An overhang.</strong> Walk off an edge slowly. Once the sphere's centre is past it, the only
+    thing under the capsule is the edge, and the normal tilts by <code>asin(x/(r&nbsp;+&nbsp;skin))</code> with
+    the overhang <code>x</code>. The character stays grounded until that tilt passes 45°, at
+    <code>x&nbsp;=&nbsp;(r&nbsp;+&nbsp;skin)·sin&nbsp;θ&nbsp;=&nbsp;219.20&nbsp;mm</code>: nearly a quarter of a
+    metre of standing on nothing, which a player sees and which §7 has to handle. Placed on the edge and
+    bisected, the harness reads 219.79&nbsp;mm. Walking off at 5&nbsp;mm a step, it loses the ground at
+    215.0&nbsp;mm, which is the same number rounded to the step.
+  </p>
+
+  <p>
+    <strong>The normal it reports.</strong> Figure&nbsp;7's right panel sets six overhangs and reads the
+    tilt of the cast's normal against the arcsine. They agree to within <strong>0.189°</strong>, and that
+    residue is GJK's. A curved shape against an edge a centimetre away is exactly where 8.5's GJK stalls,
+    and its direction is then good to about 0.2°. At the 45° threshold, 0.2° moves the free curb by
+    <code>0.219&nbsp;×&nbsp;0.0035</code>&nbsp;≈&nbsp;0.8&nbsp;mm, which is the millimetre between 91.83 and
+    90.80.
+  </p>
+
+  @@FIG_EDGE@@
+
+  <p>
+    <strong>A tighter tolerance is not the fix, and the reason is the size of the level.</strong> The
+    natural response to "GJK's answer is loose at a centimetre" is to tighten GJK. §E4 does, to
+    <code>10⁻⁷</code>, and nothing changes in the fourth decimal, because GJK is stopping on float rounding
+    long before its tolerance matters. What <em>does</em> change the answer is the size of the obstacle.
+    §3's cast steps from the width of a slab along GJK's direction. If that direction is off by a small
+    angle ε, the slab's far face is set by the obstacle's farthest corner, and the bound is short by about
+    the obstacle's <em>size</em> times ε. Walking down a 30° ramp and landing by a vertical cast every step,
+    the character stands <strong>10.00–10.07&nbsp;mm</strong> from a ramp 6&nbsp;m long and
+    <strong>10.02–12.32&nbsp;mm</strong> from one 60&nbsp;m long, at either tolerance. That is 8.4 §11's
+    finding for a third time. There the scale that spoiled an answer was the distance to the world's
+    origin, in 8.5 it was the size of the shapes relative to the gap, and here it is the size of the level
+    geometry. Author collision geometry in pieces of sensible size, and the controller is precise to a
+    tenth of a millimetre.
+  </p>
+
+  <h2 id="snap">7. Snapping to the ground</h2>
+
+  <p>
+    A character walking down anything that is not flat is continually walking off the ground. Every step
+    the ground drops away, and the only question is whether the controller finds it again before the
+    player sees a bounce. There are three ways the ground drops, and they fail at different speeds.
+  </p>
+
+  <p>
+    <strong>A uniform slope.</strong> Move the character horizontally and let gravity bring it down, the way
+    a controller without <code>along_ground</code> does. In one step the slope drops
+    <code>v·h·tan&nbsp;α</code>. The character drops <code>g·h²</code> in the vertical pass, and the ground
+    probe reaches two skins further. It stays grounded only while the probe can still find the slope:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v \;\le\; \frac{g\,h^2 + 2\,\text{skin}}{h\,\tan\alpha} \]</span>
+    <span class="eq-plain">it stays on a uniform slope while v &lt;= (g h^2 + 2 skin)/(h tan alpha): 2.3617 m/s on 30 degrees at 60 Hz</span>
+  </div>
+
+  <p>
+    That is 2.3617&nbsp;m/s on 30° at 60&nbsp;Hz. With no probe it would be <code>g·h/tan&nbsp;α</code>,
+    <strong>28&nbsp;cm/s</strong>, which is slower than a walk. §F bisects the speed at which the character
+    first leaves the slope: <strong>2.3561&nbsp;m/s</strong> on a ramp 8&nbsp;m long. On a 60&nbsp;m ramp it
+    leaves at 2.2537, 4.6% early, because §6's looser certificate stands the character up to 2.3&nbsp;mm
+    higher and that comes out of the probe's reach. Above the onset it spends most of every second in the
+    air, 57 frames of 60 at 3&nbsp;m/s. Laying the step along the ground fixes a uniform slope completely:
+    at every speed tested, up to 6&nbsp;m/s, zero frames in the air.
+  </p>
+
+  <p>
+    <strong>A crest.</strong> Where the flat meets a downhill, the step was laid along the flat, and past the
+    edge there is nothing under it. It turns out the round bottom rolls over a crest for free, up to a
+    point. The first step past the edge carries the sphere's centre <code>v·h</code> beyond it, and it only
+    has to drop <code>(r+s)&nbsp;−&nbsp;√((r+s)²&nbsp;−&nbsp;(v·h)²)</code> to rest on the edge again, with a
+    walkable tilt. While that drop is within the probe's reach the character never leaves the ground:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v\,h \;\le\; \sqrt{(r+s)^2 - (r + s - \text{reach})^2} \;=\; 0.1165\ \text{m} \]</span>
+    <span class="eq-plain">it rolls over a crest while v h &lt;= sqrt((r+s)^2 - (r+s-reach)^2) = 0.1165 m, v &lt; 6.99 m/s</span>
+  </div>
+
+  <p>
+    which is below <strong>6.99&nbsp;m/s</strong>. The section was written to show a crest launching the
+    character like a projectile at a jog. It did not: at 3 and 6&nbsp;m/s, with no snap at all, zero
+    frames in the air. At 7.5, 10 and 14&nbsp;m/s it does fly: 0.833, 1.133 and 1.617&nbsp;s against a
+    projectile's <code>2v·tan&nbsp;α/g</code> of 0.883, 1.177 and 1.648. Each flight is a step or three short,
+    because the character leaves the edge a step past the crest, where the slope is already below it.
+  </p>
+
+  <p>
+    <strong>A stair, going down.</strong> This is the case the snap was designed for, and the round bottom
+    makes it harder. Walk off a stair's edge and, for the first 219&nbsp;mm of overhang, the capsule is
+    still standing on that edge (§6). After that it is resting on it, <em>not</em> grounded, with a contact
+    normal too steep to stand on. A snap that simply casts down finds the edge first, at
+    <code>t&nbsp;=&nbsp;0</code>, and gives up. So the snap <strong>rolls off</strong> first: sideways, away
+    from the edge, by exactly <code>(r&nbsp;+&nbsp;s)&nbsp;−&nbsp;overhang</code>, which is less than
+    <code>(r&nbsp;+&nbsp;s)(1&nbsp;−&nbsp;sin&nbsp;θ)&nbsp;=&nbsp;90.8&nbsp;mm</code> whenever the edge was too steep to
+    stand on. Then it casts straight down.
+  </p>
+
+  <p>
+    The first draft slid down the edge's tangent plane instead. That rolls off too, but a straight slide
+    along a tangent overshoots a round edge badly: the character lurched 175&nbsp;mm forward on some steps.
+    Rolled off by the exact amount, eight 18&nbsp;cm stairs are walked down at 2&nbsp;m/s in nine snaps, with
+    zero frames in the air, and the worst extra forward movement in one step is 77.7&nbsp;mm. Without the
+    snap the same staircase is eight small falls, 54 frames in the air. The same 90.8&nbsp;mm reappears in
+    §8, going up.
+  </p>
+
+  @@FIG_SNAP@@
+
+  <p>
+    <strong>A snap is also a decision about ledges.</strong> <code>snap_distance</code> is how far down the
+    controller will look for ground, and so it is also the height of the drop a character is pulled down
+    in one step rather than falling. It defaults to 0.35&nbsp;m. Walking off a 0.30&nbsp;m ledge, the
+    character never leaves the ground (the largest single snap is 0.196&nbsp;m, the rest taken by the roll
+    and the next step); off a 0.50&nbsp;m one it falls for 16 frames. That is the right behaviour for
+    stairs and kerbs, and a visible jerk for anything designed as a drop. Set it from the tallest stair
+    the level has, not from a tolerance. The snap never runs while the character is rising, so a jump is
+    never pulled back down.
+  </p>

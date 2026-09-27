@@ -1,0 +1,52 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l83f8-t l83f8-d">
+  <title id="l83f8-t">The momentum sphere, the energy ellipsoid, and the curve where omega lives</title>
+  <desc id="l83f8-d">A torque-free rigid body conserves two quantities, drawn here as a sphere and an ellipsoid; the angular velocity is confined to the curve where they intersect. Because both quantities are linear in the squared components, the extremes of the angular speed occur where one component vanishes, which makes the reachable range a derivation rather than an observation. The predicted range and the measured one agree to three decimals.</desc>
+  <defs>
+    <marker id="e-i-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blue-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amber-l83f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="40" y="74" width="340" height="240" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="40" y="58" class="xs muted" text-anchor="start">the two conserved quantities, and the curve where they meet</text>
+<circle cx="210.0" cy="194.0" r="86" fill="none" stroke="#ebc860" stroke-width="2.0"/>
+<text x="210.0" y="98" class="xs mono" text-anchor="middle">|L|² = const — a sphere</text>
+<ellipse cx="210.0" cy="194.0" rx="112" ry="62" fill="none" stroke="#9b7ede" stroke-width="2.0" stroke-dasharray="6 4"/>
+<text x="210.0" y="302" class="xs mono" text-anchor="middle">2T = ΣLᵢ²/Iᵢ — an ellipsoid</text>
+<path d="M 151.25,132.90 L 149.47,135.14 L 147.76,137.51 L 146.12,139.98 L 144.57,142.57 L 143.09,145.26 L 141.70,148.05 L 140.40,150.93 L 139.18,153.90 L 138.05,156.95 L 137.02,160.07 L 136.07,163.27 L 135.23,166.52 L 134.47,169.83 L 133.82,173.19 L 133.27,176.60 L 132.81,180.04 L 132.46,183.50 L 132.20,186.99 L 132.05,190.49 L 132.00,194.00 L 132.05,197.51 L 132.20,201.01 L 132.46,204.50 L 132.81,207.96 L 133.27,211.40 L 133.82,214.81 L 134.47,218.17 L 135.23,221.48 L 136.07,224.73 L 137.02,227.93 L 138.05,231.05 L 139.18,234.10 L 140.40,237.07 L 141.70,239.95 L 143.09,242.74 L 144.57,245.43 L 146.12,248.02 L 147.76,250.49 L 149.47,252.86 L 151.25,255.10" fill="none" stroke="#5ac878" stroke-width="2.6"/>
+<path d="M 268.75,132.90 L 270.53,135.14 L 272.24,137.51 L 273.88,139.98 L 275.43,142.57 L 276.91,145.26 L 278.30,148.05 L 279.60,150.93 L 280.82,153.90 L 281.95,156.95 L 282.98,160.07 L 283.93,163.27 L 284.77,166.52 L 285.53,169.83 L 286.18,173.19 L 286.73,176.60 L 287.19,180.04 L 287.54,183.50 L 287.80,186.99 L 287.95,190.49 L 288.00,194.00 L 287.95,197.51 L 287.80,201.01 L 287.54,204.50 L 287.19,207.96 L 286.73,211.40 L 286.18,214.81 L 285.53,218.17 L 284.77,221.48 L 283.93,224.73 L 282.98,227.93 L 281.95,231.05 L 280.82,234.10 L 279.60,237.07 L 278.30,239.95 L 276.91,242.74 L 275.43,245.43 L 273.88,248.02 L 272.24,250.49 L 270.53,252.86 L 268.75,255.10" fill="none" stroke="#5ac878" stroke-width="2.6"/>
+<text x="210.0" y="198.0" class="xs t-hi" text-anchor="middle">ω lives HERE</text>
+<text x="430" y="58" class="xs muted" text-anchor="start">…so the reachable range of |ω| is a DERIVATION, not a guess</text>
+<text x="430" y="86" class="xs muted" text-anchor="start">where one component vanishes</text>
+<text x="734" y="86" class="xs muted" text-anchor="end">|ω|</text>
+<text x="864" y="86" class="xs muted" text-anchor="end"></text>
+<line x1="430" y1="94.0" x2="870" y2="94.0" class="grid" stroke-width="1.0"/>
+<text x="430" y="111.0" class="xs" text-anchor="start">Lx = 0</text>
+<text x="734" y="111.0" class="xs mono" text-anchor="end">infeasible</text>
+<text x="864" y="111.0" class="xs mono" text-anchor="end"></text>
+<text x="430" y="128.0" class="xs" text-anchor="start">Ly = 0</text>
+<text x="734" y="128.0" class="xs mono" text-anchor="end">4.4880</text>
+<text x="864" y="128.0" class="xs mono" text-anchor="end">the maximum</text>
+<text x="430" y="145.0" class="xs" text-anchor="start">Lz = 0</text>
+<text x="734" y="145.0" class="xs mono" text-anchor="end">4.0524</text>
+<text x="864" y="145.0" class="xs mono" text-anchor="end">the minimum</text>
+<text x="430" y="193.5" class="xs muted" text-anchor="start"></text>
+<text x="864" y="193.5" class="xs muted" text-anchor="end">range of |ω|</text>
+<line x1="430" y1="201.5" x2="870" y2="201.5" class="grid" stroke-width="1.0"/>
+<text x="430" y="218.5" class="xs" text-anchor="start">predicted</text>
+<text x="864" y="218.5" class="xs mono" text-anchor="end">4.0524 … 4.4880</text>
+<text x="430" y="235.5" class="xs" text-anchor="start">measured, 60 s at 60 Hz</text>
+<text x="864" y="235.5" class="xs mono" text-anchor="end">4.0527 … 4.4924</text>
+<text x="430" y="270.0" class="xs muted" text-anchor="start">Write uᵢ = Lᵢ² and BOTH conserved quantities are linear</text>
+<text x="430" y="286.0" class="xs muted" text-anchor="start">in u. So the reachable set is a segment, |ω|² = Σuᵢ/Iᵢ² is</text>
+<text x="430" y="302.0" class="xs muted" text-anchor="start">linear on it, and a linear function on a segment takes its</text>
+<text x="430" y="318.0" class="xs muted" text-anchor="start">extremes at the ENDS — where one uᵢ reaches zero.</text>
+<text x="430" y="334.0" class="xs muted" text-anchor="start"></text>
+<text x="430" y="350.0" class="xs t-hi" text-anchor="start">A swing of 10.85% with nothing acting on the body.</text>
+<text x="430" y="366.0" class="xs t-hi" text-anchor="start">L is the conserved quantity. ω is not.</text>
+</svg>

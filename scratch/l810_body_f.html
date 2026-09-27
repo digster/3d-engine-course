@@ -1,0 +1,621 @@
+  <h2 id="budget">13. The budget</h2>
+
+  <p>
+    A settled yard: one floor, a hundred crates in twenty towers, a hundred manifolds and four
+    hundred contact points, with sleeping switched off so that every stage is paid for. Minima
+    over 200 repetitions with five discarded.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§J — the three stages</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     broadphase                17.208 us
+     narrow phase              49.792 us
+     solve (8 vel + 3 pos)    135.000 us
+     total                    202.000 us of a 16667 us frame (1.21%)</code></pre>
+  </div>
+
+  <p>
+    The solve is two thirds of the contact work at this size, which is a reversal of 8.8's frame
+    — there the narrow phase dominated, because there was no solve. Where the solve's time goes is
+    then a straight-line fit, and the measurement is only meaningful if every row runs from the
+    <em>same</em> state:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§J — restored from one snapshot for every row</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     vel iters   pos iters    solve us
+             0           0      14.958
+             1           0      27.958
+             2           0      40.833
+             4           0      66.708
+             8           0     118.292
+            16           0     221.500
+             8           1     123.916
+             8           3     136.000
+             8           6     153.958
+
+     fixed cost (islands, sleep, prepare, warm start, write-back): 14.958 us
+     one velocity iteration over 100 manifolds: 12.917 us
+     one position iteration:                     5.903 us  (46% of a velocity one)</code></pre>
+  </div>
+
+  <p class="worked">
+    <strong>Worked: reading a cost model off a table.</strong> Zero iterations cost 14.958&nbsp;µs,
+    which is everything that is not the loop — the union–find, the counting sort, the sleep pass,
+    a hundred <code>prepare_contacts</code> calls, the warm start and the write-back. From there
+    each velocity iteration adds <code>(118.292 − 14.958)/8 = 12.917 µs</code>, and the 16-row
+    predicts <code>14.958 + 16 × 12.917 = 221.6</code> against a measured 221.500. Three figures.
+    A cost model that predicts a row it was not fitted to is a cost model with no surprises in it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The first version of that table was nonsense and the reason is worth keeping.</strong>
+      It changed the iteration count on a <em>running</em> scene, so the zero-iteration row dropped
+      the whole yard through the floor and then measured the "cost" of a scene with no contacts
+      left in it — which came out faster than eight. A timing sweep over a parameter that changes
+      the simulation has to restore the simulation. And the snapshot has to include the manifold
+      cache, because warm starting is precisely the feature that makes a step depend on more than
+      its bodies.
+    </p>
+  </div>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    At 8.8's scale — 2,001 bodies, 2,619 manifolds, 8,806 contact points — the whole contact
+    pipeline is <strong>4.35&nbsp;ms of a 16.67&nbsp;ms frame</strong>, 26% of the budget, of which
+    the solve is 71%. With sleeping on and the pile settled it is <strong>1.32&nbsp;ms</strong>:
+    3.3× better, and the residue is the broadphase and narrow phase, which sleeping does not touch.
+  </p>
+
+  <p>
+    Which puts the iteration count in its place. A velocity iteration over a hundred manifolds is
+    12.9&nbsp;µs, so 60&nbsp;Hz would afford more than a thousand of them on that scene. Eight is
+    not a performance decision at these sizes. What decides it is the next section.
+  </p>
+
+  <h2 id="leaves">14. What this solver leaves behind</h2>
+
+  <p>
+    Three limitations, and they are the same limitation.
+  </p>
+
+  <h3>How tall a stack this actually holds</h3>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — sweeps needed for a tower of n to stand for 20 s (sleeping off)</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     crates    minimum velocity iterations    drift at that count mm
+          2                               2                      3.13
+          3                               2                     20.17
+          5                               4                    105.86
+         10                              20                    402.15
+         15                    more than 64                         -
+         20                    more than 64                         -</code></pre>
+  </div>
+
+  <p>
+    <strong>The shipped default is eight, which holds five crates and does not hold ten.</strong>
+    An under-swept tower does not sag — it <em>leans</em>, because the corrections arrive
+    inconsistently and the inconsistency has a direction, and once it has leaned far enough it goes
+    over. §13 measured the cost as linear in the iteration count and this table says the count
+    needed grows faster than the height, so a tall stack is quadratic and a scene costs what its
+    tallest pile costs.
+  </p>
+
+  <p>
+    Sleeping rescues the short ones, which is not something the solver can take credit for — it
+    stops the drift by stopping the simulation, and only if the pile settles before it leans. A
+    five-crate tower drifts 100&nbsp;mm in twenty seconds awake and 16&nbsp;mm with sleeping on
+    (asleep at 1.07&nbsp;s). A ten-crate tower is still leaning at 6.83&nbsp;s when it falls
+    asleep, and sleeping saves nothing.
+  </p>
+
+  <h3>Mass ratios</h3>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — a heavy crate on a light one, eight sweeps, no position correction, 10 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     ratio     light crate squashed mm    residual m/s
+           1                     1.6860      3.5557e-09
+          10                    51.3249      4.7792e-07
+         100                   385.6325      3.1571e-09
+        1000                   476.6946      1.7610e-10</code></pre>
+  </div>
+
+  <p>
+    A thousand-to-one ratio squashes the light crate 283 times further at the same iteration count.
+    The impulse the heavy body needs is a thousand times larger and Gauss–Seidel gets there one
+    sweep at a time. (The position correction hides most of this in practice, which is the third
+    reason it is on by default — but hiding it is not fixing it.)
+  </p>
+
+  <h3>What all three have in common</h3>
+
+  <p>
+    A Gauss–Seidel sweep carries information across <em>one contact</em>. A chain of <em>n</em>
+    contacts therefore needs of order <em>n</em> sweeps before its bottom knows what its top is
+    doing, and a large mass ratio makes the error at each link larger. More iterations buy that
+    linearly and nothing else does.
+  </p>
+
+  <p>
+    What fixes it is not more iterations. It is to stop treating each contact as an independent
+    scalar and write the constraint as a <strong>Jacobian</strong> over the pair — a row that says
+    which combination of both bodies' twelve velocity components the constraint cares about — at
+    which point a contact is one kind of constraint among several, and solving a set of them
+    jointly becomes a thing you can talk about. That is also, exactly, what a hinge needs. It is
+    Lesson 8.11, and it is the reason this solver was written the way it was: <code>solve_positions</code>
+    already takes no bodies, only a batch and two velocities, because the solver never needed to
+    know what it was constraining.
+  </p>
+
+  <h3>And three things named rather than fixed</h3>
+
+  <ul>
+    <li>
+      <strong>No block solver.</strong> Box2D solves a two-point manifold as a 2×2 LCP precisely
+      because a flat contact solved sequentially is what makes boxes wobble. A 3D four-point
+      manifold would want a 4×4, and nobody ships that. It would attack §14's first table directly.
+    </li>
+    <li>
+      <strong>No relaxation pass.</strong> Solvers that use Baumgarte often add a second velocity
+      pass with the bias disabled, to remove the energy the bias added. This engine does not need
+      one, because split impulse never adds any — which is one more argument for the default.
+    </li>
+    <li>
+      <strong>No speculative contacts.</strong> §6's arrival depth exists because
+      <code>collide_manifold</code> reports nothing until the shapes actually overlap. A
+      speculative contact is generated <em>before</em> they touch, with a positive separation, and
+      the solver caps the approach speed at <code>separation/h</code> so the body stops exactly at
+      the surface, adding no energy and needing no correction for the arrival case. It needs the
+      narrow phase to report separated pairs, which is a change to 8.7's contract rather than to
+      this file. <code>manifold_config::keep_slop</code> and
+      <code>broadphase_config::margin</code> are the two knobs it would use, and both already
+      exist.
+    </li>
+  </ul>
+
+  <h2 id="listings">15. Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/solver.hpp</code></td><td>modified</td>
+          <td>The position corrections, the pseudo velocity, <code>contact_pair</code>,
+              <code>island</code>, <code>sleep_config</code>, <code>contact_solver</code>, and two
+              new closed forms. 8.9's half is unchanged except where a default moved.</td></tr>
+      <tr><td><code>engine/src/phys/solver.cpp</code></td><td>modified</td>
+          <td>The bias, the position solve, the union–find, the sleep pass, and the loop.</td></tr>
+      <tr><td><code>engine/include/engine/phys/rigid_body.hpp</code></td><td>modified</td>
+          <td>Three sleep fields on <code>rigid_body</code>, <code>wake</code>,
+              <code>is_sleep_candidate</code>, <code>step_report::sleeping</code>, and the two
+              halves of <code>step</code>.</td></tr>
+      <tr><td><code>engine/src/phys/rigid_body.cpp</code></td><td>modified</td>
+          <td>The split, checked bit-for-bit in §11 against the function it replaced.</td></tr>
+      <tr><td><code>engine/include/engine/phys/manifold.hpp</code></td><td>modified</td>
+          <td>One field: the tangent basis the cached friction impulses were measured in.
+              §4.</td></tr>
+      <tr><td><code>engine/src/phys/manifold.cpp</code></td><td>modified</td>
+          <td>Two lines in <code>carry_impulses</code> — the basis travels with the
+              impulses.</td></tr>
+      <tr><td><code>demos/stack/main.cpp</code></td><td>new</td>
+          <td>Four scenes, island colours, sleeping drawn as dimming, and a budget bar.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>One executable.</td></tr>
+      <tr><td><code>scratch/verify_810.cpp</code></td><td>new</td>
+          <td>Eleven measured sections, 64 checks, every one with a control.</td></tr>
+      <tr><td><code>scratch/build_verify_810.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, and refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>engine/CMakeLists.txt</code> and <code>engine/include/engine/engine.hpp</code> are
+    <em>not</em> in that list, for the first time in Module 8: this lesson adds no translation unit
+    and no public header, only code inside files that already exist. That is worth a sentence
+    because it is what the shape of a module looks like when it stops growing outward and starts
+    growing denser.
+  </p>
+
+  @@LISTING:engine/include/engine/phys/solver.hpp@@
+
+  @@LISTING:engine/src/phys/solver.cpp@@
+
+  @@LISTING:engine/include/engine/phys/rigid_body.hpp@@
+
+  @@LISTING:engine/src/phys/rigid_body.cpp@@
+
+  @@LISTING:engine/include/engine/phys/manifold.hpp@@
+
+  @@LISTING:engine/src/phys/manifold.cpp@@
+
+  @@LISTING:demos/stack/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_810.cpp@@
+
+  @@LISTING:scratch/build_verify_810.sh@@
+
+  <h2 id="build">16. Build &amp; run</h2>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target stack -j
+./build/demos/stack</code></pre>
+  </div>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug --target stack
+.\build\demos\Debug\stack.exe</code></pre>
+  </div>
+
+  <p>
+    And the harness, which needs an optimised library — the script refuses to run against one
+    without a <code>CMAKE_BUILD_TYPE</code>, for the reason 7.6 measured at 18×:
+  </p>
+
+  <div class="listing shell">
+    <figcaption><span class="path">the measurements</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_810.sh
+sh scratch/build_verify_810.sh --only=h    # one section</code></pre>
+  </div>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on a ten-crate tower that is standing. Watch it for eight seconds and it
+    <em>leans</em> — slowly at first, then not slowly — and goes over. Hold <kbd>Right</kbd> until
+    the panel reads twenty iterations, press <kbd>R</kbd>, and it stands for as long as you care to
+    watch. That is §14's first table, live.
+  </p>
+
+  <p>
+    Press <kbd>2</kbd>. Twelve towers in twelve colours, because a fixed body is not a bridge; they
+    settle in about a second and a half and the colours dim as each island falls asleep, the panel
+    counting them off. Press <kbd>B</kbd> and the yard turns one colour: that is the island bug,
+    and the labels are recomputed without changing the physics so that what you are looking at is
+    the partition rather than a different simulation. Press <kbd>X</kbd> to throw a crate in from
+    the left, and watch exactly one tower wake up.
+  </p>
+
+  <p>
+    Press <kbd>3</kbd> for a crate spawned 200&nbsp;mm inside the floor, with the surface drawn as
+    a dashed line. Under split impulse it rises to the line and stops. Press <kbd>C</kbd> for
+    Baumgarte and press <kbd>R</kbd>: it is thrown ninety-nine millimetres clear.
+  </p>
+
+  <p>
+    The harness prints eleven sections and ends with <code>PASS: 64 checks, 0 failures</code>.
+    Every number in this lesson is in that output; the run takes about nine seconds.
+  </p>
+
+  <h2 id="pitfalls">17. Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>Nothing ever sleeps, at any threshold.</dt>
+    <dd>
+      <strong>Symptom:</strong> the sleep counter stays at zero on a scene that is visibly
+      motionless, and lowering the threshold does not help — it makes it worse.<br>
+      <strong>Cause:</strong> the sleep test is reading the velocity <em>before</em> the contact
+      solve. Every dynamic body is then travelling at <code>g·h</code> = 0.1635&nbsp;m/s at
+      60&nbsp;Hz, which is above any sane threshold.<br>
+      <strong>Fix:</strong> move the test to the end of the step. To confirm the diagnosis before
+      you move anything, print the fastest dynamic body's speed at both points: §10 measures 0.1836
+      before and 0.0629 after on the same frame.
+    </dd>
+
+    <dt>A crate hangs in the air after the thing under it is knocked away.</dt>
+    <dd>
+      <strong>Symptom:</strong> the support is destroyed or knocked out and the body above it stays
+      exactly where it was, indefinitely.<br>
+      <strong>Cause:</strong> sleeping is being decided per body rather than per island. A sleeping
+      body is an immovable body to everything else, and nothing woke it.<br>
+      <strong>Fix:</strong> the island rule — an island is asleep only when every one of its bodies
+      is, and any awake member wakes all of them. If the support was removed without a collision
+      (a teleport, a delete, a velocity assignment), no graph can see it and you must call
+      <code>wake</code> on the neighbours yourself.
+    </dd>
+
+    <dt>A whole level stays awake because of one rolling marble.</dt>
+    <dd>
+      <strong>Symptom:</strong> the island count is 1 on a scene with obviously separate piles, and
+      the sleep counter never rises.<br>
+      <strong>Cause:</strong> the union–find is joining bodies through the floor. A contact is an
+      edge only when <em>both</em> ends can move.<br>
+      <strong>Fix:</strong> skip the union when either body is fixed or kinematic. Print the island
+      count on a scene of separated towers — it should equal the number of towers, and §9 measures
+      20 against 1 on the same contacts.
+    </dd>
+
+    <dt>A stack slowly shears sideways and then falls over.</dt>
+    <dd>
+      <strong>Symptom:</strong> each crate is offset a little further than the one below it, the
+      offset grows, and the tower goes over after several seconds. Friction looks like it is not
+      working.<br>
+      <strong>Cause:</strong> two candidates, and they are distinguishable. Either the cached
+      friction impulses are being applied in a different tangent basis from the one they were
+      measured in (§4), or the tower simply needs more sweeps than it is getting (§14).<br>
+      <strong>Fix:</strong> tell them apart before fixing either. Compute
+      <code>tangent_basis</code> in a probe each frame and count how often <code>t1</code> moves by
+      more than thirty degrees; if that number is not tiny, store the basis. Then sweep the
+      iteration count: if the tower stands at 20 and falls at 8, it is the chain length and no
+      amount of anything else will fix it.
+    </dd>
+
+    <dt>A body pops off the floor when the scene loads.</dt>
+    <dd>
+      <strong>Symptom:</strong> objects placed slightly inside geometry jump into the air on the
+      first frame.<br>
+      <strong>Cause:</strong> Baumgarte, with a starting overlap deep enough for the push to beat
+      the climb. §7 measures the threshold at 200&nbsp;mm for a half-metre crate.<br>
+      <strong>Fix:</strong> <code>position_correction::split_impulse</code>, which is the default;
+      and keep <code>max_correction_speed</code> clamped, because a body spawned a metre inside a
+      wall is otherwise told to leave at 12&nbsp;m/s.
+    </dd>
+
+    <dt>A stack breathes: everything jitters by a millimetre at 60 Hz.</dt>
+    <dd>
+      <strong>Symptom:</strong> a settled pile visibly shimmers, and <code>stats.points</code>
+      oscillates.<br>
+      <strong>Cause:</strong> <code>penetration_slop</code> is zero or nearly so, and the contacts
+      are competing for a separation none of them can have.<br>
+      <strong>Fix:</strong> 2&nbsp;mm was enough to stop it completely in §8 and 5&nbsp;mm is the
+      default. Note that a <em>single</em> resting contact does not need any slop at all, so if you
+      see this on one body the cause is something else.
+    </dd>
+
+    <dt>Everything is fine until the scene gets large, then the solver reads freed memory.</dt>
+    <dd>
+      <strong>Symptom:</strong> a crash or garbage impulses that appear only above some contact
+      count, and go away under a debugger.<br>
+      <strong>Cause:</strong> <code>contact_solver::add</code> keeps a pointer to the manifold, and
+      the caller is pushing manifolds into a <code>std::vector</code> that reallocates mid-loop.<br>
+      <strong>Fix:</strong> <code>reserve</code> before the loop, or build the whole vector first
+      and add afterwards. The engine's contract says the manifold must outlive the step; the caller
+      has to mean it.
+    </dd>
+
+    <dt>Bodies sink at exactly 2.7 mm per step.</dt>
+    <dd>
+      <strong>Symptom:</strong> a resting body descends steadily, and the rate does not depend on
+      the iteration count, the correction, or the mass.<br>
+      <strong>Cause:</strong> the contact solve is running after the position integration.<br>
+      <strong>Fix:</strong> put it between the halves. And recognise the number:
+      <code>g·h²</code> is 2.725&nbsp;mm at 60&nbsp;Hz and 0.473&nbsp;mm at 144, so the rate
+      scaling with the square of the step is the confirmation.
+    </dd>
+  </dl>
+
+  <h2 id="exercises">18. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Warm-up: predict the iteration count.</strong> §3 measured the contraction at 0.53
+        per sweep and a one-pass residual of 2.03&nbsp;×&nbsp;10⁻². How many sweeps to reach
+        10⁻⁶? Check against the table, then run
+        <code>./build/demos/stack --scene 1 --iters N</code> and see whether the tower's behaviour
+        agrees with your arithmetic.
+      </p>
+      <details><summary>Hint</summary>
+        <p><code>n = ln(r₁/r_target) / ln(1/0.53)</code>.</p>
+      </details>
+      <details><summary>Solution</summary>
+        <p>
+          <code>ln(2.03e-2 / 1e-6) = ln(20300) = 9.918</code>, and
+          <code>ln(1/0.53) = 0.635</code>, so <code>n = 15.6</code> — sixteen sweeps. The table
+          reads 1.68&nbsp;×&nbsp;10⁻⁶ at sixteen, which is as close as a prediction from a
+          two-significant-figure rate gets. Note what the tower does <em>not</em> do: a
+          single crate is already fine at eight, because its chain is one contact long.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Break the island rule on purpose.</strong> In <code>build_islands</code>, delete
+        the two lines that skip a union when either body is not dynamic. Run the yard scene and
+        read the island count. Then predict, before running it, what the sleep counter will do when
+        you press <kbd>X</kbd> to throw a crate at one tower.
+      </p>
+      <details><summary>Solution sketch</summary>
+        <p>
+          Twenty islands become one, and the thrown crate wakes all hundred crates rather than
+          five. The demo's <kbd>B</kbd> key does this to the <em>labels</em> without touching the
+          solve, so you can see the partition change while the physics stays put; doing it in the
+          engine changes the physics too, and comparing the two is the point of the exercise.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Find the arrival-depth distribution yourself.</strong> §6 claims the arrival depth
+        is uniform on [0,&nbsp;v·h]. Instrument a single dropped crate to record
+        <code>depth / (v·h)</code> on the frame the contact first appears, sweep the drop height
+        finely, and histogram the result. Then explain why the smallest value in the table is
+        0.002 and not 0.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          Read the speed <em>after</em> the velocity half, because that is the velocity the
+          position line will travel at. Reading it before gives you a systematic error of
+          <code>g·h²</code>.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          The fraction is the leftover of a step, which is a real number in [0,&nbsp;1) sampled by
+          the drop height. It is never exactly 0 because that would require the body to cross the
+          surface exactly at a step boundary, and with a finite sweep you never hit it — 0.002 is
+          just the smallest of 200 samples. Sampling 20,000 drops gets closer to 0 and never
+          reaches it.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: the relaxation pass.</strong> Under
+        <code>position_correction::baumgarte</code>, add a second velocity pass after the position
+        stage with the bias set to zero — Box2D calls this "relax", and its job is to remove the
+        energy the bias added. Measure §7's departure speed with and without it.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          You need the accumulated impulses to survive into the relax pass but the bias not to, so
+          the pass is <code>solve_contacts</code> with a <code>solver_config</code> whose
+          <code>correction</code> is <code>none</code>. Do not reset the accumulators.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          It helps, substantially, and it never reaches zero — which is the honest reason this
+          engine ships split impulse instead: the relax pass costs a whole extra velocity sweep
+          (12.9&nbsp;µs on §13's scene) to partially undo a problem that split impulse does not
+          have, for the price of one position sweep at 5.9.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: speculative contacts.</strong> §14 names them. Give
+        <code>manifold_config</code> a <code>speculative_margin</code>; when GJK reports the shapes
+        separated by less than it, build a one-point manifold from the witness points with a
+        <em>negative</em> depth. Then, in <code>prepare_contacts</code>, cap the target so that a
+        point with separation <code>s &gt; 0</code> may approach at no more than
+        <code>s/h</code>. Measure the arrival depth again.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          <code>gjk_result</code> already carries <code>point_a</code>, <code>point_b</code>,
+          <code>distance</code> and <code>direction</code> — everything a one-point speculative
+          manifold needs. The hard part is not the geometry, it is that
+          <code>contact_point::depth</code> currently promises to be non-negative and half the
+          engine reads it.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          Done properly the arrival depth goes to zero for any body slower than
+          <code>margin/h</code> — 0.6&nbsp;m/s at a 1&nbsp;cm margin and 60&nbsp;Hz — because the
+          body is braked to land exactly on the surface rather than braked after crossing it. It
+          adds no energy, which is why it is the more principled of the two answers to §6. It also
+          costs a narrow phase that runs on pairs that are not touching, which is what the
+          broadphase margin is for.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">19. Recap &amp; next</h2>
+
+  <p>
+    The engine can hold a stack up. That sentence is worth unpacking, because five separate pieces
+    had to be true at once for it and each of them was measured rather than assumed.
+  </p>
+
+  <p>
+    <strong>Iteration</strong> turns four coupled constraints into a converging sequence, at a
+    contraction of 0.53 per sweep — and a four-point manifold is already a system, so you do not
+    need a stack to need a solver. <strong>Warm starting</strong> makes eight sweeps behave like
+    eighty by handing the solve last frame's answer, which was already sitting in the manifold
+    waiting for a reader; it is free, and it is an initial guess rather than a fact, which is why
+    a deliberately wrong one costs more iterations than no guess at all. A <strong>position
+    correction</strong> repairs the overlap that no velocity solve can see, and the default is the
+    one that adds no energy, because the other one throws a crate spawned 200&nbsp;mm deep ninety-
+    nine millimetres into the air. <strong>Islands</strong> partition the world so that sleeping
+    is a question with an answer, on one rule: a body that cannot move is not a bridge.
+    <strong>Sleeping</strong> takes a settled yard's solve from 131&nbsp;µs to 3 — and has to be
+    tested after the solve, because before it every resting body in the scene is travelling at
+    <code>g·h</code>.
+  </p>
+
+  <p>
+    Two things were fixed on the way that were not on the plan. <code>body_world::step</code> was
+    split in two, because a contact solve has to happen between the halves and solving late costs
+    <code>g·h²</code> per step forever; and three lessons of cached friction impulses turned out to
+    be coordinates in a basis nobody had stored, which is a bug class worth more than the bug.
+  </p>
+
+  <p>
+    And the honest ending, in one table: eight sweeps hold five crates and do not hold ten. That is
+    not a tuning problem and it is not a bug. A Gauss–Seidel sweep carries information across one
+    contact, so a chain of <em>n</em> needs about <em>n</em> sweeps, and the cost is linear in the
+    count — a tall stack is quadratic.
+  </p>
+
+  <p>
+    <strong>Next:</strong> <em>8.11 — Constraints and Joints: Hinge and Ball-Socket</em>. A contact
+    is a constraint that only pushes. Write the general version — a Jacobian row, an effective
+    mass, a clamp — and the same loop that stacks boxes builds hinges, ball-sockets and motors.
+    <code>solve_positions</code> already takes no bodies, only a batch and two velocities, because
+    that generalisation was the shape this lesson was aiming at.
+  </p>
+
+  <h2 id="reading">20. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Erin Catto, “Iterative Dynamics with Temporal Coherence” (2005).</strong> The paper
+      this lesson is an implementation of: sequential impulses, warm starting, and split impulse,
+      derived from the LCP rather than asserted. Read §2 with it open.
+    </li>
+    <li>
+      <strong>Erin Catto, GDC talks — “Soft Constraints” (2011) and “Solver2D” (2024).</strong>
+      The first is where the bias, the slop and the relaxation pass are explained as one idea; the
+      second compares sequential impulses against several alternatives on the same fixtures, which
+      is the right way to read §14's limitations.
+    </li>
+    <li>
+      <strong>Baumgarte, “Stabilization of constraints and integrals of motion in dynamical
+      systems”, <em>Computer Methods in Applied Mechanics and Engineering</em> 1:1 (1972).</strong>
+      The original, and much more general than the one line everyone quotes.
+    </li>
+    <li>
+      <strong>Kenny Erleben, “Velocity-Based Shock Propagation for Multibody Dynamics Animation”
+      (ACM TOG 2007).</strong> Directly about §14's first table: what to do when the chain is long
+      and the mass ratios are bad, without abandoning sequential impulses.
+    </li>
+    <li>
+      <strong>Erwin Coumans, Bullet Physics manual, and the Bullet source
+      (<code>btSequentialImpulseConstraintSolver</code>).</strong> A production implementation of
+      exactly this, including the island manager and the sleeping policy, with all the special
+      cases this lesson left out.
+    </li>
+    <li>
+      <strong>Box2D's <code>b2Island</code>, <code>b2ContactSolver</code> and
+      <code>b2Body::SetAwake</code>.</strong> Small enough to read in an evening and the clearest
+      existing statement of the island/sleep interaction, including the block solver §14 names.
+    </li>
+    <li>
+      <strong>Golub &amp; Van Loan, <em>Matrix Computations</em>, ch. 11 (“Large Sparse
+      Eigenvalue Problems”) and the Gauss–Seidel material in ch. 10.</strong> For the convergence
+      argument §2 gestures at, done properly.
+    </li>
+    <li>
+      <strong>Cottle, Pang &amp; Stone, <em>The Linear Complementarity Problem</em>.</strong> The
+      reference for what "projected Gauss–Seidel" is projecting onto, and when it is guaranteed to
+      converge. Heavy going, and the place to go when a solver diverges and you want to know
+      whether it was allowed to.
+    </li>
+  </ul>

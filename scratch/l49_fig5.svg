@@ -1,0 +1,53 @@
+<svg viewBox="0 0 720 424" role="img" aria-labelledby="f49e-t f49e-d">
+  <title id="f49e-t">Vertex reuse against cache size, simulated</title>
+  <desc id="f49e-d">A simulated FIFO post-transform vertex cache over torus.obj's own index order. The curve is a staircase: caches from 6 to 32 all give 2,400 invocations, and only at about 50 does the second kind of reuse start landing. Shuffling the triangle order while keeping the geometry identical costs 2.83x. This is a model with stated assumptions, not a measurement.</desc>
+  <defs>
+    <marker id="e-i-f49e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f49e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f49e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">vertex reuse against cache size &#8212; <tspan class="t-hi">a staircase, not a slope</tspan></text>
+  <rect x="56.0" y="50.0" width="400.0" height="210.0" class="fill-soft ink" stroke-width="0.75"/>
+  <line x1="56.0" y1="252.4" x2="456.0" y2="252.4" class="grid" stroke-width="0.75"/>
+  <text x="48.0" y="256.4" class="xs muted" text-anchor="end">1225</text>
+  <line x1="56.0" y1="212.6" x2="456.0" y2="212.6" class="grid" stroke-width="0.75"/>
+  <text x="48.0" y="216.6" class="xs muted" text-anchor="end">2400</text>
+  <line x1="56.0" y1="137.8" x2="456.0" y2="137.8" class="grid" stroke-width="0.75"/>
+  <text x="48.0" y="141.8" class="xs muted" text-anchor="end">4608</text>
+  <line x1="56.0" y1="59.8" x2="456.0" y2="59.8" class="grid" stroke-width="0.75"/>
+  <text x="48.0" y="63.8" class="xs muted" text-anchor="end">6912</text>
+  <line x1="56.0" y1="252.4" x2="456.0" y2="252.4" stroke="#5ac878" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="62.0" y="246.4" class="xs t-ok">best case: one invocation per vertex</text>
+  <circle cx="78.0" cy="59.8" r="3" class="hi-fill"/>
+  <text x="78.0" y="274.0" class="xs mono muted" text-anchor="middle">0</text>
+  <circle cx="117.6" cy="137.8" r="3" class="hi-fill"/>
+  <text x="117.6" y="274.0" class="xs mono muted" text-anchor="middle">4</text>
+  <circle cx="157.1" cy="212.6" r="3" class="hi-fill"/>
+  <text x="157.1" y="274.0" class="xs mono muted" text-anchor="middle">6</text>
+  <circle cx="196.7" cy="212.6" r="3" class="hi-fill"/>
+  <text x="196.7" y="274.0" class="xs mono muted" text-anchor="middle">8</text>
+  <circle cx="236.2" cy="212.6" r="3" class="hi-fill"/>
+  <text x="236.2" y="274.0" class="xs mono muted" text-anchor="middle">16</text>
+  <circle cx="275.8" cy="212.6" r="3" class="hi-fill"/>
+  <text x="275.8" y="274.0" class="xs mono muted" text-anchor="middle">32</text>
+  <circle cx="315.3" cy="215.8" r="3" class="hi-fill"/>
+  <text x="315.3" y="274.0" class="xs mono muted" text-anchor="middle">48</text>
+  <circle cx="354.9" cy="252.3" r="3" class="hi-fill"/>
+  <text x="354.9" y="274.0" class="xs mono muted" text-anchor="middle">50</text>
+  <circle cx="394.4" cy="252.4" r="3" class="hi-fill"/>
+  <text x="394.4" y="274.0" class="xs mono muted" text-anchor="middle">52</text>
+  <circle cx="434.0" cy="252.4" r="3" class="hi-fill"/>
+  <text x="434.0" y="274.0" class="xs mono muted" text-anchor="middle">64</text>
+  <polyline points="78.0,59.8 117.6,137.8 157.1,212.6 196.7,212.6 236.2,212.6 275.8,212.6 315.3,215.8 354.9,252.3 394.4,252.4 434.0,252.4" class="hi" fill="none" stroke-width="1.6"/>
+  <text x="256.0" y="290.0" class="xs muted" text-anchor="middle">post-transform cache size, vertices</text>
+  <text x="22.0" y="40.0" class="xs muted">vertex-shader invocations</text>
+  <text x="236.2" y="230.6" class="xs t-hi" text-anchor="middle">reuse from the neighbouring quad</text>
+  <text x="450.0" y="158.4" class="xs t-hi" text-anchor="end">and only here, the quad one ring away</text>
+  <text x="24" y="324" class="xs">A cache of 8 and a cache of 32 catch <tspan class="t-hi">exactly the same reuse</tspan>, because nothing in this mesh is reused at a distance between them.</text>
+  <text x="24" y="348" class="xs"><tspan class="t-bad">THE CONTROL:</tspan> the same 2,304 triangles with the ORDER shuffled &#8212; 2,400 invocations becomes 6,784, <tspan class="t-bad">2.83&#215; worse</tspan>.</text>
+  <text x="24" y="368" class="xs muted">Nothing about the geometry changed. Reuse is a property of the index ORDER, which is why real pipelines run an index optimiser as a build step.</text>
+  <text x="24" y="400" class="xs muted">And this whole figure is a MODEL, not a measurement &#8212; the true number needs a tool this machine cannot run. &#167;3.6 says exactly where to read it.</text>
+</svg>

@@ -1,0 +1,704 @@
+  <!-- =================================================================
+       9 — THE STORE
+       ================================================================= -->
+  <h2 id="store"><span class="num">9</span>Textures and Materials Become Assets</h2>
+
+  <p>
+    Lesson 6.5 put <code>texture_pool</code> in <code>texture.hpp</code> and explicitly kept it
+    <em>out</em> of <code>asset_store</code>, with this reasoning:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/texture.hpp — as 6.5 left it</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// **Deliberately NOT in `asset_store`.** The asset store is about *files* — a
+/// search path, a name, a cache, a load count (5.5) — and every texture in this
+/// engine so far is generated in memory rather than loaded. Lesson 6.6 is where
+/// textures start arriving from disk, and that is the lesson that gets to decide
+/// whether they become assets.
+using texture_pool = pool&lt;texture&gt;;</code></pre>
+  </figure>
+
+  <p>
+    That grounds expire here, in the most direct way possible: a glTF material arrives naming an
+    image on disk, two materials in one file routinely name the same one, and "load it once and
+    hand out the same reference" is precisely the store's job description. So the answer to 6.5's
+    deferred question is <strong>yes</strong>, and the interesting part is what had to be added
+    around a pool that did not itself change.
+  </p>
+
+  <h3>9.1 — A texture is a DERIVED asset</h3>
+
+  <p>
+    A mesh is loaded. An image is loaded. A texture is <em>made from</em> an image — and Lesson 5.5
+    already had a name and a mechanism for that shape.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/asset/asset_store.cpp — the acquire, in full</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">texture_load out;
+const image_load img = load_image(name);   // the door that already exists
+out.report = img.report;
+out.source = img.handle;
+
+if (!img.ok()) { return out; }
+
+const image_data* pixels = images_.get(img.handle);
+if (pixels == nullptr) { return out; }
+
+out.handle = derive_texture(img.handle, key, to_texture(*pixels));</code></pre>
+  </figure>
+
+  <p>
+    Everything about resolving a name against the search path, reading bytes, decoding them and
+    counting the read is <code>load_image</code>'s job and is not repeated. That is what makes "the
+    same image loaded twice is decoded once" true for textures as well, without
+    <code>load_texture</code> knowing anything about it.
+  </p>
+
+  <p>
+    <code>derive_texture</code> records an edge — image → texture — and that edge is the whole
+    reason the function exists rather than being a plain insert:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A dependency edge, not a reference count</span>
+    <p>Lesson 5.5 refused reference counting at length: a handle is a value, four bytes, trivially
+       copyable, and refcounting requires copying to have a side effect, which costs every property
+       Lesson 5.4 was written to obtain.</p>
+    <p>A derivation edge is different in kind. <strong>Nobody outside the store can hold one.</strong>
+       The store made the texture, nobody asked for it by a name of its own, and it has no
+       independent reason to exist — so unloading the image takes it, transitively, and the rule
+       is enforced by a private member rather than by a contract.</p>
+    <p><code>verify_66</code> §F unloads <code>uv_grid.png</code> and gets <strong>2</strong> back:
+       the image and the texture built from it. The material's handle is then stale, which is not
+       a crash — <code>bind_albedo</code> returns an unbound binding and the surface falls back to
+       its tint. Lesson 5.4's bargain, arriving at last with a real dependency behind it.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">One detail that is easy to get wrong and silent when you do</span>
+    <p>The cascade must remove the texture's <strong>name entry</strong> as well as the texture.
+       Miss it and <code>find_texture("uv_grid.png")</code> keeps handing out a handle to a slot
+       the pool has already recycled.</p>
+    <p>It would not crash — 5.4's generation counter catches it and <code>contains()</code> returns
+       false — so the symptom is an object that silently loses its texture some arbitrary number of
+       frames later. Correct behaviour, and still a bug worth not having.
+       <code>verify_66</code> §F asserts the name entry went.</p>
+  </div>
+
+  <p>
+    One more thing about the edge lists, worth a sentence because the tempting shortcut is wrong.
+    There are now <em>two</em> of them — <code>mesh_derivations_</code> and
+    <code>texture_derivations_</code> — rather than one generic list of
+    <code>{uint32, uint32}</code> pairs. A single untagged list would compile, and would happily
+    resolve a texture's handle bits against the mesh pool: Lesson 5.4's aliasing failure in a new
+    costume. Two lists, two types, no tag.
+  </p>
+
+  <h3>9.2 — A material is a named asset with no file</h3>
+
+  <p>
+    Materials get the other half: <code>insert_material(name, m)</code>,
+    <code>find_material(name)</code>, <code>unload_material(h)</code>, and a
+    <code>material_by_key_</code> map.
+  </p>
+
+  <p>
+    There is deliberately <strong>no <code>load_material</code></strong>, and there never will be,
+    because a material is not a file. It arrives as part of one. But naming it anyway is what buys
+    the property glTF needs: a file whose four primitives share one material must produce
+    <em>one</em> material, and two loads of the same file must not produce eight.
+  </p>
+
+  <p>
+    The names are derived and deterministic, which is what makes the cache work without a second
+    map:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The derived names asset_store::load_model stores a model's
+        parts under</caption>
+      <thead><tr><th>Part</th><th>Stored as</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>primitive <em>i</em></td><td><code>"shapes.glb#2"</code></td>
+            <td>ordinal, because a primitive has no name of its own</td></tr>
+        <tr><td>material <em>"gold"</em></td><td><code>"shapes.glb:gold"</code></td>
+            <td>namespaced — two models may both call a material "Metal"</td></tr>
+        <tr><td>an unnamed material</td><td><code>"shapes.glb:material_3"</code></td>
+            <td>generated in the loader, so the name is never empty</td></tr>
+        <tr><td>the spec's default</td><td><code>"shapes.glb:glTF default"</code></td>
+            <td>materialised only if some primitive names no material</td></tr>
+        <tr><td>a base colour image</td><td><code>"uv_grid.png"</code></td>
+            <td><strong>not</strong> namespaced — it is a real file, shared across models</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <code>verify_66</code> §F loads <code>cube.gltf</code> twice and asserts the second call returns
+    the same handles with <code>files_read</code> unchanged at 2. It also asks the store directly
+    for <code>uv_grid.png</code> and gets back the texture the material already holds — one decode,
+    one copy, however many materials name it.
+  </p>
+
+  <div class="callout">
+    <span class="label">Why <code>models_loaded</code> is its own counter</span>
+    <p>One model file reads <em>many</em> files: the <code>.gltf</code>, its <code>.bin</code>, and
+       one per texture. <code>cube.gltf</code> reports <code>models_loaded = 1</code> and
+       <code>files_read = 2</code>.</p>
+    <p>Conflate the two and "did the cache work?" becomes unanswerable, because you can no longer
+       tell one cached model from two uncached textures. A counter that measures two things measures
+       neither.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — THE GAP
+       ================================================================= -->
+  <h2 id="gap"><span class="num">10</span>The One Thing We Cannot Represent</h2>
+
+  <p>
+    Every importer has a conformance gap. What separates a good one from a bad one is whether the
+    gap is <em>reported</em>.
+  </p>
+
+  <p>
+    Ours is one sentence of the specification, §5.19.4: <em>"If both factors and textures are
+    present, the factor value acts as a linear multiplier for the corresponding texture
+    values."</em>
+  </p>
+
+  <p>
+    Our <code>material</code> does not multiply. Lesson 3.9 established that a bound albedo image
+    <strong>replaces</strong> the tint, on the grounds that both of them <em>are</em> the albedo and
+    a surface has one albedo. That rule is defensible and it is what the rasterizer implements — and
+    it disagrees with glTF whenever a material has a base colour texture <em>and</em> a non-white
+    base colour factor.
+  </p>
+
+  <p>
+    Note precisely how narrow that is. It is not "the factor". A material with a coloured factor and
+    no texture imports exactly; a material with a texture and a white factor imports exactly,
+    because multiplying by white <em>is</em> replacing. The gap is only the combination.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/asset/asset_store.cpp — the report</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">if (!is_white(desc.base_colour))
+{
+    ++out.factor_texture_conflicts;
+    ENGINE_LOG_WARN(log_asset,
+        "glTF material '%s': baseColorFactor (%.3f %.3f %.3f) is not "
+        "white and a baseColorTexture is bound. The spec multiplies "
+        "them; this engine's albedo image REPLACES the tint (3.9), so "
+        "the factor is dropped.",
+        desc.name.c_str(), …);
+}</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Where a conformance gap belongs</span>
+    <p><strong>At the only point that knows both halves.</strong> The parser sees the factor and the
+       URI but not whether the image resolved; the renderer sees a bound texture but has long since
+       lost the factor. <code>load_model</code> is the one place holding both, so the warning lives
+       there and the count travels back in <code>model_load</code>.</p>
+    <p>And it is a <em>count</em> as well as a log line, because a log line scrolls past and a
+       number can be asserted. <code>verify_66</code> §F asserts
+       <code>factor_texture_conflicts == 0</code> for <code>shapes.glb</code> — where the coloured
+       material has no texture — which is a test of the <em>detector</em> as much as of the
+       asset.</p>
+  </div>
+
+  <p>
+    Making them multiply is a one-line change in <code>raster.cpp</code> and a matching one in
+    <code>scene.frag.hlsl</code>. It is Exercise 2, and it is deliberately not made here — because
+    the demo scene's textured surfaces carry a non-white tint, so the change would move the
+    reference render, and this lesson's whole claim is that adding a format does not move the
+    picture.
+  </p>
+
+  <div class="callout">
+    <span class="label">Named, not fixed: two textures glTF offers that we do not read</span>
+    <p><code>metallicRoughnessTexture</code> and <code>normalTexture</code> are counted in
+       <code>gltf_material_desc</code> (<code>wants_metallic_roughness_texture</code>,
+       <code>wants_normal_texture</code>) and not loaded.</p>
+    <p>The reason is one concrete thing rather than lack of time: they are <strong>linear data in
+       an image</strong>, and <code>texture</code> stores sRGB-encoded texels because
+       <code>sample</code> decodes on read (3.9). A roughness map read through an sRGB decode is
+       wrong by the gamma curve everywhere except 0 and 1. Fixing that means giving a texture a
+       colour space — which is Lesson 6.7's problem, because normal maps need exactly the same
+       thing.</p>
+    <p>The <em>factors</em> import completely, so a material's metallic and roughness are correct;
+       what is missing is per-texel variation. This is the ninety-percent picture, and the missing
+       ten percent has a lesson number.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Named, not fixed: the one gap that does <em>not</em> announce itself</span>
+    <p><code>alphaMode</code> and <code>alphaCutoff</code> are not read at all. What
+       <code>gltf_material_desc</code> carries is <code>alpha</code> — the fourth component of
+       <code>baseColorFactor</code>, stored because the file said it and consumed by nothing. So a
+       material marked <code>MASK</code> or <code>BLEND</code> imports as <strong>fully
+       opaque</strong>.</p>
+    <p>That is a conformance gap like the others, but it breaks this section's own rule, and the
+       break is worth staring at. Every other limit in this importer <em>reports</em>:
+       <code>too_many_vertices</code> fires a status, <code>unsupported_primitive</code> fires a
+       status, the factor-times-texture conflict logs a warning <em>and</em> returns a count you can
+       assert on. This one is silent — no status, no warning, no number.</p>
+    <p>The reason is not an oversight in the parser, and it is the same shape as the
+       <code>metallicRoughnessTexture</code> gap above: <strong>there is nowhere to put the
+       answer.</strong> A status code says &ldquo;this file wants something the engine cannot
+       do&rdquo;, and to detect <em>that</em>, the engine needs a notion of what it can do. The
+       pipeline has carried <code>no blending</code> since Lesson 4.4, and the software rasterizer
+       has no blend equation at all, so there is no state for the importer to compare the file
+       against. It cannot report a conflict with a concept that does not exist yet.</p>
+    <p>It matters more than the wording suggests. <strong>Cutout foliage and glass are two of the
+       most common things in a downloaded asset pack</strong>, and both come back as opaque
+       cardboard — a leaf rendered as the rectangle it was mapped onto. Nothing in the load report
+       hints at why. <strong>Lesson 6.11</strong> adds alpha masking, blending and the draw order
+       they require; the honest thing to know until then is that <em>this importer's silence about
+       alpha is the one place it is not telling you what it dropped.</em></p>
+  </div>
+
+  <!-- =================================================================
+       11 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">11</span>Complete Code Listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The two <code>CMakeLists.txt</code>
+    changes are the fragments quoted in §8.1; the demo, the harness and the asset generator are
+    below in full.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">File manifest for Lesson 6.6</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/gfx/gltf.hpp</code></td><td>new</td>
+            <td>the loader's public surface: statuses, descriptions, the two entry points</td></tr>
+        <tr><td><code>engine/src/gfx/gltf.cpp</code></td><td>new</td>
+            <td>the only translation unit that sees cgltf</td></tr>
+        <tr><td><code>engine/include/engine/asset/asset_store.hpp</code></td><td>modified</td>
+            <td>textures, materials, and <code>load_model</code></td></tr>
+        <tr><td><code>engine/src/asset/asset_store.cpp</code></td><td>modified</td>
+            <td>the derivation edge, the cache, the conformance report</td></tr>
+        <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td>
+            <td><code>to_texture</code>, and 6.5's deferred note answered</td></tr>
+        <tr><td><code>engine/src/gfx/texture.cpp</code></td><td>modified</td>
+            <td>the channel shuffle</td></tr>
+        <tr><td><code>engine/include/engine/gfx/microfacet.hpp</code></td><td>modified</td>
+            <td>the ⚠ VERIFY discharged, with the citation</td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>new</td>
+            <td>the asset system's acceptance test</td></tr>
+        <tr><td><code>scratch/make_gltf_assets.py</code></td><td>new</td>
+            <td>writes both assets, so no third-party geometry is shipped</td></tr>
+        <tr><td><code>scratch/verify_66.cpp</code></td><td>new</td>
+            <td>58 checks in seven sections</td></tr>
+        <tr><td><code>assets/cube.gltf</code>, <code>cube.bin</code>,
+            <code>shapes.glb</code></td><td>new</td>
+            <td>generated; text-with-external-buffer and binary</td></tr>
+        <tr><td><code>CMakeLists.txt</code>, <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code></td><td>modified</td>
+            <td>cgltf, PRIVATE; the <code>gltf_view</code> target</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/gltf.hpp@@
+  @@LISTING:engine/src/gfx/gltf.cpp@@
+  @@LISTING:engine/include/engine/asset/asset_store.hpp@@
+  @@LISTING:engine/src/asset/asset_store.cpp@@
+  @@LISTING:demos/gltf_view/main.cpp@@
+  @@LISTING:scratch/make_gltf_assets.py@@
+  @@LISTING:scratch/verify_66.cpp@@
+
+  <!-- =================================================================
+       12 — BUILD &amp; RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">12</span>Build &amp; Run, and What You Should See</h2>
+
+  <p>
+    The first configure after this lesson fetches <code>cgltf</code>, which is one header and
+    takes a second.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux and macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+
+python3 scratch/make_gltf_assets.py    # regenerate the assets (already committed)
+
+./build/demos/gltf_view                            # shapes.glb, orbiting
+./build/demos/gltf_view --model cube.gltf          # the textured cube
+./build/demos/gltf_view --shot shot.ppm            # one frame, no window
+./build/demos/gltf_view --pose 1.7 --shot shot.ppm # a chosen angle on the orbit
+
+sh scratch/build_verify_66.sh                             # 58 checks
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_66.sh # …and in release</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+
+py scratch\make_gltf_assets.py
+
+.\build\demos\Debug\gltf_view.exe --model cube.gltf</code></pre>
+  </figure>
+
+  <h3>The picture</h3>
+
+  @@FIG_RESULT@@
+
+  <p>
+    <code>--model cube.gltf</code> is the one to look at first, because three separate things are
+    being asserted by one image:
+  </p>
+
+  <ul>
+    <li><strong>The arrow points up.</strong> <code>uv_grid.png</code> is an orientation chart with
+        a mark in its top-left corner and an arrow along +v; a checkerboard could not tell you this,
+        because a checkerboard is symmetric under every flip. The arrow pointing up means
+        <code>v</code> was not flipped, which is the trap in §4.</li>
+    <li><strong>There is an image at all.</strong> The <code>.gltf</code> said
+        <code>"uri": "uv_grid.png"</code>, and the store resolved that against its <em>own</em>
+        search path, decoded it, shuffled the channels and cached it. Every step of that is new
+        this lesson.</li>
+    <li><strong>The highlight has the file's shape.</strong> <code>roughnessFactor: 0.4</code> came
+        out of the JSON and went into <code>microsurface::roughness</code> untouched. Nothing in
+        <code>gltf_view</code> types a colour, a shininess or a specular value.</li>
+  </ul>
+
+  <p>
+    Then <code>shapes.glb</code>, which is four primitives, four placements from a three-deep node
+    tree, and four materials — three from the file plus the specification's default on the plinth,
+    which names none.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What you will actually see, and why it is right</span>
+    <p><strong>The metals are nearly black, except where they are pure white.</strong> The gold
+       octahedron reads gold at some orbit angles and clips to white at others; the silver cube is
+       dark from most directions.</p>
+    <p>That is not a bug and it is not the importer. A conductor has <em>no diffuse lobe</em> —
+       <code>diffuse_albedo_of</code> returns exactly black at <code>metallic = 1</code>, which
+       Lesson 6.4 derived — so the only light leaving it is the mirrored part. A metal with nothing
+       to reflect but one directional light therefore has exactly two states.</p>
+    <p>And the bright state is <em>very</em> bright. Evaluating the BRDF in the mirror direction
+       under this engine's reference irradiance:</p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Peak outgoing radiance of a conductor in the mirror
+        direction, against roughness, where 1.0 is displayable white</caption>
+      <thead>
+        <tr><th>roughness</th><th>peak BRDF (sr<sup>−1</sup>)</th>
+            <th>L<sub>o</sub></th><th>display can show</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0.25</td><td>20.37</td><td><strong>64.0</strong></td><td>1.0</td></tr>
+        <tr><td>0.35</td><td>5.30</td><td>16.7</td><td>1.0</td></tr>
+        <tr><td>0.45</td><td>1.94</td><td>6.10</td><td>1.0</td></tr>
+        <tr><td>0.55</td><td>0.87</td><td>2.73</td><td>1.0</td></tr>
+        <tr><td>0.70</td><td>0.33</td><td>1.04</td><td>1.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    A polished metal's highlight is <strong>sixty-four times</strong> what the framebuffer can hold,
+    so <code>to_encoded</code> clamps it and you get a white facet. That number is the quantitative
+    case for two lessons still to come: <strong>image-based lighting</strong> (6.15) gives a metal
+    something to reflect other than one point light, and a <strong>tonemapper</strong> (6.12) gives
+    the highlight somewhere to go. The materials in the asset are chosen at defensible values (0.40
+    and 0.45 — brushed, not polished) so the clipping is a facet rather than an object, and
+    <code>--pose</code> exists so you can sweep past it and watch.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The claim this lesson has to make</span>
+    <p><strong>58 checks, 0 failures</strong>, debug and release. <code>verify_45</code> through
+       <code>verify_65</code> all still green.</p>
+    <p>And the reference render is <strong>byte-identical, hash E917C06C</strong> — fifteenth lesson
+       at that hash. A whole second asset format, a texture pool inside the store, a material cache
+       and a channel shuffle, and not one pixel moved. <em>Loading a new format adds a path; it
+       must not move the existing picture.</em></p>
+  </div>
+
+  <!-- =================================================================
+       13 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">13</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Symptom, cause and fix for the failures this lesson's code
+        can produce</caption>
+      <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>The model loads, but every texture is upside down.</td>
+          <td>You applied <code>flip_uv_v</code>. It is correct for OBJ and wrong for glTF; the two
+              formats disagree about where <code>(0,0)</code> is.</td>
+          <td>Do not flip. <code>load_model</code> takes no import settings for this reason. Check
+              with the uv grid, not a checkerboard — a checkerboard cannot show you.</td>
+        </tr>
+        <tr>
+          <td><code>missing_buffer</code> on a file that opens fine in a viewer.</td>
+          <td>A <code>.gltf</code> names an external <code>.bin</code>, and it was not copied
+              alongside — or the base directory handed to <code>parse_gltf</code> lost its trailing
+              separator.</td>
+          <td>Copy both files. The base dir must end in <code>/</code>; <code>load_gltf</code>
+              derives it with <code>find_last_of("/\\")</code> and keeps the separator.</td>
+        </tr>
+        <tr>
+          <td>The model draws as a spray of triangles connecting the wrong corners.</td>
+          <td>An index was narrowed to <code>uint16</code> and wrapped.</td>
+          <td>Check <code>report.skipped_too_large</code> and
+              <code>report.max_primitive_vertices</code>. Do not cast — the loader refuses the
+              primitive and says so.</td>
+        </tr>
+        <tr>
+          <td>Every imported asset is noticeably darker than in a reference viewer.</td>
+          <td><code>to_linear</code> applied to <code>baseColorFactor</code>. The factor is already
+              linear; only the texture is encoded.</td>
+          <td>Remove it. Gold's 0.71 becoming 0.4624 is the fingerprint.</td>
+        </tr>
+        <tr>
+          <td>Textures come out with red and blue swapped.</td>
+          <td><code>memcpy</code> from <code>image_data::pixels</code> into
+              <code>texture</code>'s texels. RGBA bytes are not ARGB8888 words.</td>
+          <td><code>pack_argb</code>, per texel. It is the only spelling that cannot get this
+              wrong.</td>
+        </tr>
+        <tr>
+          <td>A cube imports with 36 vertices when the file wrote 8.</td>
+          <td>Not a bug. The primitive had no <code>NORMAL</code>, so flat normals were generated,
+              and flat shading forces one vertex per face-corner.</td>
+          <td>Nothing — but know it, because it makes an index-for-index comparison against the
+              source impossible. This is the failure the first run of <code>verify_66</code> §A
+              produced, and the fix was to make the test asset ship normals.</td>
+        </tr>
+        <tr>
+          <td>A model is invisible, or you are looking at the inside of it.</td>
+          <td>glTF says an asset's front faces +Z; our camera looks down −Z.</td>
+          <td>Yaw the object. Do <em>not</em> negate coordinates in the loader — that mirrors the
+              geometry and reverses every triangle, so you fix the facing and break the
+              winding.</td>
+        </tr>
+        <tr>
+          <td>Half a model vanishes once back-face culling is on.</td>
+          <td>The primitive is an open shell, and glTF is full of them.</td>
+          <td><code>cull_of(validate(mesh).closed(), desc.double_sided)</code>. The mesh supplies
+              the fact, the file supplies the intent (6.5).</td>
+        </tr>
+        <tr>
+          <td>An object silently loses its texture some frames after a level change.</td>
+          <td>An image was unloaded and the derived texture's <em>name entry</em> outlived it, so
+              <code>find_texture</code> handed out a recycled slot.</td>
+          <td>Erase the name in the cascade. It does not crash — 5.4's generation counter sees it —
+              which is exactly why it takes so long to notice.</td>
+        </tr>
+        <tr>
+          <td>A duplicate-symbol link error mentioning <code>cgltf_parse</code>.</td>
+          <td><code>CGLTF_IMPLEMENTATION</code> defined in more than one translation unit, usually
+              because it reached a header.</td>
+          <td>Define it in <code>gltf.cpp</code> and nowhere else. This is the good failure; the bad
+              one is a build that picks one silently.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- =================================================================
+       14 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">14</span>Exercises</h2>
+
+  <h3>14.1 — Break the ceiling on purpose <span class="tag">guided</span></h3>
+  <p>
+    Edit <code>scratch/make_gltf_assets.py</code> to emit a grid mesh with more than 65,536 vertices
+    (a 260 × 260 lattice will do it), and load it. Confirm you get
+    <code>gltf_status::too_many_vertices</code> and a <code>max_primitive_vertices</code> that names
+    the real number.
+  </p>
+  <p>
+    Then <em>make it work</em>, twice. First widen <code>mesh_data::indices</code> to
+    <code>uint32_t</code> and measure what that costs on <code>torus.obj</code>: index bytes before
+    and after, and total mesh bytes. Then revert, and instead split the primitive into chunks of
+    65,536 with a vertex remap per chunk.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> The split is the harder and more useful one, and the awkward part is that
+    a triangle's three indices must land in the same chunk — so you cannot cut on a vertex boundary,
+    you have to walk triangles and emit vertices on demand. That is the same "unify as you go" loop
+    <code>parse_obj</code> already contains, run backwards. Note which answer a real engine picks
+    and why it depends on the target: SDL_GPU supports both index widths, mobile GPUs used to
+    prefer 16.
+  </p>
+
+  <h3>14.2 — Make the factor multiply <span class="tag">guided</span></h3>
+  <p>
+    Close this lesson's conformance gap. In <code>raster.cpp</code>'s lit path, multiply the sampled
+    albedo by the interpolated vertex colour instead of replacing it; do the same in
+    <code>shaders/scene.frag.hlsl</code>. Then run <code>verify_48</code> §F to confirm the CPU and
+    GPU still agree, and <code>verify_66</code> to see the golden move.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> It <em>will</em> move — the demo scene's textured floor carries an amber
+    tint, so the change is visible. Re-baseline properly, the way Lesson 6.4 did: report the number
+    of pixels that moved, the direction they moved in, and the old hash beside the new. "It looks
+    fine" is not a re-baseline. Then argue with yourself about whether the engine should adopt
+    glTF's rule or keep 3.9's, and write the argument down — both are defensible and the point is
+    that you can say which you chose.
+  </p>
+
+  <h3>14.3 — Frame from the accessors <span class="tag">engine challenge</span></h3>
+  <p>
+    <code>gltf_view</code> computes its camera distance by walking every vertex. The specification
+    <em>requires</em> <code>min</code> and <code>max</code> on a <code>POSITION</code> accessor —
+    precisely so a viewer does not have to. Surface those bounds through
+    <code>gltf_primitive</code>, transform them by the node matrix, and frame from them instead.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> The subtlety is that transforming an axis-aligned box by a rotation and
+    taking the corners' bounds gives you a <em>larger</em> box than the geometry needs — the AABB of
+    a rotated AABB is not the AABB of the rotated geometry. Measure the difference on
+    <code>shapes.glb</code>. This is the same conservative-bounds problem Lesson 6.16's frustum
+    culling has to live with, and meeting it here first is the point of the exercise.
+  </p>
+
+  <h3>14.4 — Strips and fans <span class="tag">open</span></h3>
+  <p>
+    <code>build_geometry</code> counts and skips any primitive that is not
+    <code>cgltf_primitive_type_triangles</code>. Convert <code>TRIANGLE_STRIP</code> and
+    <code>TRIANGLE_FAN</code> into triangle lists at import so those files load.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> A strip of <em>n</em> vertices is <em>n</em> − 2 triangles, and the
+    winding alternates: triangle <em>i</em> is (<em>i</em>, <em>i</em>+1, <em>i</em>+2) for even
+    <em>i</em> and (<em>i</em>+1, <em>i</em>, <em>i</em>+2) for odd. Get that backwards and every
+    other triangle is back-facing, which is invisible until culling is on — so test it with
+    <code>validate()</code>'s <code>reversed_edges</code> rather than by looking.
+  </p>
+
+  <h3>14.5 — Prove the coupling difference on screen <span class="tag">open</span></h3>
+  <p>
+    §6 measured the two diffuse couplings as 1.036× apart at normal incidence and 5.62× apart at
+    88°. Make that visible: render <code>shapes.glb</code>'s red tetrahedron twice, once with each
+    coupling, and difference the two framebuffers.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> <code>fill_style</code> has no coupling field, and adding one is the
+    exercise's real content — it is pipeline state by 6.5's rule, so think about where it can
+    legitimately live and what that implies about a scene mixing the two. Then predict, before you
+    run it, where in the image the difference will be largest. If your prediction is "the middle of
+    the bright face", re-read §6.
+  </p>
+
+  <!-- =================================================================
+       15 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">15</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now read the format the industry actually ships. Concretely, it gained:
+  </p>
+
+  <ul>
+    <li><strong>A glTF 2.0 loader</strong>, text and binary, handling node hierarchies,
+        multi-primitive meshes, external and embedded buffers, and the full metallic-roughness
+        material model — behind our own types, with cgltf confined to one translation unit that no
+        demo can reach.</li>
+    <li><strong>Textures as assets.</strong> <code>load_texture</code> resolves, decodes, shuffles
+        and caches; the result is a <em>derived</em> asset whose lifetime is bound to its image, so
+        unloading the image takes it.</li>
+    <li><strong>Materials with identity.</strong> Named, cached, shared — so a file's four
+        primitives sharing one material produce one material, and loading the file twice produces
+        none extra.</li>
+    <li><strong><code>to_texture</code></strong>, the twelve-line bridge between "decoded a PNG" and
+        "can sample it" that should have existed since Lesson 5.3 and did not, because no code path
+        had ever crossed the gap.</li>
+    <li><strong>A settled question.</strong> The ⚠ VERIFY from 6.4 is discharged with a citation and
+        a measurement: our BRDF differs from glTF's reference in exactly one factor, the
+        specification permits the variation explicitly, and the property it does require —
+        energy conservation — is the one our form has.</li>
+    <li><strong>A conformance gap that reports itself</strong>, rather than one you find out about
+        from an artist.</li>
+  </ul>
+
+  <p>
+    And three things this lesson deliberately did not do, each with a reason and a lesson number:
+    it did not read the metallic-roughness or normal textures (they are linear data and
+    <code>texture</code> has no colour space — <strong>6.7</strong>); it did not make the base
+    colour factor multiply (it would move the golden — Exercise 2); and it did not widen the index
+    type (it costs bytes on every mesh — Exercise 1).
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The through-line, if you take one thing from this lesson</span>
+    <p>Almost none of the work here was parsing. It was <strong>deciding what agrees with what</strong>
+       — four conventions, six BRDF terms, three material parameters — and the answer was
+       overwhelmingly <em>"nothing to do"</em>.</p>
+    <p>That is what it feels like to import into an engine whose conventions were argued rather than
+       picked, and whose parameters were derived rather than tuned. An engine with a Z-up world and
+       a hand-fitted gloss curve would have needed a basis change, a winding fix and a conversion
+       table here, every one of which is a place for a plausible-looking bug to live forever.</p>
+  </div>
+
+  <p>
+    <strong>Next: 6.7 — Normal Mapping and the TBN Derivation.</strong> Every surface in this engine is as
+    flat as its triangles, and the fix is to perturb the normal per pixel from an image — which
+    needs a per-vertex tangent frame, derived from the uv parameterisation, and it needs the thing
+    this lesson deferred: a texture that knows it holds <em>linear data</em> rather than colour. A
+    normal map read through an sRGB decode is wrong everywhere except at its extremes, and it looks
+    almost right, which is the worst possible way to be wrong. glTF has been telling us about
+    <code>normalTexture</code> the whole time; 6.7 is where we listen.
+  </p>
+
+  <!-- =================================================================
+       16 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">16</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Khronos Group — <em>glTF 2.0 Specification</em></strong>. The primary source for
+        everything in this lesson. §3.5 (coordinate system), §3.7 (meshes and primitives), §3.9
+        (materials and textures), and <strong>Appendix B, "BRDF Implementation"</strong>, which §6
+        quotes in full. It is readable, which is not something you can say about most format
+        specifications.</li>
+    <li><strong>Khronos Group — <em>glTF-Sample-Assets</em></strong> and the
+        <em>glTF-Sample-Viewer</em>. The sample assets are the standard way to find out that your
+        importer is wrong: <code>BoxTextured</code>, <code>OrientationTest</code> and
+        <code>NormalTangentTest</code> each exist to catch a specific class of mistake. Point
+        <code>gltf_view</code> at them.</li>
+    <li><strong>Johannes Kuhlmann — <em>cgltf</em></strong>. Seven thousand lines of one header, and
+        worth reading rather than only linking. <code>cgltf_accessor_read_float</code> is the
+        function §2 is about; reading it is the fastest way to see the combinatorial matrix as
+        code.</li>
+    <li><strong>Brian Karis — <em>Real Shading in Unreal Engine 4</em></strong> (SIGGRAPH 2013
+        course notes). The clearest short account of why the metallic-roughness parameterisation
+        won, which is the argument underneath §5.</li>
+    <li><strong>Brent Burley — <em>Physically-Based Shading at Disney</em></strong> (SIGGRAPH 2012).
+        The source of the <code>alpha = roughness²</code> remap that glTF's Appendix B cites and
+        that Lesson 6.3 derived independently.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §9.5 and §16.5</strong>. Microfacet BRDFs, and the
+        chapter on scene graphs and asset representation that explains why a node tree is a tree.</li>
+    <li><strong>Sean Barrett — <em>"How to make a single-header library"</em></strong>. The
+        convention that <code>stb_image</code> and <code>cgltf</code> both follow, and the reason
+        the <code>*_IMPLEMENTATION</code> macro exists at all.</li>
+  </ul>

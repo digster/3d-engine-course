@@ -1,0 +1,50 @@
+<svg viewBox="0 0 720 390" role="img" aria-labelledby="l67f2-t l67f2-d">
+  <title id="l67f2-t">The byte 128 decoded as data and as colour, and the consequence</title>
+  <desc id="l67f2-d">A bar from 0 to 1 with two marks: 0.502 read as data and 0.216 read as colour, the gap being the sRGB transfer function. Below, two panels showing what a flat normal map becomes under each reading — a surface tilted 0.318 degrees, which is the quantisation floor, against one tilted 38.8 degrees.</desc>
+  <defs>
+    <marker id="e-i-l67f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l67f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l67f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l67f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l67f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="390" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">The byte 128, read two ways</text>
+<rect x="90" y="74" width="540" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="90" y="74" width="540" height="26" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<line x1="90.0" y1="74" x2="90.0" y2="100" class="grid" stroke-width="1.0"/>
+<text x="90.0" y="118" class="xs" text-anchor="middle">0.0</text>
+<line x1="360.0" y1="74" x2="360.0" y2="100" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="118" class="xs" text-anchor="middle">0.5</text>
+<line x1="630.0" y1="74" x2="630.0" y2="100" class="grid" stroke-width="1.0"/>
+<text x="630.0" y="118" class="xs" text-anchor="middle">1.0</text>
+<line x1="361.0584" y1="70" x2="361.0584" y2="104" class="hi" stroke-width="2.0"/>
+<rect x="315.0584" y="42" width="92" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="361.0584" y="55" class="xs" text-anchor="middle">as DATA  0.502</text>
+<line x1="206.56439999999998" y1="70" x2="206.56439999999998" y2="104" class="hi" stroke-width="2.0"/>
+<rect x="160.56439999999998" y="42" width="92" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="206.56439999999998" y="55" class="xs" text-anchor="middle">as COLOUR  0.216</text>
+<text x="360.0" y="140" class="xs" text-anchor="middle">the same eight bits, and the gap is the sRGB transfer function</text>
+<text x="360.0" y="172" class="sm" text-anchor="middle">…and what that does to a FLAT normal map</text>
+<rect x="24" y="194" width="300" height="122" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.09"/>
+<rect x="24" y="194" width="300" height="122" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="174.0" y="216" class="sm" text-anchor="middle">texel_space::linear</text>
+<line x1="38" y1="226" x2="310" y2="226" class="grid" stroke-width="1.0"/>
+<text x="174.0" y="248" class="xs" text-anchor="middle">(128,128,255) decodes to</text>
+<text x="174.0" y="268" class="xs" text-anchor="middle">(0.004, 0.004, 1.0)</text>
+<rect x="64" y="278" width="220" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="174.0" y="292" class="xs" text-anchor="middle">tilts the surface 0.318 deg</text>
+<text x="174.0" y="310" class="xs" text-anchor="middle">the quantisation floor</text>
+<rect x="396" y="194" width="300" height="122" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.09"/>
+<rect x="396" y="194" width="300" height="122" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="546.0" y="216" class="sm" text-anchor="middle">texel_space::srgb</text>
+<line x1="410" y1="226" x2="682" y2="226" class="grid" stroke-width="1.0"/>
+<text x="546.0" y="248" class="xs" text-anchor="middle">(128,128,255) decodes to</text>
+<text x="546.0" y="268" class="xs" text-anchor="middle">(-0.568, -0.568, 1.0)</text>
+<rect x="436" y="278" width="220" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="546.0" y="292" class="xs" text-anchor="middle">tilts the surface 38.8 deg</text>
+<text x="546.0" y="310" class="xs" text-anchor="middle">everywhere, one direction</text>
+<text x="360.0" y="344" class="xs" text-anchor="middle">The GPU has had this since 4.7 — create_sampled(…, srgb) picks _UNORM_SRGB or</text>
+<text x="360.0" y="362" class="xs" text-anchor="middle">_UNORM. The software renderer had no counterpart until this lesson.</text>
+<text x="360.0" y="380" class="sm" text-anchor="middle">Two halves of one idea, and no code path crossed between them.</text>
+</svg>

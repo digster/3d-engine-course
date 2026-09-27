@@ -1,0 +1,303 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-01-euler-angles.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.1 — Euler Angles and Their Pathologies</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-03-complex-numbers.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.3 — Complex Numbers Rotate the Plane</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.2</div>
+    <h1>Axis-Angle and Rodrigues' Rotation Formula</h1>
+    <p class="deck">
+      Lesson 7.1 asked "which three turns compose to this orientation?" and got twenty-four
+      different answers, a singularity that no choice of answer escapes, and an interpolation that
+      performs <strong>14% more turning than it needs</strong> on an ordinary pair of poses and
+      <strong>209% more</strong> near gimbal lock. This lesson asks a different question —
+      <em>what single turn is this?</em> — and the difference between the two questions is the
+      whole arc of Module 7. Euler's rotation theorem says the second question always has an
+      answer: every rotation of space about a fixed origin is a turn of some angle about some
+      axis. Not "can be decomposed into". <em>Is.</em> We prove it in four lines of determinant
+      algebra using only functions <code>mat3</code> has had since Lesson 2.6, and then we look
+      hard at the one step that fails in four dimensions — because the theorem is false there, and
+      knowing <em>why</em> is what turns it from a fact you memorised into one you understand.
+      Then we derive Rodrigues' rotation formula from a picture rather than quoting it, build the
+      matrix it names, and go backwards: given a rotation, find its turn. That inverse has two
+      holes, at <code>θ = 0</code> and at <code>θ = 180°</code>, and they are not equally
+      dangerous — an error <code>φ</code> in the axis produces <code>2 sin(θ/2) · φ</code> of
+      error in the orientation, which is <em>zero</em> exactly where the axis becomes
+      unrecoverable and <em>maximal</em> where it becomes hard to find. That one formula explains
+      both ends, sets both thresholds, and is measured against a brute-force sweep to two parts in
+      a hundred thousand. And then the payoff. Scaling the angle of the single turn that separates
+      two orientations traces the <strong>geodesic</strong> between them — the shortest path, at
+      constant speed — so 7.1's +14% and +209% become <strong>0.00% at every pose</strong>, on the
+      same pairs, measured with the same instrument. That is spherical linear interpolation, three
+      lines long, and it is also where this representation runs out: every call spends an
+      <code>atan2</code>, a <code>sqrt</code> and a <code>sin</code>/<code>cos</code> pair on a
+      quantity a quaternion carries for free, and axis-angle has no formula at all for composing
+      two turns. Lessons 7.3 and 7.4 are about fixing that.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-07-vectors-2d.html">1.7 — 2D Vectors, Geometrically</a>,
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="02-06-mat4.html">2.6 — Building mat4 by Hand</a>,
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="05-11-imgui-debug-draw.html">5.11 — Dear ImGui and the Debug Draw System</a>,
+          <a href="07-01-euler-angles.html">7.1 — Euler Angles and Their Pathologies</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/axis_angle.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/math/rotation.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/math/euler.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>demos/gimbal/main.cpp</code>,
+            <code>scratch/verify_72.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_72.sh</code> <em>(new)</em>,
+            <code>scratch/golden_72.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can turn any rotation into the single turn it performs, and back, with both
+            degenerate ends handled honestly rather than clamped. <code>rotation_slerp</code>
+            interpolates two orientations along the exact geodesic — <strong>0.00% excess
+            turning at all four of 7.1's pitch bands</strong>, against that lesson's 209.5%, 62.5%,
+            22.5% and 26.7%. <strong>42 checks green</strong>, eleven of them controls. The gimbal
+            demo grows two keys: <kbd>A</kbd> poses the craft by Rodrigues instead of by three
+            angles and prints the disagreement (0.000003°), and <kbd>B</kbd> runs the two blends
+            side by side so you can watch one of them turn rigidly about a line that never moves
+            while the other wanders off it.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…prove Euler's rotation theorem from three determinant identities, and say exactly which
+          step of the proof fails in four dimensions.</li>
+      <li>…derive Rodrigues' rotation formula from a decomposition you can draw, and read each of
+          its three terms as a sentence rather than as a symbol.</li>
+      <li>…recover the axis and angle of a rotation matrix, by two different routes, and choose
+          between them with a threshold you derived and then measured.</li>
+      <li>…explain why a representation can have a singularity that costs nothing and another that
+          costs everything, using one formula that covers both.</li>
+      <li>…implement spherical linear interpolation, and demonstrate on measured paths that it
+          performs exactly the turning a move requires.</li>
+      <li>…state what axis-angle cannot do — compose, and be stored cheaply — precisely enough to
+          predict what a quaternion will have to fix.</li>
+      <li>…tell a real optimisation from one whose sign flips between measurements, and know which
+          kind you are looking at before you pay for it in readability.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: three numbers, twenty-four meanings, one hole</a></li>
+      <li><a href="#intuition">Building intuition: the line that stays still</a></li>
+      <li><a href="#what">What axis-angle is, and the two ambiguities it admits</a></li>
+      <li><a href="#theorem">Euler's rotation theorem</a></li>
+      <li><a href="#rodrigues">Rodrigues' rotation formula, derived</a></li>
+      <li><a href="#exponential">The exponential map, and the rotation vector</a></li>
+      <li><a href="#forward">Implementation: building a rotation</a></li>
+      <li><a href="#inverse">Implementation: recovering one</a></li>
+      <li><a href="#geodesic">The geodesic: 7.1's indictment, answered</a></li>
+      <li><a href="#cost">What it costs, and why this is not the end</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: three numbers, twenty-four meanings, one hole</h2>
+
+  <p>
+    Lesson 7.1 gave the engine an interface: three numbers a human can type, converted to the
+    <code>mat3</code> the renderer multiplies by. It works, it is written down, and the
+    Conventions page now names it. It also ended with three indictments, and they are worth
+    restating precisely because this lesson answers all three.
+  </p>
+
+  <p>
+    <strong>First, the convention is load-bearing and invisible.</strong> There are twenty-four
+    self-consistent ways to read three angles as an orientation. They are all in use. The same
+    triple <code>(30°, 40°, 50°)</code> read under the wrong one lands anywhere from 16° to 83°
+    away from where it belongs, and the 16° case is the dangerous one, because 16° reads as a
+    tuning problem rather than as a wrong answer. A file that contains three floats and does not
+    say which of the twenty-four it means does not contain an orientation.
+  </p>
+
+  <p>
+    <strong>Second, there is a hole.</strong> At pitch ±90° the yaw and roll knobs turn about the
+    same world axis, one degree of freedom of the <em>parameterisation</em> disappears, and the
+    matrix that converts knob rates into angular velocity drops rank. That is not a defect of the
+    y-x-z order; every three-angle scheme has such a hole somewhere, and the only thing an axis
+    order decides is where to put it.
+  </p>
+
+  <p>
+    <strong>Third — and this is the one that actually costs a game frames and looks wrong on
+    screen — interpolating three angles does not interpolate the rotation.</strong> Lesson 7.1
+    measured a generic blend performing 204.29° of turning for a journey that needs 179.05°: a
+    <strong>25.24° detour</strong>, with the angular speed varying by a factor of 1.56 along the
+    way. Run the identical angle deltas near gimbal lock and the detour becomes
+    <strong>209.5%</strong> — the blend performs three times the turning the move requires.
+  </p>
+
+  <p>
+    Every one of those three is a property of <em>the way we wrote the rotation down</em>, not of
+    rotation. So the honest response is not to patch the notation. It is to ask whether there is a
+    different question to ask about a rotation whose answer does not have these problems.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The question this lesson asks</span>
+    <p>
+      Euler angles answer: <em>which three turns, about which axes, in which order, compose to
+      this orientation?</em> That question has twenty-four readings and a singularity in each.
+    </p>
+    <p>
+      Axis-angle answers: <em>what single turn is this?</em> That question has exactly one reading,
+      and — as §4 proves — it always has an answer.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: the line that stays still</h2>
+
+  <p>
+    Put your hand flat on the desk, palm down, fingers pointing away from you. Now turn it into any
+    other orientation you like: twist it, tip it, roll it, take as many separate movements as you
+    want. Stop somewhere awkward.
+  </p>
+
+  <p>
+    Here is the claim. <strong>However you got there, there is a single straight line through your
+    wrist such that one clean turn about that line — one movement, one axis — would have taken
+    your hand from flat-on-the-desk to exactly where it is now.</strong> Not approximately. Exactly.
+    And you did not choose that line; it was decided the moment you stopped moving.
+  </p>
+
+  <p>
+    That is a strong claim and it should not feel obvious. You performed three or four separate
+    turns about three or four different axes, and the assertion is that the <em>net effect</em> of
+    all of them is always expressible as one turn about one axis. Most compositions of operations
+    do not collapse like that. Two translations compose into a translation, fine — but two
+    <em>scalings</em> about different centres do not generally compose into a scaling, and two
+    shears do not compose into a shear. Rotations are special, and the reason they are special is
+    a fact about the number three.
+  </p>
+
+  <p>
+    Before the algebra, though, look at what the claim means for the points of the object. If there
+    is a single axis, then every point <em>on</em> that axis has not moved at all — a rotation
+    about a line leaves the line fixed. And every point <em>off</em> the axis has travelled along a
+    circle centred on the axis, through exactly the same angle as every other point. So the entire
+    motion of an entire rigid body, however many separate movements it took, is described by a
+    line and one number.
+  </p>
+
+  @@FIG_FIXED_LINE@@
+
+  <p>
+    Figure 1 draws that for three sample vectors. The teal one lies along the axis and is in
+    precisely the same place in both panels — the arrowhead has not moved a pixel. The amber and
+    blue ones have each swung round it by the same 58°, and the curves in the right-hand panel are
+    the paths they took. The dashed circle is the orbit: it is drawn once, and <em>every</em>
+    direction at that angle from the axis lives on it.
+  </p>
+
+  <p>
+    There is a second way to see it that some people find more convincing, and it is worth having
+    both. Take any rotation and ask what it does to a sphere centred at the origin. It maps the
+    sphere onto itself — rotations preserve length, so no point leaves the sphere and no point on
+    the sphere fails to be hit. So we have a continuous map from a sphere to itself that preserves
+    distances and does not turn it inside out. Now think about what such a map can do to the
+    <em>directions</em> on the sphere, and the question becomes: must something be left alone?
+    In two dimensions, no — spin a circle by 37° and nothing on it stays put. In three, the answer
+    turns out to be yes, and the difference between those two answers is exactly the difference
+    between an even dimension and an odd one.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Where this is going</span>
+    <p>
+      The two-dimensional case leaving nothing fixed is not a failure of intuition, it is the
+      right answer: a 2-D rotation's axis points <em>out of the plane</em>, which is a direction
+      the plane does not contain. That is the first hint that "rotation happens in a
+      <strong>plane</strong>, and in 3-D a plane happens to have a unique normal" is the deeper
+      statement, and "rotation happens about an axis" is a coincidence of three dimensions.
+      Lesson 7.3 picks that thread up; §4.3 shows what happens when you pull it in 4-D.
+    </p>
+  </div>
+
+  <h2 id="what">3. What axis-angle is, and the two ambiguities it admits</h2>
+
+  <p>
+    The representation is exactly what the last section described: a unit vector <code>n</code>
+    naming the line, and an angle <code>θ</code> saying how far to turn about it, right-hand rule
+    (Conventions §2). Four numbers, for a thing with three degrees of freedom, with one constraint
+    — <code>|n| = 1</code> — soaking up the extra.
+  </p>
+
+  <p>
+    Before we build anything, it is worth being precise about when two different <code>(n, θ)</code>
+    pairs are the same rotation, because <em>every</em> difficulty in this lesson's second half is
+    one of these three facts arriving somewhere inconvenient.
+  </p>
+
+  <ol>
+    <li>
+      <strong>Reversing both reverses nothing.</strong> <code>(n, θ)</code> and
+      <code>(−n, −θ)</code> are the same rotation: turning the other way about the opposite axis
+      gets you to the same place. We remove this one by <em>convention</em>, taking
+      <code>θ ≥ 0</code> always, and it costs nothing.
+    </li>
+    <li>
+      <strong>The identity has no axis.</strong> <code>(n, 0)</code> is the identity for
+      <em>every</em> unit <code>n</code>. "Every axis is correct" and "no axis is determined" are
+      the same sentence, and no implementation can do better than pick one and say so.
+    </li>
+    <li>
+      <strong>A half-turn has two axes.</strong> <code>(n, 180°)</code> and
+      <code>(−n, 180°)</code> are the same rotation — turning 180° one way about a line and 180°
+      the other way about the same line land in the same place. This is not a numerical
+      difficulty; it is a genuine two-valued answer, and the measurement in §8.6 shows the two
+      differing by 1.0e-05°, which is float noise and not disagreement.
+    </li>
+  </ol>
+
+  <p>
+    With <code>θ ≥ 0</code> fixed by convention, we also want an upper bound, and
+    <strong>[0, 180°] is the natural one</strong>: a turn of 200° about <code>n</code> is a turn of
+    160° about <code>−n</code>, so restricting to half-turns or less loses nothing and gains the
+    property that <em>the angle is the distance</em>. That is not a small gain. It means
+    <code>θ</code> is exactly the quantity Lesson 7.1 had to build a separate instrument to
+    measure, and it falls out of the representation for free.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Canonical form, used everywhere in this lesson</span>
+    <p>
+      <code>axis</code> is unit, <code>angle</code> is in <code>[0, π]</code>. Every rotation has
+      exactly one such spelling, except the identity (infinitely many, because the axis is free)
+      and the half-turn (two, because the sign is free). Both exceptions are real, both are
+      handled, and neither is swept under a clamp.
+    </p>
+  </div>

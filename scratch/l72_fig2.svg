@@ -1,0 +1,39 @@
+<svg viewBox="0 0 760 396" role="img" aria-labelledby="f72b-t f72b-d">
+  <title id="f72b-t">Why three dimensions and not four</title>
+  <desc id="f72b-d">Two complex-plane panels, each with a dashed unit circle. On the left, three eigenvalues of a 3-D rotation: a conjugate pair off the real axis and one left over, sitting at plus one on the real axis and marked in teal. On the right, four eigenvalues of a 4-D double rotation, forming two conjugate pairs with none left over and none at plus one. Underneath each, the measured determinant of R minus the identity: zero on the left, 0.25840 on the right.</desc>
+  <defs>
+    <marker id="e-i-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-teal-f72b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<text x="192" y="26" class="sm" text-anchor="middle">3-D: three eigenvalues</text>
+<circle cx="192" cy="168" r="86.0" fill="none" stroke="#8f918a" stroke-width="1.1" stroke-dasharray="3 4"/>
+<line x1="88.0" y1="168" x2="296.0" y2="168" class="grid" stroke-width="1.0"/>
+<line x1="192" y1="64.0" x2="192" y2="272.0" class="grid" stroke-width="1.0"/>
+<text x="302.0" y="172" class="xs muted" text-anchor="start">Re</text>
+<text x="192" y="58.0" class="xs muted" text-anchor="middle">Im</text>
+<circle cx="237.6" cy="95.1" r="5.0" fill="#5082e6"/>
+<circle cx="237.6" cy="240.9" r="5.0" fill="#5082e6"/>
+<circle cx="278.0" cy="168.0" r="5.0" fill="#60ded0"/>
+<text x="284.0" y="188" class="xs" text-anchor="start">λ = 1</text>
+<line x1="278.0" y1="168.0" x2="282.0" y2="180.0" stroke="#60ded0" stroke-width="1.0" fill="none"/>
+<text x="192" y="294.0" class="xs t-ok" text-anchor="middle">one is left over, and it must be +1</text>
+<text x="192" y="312.0" class="mono xs muted" text-anchor="middle">det(R − I) = 0  →  a fixed line exists</text>
+<text x="568" y="26" class="sm" text-anchor="middle">4-D: four eigenvalues</text>
+<circle cx="568" cy="168" r="86.0" fill="none" stroke="#8f918a" stroke-width="1.1" stroke-dasharray="3 4"/>
+<line x1="464.0" y1="168" x2="672.0" y2="168" class="grid" stroke-width="1.0"/>
+<line x1="568" y1="64.0" x2="568" y2="272.0" class="grid" stroke-width="1.0"/>
+<text x="678.0" y="172" class="xs muted" text-anchor="start">Re</text>
+<text x="568" y="58.0" class="xs muted" text-anchor="middle">Im</text>
+<circle cx="638.4" cy="118.7" r="5.0" fill="#5082e6"/>
+<circle cx="638.4" cy="217.3" r="5.0" fill="#5082e6"/>
+<circle cx="623.3" cy="102.1" r="5.0" fill="#5082e6"/>
+<circle cx="623.3" cy="233.9" r="5.0" fill="#5082e6"/>
+<text x="568" y="294.0" class="xs t-bad" text-anchor="middle">they pair up perfectly. none is left over</text>
+<text x="568" y="312.0" class="mono xs muted" text-anchor="middle">det(R − I) = 0.25840  →  nothing is fixed</text>
+<text x="380.0" y="350" class="xs muted" text-anchor="middle">a real matrix's eigenvalues come in conjugate PAIRS, and a rotation's all sit on the unit circle</text>
+<text x="380.0" y="372" class="xs muted" text-anchor="middle">an odd dimension cannot pair them all up — and a real one on the unit circle is ±1, which det = +1 settles</text>
+</svg>

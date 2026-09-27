@@ -1,0 +1,134 @@
+<svg viewBox="0 0 760 504" role="img" aria-labelledby="f77i-t f77i-d">
+  <title id="f77i-t">Keyframe reduction on one channel</title>
+  <desc id="f77i-d">A sine curve with its 31 baked keys, the 19 that survive a half-degree tolerance and the 8 that survive two degrees, and a table of keys, bytes and error at five tolerances.</desc>
+  <defs>
+    <marker id="e-i-f77i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">throwing away the keys the sampler can rebuild</text>
+<text x="380.0" y="47" class="xs muted" text-anchor="middle">thigh.L's rotation channel: 31 keys, then 19, then 8</text>
+<rect x="152.0" y="84.0" width="546.0" height="128.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<path d="M 174.00,148.00 L 176.09,146.80 L 178.18,145.59 L 180.28,144.39 L 182.37,143.19 L 184.46,142.00 L 186.55,140.80 L 188.64,139.62 L 190.73,138.44 L 192.82,137.26 L 194.92,136.09 L 197.01,134.94 L 199.10,133.79 L 201.19,132.64 L 203.28,131.52 L 205.38,130.40 L 207.47,129.29 L 209.56,128.20 L 211.65,127.12 L 213.74,126.05 L 215.83,125.00 L 217.93,123.97 L 220.02,122.95 L 222.11,121.95 L 224.20,120.96 L 226.29,120.00 L 228.38,119.05 L 230.47,118.13 L 232.57,117.22 L 234.66,116.34 L 236.75,115.47 L 238.84,114.63 L 240.93,113.82 L 243.03,113.02 L 245.12,112.25 L 247.21,111.51 L 249.30,110.79 L 251.39,110.09 L 253.48,109.42 L 255.57,108.78 L 257.67,108.16 L 259.76,107.57 L 261.85,107.01 L 263.94,106.48 L 266.03,105.98 L 268.12,105.50 L 270.22,105.06 L 272.31,104.64 L 274.40,104.25 L 276.49,103.89 L 278.58,103.57 L 280.68,103.27 L 282.77,103.01 L 284.86,102.77 L 286.95,102.57 L 289.04,102.39 L 291.13,102.25 L 293.23,102.14 L 295.32,102.06 L 297.41,102.02 L 299.50,102.00 L 301.59,102.02 L 303.68,102.06 L 305.77,102.14 L 307.87,102.25 L 309.96,102.39 L 312.05,102.57 L 314.14,102.77 L 316.23,103.01 L 318.32,103.27 L 320.42,103.57 L 322.51,103.89 L 324.60,104.25 L 326.69,104.64 L 328.78,105.06 L 330.88,105.50 L 332.97,105.98 L 335.06,106.48 L 337.15,107.01 L 339.24,107.57 L 341.33,108.16 L 343.43,108.78 L 345.52,109.42 L 347.61,110.09 L 349.70,110.79 L 351.79,111.51 L 353.88,112.25 L 355.98,113.02 L 358.07,113.82 L 360.16,114.63 L 362.25,115.47 L 364.34,116.34 L 366.43,117.22 L 368.52,118.13 L 370.62,119.05 L 372.71,120.00 L 374.80,120.96 L 376.89,121.95 L 378.98,122.95 L 381.07,123.97 L 383.17,125.00 L 385.26,126.05 L 387.35,127.12 L 389.44,128.20 L 391.53,129.29 L 393.62,130.40 L 395.72,131.52 L 397.81,132.64 L 399.90,133.79 L 401.99,134.94 L 404.08,136.09 L 406.18,137.26 L 408.27,138.44 L 410.36,139.62 L 412.45,140.80 L 414.54,142.00 L 416.63,143.19 L 418.73,144.39 L 420.82,145.59 L 422.91,146.80 L 425.00,148.00 L 427.09,149.20 L 429.18,150.41 L 431.27,151.61 L 433.37,152.81 L 435.46,154.00 L 437.55,155.20 L 439.64,156.38 L 441.73,157.56 L 443.82,158.74 L 445.92,159.91 L 448.01,161.06 L 450.10,162.21 L 452.19,163.36 L 454.28,164.48 L 456.38,165.60 L 458.47,166.71 L 460.56,167.80 L 462.65,168.88 L 464.74,169.95 L 466.83,171.00 L 468.93,172.03 L 471.02,173.05 L 473.11,174.05 L 475.20,175.04 L 477.29,176.00 L 479.38,176.95 L 481.48,177.87 L 483.57,178.78 L 485.66,179.66 L 487.75,180.53 L 489.84,181.37 L 491.93,182.18 L 494.02,182.98 L 496.12,183.75 L 498.21,184.49 L 500.30,185.21 L 502.39,185.91 L 504.48,186.58 L 506.57,187.22 L 508.67,187.84 L 510.76,188.43 L 512.85,188.99 L 514.94,189.52 L 517.03,190.02 L 519.12,190.50 L 521.22,190.94 L 523.31,191.36 L 525.40,191.75 L 527.49,192.11 L 529.58,192.43 L 531.67,192.73 L 533.77,192.99 L 535.86,193.23 L 537.95,193.43 L 540.04,193.61 L 542.13,193.75 L 544.23,193.86 L 546.32,193.94 L 548.41,193.98 L 550.50,194.00 L 552.59,193.98 L 554.68,193.94 L 556.77,193.86 L 558.87,193.75 L 560.96,193.61 L 563.05,193.43 L 565.14,193.23 L 567.23,192.99 L 569.33,192.73 L 571.42,192.43 L 573.51,192.11 L 575.60,191.75 L 577.69,191.36 L 579.78,190.94 L 581.88,190.50 L 583.97,190.02 L 586.06,189.52 L 588.15,188.99 L 590.24,188.43 L 592.33,187.84 L 594.42,187.22 L 596.52,186.58 L 598.61,185.91 L 600.70,185.21 L 602.79,184.49 L 604.88,183.75 L 606.98,182.98 L 609.07,182.18 L 611.16,181.37 L 613.25,180.53 L 615.34,179.66 L 617.43,178.78 L 619.52,177.87 L 621.62,176.95 L 623.71,176.00 L 625.80,175.04 L 627.89,174.05 L 629.98,173.05 L 632.08,172.03 L 634.17,171.00 L 636.26,169.95 L 638.35,168.88 L 640.44,167.80 L 642.53,166.71 L 644.62,165.60 L 646.72,164.48 L 648.81,163.36 L 650.90,162.21 L 652.99,161.06 L 655.08,159.91 L 657.17,158.74 L 659.27,157.56 L 661.36,156.38 L 663.45,155.20 L 665.54,154.00 L 667.63,152.81 L 669.73,151.61 L 671.82,150.41 L 673.91,149.20 L 676.00,148.00" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="166.0" y="242.0" class="xs" text-anchor="end">31 keys, as baked</text>
+<circle cx="174.00" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="190.73" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="207.47" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="224.20" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="240.93" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="257.67" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="274.40" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="291.13" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="307.87" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="324.60" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="341.33" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="358.07" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="374.80" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="391.53" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="408.27" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="425.00" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="441.73" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="458.47" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="475.20" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="491.93" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="508.67" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="525.40" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="542.13" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="558.87" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="575.60" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="592.33" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="609.07" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="625.80" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="642.53" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="659.27" cy="238.00" r="2.6" fill="#9e84e8"/>
+<circle cx="676.00" cy="238.00" r="2.6" fill="#9e84e8"/>
+<text x="166.0" y="264.0" class="xs" text-anchor="end">19 keys, 0.50°</text>
+<circle cx="174.00" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="174.00" cy="148.00" r="2.8" fill="#60c4ce"/>
+<circle cx="224.20" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="224.20" cy="120.96" r="2.8" fill="#60c4ce"/>
+<circle cx="257.83" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="257.83" cy="108.11" r="2.8" fill="#60c4ce"/>
+<circle cx="274.40" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="274.40" cy="104.25" r="2.8" fill="#60c4ce"/>
+<circle cx="290.97" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="290.97" cy="102.26" r="2.8" fill="#60c4ce"/>
+<circle cx="308.03" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="308.03" cy="102.26" r="2.8" fill="#60c4ce"/>
+<circle cx="324.60" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="324.60" cy="104.25" r="2.8" fill="#60c4ce"/>
+<circle cx="341.17" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="341.17" cy="108.11" r="2.8" fill="#60c4ce"/>
+<circle cx="374.80" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="374.80" cy="120.96" r="2.8" fill="#60c4ce"/>
+<circle cx="425.00" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="425.00" cy="148.00" r="2.8" fill="#60c4ce"/>
+<circle cx="475.20" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="475.20" cy="175.04" r="2.8" fill="#60c4ce"/>
+<circle cx="508.83" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="508.83" cy="187.89" r="2.8" fill="#60c4ce"/>
+<circle cx="525.40" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="525.40" cy="191.75" r="2.8" fill="#60c4ce"/>
+<circle cx="541.97" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="541.97" cy="193.74" r="2.8" fill="#60c4ce"/>
+<circle cx="559.03" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="559.03" cy="193.74" r="2.8" fill="#60c4ce"/>
+<circle cx="575.60" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="575.60" cy="191.75" r="2.8" fill="#60c4ce"/>
+<circle cx="592.17" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="592.17" cy="187.89" r="2.8" fill="#60c4ce"/>
+<circle cx="625.80" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="625.80" cy="175.04" r="2.8" fill="#60c4ce"/>
+<circle cx="676.00" cy="260.00" r="2.6" fill="#60c4ce"/>
+<circle cx="676.00" cy="148.00" r="2.8" fill="#60c4ce"/>
+<text x="166.0" y="286.0" class="xs" text-anchor="end">8 keys, 2.00°</text>
+<circle cx="174.00" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="257.83" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="308.03" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="358.23" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="491.77" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="541.97" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="592.17" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<circle cx="676.00" cy="282.00" r="2.6" fill="#f2ba5c"/>
+<text x="425.0" y="312.0" class="xs muted" text-anchor="middle">the survivors bunch where the curve turns, which is where a straight line between neighbours misses it</text>
+<text x="150.0" y="342.0" class="xs muted" text-anchor="start">tolerance</text>
+<text x="340.0" y="342.0" class="xs muted" text-anchor="end">keys</text>
+<text x="448.0" y="342.0" class="xs muted" text-anchor="end">key bytes</text>
+<text x="544.0" y="342.0" class="xs muted" text-anchor="end">error</text>
+<text x="654.0" y="342.0" class="xs muted" text-anchor="end">headers/keys</text>
+<line x1="150.0" y1="350.0" x2="660.0" y2="350.0" class="grid" stroke-width="1.0"/>
+<text x="150.0" y="367.0" class="xs" text-anchor="start">none</text>
+<text x="340.0" y="367.0" class="xs mono" text-anchor="end">2,139</text>
+<text x="448.0" y="367.0" class="xs mono" text-anchor="end">37,076</text>
+<text x="544.0" y="367.0" class="xs mono" text-anchor="end">0.1534°</text>
+<text x="654.0" y="367.0" class="xs mono" text-anchor="end">0.04×</text>
+<text x="150.0" y="384.0" class="xs" text-anchor="start">0.05°</text>
+<text x="340.0" y="384.0" class="xs mono" text-anchor="end">386</text>
+<text x="448.0" y="384.0" class="xs mono" text-anchor="end">7,616</text>
+<text x="544.0" y="384.0" class="xs mono" text-anchor="end">0.1534°</text>
+<text x="654.0" y="384.0" class="xs mono" text-anchor="end">0.22×</text>
+<text x="150.0" y="401.0" class="xs" text-anchor="start">0.25°</text>
+<text x="340.0" y="401.0" class="xs mono" text-anchor="end">287</text>
+<text x="448.0" y="401.0" class="xs mono" text-anchor="end">5,636</text>
+<text x="544.0" y="401.0" class="xs mono" text-anchor="end">0.2553°</text>
+<text x="654.0" y="401.0" class="xs mono" text-anchor="end">0.29×</text>
+<text x="150.0" y="418.0" class="xs" text-anchor="start">0.50°</text>
+<text x="340.0" y="418.0" class="xs mono" text-anchor="end">191</text>
+<text x="448.0" y="418.0" class="xs mono" text-anchor="end">3,716</text>
+<text x="544.0" y="418.0" class="xs mono" text-anchor="end">0.5102°</text>
+<text x="654.0" y="418.0" class="xs mono" text-anchor="end">0.45×</text>
+<text x="150.0" y="435.0" class="xs" text-anchor="start">2.00°</text>
+<text x="340.0" y="435.0" class="xs mono" text-anchor="end">104</text>
+<text x="448.0" y="435.0" class="xs mono" text-anchor="end">1,976</text>
+<text x="544.0" y="435.0" class="xs mono" text-anchor="end">3.0000°</text>
+<text x="654.0" y="435.0" class="xs mono" text-anchor="end">0.84×</text>
+<text x="150.0" y="452.0" class="xs" text-anchor="start">8.00°</text>
+<text x="340.0" y="452.0" class="xs mono" text-anchor="end">62</text>
+<text x="448.0" y="452.0" class="xs mono" text-anchor="end">1,136</text>
+<text x="544.0" y="452.0" class="xs mono" text-anchor="end">7.8921°</text>
+<text x="654.0" y="452.0" class="xs mono" text-anchor="end">1.46×</text>
+<text x="380.0" y="474" class="xs muted" text-anchor="middle">the error column is against the FUNCTION the keys were baked from, so the first row is what 30 Hz costs before</text>
+<text x="380.0" y="490" class="xs muted" text-anchor="middle">anything is thrown away. The last column is the warning: the std::vector headers do not shrink with the keys.</text>
+</svg>

@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f612a-t f612a-d">
+  <title id="f612a-t">The 8-bit lid and the values above it</title>
+  <desc id="f612a-d">A logarithmic axis of linear values with the 1.0 clamp marked, and the measured specular peaks of surfaces at five roughnesses.</desc>
+  <defs>
+    <marker id="e-i-f612a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f612a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f612a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f612a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f612a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">What an 8-bit pixel can hold, and what the shading equation returns</text>
+<line x1="120" y1="300" x2="640" y2="300" class="grid" stroke-width="1.0"/>
+<line x1="149.52927975757726" y1="296" x2="149.52927975757726" y2="305" class="grid" stroke-width="1.0"/>
+<text x="149.52927975757726" y="320" class="xs" text-anchor="middle">1</text>
+<line x1="247.6234238060618" y1="296" x2="247.6234238060618" y2="305" class="grid" stroke-width="1.0"/>
+<text x="247.6234238060618" y="320" class="xs" text-anchor="middle">10</text>
+<line x1="345.71756785454636" y1="296" x2="345.71756785454636" y2="305" class="grid" stroke-width="1.0"/>
+<text x="345.71756785454636" y="320" class="xs" text-anchor="middle">100</text>
+<line x1="443.8117119030309" y1="296" x2="443.8117119030309" y2="305" class="grid" stroke-width="1.0"/>
+<text x="443.8117119030309" y="320" class="xs" text-anchor="middle">1,000</text>
+<line x1="541.9058559515154" y1="296" x2="541.9058559515154" y2="305" class="grid" stroke-width="1.0"/>
+<text x="541.9058559515154" y="320" class="xs" text-anchor="middle">10,000</text>
+<line x1="640.0" y1="296" x2="640.0" y2="305" class="grid" stroke-width="1.0"/>
+<text x="640.0" y="320" class="xs" text-anchor="middle">100,000</text>
+<text x="380.0" y="344" class="xs" text-anchor="middle">linear value the shading equation returns</text>
+<line x1="149.5" y1="60.0" x2="149.5" y2="298.0" stroke="#e05c5c" stroke-width="2.2" fill="none"/>
+<text x="141.52927975757726" y="54" class="xs" text-anchor="end">1.0 — the lid</text>
+<rect x="149.52927975757726" y="66" width="490.4707202424228" height="228" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="394.7646398787886" y="92" class="xs" text-anchor="middle">everything in here is stored as code 255</text>
+<text x="394.7646398787886" y="110" class="xs" text-anchor="middle">— the same code, for all of it —</text>
+<circle cx="143.5" cy="140" r="4" fill="#5ac878"/>
+<text x="153.47878815720637" y="144" class="xs" text-anchor="start">roughness 0.49   0.87</text>
+<circle cx="173.1" cy="162" r="4" fill="#f0961e"/>
+<text x="183.0522376911274" y="166" class="xs" text-anchor="start">roughness 0.35   1.74</text>
+<circle cx="253.9" cy="184" r="4" fill="#f0961e"/>
+<text x="263.9092660297109" y="188" class="xs" text-anchor="start">roughness 0.20   11.59</text>
+<circle cx="370.0" cy="206" r="4" fill="#f0961e"/>
+<text x="380.0483580667391" y="210" class="xs" text-anchor="start">roughness 0.10   177.03</text>
+<circle cx="488.0" cy="228" r="4" fill="#f0961e"/>
+<text x="498.03875768735986" y="232" class="xs" text-anchor="start">roughness 0.05   2,823.99</text>
+<circle cx="615.2" cy="250" r="4" fill="#e05c5c"/>
+<text x="605.2354551488079" y="254" class="xs" text-anchor="end">polished METAL  55,917  (+15.8 stops)</text>
+<text x="360.0" y="358" class="xs" text-anchor="middle">The demo's own roughness is 0.49, which peaks at 0.8676 — JUST under. That is not luck and it is not an accident:</text>
+<text x="360.0" y="376" class="xs" text-anchor="middle">`k_reference_irradiance` = pi was chosen in 6.2 so a white surface renders at exactly 1.0. The engine has been AVOIDING</text>
+<text x="360.0" y="394" class="xs" text-anchor="middle">the question by construction, and one polished material is all it takes to ask it.</text>
+</svg>

@@ -1,0 +1,552 @@
+  <h2 id="inverse">8. Implementation: recovering one</h2>
+
+  <p>
+    Given a rotation matrix, find the turn. This is the harder half, it is where the two
+    ambiguities of §3 arrive as real code, and it is the part most implementations get subtly
+    wrong — usually by clamping something and hoping.
+  </p>
+
+  <h3 id="inverse-angle">8.1 The angle, which 7.1 already computed</h3>
+
+  <p>
+    Split any matrix into a symmetric part and an antisymmetric part; it is the matrix version of
+    splitting a function into even and odd halves, and for a rotation both halves turn out to carry
+    exactly one thing we want. Take the closed form from §5.3 and read it:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \operatorname{tr}(R) = 1 + 2\cos\theta, \qquad R - R^{\mathsf T} = 2\sin\theta\,[\mathbf{n}]_\times \]</span>
+    <span class="eq-plain">trace(R) = 1 + 2 cos(theta), and R - R^T = 2 sin(theta) [n]_x</span>
+  </div>
+
+  <p>
+    The trace comes from the diagonal: <code>I cos θ</code> contributes <code>3cos θ</code>,
+    <code>[n]ₓ</code> has a zero diagonal and contributes nothing, and
+    <code>(1 − cos θ)n nᵀ</code> contributes <code>(1 − cos θ)(n<sub>x</sub>² + n<sub>y</sub>² +
+    n<sub>z</sub>²) = 1 − cos θ</code> because <code>n</code> is unit. Total
+    <code>3cos θ + 1 − cos θ = 1 + 2cos θ</code>.
+  </p>
+
+  <p>
+    The antisymmetric part is even easier: <code>I</code> and <code>n nᵀ</code> are both symmetric,
+    so they cancel completely in <code>R − Rᵀ</code>, and only the <code>sin θ [n]ₓ</code> term
+    survives — doubled, because subtracting an antisymmetric matrix's transpose is adding it.
+  </p>
+
+  <p>
+    So we have the cosine and the sine of the angle, and Lesson 7.1 §8 established at length why
+    <code>atan2</code> of both beats <code>acos</code> of one: the trace alone cannot resolve a
+    small turn, because near <code>θ = 0</code> the trace is <code>3 − θ²</code> and a
+    <code>float</code> at 3.0 cannot hold a change of 1.6e-05. The measured relative error of the
+    textbook <code>acos((tr R − 1)/2)</code> at a 0.004° turn is <strong>1.00</strong> — it returns
+    zero.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \theta \;=\; \operatorname{atan2}\!\left(\tfrac{1}{2}\big\|R - R^{\mathsf T}\big\|,\; \tfrac{1}{2}\big(\operatorname{tr}(R) - 1\big)\right) \]</span>
+    <span class="eq-plain">theta = atan2( |R - R^T| / 2 , (trace(R) - 1) / 2 )</span>
+  </div>
+
+  <p>
+    The first argument is a magnitude, so <code>atan2</code> returns a value in
+    <code>[0, π]</code> — which is §3's canonical range, arriving for free rather than being
+    clamped into place. This is the same four lines Lesson 7.1 wrote as
+    <code>angle_between_rotations</code>, and the only thing 7.2 changes is that it stops throwing
+    away the vector it takes the length of.
+  </p>
+
+  @@FIG_AXIS_RENDER@@
+
+  <h3 id="inverse-skew">8.2 The axis, for free, almost everywhere</h3>
+
+  <p>
+    That vector is the axis. <code>R − Rᵀ = 2 sin θ [n]ₓ</code>, and an antisymmetric matrix has
+    three independent entries which are exactly the components of the vector it crosses with. In
+    written notation they are <code>(r<sub>21</sub> − r<sub>12</sub>, r<sub>02</sub> −
+    r<sub>20</sub>, r<sub>10</sub> − r<sub>01</sub>)</code>, and that vector is
+    <code>2 sin θ · n</code>: direction the axis, length twice the sine.
+  </p>
+
+  <p>
+    So the general case is one division. Normalise the skew vector and you have the axis, with the
+    correct sign — because <code>sin θ &gt; 0</code> for every <code>θ</code> strictly between 0
+    and π, so normalising cannot flip it.
+  </p>
+
+<pre><code class="lang-cpp">const vec3 skew{m.at(2, 1) - m.at(1, 2),
+                m.at(0, 2) - m.at(2, 0),
+                m.at(1, 0) - m.at(0, 1)};
+// ... and after computing the angle from atan2 of its length and the trace:
+out.value.axis = skew / two_sin;</code></pre>
+
+  <div class="worked">
+    <p><strong>verify_72 §C.1</strong> — fifty thousand round trips, broken down by which branch
+      answered, because a branch that is quietly worse than its sibling is invisible in a single
+      worst case:</p>
+<pre><code>50,000 round trips over the full range, by route:
+   general    33417 trips, worst orientation error 1.418e-05°
+   no_axis        -  (never taken)
+  reversal    16583 trips, worst orientation error 2.755e-05°</code></pre>
+    <p>
+      Both branches are exercised — thirty-three thousand and sixteen thousand times — which is
+      itself a check: a sweep that never reaches a branch cannot report anything about it. The
+      <code>no_axis</code> row prints a dash rather than a zero, because a zero there would be the
+      best-looking number in the table standing for no measurement at all. That is Lesson 7.1's
+      §D.3 rule, and it has now caught something in three consecutive lessons.
+    </p>
+  </div>
+
+  <h3 id="inverse-amplify">8.3 What an axis error actually costs — the formula that explains
+      both ends</h3>
+
+  <p>
+    Before handling either degenerate case, it is worth knowing what is at stake in each, and there
+    is one formula that answers for both. Suppose the axis you recover is off by a small angle
+    <code>φ</code>. How wrong is the resulting orientation?
+  </p>
+
+  <p>
+    Two turns of the same angle <code>θ</code> about axes <code>φ</code> apart differ by a rotation
+    of <code>Θ</code>, where
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \cos(\Theta/2) = \cos^2(\theta/2) + \sin^2(\theta/2)\cos\varphi \;\;\Longrightarrow\;\; \Theta \approx 2\sin(\theta/2)\,\varphi \quad\text{for small }\varphi \]</span>
+    <span class="eq-plain">cos(Theta/2) = cos^2(theta/2) + sin^2(theta/2) cos(phi), so for small phi, Theta is about 2 sin(theta/2) phi</span>
+  </div>
+
+  <p>
+    Read the consequence rather than the derivation. <strong>An error in the axis is multiplied by
+    <code>2 sin(θ/2)</code> on its way into the orientation.</strong> At <code>θ = 0</code> that
+    factor is <strong>zero</strong>. At <code>θ = 180°</code> it is <strong>two</strong> — the
+    error is doubled.
+  </p>
+
+  @@FIG_AMPLIFY@@
+
+  <p>
+    That single curve settles the design of the whole extraction, and it says something that is not
+    obvious: <strong>the two hard ends are not equally dangerous.</strong> At the identity the axis
+    becomes unrecoverable, and it does not matter, because whatever nonsense you return is
+    multiplied by essentially zero. At a half-turn the axis becomes hard to find, and it matters
+    more than anywhere else, because that is exactly where the multiplier peaks. A library that
+    treats the two ends symmetrically — the same epsilon, the same fallback — has misunderstood its
+    own problem.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §C.2</strong> — the law against measurement, with a 0.001 rad axis tilt:</p>
+<pre><code>     theta   measured ratio    2 sin(θ/2)    rel err
+      0.5°          0.00873        0.00873  8.86e-06
+      5.0°          0.08724        0.08724  1.10e-05
+     30.0°          0.51765        0.51764  2.30e-05
+     90.0°          1.41420        1.41421  1.07e-05
+    150.0°          1.93185        1.93185  6.79e-07
+    179.0°          1.99988        1.99992  2.14e-05</code></pre>
+    <p>
+      Worst relative error two parts in a hundred thousand across the full range, and note
+      <code>1.41420</code> at 90°, which is <code>√2</code>. The measurement makes no use of the
+      formula: it builds two real matrices with tilted axes and asks
+      <code>angle_between_rotations</code> how far apart they are.
+    </p>
+  </div>
+
+  <h3 id="inverse-reversal">8.4 The half-turn, where the easy route runs out</h3>
+
+  <p>
+    As <code>θ</code> approaches 180°, <code>sin θ</code> approaches zero, the skew vector's length
+    <code>2 sin θ</code> approaches zero with it, and normalising a vanishing vector amplifies
+    whatever error it carries. A <code>float</code>'s <code>ε</code> of absolute error in the matrix
+    entries arrives in the axis direction as roughly <code>ε / (2 sin θ)</code>, which grows without
+    bound. At exactly <code>θ = 180°</code> the matrix is symmetric, the skew vector is
+    <em>identically zero</em>, and there is nothing at all to normalise.
+  </p>
+
+  <p>
+    The information has not been destroyed, though — it has moved. At a half-turn, everything about
+    the rotation is in the symmetric part, which is where we have not looked. Take the closed form
+    again and read the diagonal and the off-diagonal separately:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ r_{ii} = \cos\theta + (1-\cos\theta)\,n_i^2, \qquad r_{ij} + r_{ji} = 2(1-\cos\theta)\,n_i n_j \quad (i \neq j) \]</span>
+    <span class="eq-plain">r_ii = cos(theta) + (1 - cos(theta)) n_i^2, and r_ij + r_ji = 2(1 - cos(theta)) n_i n_j for i not equal to j</span>
+  </div>
+
+  <p>
+    The <code>[n]ₓ</code> term is antisymmetric, so it cancels <em>exactly</em> in the second
+    line — which is precisely why this route is immune to whatever is happening to the part the
+    first route depends on. Rearranged, with <code>cos θ</code> already known from the trace:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ n_i^2 = \frac{r_{ii} - \cos\theta}{1 - \cos\theta}, \qquad n_j = \frac{r_{ij} + r_{ji}}{2(1-\cos\theta)\,n_i} \]</span>
+    <span class="eq-plain">n_i^2 = (r_ii - cos(theta)) / (1 - cos(theta)), and n_j = (r_ij + r_ji) / (2 (1 - cos(theta)) n_i)</span>
+  </div>
+
+  <p>
+    Two details make this work rather than merely exist. <strong>Pivot on the largest
+    diagonal.</strong> Every other component is obtained by dividing by <code>n<sub>i</sub></code>,
+    and the three squares sum to 1, so the largest is at least <code>1/3</code> and the divisor at
+    least <code>1/√3</code>. Pivot on the smallest instead and an axis lying close to a coordinate
+    plane divides by something near zero — trading one catastrophe for another.
+  </p>
+
+  <p>
+    <strong>And squares have no sign.</strong> The formula fixes the axis only up to an overall
+    <code>±</code>. Whatever is left of the antisymmetric part still knows the answer:
+    <code>skew</code> is <code>2 sin θ · n</code> with <code>sin θ &gt; 0</code> below 180°, so a
+    positive dot product with the candidate means we guessed right. At exactly 180° the dot product
+    is zero and we keep what we have — correctly, because both answers name the same rotation.
+  </p>
+
+  <h4 id="inverse-threshold">Where to switch, derived and then measured</h4>
+
+  <p>
+    Two routes, each bad at one end. The switch belongs where their errors are equal. The first
+    route divides by <code>2 sin θ</code>; the second divides by <code>1 − cos θ</code>, with its
+    pivot at least <code>1/√3</code>, so its error is about <code>√3 ε / (2(1 − cos θ))</code>.
+    Setting the two equal:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{\varepsilon}{2\sin\theta} = \frac{\sqrt{3}\,\varepsilon}{2(1-\cos\theta)} \;\Longrightarrow\; \sqrt{3}\sin\theta = 1-\cos\theta \;\Longrightarrow\; \tan(\theta/2) = \sqrt{3} \;\Longrightarrow\; \theta = 120° \]</span>
+    <span class="eq-plain">eps/(2 sin theta) = sqrt(3) eps / (2 (1 - cos theta)) gives sqrt(3) sin theta = 1 - cos theta, i.e. tan(theta/2) = sqrt(3), i.e. theta = 120 degrees</span>
+  </div>
+
+  <p>
+    The last step uses the half-angle identities <code>sin θ = 2sin(θ/2)cos(θ/2)</code> and
+    <code>1 − cos θ = 2sin²(θ/2)</code>; the <code>2sin(θ/2)</code> cancels off both sides and
+    leaves <code>√3 cos(θ/2) = sin(θ/2)</code>. So the threshold is <code>2π/3</code>.
+  </p>
+
+  @@FIG_ROUTES@@
+
+  <p>
+    And now the measurement, which says something slightly better than "the derivation was right".
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §C.3</strong> — both routes, at the same poses, on matrices carrying 1e-7
+      of <em>absolute</em> error, 4,000 random axes per probe:</p>
+<pre><code>     theta       skew route        symmetric     skew/sym
+     30.0°       1.749e-05°       1.191e-04°        0.15x
+     60.0°       1.170e-05°       3.609e-05°        0.32x
+     90.0°       1.054e-05°       1.574e-05°        0.67x
+    110.0°       1.271e-05°       1.258e-05°        1.01x
+    120.0°       1.288e-05°       1.491e-05°        0.86x
+    130.0°       1.552e-05°       1.196e-05°        1.30x
+    150.0°       1.942e-05°       1.255e-05°        1.55x
+    175.0°       1.481e-04°       1.290e-05°       11.48x
+    179.9°       6.892e-03°       1.211e-05°      569.14x</code></pre>
+  </div>
+
+  <p>
+    The two curves do not cross at a point. <strong>They run level across a wide band</strong> —
+    from about 95° to 140° they are within 25% of each other and the winner flips from probe to
+    probe, which is what a crossover looks like when you sample it finely enough. Outside the band
+    it is decisive: at 30° the skew route is 6.8× better, at 179.9° the symmetric route is
+    <strong>569× better</strong>. And 120° lands in the middle of the band where the choice does not
+    matter, which is the best possible place for a threshold to be. It is not a compromise between
+    two bad options; it is a point at which both are good.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the harness has its own copy of both routes</span>
+    <p>
+      The engine runs exactly one route per call, chosen by the threshold — so <em>the engine
+      cannot make this measurement about itself</em>. You cannot find where two curves cross by
+      plotting one of them. <code>verify_72</code> therefore has local
+      <code>axis_by_skew</code> and <code>axis_by_symmetric</code> functions and runs both at every
+      probe. Duplicating engine code in a harness is normally a smell; here it is the only way the
+      question can be asked.
+    </p>
+    <p>
+      And the cheapest possible check that the threshold is not arbitrary: at exactly 120° the two
+      routes must <em>agree</em>. Measured on clean matrices over twenty thousand random axes, they
+      differ by at most <strong>1.354e-05°</strong>. The switch is invisible.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The perturbation is ABSOLUTE, and that is the whole experiment</span>
+    <p>
+      A freshly built rotation matrix is accurate to a <em>relative</em> 1e-7, which hides the
+      conditioning question completely — the entries the skew route subtracts are themselves
+      proportional to <code>sin θ</code>, so their relative error does not blow up. Lesson 7.1 §6.2
+      found the same thing about the Euler extraction and had to correct its own first
+      explanation. A matrix that came down a ten-deep hierarchy, or out of a file, carries
+      <em>absolute</em> error, and that is the matrix whose axis is hard to find. Perturbing by a
+      fixed 1e-7 per entry is how this harness builds one.
+    </p>
+  </div>
+
+  <h3 id="inverse-identity">8.5 The identity end, where nothing much happens</h3>
+
+  <p>
+    At the other end the axis also becomes unrecoverable — and by §8.3, it costs nothing. The only
+    real requirement is not to divide by zero and not to return a non-unit axis, because
+    <code>normalised()</code> of the zero vector is the zero vector, and an
+    <code>axis_angle</code> with a zero axis builds a matrix that is not a rotation. That is a
+    silent corruption three systems downstream, and it is the reason the branch exists at all.
+  </p>
+
+  @@FIG_IDENTITY@@
+
+  <div class="worked">
+    <p><strong>verify_72 §C.5</strong> — two columns of one table, moving in opposite directions:</p>
+<pre><code>       theta     axis error  orientation error      route
+       1e-02        0.0005°         5.182e-06°    general
+       1e-03        0.0052°         5.176e-06°    general
+       1e-04        0.0515°         5.176e-06°    general
+       1e-05        0.5150°         5.176e-06°    general
+       1e-06       78.2988°         7.280e-05°    no_axis  &lt;- placeholder
+       1e-08       78.2988°         5.174e-06°    no_axis  &lt;- placeholder</code></pre>
+    <p>
+      The axis error scales as <code>1/θ</code> exactly as predicted — a decade per decade — and
+      reaches half a degree at the threshold. The orientation error does not move at all. Same
+      runs, same matrices: the axis is destroyed and the orientation those same numbers rebuild is
+      not.
+    </p>
+  </div>
+
+  <p>
+    The threshold follows from the same arithmetic. With 1e-7 of absolute error the axis is off by
+    about <code>ε/(2 sin θ)</code>, which reaches one degree at <code>θ ≈ 5.2e-6</code>;
+    <code>k_axis_angle_identity_angle</code> is set at <strong>1e-5</strong>, which raises the flag
+    while the axis is still half a degree good — slightly early rather than slightly late.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Two rows of that table are not a measurement, and the table says so</span>
+    <p>
+      Below the threshold the routine has stopped trying and returns the placeholder <code>+X</code>
+      axis. The "78.2988°" in those rows is the angle between <code>+X</code> and whatever the test
+      happened to choose as its true axis — a property of the test's inputs, not of the algorithm.
+      The first draft of this check took a maximum over the whole column and would have reported the
+      placeholder as the worst case of a degradation it is not part of. The figure draws those two
+      points hollow for the same reason.
+    </p>
+    <p>
+      And the strongest form of the argument is in the same rows. At <code>θ = 1e-6</code> an axis
+      <strong>78.30° wrong</strong> costs <strong>7.280e-05°</strong> of orientation, and
+      <code>2 sin(θ/2) × 78°</code> predicts <strong>7.830e-05°</strong>. The placeholder being
+      harmless is not a hope; it is arithmetic, and the arithmetic is the same formula as §8.3.
+    </p>
+  </div>
+
+  <h3 id="inverse-sign">8.6 The sign at a half-turn is genuinely free</h3>
+
+  <p>
+    §3 claimed <code>(n, 180°)</code> and <code>(−n, 180°)</code> are the same rotation. It is worth
+    seeing that as a number rather than accepting it, because code that compares two axes for
+    equality has to know, and code that rebuilds a matrix from them does not.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §C.6</strong>, with the control that makes it mean something:</p>
+<pre><code>(n, 180°) and (-n, 180°) are 1.002e-05° apart — the same rotation
+the extraction returned (-0.0000, -0.6000, -0.8000) at 180.0000°, route=reversal
+CONTROL at 179° the same two are 2.000° apart — the sign matters again</code></pre>
+    <p>
+      Fed a matrix built from <code>n = (0, +0.6, +0.8)</code>, the extraction returned
+      <code>−n</code>. That is not a bug and no implementation can prefer one answer: both are
+      correct. One degree away from the half-turn the ambiguity is gone and the two differ by
+      2.000°, which is what a genuine two-valued answer looks like from the outside — it exists at
+      exactly one point and nowhere near it.
+    </p>
+  </div>
+
+  <h2 id="geodesic">9. The geodesic: 7.1's indictment, answered</h2>
+
+  <p>
+    Everything so far has been machinery. This is what it was for.
+  </p>
+
+  <h3 id="geodesic-idea">9.1 Three lines</h3>
+
+  <p>
+    To blend from orientation <code>A</code> to orientation <code>B</code>: find the single turn
+    that separates them, perform <code>t</code> of it, and apply that after <code>A</code>.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \operatorname{slerp}(A, B, t) \;=\; A \cdot R(\mathbf{n},\, t\theta), \qquad (\mathbf{n}, \theta) = \text{axis-angle of } A^{\mathsf T}B \]</span>
+    <span class="eq-plain">slerp(A, B, t) = A * R(n, t theta), where (n, theta) is the axis-angle of A^T B</span>
+  </div>
+
+  <p>
+    <code>AᵀB</code> is "undo <code>A</code>, then do <code>B</code>" — the relative rotation, in
+    <code>A</code>'s own frame. Both endpoints are exact by construction: at <code>t = 0</code> it
+    is <code>A·I = A</code>, and at <code>t = 1</code> it is <code>A·AᵀB = B</code>. In between it
+    is the geodesic, because <em>turning steadily about one fixed axis is what "straight line"
+    means in the space of rotations</em>.
+  </p>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline mat3 rotation_slerp(const mat3&amp; a, const mat3&amp; b, float t)
+{
+    const axis_angle_extraction e = axis_angle_from_rotation(transpose(a) * b);
+    return a * rotation_from_axis_angle({e.value.axis, e.value.angle * t});
+}</code></pre>
+
+  <p>
+    And it takes the short way round for free. <code>axis_angle_from_rotation</code> returns an
+    angle in <code>[0, π]</code>, so there is no long-way-round branch to forget — where Lesson 7.1
+    needed <code>shortest_angle_delta</code> applied per angle, three times, because a raw lerp
+    from yaw 170° to −170° performs 340° backwards.
+  </p>
+
+  <h3 id="geodesic-measure">9.2 The measurement, on 7.1's own pairs</h3>
+
+  <p>
+    A claim of "zero excess" is worthless unless the instrument that produces it can also produce a
+    non-zero. So the harness runs the <em>same</em> path-length instrument on the <em>same</em>
+    pose pairs Lesson 7.1 published, and the Euler numbers are the control: if they do not
+    reproduce, the instrument has changed and slerp's zero means nothing.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §E.2</strong> — the generic pair, 2,048 steps:</p>
+<pre><code>generic pair       path   geodesic     excess    speed
+Euler lerp      204.29°    179.05°     14.10%   1.556x  &lt;- CONTROL (7.1's number)
+slerp           179.05°    179.05°     -0.00%   1.000x</code></pre>
+    <p>
+      <code>204.29°</code> and <code>14.10%</code> and <code>1.556x</code> are Lesson 7.1's
+      published figures, to the digit. The instrument is the same instrument. And beside them,
+      <code>179.05°</code> against a requirement of <code>179.05°</code>: the blend performs
+      exactly the turning the move needs, and its speed is constant to three decimal places.
+    </p>
+  </div>
+
+  @@FIG_BANDS@@
+
+  <div class="worked">
+    <p><strong>verify_72 §E.3</strong> — the same three angle deltas at four distances from gimbal
+      lock, which is the table Lesson 7.1 ended on:</p>
+<pre><code>                pitch band Euler excess slerp excess slerp speed
+ 87° -> 30°  (near lock)       209.5%       -0.00%     1.000x
+             47° -> -10°        62.5%        0.00%     1.000x
+             20° -> -37°        22.5%        0.00%     1.000x
+              0° -> -57°        26.7%       -0.00%     1.000x</code></pre>
+  </div>
+
+  <p>
+    The amber column varies by a factor of nine across four moves that are <em>identical in the
+    angles</em> — the only thing that changed is where the pose sat. The blue column cannot vary,
+    and that is the important word. It is not that slerp happens to do well at these four poses. A
+    geodesic performs the turning the move requires; there is no other number it could report, at
+    any pose, ever. The 0.00% is a structural fact and the four rows are a check that the code
+    implements it.
+  </p>
+
+  <h3 id="geodesic-see">9.3 Watching it</h3>
+
+  <p>
+    Press <kbd>B</kbd> in the gimbal demo and both blends run at once between the same two poses,
+    each drawing where its nose has been.
+  </p>
+
+  @@FIG_BLEND_RENDER@@
+
+  <p>
+    The teal line is the axis of the single turn separating the endpoints, and it is the
+    <strong>same line in both panels</strong>: it is computed once and it does not move during the
+    blend, because for the geodesic there is nothing for it to do but not move. The blue craft
+    rotates rigidly about it from start to finish. Nothing the amber craft does can be described
+    that way at any single instant, let alone throughout — which is what "Euler angles do not
+    interpolate the rotation" looks like when you draw it rather than tabulate it.
+  </p>
+
+  <p>
+    In the right-hand panel both craft have arrived and are drawn on top of each other, so only one
+    is visible. The two trails are not on top of each other, and the gap between them is the
+    25.24°.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §E.4</strong> — and the wrap bug that 7.1 needed a separate function for:</p>
+<pre><code>yaw 170° -> -170°: raw Euler lerp turns 340.0°, slerp turns 20.0°</code></pre>
+    <p>
+      Seventeen times the turning, for a twenty-degree move. Lesson 7.1 fixed this with
+      <code>shortest_angle_delta</code> applied to each angle — a real fix, for a real problem,
+      that had to be remembered at every call site. Slerp does not have the problem to fix.
+    </p>
+  </div>
+
+  <h2 id="cost">10. What it costs, and why this is not the end</h2>
+
+  <p>
+    Axis-angle has answered all three of Lesson 7.1's indictments. It has one convention rather
+    than twenty-four; its angle <em>is</em> the distance between orientations; and it interpolates
+    exactly. It would be a strange lesson that then went on to build two more representations, so
+    it is worth being precise about what is still wrong.
+  </p>
+
+  <h3 id="cost-time">10.1 The bill</h3>
+
+  <div class="worked">
+    <p><strong>verify_72 §F</strong> — measured as cumulative stages, each one the previous plus
+      the next step of <code>rotation_slerp</code>:</p>
+<pre><code>rotation_slerp               31.46 ns/call, and where it goes:
+  transpose(a) * b            3.76 ns
+  + the extraction           24.95 ns   (+21.18)
+  + rebuilding the turn      29.55 ns   (+4.60)
+  + composing it onto a      31.46 ns   (+1.91)
+the two trig-bearing stages are 82% of the call.</code></pre>
+    <p>
+      Stages rather than isolated timings, and for a specific reason: the extraction needs a
+      relative matrix, and building one <em>is</em> the first stage, so an "extraction only" loop
+      either measures the product as well or measures it on a fixed input the compiler can hoist
+      out of the repeat loop entirely. The first draft of this section timed a 3×3 product at
+      <strong>0.41 ns</strong> — about one cycle for 27 multiplies and 18 adds, which is not a fast
+      matrix multiply, it is five of the forty-five operations it should have done, because reading
+      one element of the result let the compiler discard the other eight.
+    </p>
+  </div>
+
+  <p>
+    Thirty-one nanoseconds is not much. A hundred and twenty bones blended between two animation
+    clips is 3.8 µs a frame, which nobody would notice. But a real animation graph blends three or
+    four clips rather than two, and it does it for several characters, and the number that matters
+    is that <strong>82% of the call is trigonometry spent recovering a quantity the representation
+    did not keep.</strong> A quaternion carries the half-angle's sine and cosine in its four
+    components; slerping two of them is a dot product, two trig calls and a four-component
+    interpolation, with no matrix and no extraction anywhere.
+  </p>
+
+  <h3 id="cost-compose">10.2 The thing it cannot do at all</h3>
+
+  <p>
+    The cost is an argument about constants. This one is an argument about the representation.
+  </p>
+
+  <p>
+    Given <code>(n₁, θ₁)</code> and <code>(n₂, θ₂)</code>, what is the axis and angle of doing one
+    and then the other? <strong>There is no pleasant formula.</strong> There is a formula — the
+    Rodrigues composition formula — and it is a page of half-angle tangents that is numerically
+    poor near <code>θ = π</code> and that nobody uses. In practice you convert both to matrices,
+    multiply, and extract: trigonometry out, trigonometry back in, every time two rotations meet.
+  </p>
+
+  <p>
+    That is fatal for the thing engines do most. A transform hierarchy composes rotations at every
+    level, every frame. A physics solver composes an orientation with an angular velocity step
+    thousands of times a second. A skeleton composes a bone's local rotation with its parent's for
+    every bone in the chain. Axis-angle is a fine <em>interface</em> and a fine
+    <em>interpolator</em>, and it is a bad thing to hold a rotation in while you work.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What we are looking for, stated before we go and find it</span>
+    <p>
+      A representation that <strong>composes without trigonometry</strong>, <strong>interpolates
+      along the geodesic</strong> the way this one does, stores in four floats or fewer, and can be
+      renormalised cheaply when it drifts. Lesson 7.3 finds the answer in two dimensions first,
+      where it is a piece of school algebra and not a mystery: a complex number
+      <code>cos θ + i sin θ</code> composes rotations <em>by multiplication</em>, with no
+      trigonometry at the point of use. Lesson 7.4 asks what the three-dimensional version of that
+      object is, and the answer is a quaternion — which will turn out to store exactly the
+      half-angle quantities §8.3's <code>2 sin(θ/2)</code> has been hinting at for this entire
+      section.
+    </p>
+  </div>

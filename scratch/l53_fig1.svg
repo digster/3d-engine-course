@@ -1,0 +1,75 @@
+<svg viewBox="0 0 720 404" role="img" aria-labelledby="l53f1-t l53f1-d">
+  <title id="l53f1-t">One voice, then several</title>
+  <desc id="l53f1-d">Before: six subsystems all funnelling into a single SDL_Log at application/info. After: two bar charts, the 92 engine calls broken down by category and by level.</desc>
+  <defs>
+    <marker id="e-i-l53f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">197 logging calls. Before, every one of them was the same statement.</text>
+<text x="20" y="46" class="xs t-hi" text-anchor="start">BEFORE</text>
+<rect x="20" y="62" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="74" class="xs" text-anchor="middle">platform</text>
+<line x1="120" y1="71" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="20" y="84" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="96" class="xs" text-anchor="middle">gpu device</text>
+<line x1="120" y1="93" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="20" y="106" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="118" class="xs" text-anchor="middle">shaders</text>
+<line x1="120" y1="115" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="20" y="128" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="140" class="xs" text-anchor="middle">pipelines</text>
+<line x1="120" y1="137" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="20" y="150" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="162" class="xs" text-anchor="middle">textures</text>
+<line x1="120" y1="159" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="20" y="172" width="96" height="17" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="68" y="184" class="xs" text-anchor="middle">assets</text>
+<line x1="120" y1="181" x2="178" y2="118" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l53f1)"/>
+<rect x="182" y="100" width="150" height="36" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2"/>
+<text x="257" y="116" class="xs mono t-inv" text-anchor="middle">SDL_Log(...)</text>
+<text x="257" y="129" class="xs t-inv" text-anchor="middle">APPLICATION / info</text>
+<text x="344" y="112" class="xs muted" text-anchor="start">one category,</text>
+<text x="344" y="126" class="xs muted" text-anchor="start">one level, no filter.</text>
+<text x="344" y="140" class="xs t-bad" text-anchor="start">The only choices were</text>
+<text x="344" y="154" class="xs t-bad" text-anchor="start">“all of it” and “none of it”.</text>
+<line x1="20" y1="196" x2="700" y2="196" class="grid" stroke-width="1"/>
+<text x="20" y="216" class="xs t-hi" text-anchor="start">AFTER — a category says WHO is speaking; a level says HOW MUCH IT MATTERS</text>
+<text x="20" y="244" class="xs muted" text-anchor="start">by category</text>
+<text x="20" y="267" class="xs mono" text-anchor="start">core</text>
+<rect x="96" y="256" width="23.8" height="13" rx="2" fill="#5082e6"/>
+<text x="125.8" y="267" class="xs mono" text-anchor="start">7</text>
+<text x="20" y="287" class="xs mono" text-anchor="start">platform</text>
+<rect x="96" y="276" width="47.6" height="13" rx="2" fill="#5082e6"/>
+<text x="149.6" y="287" class="xs mono" text-anchor="start">14</text>
+<text x="20" y="307" class="xs mono" text-anchor="start">gfx</text>
+<text x="102.0" y="307" class="xs mono" text-anchor="start">0</text>
+<text x="20" y="327" class="xs mono" text-anchor="start">gpu</text>
+<rect x="96" y="316" width="190.4" height="13" rx="2" fill="#5082e6"/>
+<text x="292.4" y="327" class="xs mono" text-anchor="start">56</text>
+<text x="20" y="347" class="xs mono" text-anchor="start">asset</text>
+<rect x="96" y="336" width="27.2" height="13" rx="2" fill="#5082e6"/>
+<text x="129.2" y="347" class="xs mono" text-anchor="start">8</text>
+<text x="392" y="244" class="xs muted" text-anchor="start">by level</text>
+<text x="392" y="267" class="xs mono" text-anchor="start">error</text>
+<rect x="452" y="256" width="183.6" height="13" rx="2" fill="#e05c5c"/>
+<text x="641.6" y="267" class="xs mono" text-anchor="start">54</text>
+<text x="392" y="287" class="xs mono" text-anchor="start">info</text>
+<rect x="452" y="276" width="85.0" height="13" rx="2" fill="#5082e6"/>
+<text x="543.0" y="287" class="xs mono" text-anchor="start">25</text>
+<text x="392" y="307" class="xs mono" text-anchor="start">warn</text>
+<rect x="452" y="296" width="20.4" height="13" rx="2" fill="#f0961e"/>
+<text x="478.4" y="307" class="xs mono" text-anchor="start">6</text>
+<text x="392" y="327" class="xs mono" text-anchor="start">debug</text>
+<rect x="452" y="316" width="13.6" height="13" rx="2" fill="#9b7ede"/>
+<text x="471.6" y="327" class="xs mono" text-anchor="start">4</text>
+<text x="392" y="347" class="xs mono" text-anchor="start">critical</text>
+<rect x="452" y="336" width="6.8" height="13" rx="2" fill="#e05c5c"/>
+<text x="464.8" y="347" class="xs mono" text-anchor="start">2</text>
+<text x="392" y="367" class="xs mono" text-anchor="start">trace</text>
+<rect x="452" y="356" width="3.4" height="13" rx="2" fill="#5ac878"/>
+<text x="461.4" y="367" class="xs mono" text-anchor="start">1</text>
+<text x="20" y="380" class="xs muted" text-anchor="start">gfx is zero because the CPU rasterizer never logs — a fact about it, not about the category.</text>
+<text x="20" y="394" class="xs muted" text-anchor="start">The engine now defaults to silence and the demo does not. That took no filtering code — see Figure 3.</text>
+</svg>

@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="f615b-t f615b-d">
+  <title id="f615b-t">Cube faces and the solid angle of a texel</title>
+  <desc id="f615b-d">On the left, the six cube faces unfolded into a cross and labelled in SDL's order. On the right, a face seen edge-on from the origin, showing that a corner texel is further away and more steeply tilted than a centre one, so it subtends about a fifth of the solid angle.</desc>
+  <defs>
+    <marker id="e-i-f615b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">A direction picks a face by its largest component — and the texels are not the same size</text>
+<rect x="112" y="62" width="52" height="52" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="138.0" y="93.0" class="xs" text-anchor="middle">+Y</text>
+<rect x="58" y="116" width="52" height="52" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="84.0" y="147.0" class="xs" text-anchor="middle">-X</text>
+<rect x="112" y="116" width="52" height="52" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="138.0" y="147.0" class="xs" text-anchor="middle">+Z</text>
+<rect x="166" y="116" width="52" height="52" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="192.0" y="147.0" class="xs" text-anchor="middle">+X</text>
+<rect x="220" y="116" width="52" height="52" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="246.0" y="147.0" class="xs" text-anchor="middle">-Z</text>
+<rect x="112" y="170" width="52" height="52" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="138.0" y="201.0" class="xs" text-anchor="middle">-Y</text>
+<text x="166" y="246" class="xs" text-anchor="middle">the six faces, in SDL’s order:</text>
+<text x="166" y="262" class="xs" text-anchor="middle">+X -X +Y -Y +Z -Z — index 0..5,</text>
+<text x="166" y="278" class="xs" text-anchor="middle">handed straight to `layer`</text>
+<text x="545.0" y="56" class="xs" text-anchor="middle">WHY A CENTRE TEXEL IS BIGGER</text>
+<line x1="470" y1="78" x2="620" y2="78" class="ink" stroke-width="1.6"/>
+<circle cx="545.0" cy="196" r="3.5" class="fill-ink"/>
+<text x="545.0" y="214" class="xs" text-anchor="middle">origin</text>
+<line x1="545.0" y1="196.0" x2="545.0" y2="78.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="545.0" y1="196.0" x2="620.0" y2="78.0" stroke="#e05c5c" stroke-width="1.6" fill="none"/>
+<line x1="545.0" y1="196.0" x2="470.0" y2="78.0" stroke="#e05c5c" stroke-width="1.6" fill="none"/>
+<line x1="534.0" y1="78.0" x2="556.0" y2="78.0" stroke="#5ac878" stroke-width="4.0" fill="none"/>
+<line x1="598.0" y1="78.0" x2="620.0" y2="78.0" stroke="#e05c5c" stroke-width="4.0" fill="none"/>
+<text x="545.0" y="70" class="xs" text-anchor="middle">r = 1</text>
+<text x="624" y="70" class="xs" text-anchor="start">r = √3</text>
+<rect x="396" y="228" width="296" height="106" rx="4" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="544" y="248" class="xs" text-anchor="middle">dω = dA · cosθ / r² = dA / r³</text>
+<text x="544" y="266" class="xs" text-anchor="middle">because the tilt cosθ is itself 1/r</text>
+<text x="544" y="286" class="xs" text-anchor="middle">corner : centre = 1 / 3√3 = 0.19245</text>
+<text x="544" y="304" class="xs" text-anchor="middle">so the CENTRE texel is worth 5.196 corner texels</text>
+<text x="544" y="324" class="xs" text-anchor="middle">(measured 0.195535 at 128, approaching it)</text>
+<text x="360.0" y="388" class="xs" text-anchor="middle">Averaging texels with EQUAL weights is therefore 1.01% too bright — and refining the cube does not help</text>
+<text x="360.0" y="406" class="xs" text-anchor="middle">(1.010005 at 16×16, 1.010066 at 64×64). It is a BIAS, not a discretisation error.</text>
+</svg>

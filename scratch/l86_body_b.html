@@ -1,0 +1,324 @@
+  <h2 id="definition">3. What penetration depth actually is</h2>
+
+  <p>
+    “How far in do they go” is not a definition. Two crates meeting at a corner go a long way in
+    along one diagonal and hardly any along another; ask three people to point at “the depth” and
+    you will get three answers. The definition a solver can use is the one that says what you are
+    going to <em>do</em> about it:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The penetration depth of A and B is the length of the shortest vector
+      <code>t</code> such that A and <code>B + t</code> no longer overlap.</strong> The vector
+      itself is the <em>minimum translation vector</em>, or MTV. It is a definition about motion,
+      which is what makes it the right one for something that is about to move.
+    </p>
+  </div>
+
+  <p>
+    And that definition hands you the algorithm in two lines, because 8.5 §3 already proved the
+    step it turns on. A and <code>B + t</code> overlap exactly when some point of A equals some
+    point of <code>B + t</code>:
+  </p>
+
+  <p class="eq-plain">
+    a = b + t for some a ∈ A, b ∈ B   ⟺   t = a − b for some a ∈ A, b ∈ B   ⟺   t ∈ A ⊖ B
+  </p>
+
+  <p>
+    Read that once more slowly, because it is the whole lesson. <strong>The set of translations
+    that keep the two shapes overlapping <em>is</em> the Minkowski difference.</strong> Not related
+    to it, not computed from it — it is the same set of vectors, seen as displacements instead of
+    as differences of points. So the shortest translation that <em>separates</em> them is the
+    shortest vector that is not in <code>A ⊖ B</code>, which is the vector from the origin to the
+    nearest point of its <strong>boundary</strong>.
+  </p>
+
+  @@FIG_MTV@@
+
+  <p>
+    Compare that with what GJK computed. GJK asked for the distance from the origin to the
+    <em>set</em>, which is zero the moment the origin is inside. EPA asks for the distance from the
+    origin to the set's <em>boundary</em>, which is the interesting number in precisely the case
+    GJK gives up on. Same set, same support function, two different questions about the same point.
+  </p>
+
+  <h3>3.1 A worked example, with real numbers</h3>
+
+  <p>
+    Take the simplest configuration there is. Box A is a unit cube centred on the origin, so it
+    spans <code>[−0.5, 0.5]</code> on all three axes. Box B is the same cube, centred at
+    <code>(0.6, 0, 0)</code>. They overlap.
+  </p>
+
+  <p>
+    The Minkowski difference of two axis-aligned boxes is another axis-aligned box: its half
+    extents are the two boxes' half extents added, and its centre is
+    <code>centre<sub>A</sub> − centre<sub>B</sub></code>. So <code>A ⊖ B</code> is a box with half
+    extents <code>(1, 1, 1)</code> centred at <code>(−0.6, 0, 0)</code>, spanning:
+  </p>
+
+  <p class="eq-plain">
+    x ∈ [−1.6, 0.4],   y ∈ [−1, 1],   z ∈ [−1, 1]
+  </p>
+
+  <p>
+    The origin is inside it, which agrees with the boxes overlapping. Now, the six faces of that
+    box are at distances 0.4, 1.6, 1, 1, 1 and 1 from the origin. <strong>The nearest is
+    0.4</strong>, on the face <code>x = 0.4</code>, whose outward normal is <code>+x</code>.
+  </p>
+
+  <p>
+    So the penetration depth is 0.4 m and the MTV is <code>(0.4, 0, 0)</code>. Check it by hand:
+    translate B by that vector and its centre moves to <code>(1.0, 0, 0)</code>, so it spans
+    <code>[0.5, 1.5]</code> in x while A spans <code>[−0.5, 0.5]</code> — touching at
+    <code>x = 0.5</code>, exactly. Translate it by any less and they still overlap; translate it by
+    the same distance in any other direction and, since 0.4 was the <em>minimum</em> over the
+    faces, they still overlap too.
+  </p>
+
+  <p>
+    §A.1 of the harness runs that pair through the real code, with B nudged to
+    <code>(0.6, 0.15, 0)</code> so the arrangement is not perfectly symmetric:
+  </p>
+
+  <pre><code class="lang-text">  A.1  two unit cubes, centres 0.60 m apart in x, 0.15 in y
+
+       GJK      intersecting   distance 0.000000
+                direction (+0.0000 +0.0000 +0.0000)
+       EPA      proven         depth    0.400000
+                normal    (+1.0000 +0.0000 +0.0000)
+       SAT MTV  depth 0.400000  axis (+1.0000 +0.0000 +0.0000)
+       exact    depth 0.400000  (double, over 30 signed axes)
+       bracket  lower 0.400000  upper 0.400000  slack 0.00e+00
+       seed     simplex 3 pts, 2 found, 4 iterations</code></pre>
+
+  <p>
+    Note the last line already. The simplex GJK handed over had <strong>three</strong> points, not
+    four, and the seed had to go and find two more before EPA could start. That is §5's whole
+    subject and it is not a special case: it is what the commonest arrangement in a game produces.
+  </p>
+
+  <h3>3.2 The same thing, as a minimum over directions</h3>
+
+  <p>
+    There is a second way to write the definition, and it is the one that makes the answer
+    checkable. For any unit direction <code>n</code>, let <code>h(n)</code> be the support function
+    of the difference set:
+  </p>
+
+  <p class="eq-plain">
+    h(n) = max over x ∈ A ⊖ B of dot(x, n)
+  </p>
+
+  <p>
+    <code>h(n)</code> is how far you can walk from the origin in direction <code>n</code> before
+    leaving the set — the voice in the dark room, exactly. And for a convex set containing the
+    origin, the distance to the boundary is the smallest of those:
+  </p>
+
+  <p class="eq-plain">
+    depth = min over unit n of h(n)
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why that is true, in one picture.</strong> Every direction <code>n</code> gives a
+      supporting plane at distance <code>h(n)</code>, with the whole set behind it, so the boundary
+      is nowhere further than <code>h(n)</code> in that direction and the depth is at most
+      <code>h(n)</code>. That is the “≤” half. For “≥”, take the boundary point <code>p</code>
+      nearest the origin: the set has a supporting plane <em>through</em> <code>p</code> (convexity
+      again), and its normal <code>n<sub>p</sub></code> has <code>h(n<sub>p</sub>) = |p|</code>. So
+      the minimum is attained, and it is attained at the answer.
+    </p>
+  </div>
+
+  <p>
+    Two things fall out of that form immediately, and both of them are load-bearing.
+  </p>
+
+  <p>
+    <strong>First, a claimed answer certifies half of itself in two support calls.</strong> If EPA
+    returns a normal <code>n</code> and a depth <code>d</code>, then <code>h(n)</code> is
+    computable directly — <code>engine/include/engine/phys/epa.hpp</code> exposes it as
+    <code>depth_along</code> — and if <code>d ≠ h(n)</code> the answer is provably wrong.
+    Achievability, proven from the output alone, with no reference implementation anywhere.
+  </p>
+
+  <p>
+    <strong>Second, minimality is the hard half and no cheap certificate gives it.</strong> Nothing
+    you can compute in constant time proves that no <em>other</em> direction does better. §9 of the
+    harness handles that with two instruments that fail in opposite ways: a falsifier that samples
+    thousands of directions (being a minimum over a subset, it can only ever be too large, so it
+    can convict EPA and can never acquit it), and an exact reference that works only for boxes.
+  </p>
+
+  <h3>3.3 And the exact reference is 8.4</h3>
+
+  <p>
+    Here is the pleasant surprise. <code>h(n)</code> is a piecewise-linear function of
+    <code>n</code> — linear over each cone of the difference polytope's normal fan — so its minimum
+    over the sphere of directions is attained at a cone boundary, which is to say <strong>on a face
+    normal of <code>A ⊖ B</code></strong>. And the faces of the difference of two boxes are: the
+    faces of A, the faces of B, and one face per pair of edge directions. Their normals are
+    <code>±a<sub>i</sub></code>, <code>±b<sub>j</sub></code> and
+    <code>±(a<sub>i</sub> × b<sub>j</sub>)</code> — which is 8.4's fifteen candidate axes, in both
+    signs, and nothing else.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So the SAT's minimum-overlap axis <em>is</em> the true minimum translation, for
+      boxes.</strong> 8.4 shipped that a whole lesson before EPA existed, and described it only as
+      “the smallest translation that would separate them”. It was not an approximation and it was
+      not a convenience — it was the exact answer, for the one shape whose face list is finite and
+      short. Which makes 8.4 the reference this lesson is checked against, and makes §C's
+      comparison a meeting between two algorithms with nothing in common but the set they are
+      asking about.
+    </p>
+  </div>
+
+  <p>
+    §C runs that comparison on 2,000 overlapping pairs, with both instruments at once:
+  </p>
+
+  <pre><code class="lang-text">  C.1  2000 pairs x 4096 sampled directions = 8192000 h() calls
+
+       directions beating EPA by &gt; 1e-4 m:  0
+       worst margin:                        0.000e+00 m
+
+       best sampled h / EPA depth (&gt;= 1 if EPA is right)
+         mean 1.01864   p05 1.00340   min 1.00032
+
+       CONTROL — the exact minimum over the 30 face normals
+         mean 1.000000   p05 1.000000   min 1.000000</code></pre>
+
+  <p>
+    Read the two blocks together, because the contrast is the point. Four thousand random
+    directions per pair — eight million support evaluations — never once found a shorter escape
+    than EPA did, but they never got closer than 0.03% either, and on average they overshoot by
+    1.9%. Thirty enumerated face normals land on the answer to six digits, every time. That is the
+    difference between sampling a minimum and knowing where it lives, and it is exactly why the
+    falsifier can only convict.
+  </p>
+
+  <h3>3.4 Or check it by doing it</h3>
+
+  <p>
+    There is a third instrument, and it is the most direct one available: the definition is a
+    statement about translating a box, so translate the box. §B pushes the second shape by
+    <code>1.01 × depth</code> along the reported normal and requires GJK to report them separated;
+    then by <code>0.99 × depth</code> and requires GJK to report them still touching.
+  </p>
+
+  <pre><code class="lang-text">  B.1  50000 overlapping pairs, moved by the reported MTV
+
+       pushed by 1.01 x depth -&gt; separated    50000 / 50000
+         residual gap / expected: mean 1.0000  p05 1.0000
+       pushed by 0.99 x depth -&gt; still hit    50000 / 50000
+
+       CONTROL — same distance, a different direction
+       pushed 1.01 x depth elsewhere -&gt; hit   47476 / 47484
+       the translation that direction really needs,
+       as a multiple of the MTV: min 1.0354  mean 2.93</code></pre>
+
+  <p>
+    All fifty thousand, both ways, and the residual gap after the push is exactly the 1% that was
+    asked for. The control is the minimality claim made behaviourally: travel the same distance in
+    a <em>different</em> direction and the pair must still overlap, because <code>depth</code> is
+    the minimum. Eight of 47,484 came apart anyway, and the last line explains them — the shortest
+    translation in those random directions was as little as 1.0354× the MTV, which is inside the
+    1% nudge plus the two algorithms' tolerances. The arithmetic version of the same check, the
+    ratio never dropping below 1, holds on every single pair.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Both tolerances had to be tightened for that section to measure anything.</strong>
+      At the default, 8.5 §F.6 measured GJK's contact margin at <code>2.11 × tolerance ×
+      size</code> — 0.4 mm on metre-sized crates — which is wider than a 1% nudge on a 1 cm depth.
+      The first version of §B reported 46 failures in 50,000 and every one of them was GJK
+      declining to call a 10 µm gap a gap. A test whose resolution is coarser than the effect it
+      is testing measures its own instrument.
+    </p>
+  </div>
+
+  <h2 id="bounds">4. The sandwich, run the other way</h2>
+
+  <p>
+    Now make the balloon argument precise. Let <code>S = A ⊖ B</code> be the difference set and
+    <code>P</code> a convex polytope with <code>P ⊆ S</code> and the origin inside <code>P</code>.
+    Then for every direction, <code>P</code>'s support function is no larger than
+    <code>S</code>'s — that is just what “inside” means:
+  </p>
+
+  <p class="eq-plain">
+    P ⊆ S  ⟹  h<sub>P</sub>(n) ≤ h<sub>S</sub>(n) for every n  ⟹  min<sub>n</sub> h<sub>P</sub>(n) ≤ min<sub>n</sub> h<sub>S</sub>(n)
+  </p>
+
+  <p>
+    And by §3.2 the right-hand side is the depth we want, while the left-hand side is the distance
+    from the origin to <code>P</code>'s own boundary. For a polytope that is the minimum over its
+    <em>faces</em> of the plane offset, which is a number you can read straight off a list. So:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The closest face of an inner polytope is a lower bound on the penetration
+      depth.</strong> Its plane distance, nothing else. No search, no refinement — the bound is
+      the thing you already computed to decide which face to expand.
+    </p>
+  </div>
+
+  <p>
+    The upper bound is the other half and it is one support call. Expanding the closest face means
+    asking for <code>support<sub>S</sub>(n)</code> along its outward normal, and
+    <code>dot(w, n)</code> is exactly <code>h<sub>S</sub>(n)</code> — an upper bound on the depth,
+    by §3.2's “≤” half. Keep the smallest one seen and it only improves.
+  </p>
+
+  <p>
+    So each pass does both jobs with one support call:
+  </p>
+
+  <ol>
+    <li>find the polytope's closest face; its distance <code>d</code> is the current
+        <strong>lower</strong> bound;</li>
+    <li><code>w = support<sub>S</sub>(n)</code> along that face's normal;
+        <code>dot(w, n)</code> is an <strong>upper</strong> bound;</li>
+    <li>if the two have met, stop — the depth is proven;</li>
+    <li>otherwise add <code>w</code> to the polytope and repeat.</li>
+  </ol>
+
+  @@FIG_SANDWICH@@
+
+  <p>
+    The figure runs that loop on the same two polygons figure 2 used, with the polytope drawn at
+    each step. The number to watch is the lower bound, and the direction it moves in:
+    <strong>it rises</strong>. GJK's equivalent quantity — <code>|v|</code>, the distance from the
+    origin to the simplex — only ever fell, and 8.5 leaned on that monotonicity twice, once as a
+    terminator and once as a corruption detector. The same argument works here with the inequality
+    reversed: every expansion <em>adds</em> a vertex, so the new polytope contains the old one, so
+    its distance to the boundary cannot decrease.
+  </p>
+
+  <p>
+    That gives <code>epa.cpp</code> the same two-line check, and for the same two reasons:
+  </p>
+
+  <pre><code class="lang-cpp">        // MONOTONICITY IS A THEOREM HERE, EXACTLY AS |v| WAS IN GJK — and it is
+        // checked for the same two reasons. Every expansion adds a vertex, so
+        // the new polytope CONTAINS the old one, so its distance to the boundary
+        // cannot decrease. A step that decreases it is not slow convergence; it
+        // is a corrupted surface, which is what a torn horizon produces.
+        if (f.d + tol * scale &lt; lower)
+        {
+            status = epa_status::stalled;
+            break;
+        }</code></pre>
+
+  <p>
+    Hold on to the last sentence of that comment. It is a claim about a failure that has not been
+    introduced yet, and it is §7's.
+  </p>

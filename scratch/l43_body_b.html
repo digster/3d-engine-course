@@ -1,0 +1,953 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-shaders"><span class="num">4.1</span>Four shaders</h3>
+
+  <p>
+    Two pairs, and the second pair exists for a specific reason. The first pair is what Lesson 4.4
+    will draw with — a vertex stage that passes a colour through, and a fragment stage that
+    returns it. Between them they declare <em>no resources at all</em>, so every count in their
+    create-info is zero.
+  </p>
+
+  <p>
+    A shader with no resources cannot demonstrate the thing that most often goes wrong. So the
+    second pair, which Lesson 4.6 will use, declares one uniform buffer in the vertex stage and a
+    texture, sampler and uniform buffer in the fragment stage — enough to make every register
+    space in Figure 2 appear in real code:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/textured.frag.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-hlsl">Texture2D&lt;float4&gt; albedo        : register(t0, space2);
+SamplerState      albedo_sampler : register(s0, space2);
+
+cbuffer Tint : register(b0, space3)
+{
+    float4 tint;
+};
+
+float4 main(Input input) : SV_Target0
+{
+    return albedo.Sample(albedo_sampler, input.uv) * tint;
+}</code></pre>
+  </figure>
+
+  <p>
+    That <code>Sample</code> call is worth a moment. It is one line of HLSL for what
+    <code>src/gfx/texture.cpp</code> spends a hundred lines on in Lesson 3.9: wrap the coordinate
+    according to the address mode, find the four texels whose <em>centres</em> surround the sample
+    point, weight them by distance. You wrote it by hand so that this line is a recognition rather
+    than a magic word — and the hardware does it for free, which was always the point.
+  </p>
+
+  <p>
+    The vertex shader of that pair carries the other half of the mapping:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/textured.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-hlsl">cbuffer Camera : register(b0, space1)
+{
+    float4x4 clip_from_model;
+};
+
+Output main(Input input)
+{
+    Output output;
+    output.uv = input.uv;
+    output.position = mul(clip_from_model, float4(input.position, 1.0f));
+    return output;
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>mul(M, v)</code> treats <code>v</code> as a column vector — which is the convention this
+    engine adopted in Lesson 2.5 and has never deviated from: <em>v' = Mv</em>, and <em>AB</em>
+    means <em>B</em> first. Our <code>mat4</code> is column-major in memory and HLSL packs
+    constant-buffer matrices column-major by default, so the sixteen floats go across untouched.
+    Lesson 4.6 pays that off properly when it actually uploads one; for now it is enough that the
+    shader compiles and says what it needs.
+  </p>
+
+  <h3 id="impl-cmake"><span class="num">4.2</span>A build step that asks first</h3>
+
+  <p>
+    Now the build. The naive version is four lines of <code>add_custom_command</code> and it works
+    on the machine you wrote it on. §2.3 is the reason we are not writing that: the tool's
+    capabilities depend on how it was built, and finding out at build time — as a confusing error
+    inside a compile step — is much worse than finding out at configure time, in a message.
+  </p>
+
+  <p>
+    So <code>cmake/Shaders.cmake</code> opens by running the tool once and looking at the exit
+    code:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">cmake/Shaders.cmake</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">set(SHADERCROSS_READS_HLSL OFF)
+if(SHADERCROSS_EXE)
+    execute_process(
+        COMMAND ${SHADERCROSS_RUN}
+                "${CMAKE_CURRENT_SOURCE_DIR}/shaders/triangle.vert.hlsl"
+                -s HLSL -t vertex -d SPIRV
+                -o "${CMAKE_CURRENT_BINARY_DIR}/shadercross_probe.spv"
+        RESULT_VARIABLE _probe_result
+        OUTPUT_QUIET ERROR_QUIET)
+    if(_probe_result EQUAL 0)
+        set(SHADERCROSS_READS_HLSL ON)
+    endif()
+    file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/shadercross_probe.spv")
+endif()</code></pre>
+  </figure>
+
+  <p>
+    This is a <strong>capability probe</strong>, and it is a technique worth having in your hands
+    generally: when a tool's behaviour depends on how it was built, run it rather than reason
+    about it. Version numbers cannot answer this question — the version is 3.0.0 whether or not
+    DXC was linked in.
+  </p>
+
+  <p>
+    The result decides the route, and the configure output says which one you got:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">cmake -S . -B build</span></figcaption>
+    <pre><code>-- Shaders: shadercross has no DXC; using glslc for HLSL-&gt;SPIR-V -&gt; spv;msl</code></pre>
+  </figure>
+
+  <p>
+    Three messages are possible — shadercross reads HLSL directly, shadercross plus glslc, or
+    neither and a warning that nothing will be compiled — and printing which is not decoration. A
+    silent fallback is a thing you discover months later when your DXIL is missing on a build
+    machine.
+  </p>
+
+  <p>
+    The compilation itself is two hops per shader, mirroring Figure 1 exactly, plus the
+    reflection:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">cmake/Shaders.cmake</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">    foreach(fmt IN LISTS SHADER_FORMATS)
+        if(fmt STREQUAL "spv")
+            continue()
+        endif()
+        string(TOUPPER "${fmt}" fmt_upper)
+        set(dst "${out_dir}/${name}.${fmt}")
+        add_custom_command(
+            OUTPUT "${dst}"
+            COMMAND ${SHADERCROSS_RUN} "${spv}" -s SPIRV -t ${stage} -d ${fmt_upper} -o "${dst}"
+            DEPENDS "${spv}"
+            COMMENT "SPIR-V -&gt; ${fmt_upper}  ${name}"
+            VERBATIM)
+        list(APPEND outputs "${dst}")
+    endforeach()</code></pre>
+  </figure>
+
+  <p>
+    And then the piece that everybody forgets exactly once:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">cmake/Shaders.cmake</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">    # One custom target per shader, which the executable depends on. Without this
+    # the custom commands have no consumer and are never run — a build that
+    # silently produces nothing, which is the classic CMake shader mistake.
+    string(REPLACE "." "_" safe_name "${name}")
+    add_custom_target(shader_${safe_name} DEPENDS ${outputs})
+    add_dependencies(${target} shader_${safe_name})</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Why an unattached custom command does nothing</span>
+    <p>
+      <code>add_custom_command(OUTPUT ...)</code> does not create a build rule that runs. It
+      declares <em>how to produce a file if somebody needs it</em>. If no target lists that file as
+      a dependency, nothing ever asks for it, and the command never runs — with no error, because
+      nothing failed. You get a successful build and an empty output directory.
+    </p>
+    <p>
+      The fix is the three lines above: wrap the outputs in a target, and make the executable
+      depend on it. The <code>string(REPLACE)</code> is there because our shader names contain a
+      dot (<code>triangle.vert</code>) and CMake target names may not.
+    </p>
+  </div>
+
+  <h3 id="impl-load"><span class="num">4.3</span>Loading one onto the device</h3>
+
+  <p>
+    <code>gpu_shader::load</code> is four steps, and the first is the payoff of a line Lesson 4.2
+    logged and promised to use:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_shader.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // ---- 1. Which file does this device want? ------------------------------
+    target_ = choose_shader_target(dev.report().granted);</code></pre>
+  </figure>
+
+  <p>
+    <code>granted</code> is what <code>SDL_GetGPUShaderFormats</code> answered — <em>what the
+    device accepts</em>, not the mask we asked for when creating it. Lesson 4.2 §4.2 flagged the
+    difference and said this lesson would need the second one; here it is, deciding which file to
+    open.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_shader.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    if ((granted &amp; SDL_GPU_SHADERFORMAT_MSL) != 0u)
+    {
+        t.format = SDL_GPU_SHADERFORMAT_MSL;
+        t.extension = "msl";
+
+        // SPIRV-Cross renames the entry point, because `main` is reserved in
+        // MSL. This single line is the difference between a shader that loads
+        // and an error message about a function that does not exist.
+        t.entrypoint = "main0";
+    }</code></pre>
+  </figure>
+
+  <p>
+    Note where the entry point lives: on the <em>format</em>, not on the shader. §3.4's rename is a
+    property of how MSL was produced, so it belongs beside the format that says so. Store it per
+    shader and you have four copies of one fact.
+  </p>
+
+  <p>
+    Then the file, the reflection, and the creation. One decision inside is worth defending:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_shader.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    if (!parsed)
+    {
+        // Refusing here rather than defaulting to zero is the whole argument. A
+        // shader created with counts that are too low binds nothing at the slots
+        // it reads, and reads garbage — silently, at full frame rate.
+        SDL_Log("shader '%s': %s is not the reflection we expect — refusing to guess counts",
+                name, json_file.c_str());
+        SDL_free(code);
+        destroy();
+        return false;
+    }</code></pre>
+  </figure>
+
+  <p>
+    A missing or malformed reflection file is a <em>refusal</em>, not a fallback to zeros. Given
+    §3.3's measurement — that SDL accepts any counts you give it — falling back to zero would
+    mean quietly building the exact bug the file exists to prevent. Failing loudly at startup is
+    the better outcome by a wide margin.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — a struct is not always a mirror</span>
+    <p>
+      <code>shader_resources</code> holds four <code>Uint32</code>s: exactly the four fields of
+      <code>SDL_GPUShaderCreateInfo</code> that this class cannot know for itself. It is
+      deliberately <em>not</em> a mirror of the whole create-info, even though the rest of this
+      engine mirrors SDL structs enthusiastically (Lesson 3.9's sampler, Lesson 4.1's
+      <code>fill_style</code>).
+    </p>
+    <p>
+      The boundary is drawn at <strong>what must be discovered</strong>. The code, its size, the
+      format, the stage and the entry point are all things the caller knows. These four are
+      things only the compiled shader knows. Drawing a type's edge along that seam is what makes
+      "read them from a file" the obvious implementation rather than a workaround.
+    </p>
+  </div>
+
+  <h3 id="impl-json"><span class="num">4.4</span>A parser that is allowed to be small</h3>
+
+  <p>
+    The reflection file is JSON, and this engine has no JSON parser. It gets one of about thirty
+    lines, which scans for four known keys and reads the integer after each — and that is a
+    decision that deserves defending rather than sliding past, because in Lesson 3.5 exactly the
+    opposite decision was made for OBJ.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_shader.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // Search for the key WITH its quotes. Without them, "samplers" would also
+    // match inside a longer key, which is the kind of bug that surfaces the day
+    // somebody adds a field.
+    std::string quoted;
+    quoted.reserve(key.size() + 2);
+    quoted += '"';
+    quoted += key;
+    quoted += '"';</code></pre>
+  </figure>
+
+  <p>
+    The difference is <strong>trust</strong>. <code>parse_obj</code> reads files a user supplies,
+    from the internet, possibly hostile and certainly malformed — so it validates everything,
+    reports a line number, and has a status enum. This file was written by a compiler we invoked
+    ourselves, three seconds ago, into a directory we created. It is not a trust boundary, and
+    building a general JSON parser to read it would be answering a question nobody asked.
+  </p>
+
+  <p>
+    What it must still do is <em>refuse</em> rather than guess, which is what §G of the harness
+    checks: a missing key, a non-numeric value, an empty file and the substring trap
+    (<code>"num_samplers"</code> must not satisfy a search for <code>"samplers"</code>) are all
+    rejected. Small is allowed; sloppy is not.
+  </p>
+
+  <h3 id="impl-probe"><span class="num">4.5</span>Four green squares</h3>
+
+  <p>
+    The probe from Lesson 4.2 gains a shader-loading step and a row of indicators. There is still
+    no text in that mode — text needs a font and a shader, and we have only just produced the
+    shaders — so "did the toolchain work" has to be a shape:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    for (int i = 0; i &lt; shaders.count; ++i)
+    {
+        const int x = 8 + i * 14;
+        const Uint32 fill = shaders.loaded[i] ? engine::pack_argb(90, 200, 120)
+                                              : engine::pack_argb(235, 90, 80);
+        fb.fill_rect(x, 8, 10, 10, fill);
+        fb.fill_rect(x + 2, 10, 6, 6, engine::pack_argb(10, 12, 18));
+        fb.fill_rect(x + 3, 11, 4, 4, fill);
+    }</code></pre>
+  </figure>
+
+  <p>
+    Green means <code>SDL_CreateGPUShader</code> returned an object: the HLSL compiled, the right
+    binary format was chosen for this device, the entry point was named correctly, and the counts
+    came out of the reflection. The log says the same thing in numbers:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">./engine --gpu</span></figcaption>
+    <pre><code>  shaders granted : MSL | METALLIB
+  shader format   : MSL (.msl), entry point "main0"
+    triangle.vert    493 bytes   samplers 0  storage tex 0  storage buf 0  uniform buf 0
+    triangle.frag    342 bytes   samplers 0  storage tex 0  storage buf 0  uniform buf 0
+    textured.vert    585 bytes   samplers 0  storage tex 0  storage buf 0  uniform buf 1
+    textured.frag    524 bytes   samplers 1  storage tex 0  storage buf 0  uniform buf 1</code></pre>
+  </figure>
+
+  <p>
+    <strong>Nothing is drawn with them.</strong> A shader that exists and a shader that draws are
+    two different achievements, and this lesson claims only the first. Lesson 4.4 binds these
+    objects into a pipeline and finally gets a triangle out of the hardware.
+  </p>
+
+  <p>
+    The sizes in that log are worth one look, because they are smaller than most people expect:
+  </p>
+
+  @@FIG_SIZES@@
+
+  <p>
+    Figure 5 puts every file in the toolchain on one scale. The largest compiled shader in this
+    lesson is <strong>1,100 bytes</strong> of SPIR-V, and the MSL translations are smaller still.
+    The reflection file, at 233 to 307 bytes, is the <em>same order of size as the code it
+    describes</em>. And the HLSL bars are the longest only because this course's shaders carry
+    more comment than code — which is a fact about our commenting, not about shaders.
+  </p>
+
+  <h3 id="impl-when"><span class="num">4.6</span>Where the compile actually happens</h3>
+
+  <p>
+    One measurement remains, and it produced the most interesting result in the lesson. How long
+    does <code>SDL_CreateGPUShader</code> take?
+  </p>
+
+  @@FIG_WHEN@@
+
+  <p>
+    Figure 6 is the answer, and the middle bar is barely visible for a reason:
+    <strong>eight microseconds</strong>. All four shaders created, cold, in 0.028 ms — against
+    61.2 ms to compile them at build time. And the first measurement of a shader is the same as
+    the ninth, so this is not a cache.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Read that and disbelieve it</span>
+    <p>
+      Eight microseconds cannot include turning MSL into machine code for a 20-core GPU. Lesson
+      4.2's rule applies — <em>check that the number can be true</em> — and it is not true. What
+      is true is that <strong>the compile has not happened yet</strong>.
+    </p>
+    <p>
+      The prediction, which Lesson 4.4 is going to check: it happens at <em>pipeline</em> creation.
+      Only there does the driver know the colour target's format, the depth state, the blend mode
+      and the vertex layout — and machine code for a fragment shader must be specialised to all of
+      them. That is exactly what Lesson 4.1 measured as the real reason immutable pipeline objects
+      exist, and exactly what SDL_gpu.h means when it lists pipelines under things created once:
+      <em>"Render pipelines (precalculated rendering state)"</em>.
+    </p>
+    <p>
+      A shader object, then, is not a compiled program. It is a <em>compiled-enough</em>
+      program — a validated blob plus the four counts — waiting to be told what it will be used
+      with. We will find out in the next lesson whether that is right.
+    </p>
+  </div>
+
+  <p>
+    That reframes what this lesson bought, and the reframing is the honest summary of offline
+    compilation. The 61.2 ms it moved out of your program's startup is the <em>front end</em>: the
+    parse, the type checking, the optimisation, the megabytes of compiler that would otherwise be
+    in the box. What it cannot move is the driver's own final step, which happens on the user's
+    machine because only the user's machine knows what the user's GPU is.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>path</th><th>state</th><th>purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>shaders/triangle.vert.hlsl</code></td><td><strong>new</strong></td>
+          <td>Clip-space position and a colour through. No resources: every count is zero.</td></tr>
+      <tr><td><code>shaders/triangle.frag.hlsl</code></td><td><strong>new</strong></td>
+          <td>Returns the interpolated colour. Lesson 4.4 draws with this pair.</td></tr>
+      <tr><td><code>shaders/textured.vert.hlsl</code></td><td><strong>new</strong></td>
+          <td>A uniform buffer in <code>space1</code>, and <code>mul(M, v)</code> in our column
+              convention.</td></tr>
+      <tr><td><code>shaders/textured.frag.hlsl</code></td><td><strong>new</strong></td>
+          <td>Texture + sampler in <code>space2</code>, uniform buffer in <code>space3</code> —
+              the register rules in real code.</td></tr>
+      <tr><td><code>cmake/Shaders.cmake</code></td><td><strong>new</strong></td>
+          <td>The configure-time capability probe, and <code>add_hlsl_shader</code>.</td></tr>
+      <tr><td><code>src/gfx/gpu_shader.hpp</code></td><td><strong>new</strong></td>
+          <td><code>shader_stage</code>, <code>shader_resources</code>,
+              <code>shader_target</code>, <code>gpu_shader</code>.</td></tr>
+      <tr><td><code>src/gfx/gpu_shader.cpp</code></td><td><strong>new</strong></td>
+          <td>Format choice, the reflection scanner, and <code>SDL_CreateGPUShader</code>.</td></tr>
+      <tr><td><code>src/gfx/gpu_device.hpp</code></td><td>modified</td>
+          <td><code>create(nullptr, …)</code> is now legal: a device with no window, for offscreen
+              work and for this lesson's harness.</td></tr>
+      <tr><td><code>src/gfx/gpu_device.cpp</code></td><td>modified</td>
+          <td>Skips the claim and the swapchain queries when there is no window.</td></tr>
+      <tr><td><code>src/main.cpp</code></td><td>modified</td>
+          <td>Loads the four shaders, reports them, and draws one indicator square each.</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>Includes the shader module, declares four shaders, copies them next to the
+              binary.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 1.</span> This lesson's file manifest. <code>gpu_device</code> is
+    modified rather than left alone because a device with no window turned out to be exactly what
+    a shader harness wants — and SDL_gpu.h says outright that it is supported.
+  </figcaption>
+  </figure>
+
+@@LISTING:shaders/triangle.vert.hlsl@@
+@@LISTING:shaders/triangle.frag.hlsl@@
+@@LISTING:shaders/textured.vert.hlsl@@
+@@LISTING:shaders/textured.frag.hlsl@@
+@@LISTING:cmake/Shaders.cmake@@
+@@LISTING:src/gfx/gpu_shader.hpp@@
+@@LISTING:src/gfx/gpu_shader.cpp@@
+@@LISTING:src/gfx/gpu_device.hpp@@
+@@LISTING:src/gfx/gpu_device.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    This is the first lesson that needs a tool the course has not used before, and there are no
+    binary releases of it. Budget half an hour for the build the first time.
+  </p>
+
+  <h3>Getting SDL_shadercross</h3>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code>git clone --recursive https://github.com/libsdl-org/SDL_shadercross.git
+cd SDL_shadercross
+git checkout &lt;a commit SHA you write down&gt;    # no tags exist — see §2.3
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+sudo cmake --install build</code></pre>
+  </figure>
+
+  <p>
+    <code>--recursive</code> matters: the SPIRV-Cross and DXC dependencies are submodules, and a
+    plain clone silently produces a build with neither — which is precisely the half-equipped
+    tool §2.3 describes. On Windows the same commands work from a Developer Command Prompt, with
+    <code>--config Release</code> on the build step and no <code>sudo</code>.
+  </p>
+
+  <div class="callout note">
+    <span class="label">If your shadercross cannot read HLSL</span>
+    <p>
+      Install <strong>shaderc</strong> for <code>glslc</code> and our CMake will use it for the
+      first hop automatically — <code>brew install shaderc</code>,
+      <code>apt install glslc</code>, or the Vulkan SDK, which bundles it on every platform. You
+      lose DXIL output, which costs you nothing until you ship for D3D12.
+    </p>
+  </div>
+
+  <h3>Building the engine</h3>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code>cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Read the configure output first — the line beginning <code>-- Shaders:</code> tells you which
+    of the three routes you got. Then, in the window, the probe from Lesson 4.2 with
+    <strong>four small green squares along the top left</strong>, one per shader. Red means one
+    failed, and the log says which and why.
+  </p>
+
+  <p>
+    The picture is otherwise unchanged, and it should be: nothing is drawn with these shaders yet.
+    What changed is that four files of HLSL are now objects on the GPU.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      Open <code>build/shaders/triangle.vert.msl</code> in an editor. You wrote HLSL; that file is
+      Metal Shading Language, generated from it, and you can read it. Find the line beginning
+      <code>vertex main0_out main0</code> — that is §3.4's rename, in the file, on your disk. Then
+      run <code>spirv-dis build/shaders/textured.frag.spv | grep DescriptorSet</code> and check
+      the sets against Figure 2. Both of those are your shaders, and neither is a claim you have to
+      take from this page.
+    </p>
+  </div>
+
+  <p>
+    To reproduce the lesson's measurements, build and run the harness. It needs no window — Lesson
+    4.2 separated the device from the window claim, and this is what that buys:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the harness</span></figcaption>
+    <pre><code>c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_43.cpp src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/verify_43
+./build/verify_43</code></pre>
+  </figure>
+
+  <p>
+    It is built into <code>build/</code> rather than <code>scratch/</code> on purpose: it finds
+    shaders with <code>SDL_GetBasePath()</code>, the same way the engine does, so it has to live
+    where the compiled shaders are.
+  </p>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+
+    <details class="pitfall-item">
+      <summary>The build succeeds and the shader directory is empty</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> No compile errors, no warnings, and no output files. The
+        program then reports that it cannot read a shader.</p>
+        <p><strong>Cause.</strong> An <code>add_custom_command(OUTPUT ...)</code> with nothing
+        depending on its output. It describes how to make a file; if no target wants that file,
+        the rule is never run and nothing has failed.</p>
+        <p><strong>Fix.</strong> Wrap the outputs in an <code>add_custom_target</code> and
+        <code>add_dependencies(your_exe that_target)</code>, as §4.2 does. Remember that CMake
+        target names cannot contain a dot, so <code>triangle.vert</code> needs
+        <code>string(REPLACE "." "_" ...)</code> first.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Failed to compile SPIR-V From HLSL: not built with DXC support</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> shadercross runs, prints that error, and produces a
+        zero-byte file.</p>
+        <p><strong>Cause.</strong> The tool was built without DirectXShaderCompiler — usually a
+        clone without <code>--recursive</code>. Its version number does not reveal this; only
+        running it does.</p>
+        <p><strong>Fix.</strong> Rebuild with submodules, or install <code>glslc</code> and let
+        the CMake fall back for the first hop. Note what you cannot do: produce DXIL. That hop
+        <em>is</em> DXC.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>dyld: Library not loaded: @rpath/libSDL3_shadercross.0.dylib</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> The <code>shadercross</code> binary refuses to start, saying
+        it cannot find its own library. <code>Reason: no LC_RPATH's found</code>.</p>
+        <p><strong>Cause.</strong> An install that put the executable and the shared library in
+        the right places but did not record where to look. Nothing to do with your project.</p>
+        <p><strong>Fix.</strong> Add the sibling <code>lib</code> directory to the loader path.
+        <code>cmake/Shaders.cmake</code> does this for you, deriving the prefix from the
+        executable's own location and using the right variable per platform
+        (<code>DYLD_LIBRARY_PATH</code>, <code>LD_LIBRARY_PATH</code>, <code>PATH</code>).</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>SDL_CreateGPUShader fails with "Creating MTLFunction failed"</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> The file loads, the format is right, and creation still
+        returns null.</p>
+        <p><strong>Cause.</strong> The entry point name. Your HLSL says <code>main</code>; the
+        generated MSL says <code>main0</code>, because <code>main</code> is reserved in Metal
+        Shading Language.</p>
+        <p><strong>Fix.</strong> Tie the entry-point string to the <em>format</em>, as
+        <code>choose_shader_target</code> does. And be glad about this one: §3.4 measured it being
+        refused at creation with a message, which is the kindest failure in the lesson.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The shader loads, runs, and reads nothing</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> A texture samples as black, or a constant never changes.
+        Everything created successfully and no call returned an error.</p>
+        <p><strong>Cause.</strong> Either a wrong register space (§3.1) or wrong resource counts
+        (§3.3). Both are silent: the space is valid HLSL that names the wrong slot, and the counts
+        are accepted by SDL without validation — measured, including 99 samplers on a shader with
+        one.</p>
+        <p><strong>Fix.</strong> For the space, <code>spirv-dis | grep DescriptorSet</code> and
+        compare with Figure 2. For the counts, never type them: read them from the reflection file
+        the compiler wrote, and refuse to load if it is missing.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The vertex attributes arrive scrambled</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Geometry is inside out or a colour appears where a normal
+        should be. Nothing errors.</p>
+        <p><strong>Cause.</strong> Semantic numbering. SDL assumes every non-system-value semantic
+        is <code>TEXCOORD<em>n</em></code> numbered from zero, so a gap or a repeat maps an input
+        to the wrong buffer element.</p>
+        <p><strong>Fix.</strong> Number them from <code>TEXCOORD0</code> upwards with no gaps, in
+        the same order as the vertex layout you will describe in Lesson 4.5. The reflection file's
+        <code>inputs</code> array lists what the compiler thinks the locations are — read it when
+        in doubt.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Editing a shader changes nothing</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> You edit the HLSL, rebuild, run, and see the old behaviour.</p>
+        <p><strong>Cause.</strong> Usually the copy step rather than the compile: the shader was
+        rebuilt into <code>build/shaders/</code> but the program is reading a stale copy next to
+        an executable somewhere else.</p>
+        <p><strong>Fix.</strong> Check the timestamps of both. Our <code>POST_BUILD</code> copy
+        runs on every successful link, so the usual culprit is running an old binary from a
+        different directory. And note that the dependency chain is real: touching a
+        <code>.hlsl</code> re-runs all three hops for that shader and nothing else.</p>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>4.3.1 — Break a register space on purpose</h3>
+    <p>
+      Move <code>textured.frag.hlsl</code>'s <code>cbuffer Tint</code> from
+      <code>space3</code> to <code>space1</code>. Rebuild. Predict, before you look, what will
+      fail: the compile, the reflection, the load, or nothing. Then check with
+      <code>spirv-dis</code> and with the running program.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Ask what each stage of the chain knows. Does the HLSL compiler know which stage this
+        shader will be? Does shadercross? Does SDL, at creation?
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Nothing fails. It compiles, reflects, translates and loads — the uniform-buffer count is
+        still 1, because there is still one buffer; only its <em>set</em> changed. The error is
+        undetectable until something binds a uniform buffer and the shader reads a slot nobody
+        filled. That is why this lesson's answer to register spaces is a disassembler rather than
+        a compiler flag.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.3.2 — Make the counts lie, and find out when it matters</h3>
+    <p>
+      Hard-code <code>num_samplers = 0</code> in <code>gpu_shader::load</code>, ignoring the
+      reflection, and run. Then keep the lie in place through Lesson 4.4 and 4.7, and record the
+      first moment anything notices.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        §3.3 already tells you creation will not notice. The candidates are pipeline creation
+        (4.4), the bind call (4.7), and the picture.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        This is a genuinely open exercise and worth keeping notes on, because the answer is
+        backend-specific: a validation layer may object at bind time, or nothing may object at
+        all and the sampled texture comes back black. The transferable result is the shape of the
+        bug — a lie told at creation, detected at use, on a machine that may not be yours. That is
+        why the reflection file is not a convenience.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.3.3 — Add DXIL, or prove you cannot</h3>
+    <p>
+      Get a shadercross with DXC support: clone it with <code>--recursive</code> and rebuild.
+      Reconfigure our CMake and read the <code>-- Shaders:</code> line. If DXIL appears, compare
+      the file sizes with Figure 3; if it does not, find out from the build output which
+      dependency is missing.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The probe in <code>cmake/Shaders.cmake</code> is the fastest way to test: it is one
+        <code>execute_process</code> whose exit code is the whole answer. You can run the same
+        command by hand.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        With DXC present the configure line becomes "shadercross reads HLSL directly (built with
+        DXC)" and the format list gains <code>dxil</code>. DXIL is a bitcode format and is
+        typically several times the size of the equivalent SPIR-V — a fact worth measuring rather
+        than believing, since it decides how much of your package is shaders on Windows.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.3.4 — Read the whole reflection</h3>
+    <p>
+      Our scanner reads four integers and ignores the <code>inputs</code> and
+      <code>outputs</code> arrays. Extend <code>shader_resources</code> to record the vertex
+      inputs — name, type and location — and log them at startup. Then, in Lesson 4.5, use them to
+      <em>check</em> the vertex layout you describe by hand.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The arrays make the file no longer a flat list of key–integer pairs, so the thirty-line
+        scanner will not stretch to them honestly. Decide deliberately: a slightly larger scanner
+        for a known shape, or a real JSON parser. §4.4's trust argument still applies.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The payoff arrives next lesson but one: a vertex layout that disagrees with the shader is
+        another silent failure, and the compiler already knows the right answer. Checking a
+        hand-written layout against the reflection at startup turns a class of "why is my mesh
+        inside out" into an assertion with a name in it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.3.5 — Time the front end against the back end</h3>
+    <p>
+      Measure each hop yourself — HLSL→SPIR-V, SPIR-V→MSL, SPIR-V→JSON — over ten runs, taking
+      minimums. Then make the shaders substantially bigger (unroll a loop, add a hundred lines of
+      arithmetic) and measure again. Which hop grows, and what does that tell you about where the
+      work is?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Lesson 3.10's rules apply to processes as much as to functions: warm up first, take
+        minimums for anything compiler-shaped, and change one thing at a time.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        On this machine the front end is 12.3 ms against 1.5 for each translation — an
+        eight-to-one split before you make anything bigger. Growing the shader should widen it,
+        because parsing and optimising scale with the source while a SPIR-V-to-MSL translation is
+        closer to a walk over instructions. The reason this matters: it is the front end that
+        offline compilation removes from your program, and it is the expensive half.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine gained</h2>
+    <ul>
+      <li>
+        <strong>A shader toolchain in the build.</strong> Four HLSL sources become SPIR-V, MSL and
+        a reflection file at build time, with a configure-time probe that finds out what the
+        installed tool can actually do instead of assuming.
+      </li>
+      <li>
+        <strong>A shader loader that chooses.</strong> The format comes from what the device says
+        it accepts, the entry point comes from the format, and the resource counts come from the
+        compiler's own reflection.
+      </li>
+      <li>
+        <strong>A refusal to guess.</strong> A missing or malformed reflection file fails the
+        load rather than defaulting to zeros — because §3.3 measured that nothing downstream will
+        catch the mistake.
+      </li>
+      <li>
+        <strong>A windowless device.</strong> <code>gpu_device::create(nullptr, …)</code> now
+        gives a device with no swapchain, which is what a shader harness — and, later, any
+        offscreen or compute work — actually wants.
+      </li>
+    </ul>
+  </div>
+
+  <p>
+    Two findings are worth carrying rather than filing. <strong>SDL checks the entry-point name
+    and not the resource counts</strong> — one failure arrives immediately with a message and the
+    other arrives silently, much later, so they need completely different defences: for the name,
+    just get it right; for the counts, never type them at all.
+  </p>
+
+  <p>
+    And <strong>the thing called <code>CreateShader</code> does not compile the shader</strong>.
+    Eight microseconds says so. What we have built is a validated blob and the numbers that
+    describe it, waiting to be told what it will be used with — which is a strange sort of object
+    until you remember Lesson 4.1's conclusion about why pipelines exist, at which point it is
+    exactly the object you would expect.
+  </p>
+
+  <p>
+    <strong>Next: 4.4 — The First Triangle.</strong> A pipeline object built from these two
+    shaders, a render pass, and three vertices. It is more code than you expect and every line of
+    it earns its place — and somewhere in it, the compile that did not happen in this lesson
+    finally does. We will time it and find out.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>SDL_shadercross</strong> — the project itself. Read its README for the CLI, and its
+      <code>SDL_shadercross.h</code> for the runtime API we chose not to use.
+      <a href="https://github.com/libsdl-org/SDL_shadercross">github.com/libsdl-org/SDL_shadercross</a>
+    </li>
+    <li>
+      <strong>SDL_gpu.h, <code>SDL_CreateGPUShader</code></strong> — the authoritative statement of
+      the register-space rules, per stage and per format, and the source of Figure 2. If you
+      remember one page of documentation from this module, this is the one.
+      <a href="https://wiki.libsdl.org/SDL3/SDL_CreateGPUShader">wiki.libsdl.org/SDL3/SDL_CreateGPUShader</a>
+    </li>
+    <li>
+      <strong>Evan Hemsley, <em>Layers all the way down</em></strong> — why SDL_GPU takes bytes
+      and a format enum rather than shipping a shading language of its own. This lesson is that
+      blog post made concrete.
+      <a href="https://moonside.games/posts/layers-all-the-way-down/">moonside.games</a>
+    </li>
+    <li>
+      <strong>SPIRV-Cross</strong> — the library doing every arrow on the right-hand side of
+      Figure 1. Its README's section on MSL is where the entry-point rename is documented.
+      <a href="https://github.com/KhronosGroup/SPIRV-Cross">github.com/KhronosGroup/SPIRV-Cross</a>
+    </li>
+    <li>
+      <strong>Microsoft, <em>HLSL for Vulkan: Resources</em></strong> — how
+      <code>register(t0, space2)</code> becomes a descriptor set and binding, which is the
+      translation Figure 2's right-hand column shows.
+      <a href="https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst">DirectXShaderCompiler/docs/SPIR-V.rst</a>
+    </li>
+    <li>
+      <strong>Khronos, <em>SPIR-V Specification</em>, §2 "Physical Layout"</strong> — what is
+      actually inside those 756 bytes. Skim it once; the point is to stop thinking of compiled
+      shaders as magic and start thinking of them as a module format with a header.
+      <a href="https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html">registry.khronos.org/SPIR-V</a>
+    </li>
+    <li>
+      <strong>Professional CMake: A Practical Guide</strong>, chapters on custom commands and
+      generator expressions — the difference between <code>add_custom_command(OUTPUT)</code> and
+      <code>add_custom_command(TARGET)</code>, which is §4.2's pitfall stated properly.
+    </li>
+  </ul>

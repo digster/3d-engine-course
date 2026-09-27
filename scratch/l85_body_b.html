@@ -1,0 +1,313 @@
+
+  <h2 id="minkowski">3. The Minkowski difference, and the two equivalences</h2>
+
+  <p>
+    The cloud of arrows has a name. For two sets <code>A</code> and <code>B</code>, the
+    <strong>Minkowski difference</strong> is
+  </p>
+
+  <p class="eq-plain">
+    A ⊖ B = { a − b : a ∈ A, b ∈ B }
+  </p>
+
+  <p>
+    — every point of <code>A</code> minus every point of <code>B</code>, which is exactly the set
+    of arrows from <code>B</code> to <code>A</code> with their tails at the origin. 8.4 §3.2
+    introduced it, used it to explain where the fifteen candidate axes came from, and then walked
+    away. This is where it earns its keep, and it does so through two statements that are almost
+    too easy to prove:
+  </p>
+
+  <div class="callout">
+    <p><strong>Equivalence 1 — overlap becomes containment.</strong></p>
+    <p class="eq-plain">A and B overlap ⟺ A ⊖ B contains the origin</p>
+    <p>
+      Left to right: if some point <code>p</code> is in both sets, then <code>p − p = 0</code> is
+      in the difference. Right to left: if <code>0</code> is in the difference, then
+      <code>0 = a − b</code> for some <code>a ∈ A</code> and <code>b ∈ B</code>, so
+      <code>a = b</code> and that point is in both. Two lines, no convexity required, no
+      approximation anywhere.
+    </p>
+    <p><strong>Equivalence 2 — distance becomes distance to the origin.</strong></p>
+    <p class="eq-plain">distance(A, B) = distance(origin, A ⊖ B)</p>
+    <p>
+      Every point of the difference is <code>a − b</code> and its length from the origin is
+      <code>|a − b|</code>, which is the distance between that particular pair of points. Minimise
+      over the difference set and you have minimised over all pairs. Same two lines.
+    </p>
+  </div>
+
+  @@FIG_MINKOWSKI@@
+
+  <p>
+    Figure 2 is the whole idea in three panels, and the two numbers in it are the same number. The
+    left panel is a pentagon and a quadrilateral in the plane with the segment between their
+    closest points; it measures <strong>1.6530 m</strong>. The middle panel is their difference —
+    a single set, drawn by taking all twenty pairwise differences and hulling them — and the
+    arrow from the origin to its nearest point measures <strong>1.6530 m</strong>. The right
+    panel moves the quadrilateral until they overlap, and the origin is now inside the difference.
+  </p>
+
+  <h3>3.1 Worked, with real numbers</h3>
+
+  <p>
+    Take the smallest interesting case: two segments in one dimension.
+    <code>A = [3, 5]</code> and <code>B = [8, 11]</code>. Their difference is every
+    <code>a − b</code>, which runs from <code>3 − 11 = −8</code> to <code>5 − 8 = −3</code>:
+  </p>
+
+  <p class="eq-plain">
+    A ⊖ B = [−8, −3]
+  </p>
+
+  <p>
+    The origin is not in that interval, so the segments do not overlap — correct, one ends at 5
+    and the other starts at 8. The nearest point of the interval to the origin is
+    <code>−3</code>, at distance 3 — and the gap between the segments is <code>8 − 5 = 3</code>.
+    ✓ Now slide <code>B</code> down to <code>[4, 7]</code>: the difference becomes
+    <code>[3 − 7, 5 − 4] = [−4, 1]</code>, which contains the origin, and the segments do overlap.
+    ✓
+  </p>
+
+  <p>
+    Notice what happened to the <em>arithmetic</em>. Two intervals and a comparison became one
+    interval and a containment test, and the containment test is about a fixed, known point. That
+    is the shape of every use of this idea, in every dimension.
+  </p>
+
+  <h3>3.2 The catch, and why it is not fatal</h3>
+
+  <p>
+    The difference set is not free. Two convex polytopes with <code>m</code> and <code>n</code>
+    vertices have a difference with up to <code>m · n</code> vertices — for two boxes that is 64
+    candidate points before hulling, and for two twenty-vertex colliders it is 400. Building it
+    per pair per frame is out of the question, and building it once is impossible because it
+    changes with every relative rotation.
+  </p>
+
+  <p>
+    So we will never build it. §5 shows that its <em>support function</em> — the only thing an
+    algorithm actually needs — costs two calls to the two shapes' own, no matter how many vertices
+    the difference would have had. First, though, we need to be clear about what a support
+    function is and why one function is enough.
+  </p>
+
+  <h2 id="support">4. The support function <em>is</em> the shape</h2>
+
+  <p>
+    8.4 slipped one of these into <code>shape.hpp</code> a lesson early, with a note saying it
+    would matter here:
+  </p>
+
+  <pre><code class="lang-cpp">/// The farthest point of the box in direction `d`. `d` need not be unit length.
+[[nodiscard]] vec3 support(const obb&amp; box, vec3 d);</code></pre>
+
+  <p>
+    That is a <strong>support function</strong>: hand it a direction, get back the point of the
+    shape that is farthest that way. For a box it is three sign tests — go to the <code>+</code>
+    end of each axis when the direction leans that way and the <code>−</code> end when it leans
+    the other. For a sphere it is <code>centre + r·d̂</code>. For a cloud of points it is a loop
+    with a running maximum.
+  </p>
+
+  <p>
+    It looks like a small utility. It is not: <strong>a convex set is completely determined by its
+    support function.</strong> Not described by, not approximated by — determined. Two convex sets
+    with the same support function are the same set.
+  </p>
+
+  @@FIG_SUPPORT@@
+
+  <h3>4.1 Why one point is enough</h3>
+
+  <p>
+    The argument is worth doing slowly, because it is the reason the rest of the lesson works.
+  </p>
+
+  <p>
+    Fix a direction <code>d</code> and let <code>h = dot(support(X, d), d)</code>. By definition
+    no point of <code>X</code> has a larger dot product with <code>d</code>, so every point
+    satisfies <code>dot(x, d) ≤ h</code>. That inequality describes a <strong>half-space</strong>:
+    everything on one side of a plane whose normal is <code>d</code>. So each direction gives you
+    one half-space that contains the whole set, and the boundary of that half-space touches the
+    set — it is not slack.
+  </p>
+
+  <p>
+    Now intersect all of them, over every direction. The result contains <code>X</code>, because
+    each one does. Does it contain anything <em>else</em>? Suppose a point <code>p</code> is
+    outside <code>X</code>. Because <code>X</code> is convex and closed, there is a plane that
+    separates them — that is the separating hyperplane theorem, and it is the same fact 8.4's
+    shadow test rests on, wearing different clothes. Take that plane's normal as <code>d</code>:
+    the half-space it defines contains <code>X</code> and excludes <code>p</code>. So
+    <code>p</code> is not in the intersection.
+  </p>
+
+  <p>
+    Every point outside <code>X</code> is excluded by some half-space, and every point of
+    <code>X</code> is in all of them. The intersection <em>is</em> <code>X</code>, and
+    <code>support</code> named the boundary of every one of those half-spaces. That is what
+    "determines" means.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The convexity is load-bearing and it is the same convexity 8.4 needed.</strong>
+      For a non-convex shape the separating hyperplane theorem fails — think of 8.4's ball resting
+      in the mouth of a cup — and the intersection of all those half-spaces gives you the shape's
+      <em>convex hull</em> rather than the shape. That is not a defect to be worked around; it is
+      the reason collision geometry is convex in the first place, and the reason a barrel collides
+      as a cylinder.
+    </p>
+  </div>
+
+  <h3>4.2 Worked: a box, by hand</h3>
+
+  <p>
+    Take the box from 8.4 §6: half extents <code>(2, 1, 0.5)</code>, turned 30° about
+    <code>z</code>, centred at the origin. Its axes are then
+  </p>
+
+  <p class="eq-plain">
+    u₀ = (0.866025, 0.500000, 0), u₁ = (−0.500000, 0.866025, 0), u₂ = (0, 0, 1)
+  </p>
+
+  <p>
+    Ask for the support point in direction <code>d = (1, 0, 0)</code>. A point of the box is
+    <code>Σ sᵢ hᵢ uᵢ</code> with each <code>sᵢ</code> in <code>[−1, 1]</code>, so
+  </p>
+
+  <p class="eq-plain">
+    dot(p, d) = s₀ · 2 · 0.866025 + s₁ · 1 · (−0.500000) + s₂ · 0.5 · 0
+  </p>
+
+  <p>
+    The three terms are independent, so each <code>sᵢ</code> is chosen on its own to make its own
+    term as large as possible: <code>s₀ = +1</code> because its coefficient is positive,
+    <code>s₁ = −1</code> because its coefficient is negative, and <code>s₂</code> is free because
+    its coefficient is zero (the implementation picks <code>+1</code>, deterministically, so two
+    runs agree). The support point is
+  </p>
+
+  <p class="eq-plain">
+    p = +2·u₀ − 1·u₁ + 0.5·u₂ = (1.732051 + 0.500000, 1.000000 − 0.866025, 0.5)
+      = (2.232051, 0.133975, 0.500000)
+  </p>
+
+  <p>
+    and <code>dot(p, d) = 2.232051</code> — which is exactly the projected radius 8.4 computed for
+    the same box and the same direction, as it must be, because the projected radius <em>is</em>
+    the support value of a centred box. The two formulas were the same formula all along; 8.4 kept
+    the number and threw the point away, and GJK needs the point.
+  </p>
+
+  <h3>4.3 And a capsule is a Minkowski sum, which makes its support two terms</h3>
+
+  <p>
+    A capsule is a segment inflated by a ball — formally <code>segment ⊕ ball</code>, a Minkowski
+    <em>sum</em> this time. Support functions add over sums:
+  </p>
+
+  <p class="eq-plain">
+    support<sub>X⊕Y</sub>(d) = support<sub>X</sub>(d) + support<sub>Y</sub>(d)
+  </p>
+
+  <p>
+    because a point of <code>X ⊕ Y</code> is <code>x + y</code> with <code>x</code> and
+    <code>y</code> chosen independently, so maximising <code>dot(x + y, d)</code> maximises
+    <code>dot(x, d)</code> and <code>dot(y, d)</code> separately — the same separability argument
+    as the box's three axes, one level up. For a capsule that reads:
+  </p>
+
+  <pre><code class="lang-cpp">vec3 support_local(const capsule&amp; c, vec3 d)
+{
+    const vec3 spine = c.axis * ((dot(c.axis, d) &gt;= 0.0f) ? c.half_height : -c.half_height);
+
+    const float len2 = length_squared(d);
+    if (len2 &lt;= 0.0f) { return spine; }
+    return spine + d * (c.radius / std::sqrt(len2));
+}</code></pre>
+
+  <p>
+    Two terms, one per operand, and neither knows the other exists. Set <code>half_height</code>
+    to zero and the first term vanishes and this is a sphere — <em>exactly</em>, not
+    approximately: §B.4 of the harness ran 20,000 random directions against
+    <code>support(sphere)</code> and got <strong>20,000 bit-identical points</strong>. Set the
+    radius to zero instead and it is a segment. One function, three shapes, and the reduction is
+    the arithmetic rather than a special case in it.
+  </p>
+
+  <h2 id="identity">5. The identity that makes the difference computable</h2>
+
+  <p>
+    Now the step that turns §3's idea into an algorithm. We need the support function of
+    <code>A ⊖ B</code> without ever building <code>A ⊖ B</code>.
+  </p>
+
+  <p>
+    A point of the difference is <code>a − b</code>. Maximise its dot product with
+    <code>d</code>:
+  </p>
+
+  <p class="eq-plain">
+    dot(a − b, d) = dot(a, d) + dot(−b, d) = dot(a, d) − dot(b, d)
+  </p>
+
+  <p>
+    Again <code>a</code> and <code>b</code> are chosen independently, so the maximum of the sum is
+    the sum of the maxima. The first term is maximised by the farthest point of <code>A</code> in
+    direction <code>d</code>. The second is <code>−dot(b, d) = dot(b, −d)</code>, maximised by the
+    farthest point of <code>B</code> in direction <code>−d</code>. Therefore
+  </p>
+
+  <div class="callout">
+    <p class="eq-plain">
+      support<sub>A⊖B</sub>(d) = support<sub>A</sub>(d) − support<sub>B</sub>(−d)
+    </p>
+    <p>
+      <strong>Two calls.</strong> Not <code>m · n</code>, not proportional to anything about the
+      difference set — two. A set with four hundred vertices answers a question about itself at
+      the price of two questions to its parents, and it is this identity, more than the algorithm
+      built on it, that makes GJK possible.
+    </p>
+  </div>
+
+  <p>
+    The minus sign on the second call is the one thing people get wrong, so it is worth a sanity
+    check with the 1D segments from §3.1. <code>A = [3, 5]</code>, <code>B = [8, 11]</code>,
+    <code>d = +1</code>. The farthest point of <code>A</code> in the <code>+</code> direction is
+    5; the farthest point of <code>B</code> in the <code>−</code> direction is 8; so the support of
+    the difference is <code>5 − 8 = −3</code>, which is indeed the largest element of
+    <code>[−8, −3]</code>. ✓ Take <code>d = −1</code> and you get <code>3 − 11 = −8</code>, the
+    smallest. ✓
+  </p>
+
+  <p>
+    §B.1 checks it on shapes rather than intervals, and checks it against the definition rather
+    than against another implementation: two twelve-point sets, all 144 pairwise differences built
+    explicitly, and the maximum over that built set compared against the identity, on 2,000 random
+    trials. <strong>Worst disagreement: 0.0000e+00 m</strong> — not small, zero, because both sides
+    select the same float and subtract the same pair.
+  </p>
+
+  <h3>5.1 Carrying the two halves along</h3>
+
+  <p>
+    There is a free bonus here, and taking it is what separates a useful GJK from a toy one.
+    Computing a point of the difference requires computing a point of <code>A</code> and a point
+    of <code>B</code> anyway. Keep them:
+  </p>
+
+  <pre><code class="lang-cpp">struct gjk_vertex
+{
+    vec3 w{};    ///< `pa − pb − (b.origin − a.origin)`. A point of `A ⊖ B`.
+    vec3 pa{};   ///< The supporting point on A, relative to `a.origin`.
+    vec3 pb{};   ///< The supporting point on B, relative to `b.origin`.
+};</code></pre>
+
+  <p>
+    Six extra floats per simplex vertex, carried through a loop that runs three or four times. In
+    §6 they turn the abstract answer — "the nearest point of the difference set is <em>here</em>"
+    — into two actual points on two actual surfaces, which is what a character controller, a
+    contact generator and a debug draw all actually want.
+  </p>

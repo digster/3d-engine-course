@@ -1,0 +1,315 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-02-what-a-brdf-is.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.2 — Radiometry-Lite: What a BRDF Is</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-04-cook-torrance.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.3</div>
+    <h1>Microfacet Theory</h1>
+    <p class="deck">
+      Lesson 6.2 ended on a number: <strong>1.1386</strong> — a white surface with a white
+      highlight reflecting more light than arrives. That number is the door into this lesson, and
+      the question it forces is not "which constant is wrong?" but a much better one:
+      <em>if that light bounced off the surface, how can it also have gone into it?</em> Answering
+      it means replacing <code>shininess</code> — a number that makes the highlight the right size
+      and measures nothing — with a <strong>statistical claim about what a surface is</strong>.
+      Along the way, Blinn-Phong turns out to have been a microfacet distribution all along, and
+      the constant this engine has shipped since Lesson 3.7 turns out to be wrong by
+      <strong>exactly 17×</strong>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-07-specular-blinn-phong.html">3.7 — Specular and Blinn-Phong</a>,
+          <a href="06-02-what-a-brdf-is.html">6.2 — Radiometry-Lite: What a BRDF Is</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/microfacet.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/light.hpp</code>,
+            <code>scratch/verify_63.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Three microfacet distributions and a masking term, each with its own test — including
+            the one test that matters, which is that a distribution <em>integrates to one</em>.
+            27 checks green; the reference render byte-identical for the
+            <strong>fourteenth</strong> lesson, because nothing here is wired in yet. That is
+            deliberate: Lesson 6.4 assembles.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain what a microfacet model claims about a surface, and why that claim makes the
+          highlight's shape a <em>histogram</em>.</li>
+      <li>…state the normalisation identity an NDF must satisfy, say why the cosine is in it, and
+          test any distribution against it in twenty lines.</li>
+      <li>…derive the constant Blinn-Phong needs to be a distribution, and compute what a renderer
+          using a different one is off by.</li>
+      <li>…say what separates Beckmann from GGX in one sentence, and back it with a number.</li>
+      <li>…tell the difference between a mapping that matches two lobes' <em>peaks</em> and one
+          that matches their <em>shapes</em>, and know which one the folklore gives you.</li>
+      <li>…explain shadowing and masking as a consequence of the microfacet picture rather than a
+          correction bolted onto it.</li>
+      <li>…measure how much energy a single-scattering model loses, and say where it went.</li>
+      <li>…recognise catastrophic cancellation in a shading formula, and use Sterbenz's lemma to
+          rearrange it away.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#landscape">A Landscape of Tiny Mirrors</a></li>
+      <li><a href="#distribution">The Distribution, and What Makes It One</a>
+        <ol>
+          <li><a href="#dist-identity">The identity, and why the cosine is in it</a></li>
+          <li><a href="#dist-check">What it buys: a test with a known answer</a></li>
+        </ol>
+      </li>
+      <li><a href="#blinn">Blinn-Phong Was a Microfacet Model</a></li>
+      <li><a href="#tail">Beckmann, GGX, and the Tail</a></li>
+      <li><a href="#fit">Matching the Peak Is Not Matching the Lobe</a></li>
+      <li><a href="#masking">Shadowing and Masking</a></li>
+      <li><a href="#energy">The Energy Budget</a></li>
+      <li><a href="#float">The Test Found a Bug in <code>float</code></a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#notdone">What This Lesson Does Not Do</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 6.2 gave the shading equation units and then used them to measure the model the engine
+    actually ships. Two of those measurements are worth putting back on the table, because this
+    lesson is the answer to both:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What 6.2 measured, and could not explain</span>
+    <p><strong>A white surface with a white highlight reflects 1.1386 of the light that hits
+       it</strong> — diffuse and specular are added with no coupling, so the same photon is
+       counted once as having bounced off the surface and once as having gone into it.</p>
+    <p>And <strong>the same surface reflects 0.1386 toward an eye 37° off the normal and 0.0259
+       toward one at 75°</strong> — a swing of 5.36× that no parameter controls and nothing in
+       the model asked for.</p>
+  </div>
+
+  <p>
+    It would be possible to patch both. A normalising constant would pull the first under 1; some
+    ad-hoc falloff would flatten the second. Both patches would be wrong, and the reason they
+    would be wrong is the actual subject of this lesson.
+  </p>
+
+  <p>
+    <strong>The model has no story about what a surface is.</strong> <code>shininess</code> is a
+    number you turn until the highlight looks the right size. Consider what that means:
+  </p>
+
+  <ul>
+    <li>It is <strong>not comparable between models.</strong> Lesson 3.7 measured that Blinn's
+        exponent must be roughly 4× Phong's for the same visual tightness — fitted at 4.38×
+        falling to 4.01×. A parameter whose meaning depends on which formula consumes it is not
+        describing the surface.</li>
+    <li>It is <strong>not measurable.</strong> There is no experiment you could perform on a piece
+        of brushed aluminium to determine its shininess. There is no instrument, because there is
+        no physical quantity.</li>
+    <li>It is <strong>not transferable.</strong> A shininess copied from one renderer to another
+        means nothing, which is why every asset pipeline that has tried has produced materials
+        that look different in every engine.</li>
+  </ul>
+
+  <p>
+    So the two symptoms in the callout are not two bugs. They are one absence, showing up twice.
+    A model that cannot say what a surface <em>is</em> cannot say how much of it is visible, and
+    cannot say how the light that bounced off it relates to the light that went in.
+  </p>
+
+  <p>
+    Microfacet theory supplies the missing story, and it supplies it in a form that can be
+    checked — which is the difference that matters. By the end of §3 you will have an equation
+    whose right-hand side is the number <strong>1</strong>, and a twenty-line test that says
+    whether any distribution satisfies it. That test is what finds everything else in this lesson,
+    including a bug in the arithmetic that every reference on the subject prints.
+  </p>
+
+  <!-- =================================================================
+       2 — A LANDSCAPE OF TINY MIRRORS
+       ================================================================= -->
+  <h2 id="landscape"><span class="num">2</span>A Landscape of Tiny Mirrors</h2>
+
+  <p>
+    Here is the whole idea, and it fits in a sentence: <strong>a surface is not smooth, it is a
+    landscape of microscopic mirrors, and each one is perfect.</strong>
+  </p>
+
+  <p>
+    Take that literally for a moment, because the payoff comes from taking it literally. Not "a
+    surface is a bit rough". Every microfacet is a <em>flawless mirror</em>, obeying the
+    reflection law exactly. The facets are far smaller than a pixel — so you never see one — and
+    far larger than a wavelength — so ordinary geometric reflection applies to each and we can
+    ignore diffraction. Between those two scales, a rough surface is a huge number of tiny
+    perfect mirrors pointing in slightly different directions.
+  </p>
+
+  <p>
+    Now ask the shading question. Light arrives from <strong>l</strong> and your eye is at
+    <strong>v</strong>. A given microfacet sends light from <strong>l</strong> to
+    <strong>v</strong> only if it is a mirror oriented to do exactly that — and Lesson 3.7 already
+    worked out which orientation that is. The halfway vector was derived there as
+    <em>"the normal this surface would need in order to bounce the light straight into the
+    eye"</em>. In a microfacet model that sentence stops being a way of putting it and becomes the
+    mechanism:
+  </p>
+
+  <div class="callout note">
+    <span class="label">A facet contributes if and only if its own normal is <strong>h</strong></span>
+    <p>Which turns the whole of specular shading into a counting problem. <em>How many of the
+       surface's microfacets happen to face <strong>h</strong>?</em> That is the only question the
+       model asks, and everything that follows is bookkeeping on the answer.</p>
+  </div>
+
+  @@FIG_LANDSCAPE@@
+
+  <p>
+    Look at what happened to the parameter. A surface where the facets nearly all face the same
+    way is <em>smooth</em>: almost all of them line up with <strong>h</strong> at once, when
+    <strong>h</strong> is near the surface normal, so the highlight is small and intense. A surface
+    where the facets point every which way is <em>rough</em>: only a few line up with any
+    particular <strong>h</strong>, but that stays true as <strong>h</strong> moves, so the
+    highlight is broad and dim.
+  </p>
+
+  <p>
+    <strong>Roughness is the width of a histogram of surface slopes.</strong> That is a physical
+    property. You can measure it with a profilometer. It transfers between renderers. It means the
+    same thing in every model that uses it — which is exactly the list of things
+    <code>shininess</code> was not.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>Two simplifications are baked in here and are worth naming rather than discovering. First,
+       the facets are treated as a <em>statistical</em> ensemble with no spatial arrangement — the
+       model knows how many face each way but not <em>where</em> they are, which is why it cannot
+       produce the glinty sparkle of real snow or car paint. That needs an actual normal map at
+       microfacet scale, and it is a live research area.</p>
+    <p>Second, light is allowed to bounce off <em>one</em> facet and then leave. Real light in a
+       valley bounces several times before escaping. §8 measures exactly what that costs, and it
+       turns out to cost a great deal.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE DISTRIBUTION
+       ================================================================= -->
+  <h2 id="distribution"><span class="num">3</span>The Distribution, and What Makes It One</h2>
+
+  <p>
+    "How many microfacets face this way" is a distribution over directions, and it gets a name and
+    a letter: the <strong>normal distribution function</strong>, <em>D</em>(<strong>h</strong>).
+    Feed it a direction, get back how much of the surface faces that way.
+  </p>
+
+  <h3 id="dist-identity">3.1 The identity, and why the cosine is in it</h3>
+
+  <p>
+    Here is where a distribution stops being a curve someone drew. If <em>D</em> reports what
+    fraction of the surface faces each way, then <strong>the fractions have to add up to the whole
+    surface</strong>. Integrate over every direction and you must get the surface back:
+  </p>
+
+  <div class="eq">
+    \[ \int_{\Omega} D(\mathbf{h}) \cos\theta_h \, d\omega = 1 \]
+  </div>
+
+  <p class="eq-plain">
+    In prose, so this survives the CDN being unreachable: the integral over the hemisphere of D of
+    h, times the cosine of the angle between h and the surface normal, is exactly 1.
+  </p>
+
+  <p>
+    The cosine is the part worth stopping on, because it is easy to read as a convention and it is
+    not one. A microfacet tilted away from the macroscopic surface presents <em>less of itself</em>
+    to that surface — its own area, projected down, is <em>cos θ<sub>h</sub></em> times its true
+    area. It is Lesson 6.2 §3's projected-area factor again, in its third appearance this module,
+    and it is the same factor for the same reason.
+  </p>
+
+  <p>
+    Which gives the identity a much better reading than "the distribution is normalised":
+  </p>
+
+  <div class="callout note">
+    <span class="label">Read it backwards</span>
+    <p>The microfacets' <strong>projected areas add up to the area of the flat surface they stand
+       on.</strong></p>
+    <p>Nothing else could possibly be true. If they summed to more, the surface would have area it
+       does not have; if less, part of it would be missing. Stated that way the identity is not a
+       normalisation rule imposed from outside — it is the definition of the facets being
+       <em>on</em> the surface.</p>
+  </div>
+
+  @@FIG_DENSITY@@
+
+  <h3 id="dist-check">3.2 What it buys: a test with a known answer</h3>
+
+  <p>
+    This is the practical difference between this lesson and everything before it in the shading
+    arc, and it is worth being explicit about.
+  </p>
+
+  <p>
+    <code>shininess</code> could not be wrong. Whatever value it had produced whatever highlight it
+    produced, and the only test available was whether someone liked the picture. <em>D</em> can be
+    wrong, in a way a machine can detect, because the identity above has a right-hand side and the
+    right-hand side is <strong>1</strong>.
+  </p>
+
+  <p>
+    <code>verify_63</code> §A integrates all three distributions on a 400,000-step grid and reports
+    a worst error of <strong>3.74e−07</strong>. That is quadrature noise, and the way you know it
+    is quadrature noise rather than a wrong constant is that it shrinks when the grid refines — §9
+    turns that observation into a bug hunt.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the constant a lobe is missing</span>
+    <p>Take the bare <code>cos<sup>s</sup>(θ<sub>h</sub>)</code> that Lesson 3.7 shipped, with no
+       constant at all, and put it through the identity at <em>s</em> = 32. The integral separates:
+       the azimuth contributes 2π, and</p>
+    <p class="mono">∫₀^(π/2) cos^32(θ) · cos(θ) · sin(θ) dθ = ∫₀¹ u^33 du = 1/34</p>
+    <p>substituting <em>u</em> = cos θ. So the whole integral is</p>
+    <p class="mono">2π / 34 = 0.1848</p>
+    <p>and <code>verify_63</code> §A measures exactly that. <strong>The lobe is not a
+       distribution; it is a shape, off by a factor of 5.41.</strong> Generalising, the integral is
+       <code>2π/(s+2)</code>, so the constant that fixes it is its reciprocal —
+       <code>(s+2)/2π</code>. That is the number §4 is about.</p>
+  </div>

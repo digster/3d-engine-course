@@ -1,0 +1,72 @@
+<svg viewBox="0 0 980 430" role="img" aria-labelledby="h2-t h2-d">
+  <title id="h2-t">The controller's five stages, and the fixed step it runs in</title>
+  <desc id="h2-d">Left: move_character's five stages in order — carry, recover, sideways, vertical, ground — each labelled with the section that measures it, over the one query they all use: a sweep, which is one cast per candidate obstacle. Right: the fixed step — steer the proxy, run the physics step, move the character — and who owns which body, with a note on the discrete jump height.</desc>
+  <defs>
+    <marker id="e-i-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grey-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-green-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-blue-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">move_character: five stages, one query</text>
+<rect x="26" y="50" width="360" height="46" rx="3" fill="none" stroke="#5082e6" stroke-width="1.4"/>
+<text x="38" y="69" class="sm" text-anchor="start">1  CARRY</text>
+<text x="38" y="86" class="xs muted" text-anchor="start">by the ground body's step, as a transform</text>
+<text x="376" y="69" class="xs mono" text-anchor="end">§10</text>
+<rect x="26" y="110" width="360" height="46" rx="3" fill="none" stroke="#5082e6" stroke-width="1.4"/>
+<text x="38" y="129" class="sm" text-anchor="start">2  RECOVER</text>
+<text x="38" y="146" class="xs muted" text-anchor="start">out of fixed and kinematic bodies, by EPA</text>
+<text x="376" y="129" class="xs mono" text-anchor="end">§11</text>
+<line x1="206.00" y1="97.00" x2="206.00" y2="108.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<rect x="26" y="170" width="360" height="46" rx="3" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<text x="38" y="189" class="sm" text-anchor="start">3  SIDEWAYS</text>
+<text x="38" y="206" class="xs muted" text-anchor="start">along the ground · off walls · step up</text>
+<text x="376" y="189" class="xs mono" text-anchor="end">§4 §5 §8</text>
+<line x1="206.00" y1="157.00" x2="206.00" y2="168.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<rect x="26" y="230" width="360" height="46" rx="3" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<text x="38" y="249" class="sm" text-anchor="start">4  VERTICAL</text>
+<text x="38" y="266" class="xs muted" text-anchor="start">land on floor · slide off steep · ceilings</text>
+<text x="376" y="249" class="xs mono" text-anchor="end">§5</text>
+<line x1="206.00" y1="217.00" x2="206.00" y2="228.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<rect x="26" y="290" width="360" height="46" rx="3" fill="none" stroke="#5082e6" stroke-width="1.4"/>
+<text x="38" y="309" class="sm" text-anchor="start">5  GROUND</text>
+<text x="38" y="326" class="xs muted" text-anchor="start">probe 2 skins down · snap if it dropped</text>
+<text x="376" y="309" class="xs mono" text-anchor="end">§6 §7</text>
+<line x1="206.00" y1="277.00" x2="206.00" y2="288.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<rect x="26" y="358" width="360" height="58" rx="3" fill="none" stroke="#f0961e" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="38" y="378" class="sm" text-anchor="start">sweep(position, d): the only question</text>
+<text x="38" y="396" class="xs muted" text-anchor="start">one cast per candidate obstacle, smallest t kept</text>
+<text x="38" y="410" class="xs muted" text-anchor="start">every stage above is policy written on its answer</text>
+<text x="440" y="30" class="sm" text-anchor="start">One fixed step, and one owner per body</text>
+<rect x="440" y="50" width="250" height="58" rx="3" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<text x="450" y="69" class="sm mono" text-anchor="start">steer_proxy</text>
+<text x="450" y="86" class="xs muted" text-anchor="start">the proxy's velocity = the chord to</text>
+<text x="450" y="100" class="xs muted" text-anchor="start">where the controller left the character</text>
+<rect x="440" y="124" width="250" height="58" rx="3" fill="none" stroke="#8f918a" stroke-width="1.4"/>
+<text x="450" y="143" class="sm mono" text-anchor="start">the physics step</text>
+<text x="450" y="160" class="xs muted" text-anchor="start">8.10's: velocities, contacts, solve,</text>
+<text x="450" y="174" class="xs muted" text-anchor="start">positions — crates, platforms, the proxy</text>
+<line x1="565.00" y1="109.00" x2="565.00" y2="122.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<rect x="440" y="198" width="250" height="58" rx="3" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<text x="450" y="217" class="sm mono" text-anchor="start">move_character</text>
+<text x="450" y="234" class="xs muted" text-anchor="start">against the world as the step left it;</text>
+<text x="450" y="248" class="xs muted" text-anchor="start">carries by what a platform just did</text>
+<line x1="565.00" y1="183.00" x2="565.00" y2="196.00" stroke="#8f918a" stroke-width="1.2" marker-end="url(#e-grey-h2)"/>
+<text x="730" y="58" class="xs" text-anchor="start">THE CONTROLLER owns</text>
+<text x="730" y="74" class="xs muted" text-anchor="start">the character's position</text>
+<text x="730" y="106" class="xs" text-anchor="start">THE SOLVER owns</text>
+<text x="730" y="122" class="xs muted" text-anchor="start">every other body</text>
+<text x="730" y="154" class="xs" text-anchor="start">THE PROXY is where they meet:</text>
+<text x="730" y="170" class="xs muted" text-anchor="start">a kinematic capsule, steered</text>
+<text x="730" y="186" class="xs muted" text-anchor="start">onto the character by velocity</text>
+<text x="730" y="218" class="xs" text-anchor="start">≤ 40 kg dynamic: PUSHED</text>
+<text x="730" y="234" class="xs muted" text-anchor="start">sideways moves ignore it</text>
+<text x="730" y="250" class="xs" text-anchor="start">heavier: a WALL</text>
+<text x="440" y="286" class="xs" text-anchor="start">A designer's jump is a height, not a force: v₀ = √(2gH). Asked for 1.20 m, the</text>
+<text x="440" y="301" class="xs" text-anchor="start">controller rises 1.1599 m at 60 Hz — the discrete sum of semi-implicit Euler's steps,</text>
+<text x="440" y="316" class="xs" text-anchor="start">v₀²/2g − v₀h/2 = 1.1596, 8.1's integrator showing through. Aim for the height the</text>
+<text x="440" y="331" class="xs" text-anchor="start">steps give, or accept four centimetres.</text>
+</svg>

@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="f616d-t f616d-d">
+  <title id="f616d-t">The positive-vertex AABB test and its three outcomes</title>
+  <desc id="f616d-d">Left: a box and a plane normal; the corner furthest along the normal is chosen by taking max on axes where the normal is positive and min where it is negative. Right: the three classifications - outside when the positive vertex is outside, intersecting when the box straddles, inside when even the negative vertex is in. Measured on two hundred thousand random boxes.</desc>
+  <defs>
+    <marker id="e-i-f616d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f616d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f616d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f616d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f616d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One corner per plane, chosen by the sign of the normal — and the three answers it can give</text>
+<text x="158.0" y="54" class="xs" text-anchor="middle">THE POSITIVE VERTEX</text>
+<rect x="92" y="92" width="132" height="96" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<circle cx="92" cy="188" r="3" fill="#8f918a"/>
+<circle cx="224" cy="188" r="3" fill="#8f918a"/>
+<circle cx="92" cy="92" r="3" fill="#8f918a"/>
+<circle cx="224" cy="92" r="3" fill="#8f918a"/>
+<line x1="158.0" y1="140.0" x2="206.36" y2="79.16" class="hi" stroke-width="1.6" marker-end="url(#e-h-f616d)"/>
+<text x="217.51999999999998" y="61.120000000000005" class="xs" text-anchor="middle">n</text>
+<circle cx="224" cy="92" r="5.5" fill="#5ac878"/>
+<text x="236" y="84" class="xs" text-anchor="start">chosen</text>
+<circle cx="92" cy="188" r="5.5" fill="#e05c5c"/>
+<text x="80" y="204" class="xs" text-anchor="end">the other one</text>
+<text x="158.0" y="242" class="xs" text-anchor="middle">take max where the normal's</text>
+<text x="158.0" y="258" class="xs" text-anchor="middle">component is positive, min where</text>
+<text x="158.0" y="274" class="xs" text-anchor="middle">it is negative — three compares,</text>
+<text x="158.0" y="290" class="xs" text-anchor="middle">one dot product, no loop over eight</text>
+<text x="550" y="54" class="xs" text-anchor="middle">THE THREE ANSWERS</text>
+<line x1="376.0" y1="118.0" x2="724.0" y2="118.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 4"/>
+<rect x="400" y="96" width="26" height="26" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="442" y="113" class="xs" text-anchor="start">outside</text>
+<text x="442" y="134" class="xs" text-anchor="start">the positive vertex is outside → all eight are</text>
+<line x1="376.0" y1="180.0" x2="724.0" y2="180.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 4"/>
+<rect x="400" y="158" width="26" height="26" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="442" y="175" class="xs" text-anchor="start">intersecting</text>
+<text x="442" y="196" class="xs" text-anchor="start">positive in, negative out → it straddles</text>
+<line x1="376.0" y1="242.0" x2="724.0" y2="242.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 4"/>
+<rect x="400" y="220" width="26" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="442" y="237" class="xs" text-anchor="start">inside</text>
+<text x="442" y="258" class="xs" text-anchor="start">the NEGATIVE vertex is inside → all eight are</text>
+<rect x="340" y="288" width="348" height="62" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3" stroke-dasharray="4 3"/>
+<text x="514" y="309" class="xs" text-anchor="middle">On 200,000 random boxes: 45,512 kept,</text>
+<text x="514" y="325" class="xs" text-anchor="middle">of which 19,653 straddle and 25,859 are</text>
+<text x="514" y="341" class="xs" text-anchor="middle">wholly inside — what a hierarchy would save</text>
+</svg>

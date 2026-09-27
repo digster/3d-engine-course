@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 398" role="img" aria-labelledby="f615f-t f615f-d">
+  <title id="f615f-t">The environment bake and what each output costs</title>
+  <desc id="f615f-d">One radiance cube map feeding three precomputed outputs: a small irradiance map indexed by surface normal, a prefiltered mip chain indexed by roughness, and an environment-independent two-dimensional BRDF table, with the memory and bake time of each.</desc>
+  <defs>
+    <marker id="e-i-f615f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One sky in, three precomputed things out — and they are only correct together</text>
+<rect x="40" y="66" width="138" height="92" rx="4" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="109.0" y="92" class="xs" text-anchor="middle">RADIANCE</text>
+<text x="109.0" y="110" class="xs" text-anchor="middle">128² × 6 faces</text>
+<text x="109.0" y="128" class="xs" text-anchor="middle">1.125 MB</text>
+<text x="109.0" y="146" class="xs" text-anchor="middle">the skybox draws this</text>
+<rect x="268" y="54" width="200" height="78" rx="4" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="368.0" y="74" class="xs" text-anchor="middle">IRRADIANCE</text>
+<text x="368.0" y="92" class="xs" text-anchor="middle">32² × 6</text>
+<text x="368.0" y="110" class="xs" text-anchor="middle">0.070 MB · 4.28 s to bake</text>
+<line x1="184" y1="112.0" x2="262" y2="93.0" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-f615f)"/>
+<text x="478" y="98" class="xs" text-anchor="start">indexed by NORMAL</text>
+<rect x="268" y="142" width="200" height="78" rx="4" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="368.0" y="162" class="xs" text-anchor="middle">PREFILTERED</text>
+<text x="368.0" y="180" class="xs" text-anchor="middle">128² × 6 × 6 lvl</text>
+<text x="368.0" y="198" class="xs" text-anchor="middle">1.500 MB · 0.50 s to bake</text>
+<line x1="184" y1="112.0" x2="262" y2="181.0" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-f615f)"/>
+<text x="478" y="186" class="xs" text-anchor="start">indexed by ROUGHNESS</text>
+<rect x="268" y="230" width="200" height="78" rx="4" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="368.0" y="250" class="xs" text-anchor="middle">BRDF TABLE</text>
+<text x="368.0" y="268" class="xs" text-anchor="middle">64², 2-D</text>
+<text x="368.0" y="286" class="xs" text-anchor="middle">0.016 MB · 0.37 s to bake</text>
+<line x1="184" y1="112.0" x2="262" y2="269.0" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-f615f)"/>
+<text x="478" y="274" class="xs" text-anchor="start">environment-independent</text>
+<rect x="40" y="322" width="660" height="66" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="360.0" y="342" class="xs" text-anchor="middle">THEY ARE HELD IN ONE STRUCT BECAUSE THEY ARE ONLY CORRECT TOGETHER: an irradiance map baked from one</text>
+<text x="360.0" y="360" class="xs" text-anchor="middle">sky and a prefiltered chain baked from another give a diffuse and a specular half that disagree about</text>
+<text x="360.0" y="378" class="xs" text-anchor="middle">where the sun is. The chain costs 1.3330× the source — the famous 4/3, from 1 + ¼ + 1/16 + …</text>
+</svg>

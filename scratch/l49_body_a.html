@@ -1,0 +1,750 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-08-porting-the-scene.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.8 — Porting the Module-3 Scene</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-01-the-refactor.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.1 — The Refactor: Engine, Demos, and the Public API</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.9</div>
+    <h1>Debugging a Frame with RenderDoc</h1>
+    <p class="deck">
+      The screen is black. Every call returned success, every pointer is non-null, and the
+      debugger you learned in Lesson 0.6 has nothing to tell you — because the work has not
+      happened yet, and when it does it will happen on another processor. This lesson is about
+      the tool that <em>can</em> see it, about making your frame legible enough to be worth
+      capturing, and about the honest boundary between what a tool shows you and what you have to
+      already know.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-08-porting-the-scene.html">4.8 — Porting the Module-3 Scene</a>,
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="04-05-vertex-buffers.html">4.5 — Vertex Buffers and Layouts</a>,
+          <a href="00-06-headers-and-debugger.html">0.6 — Headers &amp; the Debugger</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_debug.hpp</code>, <code>src/gfx/gpu_debug.cpp</code>,
+            <code>src/gfx/gpu_buffer.hpp</code>, <code>src/gfx/gpu_buffer.cpp</code>,
+            <code>src/gfx/gpu_texture.cpp</code>, <code>src/gfx/gpu_present.cpp</code>,
+            <code>src/gfx/gpu_shader.cpp</code>, <code>src/gfx/gpu_scene.hpp</code>,
+            <code>src/gfx/gpu_scene.cpp</code>, <code>src/main.cpp</code>,
+            <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Every resource in the engine named, every phase of the frame a labelled group, and
+            <code>engine --trace</code> printing the frame's command stream as a tree — the same
+            tree a capture shows, on a platform where no capture tool exists.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say precisely why a breakpoint cannot catch a GPU bug, in terms of when work happens
+          rather than in terms of tooling.</li>
+      <li>…choose the right frame debugger for your platform, and know why the choice is not
+          yours to make.</li>
+      <li>…capture a frame, find a draw call, and inspect the resources bound to it.</li>
+      <li>…name every GPU resource the way SDL asks for, and say why the setter you find first is
+          the one it steers you away from.</li>
+      <li>…structure a frame with debug groups, including the one rule that differs on Metal.</li>
+      <li>…measure the cost of instrumentation <em>against its own noise floor</em>, and
+          recognise the tell when you have not.</li>
+      <li>…state what a capture can tell you that a log cannot, and the reverse.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-wall">The submit is a wall</a></li>
+          <li><a href="#intuition-replay">Record, then replay</a></li>
+          <li><a href="#intuition-names">A capture is only as good as your names</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-tools">Which tool is yours, and why it is not your choice</a></li>
+          <li><a href="#theory-frame">The frame you already understand</a></li>
+          <li><a href="#theory-naming">The naming API SDL tells you not to use</a></li>
+          <li><a href="#theory-groups">Debug groups, and the Metal rule</a></li>
+          <li><a href="#theory-cost">What it costs, measured against its noise floor</a></li>
+          <li><a href="#theory-cache">The number this machine cannot measure</a></li>
+          <li><a href="#theory-limits">What a capture can do that a log cannot</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-names">Names, at creation</a></li>
+          <li><a href="#impl-groups">A group that is a scope</a></li>
+          <li><a href="#impl-log">The frame log</a></li>
+          <li><a href="#impl-wire">Wiring it in, and <code>--trace</code></a></li>
+        </ol>
+      </li>
+      <li><a href="#capture">Taking a Capture</a>
+        <ol>
+          <li><a href="#capture-renderdoc">RenderDoc, on Windows or Linux</a></li>
+          <li><a href="#capture-xcode">Xcode's Metal Debugger, on macOS</a></li>
+          <li><a href="#capture-read">Four questions to ask a capture</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is a bug you are going to have. The window is black. Or one object is missing. Or
+    everything is lit from the wrong side, or the texture is a smear, or the depth test seems not
+    to be happening. You did not change much. You reach for the tool that has solved every
+    problem in this course so far — the debugger from Lesson 0.6 — and you set a breakpoint on
+    the draw call.
+  </p>
+
+  <p>
+    It hits. <code>pass</code> is non-null. <code>item.mesh</code> is non-null. The index count is
+    60, which is right. Step over it. No error. <code>SDL_GetError()</code> is empty. Submit
+    returns true. The window is still black.
+  </p>
+
+  <p>
+    This is not a hard bug you are handling badly. <strong>It is a bug that the tool you are
+    using cannot see</strong>, and the reason was stated in Lesson 4.2 and has been true of every
+    line of GPU code you have written since:
+  </p>
+
+  <blockquote>
+    <p>Nothing below this line executes when it is written.</p>
+  </blockquote>
+
+  <p>
+    Every SDL_GPU call you make appends to a list. The list runs later, on another processor,
+    after a submit, in an order and a timeframe you do not control. A breakpoint stops the
+    <em>recording</em>. By the time the picture is wrong, the recording finished long ago and the
+    stack that produced it is gone.
+  </p>
+
+  <p>
+    So this lesson is about the class of tool that can see it, and about a thing people skip: a
+    capture of an uninstrumented frame is a list of two hundred numbered events referring to
+    <code>Buffer 47</code> and <code>Texture 12</code>, and you will spend your debugging time
+    working out which is which rather than what is wrong. Making a frame <em>legible</em> is
+    engine work, it is cheap, and it is what most of this lesson's code does.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why this lesson is here and not at 4.4</span>
+    <p>
+      A frame debugger shows you everything, which is useless if you do not know what you expect
+      to see. Open a capture with no idea what a vertex buffer's contents should look like and it
+      is a wall of hexadecimal.
+    </p>
+    <p>
+      You are not in that position. You know this frame has three draws, one pipeline bind, 560
+      bytes of uniform pushes, a depth attachment and a blit, because Lesson 4.8 printed those
+      numbers. You know what is in the vertex buffer, because you wrote
+      <code>gpu_vertex_pnu</code> and the interleaver. You know what the matrices should be. Every
+      object in the capture is one you created and — as of this lesson — <em>named</em>.
+    </p>
+    <p>
+      <strong>You are checking a tool against a frame you already understand</strong>, which is
+      the only way to learn to trust one.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-wall"><span class="num">2.1</span>The submit is a wall</h3>
+
+  @@FIG_WALL@@
+
+  <p>
+    Four lanes, one timeline. Your code records; the command buffer holds; the GPU executes; the
+    display shows. A debugger operates entirely in the top lane. The bug manifests in the third
+    and is observed in the fourth, and between them is a submit that your breakpoint cannot
+    follow.
+  </p>
+
+  <p>
+    Notice what this means for the <em>kinds</em> of bug you now have. In Modules 1 to 3, a wrong
+    picture was a wrong number in a function you could step into. Here the wrong picture is
+    usually one of:
+  </p>
+
+  <ul>
+    <li>a resource that was never bound (and binding nothing at a declared slot is silent);</li>
+    <li>a resource bound with the wrong <em>contents</em>, uploaded correctly to the wrong place;</li>
+    <li>pipeline state that does not match what the pass expects;</li>
+    <li>a matrix that is right in C++ and arrives transposed, or at the wrong offset;</li>
+    <li>geometry that is correct and entirely outside the frustum.</li>
+  </ul>
+
+  <p>
+    Every one of those is a <em>state</em> question rather than a <em>control-flow</em> question,
+    and a debugger is a control-flow instrument. What you want is something that can answer "what
+    was bound at event 47, and what was in it".
+  </p>
+
+  <h3 id="intuition-replay"><span class="num">2.2</span>Record, then replay</h3>
+
+  <p>
+    Here is the trick that makes a frame debugger possible, and it is worth understanding because
+    it explains both the tool's power and its limits.
+  </p>
+
+  <p>
+    The tool inserts itself between your program and the graphics driver. During a captured
+    frame it records <em>every call and every byte of every resource</em> — not the results, the
+    <strong>inputs</strong>: the full contents of each buffer and texture at the moment the frame
+    began, plus the ordered list of calls that followed. That is a complete, self-contained
+    description of the frame.
+  </p>
+
+  <p>
+    Which means the tool can <strong>replay</strong> it. Want to know what the depth buffer looked
+    like after the second draw? It re-executes the frame from the start, stops after the second
+    draw, and shows you. Want the framebuffer before and after one triangle? Same mechanism. Want
+    to know which pipeline was bound at event 47? Replay to 47 and read the state.
+  </p>
+
+  <p>
+    That is why a capture can answer questions your own logging never will: <strong>it does not
+    describe the frame, it can re-run it.</strong> And it is also exactly why the capture is large,
+    why capturing is slow, and why the tool needs to sit underneath your program at the driver
+    level — which is the constraint that decides, in §3.1, whether the tool exists for you at all.
+  </p>
+
+  <h3 id="intuition-names"><span class="num">2.3</span>A capture is only as good as your names</h3>
+
+  <p>
+    Everything above is true of an uninstrumented program too. The difference between a capture
+    you can use and one you cannot is almost entirely whether the things in it have names.
+  </p>
+
+  <p>
+    Compare. Here is an event browser entry from an uninstrumented frame:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">a capture with no names</span>
+      <span class="lang" data-lang="text">event browser</span>
+    </figcaption>
+    <pre><code class="lang-text">  47  DrawIndexed(60, 1, 0, 0, 0)
+        VB 0 = Buffer 12
+        IB   = Buffer 13
+        FS srv t0 = Texture 4
+        VS cbuffer b0 = 64 bytes
+        VS cbuffer b1 = 112 bytes</code></pre>
+  </figure>
+
+  <p>And here is the same event after this lesson:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the same capture, instrumented</span>
+      <span class="lang" data-lang="text">event browser</span>
+    </figcaption>
+    <pre><code class="lang-text">  &#x25bc; scene
+      47  DrawIndexed(60, 1, 0, 0, 0)
+            VB 0 = "scene mesh"
+            IB   = "scene mesh"
+            FS srv t0 = "white 1x1"
+            VS cbuffer b0 = 64 bytes
+            VS cbuffer b1 = 112 bytes</code></pre>
+  </figure>
+
+  <p>
+    That is the whole of it. Two API calls' worth of work, and the difference between an
+    afternoon and ten minutes. It is also the single most commonly skipped piece of engine
+    hygiene, because it does nothing at all until the day you need it — which is precisely the
+    argument for doing it now, on a frame small enough to name exhaustively, rather than later on
+    a frame with four hundred resources in it.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-tools"><span class="num">3.1</span>Which tool is yours, and why it is not your choice</h3>
+
+  @@FIG_TOOLS@@
+
+  <p>
+    The awkward fact first, because burying it would waste your time. <strong>RenderDoc does not
+    support Metal.</strong> Its own front page says what it does support:
+  </p>
+
+  <blockquote>
+    <p>
+      "…a graphics debugger currently available for Vulkan, D3D11, D3D12, OpenGL, and OpenGL ES
+      development on Windows, Linux, Android, and Nintendo Switch."
+    </p>
+  </blockquote>
+
+  <p>
+    SDL_GPU chooses its backend from what the platform offers: Vulkan or D3D12 on Windows, Vulkan
+    on Linux, <strong>Metal on macOS</strong>. So on a Mac the lesson's title names a tool you
+    cannot run, and the tool you can run is Xcode's Metal Debugger. This is not a temporary gap to
+    wait out; RenderDoc's author has been clear for years that Metal support is not planned.
+  </p>
+
+  <p>
+    SDL says the same thing, in the header on your disk. <code>SDL_gpu.h</code> has a
+    <em>Debugging</em> section — worth reading in full, it is a page long — that begins:
+  </p>
+
+  <blockquote>
+    <p>
+      "For debugging such cases, there are tools that allow visually inspecting the whole GPU
+      frame, every drawcall, every bound resource, memory buffers, etc. They are the following,
+      per platform: For Windows/Linux, use RenderDoc. For MacOS (Metal), use Xcode built-in
+      debugger…"
+    </p>
+  </blockquote>
+
+  <p>
+    <strong>Every concept in this lesson transfers exactly.</strong> Both tools have an event
+    browser, a texture viewer, a pipeline-state panel and a mesh viewer; both replay to an event;
+    both show you the bytes of a uniform push. What differs is the menus and the screenshots. §5
+    walks through both.
+  </p>
+
+  <div class="callout note">
+    <span class="label">And the third one</span>
+    <p>
+      <strong>PIX</strong> is Microsoft's, D3D12-only, and worth knowing about for one reason: it
+      is considerably better than RenderDoc at <em>GPU timing</em> — where the time in a frame
+      actually went, per draw, on the hardware. RenderDoc is the better state inspector; PIX is
+      the better profiler. Module 9's profiling lessons come back to that distinction.
+    </p>
+  </div>
+
+  <h3 id="theory-frame"><span class="num">3.2</span>The frame you already understand</h3>
+
+  @@FIG_EVENTS@@
+
+  <p>
+    This is the frame, printed by the engine itself — <code>engine --trace</code>, which §4.4
+    builds. Read it before you ever open a tool, because it is what the tool is going to show
+    you and you can check it against what you know.
+  </p>
+
+  <p>
+    Four groups, because §4.2 puts one around each phase. One render pass with a depth
+    attachment. Two per-frame uniform pushes of 64 bytes each. Then, three times: two per-draw
+    pushes (112 and 32 bytes), a vertex buffer, an index buffer, and a draw. Thirty-three events,
+    three draws, 560 bytes.
+  </p>
+
+  <p>
+    <strong>Every one of those numbers was in Lesson 4.8's log.</strong> 128 bytes per frame plus
+    144 per draw times three is 560; three objects is three draws; one pipeline bind because all
+    three objects are solids. Nothing here is new information — and that is the point. When you
+    open a capture in §5 and see thirty-three events, you will know immediately whether the tool
+    is showing you the frame you think you wrote.
+  </p>
+
+  <h3 id="theory-naming"><span class="num">3.3</span>The naming API SDL tells you not to use</h3>
+
+  <p>
+    SDL offers two ways to name a buffer or a texture, and this course used the wrong one for six
+    lessons. The story is worth telling because the mistake has a shape you will make again.
+  </p>
+
+  <p>The two ways:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// 1. a setter, called after creation
+void SDL_SetGPUBufferName(SDL_GPUDevice* device, SDL_GPUBuffer* buffer, const char* text);
+
+// 2. a property, set at creation
+#define SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING "SDL.gpu.buffer.create.name"</code></pre>
+  </figure>
+
+  <p>
+    Lesson 4.2 found the setter first, used it, and Lesson 4.3 — which had to name a
+    <em>shader</em>, and discovered that shaders have only the property — wrote a comment
+    explaining the asymmetry:
+  </p>
+
+  <blockquote>
+    <p>
+      "note the asymmetry: buffers and textures have <code>SDL_SetGPUBufferName</code> /
+      <code>SDL_SetGPUTextureName</code>, and a SHADER DOES NOT. It is named through a creation
+      property instead, <strong>because a shader is immutable the moment it exists</strong> —
+      there is no later at which to set anything on it."
+    </p>
+  </blockquote>
+
+  <p>
+    That is a tidy, plausible, confidently-reasoned explanation, and it is wrong. Here is the
+    documentation of the function that comment was reasoning <em>about</em>, four lines above the
+    declaration it had already read:
+  </p>
+
+  <blockquote>
+    <p>
+      "You should use <code>SDL_PROP_GPU_BUFFER_CREATE_NAME_STRING</code> with
+      <code>SDL_CreateGPUBuffer</code> instead of this function to avoid thread safety issues."
+    </p>
+    <p>
+      "This function is not thread safe, you must make sure the buffer is not simultaneously used
+      by any other thread."
+    </p>
+  </blockquote>
+
+  <p>
+    There was no asymmetry to explain. The creation property is the <strong>recommended path for
+    all three resource types</strong>; the setters are simply the older API, kept working and
+    steered away from. A shader never got the worse option, which is not a consolation prize —
+    it is the absence of a mistake.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The shape of the error, which is the transferable part</span>
+    <p>
+      The comment was written by somebody who had just read <code>SDL_CreateGPUShader</code>'s
+      documentation carefully and had not read <code>SDL_SetGPUBufferName</code>'s at all. They
+      observed a difference between two APIs and <em>inferred a reason</em>, and the inference
+      was internally consistent, memorable, and false.
+    </p>
+    <p>
+      <strong>A confident explanation of why an API is shaped the way it is, is a hypothesis.</strong>
+      The cheapest place to test it is the documentation of the function you are already calling.
+      Note also that the wrong explanation survived four lessons and a code listing appearing in
+      full on a published page — because it was never <em>load-bearing</em> until this lesson made
+      it so.
+    </p>
+  </div>
+
+  <p>
+    And a limitation of both APIs that is worth knowing before you go looking: <strong>there is no
+    getter.</strong> No <code>SDL_GetGPUBufferName</code> exists. A name is write-only from the
+    program's point of view — it is for the debugger and cannot be read back or asserted on. So
+    <code>verify_49</code> can prove the calls are accepted and cannot prove the names arrived;
+    only a capture can, and that check is done by eye in §5.
+  </p>
+
+  <h3 id="theory-groups"><span class="num">3.4</span>Debug groups, and the Metal rule</h3>
+
+  <p>
+    A name makes a <em>resource</em> legible. A debug group makes the <em>frame</em> legible: it
+    turns a flat list of events into a tree with your own headings on it, which is the difference
+    between navigating a capture and scrolling one.
+  </p>
+
+  <p>Three calls, and one of them has a caveat that decides the API's shape:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void SDL_PushGPUDebugGroup(SDL_GPUCommandBuffer* cb, const char* name);
+void SDL_PopGPUDebugGroup(SDL_GPUCommandBuffer* cb);
+void SDL_InsertGPUDebugLabel(SDL_GPUCommandBuffer* cb, const char* text);</code></pre>
+  </figure>
+
+  <p>The caveat, quoted:</p>
+
+  <blockquote>
+    <p>
+      "On some backends (e.g. Metal), pushing a debug group during a render/blit/compute pass will
+      create a group that is scoped to the native pass rather than the command buffer. For best
+      results, if you push a debug group during a pass, always pop it in the same pass."
+    </p>
+  </blockquote>
+
+  <p>
+    So a group has a <em>scope</em>, and getting the scope wrong does not crash — it produces a
+    capture whose tree is subtly wrong, at exactly the moment you least want to be debugging your
+    debugging. That is an argument for expressing it as a C++ scope, which is what §4.2 does: an
+    RAII type whose destructor pops. A block cannot be unbalanced, and a type that is neither
+    copyable nor movable cannot be stashed somewhere it would outlive its pass.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Two portability notes worth knowing before you are surprised</span>
+    <p>
+      On <strong>D3D12</strong>, all three of these functions require
+      <code>WinPixEventRuntime.dll</code> to be in your PATH or next to your executable —
+      SDL's header says so for each one. Without it they are inert, not broken: your groups
+      silently do not appear. If you are on Windows with the D3D12 backend and your capture has
+      no tree, that is the first thing to check.
+    </p>
+    <p>
+      And a group is a <em>debugging</em> construct with no rendering meaning whatsoever. It does
+      not begin a pass, does not affect state, and does not synchronise anything. It is a label on
+      a range of the command stream, and nothing more.
+    </p>
+  </div>
+
+  <h3 id="theory-cost"><span class="num">3.5</span>What it costs, measured against its noise floor</h3>
+
+  <p>
+    Instrumentation that ships has to justify itself. Three costs, and the middle one pays off a
+    promise <code>src/main.cpp</code> has carried since Lesson 4.2 — <em>"the validation layer
+    costs real time … Lesson 4.9 turns it off to measure"</em>.
+  </p>
+
+  @@FIG_COSTS@@
+
+  <p>
+    Read the chart from the left. The first measurement is not any of the three costs: it is the
+    <strong>noise floor</strong>, measured by running the identical workload five times and taking
+    the spread of the medians. It comes out at 2.46 µs, and it is the thing every other number in
+    this section has to beat before it counts as a result.
+  </p>
+
+  <h4>Why that step is not optional, and what happens without it</h4>
+
+  <p>
+    The first version of this measurement skipped it and compared one instrumented frame against
+    one bare frame. The answer it produced was:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the first version of verify_49 §C</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">    no instrumentation          0.0240 ms
+    + debug group and label     0.0238 ms   (-0.0003)</code></pre>
+  </figure>
+
+  <p>
+    <strong>Adding work made the frame faster.</strong> That is not a surprising result about
+    debug groups; it is the measurement telling you it has nothing to say. The effect is smaller
+    than the machine's own variation, and any number you print there — positive or negative — is
+    a fluctuation wearing four decimal places.
+  </p>
+
+  <p>
+    The fix is to make the effect bigger until it clears the floor. Push 1, 8, 32 and 128 groups
+    per frame, changing nothing else, and divide:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Recording time against the number of debug groups per frame</caption>
+    <thead><tr><th>push + label + pop</th><th>ms to record</th><th>vs 0</th><th>per triple</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0</td><td class="mono">0.02400</td><td class="mono">—</td><td class="mono">—</td></tr>
+      <tr><td class="mono">1</td><td class="mono">0.02342</td><td class="mono">−0.00058</td><td>below the noise floor</td></tr>
+      <tr><td class="mono">8</td><td class="mono">0.02492</td><td class="mono">+0.00092</td><td>below the noise floor</td></tr>
+      <tr><td class="mono">32</td><td class="mono">0.02987</td><td class="mono">+0.00587</td><td class="mono">183.6 ns</td></tr>
+      <tr><td class="mono">128</td><td class="mono">0.04729</td><td class="mono">+0.02329</td><td class="mono">182.0 ns</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="eq-plain">
+    The last two rows agree to within 1%, and <em>that agreement is the evidence</em>: a real
+    per-call cost is constant, so two independent estimates of it converging is what distinguishes
+    a measurement from a coincidence.
+  </p>
+
+  <p>
+    So: <strong>about 183 ns per push-label-pop.</strong> The engine issues four groups a frame,
+    which is 0.73 µs, which is <strong>0.004% of a 16.7 ms frame</strong>. They ship on, in every
+    build, and the decision took one measurement rather than an argument.
+  </p>
+
+  <h4>The validation layer</h4>
+
+  <p>
+    Recording one three-draw frame: <strong>0.0267 ms with debug mode on, 0.0228 ms off — a
+    ratio of 1.17×.</strong> Measured on the <em>recording</em> rather than the whole frame, on
+    purpose: validation runs on the CPU as each call is recorded, so a whole-frame number would
+    dilute it with GPU time the layer cannot affect.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Do not read 1.17× as "validation is cheap"</span>
+    <p>
+      This scene has <strong>three draws</strong>. The layer's cost is per API <em>call</em>, so
+      it scales with how chatty your frame is — a frame with two thousand draws pays roughly a
+      thousand times what this one does, and there the ratio would not be 1.17.
+    </p>
+    <p>
+      The useful form of the finding is not a ratio at all: it is "validation costs about <em>X</em>
+      per call, and I know how many calls I make". Which is a number you now have both halves of,
+      because the frame log counts the calls.
+    </p>
+    <p>
+      Keep it on while developing regardless. Lesson 4.2's reasoning stands: the alternative to a
+      validation message is a black window with no message at all, and that trade is not close.
+    </p>
+  </div>
+
+  <h4>Naming</h4>
+
+  <p>
+    Creating a 256-byte buffer: <strong>0.0011 ms unnamed, 0.0018 ms named</strong> — 0.7 µs, paid
+    once per resource, at load time, never per frame. There is no version of this trade worth
+    taking the other way.
+  </p>
+
+  <h3 id="theory-cache"><span class="num">3.6</span>The number this machine cannot measure</h3>
+
+  <p>
+    Lesson 4.5 introduced <code>best_case_invocations()</code> and
+    <code>worst_case_invocations()</code> — 1,225 and 6,912 for our torus — and said, in a doc
+    comment that is still there:
+  </p>
+
+  <blockquote>
+    <p>
+      "Hardware lands somewhere between, nearer the bottom for well-ordered geometry, and Lesson
+      4.9's RenderDoc capture is where the real number finally shows up."
+    </p>
+  </blockquote>
+
+  <p>
+    <strong>It does not show up here.</strong> This course is written on a Mac, SDL_GPU gives it
+    Metal, RenderDoc does not capture Metal, and Metal's pipeline-statistics counters are not
+    reachable through SDL_GPU. Writing a plausible number here would be the single worst thing
+    this lesson could do, so instead: a model, with its assumptions stated, and the exact place to
+    read the truth on hardware that will tell you.
+  </p>
+
+  @@FIG_CACHE@@
+
+  <p>
+    The model is a <strong>post-transform vertex cache</strong>: hardware remembers the last
+    <em>N</em> vertices it shaded, and an index that hits the cache costs no invocation. Simulate
+    a FIFO cache of several sizes over the index order <code>torus.obj</code> actually ships with,
+    and you get the staircase above — which is more interesting than the number would have been.
+  </p>
+
+  <h4>Why a staircase and not a slope</h4>
+
+  <p>
+    <code>make_torus(48, 24)</code> emits quads ring by ring: <code>for i in major, for j in
+    minor</code>. So each quad shares two vertices with the quad <em>next to it</em> — a few index
+    positions back, which any cache catches — and two with the quad <em>one ring away</em>, about
+    2 × 24 = 48 positions back. There is nothing reused at a distance between those two, so a
+    cache of 8 and a cache of 32 catch exactly the same reuse: 2,400 invocations, both. Only at
+    about 50 does the second kind start landing, and then it drops straight to 1,225.
+  </p>
+
+  <p>
+    Which surfaces the finding that is worth more than the original question. <strong>Vertex reuse
+    is a property of the index ORDER, not only of the cache.</strong> The control makes it a
+    measurement rather than a story: take the same 2,304 triangles, the same vertices, the same
+    everything, and shuffle the order the triangles are listed in.
+  </p>
+
+  <p class="eq-plain">
+    ordered, cache 32: 2,400 invocations · shuffled, cache 32: 6,784 — <strong>2.83× worse</strong>,
+    with nothing about the geometry changed.
+  </p>
+
+  <p>
+    That is why real pipelines run an <strong>index-buffer optimiser</strong> as a build step —
+    Tom Forsyth's linear-speed vertex-cache optimiser, or <code>meshoptimizer</code> — and why a
+    mesh exported straight out of a modelling tool is often leaving half its vertex throughput on
+    the floor. Module 9's asset pipeline is where that becomes ours.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Everything this model assumes, each of which is a way it can be wrong</span>
+    <p>
+      That the cache is <strong>FIFO</strong> (some hardware is LRU, some is neither); that it
+      holds whole <strong>vertices</strong> (some hold post-transform outputs of a fixed size, so a
+      fatter vertex means fewer entries); that indices are processed <strong>strictly in
+      order</strong> (modern hardware batches them into primitive groups and may reorder within
+      one); and that there is <strong>one</strong> cache (there are usually several, one per
+      geometry unit).
+    </p>
+    <p>
+      <strong>Where to read the true number:</strong> in RenderDoc, the Pipeline State viewer's
+      statistics, or a <code>VK_QUERY_TYPE_PIPELINE_STATISTICS</code> query for
+      <code>VERTEX_SHADER_INVOCATIONS</code>. On D3D12,
+      <code>D3D12_QUERY_TYPE_PIPELINE_STATISTICS</code> → <code>VSInvocations</code>. In Xcode,
+      the Metal Debugger's per-pipeline counters. Exercise 4.9.5 is to run it and report how far
+      off this table is — <em>that</em> number is worth more than the table.
+    </p>
+  </div>
+
+  <h3 id="theory-limits"><span class="num">3.7</span>What a capture can do that a log cannot</h3>
+
+  <p>
+    §4.3 builds a frame log: 150 lines that print the command stream as a tree. It is worth being
+    precise about why that is worth writing when the real tools exist, and equally precise about
+    where it stops.
+  </p>
+
+  @@FIG_COMPARE@@
+
+  <p>
+    The top six rows are the case for writing it. It runs on <strong>every backend</strong>,
+    including the one RenderDoc does not support. It runs in <strong>CI</strong>, where a GUI
+    cannot — <code>engine --trace</code> is a headless frame dump you can diff between commits and
+    fail a build on. And it can be <strong>cross-checked</strong>: <code>verify_49</code> §D
+    asserts that the log's draw count, uniform bytes and triangle count match
+    <code>draw_stats</code>, which are two independent readings of the same frame.
+  </p>
+
+  <p>
+    That last one deserves a sentence, because it is the thing a capture genuinely cannot give
+    you. A capture is a picture of what happened; it has no second, independent account of what
+    <em>should</em> have happened to compare against. Two counters incremented from the same
+    statements do — which is also why the log is recorded from <em>inside</em>
+    <code>render()</code> rather than described from outside it. Instrumentation that can drift
+    from the code it describes is worse than none, because it is believed.
+  </p>
+
+  <p>
+    The bottom six rows are why the tools exist and why this lesson is not "and therefore you do
+    not need RenderDoc". Every one of them requires the frame to be <strong>replayed</strong>, and
+    replaying needs the driver: the contents of a buffer at a given event, the framebuffer as it
+    stood after one particular draw, which pipeline state was live, the compiled shader
+    disassembled, per-draw GPU timing, stepping a single fragment through your shader. No amount
+    of logging reaches any of that.
+  </p>
+
+  <p class="eq-plain">
+    The log tells you what you asked the GPU to do. The capture tells you what the GPU had.
+  </p>

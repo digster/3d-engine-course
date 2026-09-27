@@ -1,0 +1,50 @@
+<svg viewBox="0 0 720 446" role="img" aria-labelledby="l511f4-t l511f4-d">
+  <title id="l511f4-t">The ImGui calls placed in the engine's frame</title>
+  <desc id="l511f4-d">handle_event runs per event; ui.begin_frame is the first thing in on_input, before the input gate and the action map read the capture flags; the panels and ui.render run in on_overlay, after the framebuffer blit.</desc>
+  <defs>
+    <marker id="e-i-l511f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l511f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l511f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l511f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l511f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Where each ImGui call goes — and the one-frame bug that comes of moving one of them.</text>
+<text x="140" y="65" class="xs mono" text-anchor="end">SDL_AppEvent × N</text>
+<rect x="152" y="50" width="210" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="65" class="xs mono" text-anchor="middle">handle_event(e)</text>
+<text x="376" y="65" class="xs muted" text-anchor="start">ImGui learns what happened</text>
+<text x="140" y="95" class="xs mono" text-anchor="end">begin_frame()</text>
+<rect x="152" y="80" width="210" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="95" class="xs mono" text-anchor="middle">platform: clock + input</text>
+<text x="140" y="125" class="xs mono" text-anchor="end">on_input()</text>
+<rect x="152" y="110" width="210" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="257" y="125" class="xs mono" text-anchor="middle">ui.begin_frame()</text>
+<text x="376" y="125" class="xs muted" text-anchor="start">NewFrame → the capture flags exist</text>
+<rect x="152" y="140" width="210" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="257" y="155" class="xs mono" text-anchor="middle">gate.update(in(), …)</text>
+<text x="376" y="155" class="xs muted" text-anchor="start">and are read HERE, one line later</text>
+<rect x="152" y="170" width="210" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="257" y="185" class="xs mono" text-anchor="middle">actions.update(gate)</text>
+<text x="140" y="215" class="xs mono" text-anchor="end">on_fixed_step() × 0..N</text>
+<rect x="152" y="200" width="210" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="215" class="xs mono" text-anchor="middle">the simulation</text>
+<text x="140" y="245" class="xs mono" text-anchor="end">on_frame(alpha)</text>
+<rect x="152" y="230" width="210" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="245" class="xs mono" text-anchor="middle">the scene + the flush</text>
+<text x="140" y="275" class="xs mono" text-anchor="end">blit_framebuffer()</text>
+<rect x="152" y="260" width="210" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="275" class="xs mono" text-anchor="middle">our pixels reach the window</text>
+<text x="140" y="305" class="xs mono" text-anchor="end">on_overlay()</text>
+<rect x="152" y="290" width="210" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="305" class="xs mono" text-anchor="middle">ImGui::Begin … End</text>
+<text x="376" y="305" class="xs muted" text-anchor="start">the panels</text>
+<rect x="152" y="320" width="210" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="335" class="xs mono" text-anchor="middle">ui.render()</text>
+<text x="376" y="335" class="xs muted" text-anchor="start">over the frame, under the vsync wait</text>
+<text x="140" y="365" class="xs mono" text-anchor="end">present()</text>
+<rect x="148" y="108" width="218" height="92" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3" stroke-dasharray="4 3"/>
+<line x1="30" y1="380" x2="690" y2="380" class="grid" stroke-width="1.2"/>
+<text x="30" y="402" class="xs t-bad" text-anchor="start">MOVE ui.begin_frame() DOWN INTO on_overlay(), next to the panels, and every read of wants_keyboard()</text>
+<text x="30" y="418" class="xs muted" text-anchor="start">answers about the PREVIOUS frame: the first keystroke after you click into a text field also reaches the</text>
+<text x="30" y="434" class="xs muted" text-anchor="start">game. One frame, every time, and invisible unless you look for it.</text>
+</svg>

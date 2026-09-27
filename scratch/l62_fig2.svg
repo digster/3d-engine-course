@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l62f2-t l62f2-d">
+  <title id="l62f2-t">Radiance is invariant along a ray</title>
+  <desc id="l62f2-d">An emitter and a receiver at two distances. Doubling the distance divides both the irradiance and the subtended solid angle by four, so radiance, their ratio, is unchanged at 7.5.</desc>
+  <defs>
+    <marker id="e-i-l62f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l62f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l62f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l62f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l62f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Move the receiver twice as far away. Two of these three numbers fall by four; the third does not move.</text>
+<text x="470" y="86" class="xs muted" text-anchor="end">irradiance E</text>
+<line x1="394" y1="93" x2="470" y2="93" class="grid" stroke-width="1.0"/>
+<text x="570" y="86" class="xs muted" text-anchor="end">solid angle ω</text>
+<line x1="494" y1="93" x2="570" y2="93" class="grid" stroke-width="1.0"/>
+<text x="672" y="86" class="xs muted" text-anchor="end">L = E / ω</text>
+<line x1="596" y1="93" x2="672" y2="93" class="grid" stroke-width="1.0"/>
+<rect x="53" y="111" width="10" height="34" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<line x1="226.0" y1="106" x2="226.0" y2="150" class="ink" stroke-width="2.4"/>
+<text x="226.0" y="166" class="xs muted" text-anchor="middle">receiver, d = 1</text>
+<path d="M 226.0 128 L 64 111 L 64 145 Z" fill="#5082e6" fill-opacity="0.16" stroke="#5082e6" stroke-width="1.1"/>
+<text x="470" y="132" class="xs mono muted" text-anchor="end">7.500e-04</text>
+<text x="570" y="132" class="xs mono muted" text-anchor="end">1.000e-04</text>
+<text x="672" y="132" class="xs mono t-ok" text-anchor="end">7.5000</text>
+<rect x="53" y="207" width="10" height="34" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<line x1="394.0" y1="202" x2="394.0" y2="246" class="ink" stroke-width="2.4"/>
+<text x="394.0" y="262" class="xs muted" text-anchor="middle">receiver, d = 2</text>
+<path d="M 394.0 224 L 64 207 L 64 241 Z" fill="#5082e6" fill-opacity="0.16" stroke="#5082e6" stroke-width="1.1"/>
+<text x="470" y="228" class="xs mono t-bad" text-anchor="end">1.875e-04</text>
+<text x="570" y="228" class="xs mono t-bad" text-anchor="end">2.500e-05</text>
+<text x="672" y="228" class="xs mono t-ok" text-anchor="end">7.5000</text>
+<text x="58" y="94" class="xs muted" text-anchor="middle">emitter</text>
+<text x="436" y="180.0" class="xs t-bad" text-anchor="middle">÷ 4</text>
+<line x1="436" y1="142" x2="436" y2="169.0" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<line x1="436" y1="185.0" x2="436" y2="214" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="536" y="180.0" class="xs t-bad" text-anchor="middle">÷ 4</text>
+<line x1="536" y1="142" x2="536" y2="169.0" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<line x1="536" y1="185.0" x2="536" y2="214" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="638" y="180.0" class="xs t-ok" text-anchor="middle">unchanged</text>
+<line x1="638" y1="142" x2="638" y2="169.0" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<line x1="638" y1="185.0" x2="638" y2="214" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<rect x="24" y="302" width="672" height="76" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="326" class="sm t-hi" text-anchor="middle">Both fall as 1/d², so their RATIO is constant — that is the whole of radiance invariance.</text>
+<text x="360.0" y="348" class="xs muted" text-anchor="middle">Store irradiance and every shading equation needs to know how far away the light is. Store radiance and the ray carries its own</text>
+<text x="360.0" y="363" class="xs muted" text-anchor="middle">answer — which is why a pixel can be one number.</text>
+</svg>

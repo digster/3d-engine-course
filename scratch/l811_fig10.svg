@@ -1,0 +1,93 @@
+<svg viewBox="0 0 980 407" role="img" aria-labelledby="f10-t f10-d">
+  <title id="f10-t">What joints leave behind: mass ratios, sub-stepping and the budget</title>
+  <desc id="f10-d">Left: the total stretch of a ten-link chain against sweeps per step for end weights of 1, 10 and 100 kg on log axes. Right: the same number of joint visits spent as one step of eight sweeps or eight steps of one, and the cost per joint for each kind.</desc>
+  <defs>
+    <marker id="e-i-f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="26" y="34" class="sm" text-anchor="start">Ten links and an end weight: total stretch</text>
+<rect x="70" y="64" width="380" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="70" y1="294.0" x2="450" y2="294.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="298.0" class="xs mono" text-anchor="end">0.001 mm</text>
+<line x1="70" y1="255.66666666666669" x2="450" y2="255.66666666666669" class="grid" stroke-width="0.6"/>
+<text x="64" y="259.6666666666667" class="xs mono" text-anchor="end">0.01 mm</text>
+<line x1="70" y1="217.33333333333334" x2="450" y2="217.33333333333334" class="grid" stroke-width="0.6"/>
+<text x="64" y="221.33333333333334" class="xs mono" text-anchor="end">0.1 mm</text>
+<line x1="70" y1="179.0" x2="450" y2="179.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="183.0" class="xs mono" text-anchor="end">1 mm</text>
+<line x1="70" y1="140.66666666666669" x2="450" y2="140.66666666666669" class="grid" stroke-width="0.6"/>
+<text x="64" y="144.66666666666669" class="xs mono" text-anchor="end">10 mm</text>
+<line x1="70" y1="102.33333333333331" x2="450" y2="102.33333333333331" class="grid" stroke-width="0.6"/>
+<text x="64" y="106.33333333333331" class="xs mono" text-anchor="end">100 mm</text>
+<line x1="70" y1="64.0" x2="450" y2="64.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="68.0" class="xs mono" text-anchor="end">1000 mm</text>
+<path d="M 90.00,174.25 L 175.00,187.50 L 260.00,202.76 L 345.00,221.05 L 430.00,255.67" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<circle cx="90.0" cy="174.3" r="3.2" fill="#5ac878"/>
+<circle cx="175.0" cy="187.5" r="3.2" fill="#5ac878"/>
+<circle cx="260.0" cy="202.8" r="3.2" fill="#5ac878"/>
+<circle cx="345.0" cy="221.0" r="3.2" fill="#5ac878"/>
+<circle cx="430.0" cy="255.7" r="3.2" fill="#5ac878"/>
+<path d="M 90.00,130.55 L 175.00,142.68 L 260.00,155.39 L 345.00,169.31 L 430.00,185.92" fill="none" stroke="#f0961e" stroke-width="1.8"/>
+<circle cx="90.0" cy="130.6" r="3.2" fill="#f0961e"/>
+<circle cx="175.0" cy="142.7" r="3.2" fill="#f0961e"/>
+<circle cx="260.0" cy="155.4" r="3.2" fill="#f0961e"/>
+<circle cx="345.0" cy="169.3" r="3.2" fill="#f0961e"/>
+<circle cx="430.0" cy="185.9" r="3.2" fill="#f0961e"/>
+<path d="M 90.00,79.76 L 175.00,94.64 L 260.00,108.18 L 345.00,119.97 L 430.00,132.11" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<circle cx="90.0" cy="79.8" r="3.2" fill="#e05c5c"/>
+<circle cx="175.0" cy="94.6" r="3.2" fill="#e05c5c"/>
+<circle cx="260.0" cy="108.2" r="3.2" fill="#e05c5c"/>
+<circle cx="345.0" cy="120.0" r="3.2" fill="#e05c5c"/>
+<circle cx="430.0" cy="132.1" r="3.2" fill="#e05c5c"/>
+<text x="90.0" y="310" class="xs mono" text-anchor="middle">8</text>
+<text x="175.0" y="310" class="xs mono" text-anchor="middle">16</text>
+<text x="260.0" y="310" class="xs mono" text-anchor="middle">32</text>
+<text x="345.0" y="310" class="xs mono" text-anchor="middle">64</text>
+<text x="430.0" y="310" class="xs mono" text-anchor="middle">128</text>
+<text x="260.0" y="326" class="xs muted" text-anchor="middle">sweeps per step</text>
+<line x1="70.0" y1="340.0" x2="90.0" y2="340.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="98" y="344" class="xs" text-anchor="start">end weight 100 kg</text>
+<line x1="70.0" y1="357.0" x2="90.0" y2="357.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="98" y="361" class="xs" text-anchor="start">end weight 10 kg</text>
+<line x1="70.0" y1="374.0" x2="90.0" y2="374.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="98" y="378" class="xs" text-anchor="start">end weight 1 kg</text>
+<text x="540" y="34" class="sm" text-anchor="start">The same visits per frame, 100 kg end weight</text>
+<rect x="680" y="56" width="242.58875" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540" y="70" class="xs mono" text-anchor="start">8 sweeps × 1 step</text>
+<text x="930.58875" y="70" class="xs mono" text-anchor="start">388.1 mm</text>
+<rect x="680" y="90" width="101.94937499999999" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540" y="104" class="xs mono" text-anchor="start">4 sweeps × 2 steps</text>
+<text x="789.949375" y="104" class="xs mono" text-anchor="start">163.1 mm</text>
+<rect x="680" y="124" width="30.656875" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540" y="138" class="xs mono" text-anchor="start">2 sweeps × 4 steps</text>
+<text x="718.656875" y="138" class="xs mono" text-anchor="start">49.1 mm</text>
+<rect x="680" y="158" width="12.806875" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540" y="172" class="xs mono" text-anchor="start">1 sweep × 8 steps</text>
+<text x="700.806875" y="172" class="xs mono" text-anchor="start">20.5 mm</text>
+<line x1="680" y1="50" x2="680" y2="192" class="grid" stroke-width="1.0"/>
+<text x="540" y="204" class="xs muted" text-anchor="start">Per joint, in the engine's loop, 1,000 joints</text>
+<text x="540" y="224" class="xs muted" text-anchor="start">joint</text>
+<text x="804" y="224" class="xs muted" text-anchor="end">prepare</text>
+<text x="894" y="224" class="xs muted" text-anchor="end">per sweep</text>
+<line x1="540" y1="232.0" x2="900" y2="232.0" class="grid" stroke-width="1.0"/>
+<text x="540" y="249.0" class="xs" text-anchor="start">ball-socket, block</text>
+<text x="804" y="249.0" class="xs mono" text-anchor="end">90.5 ns</text>
+<text x="894" y="249.0" class="xs mono" text-anchor="end">13.7 ns</text>
+<text x="540" y="266.0" class="xs" text-anchor="start">ball-socket, rows</text>
+<text x="804" y="266.0" class="xs mono" text-anchor="end">104.2 ns</text>
+<text x="894" y="266.0" class="xs mono" text-anchor="end">35.8 ns</text>
+<text x="540" y="283.0" class="xs" text-anchor="start">hinge, block</text>
+<text x="804" y="283.0" class="xs mono" text-anchor="end">112.5 ns</text>
+<text x="894" y="283.0" class="xs mono" text-anchor="end">23.9 ns</text>
+<text x="540" y="300.0" class="xs" text-anchor="start">hinge + limit + motor</text>
+<text x="804" y="300.0" class="xs mono" text-anchor="end">138.8 ns</text>
+<text x="894" y="300.0" class="xs mono" text-anchor="end">60.0 ns</text>
+<text x="540" y="317.0" class="xs" text-anchor="start">rod</text>
+<text x="804" y="317.0" class="xs mono" text-anchor="end">90.5 ns</text>
+<text x="894" y="317.0" class="xs mono" text-anchor="end">12.4 ns</text>
+<text x="540" y="345.5" class="xs muted" text-anchor="start">Against 129 ns per contact manifold per sweep (8.10 §13): a hinge with a</text>
+<text x="540" y="360.5" class="xs muted" text-anchor="start">limit and a motor costs less than half of one crate resting on another.</text>
+</svg>

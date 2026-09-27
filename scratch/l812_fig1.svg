@@ -1,0 +1,145 @@
+<svg viewBox="0 0 980 497.0" role="img" aria-labelledby="g1-t g1-d">
+  <title id="g1-t">The humanoid's ragdoll, and the two owners of its bodies</title>
+  <desc id="g1-d">Left: 7.7's 23-joint humanoid in its T-pose, with eleven capsules drawn over it — cone-twist sockets in blue, hinges in amber, the pelvis as the root — and the twelve passenger joints as hollow rings. Right: two states, animated and simulated, joined by simulate() and animate(), and a table of the eleven parts with the joint each follows, its link and its mass.</desc>
+  <defs>
+    <marker id="e-i-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">7.7's humanoid, T-posed, seen from the front</text>
+<path d="M 206.70,240.40 L 233.30,240.40 A 20.90 20.90 0 0 0 233.30,198.60 L 206.70,198.60 A 20.90 20.90 0 0 0 206.70,240.40 Z" fill="#8f918a" fill-opacity="0.1" stroke="#8f918a" stroke-width="1.6"/>
+<path d="M 248.50,172.00 L 248.50,134.00 A 28.50 28.50 0 0 0 191.50,134.00 L 191.50,172.00 A 28.50 28.50 0 0 0 248.50,172.00 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 239.00,88.40 L 239.00,77.00 A 19.00 19.00 0 0 0 201.00,77.00 L 201.00,88.40 A 19.00 19.00 0 0 0 239.00,88.40 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 261.80,121.65 L 299.80,121.65 A 8.55 8.55 0 0 0 299.80,104.55 L 261.80,104.55 A 8.55 8.55 0 0 0 261.80,121.65 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 315.95,120.70 L 360.60,120.70 A 7.60 7.60 0 0 0 360.60,105.50 L 315.95,105.50 A 7.60 7.60 0 0 0 315.95,120.70 Z" fill="#f0961e" fill-opacity="0.1" stroke="#f0961e" stroke-width="1.6"/>
+<path d="M 178.20,104.55 L 140.20,104.55 A 8.55 8.55 0 0 0 140.20,121.65 L 178.20,121.65 A 8.55 8.55 0 0 0 178.20,104.55 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 124.05,105.50 L 79.40,105.50 A 7.60 7.60 0 0 0 79.40,120.70 L 124.05,120.70 A 7.60 7.60 0 0 0 124.05,105.50 Z" fill="#f0961e" fill-opacity="0.1" stroke="#f0961e" stroke-width="1.6"/>
+<path d="M 223.80,242.30 L 223.80,295.50 A 13.30 13.30 0 0 0 250.40,295.50 L 250.40,242.30 A 13.30 13.30 0 0 0 223.80,242.30 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 227.60,318.30 L 227.60,377.20 A 9.50 9.50 0 0 0 246.60,377.20 L 246.60,318.30 A 9.50 9.50 0 0 0 227.60,318.30 Z" fill="#f0961e" fill-opacity="0.1" stroke="#f0961e" stroke-width="1.6"/>
+<path d="M 189.60,242.30 L 189.60,295.50 A 13.30 13.30 0 0 0 216.20,295.50 L 216.20,242.30 A 13.30 13.30 0 0 0 189.60,242.30 Z" fill="#5082e6" fill-opacity="0.1" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 193.40,318.30 L 193.40,377.20 A 9.50 9.50 0 0 0 212.40,377.20 L 212.40,318.30 A 9.50 9.50 0 0 0 193.40,318.30 Z" fill="#f0961e" fill-opacity="0.1" stroke="#f0961e" stroke-width="1.6"/>
+<line x1="220.0" y1="219.5" x2="220.0" y2="196.7" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="196.7" x2="220.0" y2="170.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="170.1" x2="220.0" y2="139.7" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="139.7" x2="220.0" y2="105.5" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="105.5" x2="220.0" y2="86.5" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="139.7" x2="229.5" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="229.5" y1="113.1" x2="254.2" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="254.2" y1="113.1" x2="307.4" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="307.4" y1="113.1" x2="354.9" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="139.7" x2="210.5" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="210.5" y1="113.1" x2="185.8" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="185.8" y1="113.1" x2="132.6" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="132.6" y1="113.1" x2="85.1" y2="113.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="219.5" x2="237.1" y2="229.0" class="ink-soft" stroke-width="1.0"/>
+<line x1="237.1" y1="229.0" x2="237.1" y2="308.8" class="ink-soft" stroke-width="1.0"/>
+<line x1="237.1" y1="308.8" x2="237.1" y2="386.7" class="ink-soft" stroke-width="1.0"/>
+<line x1="237.1" y1="386.7" x2="237.1" y2="398.1" class="ink-soft" stroke-width="1.0"/>
+<line x1="220.0" y1="219.5" x2="202.9" y2="229.0" class="ink-soft" stroke-width="1.0"/>
+<line x1="202.9" y1="229.0" x2="202.9" y2="308.8" class="ink-soft" stroke-width="1.0"/>
+<line x1="202.9" y1="308.8" x2="202.9" y2="386.7" class="ink-soft" stroke-width="1.0"/>
+<line x1="202.9" y1="386.7" x2="202.9" y2="398.1" class="ink-soft" stroke-width="1.0"/>
+<circle cx="220.0" cy="219.5" r="3.4" fill="#8f918a"/>
+<circle cx="220.0" cy="196.7" r="3.4" fill="#5082e6"/>
+<circle cx="220.0" cy="170.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="220.0" cy="139.7" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="220.0" cy="105.5" r="3.4" fill="#5082e6"/>
+<circle cx="220.0" cy="86.5" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="229.5" cy="113.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="254.2" cy="113.1" r="3.4" fill="#5082e6"/>
+<circle cx="307.4" cy="113.1" r="3.4" fill="#f0961e"/>
+<circle cx="354.9" cy="113.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="210.5" cy="113.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="185.8" cy="113.1" r="3.4" fill="#5082e6"/>
+<circle cx="132.6" cy="113.1" r="3.4" fill="#f0961e"/>
+<circle cx="85.1" cy="113.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="237.1" cy="229.0" r="3.4" fill="#5082e6"/>
+<circle cx="237.1" cy="308.8" r="3.4" fill="#f0961e"/>
+<circle cx="237.1" cy="386.7" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="237.1" cy="398.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="202.9" cy="229.0" r="3.4" fill="#5082e6"/>
+<circle cx="202.9" cy="308.8" r="3.4" fill="#f0961e"/>
+<circle cx="202.9" cy="386.7" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<circle cx="202.9" cy="398.1" r="2.8" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="40.0" y1="400.0" x2="400.0" y2="400.0" class="grid" stroke-width="1.0"/>
+<line x1="26.0" y1="426.0" x2="46.0" y2="426.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="54" y="430.0" class="xs" text-anchor="start">cone-twist socket: waist, neck, shoulders, hips</text>
+<line x1="26.0" y1="443.0" x2="46.0" y2="443.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="54" y="447.0" class="xs" text-anchor="start">hinge: elbows and knees</text>
+<line x1="26.0" y1="460.0" x2="46.0" y2="460.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="54" y="464.0" class="xs" text-anchor="start">the root part (pelvis); hollow rings are passengers</text>
+<text x="500" y="30" class="sm" text-anchor="start">Every body has exactly one owner at a time</text>
+<rect x="500" y="52" width="200" height="92" rx="3" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<text x="600.0" y="74" class="sm" text-anchor="middle">ANIMATED</text>
+<text x="600.0" y="94" class="xs muted" text-anchor="middle">the clip owns them</text>
+<text x="600.0" y="108" class="xs muted" text-anchor="middle">kinematic: no mass</text>
+<text x="600.0" y="122" class="xs muted" text-anchor="middle">steered by velocity</text>
+<text x="600.0" y="136" class="xs muted" text-anchor="middle">joints: nothing to do</text>
+<rect x="770" y="52" width="200" height="92" rx="3" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<text x="870.0" y="74" class="sm" text-anchor="middle">SIMULATED</text>
+<text x="870.0" y="94" class="xs muted" text-anchor="middle">the solver owns them</text>
+<text x="870.0" y="108" class="xs muted" text-anchor="middle">dynamic: mass restored</text>
+<text x="870.0" y="122" class="xs muted" text-anchor="middle">joints in the solver</text>
+<text x="870.0" y="136" class="xs muted" text-anchor="middle">read_pose → the skin</text>
+<line x1="706.00" y1="82.00" x2="764.00" y2="82.00" stroke="#5ac878" stroke-width="1.6" marker-end="url(#e-green-g1)"/>
+<text x="735.0" y="74" class="xs mono" text-anchor="middle">simulate()</text>
+<line x1="764.00" y1="118.00" x2="706.00" y2="118.00" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-blue-g1)"/>
+<text x="735.0" y="136" class="xs mono" text-anchor="middle">animate()</text>
+<text x="500" y="180" class="xs muted" text-anchor="start">The eleven parts: Dempster's fractions of 80 kg</text>
+<text x="500" y="200" class="xs muted" text-anchor="start">part</text>
+<text x="710" y="200" class="xs muted" text-anchor="end">follows</text>
+<text x="820" y="200" class="xs muted" text-anchor="end">link</text>
+<text x="890" y="200" class="xs muted" text-anchor="end">kg</text>
+<line x1="500" y1="208.0" x2="896" y2="208.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="225.0" class="xs" text-anchor="start">pelvis</text>
+<text x="710" y="225.0" class="xs mono" text-anchor="end">hips</text>
+<text x="820" y="225.0" class="xs mono" text-anchor="end">root</text>
+<text x="890" y="225.0" class="xs mono" text-anchor="end">11.36</text>
+<text x="500" y="242.0" class="xs" text-anchor="start">torso</text>
+<text x="710" y="242.0" class="xs mono" text-anchor="end">spine1</text>
+<text x="820" y="242.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="242.0" class="xs mono" text-anchor="end">28.40</text>
+<text x="500" y="259.0" class="xs" text-anchor="start">head</text>
+<text x="710" y="259.0" class="xs mono" text-anchor="end">neck</text>
+<text x="820" y="259.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="259.0" class="xs mono" text-anchor="end">6.48</text>
+<text x="500" y="276.0" class="xs" text-anchor="start">upperarm.L</text>
+<text x="710" y="276.0" class="xs mono" text-anchor="end">upperarm.L</text>
+<text x="820" y="276.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="276.0" class="xs mono" text-anchor="end">2.24</text>
+<text x="500" y="293.0" class="xs" text-anchor="start">forearm.L</text>
+<text x="710" y="293.0" class="xs mono" text-anchor="end">forearm.L</text>
+<text x="820" y="293.0" class="xs mono" text-anchor="end">hinge</text>
+<text x="890" y="293.0" class="xs mono" text-anchor="end">1.76</text>
+<text x="500" y="310.0" class="xs" text-anchor="start">upperarm.R</text>
+<text x="710" y="310.0" class="xs mono" text-anchor="end">upperarm.R</text>
+<text x="820" y="310.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="310.0" class="xs mono" text-anchor="end">2.24</text>
+<text x="500" y="327.0" class="xs" text-anchor="start">forearm.R</text>
+<text x="710" y="327.0" class="xs mono" text-anchor="end">forearm.R</text>
+<text x="820" y="327.0" class="xs mono" text-anchor="end">hinge</text>
+<text x="890" y="327.0" class="xs mono" text-anchor="end">1.76</text>
+<text x="500" y="344.0" class="xs" text-anchor="start">thigh.L</text>
+<text x="710" y="344.0" class="xs mono" text-anchor="end">thigh.L</text>
+<text x="820" y="344.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="344.0" class="xs mono" text-anchor="end">8.00</text>
+<text x="500" y="361.0" class="xs" text-anchor="start">shin.L</text>
+<text x="710" y="361.0" class="xs mono" text-anchor="end">shin.L</text>
+<text x="820" y="361.0" class="xs mono" text-anchor="end">hinge</text>
+<text x="890" y="361.0" class="xs mono" text-anchor="end">4.88</text>
+<text x="500" y="378.0" class="xs" text-anchor="start">thigh.R</text>
+<text x="710" y="378.0" class="xs mono" text-anchor="end">thigh.R</text>
+<text x="820" y="378.0" class="xs mono" text-anchor="end">cone-twist</text>
+<text x="890" y="378.0" class="xs mono" text-anchor="end">8.00</text>
+<text x="500" y="395.0" class="xs" text-anchor="start">shin.R</text>
+<text x="710" y="395.0" class="xs mono" text-anchor="end">shin.R</text>
+<text x="820" y="395.0" class="xs mono" text-anchor="end">hinge</text>
+<text x="890" y="395.0" class="xs mono" text-anchor="end">4.88</text>
+<text x="500" y="421.5" class="xs muted" text-anchor="start">Twelve of the 23 joints are passengers: a clavicle, a hand, a foot and a</text>
+<text x="500" y="436.5" class="xs muted" text-anchor="start">toe ride on the nearest part above them at the local transform the clip</text>
+<text x="500" y="451.5" class="xs muted" text-anchor="start">last gave them. Heaviest to lightest, torso to forearm, is 16.1 : 1.</text>
+</svg>

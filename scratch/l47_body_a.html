@@ -1,0 +1,499 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-06-uniforms.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.6 — Uniform Data and the Matrix Upload</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-08-porting-the-scene.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.8 — Porting the Module-3 Scene</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.7</div>
+    <h1>Textures, Samplers, and Depth</h1>
+    <p class="deck">
+      Two things you already built, ported — and they are the two easiest ports in the module,
+      because Lessons 3.1 and 3.9 were written with this day in mind. So the lesson spends its
+      time on what is <em>not</em> a port: an image decoder that we do not write, a sampler that
+      is an object rather than an argument, and the one number in a depth buffer that nobody
+      tells you about until it ruins a scene.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-06-uniforms.html">4.6 — Uniform Data</a>,
+          <a href="03-01-z-buffer.html">3.1 — The Z-Buffer</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping</a>,
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/image.hpp</code>, <code>src/gfx/image.cpp</code>,
+            <code>src/gfx/gpu_texture.hpp</code>, <code>src/gfx/gpu_texture.cpp</code>,
+            <code>shaders/mesh.frag.hlsl</code>, <code>shaders/depth_probe.vert.hlsl</code>,
+            <code>shaders/depth_probe.frag.hlsl</code>,
+            <code>shaders/texture_probe.frag.hlsl</code>, <code>src/gfx/gpu_uniform.hpp</code>,
+            <code>src/gfx/gpu_device.cpp</code>, <code>src/main.cpp</code>,
+            <code>CMakeLists.txt</code>, <code>assets/uv_grid.png</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A textured, depth-tested scene — and a measured answer to "how far apart must two
+            surfaces be before my depth buffer can tell them apart", which turns out to be half a
+            metre at ninety metres unless you know one trick.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…add a depth attachment to a render pass and set the three pipeline fields that make it
+          do anything.</li>
+      <li>…derive why depth precision falls off as the square of distance, and compute the
+          smallest gap a given format can resolve at a given range.</li>
+      <li>…explain reversed-Z, say which formats it helps and which it does not, and why.</li>
+      <li>…decide which depth format to ask for — and ask, rather than assume.</li>
+      <li>…get an image onto the device, and say which single flag decides whether your lighting
+          maths is correct.</li>
+      <li>…say what a sampler <em>is</em>, and why it is an object here and was an argument in
+          Lesson 3.9.</li>
+      <li>…justify not hand-rolling a PNG decoder in a course that hand-rolls everything.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-attachment">Depth is an attachment, not a mode</a></li>
+          <li><a href="#intuition-sampler">A sampler is an object</a></li>
+          <li><a href="#intuition-decoder">The one thing we do not write</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-state">The depth test, as three fields</a></li>
+          <li><a href="#theory-precision">Why precision falls off as the square of distance</a></li>
+          <li><a href="#theory-formats">What each format can actually separate</a></li>
+          <li><a href="#theory-reversed">Reversed-Z</a></li>
+          <li><a href="#theory-srgb">Which way up, and the one flag that matters</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-image">A decoder behind our own interface</a></li>
+          <li><a href="#impl-texture">The texture, and the depth target</a></li>
+          <li><a href="#impl-sampler">The sampler, and a cast with a test behind it</a></li>
+          <li><a href="#impl-pass">The attachment, and the resize nobody remembers</a></li>
+          <li><a href="#impl-probe">Instruments for a question with no API</a></li>
+          <li><a href="#impl-scene">The scene</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 4.6 gave the camera freedom, and freedom immediately exposed something that two
+    lessons had been hiding. Orbit down towards the ring of tori until two of them overlap on
+    screen, and whichever was drawn <em>later</em> wins — regardless of which is nearer.
+  </p>
+
+  <p>
+    That has been true since Lesson 4.4. It went unnoticed because Lesson 4.5 arranged its seven
+    instances on a ring, at a scale and a camera angle where nothing overlapped, and Lesson 4.6
+    inherited that arrangement. This is worth naming as a general shape, because it will happen to
+    you: <strong>a limitation you have designed around stops being visible, and starts being
+    load-bearing.</strong> The scene was not built to hide the missing depth test — but it did,
+    and the day the camera moved, two lessons' worth of quiet wrongness arrived at once.
+  </p>
+
+  <p>
+    The second thing is quieter still. The texture coordinate has been riding through the vertex
+    buffer since Lesson 4.5, and its entire job so far has been to draw a diagnostic grid so we
+    could tell it had arrived. Nothing has ever been <em>painted</em>.
+  </p>
+
+  <p>
+    So: a depth buffer and a texture. You wrote both, on the CPU, in Lessons 3.1 and 3.9 — and
+    both of those lessons were written knowing this one was coming. Here is what
+    <code>depth_buffer.hpp</code> said in Module 3, before any of Module 4 existed:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>The hardware keeps them separate.</strong> SDL_GPU's <code>SDL_BeginGPURenderPass</code>
+      takes an array of <code>SDL_GPUColorTargetInfo</code> and, as a <em>separate</em> parameter,
+      a <code>SDL_GPUDepthStencilTargetInfo*</code> — which "may be NULL". […] Modelling that
+      split now means Module 4 is a rename, not a redesign.
+    </p>
+  </blockquote>
+
+  <p>
+    A promise made two modules early is a promise worth checking. Most of this lesson is that
+    check — and it passes, which means the lesson can spend its length on the parts that are
+    genuinely new: an image decoder, a sampler object, and the depth-precision question that
+    nobody warns you about until a wall starts flickering at fifty metres.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-attachment">2.1 Depth is an attachment, not a mode</h3>
+
+  <p>
+    On the CPU, turning depth testing on meant passing a <code>depth_buffer*</code> to
+    <code>draw_triangles</code> instead of <code>nullptr</code>. On the GPU it is two separate
+    decisions in two separate places, and keeping them straight is most of what goes wrong:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The render pass gets an attachment.</strong> A second image, the same size as the
+      colour target, with its own load and store operations — cleared at the start of the pass
+      exactly as the colour target is.
+    </li>
+    <li>
+      <strong>The pipeline gets three fields.</strong> Whether to test, whether to write, and what
+      comparison to use. These have been sitting in <code>SDL_GPUDepthStencilState</code>,
+      zero-filled, since Lesson 4.4.
+    </li>
+  </ul>
+
+  <p>
+    Both are required and neither implies the other, which is exactly right: a shadow pass writes
+    depth and no colour, and a transparent pass tests depth without writing it. Fuse them into one
+    "depth on" switch and neither is expressible — which is the argument
+    <code>depth_buffer.hpp</code> made in Lesson 3.1 for not putting the comparison inside the
+    buffer class.
+  </p>
+
+  <h3 id="intuition-sampler">2.2 A sampler is an object</h3>
+
+  <p>
+    In Lesson 3.9, how to read a texture was an argument:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Lesson 3.9, on the CPU</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">sample(image, uv, filter::linear, address_mode::repeat)</code></pre>
+  </figure>
+
+  <p>
+    On the GPU it is an <em>object</em>, created once and bound alongside the texture. If that
+    shape feels familiar, it should: it is the fourth time this module has made the same move.
+    Render state became a pipeline object (4.4); the vertex layout became pipeline state (4.5);
+    per-draw constants became a push (4.6); and now the rules for reading a texture become a
+    sampler. Every one of them is a decision the hardware must specialise for, and a decision the
+    hardware specialises for cannot be a parameter of the innermost loop.
+  </p>
+
+@@FIG_SAMPLER@@
+
+  <p>
+    The separation into <em>two</em> objects is worth a moment, because neither OpenGL nor our CPU
+    path modelled it that way and it is better than both. A texture is the pixels; a sampler is
+    the rules. Keeping them apart means one image can be read three ways in a single frame by
+    binding it with three samplers, and one sampler serves every texture in a material system
+    without being duplicated per image. They meet only at the binding —
+    <code>SDL_GPUTextureSamplerBinding</code>, <code>t0</code> paired with <code>s0</code>.
+  </p>
+
+  <h3 id="intuition-decoder">2.3 The one thing we do not write</h3>
+
+  <p>
+    This course has hand-rolled the maths library, the rasterizer, the OBJ parser, and will
+    hand-roll the ECS, the allocators and the collision system. It is about to use somebody else's
+    PNG decoder, and the reason is not difficulty.
+  </p>
+
+  <p>
+    A baseline PNG decoder is an afternoon. PNG <em>in the wild</em> is DEFLATE, plus five
+    per-scanline filter modes, plus Adam7 interlacing, plus sixteen-bit channels, plus palettes,
+    plus <code>tRNS</code> transparency, plus gamma and colour-profile chunks. A decoder that
+    handles the files you happened to test is worse than no decoder at all, because it fails on a
+    user's asset rather than on yours. And crucially: <strong>there is nothing about game engines
+    in the fifth filter mode.</strong>
+  </p>
+
+  <p>
+    Compare with <code>parse_obj</code>, which we <em>did</em> write. OBJ is a line-based text
+    format whose difficulty is entirely in the thing this course is about — the mismatch between
+    how a file describes a vertex and how hardware fetches one. That is the test:
+    <strong>is the hard part the subject?</strong> For OBJ, yes. For PNG, no.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The approved list, and why it is a list</span>
+    <p>
+      The master prompt names five third-party libraries and no others: <code>stb_image</code>,
+      <code>stb_truetype</code>, Dear ImGui (tooling only), <code>cgltf</code>, and
+      SDL_shadercross. <code>stb_image</code> enters here; the rest arrive when their problem
+      does. Each carries the same obligation this section just discharged — say out loud why you
+      are not writing it — because a dependency added without that sentence is a dependency
+      nobody can later argue with.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-state">3.1 The depth test, as three fields</h3>
+
+  <p>
+    Here is the whole of it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">mdesc.raw().depth_stencil_state.enable_depth_test = true;
+mdesc.raw().depth_stencil_state.enable_depth_write = true;
+mdesc.raw().depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;</code></pre>
+  </figure>
+
+  <p>
+    <code>LESS</code>, and the reason is a convention rather than a preference: SDL_GPU's NDC puts
+    <strong>0 at the near plane and 1 at the far plane</strong> (Conventions §4), so smaller is
+    nearer and a nearer fragment must compare less-than to win. That is the same reason Lesson
+    3.1's software test was a <code>&lt;</code> and its cleared buffer was full of
+    <code>1.0</code>.
+  </p>
+
+  <p>
+    <code>enable_depth_write</code> is documented as ignored while the test is off, so the two
+    travel together — but they are genuinely independent when the test is on, and the pair that
+    matters is <em>test without write</em>: that is how a transparent pass sorts itself against
+    opaque geometry without occluding other transparent surfaces.
+  </p>
+
+  <h3 id="theory-precision">3.2 Why precision falls off as the square of distance</h3>
+
+  <p>
+    Now the part that is not a port. A depth buffer stores a number per pixel, and that number is
+    not the distance — it is the distance run through Lesson 2.10's projection. That distinction
+    is the entire subject of this section, and it has a cost you can compute.
+  </p>
+
+  <p>
+    Start from the projection matrix on the Conventions page. For a view-space point at depth
+    <em>z</em>, the third and fourth clip components are
+    <em>z<sub>clip</sub></em> = <em>A</em>(<em>z</em> + <em>n</em>) and <em>w</em> = −<em>z</em>,
+    with <em>A</em> = <em>f</em>/(<em>n</em>−<em>f</em>). Write <em>d</em> = −<em>z</em> for the
+    positive distance in front of the eye, and the perspective divide gives:
+  </p>
+
+  <div class="eq">
+    \[ z_{\text{ndc}} = \frac{A(n - d)}{d} = \frac{f}{f-n}\left(1 - \frac{n}{d}\right) \]
+  </div>
+
+  <p class="eq-plain">
+    In words: depth in the buffer is not proportional to distance — it is proportional to
+    <em>one minus near-over-distance</em>, which is a hyperbola.
+  </p>
+
+  <p>
+    <strong>Check it at the two ends.</strong> At <em>d</em> = <em>n</em> the bracket is
+    1 − 1 = 0, so <em>z</em> = 0. At <em>d</em> = <em>f</em> the bracket is
+    1 − <em>n</em>/<em>f</em> = (<em>f</em>−<em>n</em>)/<em>f</em>, which cancels the leading
+    factor exactly and gives 1. Near maps to 0 and far maps to 1, as SDL_GPU requires.
+  </p>
+
+  <p>
+    Now differentiate, because what we want to know is not where a surface lands but how far it
+    must <em>move</em> before the buffer notices:
+  </p>
+
+  <div class="eq">
+    \[ \frac{dz}{dd} = \frac{f}{f-n} \cdot \frac{n}{d^{2}} \]
+  </div>
+
+  <p class="eq-plain">
+    The rate at which depth changes with distance is proportional to one over distance squared.
+    Double the distance and you get a quarter of the resolution.
+  </p>
+
+@@FIG_DEPTH_CURVE@@
+
+  <p>
+    <strong>Worked example, with our own frustum.</strong> Near 0.3, far 100. At one metre:
+  </p>
+
+  <div class="eq">
+    \[ z_{\text{ndc}}(1) = \frac{100}{99.7}\left(1 - \frac{0.3}{1}\right) = 1.00301 \times 0.7 = 0.7021 \]
+  </div>
+
+  <p>
+    <strong>Seventy per cent of the entire depth range is spent in the first metre.</strong> The
+    remaining ninety-nine metres share the other thirty per cent. That single number is the whole
+    of why depth buffers behave the way they do, and it follows from nothing more exotic than the
+    perspective divide having a 1/<em>d</em> in it.
+  </p>
+
+  <p>
+    Turn that into the number an engine actually needs. If the format stores <em>N</em> evenly
+    spaced codes across [0, 1], then one code is 1/<em>N</em>, and the smallest world-space
+    separation that spans one code is:
+  </p>
+
+  <div class="eq">
+    \[ \Delta d = \frac{1}{N} \cdot \frac{dd}{dz} = \frac{(f-n)\,d^{2}}{f\,n\,N} \]
+  </div>
+
+  <p>
+    For D16 (<em>N</em> = 65,535) at ninety metres that is 0.41 metres. <strong>Two walls forty
+    centimetres apart, ninety metres away, occupy the same depth code.</strong> Whichever is drawn
+    second wins, per pixel, and as the camera moves the winner changes — which is z-fighting,
+    with a number attached to it at last.
+  </p>
+
+  <h3 id="theory-formats">3.3 What each format can actually separate</h3>
+
+  <p>
+    A formula is a prediction. Here is the measurement: draw a far surface, then a near one, with
+    the depth test on, and bisect on the gap until the near one stops winning.
+  </p>
+
+@@FIG_DEPTH_TABLE@@
+
+  <p>
+    The measurement tracks the prediction to within a few per cent across two orders of
+    magnitude — 0.050 mm measured against 0.051 predicted at one metre, 412 mm against 411 at
+    ninety. Theory and hardware agreeing that closely is worth pausing on: it means the model in
+    §3.2 is not an approximation of what the hardware does, it <em>is</em> what the hardware does.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">D24_UNORM does not exist here</span>
+    <p>
+      Look at the support table in the figure. <strong>D24_UNORM — the format a desktop renderer
+      would have hard-coded — is not available on this device.</strong> SDL guarantees exactly one
+      depth format, <code>D16_UNORM</code>, and everything else is a query. This is the same
+      discipline Lesson 4.2 established for the swapchain format and the present modes, arriving
+      in the one place where getting it wrong is not a missing feature but a failure to create a
+      texture at startup.
+    </p>
+  </div>
+
+  <h3 id="theory-reversed">3.4 Reversed-Z</h3>
+
+  <p>
+    §3.2's derivation has a consequence that looks like a trick and is really just arithmetic.
+  </p>
+
+  <p>
+    A <code>_UNORM</code> depth format spreads its codes evenly across [0, 1]. A
+    <strong>float</strong> does not: floating point stores its precision near zero, with roughly
+    as many representable values between 0.001 and 0.002 as between 0.5 and 1.0. So a
+    <code>D32_FLOAT</code> depth buffer has enormous precision near <em>z</em> = 0 and comparatively
+    little near <em>z</em> = 1.
+  </p>
+
+  <p>
+    And where does the ordinary mapping put the far plane? At <em>z</em> = 1 — the coarse end.
+    Which is precisely where §3.2 already told us 1/<em>d</em>² has thrown the resolution away.
+    <strong>The two effects compound instead of cancelling.</strong>
+  </p>
+
+  <p>
+    So reverse it: map near to 1 and far to 0. Now the float's fine spacing near zero lands at the
+    far plane, where the projection is at its coarsest, and the two effects very nearly cancel
+    instead. Three changes and no new concepts — one subtraction in the vertex shader,
+    <code>COMPAREOP_GREATER</code> instead of <code>LESS</code>, and clearing the buffer to 0
+    instead of 1.
+  </p>
+
+@@FIG_REVERSED@@
+
+  <p>
+    <strong>180× at ninety metres</strong>, from 2.2 mm to 0.012 mm. And note the control:
+    <code>D16_UNORM</code> gains <em>nothing at all</em> — 412.4 mm either way — because its codes
+    are evenly spaced and reversing which end is which moves none of them. That the measurement
+    shows a large effect on exactly the format the theory predicts and no effect on the format the
+    theory predicts nothing for is what makes it believable.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why this engine does not use it yet</span>
+    <p>
+      Reversed-Z is standard practice in production renderers and this engine does not use it,
+      which deserves a reason rather than an omission. It touches the projection matrix, the
+      compare op, the clear value, and every later pass that reads depth — so it is a change to
+      make once, deliberately, with the shadow maps and depth-based post-processing of Module 6 in
+      view, rather than now for a scene whose far plane is a hundred metres and whose deepest
+      object is at nine. Exercise 4.7.4 does it properly.
+    </p>
+  </div>
+
+  <h3 id="theory-srgb">3.5 Which way up, and the one flag that matters</h3>
+
+  <p>
+    Two questions about an image, and they can both be answered with numbers rather than by
+    squinting at a screenshot.
+  </p>
+
+  <p>
+    <strong>Which way up?</strong> Lesson 3.9 established that Wavefront OBJ counts <em>v</em>
+    upwards from the bottom while every GPU texture counts it downwards from the top, and applied
+    the flip at import. That was reasoned from documentation, because no image existed to test it
+    against. <code>assets/uv_grid.png</code> now exists, and it carries a differently-coloured
+    block in each corner precisely so that a program can read the four corners back and say which
+    way up the picture arrived.
+  </p>
+
+  <p>
+    <strong>And what does <code>_SRGB</code> do?</strong> Lesson 3.9 spent a section on the fact
+    that an albedo is a reflectance, a reflectance multiplies a quantity of light, and both sides
+    of that multiply must be in linear space. It measured what skipping the decode costs: two
+    texels blended in encoded space give 0.2139 where 0.5 is correct — 43% of the light. On the
+    GPU that decode is one enum.
+  </p>
+
+@@FIG_SRGB@@
+
+  <p>
+    The <code>_UNORM</code> column matches the file <em>byte for byte</em>, in every corner. That
+    is a stronger statement than "it looked right": the decoder, the upload, the sampler and the
+    readback all agree about which way <em>v</em> runs and which channel is which, and any one of
+    them being wrong would have shown here.
+  </p>
+
+  <p>
+    The <code>_SRGB</code> column is darker, and by the right amount: 222 becomes 186, and
+    sRGB-decoding 222/255 = 0.871 gives 0.7305, which is 186.3 out of 255. The sampler did Lesson
+    3.9's per-texel arithmetic for free — and, crucially, <strong>before the filter rather than
+    after</strong>, which is the ordering the software path had to construct by hand and the whole
+    reason <code>_SRGB</code> texture formats exist.
+  </p>

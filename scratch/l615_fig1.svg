@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 402" role="img" aria-labelledby="f615a-t f615a-d">
+  <title id="f615a-t">The two failures of a constant ambient term</title>
+  <desc id="f615a-d">On the left, uniform light arriving from every direction so no surface orientation is distinguished. On the right, a chrome sphere rendered black except for a single specular highlight from the one directional light. Below, the comment shipped in the engine since Lesson 6.4 naming this lesson as the fix.</desc>
+  <defs>
+    <marker id="e-i-f615a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Two things a constant ambient cannot do, and only one of them was ever written down</text>
+<text x="178" y="48" class="xs" text-anchor="middle">IT HAS NO DIRECTION</text>
+<line x1="260.0" y1="140.0" x2="230.0" y2="140.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="256.6784238363888" y1="116.89793033900277" x2="227.89363462795387" y2="125.34990704424565" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="246.98278969215687" y1="95.667452968641" x2="221.74518370722143" y2="111.88667749230893" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="231.69858018351337" y1="78.02853490295082" x2="212.05275816515484" y2="100.70102213357856" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="212.06403106615468" y1="65.4101763809295" x2="199.60158067609808" y2="92.69913624156504" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="189.66981673840937" y1="58.83464176576352" x2="185.40037159021082" y2="88.5292850221915" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="166.33018326159063" y1="58.83464176576351" x2="170.59962840978918" y2="88.52928502219149" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="143.93596893384532" y1="65.41017638092949" x2="156.39841932390192" y2="92.69913624156504" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="124.30141981648663" y1="78.02853490295082" x2="143.94724183484516" y2="100.70102213357856" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="109.01721030784316" y1="95.66745296864099" x2="134.25481629277857" y2="111.88667749230892" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="99.32157616361121" y1="116.89793033900277" x2="128.10636537204613" y2="125.34990704424565" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<line x1="96.0" y1="139.99999999999994" x2="126.0" y2="139.99999999999997" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-f615a)"/>
+<circle cx="178" cy="140" r="44" fill="#5082e6" fill-opacity="0.30" stroke="#5082e6" stroke-width="1.4"/>
+<line x1="78" y1="140" x2="278" y2="140" class="grid" stroke-width="1.0" stroke-dasharray="4 3"/>
+<text x="178" y="145" class="xs" text-anchor="middle">same fill</text>
+<text x="178" y="160" class="xs" text-anchor="middle">everywhere</text>
+<text x="178" y="250" class="xs" text-anchor="middle">A face turned to the sky and one turned</text>
+<text x="178" y="266" class="xs" text-anchor="middle">to the floor receive identical light, so</text>
+<text x="178" y="282" class="xs" text-anchor="middle">nothing in the scene is ever grounded.</text>
+<text x="534" y="48" class="xs" text-anchor="middle">IT HAS NO SPECULAR HALF AT ALL</text>
+<circle cx="534" cy="140" r="46" fill="#101216" stroke="#8f918a" stroke-width="1.2"/>
+<circle cx="518" cy="122" r="9" fill="#f0961e" fill-opacity="0.95" stroke="none"/>
+<line x1="438" y1="78" x2="508" y2="114" class="hi" stroke-width="1.3" marker-end="url(#e-h-f615a)"/>
+<text x="430" y="72" class="xs" text-anchor="end">the one key light</text>
+<text x="534" y="206" class="xs" text-anchor="middle">`base * ambient` goes through NO BRDF, and a metal</text>
+<text x="534" y="222" class="xs" text-anchor="middle">has no `base` to multiply — so chrome in a bright</text>
+<text x="534" y="238" class="xs" text-anchor="middle">room is black except where one lamp reaches it.</text>
+<rect x="56" y="296" width="608" height="92" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="360.0" y="318" class="xs" text-anchor="middle">ON RECORD SINCE LESSON 6.4, in a comment shipped in both light.hpp and scene.frag.hlsl:</text>
+<text x="360.0" y="340" class="xs" text-anchor="middle">“a mirror in a bright uniform room renders black except where the key light reaches it — that</text>
+<text x="360.0" y="376" class="xs" text-anchor="middle">missing term is Lesson 6.15’s image-based lighting.” This is the lesson that closes it.</text>
+</svg>

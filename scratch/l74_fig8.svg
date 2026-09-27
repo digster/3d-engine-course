@@ -1,0 +1,68 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f74h-t f74h-d">
+  <title id="f74h-t">Drift, and a renormalisation that is exact at both ends</title>
+  <desc id="f74h-d">On the left, a table of the deviation from orthonormality after a million composed rotations at three step sizes. The raw quaternion walk is worse than the raw matrix walk at every step. A single fast renormalisation per step brings it to six times ten to the minus eight, better than both by five orders of magnitude. On the right, a table of what the fast renormalisation does outside its domain: at an input norm of one and again at exactly two the pose error is zero, and in between it rises to nearly fifty degrees. The failure is not monotonic, so a test that sampled only one and two would certify a broken function.</desc>
+  <defs>
+    <marker id="e-i-f74h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="196" y="44" class="sm" text-anchor="middle">after 1,000,000 compositions</text>
+<text x="196" y="60" class="xs muted" text-anchor="middle">max |MᵀM − I| — both asked the SAME question</text>
+<text x="64" y="92" class="xs muted" text-anchor="end">step</text>
+<text x="150" y="92" class="xs muted" text-anchor="end">quat raw</text>
+<text x="248" y="92" class="xs muted" text-anchor="end">mat3 raw</text>
+<text x="336" y="92" class="xs muted" text-anchor="end">tidied</text>
+<line x1="30" y1="100" x2="350" y2="100" class="grid" stroke-width="1.0"/>
+<text x="64" y="122" class="xs mono" text-anchor="end">0.37°</text>
+<text x="150" y="122" class="xs mono" text-anchor="end">8.774e-02</text>
+<text x="248" y="122" class="xs mono" text-anchor="end">1.780e-02</text>
+<text x="336" y="122" class="xs mono t-hi" text-anchor="end">5.960e-08</text>
+<text x="64" y="146" class="xs mono" text-anchor="end">1.00°</text>
+<text x="150" y="146" class="xs mono" text-anchor="end">2.940e-02</text>
+<text x="248" y="146" class="xs mono" text-anchor="end">2.674e-02</text>
+<text x="336" y="146" class="xs mono t-hi" text-anchor="end">1.192e-07</text>
+<text x="64" y="170" class="xs mono" text-anchor="end">2.50°</text>
+<text x="150" y="170" class="xs mono" text-anchor="end">1.824e-01</text>
+<text x="248" y="170" class="xs mono" text-anchor="end">5.681e-02</text>
+<text x="336" y="170" class="xs mono t-hi" text-anchor="end">1.192e-07</text>
+<line x1="30" y1="180" x2="350" y2="180" class="grid" stroke-width="1.0"/>
+<text x="196" y="214" class="sm t-hi" text-anchor="middle">THE RAW QUATERNION LOSES.</text>
+<text x="196" y="232" class="xs muted" text-anchor="middle">In the plane (7.3) the complex number won by 6.15×.</text>
+<text x="196" y="248" class="xs muted" text-anchor="middle">Here the answer depends on the STEP, because an</text>
+<text x="196" y="264" class="xs muted" text-anchor="middle">unrepaired norm error compounds as |q|ⁿ and the</text>
+<text x="196" y="280" class="xs muted" text-anchor="middle">sandwich then squares it. One `renormalised_fast`</text>
+<text x="196" y="296" class="xs muted" text-anchor="middle">per step — no sqrt, no divide — ends the argument.</text>
+<line x1="392" y1="60" x2="392" y2="330" class="grid" stroke-width="1.0"/>
+<text x="586" y="44" class="sm" text-anchor="middle">renormalised_fast outside its domain</text>
+<text x="586" y="60" class="xs muted" text-anchor="middle">the same function 7.3 warned about</text>
+<text x="470" y="92" class="xs muted" text-anchor="end">|q| in</text>
+<text x="584" y="92" class="xs muted" text-anchor="end">norm err</text>
+<text x="700" y="92" class="xs muted" text-anchor="end">pose err</text>
+<line x1="420" y1="100" x2="710" y2="100" class="grid" stroke-width="1.0"/>
+<text x="470" y="122" class="xs mono t-hi" text-anchor="end">1.000</text>
+<text x="584" y="122" class="xs mono t-hi" text-anchor="end">5.960e-08</text>
+<text x="700" y="122" class="xs mono t-hi" text-anchor="end">0.0000°</text>
+<text x="470" y="146" class="xs mono" text-anchor="end">1.050</text>
+<text x="584" y="146" class="xs mono" text-anchor="end">3.812e-03</text>
+<text x="700" y="146" class="xs mono" text-anchor="end">0.3349°</text>
+<text x="470" y="170" class="xs mono" text-anchor="end">1.250</text>
+<text x="584" y="170" class="xs mono" text-anchor="end">1.016e-01</text>
+<text x="700" y="170" class="xs mono" text-anchor="end">9.0135°</text>
+<text x="470" y="194" class="xs mono" text-anchor="end">1.500</text>
+<text x="584" y="194" class="xs mono" text-anchor="end">4.375e-01</text>
+<text x="700" y="194" class="xs mono" text-anchor="end">34.7161°</text>
+<text x="470" y="218" class="xs mono" text-anchor="end">1.750</text>
+<text x="584" y="218" class="xs mono" text-anchor="end">9.453e-01</text>
+<text x="700" y="218" class="xs mono" text-anchor="end">49.8686°</text>
+<text x="470" y="242" class="xs mono t-hi" text-anchor="end">2.000</text>
+<text x="584" y="242" class="xs mono t-hi" text-anchor="end">2.980e-07</text>
+<text x="700" y="242" class="xs mono t-hi" text-anchor="end">0.0000°</text>
+<line x1="420" y1="252" x2="710" y2="252" class="grid" stroke-width="1.0"/>
+<text x="586" y="292" class="sm t-hi" text-anchor="middle">EXACT at 1.0 and EXACT at 2.0.</text>
+<text x="586" y="310" class="xs muted" text-anchor="middle">At 2 it returns −q, which is the same rotation.</text>
+<text x="586" y="326" class="xs muted" text-anchor="middle">A test sampling those two points certifies it.</text>
+<text x="380.0" y="362" class="xs muted" text-anchor="middle">7.3's warning does not carry up — it gets sharper. There the worst input was |z| = 2; here that input is</text>
+<text x="380.0" y="380" class="xs muted" text-anchor="middle">perfect, and the damage is in the middle where nobody thinks to look. The failure is not monotonic.</text>
+</svg>

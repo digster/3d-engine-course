@@ -1,0 +1,443 @@
+  <!-- =================================================================
+       5 — FRESNEL
+       ================================================================= -->
+  <h2 id="fresnel"><span class="num">5</span>Fresnel, From the Physics</h2>
+
+  <p>
+    We have used <code>F</code> for two sections without saying what it is. Time to fix that — and
+    to do it in the order this course always uses: the <em>shape</em> first, from physics you can
+    check by looking out of a window, and only then a formula.
+  </p>
+
+  <h3 id="fres-shape"><span class="num">5.1</span>The shape, before any formula</h3>
+
+  <p>
+    When light meets a boundary between two materials — air and glass, air and water, air and paint
+    — some reflects and some crosses. Augustin-Jean Fresnel worked out how much, in 1823, from the
+    wave picture of light and the requirement that the electric and magnetic fields match up on
+    both sides of the boundary. The answer depends on the angle and on the polarisation, and for
+    unpolarised light you average the two polarisations:
+  </p>
+
+  <div class="eq">
+    \[ r_s = \frac{\cos\theta_i - n\cos\theta_t}{\cos\theta_i + n\cos\theta_t},\qquad
+       r_p = \frac{n\cos\theta_i - \cos\theta_t}{n\cos\theta_i + \cos\theta_t},\qquad
+       F = \tfrac{1}{2}\left(r_s^2 + r_p^2\right) \]
+  </div>
+  <p class="eq-plain">
+    In prose: two amplitude ratios, one per polarisation, each <strong>squared</strong> to turn an
+    amplitude into a power, then averaged. <code>θ_t</code> is the
+    transmitted angle, from Snell's law.
+  </p>
+
+  <p>
+    You do not need to memorise that, and we are not going to ship it. What matters is the shape it
+    produces, and the shape has two features that are worth more than the formula:
+  </p>
+
+  <ul>
+    <li><strong>At normal incidence it is small</strong>, and it is a property of the material —
+        4% for glass, 2% for water, 17% for diamond.</li>
+    <li><strong>At grazing incidence it is exactly 1, always, for every material.</strong> Not
+        "close to 1"; exactly 1. That is the window at night, and it is why it does not matter
+        what the window is made of.</li>
+  </ul>
+
+  @@FIG_FRESNEL@@
+
+  <p>
+    Look at where the curves spend their time. All three sit almost flat at their normal-incidence
+    value for the first forty-five degrees, then turn upward, and then shoot to 1 in the last few
+    degrees before grazing. Most of a rendered image lives in that flat part — which is why a
+    single number per material gets you most of the way, and why the last few degrees are where
+    everything interesting happens visually (wet roads at sunset, the rim of a face against a
+    window).
+  </p>
+
+  <h3 id="fres-f0"><span class="num">5.2</span>F0, and where 0.04 comes from</h3>
+
+  <p>
+    Set <code>θ_i = 0</code> in the equations above. Then
+    <code>θ_t = 0</code> too, both cosines are 1, and the two
+    polarisations collapse onto the same expression:
+  </p>
+
+  <div class="eq">
+    \[ F_0 \;=\; \left(\frac{n_1 - n_2}{n_1 + n_2}\right)^{\!2}
+       \;\;\xrightarrow{\;n_1 = 1\;}\;\; \left(\frac{1 - n}{1 + n}\right)^{\!2} \]
+  </div>
+
+  <p>
+    That is one line of algebra and it is the single most useful equation in material authoring,
+    because it turns a number you can look up (an index of refraction) into a number the renderer
+    wants (a reflectance).
+  </p>
+
+  <div class="callout">
+    <span class="label">Worked example: glass</span>
+    <p>Window glass has <code>n = 1.5</code>. So
+       F0 = ((1 − 1.5) / (1 + 1.5))² = (−0.2)² = <strong>0.04</strong>.</p>
+    <p><strong>That is where the 0.04 in every PBR renderer comes from.</strong> It is not a
+       constant somebody liked; it is window glass, and most dielectrics are close enough to
+       window glass that one number serves.</p>
+  </div>
+
+  <p>
+    How close is "close enough"? Here is the whole visible range of ordinary dielectrics:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>material</th><th>index of refraction</th><th>F0</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>water</td><td>1.333</td><td>0.02037</td></tr>
+      <tr><td>skin</td><td>1.400</td><td>0.02778</td></tr>
+      <tr><td>plastic, glass</td><td>1.500</td><td>0.04000</td></tr>
+      <tr><td>sapphire</td><td>1.770</td><td>0.07727</td></tr>
+      <tr><td>diamond</td><td>2.420</td><td>0.17239</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Everything from a puddle to a gemstone lives between 0.02 and 0.17, and everything that is not
+    a gemstone lives between 0.02 and 0.08. <strong>That is a remarkably small box, and it is what
+    makes a single default defensible where <code>specular::colour</code> never was.</strong>
+  </p>
+
+  <p>
+    The inverse is worth having too, and for a reason that is not symmetry — it is a
+    <em>diagnostic</em>. Run this engine's own shipped specular colours back through it:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>authored <code>specular::colour</code></th><th>implied index of refraction</th><th>is there such a material?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.30</td><td>3.42</td><td>no known solid</td></tr>
+      <tr><td>0.45</td><td>5.08</td><td>no</td></tr>
+      <tr><td>0.60</td><td>7.87</td><td>no</td></tr>
+      <tr><td>0.85</td><td><strong>24.63</strong></td><td>emphatically no</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Diamond, the most refractive common solid, is 2.42. The highest index of any solid at visible
+    wavelengths is around 4. <strong>The demo scene has been shipping a material with an index of
+    refraction of 24.6 since Lesson 3.7</strong>, and nothing looked wrong, because Lesson 6.3's
+    17× normalisation error was hiding inside it and the two were roughly cancelling.
+  </p>
+
+  <div class="callout">
+    <span class="label">The transferable habit</span>
+    <p>A parameter that can be round-tripped into a physical quantity can be <em>audited</em>. An
+       error a parameter can absorb is invisible until you ask the parameter what it claims about
+       the world — and then it is obvious in one line. This is the second time in three lessons
+       that trick has found something.</p>
+  </div>
+
+  <h3 id="fres-schlick"><span class="num">5.3</span>Schlick, fitted and measured</h3>
+
+  <p>
+    The exact equations need Snell's law, a square root, two polarisation terms and an average:
+    call it twenty operations, per light, per pixel. In 1994 Christophe Schlick proposed replacing
+    all of it with
+  </p>
+
+  <div class="eq">
+    \[ F(\cos\theta) \;=\; F_0 \;+\; (1 - F_0)\,(1 - \cos\theta)^5 \]
+  </div>
+
+  <p>
+    Notice what this gets right <em>by construction</em>, before any fitting happens. At
+    <code>cos θ = 1</code> the second term vanishes and it returns
+    exactly <code>F0</code>. At <code>cos θ = 0</code>
+    it returns <code>F0 + 1 − F0 = 1</code> — exactly 1, for every
+    material, which is the physical fact from §5.1 built into the algebra rather than approximated.
+    <strong>Schlick's actual contribution is the fifth power in between</strong>, and that is the
+    only part that is a fit.
+  </p>
+
+  <p>
+    So: how good a fit? The folklore says "very accurate" and moves on. Lesson 6.3 gave the
+    <code>s = 2/α² − 2</code> mapping the same treatment and found
+    that the folklore was quoting one answer to a different question, so let us measure rather than
+    repeat.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>material</th><th>F0</th><th>worst absolute error</th><th>at</th><th>worst <em>relative</em> error</th><th>at</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>water (1.33)</td><td>0.0204</td><td>0.0599</td><td>cos 0.108</td><td>22.7%</td><td>cos 0.628</td></tr>
+      <tr><td>skin (1.40)</td><td>0.0278</td><td>0.0461</td><td>cos 0.099</td><td>23.5%</td><td>cos 0.597</td></tr>
+      <tr><td>glass (1.50)</td><td>0.0400</td><td>0.0357</td><td>cos 0.088</td><td><strong>23.2%</strong></td><td>cos 0.566</td></tr>
+      <tr><td>sapphire (1.80)</td><td>0.0816</td><td>0.0345</td><td>cos 0.080</td><td>18.2%</td><td>cos 0.521</td></tr>
+      <tr><td>diamond (2.42)</td><td>0.1724</td><td>0.0757</td><td>cos 0.096</td><td>13.9%</td><td>cos 0.141</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The relative error is 23%, and it sits at about 55° — right in the middle of the range
+    where surfaces are ordinarily seen.</strong> That is not what "very accurate" usually means.
+  </p>
+
+  <div class="callout">
+    <span class="label">Worked example: glass at 60°</span>
+    <p><code>cos 60° = 0.5</code>, so
+       <code>(1 − 0.5)⁵ = 0.03125</code> and Schlick gives
+       0.04 + 0.96 × 0.03125 = <strong>0.0700</strong>.</p>
+    <p>The exact equations give <strong>0.0892</strong>. Schlick is <strong>21% low</strong>.</p>
+  </div>
+
+  <p>
+    And yet we are going to ship it, so the defence had better be honest. It is this:
+    <strong>a 21% error in a quantity that is itself 0.04 is an error of 0.019 in a
+    reflectance</strong>, which is well below what an 8-bit display can show and far below what
+    anything else in this renderer is wrong by. Schlick is not accurate; it is <em>cheap, exact at
+    both ends, and wrong by an amount that does not matter at dielectric F0</em>. Those are
+    different claims, and only the second one survives contact with a measurement.
+  </p>
+
+  <p>
+    Note the last row, too: the absolute error <em>doubles</em> for diamond. The approximation gets
+    worse as F0 rises, which is exactly the regime where metals live — and where you might care.
+    Exercise 15.3 asks you to find out whether it is visible.
+  </p>
+
+  <!-- =================================================================
+       6 — METALS
+       ================================================================= -->
+  <h2 id="metal"><span class="num">6</span>Metals, and Where the Colour Lives</h2>
+
+  <p>
+    We now have everything needed for a claim this course has been making informally since Lesson
+    3.7 — that a plastic has a white highlight and a metal has a coloured one — and we can finally
+    say <em>why</em>, rather than asserting it as a rule of thumb.
+  </p>
+
+  <p>
+    Follow the light. It arrives at the surface, and by §2 it does exactly one of two things.
+  </p>
+
+  <p>
+    <strong>For a dielectric</strong> — plastic, paint, skin, wood, glass — the fraction that
+    bounces off does so at the clear boundary, which has no pigment in it. So the mirrored light
+    keeps the <em>lamp's</em> colour: F0 is grey. The rest goes in, rattles around among the
+    pigment particles, loses whichever wavelengths they absorb, and comes back out. So the diffuse
+    light carries the colour. <strong>A dielectric's colour lives in its albedo and its F0 is
+    grey.</strong>
+  </p>
+
+  <p>
+    <strong>For a conductor</strong> — gold, copper, iron — the light that crosses the interface
+    meets a sea of free electrons and is absorbed within a few atomic layers. Nothing comes back
+    out. So there is no diffuse lobe <em>at all</em>, and the only light leaving the surface is the
+    part that bounced off. If a gold surface is going to look gold, the colour has nowhere to live
+    except in the reflection itself. <strong>A metal's F0 is coloured and its albedo is
+    irrelevant.</strong>
+  </p>
+
+  @@FIG_METAL@@
+
+  <p>
+    Gold's F0 is about (1.00, 0.71, 0.29): it reflects all the red, most of the green, and less
+    than a third of the blue. Copper is (0.95, 0.64, 0.54), silver very nearly white at
+    (0.97, 0.96, 0.92).
+  </p>
+
+  <p>
+    Now look at what that does to the material representation, because this is the part that
+    usually arrives as a pipeline convention and it should not:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The metallic workflow, as a consequence</span>
+    <p>A dielectric needs a coloured albedo and a grey F0. A metal needs a coloured F0 and no
+       albedo. <strong>So one colour field serves both</strong>, and a single number decides which
+       question it is answering:</p>
+    <div class="eq">
+      \[ F_0 = \text{lerp}(0.04,\; \text{albedo},\; \text{metallic}), \qquad
+         \text{diffuse albedo} = \text{albedo} \times (1 - \text{metallic}) \]
+    </div>
+    <p>That is not a compression of two workflows into one. It is the physics, written down.</p>
+  </div>
+
+  <p>
+    Two details worth pinning, because both look like sloppiness and are not.
+  </p>
+
+  <p>
+    <strong>Why is <code>metallic</code> a float when nothing is half a metal?</strong> Because a
+    <em>texture</em> that says "this pixel is the painted part of the robot and that one is the
+    bare steel" has to be filtered, and a filtered switch is a float. The in-between values are not
+    materials; they are the blend across a boundary. (They are also, in practice, where artists
+    make a mess — see the pitfalls.)
+  </p>
+
+  <p>
+    <strong>Why keep <code>f0</code> as a separate field at all, if it is 0.04 for nearly
+    everything?</strong> Because "nearly" is doing real work: water at 0.02 and gemstones at 0.17
+    are both things a scene may contain, and a parameter with a physical meaning is cheap to keep
+    and expensive to reintroduce later. It defaults to 0.04, so a material that has nothing to say
+    about it says nothing.
+  </p>
+
+  <!-- =================================================================
+       7 — THE COUPLING
+       ================================================================= -->
+  <h2 id="coupling"><span class="num">7</span>The Coupling, and Where It Fails</h2>
+
+  <p>
+    Back to the door. We have <code>F</code>, so we can write the sentence from §2 as arithmetic:
+  </p>
+
+  <div class="eq">
+    \[ f_r \;=\; \underbrace{\frac{D\,G\,F}{4(n\!\cdot\!l)(n\!\cdot\!v)}}_{\text{what bounced off}}
+       \;+\; \underbrace{k_d \cdot \frac{\text{albedo}}{\pi}}_{\text{what got in and came back}} \]
+  </div>
+
+  <p>
+    …and the only question left is what <code>k_d</code> should be. The
+    obvious answer is <code>1 − F</code>. The question is
+    <em>F at which angle</em>, and it turns out to matter enormously.
+  </p>
+
+  <p>
+    Nearly every real-time renderer answers <code>k_d = 1 − F(v·h)</code>,
+    reusing the Fresnel already computed for the specular. It is one line, it costs nothing extra,
+    and the glTF 2.0 reference BRDF is defined this way.
+    <span class="verify">⚠ VERIFY: check Khronos glTF 2.0 specification, Appendix B, "BRDF
+    Implementation", before relying on this for asset interchange in Lesson 6.6.</span>
+    So let us measure it, using Lesson 6.2's hemispherical-reflectance integrator, unchanged for
+    the third lesson running.
+  </p>
+
+  @@FIG_ENERGY@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>coupling</th><th>worst R(v) over the sweep</th><th>reciprocal?</th><th>verdict</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>none (Lessons 3.7 – 6.3)</td><td>1.4300</td><td>yes</td><td>emits light</td></tr>
+      <tr><td><code>1 − F(v·h)</code></td><td><strong>1.3395</strong></td><td>yes</td><td>still emits light</td></tr>
+      <tr><td><code>(1−F(n·l))(1−F(n·v))</code></td><td><strong>0.9255</strong></td><td>yes</td><td>ships</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The standard coupling does not conserve energy.</strong> It closes the door at normal
+    incidence beautifully — a white furnace reads 0.9999, better than the form we are about to
+    ship — and then reaches 1.34 for a smooth surface viewed near grazing.
+  </p>
+
+  <p>
+    This was genuinely surprising, so the first thing to do was doubt the instrument. Refining the
+    integration grid from 200 to 1600 steps moved the answer from 1.0921 to 1.2031 and then stopped:
+    it <em>converges</em> on the excess rather than shrinking toward 1. Lesson 6.3's rule settles
+    it — <strong>quadrature error shrinks with the grid; arithmetic error does not</strong> — so
+    the excess is real.
+  </p>
+
+  <p>
+    Localising it took one more measurement. Integrate the two lobes separately at roughness 0.10
+    with the eye at 75°: the specular takes <strong>0.2523</strong> and the diffuse gives up only
+    <strong>0.0521</strong>. The books do not balance, and the reason is visible once you say it:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The diagnosis</span>
+    <p><code>1 − F(v·h)</code> is the fraction of light that got
+       <strong>IN</strong>. It says nothing about the light that fails to get <strong>OUT</strong>.
+       A diffuse ray leaving toward an eye 75° off the normal meets the interface at 75°, where a
+       quarter of it reflects back inside — and that form lets all of it out.</p>
+  </div>
+
+  <p>
+    That is a diagnosis, which means it makes a prediction: bolt an exit factor on and the excess
+    should vanish. It does — <code>(1−F(v·h))(1−F(n·v))</code>
+    drops the grazing 1.2002 to 0.9574 and the worst case to 0.9628. The mechanism was right.
+  </p>
+
+  <p>
+    And then that repair fails a different test, which is the part worth slowing down for.
+    <strong>A BRDF must be reciprocal</strong>: swapping the light and the eye must not change the
+    answer, because light does not know which way it is travelling. Measured on one configuration,
+    that form gives 0.262327 one way and 0.293236 the other. It is not a BRDF at all.
+  </p>
+
+  <p>
+    Fix the asymmetry and the answer falls out. If light crossing the interface on the way
+    <em>out</em> is attenuated, so is light crossing on the way <em>in</em> — at the light's own
+    angle, not the half-vector's. Two crossings, one each:
+  </p>
+
+  <div class="eq">
+    \[ k_d \;=\; \bigl(1 - F(n\!\cdot\!l)\bigr)\bigl(1 - F(n\!\cdot\!v)\bigr) \]
+  </div>
+
+  <p>
+    Symmetric in <code>l</code> and <code>v</code>, so reciprocal. Motivated by the physics rather
+    than fitted. And measured never to exceed 1 anywhere in a full sweep of roughness against view
+    angle: <strong>worst 0.9255</strong>. That is what this engine ships.
+  </p>
+
+  <div class="callout">
+    <span class="label">The honest cost, stated</span>
+    <p>It is <strong>darker</strong>. At normal incidence a white surface reads 0.9144 where the
+       half-vector form reads 0.9966 — about 8.5% less light. That light is not lost to a bug: it
+       is the portion that reflects back <em>inside</em> the surface at the exit boundary, which a
+       real material would eventually re-emit and this model simply forgets. It is the same class
+       of loss as Lesson 6.3's missing 69%, and §10 names the fix.</p>
+    <p>The alternative is kept in the header as <code>diffuse_coupling::half_vector</code>, named
+       and measured, exactly as Lesson 6.3 kept <code>smith_g_separable</code>. You will meet it in
+       every engine you read next, and now you know precisely what it is approximating.</p>
+  </div>
+
+  <h3><span class="num">7.1</span>The whole BRDF, pushed through by hand</h3>
+
+  <p>
+    One worked example, with real numbers, so nothing above is abstract. Take a mid-grey plastic —
+    albedo 0.5, roughness 0.49, dielectric — with the light and the eye each 30° off the normal on
+    opposite sides, so the halfway vector is the normal exactly.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>quantity</th><th>working</th><th>value</th></tr></thead>
+    <tbody>
+      <tr><td>α</td><td>0.49²</td><td>0.240100</td></tr>
+      <tr><td>n·l = n·v = v·h</td><td>cos 30°</td><td>0.866025</td></tr>
+      <tr><td>n·h</td><td>h is n</td><td>1</td></tr>
+      <tr><td>D</td><td>α² / (π α⁴), since the denominator is α² at the peak</td><td>5.521610</td></tr>
+      <tr><td>G</td><td>height-correlated Smith</td><td>0.990528</td></tr>
+      <tr><td>F</td><td>0.04 + 0.96 × (1 − 0.866025)⁵</td><td>0.0400414</td></tr>
+      <tr><td><strong>f_spec</strong></td><td>D·G·F / (4 × 0.866025²)</td><td><strong>0.073000</strong></td></tr>
+      <tr><td>k_d</td><td>(1 − 0.0400414)²</td><td>0.921520</td></tr>
+      <tr><td><strong>f_diff</strong></td><td>0.921520 × 0.5/π</td><td><strong>0.146665</strong></td></tr>
+      <tr><td><strong>f_r</strong></td><td>sum</td><td><strong>0.219664</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Now the same surface under the model this engine shipped yesterday — <code>specular::colour</code>
+    0.85, shininess 32, and the halfway vector on the normal so the lobe is exactly 1:
+    <code>f_r = (0.85 + 0.5)/π = 0.429718</code>.
+  </p>
+
+  <p>
+    <strong>1.96× brighter.</strong> That factor is the whole of §9 in one number, and it is why
+    the materials and the constants had to change in the same commit.
+  </p>

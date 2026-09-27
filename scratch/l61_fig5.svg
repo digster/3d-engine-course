@@ -1,0 +1,88 @@
+<svg viewBox="0 0 720 462" role="img" aria-labelledby="l61f5-t l61f5-d">
+  <title id="l61f5-t">A nine-step light ramp rendered into both target formats</title>
+  <desc id="l61f5-d">For nine linear light levels, the code stored by the pre-6.1 engine and by the fixed one, with the ratio by which the display was too dark: 12 times in shadow, 1.2 times near white.</desc>
+  <defs>
+    <marker id="e-i-l61f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l61f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l61f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l61f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l61f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The bug, measured on real GPU pixels: nine light levels, rendered twice by the same shader.</text>
+<text x="116" y="66" class="xs muted" text-anchor="end">light asked for</text>
+<text x="161.0" y="66" class="xs mono" text-anchor="middle">0.02</text>
+<text x="223.0" y="66" class="xs mono" text-anchor="middle">0.05</text>
+<text x="285.0" y="66" class="xs mono" text-anchor="middle">0.10</text>
+<text x="347.0" y="66" class="xs mono" text-anchor="middle">0.20</text>
+<text x="409.0" y="66" class="xs mono" text-anchor="middle">0.35</text>
+<text x="471.0" y="66" class="xs mono" text-anchor="middle">0.50</text>
+<text x="533.0" y="66" class="xs mono" text-anchor="middle">0.65</text>
+<text x="595.0" y="66" class="xs mono" text-anchor="middle">0.80</text>
+<text x="657.0" y="66" class="xs mono" text-anchor="middle">0.95</text>
+<text x="116" y="108" class="xs mono" text-anchor="end">before 6.1</text>
+<rect x="130" y="88" width="58" height="32" fill="rgb(5,5,5)" stroke="none"/>
+<text x="159.0" y="136" class="xs mono" text-anchor="middle">5</text>
+<rect x="192" y="88" width="58" height="32" fill="rgb(13,13,13)" stroke="none"/>
+<text x="221.0" y="136" class="xs mono" text-anchor="middle">13</text>
+<rect x="254" y="88" width="58" height="32" fill="rgb(26,26,26)" stroke="none"/>
+<text x="283.0" y="136" class="xs mono" text-anchor="middle">26</text>
+<rect x="316" y="88" width="58" height="32" fill="rgb(51,51,51)" stroke="none"/>
+<text x="345.0" y="136" class="xs mono" text-anchor="middle">51</text>
+<rect x="378" y="88" width="58" height="32" fill="rgb(89,89,89)" stroke="none"/>
+<text x="407.0" y="136" class="xs mono" text-anchor="middle">89</text>
+<rect x="440" y="88" width="58" height="32" fill="rgb(128,128,128)" stroke="none"/>
+<text x="469.0" y="136" class="xs mono" text-anchor="middle">128</text>
+<rect x="502" y="88" width="58" height="32" fill="rgb(166,166,166)" stroke="none"/>
+<text x="531.0" y="136" class="xs mono" text-anchor="middle">166</text>
+<rect x="564" y="88" width="58" height="32" fill="rgb(204,204,204)" stroke="none"/>
+<text x="593.0" y="136" class="xs mono" text-anchor="middle">204</text>
+<rect x="626" y="88" width="58" height="32" fill="rgb(242,242,242)" stroke="none"/>
+<text x="655.0" y="136" class="xs mono" text-anchor="middle">242</text>
+<text x="116" y="124" class="xs muted" text-anchor="end">linear, written raw</text>
+<text x="116" y="192" class="xs mono" text-anchor="end">after 6.1</text>
+<rect x="130" y="172" width="58" height="32" fill="rgb(39,39,39)" stroke="none"/>
+<text x="159.0" y="220" class="xs mono" text-anchor="middle">39</text>
+<rect x="192" y="172" width="58" height="32" fill="rgb(63,63,63)" stroke="none"/>
+<text x="221.0" y="220" class="xs mono" text-anchor="middle">63</text>
+<rect x="254" y="172" width="58" height="32" fill="rgb(89,89,89)" stroke="none"/>
+<text x="283.0" y="220" class="xs mono" text-anchor="middle">89</text>
+<rect x="316" y="172" width="58" height="32" fill="rgb(124,124,124)" stroke="none"/>
+<text x="345.0" y="220" class="xs mono" text-anchor="middle">124</text>
+<rect x="378" y="172" width="58" height="32" fill="rgb(160,160,160)" stroke="none"/>
+<text x="407.0" y="220" class="xs mono" text-anchor="middle">160</text>
+<rect x="440" y="172" width="58" height="32" fill="rgb(188,188,188)" stroke="none"/>
+<text x="469.0" y="220" class="xs mono" text-anchor="middle">188</text>
+<rect x="502" y="172" width="58" height="32" fill="rgb(211,211,211)" stroke="none"/>
+<text x="531.0" y="220" class="xs mono" text-anchor="middle">211</text>
+<rect x="564" y="172" width="58" height="32" fill="rgb(231,231,231)" stroke="none"/>
+<text x="593.0" y="220" class="xs mono" text-anchor="middle">231</text>
+<rect x="626" y="172" width="58" height="32" fill="rgb(249,249,249)" stroke="none"/>
+<text x="655.0" y="220" class="xs mono" text-anchor="middle">249</text>
+<text x="116" y="208" class="xs muted" text-anchor="end">encoded on write</text>
+<text x="116" y="294" class="xs muted" text-anchor="end">times too dark</text>
+<rect x="136" y="247.28640000000001" width="46" height="52.7136" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="159.0" y="316" class="xs mono" text-anchor="middle">13.2x</text>
+<rect x="198" y="250.30706529655023" width="46" height="49.69293470344977" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="221.0" y="316" class="xs mono" text-anchor="middle">12.4x</text>
+<rect x="260" y="261.2771681709589" width="46" height="38.722831829041134" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="283.0" y="316" class="xs mono" text-anchor="middle">9.7x</text>
+<rect x="322" y="275.8342956961496" width="46" height="24.165704303850408" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="345.0" y="316" class="xs mono" text-anchor="middle">6.0x</text>
+<rect x="384" y="285.98580758168515" width="46" height="14.01419241831486" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="407.0" y="316" class="xs mono" text-anchor="middle">3.5x</text>
+<rect x="446" y="290.73475694281865" width="46" height="9.265243057181355" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="469.0" y="316" class="xs mono" text-anchor="middle">2.3x</text>
+<rect x="508" y="293.18168726483526" width="46" height="6.818312735164752" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="531.0" y="316" class="xs mono" text-anchor="middle">1.7x</text>
+<rect x="570" y="294.7004718168837" width="46" height="5.299528183116336" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="593.0" y="316" class="xs mono" text-anchor="middle">1.3x</text>
+<rect x="632" y="295.7203501930838" width="46" height="4.279649806916214" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="655.0" y="316" class="xs mono" text-anchor="middle">1.1x</text>
+<line x1="24" y1="334" x2="696" y2="334" class="grid" stroke-width="1.2"/>
+<text x="24" y="356" class="xs t-hi" text-anchor="start">READ THE BOTTOM ROW RIGHT TO LEFT.</text>
+<text x="24" y="374" class="xs muted" text-anchor="start">Near white the error is 1.1x and looks like nothing. In shadow it is 13x. That shape is why four modules of looking at</text>
+<text x="24" y="390" class="xs muted" text-anchor="start">this picture did not find it: the bright half is nearly right, and the dark half reads as a deliberate mood rather than</text>
+<text x="24" y="406" class="xs muted" text-anchor="start">a defect. An error that is a RATIO hides wherever there is least contrast to spare.</text>
+<text x="24" y="432" class="xs t-hi" text-anchor="start">Both rows are real downloaded pixels — verify_61 §F renders each level into both target formats and prints this table. The</text>
+<text x="24" y="448" class="xs muted" text-anchor="start">swatches ARE the stored codes, so the top row is literally what the engine used to display.</text>
+</svg>

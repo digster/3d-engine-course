@@ -1,0 +1,58 @@
+<svg viewBox="0 0 720 360" role="img" aria-labelledby="l42f6-t l42f6-d">
+  <title id="l42f6-t">Copy bandwidth on compressible and incompressible content</title>
+  <desc id="l42f6-d">A bar chart of copy bandwidth in gigabytes per second at four texture sizes, with two bars per size. The first bar of each pair copies a flat-coloured texture and reports 686 and 798 gigabytes per second at 2048 and 4096 squared — above the dashed line at 273, this machine's entire memory bandwidth, which is impossible. The second bar of each pair copies incompressible noise and settles onto the line at 278. The difference is lossless render-target compression, which makes a flat texture almost free to copy and makes the first measurement fiction.</desc>
+  <defs>
+    <marker id="e-i-l42f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l42f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l42f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">copy bandwidth, and the number that could not be true</text>
+<text x="24" y="44" class="xs muted">the same ping-ponged blits, counting reads and writes, at four texture sizes</text>
+<line x1="78.0" y1="294.0" x2="578.0" y2="294.0" class="grid" stroke-width="0.8"/>
+<text x="68.0" y="298.0" class="xs mono muted" text-anchor="end">0</text>
+<line x1="78.0" y1="242.4" x2="578.0" y2="242.4" class="grid" stroke-width="0.8"/>
+<text x="68.0" y="246.4" class="xs mono muted" text-anchor="end">200</text>
+<line x1="78.0" y1="190.9" x2="578.0" y2="190.9" class="grid" stroke-width="0.8"/>
+<text x="68.0" y="194.9" class="xs mono muted" text-anchor="end">400</text>
+<line x1="78.0" y1="139.3" x2="578.0" y2="139.3" class="grid" stroke-width="0.8"/>
+<text x="68.0" y="143.3" class="xs mono muted" text-anchor="end">600</text>
+<line x1="78.0" y1="87.8" x2="578.0" y2="87.8" class="grid" stroke-width="0.8"/>
+<text x="68.0" y="91.8" class="xs mono muted" text-anchor="end">800</text>
+<line x1="78.0" y1="294.0" x2="578.0" y2="294.0" class="ink" stroke-width="1.4"/>
+<text x="22.0" y="178.0" class="xs" transform="rotate(-90 22.0 178.0)" text-anchor="middle">GB/s</text>
+<rect x="103.5" y="260.6" width="34.0" height="33.4" fill="#78b4eb" opacity="0.85"/>
+<text x="120.5" y="254.6" class="xs mono" text-anchor="middle">130</text>
+<rect x="143.5" y="261.8" width="34.0" height="32.2" fill="#eb786e" opacity="0.85"/>
+<text x="160.5" y="255.8" class="xs mono" text-anchor="middle">125</text>
+<text x="140.5" y="312.0" class="xs mono muted" text-anchor="middle">512&#178;</text>
+<text x="140.5" y="326.0" class="xs muted" text-anchor="middle">1 MB</text>
+<rect x="228.5" y="173.9" width="34.0" height="120.1" fill="#78b4eb" opacity="0.85"/>
+<text x="245.5" y="167.9" class="xs mono" text-anchor="middle">466</text>
+<rect x="268.5" y="190.9" width="34.0" height="103.1" fill="#eb786e" opacity="0.85"/>
+<text x="285.5" y="184.9" class="xs mono" text-anchor="middle">400</text>
+<text x="265.5" y="312.0" class="xs mono muted" text-anchor="middle">1024&#178;</text>
+<text x="265.5" y="326.0" class="xs muted" text-anchor="middle">4 MB</text>
+<rect x="353.5" y="117.1" width="34.0" height="176.9" fill="#78b4eb" opacity="0.85"/>
+<text x="370.5" y="111.1" class="xs mono" text-anchor="middle">686</text>
+<rect x="393.5" y="214.3" width="34.0" height="79.7" fill="#eb786e" opacity="0.85"/>
+<text x="410.5" y="208.3" class="xs mono" text-anchor="middle">309</text>
+<text x="390.5" y="312.0" class="xs mono muted" text-anchor="middle">2048&#178;</text>
+<text x="390.5" y="326.0" class="xs muted" text-anchor="middle">16 MB</text>
+<rect x="478.5" y="88.3" width="34.0" height="205.7" fill="#78b4eb" opacity="0.85"/>
+<text x="495.5" y="82.3" class="xs mono" text-anchor="middle">798</text>
+<rect x="518.5" y="222.4" width="34.0" height="71.6" fill="#eb786e" opacity="0.85"/>
+<text x="535.5" y="216.4" class="xs mono" text-anchor="middle">278</text>
+<text x="515.5" y="312.0" class="xs mono muted" text-anchor="middle">4096&#178;</text>
+<text x="515.5" y="326.0" class="xs muted" text-anchor="middle">64 MB</text>
+<line x1="78.0" y1="223.6" x2="578.0" y2="223.6" class="hi" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="586.0" y="227.6" class="xs mono t-hi">273 GB/s</text>
+<text x="586.0" y="241.6" class="xs muted">this machine&#8217;s</text>
+<text x="586.0" y="253.6" class="xs muted">memory bus</text>
+<rect x="78.0" y="342.0" width="11" height="11" fill="#78b4eb" opacity="0.85"/>
+<text x="94.0" y="352.0" class="xs">flat colour &#8212; compresses, so the bytes are never moved</text>
+<rect x="408.0" y="342.0" width="11" height="11" fill="#eb786e" opacity="0.85"/>
+<text x="424.0" y="352.0" class="xs">noise &#8212; cannot compress</text>
+</svg>

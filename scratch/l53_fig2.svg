@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 434" role="img" aria-labelledby="l53f2-t l53f2-d">
+  <title id="l53f2-t">The six levels and the ownership rule</title>
+  <desc id="l53f2-d">Six coloured level bands from critical down to trace with their meanings and call counts, a dashed line showing that everything below error is silent by default, and the rule that a failure is logged once at the deepest point that knows why.</desc>
+  <defs>
+    <marker id="e-i-l53f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">A level is a promise about what the message means</text>
+<rect x="20" y="52" width="86" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c"/>
+<text x="63" y="67" class="xs mono t-inv" text-anchor="middle">critical</text>
+<text x="118" y="67" class="xs" text-anchor="start">the program cannot continue</text>
+<text x="690" y="67" class="xs mono muted" text-anchor="end">2</text>
+<rect x="20" y="82" width="86" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c"/>
+<text x="63" y="97" class="xs mono t-inv" text-anchor="middle">error</text>
+<text x="118" y="97" class="xs" text-anchor="start">the operation did not happen, and the caller is being told so</text>
+<text x="690" y="97" class="xs mono muted" text-anchor="end">54</text>
+<rect x="20" y="138" width="86" height="22" rx="3" fill="#f0961e" stroke="#f0961e"/>
+<text x="63" y="153" class="xs mono t-inv" text-anchor="middle">warn</text>
+<text x="118" y="153" class="xs" text-anchor="start">something went wrong and we carried on anyway</text>
+<text x="690" y="153" class="xs mono muted" text-anchor="end">6</text>
+<rect x="20" y="168" width="86" height="22" rx="3" fill="#5082e6" stroke="#5082e6"/>
+<text x="63" y="183" class="xs mono t-inv" text-anchor="middle">info</text>
+<text x="118" y="183" class="xs" text-anchor="start">a fact worth having on a bug report</text>
+<text x="690" y="183" class="xs mono muted" text-anchor="end">25</text>
+<rect x="20" y="198" width="86" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede"/>
+<text x="63" y="213" class="xs mono t-inv" text-anchor="middle">debug</text>
+<text x="118" y="213" class="xs" text-anchor="start">what a subsystem did, once per operation</text>
+<text x="690" y="213" class="xs mono muted" text-anchor="end">4</text>
+<rect x="20" y="228" width="86" height="22" rx="3" fill="#5ac878" stroke="#5ac878"/>
+<text x="63" y="243" class="xs mono t-inv" text-anchor="middle">trace</text>
+<text x="118" y="243" class="xs" text-anchor="start">per-frame or per-item detail</text>
+<text x="690" y="243" class="xs mono muted" text-anchor="end">1</text>
+<line x1="14" y1="120" x2="700" y2="120" stroke="#e05c5c" stroke-width="1.6" stroke-dasharray="5 3"/>
+<text x="20" y="138" class="xs t-bad" text-anchor="start">everything below this line is silent by default — `--log gpu=debug` raises it</text>
+<line x1="20" y1="274" x2="700" y2="274" class="grid" stroke-width="1"/>
+<text x="20" y="294" class="xs t-hi" text-anchor="start">AND THE RULE THAT DECIDES WHO SAYS IT</text>
+<text x="20" y="314" class="xs" text-anchor="start">Log the failure ONCE, at the deepest point that knows WHY — it has the path,</text>
+<text x="20" y="328" class="xs muted" text-anchor="start">the size, the SDL_GetError() string. Callers propagate silently and add only</text>
+<text x="20" y="342" class="xs muted" text-anchor="start">the CONSEQUENCE, which is the thing they know and the callee does not.</text>
+<text x="20" y="356" class="xs muted" text-anchor="start"></text>
+<text x="20" y="370" class="xs" text-anchor="start">The failure this avoids: five stack levels each logging “failed”, so one</text>
+<text x="20" y="384" class="xs muted" text-anchor="start">problem produces five lines and the most informative one is buried.</text>
+<text x="20" y="398" class="xs muted" text-anchor="start">The cost, stated honestly: a caller that RECOVERS still gets an error line</text>
+<text x="20" y="412" class="xs muted" text-anchor="start">it did not deserve. Code that is expected to fail logs at debug and says so.</text>
+</svg>

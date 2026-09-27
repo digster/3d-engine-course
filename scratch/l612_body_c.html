@@ -1,0 +1,473 @@
+  <h3>4.6 &nbsp; The fill's sixth nullable pointer</h3>
+
+  <p>
+    <code>fill_style::hdr</code> is a <code>hdr_buffer*</code>, and null is the whole of "this fill
+    is LDR" — the sixth field on that struct to make the bargain, after <code>lights</code>,
+    <code>albedo</code>, <code>normal_map</code>, <code>shadows</code> and <code>cascades</code>.
+    Every fill written in the previous sixty-six lessons passes null and behaves identically.
+  </p>
+
+  <p>
+    The framebuffer is still required, and not as a formality: it supplies the dimensions the
+    bounding box is clipped against. That is exactly the situation <code>depth_only</code>
+    documented in 6.8 — <em>"the colour target still has to EXIST, because <code>fill_triangle</code>
+    clips its bounding box against the framebuffer's dimensions and there is nowhere else for a
+    pass to learn how big it is"</em> — arriving a second time, which is a good sign that it is a
+    real constraint rather than an accident.
+  </p>
+
+  <p>In the write path it is one branch on a per-triangle constant:</p>
+
+  <pre><code class="lang-cpp">if (depth_only) { /* nothing to store */ }
+else if (hdr_row != nullptr) { hdr_row[x] = fragment_linear(f0, f1, f2, ignored); }
+else                         { row[x]     = fragment(f0, f1, f2, ignored); }</code></pre>
+
+  <p>
+    And in the blend path, the payoff §3.5 described — no decode, no re-encode, just the operator:
+  </p>
+
+  <pre><code class="lang-cpp">if (hdr_row != nullptr)
+{
+    hdr_row[x] = (style.src_storage == alpha_storage::premultiplied)
+               ? over_premultiplied(lin, a, hdr_row[x])
+               : over(lin, a, hdr_row[x]);
+    return;
+}</code></pre>
+
+  <p>
+    Note in passing that 6.11's <code>blend_encoded</code> failure has nowhere to live on this path.
+    There are no stored codes to lerp. A knob that cannot express its mistake here is not being
+    silently ignored — the mistake genuinely does not exist, which is a stronger statement than the
+    engine has usually been able to make about one of its deliberate wrong answers.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete code listings</h2>
+
+  <p>
+    Six new files, and the harness. Every other file this lesson touches is listed in the manifest
+    with what changed in it; the narrated excerpts in §4 are complete as shown.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Files touched by Lesson 6.12</caption>
+    <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/hdr.hpp</code></td><td>new</td>
+          <td>Luminance, exposure, four curves, <code>hdr_buffer</code>, the resolve</td></tr>
+      <tr><td><code>engine/src/gfx/hdr.cpp</code></td><td>new</td>
+          <td>The curves, <code>measure</code>, and the three-step resolve loop</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_post.hpp</code></td><td>new</td>
+          <td><code>gpu_tonemap_pass</code>, <code>k_hdr_format</code>, and why it is not a stack</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_post.cpp</code></td><td>new</td>
+          <td>A pipeline with no vertex input, no depth and no blending</td></tr>
+      <tr><td><code>shaders/fullscreen.vert.hlsl</code></td><td>new</td>
+          <td>Three corners from <code>SV_VertexID</code>; one triangle, not two</td></tr>
+      <tr><td><code>shaders/tonemap.frag.hlsl</code></td><td>new</td>
+          <td>The same four curves, character for character</td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+          <td><code>fill_style::hdr</code>, the sixth nullable target pointer</td></tr>
+      <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+          <td><code>shade_lit</code> hoisted; <code>fragment_linear</code>; both traversals</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+          <td><code>create_colour_target</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+          <td>COLOR_TARGET | SAMPLER, and why the second is easy to forget</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td><code>tonemap_uniforms</code>; the operator crosses as a number</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+          <td><code>encode_output</code>'s third situation, documented</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code></td><td>modified</td>
+          <td><code>hdr.cpp</code>, <code>gpu_post.cpp</code>, two shaders</td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>--hdr</code>, <code>--tonemap</code>, <code>--ev</code>, <code>--polish</code></td></tr>
+      <tr><td><code>scratch/verify_612.cpp</code></td><td>new</td>
+          <td>45 checks, nine sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/hdr.hpp@@
+
+  @@LISTING:engine/src/gfx/hdr.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_post.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_post.cpp@@
+
+  @@LISTING:shaders/fullscreen.vert.hlsl@@
+
+  @@LISTING:shaders/tonemap.frag.hlsl@@
+
+  @@LISTING:scratch/verify_612.cpp@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">6</span>Build &amp; run</h2>
+
+  <pre><code class="lang-shell"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>First, take the lid off — and notice that this is the <em>only</em> change to the scene:</p>
+
+  <pre><code class="lang-shell">./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3</code></pre>
+
+  <p>
+    <code>--polish</code> forces every material to a roughness the file did not ask for, and adds a
+    polished metal torus. The torus is not decoration: at roughness 0.15 the specular lobe is a few
+    degrees wide, so a scene of flat faces presents the mirror angle at <em>no pixel at all</em> and
+    the HDR buffer comes back with a peak of 0.22 — which is how a renderer with a real clipping
+    problem can look completely fine. A torus is curved in both directions, so some point on it
+    satisfies the mirror condition from every viewpoint.
+  </p>
+
+  <p>Then the four curves, and the exposure:</p>
+
+  <pre><code class="lang-shell">./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3 --tonemap reinhard
+./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3 --tonemap aces
+./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3 --tonemap white --white 8
+./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3 --tonemap aces --ev 2
+./build/demos/gltf_view --hdr --polish 0.15 --pose 1.3 --tonemap reinhard --luma</code></pre>
+
+  <p>And the harness:</p>
+
+  <pre><code class="lang-shell">sh scratch/build_verify_612.sh</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>On the console, the diagnostic that says whether you have an HDR problem at all:</p>
+
+  <pre><code class="lang-shell">  polish        : every material forced to roughness 0.15, plus a metal torus to catch the lobe
+  hdr           : max channel 411.8161 (8.7 stops), max luminance 398.9317
+  over the lid  : 126 of 129600 pixels (0.10%) have a channel above 1 — every one of them would be code 255 under a clamp
+  exposure      : EV100 -0.263 -> x1.0000   curve clamp   white 4.00
+  log-average   : 0.00685  (arithmetic mean 0.04280 — the gap is what one specular pixel does to a mean)</code></pre>
+
+  <p>
+    <strong>0.10% of the frame.</strong> A tenth of one percent — and all of the information being
+    destroyed is in it. Note also the last line: the arithmetic mean is <strong>6.2×</strong> the
+    log-average on this frame, which is §3.6's argument arriving in the demo rather than in a test.
+  </p>
+
+  <p>
+    On screen, the torus carries a long specular highlight. Under <code>--tonemap clamp</code> its
+    core is a <strong>flat white region with a hard edge</strong>: 126 pixels of identical code 255,
+    with the lobe's shape gone. Switch to <code>reinhard</code> and the core becomes a gradient —
+    the same pixels, now carrying the shape they always had. Only <strong>3</strong> pixels remain
+    at 255 rather than 126.
+  </p>
+
+  <p>
+    <code>aces</code> is visibly darker overall (its toe, costing 13 codes at the dark end) with the
+    tightest roll-off; <code>white</code> sits between them and reaches true white where Reinhard
+    cannot. And <code>--ev 2</code> darkens everything by a little over two stops, which is what an
+    exposure does and what a curve does not.
+  </p>
+
+  <p>The harness ends:</p>
+
+  <pre><code class="lang-shell">== I  CPU vs GPU — THE SAME CURVE, COMPUTED TWICE ==
+  a flat quad of known linear value, through BOTH resolves:
+    value   curve            GPU   CPU
+       4.0  reinhard          231   231
+       4.0  aces              252   252
+      16.0  reinhard          248   248
+       0.5  reinhard          156   156
+      40.0  clamp             255   255
+
+45 checks, 0 failures</code></pre>
+
+  <p>
+    Five of five, <strong>exactly</strong> — not within a code, identical. And the fourth row is the
+    one to notice: a linear value of 16, four stops above white, resolving to code 248 on the GPU
+    through a float target that one pass wrote and another read. Before this lesson that value did
+    not survive the fragment shader.
+  </p>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>The HDR buffer's peak is 0.22 and you were expecting thousands</h3>
+    <p><strong>Symptom.</strong> Everything is wired up, the scene is full of polished metal, and
+       <code>measure()</code> reports nothing above 1.</p>
+    <p><strong>Cause.</strong> A sharp specular lobe is a few degrees wide, and a scene of flat
+       faces may present the mirror angle at no pixel at all. The highlight is not being clipped;
+       it is not being <em>hit</em>.</p>
+    <p><strong>Fix.</strong> Put a doubly-curved surface in the scene — this demo adds a torus —
+       so that some point satisfies the mirror condition from every viewpoint. This is worth
+       recognising because it is how a renderer with a real clipping problem can look completely
+       fine right up until the day somebody adds a sphere.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Sharper surfaces report LOWER peaks than rough ones</h3>
+    <p><strong>Symptom.</strong> A probe sweeps the eye through a range of angles and finds that
+       roughness 0.05 peaks lower than roughness 0.35, which is backwards.</p>
+    <p><strong>Cause.</strong> The sweep misses the lobe. A narrow lobe needs the mirror direction
+       exactly, and a sweep through a plane that does not contain it reports a peak that is an
+       artefact of where you looked.</p>
+    <p><strong>Fix.</strong> Evaluate at <code>reflect(−to_light, n)</code> rather than sweeping.
+       And keep the symptom in mind as a diagnostic: <strong>a monotonic relationship coming out
+       backwards usually means the measurement is missing the thing it is measuring</strong>, not
+       that the physics is surprising. The first version of <code>probe_612.cpp</code> made exactly
+       this mistake and the reversal is what gave it away.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The tonemapped image is washed out and never reaches white</h3>
+    <p><strong>Symptom.</strong> Everything looks slightly grey; nothing in the frame is code 255,
+       even where the input was enormous.</p>
+    <p><strong>Cause.</strong> Plain Reinhard. <code>x/(1+x)</code> is strictly below 1, and
+       reaching code 255 needs an input of <strong>224</strong>.</p>
+    <p><strong>Fix.</strong> <code>reinhard_white</code> with a white point you choose, or ACES.
+       It is worth knowing this is a property of the operator rather than a bug in your exposure —
+       turning the exposure up to chase white just clips everything else.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The scene renders black, or the resolve samples garbage</h3>
+    <p><strong>Symptom.</strong> The HDR pass looks right in a capture and the resolve produces
+       noise, black, or last frame's contents.</p>
+    <p><strong>Cause.</strong> The HDR texture was created with <code>COLOR_TARGET</code> and not
+       <code>SAMPLER</code>. It is a legal texture that cannot legally be read.</p>
+    <p><strong>Fix.</strong> Both usage flags. And note there is no error to look for: SDL's GPU
+       validation of this lives inside <code>if (device-&gt;debug_mode)</code> (Lesson 6.10), so on
+       a release device the result is simply undefined.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Everything is far too bright, or far too dark, by exactly the gamma curve</h3>
+    <p><strong>Symptom.</strong> The resolve produces a picture that is recognisable but wrong in
+       the familiar way — washed out or muddy across the whole frame.</p>
+    <p><strong>Cause.</strong> Two encodes, or none. The scene shader is still encoding
+       (<code>encode_output = 1</code>) while writing a float target, or the resolve is not encoding
+       into a <code>UNORM</code> swapchain.</p>
+    <p><strong>Fix.</strong> Exactly one encode, at the end. A float target never carries codes, so
+       the scene pass writes linear; the resolve encodes if and only if its own target is not
+       <code>_SRGB</code>. If you are unsure which you have, <code>gpu_device</code>'s report prints
+       the swapchain format and <code>output_encodes_in_hardware</code>.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The auto-exposure flickers whenever something shiny comes into view</h3>
+    <p><strong>Symptom.</strong> The whole image dims for a frame or two as the camera turns.</p>
+    <p><strong>Cause.</strong> An exposure derived from the <em>arithmetic</em> mean luminance. One
+       pixel in ten thousand at 5000 contributes ten times the rest of the frame put together.</p>
+    <p><strong>Fix.</strong> The log-average, which is what <code>hdr_stats</code> reports beside
+       the arithmetic mean precisely so the two can be compared. The gap on a frame with one bright
+       highlight is <strong>11×</strong>.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A saturated colour still clips after tonemapping</h3>
+    <p><strong>Symptom.</strong> Blues and reds go flat in bright areas even though the tonemapper
+       is working.</p>
+    <p><strong>Cause.</strong> Luminance-only tonemapping. The curve was applied to the luminance
+       and landed in range; an individual channel did not. Blue is worst, at a luminance weight of
+       0.0722 — a pure blue of (0, 0, 8) arrives at <code>b = 5.07</code>.</p>
+    <p><strong>Fix.</strong> Per-channel, which is in range by construction — or keep
+       luminance-only and add a desaturation step, which is what production pipelines do and what
+       this course names without building.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>8.1 — Find your own lid <span class="tag">guided</span></h3>
+    <p>
+      Run the demo at four roughnesses and record <code>max channel</code> and the over-the-lid
+      count at each. Predict, before running, roughly where the count starts climbing — then check
+      it against §A's table of peaks.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The peak scales roughly as <code>1/α²</code> at the mirror angle, where
+        <code>α = roughness²</code> (6.3's Disney remap) — so halving the roughness should multiply
+        the peak by about sixteen. The table goes 1.74, 11.59, 177.03, 2824: ratios of 6.7, 15.3,
+        16.0. The agreement gets better as the approximation's assumptions get truer, which is
+        itself worth noticing.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.2 — Reach white with Reinhard <span class="tag">guided</span></h3>
+    <p>
+      Compute by hand the input that plain Reinhard needs to produce code 254 rather than 255, and
+      check it. Then work out what white point <code>reinhard_white</code> needs so that the demo's
+      measured peak of 411.82 maps to exactly 1, and run it.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        For the first: code 254 needs an encoded 253.5/255, invert the sRGB transform, then solve
+        <code>x/(1+x) = L</code> for <code>x</code>. For the second, the answer is
+        <code>--white 411.82</code> — and the picture it produces is worth looking at, because
+        mapping the brightest pixel in the frame to exactly white is almost never what you want.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.3 — Auto-exposure <span class="tag">engine</span></h3>
+    <p>
+      Use <code>hdr_stats::log_mean_luminance</code> to choose the exposure each frame instead of
+      taking it from the command line: <code>ev100_from_luminance(log_mean * K)</code> for a K you
+      pick. Then make it <em>adapt</em> — move the EV toward its target by a fixed rate per second
+      rather than jumping.
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        The standard K is 12.5/100 giving <code>EV = log2(L · 100/12.5)</code>. The adaptation is
+        one line — <code>ev += (target − ev) · (1 − exp(−rate · dt))</code> — and the
+        <code>exp</code> form rather than a plain lerp is what makes the rate frame-rate
+        independent, which is Lesson 1.4's fixed-timestep argument arriving somewhere unexpected.
+        Real implementations adapt up and down at different rates, because eyes do.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.4 — Prove the ordering claim on a picture <span class="tag">guided</span></h3>
+    <p>
+      Add a <code>--wrong-order</code> flag that applies the curve before the exposure, render the
+      polished scene at EV 2 both ways, and diff. Describe what is lost in words before looking at
+      the numbers.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The prediction: the wrong order will be darker <em>and</em> will have less variation in the
+        highlight, because the curve has already mapped everything above about 4 into a narrow band
+        and the exposure then scales that band. Look specifically at the range of codes inside the
+        highlight, not at the mean.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.5 — A real HDR display <span class="tag">engine</span></h3>
+    <p>
+      <code>gpu_device</code>'s report carries an <code>SDL_GPUSwapchainComposition</code>. Find
+      out which compositions your machine claims to support, and write the branch that would use
+      one — without implementing the PQ transfer function, just the structure and the honest list
+      of what else would have to change.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        <code>SDL_WindowSupportsGPUSwapchainComposition</code> is the query. The interesting part of
+        the answer is that the tonemap curve's <em>target</em> changes: you are no longer mapping to
+        [0,1] for an sRGB display but to an absolute luminance in nits, which makes the white point
+        a display property rather than an artistic one. Most of the rest of this lesson survives
+        unchanged, which is the point of having separated exposure from curve from encode.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; next</h2>
+
+  <p>The engine stopped avoiding a question it had been avoiding for six modules.</p>
+
+  <ul>
+    <li>
+      <strong>A float render target</strong> in both renderers — <code>hdr_buffer</code> on the CPU
+      at 3× the memory, <code>R16G16B16A16_FLOAT</code> on the GPU at 2×, and the difference between
+      those multipliers is entirely the half float.
+    </li>
+    <li>
+      <strong>An exposure in real photographic units</strong>, paying a debt <code>light.hpp</code>
+      recorded by name — and locating the engine's previous behaviour at <strong>EV −0.263</strong>
+      rather than treating it as a special case.
+    </li>
+    <li>
+      <strong>Four curves</strong>, two of them derived rather than copied, with the three
+      properties that make one legal stated and checked.
+    </li>
+    <li>
+      <strong>A full-screen resolve pass</strong> — the first thing in this engine that draws no
+      geometry and whose cost scales with pixels — with no vertex buffer, no depth and no blending.
+    </li>
+  </ul>
+
+  <p>
+    Three numbers to carry forward. The demo's polished scene has <strong>0.10%</strong> of its
+    pixels over the lid, and all of the destroyed information is in them. The arithmetic mean of a
+    frame's luminance is <strong>11×</strong> its log-average when one specular pixel is present,
+    which is why metering happens in log space. And compositing on a float target is
+    <strong>8.1×</strong> cheaper than on 8 bits, because Lesson 6.11's decode-and-re-encode round
+    trip is not a cost of blending — it was a cost of <em>storing something other than light</em>.
+  </p>
+
+  <p>
+    It is worth stating what did <em>not</em> change, too. The reference render is byte-identical
+    for the twenty-first lesson, and for a structural reason rather than a flag: the fixture renders
+    into an 8-bit <code>framebuffer</code> through the path it has always used, and everything here
+    operates on a different buffer type. This is not "the tonemapper is optional" — it is "the
+    tonemapper is a stage over a target the fixture does not have".
+  </p>
+
+  <p>
+    <strong>Next: 6.13 — Bloom and the Post-Processing Stack.</strong> This lesson built one post
+    pass and deliberately did not build a stack, because a stack is an architecture question and one
+    user is not enough evidence to answer it. Bloom supplies the second user, and it also supplies
+    the reason the ordering matters: a bloom operates on the <em>pre-tonemap</em> image, because it
+    is looking for exactly the values above 1 that this lesson finally lets the engine keep. Which
+    means the first thing 6.13 has to decide is who owns the intermediate targets — and that is the
+    same question a frame graph (6.17) answers at a larger scale.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Reinhard, E., Stark, M., Shirley, P. and Ferwerda, J., "Photographic Tone
+      Reproduction for Digital Images", SIGGRAPH 2002.</strong> The source of the operator and of
+      the log-average, and much more interesting than its reputation: the whole paper is an argument
+      by analogy with the Zone System, which is to say with how photographers actually decide an
+      exposure.
+    </li>
+    <li>
+      <strong>Lagarde, S. and de Rousiers, C., "Moving Frostbite to Physically Based Rendering"
+      (2014), §5.</strong> Where the 1.2 comes from, worked properly, along with the whole
+      photometric-units argument this lesson's exposure control rests on. The reference to read if
+      you want to author lights in lux and lumens rather than in numbers.
+    </li>
+    <li>
+      <strong>Narkowicz, K., "ACES Filmic Tone Mapping Curve" (2015).</strong> Two pages, five
+      constants, and an honest account of how the fit was made. Worth reading precisely because it
+      does not claim to be more than it is.
+    </li>
+    <li>
+      <strong>Hable, J., "Filmic Worlds" — the Uncharted 2 tonemapper and its successors.</strong>
+      The other curve everyone uses, and Hable's later posts revisiting it are an unusually candid
+      record of somebody changing their mind about their own widely-copied work.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §8 "Light and Color".</strong> Radiometry, photometry,
+      and the tonemapping chain in one place, with the display side this lesson leaves out.
+    </li>
+    <li>
+      <strong>SDL3 wiki: <code>SDL_SetGPUSwapchainParameters</code> and
+      <code>SDL_GPUSwapchainComposition</code>.</strong> What Exercise 8.5 needs, and the honest
+      scope of what SDL gives you for a real HDR display.
+    </li>
+  </ul>

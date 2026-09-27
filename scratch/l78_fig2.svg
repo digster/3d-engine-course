@@ -1,0 +1,93 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l78f2-t l78f2-d">
+  <title id="l78f2-t">Two clocks: a slipping 60 Hz simulation above, a fixed device clock below</title>
+  <desc id="l78f2-d">The simulation's frames vary in length and a long one is merely a hitch. The device consumes a fixed buffer every 10.67 ms and two undelivered buffers become 21 ms of silence with a discontinuity at each end. A row of bars shows buffer size against latency.</desc>
+  <defs>
+    <marker id="e-i-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-blue-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-red-l78f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="60" y="34" class="xs muted" text-anchor="start">the simulation clock: 60 Hz nominal, and it slips</text>
+<line x1="60" y1="76" x2="840" y2="76" class="grid" stroke-width="1.0"/>
+<line x1="60.0" y1="64.0" x2="60.0" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="98.22" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="136.4" y1="64.0" x2="136.4" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="174.66000000000003" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="212.9" y1="64.0" x2="212.9" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="251.1" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="289.3" y1="64.0" x2="289.3" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="327.53999999999996" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="365.8" y1="64.0" x2="365.8" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="454.68" y="58" class="xs mono t-hi" text-anchor="middle">38</text>
+<line x1="543.6" y1="64.0" x2="543.6" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="582.5999999999999" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="621.6" y1="64.0" x2="621.6" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="660.6" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="699.6" y1="64.0" x2="699.6" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="738.6" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="777.6" y1="64.0" x2="777.6" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="808.8" y="58" class="xs mono" text-anchor="middle">16</text>
+<line x1="840.0" y1="64.0" x2="840.0" y2="88.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="844" y="80" class="xs muted" text-anchor="start">ms</text>
+<rect x="365.76" y="92" width="177.84000000000003" height="20" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="454.68" y="107" class="xs" text-anchor="middle">a hitch. Nobody dies.</text>
+<text x="60" y="182" class="xs muted" text-anchor="start">the device clock: 512 frames every 10.67 ms, forever</text>
+<line x1="60" y1="208" x2="840" y2="208" class="grid" stroke-width="1.0"/>
+<line x1="60.0" y1="198.0" x2="60.0" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="108.8" y1="198.0" x2="108.8" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="157.5" y1="198.0" x2="157.5" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="206.2" y1="198.0" x2="206.2" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="255.0" y1="198.0" x2="255.0" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="303.8" y1="198.0" x2="303.8" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="352.5" y1="198.0" x2="352.5" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="401.2" y1="198.0" x2="401.2" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="450.0" y1="198.0" x2="450.0" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="498.8" y1="198.0" x2="498.8" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="547.5" y1="198.0" x2="547.5" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="596.2" y1="198.0" x2="596.2" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="645.0" y1="198.0" x2="645.0" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="693.8" y1="198.0" x2="693.8" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="742.5" y1="198.0" x2="742.5" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="791.2" y1="198.0" x2="791.2" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="840.0" y1="198.0" x2="840.0" y2="218.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<rect x="62.0" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="110.75" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="159.5" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="208.25" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="257.0" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="305.75" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="354.5" y="200" width="44.75" height="16" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.35"/>
+<rect x="403.25" y="200" width="44.75" height="16" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.35"/>
+<rect x="452.0" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="500.75" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="549.5" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="598.25" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="647.0" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="695.75" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="744.5" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="793.25" y="200" width="44.75" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<line x1="401.25" y1="272.00" x2="401.25" y2="230.00" stroke="#e05c5c" stroke-width="1.6" marker-end="url(#e-red-l78f2)"/>
+<text x="401.25" y="290" class="xs" text-anchor="middle">two buffers the mixer did not deliver</text>
+<text x="401.25" y="306" class="xs t-hi" text-anchor="middle">21 ms of silence with a step at each end: a CLICK</text>
+<line x1="60" y1="330" x2="840" y2="330" class="grid" stroke-width="1.0"/>
+<text x="60" y="318" class="xs muted" text-anchor="start">the queue is the whole of your margin</text>
+<rect x="134.09543004452777" y="338" width="7.809139910944457" height="14" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="138.0" y="368" class="xs mono" text-anchor="middle">128</text>
+<text x="138.0" y="384" class="xs muted" text-anchor="middle">2.67 ms</text>
+<rect x="286.2054839465667" y="338" width="15.589032106866652" height="14" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="294.0" y="368" class="xs mono" text-anchor="middle">256</text>
+<text x="294.0" y="384" class="xs muted" text-anchor="middle">5.33 ms</text>
+<rect x="434.39634403562223" y="338" width="31.207311928755573" height="14" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="450.0" y="368" class="xs mono" text-anchor="middle">512</text>
+<text x="450.0" y="384" class="xs muted" text-anchor="middle">10.67 ms</text>
+<rect x="574.8073119287556" y="338" width="62.385376142488866" height="14" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="606.0" y="368" class="xs mono" text-anchor="middle">1024</text>
+<text x="606.0" y="384" class="xs muted" text-anchor="middle">21.33 ms</text>
+<rect x="699.6" y="338" width="124.80000000000001" height="14" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="762.0" y="368" class="xs mono" text-anchor="middle">2048</text>
+<text x="762.0" y="384" class="xs muted" text-anchor="middle">42.67 ms</text>
+</svg>

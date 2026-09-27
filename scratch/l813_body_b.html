@@ -1,0 +1,264 @@
+  <h2 id="cast">3. The one query: a cast is Newton's method</h2>
+
+  <p>
+    Every query Module 8 has built so far is about an <em>instant</em>. Are these two shapes touching
+    now (8.4)? How far apart are they now (8.5)? How deep are they now (8.6)? A cast asks about an
+    <em>interval</em>: the mover travels along <code>d</code>, and the answer is the first fraction
+    <code>t</code> of that trip at which it comes within <code>skin</code> of the obstacle. Nothing is
+    sampled at a step boundary, so nothing is skipped. That is exactly what Lesson 1.8's swept test did
+    for a ball and a paddle. The question is how to answer it for any pair of convex shapes, when all
+    we can compute is a distance at an instant.
+  </p>
+
+  <h3>Newton, on the right function</h3>
+
+  <p>
+    Write the question as a function. Let <code>f(t)</code> be the distance between the mover, displaced
+    by <code>t·d</code>, and the obstacle. 8.5's GJK computes <code>f</code> at any <code>t</code> we like,
+    and hands back something more: the unit direction <code>n</code> from the mover's closest point to the
+    obstacle's. Nudge the mover a little further along <code>d</code> and the gap closes at the rate the
+    motion points along that direction. Whatever part of the motion runs across <code>n</code> slides the
+    closest points past each other without bringing them nearer:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ f'(t) \;=\; -\,d\cdot n \]</span>
+    <span class="eq-plain">f'(t) = -(d . n): the gap closes at the motion's component along the closest-point direction</span>
+  </div>
+
+  <p>
+    We want the first root of <code>f(t)&nbsp;−&nbsp;skin</code>, and we have the function and its slope.
+    The tool for that is Newton's method: stand at <code>t</code>, follow the tangent line down to the
+    target, and step there.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ t \;\leftarrow\; t \;+\; \frac{f(t) - \text{skin}}{d\cdot n} \]</span>
+    <span class="eq-plain">t &lt;- t + (f(t) - skin) / (d . n): the gap left, over the speed it is closing at</span>
+  </div>
+
+  <p>
+    That is <strong>conservative advancement</strong>, the name the collision literature gives it. Read the
+    fraction aloud and it is Lesson 1.8's swept test: <em>the gap, over the speed at which it is
+    closing</em>. 1.8 computed it once, for a flat paddle face. Here we compute it again from wherever
+    that lands, until it stops moving.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> A ball of radius 0.5 at the origin moves along
+    <code>d&nbsp;=&nbsp;(4,&nbsp;0)</code> toward another of radius 0.5 at <code>(3,&nbsp;0.6)</code>. The
+    gap between them is <code>f(t)&nbsp;=&nbsp;|(4t&nbsp;−&nbsp;3,&nbsp;−0.6)|&nbsp;−&nbsp;1</code>, and they
+    touch at <code>(4t&nbsp;−&nbsp;3)²&nbsp;=&nbsp;1&nbsp;−&nbsp;0.36</code>, so <code>4t&nbsp;−&nbsp;3&nbsp;=&nbsp;−0.8</code>
+    and <code>t&nbsp;=&nbsp;0.55</code> exactly. Start at <code>t₀&nbsp;=&nbsp;0</code>. The centres are
+    <code>√(9&nbsp;+&nbsp;0.36)&nbsp;=&nbsp;3.0594</code> apart, so the gap is 2.0594. The direction
+    between them is <code>(3,&nbsp;0.6)/3.0594&nbsp;=&nbsp;(0.9806,&nbsp;0.1961)</code>, and the motion
+    closes it at <code>d·n&nbsp;=&nbsp;4&nbsp;×&nbsp;0.9806&nbsp;=&nbsp;3.9223</code>. One step goes to
+    <code>t₁&nbsp;=&nbsp;2.0594/3.9223&nbsp;=&nbsp;0.5250</code>. There the gap is 0.0815 and the closing
+    speed 3.3280, so <code>t₂&nbsp;=&nbsp;0.5250&nbsp;+&nbsp;0.0245&nbsp;=&nbsp;0.5495</code>. Then
+    <code>t₃&nbsp;=&nbsp;0.5499998</code>. The errors run 0.55, 0.025, 0.00046, 1.9&nbsp;×&nbsp;10⁻⁷, each
+    roughly the square of the one before: <strong>quadratic convergence</strong>. The ratio
+    <code>err<sub>n+1</sub>/err<sub>n</sub>²</code> tends to <code>f''/2|f'|&nbsp;=&nbsp;5.76/6.4&nbsp;=&nbsp;0.9</code>
+    at the root. The harness computes the table by hand in double precision and reads 0.74, 0.8966,
+    0.8993.
+  </p>
+
+  @@FIG_NEWTONSTEP@@
+
+  <h3>Why it cannot overshoot, twice</h3>
+
+  <p>
+    Newton's method is usually a gamble: step along the tangent, and the true function may already have
+    crossed zero before the tangent does. A cast that stepped through a wall would be worse than no cast
+    at all. There are two reasons it cannot happen here. One says how fast the steps converge, and the
+    other why each one is safe.
+  </p>
+
+  <p>
+    <strong>The distance is convex.</strong> Move the obstacle into the mover's frame: the gap is the
+    distance from the point <code>−t·d</code> to 8.5's Minkowski difference, which is a fixed convex set.
+    The distance to a convex set is a convex function of the point, and the point moves on a straight
+    line, so <code>f</code> is convex in <code>t</code>. A convex function lies <em>above</em> every one of
+    its tangent lines:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ f(t + \Delta) \;\ge\; f(t) + f'(t)\,\Delta \;=\; \text{skin} \quad\text{at the Newton step } \Delta \]</span>
+    <span class="eq-plain">f(t + step) &gt;= f(t) + f'(t) step = skin: a convex function is above its tangent, so the step lands short</span>
+  </div>
+
+  <p>
+    Every step therefore lands <em>short</em> of the target. The iterates climb monotonically toward the
+    first contact from below, and never jump past it. Figure&nbsp;3's right panel is that picture: the
+    green tangents stop on the axis, and the blue curve has not reached it yet.
+  </p>
+
+  <p>
+    <strong>GJK's direction is a separating plane.</strong> The second argument is stronger, and it is
+    the one the code relies on. Take any unit direction <code>n</code> and the two supporting planes
+    normal to it, one touching the mover and one the obstacle. The slab between them is empty, so its
+    width is a <em>lower bound</em> on the gap. That is 8.4's separating-axis theorem. Translate the mover
+    by <code>t·d</code> and its supporting plane moves by exactly <code>t·(d·n)</code>, so the slab narrows
+    at exactly <code>d·n</code> per unit <code>t</code>, linearly, for <em>any</em> <code>n</code>. The
+    Newton step goes to where that slab is <code>skin</code> wide, and the true gap cannot be smaller than
+    the slab. So the step is safe even if GJK's <code>n</code> is not quite the true normal, which at a
+    centimetre it often is not (§6). It is the separating axis, turned into a time. The same argument
+    proves the cast's other exit: if <code>d·n&nbsp;≤&nbsp;0</code> the slab never narrows, and the path
+    is clear.
+  </p>
+
+  <p>
+    That argument has one condition, and it is not optional: the step must be taken from the slab's
+    width, not from GJK's <code>distance</code>. <code>gjk_result::distance</code> is the length between
+    two <em>witness points</em>, two real points on two real shapes, and so it is an <em>upper</em> bound
+    on the gap. 8.5 carried both bounds and called the difference <code>slack</code>. The first draft of
+    <code>cast.cpp</code> stepped from <code>distance</code>, and §B's control keeps a private copy of it.
+    Over ten thousand random casts, it finished <em>past</em> the reference crossing in
+    <strong>377 of 6,049 hits</strong>, up to <strong>0.17&nbsp;mm inside the skin</strong>. That is the
+    Newton step overshooting by exactly GJK's slack. Stepped from 8.5's <code>certify(...).lower</code>, the
+    same casts finish past the reference <strong>none</strong> of the time; the worst lands
+    9&nbsp;×&nbsp;10⁻⁷&nbsp;m inside, which is the reference's own resolution. The convexity argument had
+    promised no overshoot. It was true of the exact distance and false of the number the code was using.
+  </p>
+
+  <h3>How it behaves, over ten thousand casts</h3>
+
+  <p>
+    §B sweeps a capsule of random size and orientation against a random box, ball or capsule, in a random
+    direction, 9,996 times. Each result is checked against a reference that uses no Newton at all: a
+    golden-section search for the minimum of the convex <code>f</code>, then bisection to the skin, with
+    GJK run at a thousandth of its tolerance. The cast misses <strong>no</strong> hit the reference finds
+    and finishes after <strong>no</strong> crossing. It takes <strong>2.75</strong> Newton steps on
+    average and <strong>7</strong> at worst, and never reaches its 32-step cap. Three passes that graze the
+    skin within the tolerance count as hits, which is the safe side.
+  </p>
+
+  <p>
+    Sixty-seven hits stopped early by more than the tolerance, by up to 1.81&nbsp;mm. Each one is explained
+    by the cast's own reported bound, and each is the same thing: at a centimetre's gap between
+    metre-sized shapes, <strong>GJK stalls</strong> (8.5 §F.5), and its lower bound can sit up to
+    2.08&nbsp;mm below the truth. A tighter GJK tolerance does not help, because GJK stops on float
+    rounding before the tolerance matters. It is the price of the rigour, and it is paid on the safe
+    side: short of the skin, never past it.
+  </p>
+
+  <p>
+    <strong>1.8's swept test was always the first Newton step.</strong> Against a flat face <code>f</code>
+    is a straight line, so the tangent <em>is</em> the function and the first step lands exactly. A ball
+    falling at an angle onto a floor stops at <code>t&nbsp;=&nbsp;0.4966656</code> (exact 0.4966667) after
+    two GJK calls, the second of which only confirms the first. Curved shapes take the other two or three.
+  </p>
+
+  <h3>One obstacle at a time</h3>
+
+  <p>
+    A world has more than one obstacle, and it is tempting to cast against all of them at once: take the
+    nearest distance as <code>f</code> and step. That is wrong, and Figure&nbsp;4 shows why. The minimum
+    of two convex functions is not convex, and a separating plane separates <em>one</em> pair. Pass a
+    ball at a grazing angle with a wall further on: the nearer ball's plane is almost parallel to the
+    motion, so its step is long, and it says nothing at all about the wall. §B built 20,000 such passes
+    and stepped on the union. It went <strong>through the wall 11,194 times</strong>. One cast per
+    obstacle, keeping the smallest <code>t</code>, went through it <strong>none</strong> of the time. The
+    controller's <code>sweep</code> is exactly that, after a box test that throws away anything the move's
+    swept bounds cannot reach.
+  </p>
+
+  <p>
+    <strong>Why divide by the closing speed.</strong> There is another conservative step, and ray
+    marchers use it on signed-distance fields: <em>sphere tracing</em>. It moves along <code>d</code> by the
+    gap itself (<code>Δt&nbsp;=&nbsp;gap/|d|</code>), which is safe for <em>any</em> shape, because nothing
+    is nearer than the gap. Dividing by <code>|d|</code> instead of by <code>d·n</code> is dividing by
+    something larger, so every step is shorter than Newton's, and at a grazing angle much shorter. To
+    reach a face at 1° it takes <strong>237</strong> steps where the cast takes 2. Sphere tracing pays for
+    needing no convexity; a cast is always against one convex obstacle, so it does not have to.
+  </p>
+
+  <h3>Why a skin</h3>
+
+  <p>
+    The cast stops <code>skin</code> short of contact, and <code>character_config::skin</code> is 1&nbsp;cm.
+    So the character stands a centimetre above the floor, and a game lowers the drawn mesh by that much.
+    Why not zero? The first answer is the obvious one. A cast that stops exactly at contact leaves two
+    shapes <em>touching</em>, and the next question, asked from there, is a question GJK answers as
+    "intersecting" whenever the gap is inside its own contact margin, with no direction to report. §B's
+    last table measures it: cast, then slide from where the cast stopped, 4,000 times. With no skin,
+    2.1% of the slides start inside. That is the prediction, but it is not the worst of it.
+  </p>
+
+  <p>
+    <strong>With no skin, the cast often cannot finish.</strong> Against a flat face Newton lands on the
+    contact in <em>one</em> step, exactly on it, and GJK calls that intersecting. The cast then has to fall
+    back to the last iterate it could measure, which is often the start. With no skin, casts stopped
+    <strong>134&nbsp;mm</strong> short on average and 2.3&nbsp;m at worst. In the worked example it is
+    1.93&nbsp;mm short, one Newton step. And a skin <em>thinner</em> than GJK's margin is worse than none.
+    At 0.1&nbsp;mm, 7.3% of slides start inside, because the cast now finishes reliably and it finishes
+    inside the margin. At a millimetre or more, nothing starts inside, and the cast lands on the skin to
+    the tolerance: <code>t&nbsp;=&nbsp;0.5468830</code> against an exact 0.5468837. The engine uses a
+    centimetre, ten times the working minimum, because §6 will need GJK's direction to be good and GJK
+    is most accurate when the gap is not tiny.
+  </p>
+
+  @@FIG_UNION@@
+
+  <h2 id="slide">4. Collide and slide</h2>
+
+  <p>
+    A cast answers "how far?" The controller still has to decide what to do with the rest of the move.
+    If a character runs diagonally into a wall, the part of the motion that runs <em>into</em> the wall
+    is gone, and the part that runs <em>along</em> it should still happen. That is the projection off the
+    surface, applied only if the motion is going into it:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v' \;=\; v - \min(0,\; v\cdot n)\;n \]</span>
+    <span class="eq-plain">v' = v - min(0, v . n) n: remove the part of v that points into the surface</span>
+  </div>
+
+  <p>
+    Then cast what is left, and repeat. One wall is easy. Two walls make a <strong>corner</strong>, and a
+    corner is where every character controller's first draft breaks, this one's included.
+  </p>
+
+  <p>
+    Projecting onto one wall can point the motion into the other. The motion that respects both walls
+    lies along their <strong>crease</strong>, the line both planes contain, <code>n₁&nbsp;×&nbsp;n₂</code>,
+    and three walls pin the character completely. That gives Quake's rule, <code>clip_to_planes</code>:
+    try each surface alone, and use the result if it goes into none of the others. Otherwise try each
+    pair's crease. Otherwise stop. The rule is well known. What it is fed turns out to matter just as
+    much, and it is easy to get wrong.
+  </p>
+
+  <p>
+    <strong>Clip the original, not the remainder.</strong> Figure&nbsp;5 follows one move into a 120°
+    corner, with the stick 12° off the bisector. The move hits wall A first and slides along it, toward the
+    corner. The obvious loop then clips <em>what was left</em>, a motion already bent by A, against the
+    planes it knows. Against A alone that remainder is unchanged and goes into B; against B alone it
+    points back <em>out</em> along B, and does not go into A. So the check passes, and the character
+    walks back out of the corner. Next step it walks in again. Quake 1's <code>SV_FlyMove</code> clips the
+    <em>original</em> velocity against every plane instead. The original, clipped against A, goes into B;
+    clipped against B, it goes into A; their crease is vertical, and a horizontal move has no part along
+    it. The character stops, which is what a player pushing into a corner expects.
+  </p>
+
+  @@FIG_CORNER@@
+
+  <p>
+    §C measures all three rules in 60°, 90° and 120° corners, pressing in for five seconds and watching the
+    last one. Clipping the remainder, against the last plane or every plane, walks back and forth in the
+    obtuse corner at <strong>572–575&nbsp;mm/s</strong>. The remainder against the last plane also runs
+    out of slides on every one of 60 moves in the acute corner, burning four casts to go nowhere.
+    Clipping the original is <strong>still</strong> in every corner. The first draft of
+    <code>character.cpp</code> clipped the remainder against every plane; the plane list alone was not the
+    fix. <code>character_config::clip_rule</code> keeps all three, so §C can keep measuring them.
+  </p>
+
+  <p>
+    <strong>Parallel is not approaching.</strong> One more detail makes a controller slide at all. A
+    character running along a wall is exactly <code>skin</code> from it, and its motion is exactly
+    parallel to it. Rounding gives the cast a closing speed of a few parts in 10⁸, and the gap is already
+    within tolerance of the skin, so the cast reports a hit at <code>t&nbsp;=&nbsp;0</code>. §C ran a
+    character along a wall at 3&nbsp;m/s with that check at zero, and it moved at
+    <strong>0.0000&nbsp;m/s</strong>, 120 stalled steps of 120. <code>cast_config::min_approach</code>
+    treats a closing speed below 10⁻⁴ of the motion's length as not closing, and it runs at
+    3.0000&nbsp;m/s. The separating-plane argument bounds what the threshold can cost: the gap can close
+    by at most <code>min_approach·|d|</code> more, 5&nbsp;µm on a 5&nbsp;cm step.
+  </p>

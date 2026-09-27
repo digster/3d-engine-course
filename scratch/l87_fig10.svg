@@ -1,0 +1,80 @@
+<svg viewBox="0 0 900 530" role="img" aria-labelledby="l87f10-t l87f10-d">
+  <title id="l87f10-t">Contacts persist across frames by identity rather than by position.</title>
+  <desc id="l87f10-d">Left: the six named fields of a contact_id laid out as a stack of boxes — reference_face and incident_face as sixteen-bit values, reference_index and incident_index as bytes, and kind and flipped as bytes — none of them computed from a position. Right: tables of measurements. On a crate settling over 591 frames, 82.28 percent of contact points match the previous frame by id while a ten-micrometre position match finds 0.00 percent. On the same crate at rest jittered by a hundred nanometres a frame, both find 100 percent — which is why position matching is a trap. Below: sliding the crate two metres along the same face keeps all four ids, and rolling it onto a different face changes all four.</desc>
+  <defs>
+    <marker id="e-i-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-l87f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">A contact is matched to last frame's by IDENTITY, because it cannot be matched by position.</text>
+<text x="24" y="62" class="xs" text-anchor="start">contact_id — six bytes of named fields</text>
+<rect x="24" y="72" width="150" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="87" class="xs mono" text-anchor="start">reference_face</text>
+<text x="186" y="87" class="xs mono muted" text-anchor="start">u16</text>
+<text x="224" y="87" class="xs muted" text-anchor="start">the reference shape's face</text>
+<rect x="24" y="102" width="150" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="117" class="xs mono" text-anchor="start">incident_face</text>
+<text x="186" y="117" class="xs mono muted" text-anchor="start">u16</text>
+<text x="224" y="117" class="xs muted" text-anchor="start">the incident shape's face</text>
+<rect x="24" y="132" width="150" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="147" class="xs mono" text-anchor="start">reference_index</text>
+<text x="186" y="147" class="xs mono muted" text-anchor="start">u8</text>
+<text x="224" y="147" class="xs muted" text-anchor="start">its vertex, or 0xff</text>
+<rect x="24" y="162" width="150" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="177" class="xs mono" text-anchor="start">incident_index</text>
+<text x="186" y="177" class="xs mono muted" text-anchor="start">u8</text>
+<text x="224" y="177" class="xs muted" text-anchor="start">its vertex, or 0xff</text>
+<rect x="24" y="192" width="150" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="207" class="xs mono" text-anchor="start">kind</text>
+<text x="186" y="207" class="xs mono muted" text-anchor="start">u8</text>
+<text x="224" y="207" class="xs muted" text-anchor="start">how to read the two above</text>
+<rect x="24" y="222" width="150" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="32" y="237" class="xs mono" text-anchor="start">flipped</text>
+<text x="186" y="237" class="xs mono muted" text-anchor="start">u8</text>
+<text x="224" y="237" class="xs muted" text-anchor="start">the reference was on b</text>
+<text x="24" y="282" class="xs muted" text-anchor="start">Not one of them is computed from a position, so not one of them can change because a body moved by a micron.</text>
+<line x1="520" y1="56" x2="520" y2="300" class="grid" stroke-width="1.0"/>
+<text x="548" y="90" class="xs muted" text-anchor="start">a crate settling, 591 frames, 1,969 points</text>
+<text x="842" y="90" class="xs muted" text-anchor="end">matched</text>
+<line x1="548" y1="98.0" x2="848" y2="98.0" class="grid" stroke-width="1.0"/>
+<text x="548" y="115.0" class="xs" text-anchor="start">by ID</text>
+<text x="842" y="115.0" class="xs mono" text-anchor="end">82.28%</text>
+<text x="548" y="132.0" class="xs" text-anchor="start">by POSITION, within 10 µm</text>
+<text x="842" y="132.0" class="xs mono" text-anchor="end">0.00%</text>
+<text x="548" y="149.0" class="xs" text-anchor="start">by POSITION, within 10 mm</text>
+<text x="842" y="149.0" class="xs mono" text-anchor="end">82.17%</text>
+<text x="548" y="182" class="xs muted" text-anchor="start">the same crate at rest, jittered 100 nm a frame</text>
+<text x="842" y="182" class="xs muted" text-anchor="end">matched</text>
+<line x1="548" y1="190.0" x2="848" y2="190.0" class="grid" stroke-width="1.0"/>
+<text x="548" y="207.0" class="xs" text-anchor="start">by ID</text>
+<text x="842" y="207.0" class="xs mono" text-anchor="end">100.00%</text>
+<text x="548" y="224.0" class="xs" text-anchor="start">by POSITION, within 10 µm</text>
+<text x="842" y="224.0" class="xs mono" text-anchor="end">100.00%</text>
+<text x="548" y="248" class="xs muted" text-anchor="start">A POSITION MATCHER WORKS PERFECTLY ON A BODY THAT IS</text>
+<text x="548" y="265" class="xs muted" text-anchor="start">NOT MOVING, which is exactly why it is a trap: the</text>
+<text x="548" y="282" class="xs muted" text-anchor="start">tolerance that works at 100 nm of jitter fails at the</text>
+<text x="548" y="299" class="xs muted" text-anchor="start">8 cm a frame a crate travels while it lands.</text>
+<line x1="20" y1="316" x2="880" y2="316" class="grid" stroke-width="1.0"/>
+<text x="24" y="344" class="xs muted" text-anchor="start">what an id MEANS</text>
+<text x="458" y="344" class="xs muted" text-anchor="end">matched</text>
+<line x1="24" y1="352.0" x2="464" y2="352.0" class="grid" stroke-width="1.0"/>
+<text x="24" y="369.0" class="xs" text-anchor="start">the crate slid 2 m along the same face</text>
+<text x="458" y="369.0" class="xs mono" text-anchor="end">4 of 4</text>
+<text x="24" y="386.0" class="xs" text-anchor="start">the crate rolled onto a different face</text>
+<text x="458" y="386.0" class="xs mono" text-anchor="end">0 of 4</text>
+<text x="490" y="346" class="xs muted" text-anchor="start">An id names a FEATURE, not a place. It cannot detect</text>
+<text x="490" y="363" class="xs muted" text-anchor="start">a teleport and should not be asked to: a body that</text>
+<text x="490" y="380" class="xs muted" text-anchor="start">was MOVED rather than simulated is a discontinuity,</text>
+<text x="490" y="397" class="xs muted" text-anchor="start">and invalidating its cached manifolds is the CACHE's</text>
+<text x="490" y="414" class="xs muted" text-anchor="start">job.</text>
+<text x="24" y="424" class="xs" text-anchor="start">§9's first control expected zero matches after a two-metre teleport and got four of four — and the manifold was right.</text>
+<text x="24" y="441" class="xs" text-anchor="start">The same corner really is on the same face. A control that convicts the code of the test's own mistake is the most</text>
+<text x="24" y="458" class="xs" text-anchor="start">expensive kind there is, because it looks like a finding.</text>
+<text x="24" y="487" class="xs muted" text-anchor="start">The reference choice was measured the same way: 0 flips in 208,000 pairs, because on a face contact both cosines are</text>
+<text x="24" y="504" class="xs muted" text-anchor="start">exactly 1.0f and an exact tie is decided deterministically. The knob written for it came back out.</text>
+</svg>

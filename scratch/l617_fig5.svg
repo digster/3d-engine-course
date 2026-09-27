@@ -1,0 +1,81 @@
+<svg viewBox="0 0 760 470" role="img" aria-labelledby="l617f5-t l617f5-d">
+  <title id="l617f5-t">Transient lifetimes and the three memory totals</title>
+  <desc id="l617f5-d">A Gantt chart of nine transient resources across the fourteen scheduled passes, with their byte sizes, above three bars comparing no sharing (1,223,296 B), true memory aliasing (1,048,576 B) and what SDL_GPU can actually express (1,223,296 B - no saving at all).</desc>
+  <defs>
+    <marker id="e-i-l617f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Every transient's lifetime, and the saving that is not there.</text>
+<line x1="130.0" y1="50" x2="130.0" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="157.85714285714286" y1="50" x2="157.85714285714286" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="185.71428571428572" y1="50" x2="185.71428571428572" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="213.57142857142856" y1="50" x2="213.57142857142856" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="241.42857142857144" y1="50" x2="241.42857142857144" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="269.2857142857143" y1="50" x2="269.2857142857143" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="297.1428571428571" y1="50" x2="297.1428571428571" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="325.0" y1="50" x2="325.0" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="352.8571428571429" y1="50" x2="352.8571428571429" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="380.7142857142857" y1="50" x2="380.7142857142857" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="408.57142857142856" y1="50" x2="408.57142857142856" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="436.42857142857144" y1="50" x2="436.42857142857144" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="464.2857142857143" y1="50" x2="464.2857142857143" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="492.14285714285717" y1="50" x2="492.14285714285717" y2="282" class="grid" stroke-width="0.8"/>
+<line x1="520.0" y1="50" x2="520.0" y2="282" class="grid" stroke-width="0.8"/>
+<text x="143.92857142857142" y="44" class="xs muted" text-anchor="middle">0</text>
+<text x="171.78571428571428" y="44" class="xs muted" text-anchor="middle">1</text>
+<text x="199.64285714285714" y="44" class="xs muted" text-anchor="middle">2</text>
+<text x="227.5" y="44" class="xs muted" text-anchor="middle">3</text>
+<text x="255.35714285714286" y="44" class="xs muted" text-anchor="middle">4</text>
+<text x="283.2142857142857" y="44" class="xs muted" text-anchor="middle">5</text>
+<text x="311.07142857142856" y="44" class="xs muted" text-anchor="middle">6</text>
+<text x="338.92857142857144" y="44" class="xs muted" text-anchor="middle">7</text>
+<text x="366.7857142857143" y="44" class="xs muted" text-anchor="middle">8</text>
+<text x="394.64285714285717" y="44" class="xs muted" text-anchor="middle">9</text>
+<text x="422.5" y="44" class="xs muted" text-anchor="middle">10</text>
+<text x="450.3571428571429" y="44" class="xs muted" text-anchor="middle">11</text>
+<text x="478.2142857142857" y="44" class="xs muted" text-anchor="middle">12</text>
+<text x="506.07142857142856" y="44" class="xs muted" text-anchor="middle">13</text>
+<text x="120" y="66" class="xs mono" text-anchor="end">shadow</text>
+<rect x="131.0" y="56" width="53.714285714285715" height="15" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="67" class="xs muted" text-anchor="start">262,144 B</text>
+<text x="120" y="92" class="xs mono" text-anchor="end">hdr</text>
+<rect x="158.85714285714286" y="82" width="360.14285714285717" height="15" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="93" class="xs muted" text-anchor="start">524,288 B</text>
+<text x="120" y="118" class="xs mono" text-anchor="end">depth</text>
+<rect x="158.85714285714286" y="108" width="25.857142857142858" height="15" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="119" class="xs muted" text-anchor="start">262,144 B</text>
+<text x="120" y="144" class="xs mono" text-anchor="end">bloom 0</text>
+<rect x="186.71428571428572" y="134" width="332.2857142857143" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="145" class="xs muted" text-anchor="start">131,072 B</text>
+<text x="120" y="170" class="xs mono" text-anchor="end">bloom 1</text>
+<rect x="214.57142857142856" y="160" width="276.57142857142856" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="171" class="xs muted" text-anchor="start">32,768 B</text>
+<text x="120" y="196" class="xs mono" text-anchor="end">bloom 2</text>
+<rect x="242.42857142857144" y="186" width="220.85714285714286" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="197" class="xs muted" text-anchor="start">8,192 B</text>
+<text x="120" y="222" class="xs mono" text-anchor="end">bloom 3</text>
+<rect x="270.2857142857143" y="212" width="165.14285714285714" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="223" class="xs muted" text-anchor="start">2,048 B</text>
+<text x="120" y="248" class="xs mono" text-anchor="end">bloom 4</text>
+<rect x="298.1428571428571" y="238" width="109.42857142857143" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="249" class="xs muted" text-anchor="start">512 B</text>
+<text x="120" y="274" class="xs mono" text-anchor="end">bloom 5</text>
+<rect x="326.0" y="264" width="53.714285714285715" height="15" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="530" y="275" class="xs muted" text-anchor="start">128 B</text>
+<text x="325.0" y="298" class="xs muted" text-anchor="middle">position in the compiled schedule</text>
+<line x1="34" y1="330" x2="726" y2="330" class="grid" stroke-width="1.2"/>
+<text x="34" y="352" class="xs" text-anchor="start">THE THREE NUMBERS</text>
+<text x="218" y="381" class="xs" text-anchor="end">no sharing at all</text>
+<rect x="230" y="370" width="300.0" height="15" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540.0" y="381" class="xs muted" text-anchor="start">1,223,296 B   100.0%</text>
+<text x="218" y="407" class="xs" text-anchor="end">true memory aliasing</text>
+<rect x="230" y="396" width="257.15182588678454" height="15" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="497.15182588678454" y="407" class="xs muted" text-anchor="start">1,048,576 B   85.7%</text>
+<text x="218" y="433" class="xs" text-anchor="end">what SDL_GPU can express</text>
+<rect x="230" y="422" width="300.0" height="15" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="540.0" y="433" class="xs muted" text-anchor="start">1,223,296 B   100.0%</text>
+<text x="34" y="462" class="xs t-bad" text-anchor="start">The prize is 174,720 B (14.3%) and this engine collects none of it — 5.27 MB at 1920x1080.</text>
+</svg>

@@ -1,0 +1,48 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="f612b-t f612b-d">
+  <title id="f612b-t">Exposure values and the luminance each maps to white</title>
+  <desc id="f612b-d">A scale of exposure values from 0 to 15 with the luminance that maps to white at each, and the engine's previous behaviour located on it.</desc>
+  <defs>
+    <marker id="e-i-f612b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f612b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f612b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f612b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f612b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">EV is a logarithmic scale of light, and one stop is a factor of two</text>
+<line x1="90" y1="130" x2="630" y2="130" class="grid" stroke-width="1.2"/>
+<line x1="90.0" y1="124" x2="90.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="90.0" y="114" class="xs" text-anchor="middle">EV 0</text>
+<text x="90.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="90.0" y="174" class="xs" text-anchor="middle">1.2</text>
+<text x="90.0" y="198" class="xs" text-anchor="middle">a very dim room</text>
+<line x1="198.0" y1="124" x2="198.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="198.0" y="114" class="xs" text-anchor="middle">EV 3</text>
+<text x="198.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="198.0" y="174" class="xs" text-anchor="middle">9.6</text>
+<text x="198.0" y="198" class="xs" text-anchor="middle">a dim room</text>
+<line x1="306.0" y1="124" x2="306.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="306.0" y="114" class="xs" text-anchor="middle">EV 6</text>
+<text x="306.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="306.0" y="174" class="xs" text-anchor="middle">76.8</text>
+<line x1="414.0" y1="124" x2="414.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="414.0" y="114" class="xs" text-anchor="middle">EV 9</text>
+<text x="414.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="414.0" y="174" class="xs" text-anchor="middle">614.4</text>
+<text x="414.0" y="198" class="xs" text-anchor="middle">indoors, bright</text>
+<line x1="522.0" y1="124" x2="522.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="522.0" y="114" class="xs" text-anchor="middle">EV 12</text>
+<text x="522.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="522.0" y="174" class="xs" text-anchor="middle">4,915.2</text>
+<text x="522.0" y="198" class="xs" text-anchor="middle">an overcast day</text>
+<line x1="630.0" y1="124" x2="630.0" y2="136" class="grid" stroke-width="1.0"/>
+<text x="630.0" y="114" class="xs" text-anchor="middle">EV 15</text>
+<text x="630.0" y="158" class="xs" text-anchor="middle">white at</text>
+<text x="630.0" y="174" class="xs" text-anchor="middle">39,321.6</text>
+<text x="630.0" y="198" class="xs" text-anchor="middle">full daylight</text>
+<line x1="110" y1="224" x2="610" y2="224" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-f612b)"/>
+<text x="360.0" y="218" class="xs" text-anchor="middle">each step DOUBLES the value that maps to white</text>
+<line x1="90" y1="232" x2="630" y2="232" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="256" class="xs" text-anchor="middle">AND THE ENGINE'S OLD BEHAVIOUR IS A POINT ON THIS SCALE, which is what turns a replacement into a generalisation:</text>
+<text x="360.0" y="278" class="xs" text-anchor="middle">1.0 maps to white  =&gt;  exposure x1  =&gt;  EV = log2(1/1.2) = -0.263.</text>
+<text x="360.0" y="300" class="xs" text-anchor="middle">6.2's choice that a white card renders at 1.0 WAS an exposure setting. It was simply the only one available.</text>
+</svg>

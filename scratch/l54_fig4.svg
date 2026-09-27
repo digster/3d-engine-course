@@ -1,0 +1,58 @@
+<svg viewBox="0 0 720 376" role="img" aria-labelledby="l54f4-t l54f4-d">
+  <title id="l54f4-t">The pool's three arrays and how a handle resolves</title>
+  <desc id="l54f4-d">A handle carrying generation 3 and index 2 selects entry 2 of the sparse slots array, whose generation matches and whose dense field is 0, which selects entry 0 of the dense items array. A third array, owners, maps each dense entry back to its slot.</desc>
+  <defs>
+    <marker id="e-i-l54f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l54f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l54f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l54f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l54f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Resolving handle 2:3 — two arrays and one indirection.</text>
+<rect x="296" y="38" width="170" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="381" y="57" class="sm mono" text-anchor="middle">gen 3  |  index 2</text>
+<text x="296" y="84" class="xs muted" text-anchor="start">the handle</text>
+<text x="24" y="48" class="xs t-hi" text-anchor="start">index 2 picks the slot;</text>
+<text x="24" y="64" class="xs t-hi" text-anchor="start">generation 3 == generation 3,</text>
+<text x="24" y="80" class="xs t-hi" text-anchor="start">so it is live, and it is YOURS.</text>
+<text x="24" y="104" class="xs t-hi" text-anchor="start">slots_   sparse, STABLE</text>
+<rect x="24" y="116" width="128" height="44" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="88" y="133" class="xs muted" text-anchor="middle">slot 0</text>
+<text x="88" y="149" class="xs mono" text-anchor="middle">gen 2  ·  dense 1</text>
+<rect x="160" y="116" width="128" height="44" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="224" y="133" class="xs muted" text-anchor="middle">slot 1</text>
+<text x="224" y="149" class="xs mono" text-anchor="middle">gen 1  ·  dense —</text>
+<rect x="296" y="116" width="128" height="44" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="360" y="133" class="xs muted" text-anchor="middle">slot 2</text>
+<text x="360" y="149" class="xs mono" text-anchor="middle">gen 3  ·  dense 0</text>
+<rect x="432" y="116" width="128" height="44" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="496" y="133" class="xs muted" text-anchor="middle">slot 3</text>
+<text x="496" y="149" class="xs mono" text-anchor="middle">gen 1  ·  dense 2</text>
+<rect x="568" y="116" width="128" height="44" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="632" y="133" class="xs muted" text-anchor="middle">slot 4</text>
+<text x="632" y="149" class="xs mono" text-anchor="middle">gen 5  ·  dense —</text>
+<line x1="381" y1="70" x2="360" y2="112" class="hi" stroke-width="1.4" marker-end="url(#e-h-l54f4)"/>
+<path d="M360,162 L360,186 L88,186 L88,214" fill="none" class="hi" stroke-width="1.4" marker-end="url(#e-h-l54f4)"/>
+<text x="210" y="204" class="xs t-hi" text-anchor="start">items_   dense, MOBILE — packed, reallocates freely</text>
+<rect x="24" y="218" width="128" height="40" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="88" y="233" class="xs muted" text-anchor="middle">dense 0</text>
+<text x="88" y="250" class="sm mono" text-anchor="middle">torus</text>
+<rect x="160" y="218" width="128" height="40" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="224" y="233" class="xs muted" text-anchor="middle">dense 1</text>
+<text x="224" y="250" class="sm mono" text-anchor="middle">cube</text>
+<rect x="296" y="218" width="128" height="40" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360" y="233" class="xs muted" text-anchor="middle">dense 2</text>
+<text x="360" y="250" class="sm mono" text-anchor="middle">floor</text>
+<rect x="432" y="218" width="128" height="40" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="496" y="243" class="xs muted" text-anchor="middle">(spare capacity)</text>
+<text x="24" y="297" class="xs t-hi" text-anchor="start">owners_</text>
+<rect x="110" y="282" width="128" height="22" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="174" y="297" class="xs mono" text-anchor="middle">slot 2</text>
+<rect x="246" y="282" width="128" height="22" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="310" y="297" class="xs mono" text-anchor="middle">slot 0</text>
+<rect x="382" y="282" width="128" height="22" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="446" y="297" class="xs mono" text-anchor="middle">slot 3</text>
+<text x="24" y="330" class="xs muted" text-anchor="start">owners_ is the way back, and the only reason removal is O(1): when the last item is moved down into a hole, its slot has to be told.</text>
+<text x="24" y="346" class="xs muted" text-anchor="start">slot 1 and slot 4 are FREE, and “dense —” is the whole occupancy flag — no extra byte, nothing to keep in sync.</text>
+<text x="24" y="366" class="xs mono muted" text-anchor="start">free_slots_ = [ 4, 1 ]   — LIFO, so the warmest slot is reused first.</text>
+</svg>

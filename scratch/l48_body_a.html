@@ -1,0 +1,974 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-07-textures-and-depth.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.7 — Textures, Samplers, and Depth</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-09-renderdoc.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.9 — Debugging a Frame with RenderDoc</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.8</div>
+    <h1>Porting the Module-3 Scene</h1>
+    <p class="deck">
+      Every piece exists. Geometry, a camera, textures, a depth buffer — all built, all
+      measured. What is missing is the <em>scene</em>: Module 3's floor, its models and its
+      lighting are still running on the CPU beside the GPU path. This lesson moves them, and
+      then asks the only question worth asking about a port — <strong>how much actually had to
+      change?</strong> Two modules of convention work were done on the promise that the answer
+      would be "almost nothing". A promise nobody checks is a wish, so we count.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-07-textures-and-depth.html">4.7 — Textures, Samplers, Depth</a>,
+          <a href="04-06-uniforms.html">4.6 — Uniform Data</a>,
+          <a href="03-08-shading-models.html">3.8 — Shading Models</a>,
+          <a href="03-06-normals-and-lambert.html">3.6 — Normals and Lambert</a>,
+          <a href="02-08-space-chain.html">2.8 — The Space Chain</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_scene.hpp</code>, <code>src/gfx/gpu_scene.cpp</code>,
+            <code>shaders/scene.vert.hlsl</code>, <code>shaders/scene.frag.hlsl</code>,
+            <code>shaders/matrix_probe.frag.hlsl</code>, <code>src/gfx/gpu_uniform.hpp</code>,
+            <code>src/gfx/mesh.hpp</code>, <code>src/gfx/mesh.cpp</code>,
+            <code>src/gfx/gpu_present.hpp</code>, <code>src/gfx/gpu_present.cpp</code>,
+            <code>src/main.cpp</code>, <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Module 3's scene, drawn by the GPU, beside the software rasterizer drawing the same
+            frame — and a per-pixel count of every place the two disagree, with a cause for each
+            one.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…turn a scene description into a list of draw calls, and say why it is a list rather
+          than a loop.</li>
+      <li>…explain why a material and a cull mode cannot ride on a triangle, and what that costs
+          in draw calls.</li>
+      <li>…identify the <em>rate of change</em> of every piece of data a frame needs, and put each
+          one where it belongs.</li>
+      <li>…generate flat and smooth normals for geometry that carries none, and say why the
+          choice changes the vertex count.</li>
+      <li>…recognise, from first principles, the class of geometry on which a normal-matrix bug is
+          invisible — and therefore choose test geometry that can fail.</li>
+      <li>…compare two renderers per pixel, and attribute each kind of disagreement to a cause
+          rather than to bad luck.</li>
+      <li>…state what the floor of such a comparison is, and why claiming bit-identity across the
+          CPU/GPU boundary would be a claim about hardware.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-bill">The bill from Lesson 3.8</a></li>
+          <li><a href="#intuition-rate">A third rate of change</a></li>
+          <li><a href="#intuition-onevertex">A vertex shader sees one vertex</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-stages">Fifteen stages, and where each one went</a></li>
+          <li><a href="#theory-draws">What one draw per object costs</a></li>
+          <li><a href="#theory-normals">Normals as data, and why flat costs vertices</a></li>
+          <li><a href="#theory-matrix">A 3×3 through a constant buffer</a></li>
+          <li><a href="#theory-hidden">The bug that is invisible on boxes</a></li>
+          <li><a href="#theory-agree">How close can two rasterizers get?</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-normals">Normals, at import</a></li>
+          <li><a href="#impl-uniforms">Two more blocks, and their offsets</a></li>
+          <li><a href="#impl-shaders">The two shaders, next to the code they replace</a></li>
+          <li><a href="#impl-renderer">A renderer that takes a list</a></li>
+          <li><a href="#impl-demo">The demo, and the flag that inverts</a></li>
+          <li><a href="#impl-harness">Measuring a port</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Run the engine today and you get a ring of tori. Run it with <code>--software</code> and you
+    get a floor running to the horizon, an icosahedron, two boxes, a loaded model, four lighting
+    controls and a HUD narrating a vertex through six coordinate spaces. The second one is the
+    engine. The first one is a <em>probe</em> — an instrument built to exercise one API feature at
+    a time — and it has been standing in for the engine since Lesson 4.4.
+  </p>
+
+  <p>
+    That was the right way to build. Lesson 4.5 could measure the cost of an index buffer because
+    nothing else in the frame was moving; Lesson 4.7 could measure a depth format's resolution
+    because the scene was two flat surfaces at known distances. Every one of those numbers is
+    trustworthy <em>because</em> the probe was small. But a probe is not an engine, and Module 4
+    now has every piece the scene needs: geometry (4.5), a camera (4.6), a texture and a depth
+    attachment (4.7).
+  </p>
+
+  <p>
+    So the work of this lesson is not difficult, and it should not feel difficult. It is
+    bookkeeping — walk the objects, push their matrices, issue their draws. The <em>interesting</em>
+    part is the audit that comes with it.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The claim under test</span>
+    <p>
+      Modules 2 and 3 kept making decisions on the stated grounds that they would pay off here.
+      NDC ranges and the +y flip (2.11). Depth running 0 at the near plane, so a
+      <code>LESS</code> comparison means "nearer" (3.1). Counter-clockwise front faces (3.4).
+      Column-major matrices, chosen in 2.6 with a claim about what HLSL constant buffers expect.
+      Sampler enums written in 3.9 to match SDL's enumerator for enumerator. Each of those was a
+      cheque written against this lesson.
+    </p>
+    <p>
+      This lesson cashes them, and <strong>counts what bounces</strong>. That number is Modules 2
+      and 3's report card, and reporting it honestly matters more than it being good.
+    </p>
+  </div>
+
+  <p>
+    There is a second reason to do this carefully, and it outlives the lesson. Right now this
+    project has two complete renderers that can draw the same scene. That is a rare and
+    temporary luxury — nobody keeps a software rasterizer around forever — and while it lasts it
+    gives us something almost no graphics course has: <strong>a reference implementation.</strong>
+    Every claim Modules 2 and 3 made was measured against code you wrote and can read. If the GPU
+    disagrees with it, one of them is wrong, and we can find out which. From Module 5 onward the
+    software path becomes exactly that — a reference, kept because a port whose reference has
+    been deleted is a port nobody can check.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-bill"><span class="num">2.1</span>The bill from Lesson 3.8</h3>
+
+  <p>
+    Open <code>src/main.cpp</code> and look at <code>collect_triangles</code>. It walks every
+    object in the scene, transforms every vertex, and appends the results to <em>one</em> array.
+    Then <code>draw_triangles</code> fills that array in a single loop. In the middle of that
+    loop is this line:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">style.surface = t.surface;   // rebind the material, per triangle</code></pre>
+  </figure>
+
+  <p>
+    Lesson 3.8 wrote that line and immediately flagged it, in the field's own documentation, as
+    something that was not going to survive:
+  </p>
+
+  <blockquote>
+    <p>
+      "This field is a cheat, and the cheat is instructive. … a GPU cannot do that, because a
+      material is pipeline state and changing it means ending the draw call and starting
+      another. Real renderers therefore <strong>batch by material</strong>, and a scene with
+      three materials is three draws. … the moment this engine reaches Module 4, this field
+      stops being possible."
+    </p>
+  </blockquote>
+
+  <p>
+    Here is the moment. And it is worth being precise about <em>why</em> it stops being possible,
+    because "the GPU is less flexible" is the wrong explanation and leads to the wrong intuition.
+  </p>
+
+  <p>
+    A software rasterizer is one thread walking one loop. Between two iterations of that loop it
+    can do anything at all — read a different material, take a different branch, change its mind
+    about culling — because "between two iterations" is a moment that exists. A GPU draw call is
+    not a loop. It is a <em>launch</em>: thousands of fragments enter the machine at once, spread
+    across dozens of cores, in an order nobody controls and with no synchronisation between them.
+    There is no moment between triangle 7 and triangle 8, because triangle 8 may well have
+    finished first.
+  </p>
+
+  <p>
+    So anything that has to be <em>the same for every fragment in flight</em> has to be fixed
+    before the launch. That is what "pipeline state" means, and it is Lesson 4.1's argument
+    arriving with a concrete bill: the cull mode, the fill mode, the depth comparison, the blend
+    equation and the shaders themselves are frozen into an immutable object; the material's
+    numbers are frozen into a uniform push. Both are decided before the draw, and a draw is the
+    unit at which you get to change your mind.
+  </p>
+
+  <p>
+    Four objects with different materials is therefore four draws. Not four draws because we
+    wrote it badly — four draws because that is the shape of the machine, and the reason every
+    renderer you will ever read has a step that sorts a list of things to draw.
+  </p>
+
+  <h3 id="intuition-rate"><span class="num">2.2</span>A third rate of change</h3>
+
+  <p>
+    Lesson 4.5 gave the engine two rates at which data changes: <strong>per vertex</strong> (slot
+    0) and <strong>per instance</strong> (slot 1). Lesson 4.6 found a third that fitted neither —
+    the camera matrix, which is the same for every vertex of every instance of a frame — and
+    introduced the uniform push for it: <strong>per frame</strong>.
+  </p>
+
+  <p>
+    A scene needs a fourth, and noticing that is most of what this lesson does to the renderer's
+    shape. Consider what an object's model matrix actually is:
+  </p>
+
+  <ul>
+    <li>It is <em>not</em> per vertex — every vertex of the crate shares it.</li>
+    <li>It is <em>not</em> per frame — the crate and the barrel have different ones.</li>
+    <li>It could be per instance, if the crate and the barrel were the same mesh. They are not.</li>
+  </ul>
+
+  <p>
+    It is <strong>per draw</strong>, and SDL_GPU supports that directly, in one sentence of
+    documentation for <code>SDL_PushGPUVertexUniformData</code>: <em>"Subsequent draw calls in
+    this command buffer will use this uniform data."</em> A push is not bound to a pass and not
+    bound to a pipeline; it is a value written into the command stream at the point you write it,
+    and every draw recorded after it sees it. So the loop becomes: push this object's matrices,
+    push this object's material, bind its texture, bind the pipeline its surface style needs,
+    draw.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why "rate of change" is the right axis to group by</span>
+    <p>
+      It would feel more natural to group by <em>subject</em> — a "transform block", a "lighting
+      block", a "material block". Resist it. The camera and the lamp have nothing to do with each
+      other conceptually and they belong in the same push, because both change once a frame; the
+      model matrix and the albedo have nothing to do with each other either, and they belong
+      together because both change once a draw.
+    </p>
+    <p>
+      The reason is cost. Data pushed at the wrong rate is not <em>wrong</em>, it is
+      <em>repeated</em> — and Lesson 4.5 measured what repetition costs when the camera was
+      hard-coded into a shader because there was no other way to send it. Grouping by rate is how
+      you never pay that again. It is also why Lesson 4.7 put two texture controls into the
+      <em>light</em> block rather than giving them one of their own: they were per frame, and
+      that was the only property that mattered.
+    </p>
+  </div>
+
+  <h3 id="intuition-onevertex"><span class="num">2.3</span>A vertex shader sees one vertex</h3>
+
+  <p>
+    Here is the one that is not bookkeeping, and it announced itself the first time the ported
+    scene drew a black icosahedron.
+  </p>
+
+  <p>
+    Three of the four built-in meshes carry no normals at all. <code>cube_mesh()</code>,
+    <code>quad_mesh()</code> and <code>icosahedron_mesh()</code> are positions and indices and
+    nothing else, and Lesson 3.2's ground plane is the same. That never mattered, because
+    <code>collect_triangles</code> has this fallback, inside its per-triangle loop:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// The authored normal, or — when the mesh has none — the FACE normal,
+// computed from the three corners we are holding right now.
+const engine::vec3 n = engine::cross(b - a, c - a);</code></pre>
+  </figure>
+
+  <p>
+    A vertex shader cannot do that. It is handed one vertex. It does not know which triangle that
+    vertex belongs to, cannot see the other two corners, and has no way to take a cross product
+    of things it cannot see. (A <em>geometry</em> shader could — it receives whole primitives —
+    and this is one of about three legitimate uses for one. SDL_GPU has no geometry stage, and
+    geometry shaders are slow enough on modern hardware that their absence is closer to a feature
+    than a limitation.)
+  </p>
+
+  <p>
+    So the fallback has to move: out of the renderer, and into the geometry. That is not a
+    workaround. It is what every engine you will ever use already does — normals are authored in
+    the modelling package and written into the file, and an importer that finds none generates
+    them once, at import, and never thinks about it again. Assimp calls it
+    <code>aiProcess_GenNormals</code>. Our version is <code>engine::with_normals</code>, and
+    §3.3 derives it.
+  </p>
+
+  <p>
+    Watch what that does to a decision Lesson 3.8 had on a keypress. Flat shading and smooth
+    shading were <kbd>Q</kbd> — a runtime toggle, because the CPU rasterizer could evaluate a
+    normal per triangle or per vertex as it pleased. Once normals are data, the choice is baked
+    into the vertex buffer <em>before anything is drawn</em>, and the two options no longer have
+    the same vertex count. A runtime toggle became a build-time decision. That is the honest cost
+    of the port, and it is the first time in this course that moving code to the GPU has taken
+    something away.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-stages"><span class="num">3.1</span>Fifteen stages, and where each one went</h3>
+
+  <p>
+    Before writing anything, it is worth laying the two pipelines side by side and being specific
+    about each stage's fate. There are only five possible fates, and naming them is most of the
+    lesson.
+  </p>
+
+  @@FIG_PIPELINE@@
+
+  <p>
+    Read the right-hand column and the shape of a port becomes clear. <strong>Eight of the
+    fifteen stages simply became the hardware's job</strong> — the perspective divide, near
+    clipping, the viewport transform, coverage, interpolation, perspective correction, the depth
+    test, the texture sample and the sRGB encode. We wrote every one of those by hand across
+    Modules 2 and 3, and we now delete none of them and use none of them. That is not wasted
+    work; it is the difference between calling <code>SDL_BeginGPURenderPass</code> and knowing
+    what happens inside it. When §3.6 finds sixty pixels the two renderers disagree about, you
+    will know that the disagreement is about a sub-pixel snapping rule, because you wrote the
+    rule.
+  </p>
+
+  <p>
+    <strong>Two stages are literally the same C++ function, called from both sides.</strong>
+    <code>engine::parent_from_local</code> builds the model matrix for the software path and for
+    the GPU path; <code>engine::normal_matrix</code> builds the inverse transpose for both.
+    Neither knows a GPU exists. That is worth pausing on, because it is the strongest possible
+    evidence for a claim Module 5 is about to make at length: a scene description and a renderer
+    are different things, and code that computes where an object <em>is</em> has no business
+    knowing who is going to draw it.
+  </p>
+
+  <p>
+    <strong>Two were folded into one.</strong> The software path went world → view → clip in two
+    matrix multiplies per vertex; the GPU path multiplies <code>projection * view</code> once per
+    frame on the CPU and sends the product. For our 1,225-vertex torus that is 1,224 matrix
+    multiplies saved per frame, and it is available to the software path too — Lesson 3.7 had it
+    and gave it up, because a specular highlight needs the world position and the composed matrix
+    could not produce one. On the GPU we get both, because the vertex shader can output the world
+    position as a varying and the composed matrix separately. The cost has moved from arithmetic
+    to bandwidth: three more interpolated floats per fragment, forever.
+  </p>
+
+  <p>
+    <strong>One was translated line for line</strong> — the shading equation — and §3.6 measures
+    how faithfully.
+  </p>
+
+  <p>
+    <strong>And two could not cross at all.</strong> The cull mode and the material, for the
+    reason §2.1 gave. Everything structural about this lesson follows from those two rows.
+  </p>
+
+  <h3 id="theory-draws"><span class="num">3.2</span>What one draw per object costs</h3>
+
+  <p>
+    Let us put numbers on it, because "N draws" sounds expensive and mostly is not.
+  </p>
+
+  @@FIG_RATES@@
+
+  <p>
+    The per-draw blocks are <code>object_uniforms</code> (a 4×4 model matrix plus three padded
+    columns of the normal matrix — 112 bytes) and <code>material_uniforms</code> (an albedo, a
+    highlight colour, an exponent and a flag — 32 bytes). That is 144 bytes per object. The
+    per-frame blocks are the camera (64) and the lighting environment (64), 128 bytes, pushed
+    once.
+  </p>
+
+  <p class="eq-plain">
+    So a three-object scene moves 128 + 3 × 144 = <strong>560 bytes</strong> of uniform traffic
+    per frame, which is what the harness reports, and it would move the same 560 bytes if each of
+    those objects had a million triangles.
+  </p>
+
+  <p>
+    That is the shape of the cost and it is worth internalising: <strong>per-draw overhead scales
+    with the number of objects, not with their size.</strong> A thousand crates is a thousand
+    draws and 144 KB of pushes — which is when it starts to hurt, and which is why Module 6
+    reaches for instancing (one draw, many crates) and Module 9 for a storage buffer holding
+    every object's transform at once. Three objects is not that day.
+  </p>
+
+  <h4>What sorting the list is worth</h4>
+
+  <p>
+    The other cost is the <em>pipeline binds</em>. Our scene has three surface styles — a closed
+    solid culls its back faces, a sheet cannot, and wireframe is a third fill mode — which means
+    three pipeline objects, created once at startup. A draw list that alternates between styles
+    binds a pipeline for each; a list sorted by style binds one per style present.
+  </p>
+
+  <p>
+    Measured on a three-object scene with two styles: <strong>3 binds unsorted, 2 sorted.</strong>
+    Which is a saving of one bind, and is not worth doing for the saving. It is worth doing
+    because the number scales with the scene and the sort does not, and because a renderer that
+    <em>has</em> a place to put the sort can improve its policy later without restructuring. Our
+    <code>gpu_scene_renderer::render</code> therefore does not sort — it draws in the order given
+    and <em>counts</em> what that order cost, next to what a perfect order would have cost. A
+    policy you can measure is a policy you can argue about.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the renderer refuses to sort for you</span>
+    <p>
+      Sorting a draw list has more than one right answer and they conflict. By pipeline, to
+      minimise state changes. Front-to-back, so early-z rejects occluded fragments before they
+      shade. Back-to-front, which is the <em>only</em> correct order for transparency. By
+      distance, for level-of-detail. A renderer that picks one has quietly made a decision that
+      belongs to whoever knows what the frame is for — and a frame usually wants several of them
+      at once, applied to different buckets.
+    </p>
+    <p>
+      So <code>render()</code> takes the list as given. Module 6's frame organisation is where
+      buckets and their policies appear; this is the version of that idea small enough to see all
+      of.
+    </p>
+  </div>
+
+  <h3 id="theory-normals"><span class="num">3.3</span>Normals as data, and why flat costs vertices</h3>
+
+  <p>
+    §2.3 established that the geometry has to carry normals. Now: which normals?
+  </p>
+
+  @@FIG_NORMALS@@
+
+  <p>
+    Start with the picture. Three faces meet at a cube's corner. Each face is flat, so each has
+    exactly one normal, and the three point in three different directions — <em>−x</em>,
+    <em>+y</em>, <em>+z</em>. A vertex carries one normal. There is no way to satisfy all three
+    faces from one vertex, and no amount of cleverness makes there be one: the surface genuinely
+    has three different orientations at that point, because it has a corner there.
+  </p>
+
+  <p>
+    So <strong>flat shading requires unshared vertices.</strong> Each triangle gets its own three
+    corners, each carrying that triangle's face normal, and the index buffer that comes out is
+    0, 1, 2, 3, … — every vertex used exactly once, no sharing left to do. A cube's eight
+    positions become 36 vertices (12 triangles × 3). An icosahedron's twelve become 60.
+  </p>
+
+  <p>
+    You have seen 36 before. Lesson 3.5 loaded a cube from an OBJ file and measured that it
+    produced 24 unified vertices rather than 8, because a file that authors per-face normals
+    forces exactly this split. Here we produce it ourselves, and the two numbers differ only
+    because the file shares corners between the two triangles of each face and our generator does
+    not bother.
+  </p>
+
+  <h4>Smooth normals, and area weighting for free</h4>
+
+  <p>
+    The alternative keeps the sharing and asks a different question: what normal should this
+    <em>position</em> have, given all the faces that meet there? The standard answer is the
+    average of the face normals — and the useful subtlety is <em>weighted by what</em>.
+  </p>
+
+  <p>
+    Consider a mesh where one corner is touched by one enormous triangle and by twenty tiny
+    slivers left over from a bad tessellation. An unweighted average lets the twenty slivers
+    outvote the one large face by twenty to one, even though the slivers describe almost none of
+    the surface. The result is lighting that ripples along seams, which is a real artifact with a
+    real diagnosis and a one-word fix.
+  </p>
+
+  <p>
+    Weight each face by its <strong>area</strong>. And here is the pleasing part: you get that
+    for nothing, because the cross product you already computed <em>is</em> the weight.
+  </p>
+
+  <div class="eq">
+    \[ \|\,\mathbf{u} \times \mathbf{v}\,\| = 2\,\text{area} \]
+  </div>
+
+  <p class="eq-plain">
+    where u = b &#8722; a and v = c &#8722; a are two edges of the triangle: the length of their
+    cross product is twice the triangle's area.
+  </p>
+
+  <p class="eq-plain">
+    The length of the cross product of two triangle edges is exactly twice the triangle's area
+    (Lesson 2.3 derived this when it built barycentric coordinates from signed areas). So if you
+    accumulate the <em>un-normalised</em> cross products and normalise once at the end, every
+    face has already contributed in proportion to its area. Normalising each face normal first —
+    the obvious thing — is strictly more work <em>and</em> throws the weighting away.
+  </p>
+
+  <h4>A worked example: the corner of a cube</h4>
+
+  <p>
+    Take the unit cube's corner at (&#8722;&#189;,&nbsp;&#8722;&#189;,&nbsp;&#8722;&#189;). Three faces meet there:
+    the −x face, the −y face and the −z face, each a unit square, each split into two triangles,
+    and the corner touches one triangle of each face plus, depending on the triangulation, a
+    second. Rather than track the triangulation, note what each face contributes: a vector along
+    its own outward axis, with magnitude proportional to the area it contributes. The three
+    faces are congruent and the corner's share of each is the same, so the three contributions
+    are equal in magnitude:
+  </p>
+
+  <p class="eq-plain">
+    <em>k</em>(&#8722;1,&nbsp;0,&nbsp;0) + <em>k</em>(0,&nbsp;&#8722;1,&nbsp;0)
+    + <em>k</em>(0,&nbsp;0,&nbsp;&#8722;1) = <em>k</em>(&#8722;1,&nbsp;&#8722;1,&nbsp;&#8722;1)
+  </p>
+
+  <p>
+    Normalise: (&#8722;1,&nbsp;&#8722;1,&nbsp;&#8722;1)&#8202;/&#8202;&#8730;3 =
+    (&#8722;0.5774,&nbsp;&#8722;0.5774,&nbsp;&#8722;0.5774) — the corner direction
+    itself, which is the answer symmetry demands. The harness computes the real thing from the
+    real geometry and dots it against that prediction:
+    <strong>1.000000</strong>. Not "close to 1": the two agree to six decimal places, which is
+    what you should expect from a construction that is exact rather than approximate.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Smooth is not "better"</span>
+    <p>
+      It is tempting to treat smooth normals as the good ones. They are correct for anything
+      meant to <em>look</em> curved and wrong for anything with real edges: an averaged corner
+      normal on a crate rounds off every edge into a soft smear, which is Lesson 3.8's picture
+      arriving from the other direction. Our scene uses <code>flat</code> for the boxes and the
+      icosahedron — which is a faceted solid, and averaging its twenty face normals turns it into
+      a ball — and <code>smooth</code> for loaded models, which mostly ship their own normals
+      anyway and are left alone.
+    </p>
+    <p>
+      <code>with_normals</code> therefore has one hard rule: <strong>geometry that already has
+      normals is returned unchanged</strong>, whatever style you asked for. A file's normals are
+      authorship, and a loader that invents over them is the lie Lesson 3.5 forbade.
+    </p>
+  </div>
+
+  <h3 id="theory-matrix"><span class="num">3.4</span>A 3×3 through a constant buffer</h3>
+
+  <p>
+    The normal matrix has to reach the vertex shader, and there is a decision hiding in how you
+    spell it that is worth twenty minutes now and two days later.
+  </p>
+
+  <p>
+    The obvious spelling is <code>float3x3</code>. It reads well, and it costs exactly what the
+    alternative costs: a matrix in a constant buffer is laid out one column (or row) per 16-byte
+    register, so a 3×3 occupies 48 bytes and wastes 12 of them whichever way you write it.
+  </p>
+
+  <p>
+    The problem is the parenthesis. <em>Column or row</em> is a compiler default —
+    <code>column_major</code> for DXC, and <code>row_major</code> if a
+    <code>#pragma pack_matrix</code> anywhere upstream in your include chain says so — and
+    nothing diagnoses a mismatch. A transposed normal matrix does not crash and does not warn.
+    It lights every non-symmetric object in the scene from a slightly wrong direction, which
+    people mistake for a modelling problem and chase for days.
+  </p>
+
+  <p>
+    So the engine ships the columns explicitly, as three <code>float4</code>, and the shader
+    rebuilds the product by its definition:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/scene.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-hlsl">output.normal = normal_c0.xyz * input.normal.x
+              + normal_c1.xyz * input.normal.y
+              + normal_c2.xyz * input.normal.z;</code></pre>
+  </figure>
+
+  <p>
+    That is Lesson 2.5's sentence — <em>a matrix is where the basis vectors land</em> — written
+    out as three multiply-adds, and it cannot be transposed by a compiler flag because there is no
+    matrix for a flag to have an opinion about.
+  </p>
+
+  <p>
+    Having made that choice, we then measure whether it was necessary, because a precaution
+    nobody checks is superstition. <code>shaders/matrix_probe.frag.hlsl</code> declares the same
+    48 bytes twice — once as a <code>float3x3</code> and once as three loose columns at a second
+    slot — multiplies a known vector by each, and returns the answers into a float render target.
+    With
+  </p>
+
+  <p class="eq-plain">
+    M = columns (1, 2, 3), (40, 50, 60), (700, 800, 900) and v = (1, 0.1, 0.01),
+  </p>
+
+  <p>
+    the two possible answers are far apart and cannot be confused:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The matrix probe's four results</caption>
+    <thead><tr><th>computed</th><th>result</th></tr></thead>
+    <tbody>
+      <tr><td>CPU, <code>m * v</code></td><td class="mono">(12.000, 15.000, 18.000)</td></tr>
+      <tr><td>CPU, <code>transpose(m) * v</code></td><td class="mono">(1.230, 45.600, 789.000)</td></tr>
+      <tr><td>GPU, <code>mul(float3x3, v)</code></td><td class="mono">(12.000, 15.000, 18.000)</td></tr>
+      <tr><td>GPU, <code>c0*x + c1*y + c2*z</code></td><td class="mono">(12.000, 15.000, 18.000)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>On this toolchain <code>float3x3</code> would have worked.</strong> DXC packs
+    constant-buffer matrices column-major by default, which is what our storage assumes, and the
+    matrix-typed reading agrees exactly. That is a genuinely useful thing to know — and it is
+    still not what the engine ships, because a default that happens to be right on the machine
+    you tested is the most expensive kind of correctness there is. The measurement cost one
+    twenty-five-line shader; the alternative was finding out on somebody else's machine.
+  </p>
+
+  <h3 id="theory-hidden"><span class="num">3.5</span>The bug that is invisible on boxes</h3>
+
+  <p>
+    Lesson 3.6 put the normal matrix on a key, <kbd>J</kbd>, so that the difference between the
+    correct inverse transpose and the naive model matrix could be watched rather than described.
+    Porting that toggle to the GPU produced a result the harness flatly refused to accept at
+    first: <strong>zero pixels changed.</strong>
+  </p>
+
+  <p>
+    Two of the three objects in the scene are non-uniformly scaled boxes, which is exactly the
+    configuration in which the two matrices are supposed to differ. The experiment looked broken.
+    It was not.
+  </p>
+
+  @@FIG_NORMAL_MATRIX@@
+
+  <p>
+    Here is the reasoning, and it generalises well beyond this bug. Write the object's linear
+    transform as <em>R&#8202;S</em> with <em>S</em> = diag(<em>s<sub>x</sub></em>,
+    <em>s<sub>y</sub></em>, <em>s<sub>z</sub></em>). Then:
+  </p>
+
+  <div class="eq">
+    \[ \begin{aligned}
+         \text{naive} &= R\,S \\[2pt]
+         \text{correct} &= (R\,S)^{-\mathsf{T}} = R\,S^{-1}
+       \end{aligned} \]
+  </div>
+
+  <p class="eq-plain">
+    (using <em>R</em><sup>&#8722;T</sup> = <em>R</em> for a rotation, and
+    <em>S</em><sup>&#8722;T</sup> = <em>S</em><sup>&#8722;1</sup> for a diagonal.)
+  </p>
+
+  <p>
+    Now feed each an <strong>axis-aligned</strong> normal, say
+    <strong>e</strong><sub><em>x</em></sub> = (1,&nbsp;0,&nbsp;0):
+  </p>
+
+  <p class="eq-plain">
+    naive: <em>R&#8202;S</em>&#8202;<strong>e</strong><sub><em>x</em></sub> =
+    <em>s<sub>x</sub></em>&#8202;<em>R</em>&#8202;<strong>e</strong><sub><em>x</em></sub>
+    &nbsp;&nbsp;·&nbsp;&nbsp;
+    correct: <em>R&#8202;S</em><sup>&#8722;1</sup><strong>e</strong><sub><em>x</em></sub> =
+    (1&#8202;/&#8202;<em>s<sub>x</sub></em>)&#8202;<em>R</em>&#8202;<strong>e</strong><sub><em>x</em></sub>
+  </p>
+
+  <p>
+    <strong>The two results are parallel.</strong> They differ by a factor of
+    <em>s<sub>x</sub></em>&#178; in
+    length and not at all in direction — and the fragment shader's first line is
+    <code>normalize(input.normal)</code>, which throws length away. A box's model-space normals
+    <em>are</em> its own axes, so on a box the bug is not merely hard to see; it is exactly,
+    provably, zero.
+  </p>
+
+  <h4>Now a normal that is not an axis</h4>
+
+  <p>
+    Take <em>S</em> = diag(1.7,&nbsp;0.5,&nbsp;1.0), <em>R</em> = <em>I</em>, and a normal at
+    45° in the <em>xy</em> plane, <strong>n</strong> = (0.7071,&nbsp;0.7071,&nbsp;0):
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The two normal matrices applied to a 45-degree normal</caption>
+    <thead><tr><th></th><th>before normalising</th><th>after normalising</th></tr></thead>
+    <tbody>
+      <tr><td>naive, <em>S</em><strong>n</strong></td>
+          <td class="mono">(1.2021, 0.3536, 0)</td>
+          <td class="mono">(0.9594, 0.2822, 0)</td></tr>
+      <tr><td>correct, <em>S</em><sup>&#8722;1</sup><strong>n</strong></td>
+          <td class="mono">(0.4159, 1.4142, 0)</td>
+          <td class="mono">(0.2822, 0.9594, 0)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="eq-plain">
+    Their dot product is 0.9594 × 0.2822 + 0.2822 × 0.9594 = 0.5416, so the two normals are
+    <strong>57.2° apart</strong>. That is not a subtle shading difference; that is a surface
+    facing somewhere else entirely.
+  </p>
+
+  <p>
+    Give the scene one object whose normals are not its axes — squash the icosahedron to
+    (1.7, 0.5, 1.0) — and the harness reports <strong>2,160 pixels changing by up to 143
+    codes</strong>. Figure 4 shows both renders: the naive version blows a whole facet out to
+    white.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The general lesson, which is about testing, not about normals</span>
+    <p>
+      Lesson 3.6 said "two thirds of a typical scene looks perfect with this bug, which is why it
+      survives in codebases". The sharper statement, which the port forced out, is that on
+      axis-aligned geometry the bug is invisible <em>by construction</em> — not usually, not
+      mostly, but as a theorem.
+    </p>
+    <p>
+      A test scene made of crates therefore proves <em>nothing</em> about your normal handling,
+      and would have reported a clean pass while the renderer was broken. Choose test geometry
+      that is <strong>able to fail</strong>. This is the same discipline as Lesson 3.1's cyclic
+      planks and Lesson 4.5's deliberately wrong vertex pitch: build the scene that can expose
+      the mistake, then look at it.
+    </p>
+  </div>
+
+  <h3 id="theory-agree"><span class="num">3.6</span>How close can two rasterizers get?</h3>
+
+  <p>
+    Now the audit. Same scene, same camera, same light, same geometry — literally the same
+    <code>mesh_data</code>, imported once and handed to both renderers — at 320×180, compared per
+    pixel.
+  </p>
+
+  @@FIG_COMPARE@@
+
+  <p>
+    Three numbers, and each has a different cause.
+  </p>
+
+  <h4>Coverage: 42 and 60 pixels</h4>
+
+  <p>
+    Forty-two pixels the software rasterizer drew and the GPU did not; sixty the other way. They
+    form a sliver one pixel wide around each object's silhouette, and they are not a bug in
+    either renderer. Both use the same fill rule — a pixel belongs to a triangle when its centre
+    is inside, with the top-left tie-break Lesson 2.2 derived — but they disagree about where the
+    triangle's corners <em>are</em>. Our fill rounds each projected corner to a whole pixel; the
+    GPU snaps them to a fixed sub-pixel grid (typically 1/256 of a pixel). Same rule, different
+    resolution, and the disagreement is confined to the boundary, which is precisely what you
+    should predict.
+  </p>
+
+  <h4>Colour: 87% byte-identical</h4>
+
+  <p>
+    Of the 2,729 pixels both renderers drew, <strong>2,374 are identical byte for byte</strong>,
+    215 differ by one code, 64 by two. That is a strong result for two completely independent
+    implementations of perspective-correct interpolation and a lighting equation, and it is
+    strong <em>because</em> of the convention work: had the depth comparison, the winding, the
+    NDC range or the matrix layout disagreed anywhere, this number would not be 87%, it would be
+    close to zero.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Added after Lesson 6.1: what this 87% did <em>not</em> test</span>
+    <p>The number above is sound for what it measures, and the sentence before this box still
+       stands: geometry, winding, depth and perspective-correct interpolation genuinely agreed,
+       and a convention error anywhere in that chain would have collapsed the figure. Keep the
+       result. What it cannot support is the broader reading — <em>&ldquo;the GPU path is
+       correct&rdquo;</em> — and it is worth knowing why now rather than in two modules.</p>
+    <p><strong>This harness built its own render target, and gave it an <code>_SRGB</code>
+       format.</strong> The shipped demo did not: it returned linear light into a swapchain whose
+       header says the values are sRGB-encoded. So the comparison ran against a configuration the
+       program never used. Lesson 6.1 opens by measuring what that cost —
+       <strong>every GPU pixel drawn since Module 4 is too dark, by a factor of 2.3 at mid grey
+       and by thirteen in shadow</strong> — and the error is a <em>ratio</em>, savage in the darks
+       and absent near white, which is much of the answer to how it survived four modules and this
+       very comparison.</p>
+    <p>The transferable lesson is not about colour. <strong>A harness that constructs its own
+       configuration tests that configuration, not your program.</strong> This one was written to
+       isolate the rasterizers from presentation, which is a reasonable instinct and is why the
+       shape is easy to miss — the isolation removed the exact surface where the bug lived. When a
+       test builds its own setup, ask which part of the shipped path it just stopped covering.
+       6.1 also gives the fix, which is one call, <em>asked and not assumed</em>.</p>
+  </div>
+
+  <h4>The 2.5% that are badly wrong</h4>
+
+  <p>
+    Sixty-seven pixels differ by more than sixteen codes, up to 134. Every one of them is on a
+    silhouette — look at the difference image and they trace the outlines. These are the pixels
+    where the two rasterizers made <em>opposite</em> coverage decisions on adjacent triangles, so
+    one renderer shows the object and the other shows the background, or one shows the front face
+    and the other the one behind it. A large disagreement at a boundary is one pixel of coverage
+    difference wearing a large number.
+  </p>
+
+  <h4>And the shading equation itself: one float ULP</h4>
+
+  <p>
+    The comparison above mixes rasterization and shading. To separate them, the harness renders
+    one triangle covering a 64×64 float target with all three corner normals equal, so the
+    interpolated normal is exact and the interpolated world position is computable in closed
+    form. Then it evaluates <code>engine::shade()</code> on the CPU for each of those 4,096
+    fragments and compares against what <code>scene.frag.hlsl</code> wrote:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">CPU shade() against scene.frag.hlsl over 4,096 fragments</caption>
+    <thead><tr><th>specular model</th><th>mean |CPU − GPU|</th><th>worst</th></tr></thead>
+    <tbody>
+      <tr><td>none</td><td class="mono">5.960 × 10⁻⁸</td><td class="mono">5.960 × 10⁻⁸</td></tr>
+      <tr><td>Phong</td><td class="mono">5.960 × 10⁻⁸</td><td class="mono">5.960 × 10⁻⁸</td></tr>
+      <tr><td>Blinn</td><td class="mono">7.215 × 10⁻⁸</td><td class="mono">1.192 × 10⁻⁷</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A <code>float</code> has 24 bits of mantissa, so one unit in the last place near 1.0 is about
+    1.19 × 10⁻⁷. The worst disagreement across 12,288 comparisons — including
+    <code>pow</code>, <code>normalize</code>, a reflection and a halfway vector — is
+    <strong>exactly one ULP</strong>. Two implementations written three modules apart, in two
+    languages, running on two entirely different processors, agree to the last bit a float has.
+  </p>
+
+  <p>
+    That number is the answer to "was the software rasterizer a detour?". It was not. It was the
+    specification.
+  </p>
+
+  <h4>The one-code floor, and a hypothesis that was wrong</h4>
+
+  <p>
+    One case in the audit looked alarming. Render the ground plane <em>untextured</em> — one flat
+    quad, one uniform colour — and <strong>100% of its 39,202 pixels differ.</strong> Every
+    single one. By one code, in blue only.
+  </p>
+
+  <p>
+    The obvious explanation is the last step: turning a linear float into an eight-bit sRGB code,
+    which is <code>engine::to_encoded</code> on our side and the render target's
+    <code>_SRGB</code> format on the hardware's. So: measure it. Draw a surface of known linear
+    colour into the same <code>_SRGB</code> target, read the byte back, and compare.
+  </p>
+
+  @@FIG_SRGB@@
+
+  <p>
+    The first sweep <em>refuted</em> the hypothesis — fourteen probes across the whole range,
+    including the floor's own value, and the two encoders agreed on every one. Which meant either
+    the encode was innocent or the sweep was in the wrong place. A finer sweep across the
+    14/15 boundary found it:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The 14/15 boundary, measured</caption>
+    <thead><tr><th>linear</th><th>exact × 255</th><th>ours</th><th>hardware</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">0.0045148</td><td class="mono">14.325</td><td class="mono">14</td><td class="mono">14</td></tr>
+      <tr><td class="mono">0.0045186</td><td class="mono">14.335</td><td class="mono">14</td><td class="mono">15</td></tr>
+      <tr><td class="mono">0.0045800</td><td class="mono">14.495</td><td class="mono">14</td><td class="mono">15</td></tr>
+      <tr><td class="mono">0.0046000</td><td class="mono">14.547</td><td class="mono">15</td><td class="mono">15</td></tr>
+      <tr><td class="mono">0.0050000</td><td class="mono">15.557</td><td class="mono">16</td><td class="mono">15</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Our <code>powf</code> puts the 14/15 boundary at linear 0.004580, where the exact curve puts
+    it. This hardware's converter puts it somewhere between 0.0045148 and 0.0045186 — and then
+    holds 15 all the way through 0.0050, where the exact answer is 16. Everything above linear
+    0.006 agrees exactly. <strong>Every disagreement is in the darks.</strong>
+  </p>
+
+  <p>
+    Which is what the curve predicts. The sRGB transfer function is linear below 0.0031308 with
+    slope 12.92 and a power law above it, and its slope near zero is more than twelve times its
+    slope near white — so a linear value crosses a code boundary twelve times faster down there.
+    Both sides are approximations of the same curve, and neither is wrong; sRGB is specified as a
+    <em>function</em>, not as a table of 256 bytes, and a fixed-function converter in a ROP is
+    entitled to a tolerance.
+  </p>
+
+  <p>
+    And now the floor makes sense. One flat quad, lit only by ambient (its generated normal points
+    down, which §4.6 explains), so its blue is a single number: <strong>0.0045186</strong> —
+    a value that lands inside the gap. One colour, one disagreement, 39,202 times.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What to take from this</span>
+    <p>
+      Three things. First: <strong>"100% of pixels differ" can mean nothing at all</strong>, and a
+      percentage without a magnitude is not a measurement. Second: a per-pixel comparison across
+      the CPU/GPU boundary has a <strong>floor of one code</strong>, the floor is worst in the
+      shadows, and asserting bit-identity across it would be asserting something about the
+      hardware rather than about your maths. Third, and most useful: the first hypothesis was
+      wrong, and the sweep that refuted it took ten minutes. Measure the thing you are about to
+      blame.
+    </p>
+  </div>
+
+  <h4>What the texture does to all this</h4>
+
+  <p>
+    One more row, because it is the one that will surprise you. The <em>textured</em> floor —
+    same quad, same camera, one bound sampler — is far worse: 66.8% exact, and 14.4% of pixels
+    differing by more than sixteen codes.
+  </p>
+
+  <p>
+    Look at Figure 5&#8217;s third panel again and then imagine the same for a checkerboard running to
+    the horizon: the disagreements sit on the checker edges and get denser towards the horizon.
+    That is not the sampler being wrong on either side. It is <strong>undersampling</strong> —
+    the same phenomenon Lesson 3.9 §7 named when the floor sparkled and deferred to mipmaps.
+    Where one screen pixel covers many texels, the answer depends on exactly which texel you land
+    in, and a sub-pixel difference in the sample position gives a completely different colour.
+    Both renderers are computing a defensible answer to a question that does not have a stable
+    one.
+  </p>
+
+  <p>
+    The control is what makes that claim rather than a story: the <em>untextured</em> version of
+    the identical geometry differs by at most one code. Turn one thing off, and the difference
+    goes with it.
+  </p>

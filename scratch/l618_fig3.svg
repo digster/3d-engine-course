@@ -1,0 +1,66 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="l618f3-t l618f3-d">
+  <title id="l618f3-t">Two roundings: a bounded error and an accumulating one</title>
+  <desc id="l618f3-d">A plot of placement error in pixels against glyph index over one line of text. The green series, from snapping each glyph's position, stays inside a shaded half-pixel band. The red series, from rounding each advance, wanders down to nearly five pixels and does not return.</desc>
+  <defs>
+    <marker id="e-i-l618f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Round the position and the error is bounded forever. Round the advance and it is a random walk.</text>
+<line x1="70" y1="60" x2="70" y2="280" class="grid" stroke-width="1.1"/>
+<line x1="70" y1="91.42857142857143" x2="570" y2="91.42857142857143" class="grid" stroke-width="1.2"/>
+<text x="60" y="64.0" class="xs mono" text-anchor="end">+1</text>
+<text x="60" y="95.42857142857143" class="xs mono" text-anchor="end">+0</text>
+<text x="60" y="126.85714285714286" class="xs mono" text-anchor="end">-1</text>
+<text x="60" y="158.28571428571428" class="xs mono" text-anchor="end">-2</text>
+<text x="60" y="189.71428571428572" class="xs mono" text-anchor="end">-3</text>
+<text x="60" y="221.14285714285714" class="xs mono" text-anchor="end">-4</text>
+<text x="60" y="252.57142857142858" class="xs mono" text-anchor="end">-5</text>
+<text x="60" y="284.0" class="xs mono" text-anchor="end">-6</text>
+<text x="18" y="46" class="xs muted" text-anchor="start">placement error, px</text>
+<text x="320.0" y="306" class="xs muted" text-anchor="middle">glyph index along one 45-character line</text>
+<rect x="70" y="75.71428571428571" width="494" height="31.42857142857143" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="584" y="109.42857142857143" class="xs t-ok" text-anchor="start">+/- 0.5 px</text>
+<line x1="70.0" y1="91.4" x2="125.6" y2="92.1" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="70.0" y1="91.4" x2="125.6" y2="123.5" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="125.6" y1="92.1" x2="181.1" y2="102.3" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="125.6" y1="123.5" x2="181.1" y2="133.7" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="181.1" y1="102.3" x2="236.7" y2="104.7" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="181.1" y1="133.7" x2="236.7" y2="167.5" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="236.7" y1="104.7" x2="292.2" y2="97.9" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="236.7" y1="167.5" x2="292.2" y2="192.2" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="292.2" y1="97.9" x2="347.8" y2="77.0" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="292.2" y1="192.2" x2="347.8" y2="234.1" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="347.8" y1="77.0" x2="403.3" y2="83.8" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="347.8" y1="234.1" x2="403.3" y2="240.9" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="403.3" y1="83.8" x2="458.9" y2="106.4" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="403.3" y1="240.9" x2="458.9" y2="232.1" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<line x1="458.9" y1="106.4" x2="514.4" y2="78.2" stroke="#5ac878" stroke-width="1.8" fill="none"/>
+<line x1="458.9" y1="232.1" x2="514.4" y2="235.3" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<circle cx="70.0" cy="91.4" r="2.6" fill="#5ac878"/>
+<circle cx="70.0" cy="91.4" r="2.6" fill="#e05c5c"/>
+<circle cx="125.6" cy="92.1" r="2.6" fill="#5ac878"/>
+<circle cx="125.6" cy="123.5" r="2.6" fill="#e05c5c"/>
+<circle cx="181.1" cy="102.3" r="2.6" fill="#5ac878"/>
+<circle cx="181.1" cy="133.7" r="2.6" fill="#e05c5c"/>
+<circle cx="236.7" cy="104.7" r="2.6" fill="#5ac878"/>
+<circle cx="236.7" cy="167.5" r="2.6" fill="#e05c5c"/>
+<circle cx="292.2" cy="97.9" r="2.6" fill="#5ac878"/>
+<circle cx="292.2" cy="192.2" r="2.6" fill="#e05c5c"/>
+<circle cx="347.8" cy="77.0" r="2.6" fill="#5ac878"/>
+<circle cx="347.8" cy="234.1" r="2.6" fill="#e05c5c"/>
+<circle cx="403.3" cy="83.8" r="2.6" fill="#5ac878"/>
+<circle cx="403.3" cy="240.9" r="2.6" fill="#e05c5c"/>
+<circle cx="458.9" cy="106.4" r="2.6" fill="#5ac878"/>
+<circle cx="458.9" cy="232.1" r="2.6" fill="#e05c5c"/>
+<circle cx="514.4" cy="78.2" r="2.6" fill="#5ac878"/>
+<circle cx="514.4" cy="235.3" r="2.6" fill="#e05c5c"/>
+<text x="528.4444444444445" y="72.17514285714286" class="xs t-ok" text-anchor="start">snap the POSITION</text>
+<text x="528.4444444444445" y="239.31799999999998" class="xs t-bad" text-anchor="start">round the ADVANCE</text>
+<line x1="20" y1="316" x2="740" y2="316" class="grid" stroke-width="1.2"/>
+<text x="20" y="334" class="xs t-ok" text-anchor="start">Snapping the position: worst error 0.4765 px, and it can never exceed 0.5 — the pen keeps its fraction.</text>
+<text x="20" y="352" class="xs t-bad" text-anchor="start">Rounding the advance: worst 5.2601 px, still 4.3216 px out at the end of the line. Each error is added to the next.</text>
+<text x="20" y="374" class="xs muted" text-anchor="start">Same rounding, applied to two different quantities, with completely different consequences.</text>
+</svg>

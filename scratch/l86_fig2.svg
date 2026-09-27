@@ -1,0 +1,42 @@
+<svg viewBox="0 0 900 476" role="img" aria-labelledby="l86f2-t l86f2-d">
+  <title id="l86f2-t">The minimum translation vector is the nearest boundary point of the Minkowski difference.</title>
+  <desc id="l86f2-d">Three panels. Left: a blue pentagon and a red ten-sided polygon overlapping. Middle: their Minkowski difference as one grey polygon with the origin marked inside it and a purple arrow to the nearest point of its boundary, measuring the penetration depth. Right: the ten-sided polygon translated by that arrow, now exactly touching the pentagon, drawn in green with its old position dashed. Below, the two-line derivation that the set of overlapping translations is the Minkowski difference itself.</desc>
+  <defs>
+    <marker id="e-i-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-purple-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-green-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-l86f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The translations that keep two shapes overlapping ARE their Minkowski difference.</text>
+<text x="120" y="56" class="xs" text-anchor="middle">1.  A and B overlap</text>
+<path d="M 62.80,236.40 L 135.60,252.00 L 174.60,197.40 L 138.20,150.60 L 70.60,168.80 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 211.00,197.40 L 202.56,171.42 L 180.46,155.36 L 153.14,155.36 L 131.04,171.42 L 122.60,197.40 L 131.04,223.38 L 153.14,239.44 L 180.46,239.44 L 202.56,223.38 Z" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<text x="120" y="322" class="xs muted" text-anchor="middle">how far, and which way, to pull</text>
+<text x="120" y="336" class="xs muted" text-anchor="middle">them apart?</text>
+<text x="450" y="56" class="xs" text-anchor="middle">2.  A ⊖ B, with the origin inside</text>
+<path d="M 301.80,239.00 L 310.24,264.98 L 332.34,281.04 L 405.14,296.64 L 432.46,296.64 L 454.56,280.58 L 493.56,225.98 L 502.00,200.00 L 493.56,174.02 L 457.16,127.22 L 435.06,111.16 L 407.74,111.16 L 340.14,129.36 L 318.04,145.42 L 309.60,171.40 Z" fill="none" stroke="#8f918a" stroke-width="1.5"/>
+<line x1="450.00" y1="200.00" x2="497.03" y2="215.28" stroke="#9b7ede" stroke-width="2.2" marker-end="url(#e-purple-l86f2)"/>
+<line x1="441.0" y1="200.0" x2="459.0" y2="200.0" class="ink" stroke-width="2.0"/>
+<line x1="450.0" y1="191.0" x2="450.0" y2="209.0" class="ink" stroke-width="2.0"/>
+<text x="438.0" y="220.0" class="xs muted" text-anchor="end">the origin</text>
+<text x="505.0344418335811" y="209.28241658736252" class="xs t-hi" text-anchor="start">0.9511 m</text>
+<text x="450" y="322" class="xs muted" text-anchor="middle">every point of the set is a translation</text>
+<text x="450" y="336" class="xs muted" text-anchor="middle">that still overlaps, so the shortest one</text>
+<text x="450" y="350" class="xs muted" text-anchor="middle">that does NOT is the nearest point of</text>
+<text x="450" y="364" class="xs t-hi" text-anchor="middle">its BOUNDARY.</text>
+<text x="760" y="56" class="xs" text-anchor="middle">3.  B moved by that vector</text>
+<path d="M 702.80,236.40 L 775.60,252.00 L 814.60,197.40 L 778.20,150.60 L 710.60,168.80 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 851.00,197.40 L 842.56,171.42 L 820.46,155.36 L 793.14,155.36 L 771.04,171.42 L 762.60,197.40 L 771.04,223.38 L 793.14,239.44 L 820.46,239.44 L 842.56,223.38 Z" fill="none" stroke="#e05c5c" stroke-width="1.0" stroke-dasharray="3 3"/>
+<path d="M 898.03,212.68 L 889.59,186.70 L 867.49,170.65 L 840.18,170.65 L 818.08,186.70 L 809.63,212.68 L 818.08,238.66 L 840.18,254.72 L 867.49,254.72 L 889.59,238.66 Z" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<line x1="806.80" y1="197.40" x2="853.83" y2="212.68" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-green-l86f2)"/>
+<text x="760" y="322" class="xs muted" text-anchor="middle">exactly touching, and no shorter</text>
+<text x="760" y="336" class="xs muted" text-anchor="middle">translation in any direction does it</text>
+<line x1="20" y1="390" x2="880" y2="390" class="grid" stroke-width="1.0"/>
+<text x="20" y="414" class="sm mono" text-anchor="start">A and B + t overlap   ⟺   a = b + t for some a ∈ A, b ∈ B   ⟺   t = a − b   ⟺   t ∈ A ⊖ B</text>
+<text x="20" y="440" class="xs muted" text-anchor="start">Two lines, and 8.5 §3 already proved the equivalence they turn on. Everything else in this lesson is arithmetic.</text>
+</svg>

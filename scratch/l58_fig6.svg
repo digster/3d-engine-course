@@ -1,0 +1,71 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="l58f6-t l58f6-d">
+  <title id="l58f6-t">Type erasure by component id</title>
+  <desc id="l58f6-d">Five component types each assigned a small integer id, indexing a vector of base-class pointers; destroy walks the vector calling the one virtual function that needs no type information.</desc>
+  <defs>
+    <marker id="e-i-l58f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l58f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l58f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l58f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l58f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">How destroy(e) reaches every pool without knowing what any of them stores.</text>
+<text x="24" y="48" class="xs t-hi" text-anchor="start">component_id_of&lt;T&gt;() — a counter behind a function-local static, assigned on first use.</text>
+<rect x="60" y="62" width="108" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="114" y="76" class="xs mono" text-anchor="middle">placement</text>
+<line x1="100" y1="86" x2="100" y2="106" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f6)"/>
+<text x="110" y="102" class="xs mono t-hi" text-anchor="start">id 0</text>
+<rect x="184" y="62" width="108" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="238" y="76" class="xs mono" text-anchor="middle">geometry</text>
+<line x1="224" y1="86" x2="224" y2="106" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f6)"/>
+<text x="234" y="102" class="xs mono t-hi" text-anchor="start">id 1</text>
+<rect x="308" y="62" width="108" height="20" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="362" y="76" class="xs mono" text-anchor="middle">material</text>
+<line x1="348" y1="86" x2="348" y2="106" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f6)"/>
+<text x="358" y="102" class="xs mono t-hi" text-anchor="start">id 2</text>
+<rect x="432" y="62" width="108" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="486" y="76" class="xs mono" text-anchor="middle">orbit</text>
+<line x1="472" y1="86" x2="472" y2="106" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f6)"/>
+<text x="482" y="102" class="xs mono t-hi" text-anchor="start">id 3</text>
+<rect x="556" y="62" width="108" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="610" y="76" class="xs mono" text-anchor="middle">lifetime</text>
+<line x1="596" y1="86" x2="596" y2="106" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f6)"/>
+<text x="606" y="102" class="xs mono t-hi" text-anchor="start">id 4</text>
+<text x="52" y="126" class="xs mono muted" text-anchor="end">pools_</text>
+<rect x="60" y="110" width="108" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="114" y="123" class="xs mono" text-anchor="middle">unique_ptr&lt;</text>
+<text x="114" y="135" class="xs mono" text-anchor="middle">pool_base&gt;</text>
+<rect x="184" y="110" width="108" height="30" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="238" y="123" class="xs mono" text-anchor="middle">unique_ptr&lt;</text>
+<text x="238" y="135" class="xs mono" text-anchor="middle">pool_base&gt;</text>
+<rect x="308" y="110" width="108" height="30" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="362" y="123" class="xs mono" text-anchor="middle">unique_ptr&lt;</text>
+<text x="362" y="135" class="xs mono" text-anchor="middle">pool_base&gt;</text>
+<rect x="432" y="110" width="108" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="486" y="123" class="xs mono" text-anchor="middle">unique_ptr&lt;</text>
+<text x="486" y="135" class="xs mono" text-anchor="middle">pool_base&gt;</text>
+<rect x="556" y="110" width="108" height="30" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="610" y="123" class="xs mono" text-anchor="middle">unique_ptr&lt;</text>
+<text x="610" y="135" class="xs mono" text-anchor="middle">pool_base&gt;</text>
+<text x="24" y="162" class="xs muted" text-anchor="start">A vector indexed by the id. The pointer is to the BASE, so this vector has one type and holds five.</text>
+<line x1="24" y1="176" x2="696" y2="176" class="grid" stroke-width="1.2"/>
+<text x="24" y="198" class="xs t-hi" text-anchor="start">destroy(e): walk the vector, call the one virtual function that needs no type.</text>
+<rect x="60" y="210" width="108" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="114" y="225" class="xs mono" text-anchor="middle">erase(e)</text>
+<text x="114" y="248" class="xs" text-anchor="middle">row removed</text>
+<rect x="184" y="210" width="108" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="238" y="225" class="xs mono" text-anchor="middle">erase(e)</text>
+<text x="238" y="248" class="xs" text-anchor="middle">row removed</text>
+<rect x="308" y="210" width="108" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.08"/>
+<text x="362" y="225" class="xs mono" text-anchor="middle">erase(e)</text>
+<text x="362" y="248" class="xs muted" text-anchor="middle">not there</text>
+<rect x="432" y="210" width="108" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="486" y="225" class="xs mono" text-anchor="middle">erase(e)</text>
+<text x="486" y="248" class="xs" text-anchor="middle">row removed</text>
+<rect x="556" y="210" width="108" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.08"/>
+<text x="610" y="225" class="xs mono" text-anchor="middle">erase(e)</text>
+<text x="610" y="248" class="xs muted" text-anchor="middle">not there</text>
+<text x="24" y="274" class="xs muted" text-anchor="start">Five virtual calls to destroy an entity that had three components. Two of them return after ONE array read — that is the price of</text>
+<text x="24" y="288" class="xs muted" text-anchor="start">not keeping a per-entity component mask, and at five types it is nothing.</text>
+<text x="24" y="312" class="xs t-hi" text-anchor="start">COLD BY CONSTRUCTION: this is the only place a virtual call happens. A view holds pool&lt;T&gt;* and calls nothing through the base —</text>
+<text x="24" y="326" class="xs muted" text-anchor="start">which is Lesson 5.6’s 1.5–1.7× measurement being obeyed rather than quoted.</text>
+</svg>

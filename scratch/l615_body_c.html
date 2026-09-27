@@ -1,0 +1,795 @@
+  <h3>6.6 Putting it together, and one subtraction</h3>
+
+  @@FIG_BAKE@@
+
+  <p>
+    <code>image_based_light</code> is the function that replaces <code>base * ambient</code>. Both
+    halves live in it, because both halves are ambient: the irradiance map through Lambert's BRDF,
+    and the split sum. They are <em>added</em>, and the metallic workflow divides the albedo between
+    them exactly as <code>f0_of</code> and <code>diffuse_albedo_of</code> already do for the direct
+    light — which is the check that this is the same shading model and not a second one bolted on.
+  </p>
+
+  <p>
+    Wiring it into the software rasterizer takes one subtraction that is easy to get wrong:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/raster.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">if (style.env == nullptr) { return direct; }
+
+const linear_rgb removed = ambient_only(albedo, *style.lights, style.surface);
+const linear_rgb ibl = image_based_light(*style.env, style.surface, albedo,
+                                         shading_normal, style.eye - p);
+return {direct.r - removed.r + ibl.r * style.env_intensity,
+        direct.g - removed.g + ibl.g * style.env_intensity,
+        direct.b - removed.b + ibl.b * style.env_intensity};</code></pre>
+</figure>
+
+  <p>
+    <code>shade()</code> has already added the constant ambient. We cannot ask it for the direct
+    lighting without that term, so we <em>remove what it added</em> before adding the directional
+    version. Forget the subtraction and every surface gets fill light twice, which reads as "IBL is
+    too bright" and sends you to tune <code>env_intensity</code> — a fix that makes the picture
+    plausible and the model wrong.
+  </p>
+
+  <p>
+    <code>ambient_only()</code> is a named function three lines below the line it mirrors, rather
+    than the expression written out a second time here, because <strong>the subtraction is only
+    honest if it is character-for-character the addition</strong>. Two copies of
+    <code>albedo * ambient</code> in two files can drift; two lines in the same header cannot drift
+    far unnoticed.
+  </p>
+
+  <p>
+    And note the null check. <code>style.env == nullptr</code> is the whole of "this scene has no
+    environment" — the sixth time <code>fill_style</code> has made that bargain, after
+    <code>inv_w = 1</code> (3.2), <code>lights</code> (3.8), an unbound <code>albedo</code> (3.9),
+    <code>shadows</code> (6.8) and <code>cascades</code> (6.9). It is also what keeps the reference
+    render byte-identical: the fixture never sets it, so <code>shade()</code> is reached by exactly
+    the path it has been reached by for twenty-four lessons.
+  </p>
+
+  <!-- =================================================================
+       7 — THE GPU
+       ================================================================= -->
+  <h2 id="gpu"><span class="num">7</span>Cube maps in SDL_GPU</h2>
+
+  <p>
+    Three new things on the device side: a texture <em>type</em> the engine has never created, a
+    number format the CPU has never had to write, and a shader resource type that is neither
+    <code>Texture2D</code> nor <code>Texture2DArray</code>.
+  </p>
+
+  <h3>7.1 The texture</h3>
+
+  <p>
+    A cube map is <code>SDL_GPU_TEXTURETYPE_CUBE</code> with
+    <code>layer_count_or_depth = 6</code> — exactly six, which SDL requires. The six layers are the
+    six faces, and <code>SDL_GPUCubeMapFace</code> is documented as <em>"can be passed in as the
+    layer field"</em>, so the upload loop is Lesson 6.9's cascade-array code with a loop bound of
+    six:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">SDL_GPUTextureRegion dest{};
+dest.texture = texture_;
+dest.mip_level = static_cast&lt;Uint32&gt;(level);
+dest.layer = static_cast&lt;Uint32&gt;(f);
+dest.w = static_cast&lt;Uint32&gt;(n);
+dest.h = static_cast&lt;Uint32&gt;(n);
+dest.d = 1;</code></pre>
+</figure>
+
+  <p>
+    <strong>What differs is the shader side.</strong> A <code>TextureCube</code> takes a
+    <code>float3</code> direction where a <code>Texture2DArray</code> takes a <code>float2</code> and
+    an index, and the hardware does the face selection, the divide by the major axis, and the part
+    software cannot reproduce: <strong>filtering across face edges</strong>.
+  </p>
+
+  <p>
+    Our CPU <code>cube_map::sample</code> clamps at a face edge instead of stepping onto the
+    neighbour, so it has a seam. We measured it, and measuring it took three attempts — which is a
+    story worth §9.
+  </p>
+
+  <h3>7.2 The mip chain is uploaded, not generated</h3>
+
+  <p>
+    This is the opposite of what <code>create_sampled(..., mips = true)</code> does two functions up
+    in the same file, and the difference is the whole point of the lesson.
+    <code>SDL_GenerateMipmapsForGPUTexture</code> builds a chain by box-filtering — the right answer
+    when the levels mean <em>"this texture, smaller"</em>. These levels mean <em>"this environment,
+    blurred by a GGX lobe of roughness r"</em>, which no box filter produces. They are computed by
+    <code>prefilter_environment</code> and shipped up level by level.
+  </p>
+
+  <p>
+    The harness checks the byte count against an independently computed figure, because an upload
+    that moves the wrong number of bytes is an upload that succeeds and shows garbage:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_615 §J</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">[PASS] the FIVE-LEVEL prefiltered chain uploads level by level (261888 bytes,
+       5 levels) — SDL_GenerateMipmapsForGPUTexture is deliberately NOT used,
+       because these levels are GGX blurs and not box filters
+[PASS] and moves exactly the bytes the chain contains: 261888, computed
+       independently as sum over levels of 6 x n^2 x 4 channels x 2 bytes</code></pre>
+  </figure>
+
+  <h3>7.3 Half floats, because HDR data has no other way to get there</h3>
+
+  <p>
+    Here is something the engine has never needed until now. Everything HDR so far has been
+    <em>produced</em> on the GPU — <code>gpu_post_stack</code> renders into a
+    <code>k_hdr_format</code> target and reads it back through a sampler, and no half float ever
+    crosses the CPU boundary. An environment map is the first HDR data computed on the CPU that has
+    to be uploaded, and <code>SDL_UploadToGPUTexture</code> takes bytes in the texture's own format.
+    There is no half type in C++20 and no SDL helper, so <code>float_to_half</code> is ours to write.
+  </p>
+
+  <p>
+    The format in one line: <strong>1 sign bit, 5 exponent bits biased by 15, 10 mantissa bits.</strong>
+    Largest finite value 65,504, and about three decimal digits of precision — <em>relative</em>
+    precision, which is exactly the property <code>gpu_post.hpp</code> argued makes half floats right
+    for light. The harness confirms it across five decades:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_615 §H</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">[PASS] worst relative error 0.000485 across 1e-4 to 6e4 (at 8.012) — which is
+       2^-11, half an ulp on 10 mantissa bits plus the implicit one. THE
+       PRECISION IS RELATIVE, so the sky at 0.4 and the sun at 6,000 are stored
+       to the same accuracy</code></pre>
+  </figure>
+
+  <p>
+    2⁻¹¹ = 4.883 × 10⁻⁴, and we measured 4.85 × 10⁻⁴. That is half an ulp, which is the best a
+    correctly-rounding conversion can do, and it is the number that says the rounding is
+    round-to-nearest-even rather than truncation. Truncation would bias every value downward by half
+    a step on average, which over a whole environment map is a systematic darkening rather than
+    noise.
+  </p>
+
+  <p>
+    Three cases in that function are not the common one, and each produces a visible artefact if
+    skipped:
+  </p>
+
+  <ul>
+    <li><strong>Overflow clamps</strong> to 65,504 rather than becoming infinity. An <code>inf</code>
+        in an environment map propagates through the prefilter into a whole mip level of NaN. A sun
+        stored at 65,504 instead of 100,000 is wrong by a stop and a half; an <code>inf</code> is
+        wrong by everything.</li>
+    <li><strong>NaN stays NaN.</strong> Turning it into the largest finite half would hide the bug
+        that produced it.</li>
+    <li><strong>Subnormals.</strong> Below 2⁻¹⁴ the exponent cannot go lower and the mantissa absorbs
+        the shift. Getting this wrong rounds small values to zero, which is invisible until you
+        tonemap at a low exposure and find the shadows have quantised.</li>
+  </ul>
+
+  <h3>7.4 Three bindings, one call</h3>
+
+  <p>
+    The scene shader gains three resources at fragment slots 3, 4 and 5: two
+    <code>TextureCube</code> and one <code>Texture2D</code>. On the C++ side they join the existing
+    albedo, normal-map and shadow bindings, and the array goes from three entries to six <em>in the
+    same call</em>:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">engine/src/gfx/gpu_scene.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">SDL_GPUTextureSamplerBinding binds[6]{};
+binds[0].texture = tex;          binds[0].sampler = sampler;
+binds[1].texture = nrm;          binds[1].sampler = sampler;
+binds[2].texture = shadow_tex;   binds[2].sampler = shadow_samp;
+binds[3].texture = irr_tex;      binds[3].sampler = cube_samp;
+binds[4].texture = pre_tex;      binds[4].sampler = cube_samp;
+binds[5].texture = lut_tex;      binds[5].sampler = lut_samp;
+SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);</code></pre>
+</figure>
+
+  <p>
+    Slots 3 to 5 do not change within a frame, so binding them here rather than once at the top is
+    redundant work — but the rule Lesson 6.8 discovered still applies: <strong>a partial
+    <code>SDL_BindGPUFragmentSamplers</code> does not merge with an earlier one, it REPLACES the
+    range it names.</strong> Slot 3 would be unbound the moment slot 0 changed. One call for the
+    whole set is the only spelling that is correct, and it costs the same.
+  </p>
+
+  <p>
+    When there is no environment, the renderer binds its own <strong>1×1 black cube</strong> and a
+    1×1 black table. That is the fourth instance of this class's stated pattern — hand the shader the
+    <em>identity element</em> of the feature it is missing. White was the identity for the albedo's
+    multiply, lavender for a basis change (6.7), 1.0 for a depth comparison (6.8), and
+    <strong>black is the identity for the addition</strong> the ambient term performs. The fallback
+    is bound whether or not <code>ibl_intensity</code> is zero, because HLSL does not elide a
+    resource because a branch did not reach it, and an unbound sampler slot is undefined rather than
+    empty.
+  </p>
+
+  <h3>7.5 The skybox needs no geometry</h3>
+
+  <p>
+    A skybox is traditionally a cube: thirty-six indices, scaled up around the camera, drawn with its
+    faces inward. That works and it has two problems. It can be clipped — too big and it reaches past
+    the far plane, too small and the near plane enters it. And it has twelve internal edges, which
+    Lesson 6.12's <code>fullscreen.vert</code> already told us costs double-shaded 2×2 quads.
+  </p>
+
+  <p>
+    So we reuse the oversized-triangle trick and turn each pixel into a <strong>ray</strong>. A pixel
+    at NDC <span class="eq-plain">(n<sub>x</sub>, n<sub>y</sub>)</span> sees through
+  </p>
+
+  <div class="eq">\[ \mathbf{forward} + n_x \, \mathbf{right} + n_y \, \mathbf{up} \]</div>
+
+  <p>
+    provided <code>right</code> and <code>up</code> are pre-scaled by the image plane's half-extents
+    at unit distance — <span class="eq-plain">tan(fov<sub>y</sub>/2)</span> vertically and
+    <span class="eq-plain">aspect × tan(fov<sub>y</sub>/2)</span> horizontally. The CPU does that
+    scaling once per frame, so the shader is three multiplies and two adds. It is deliberately
+    <em>not</em> an inverse view-projection multiply, which would cost a 4×4 inverse on the CPU and a
+    matrix-vector product plus a divide per pixel to compute the same three numbers.
+  </p>
+
+  <p>
+    Two lines in that shader are load-bearing:
+  </p>
+
+  <p>
+    <strong>The depth is exactly 1.</strong> Conventions §4 puts this engine's device depth at 0 on
+    the near plane and 1 on the far one, so the sky belongs at 1, and
+    <code>position = float4(nx, ny, 1, 1)</code> puts it there. The pipeline uses
+    <strong>LESS_OR_EQUAL with depth writes off</strong>, and the <code>OR_EQUAL</code> is not
+    optional: the depth buffer was cleared to 1, so a strict <code>LESS</code> would reject every sky
+    pixel. That failure produces a completely black sky in front of correctly lit objects, which
+    reads as "the cube map failed to load" and sends you looking in the wrong place entirely.
+  </p>
+
+  <p>
+    <strong>It uses <code>SampleLevel</code>, not <code>Sample</code></strong>, and the reason is not
+    the debug feature it also enables. <code>Sample</code> picks a mip level from the screen-space
+    derivatives of the coordinate, which is exactly right for a surface texture and meaningless here:
+    the derivative of a view ray across the screen says how fast the camera is turning, not how much
+    sky a pixel covers.
+  </p>
+
+  <p>
+    <strong>And it does not tonemap.</strong> The skybox renders into the HDR target Lesson 6.12
+    built, so what belongs there is a quantity of light; <code>tonemap.frag.hlsl</code> converts the
+    finished image once, over everything. Tonemapping the sky in its own shader has a very
+    recognisable signature: the sky looks right on its own and every reflection of it comes out
+    <em>brighter</em> than the sky it reflects, because reflections read the untouched cube map while
+    the background reads a compressed copy.
+  </p>
+
+  <h3>7.6 A uniform that finally cost something</h3>
+
+  <p>
+    <code>scene_light_uniforms</code> gains two floats. <code>ibl_intensity</code> lands in the pad
+    slot Lesson 6.8 added to fill its eleventh register, so it costs <strong>zero bytes</strong> —
+    the third free ride in a row after 6.7 and 6.14. <code>ibl_max_level</code> does not fit, and
+    takes the block from 176 to 192 bytes.
+  </p>
+
+  <p>
+    That is worth naming rather than absorbing, because three lessons of free slots could reasonably
+    have set an expectation. The affordability argument is 6.8's, unchanged: this is a
+    <strong>per-frame</strong> push, so one extra register is 16 bytes a frame, where the same
+    register in <code>material_uniforms</code> would be 16 bytes <em>per draw</em>.
+  </p>
+
+  <p>
+    And it cannot be a constant in the shader. The chain's depth is chosen at run time by
+    <code>bake_environment</code>, and the roughness-to-level mapping is a property of how the chain
+    was <em>built</em> — so a hard-coded 5 in HLSL would be a number that must agree with a number in
+    C++, in another language, with nothing checking it. That is precisely the failure mode the
+    <code>static_assert</code>s in <code>gpu_uniform.hpp</code> exist to make impossible.
+  </p>
+
+  <!-- =================================================================
+       8 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete code listings</h2>
+
+  <p>
+    Five files in full. The remaining changes — <code>microfacet.hpp</code>'s two new functions,
+    <code>hdr.{hpp,cpp}</code>'s half-float pair, <code>gpu_texture</code>'s
+    <code>create_cube</code>, <code>gpu_scene</code>'s bindings, the shader's IBL term,
+    <code>raster.cpp</code>'s subtraction and the demo's flags — are quoted in full at the point
+    where they are argued for, above.
+  </p>
+
+@@LISTING:engine/include/engine/gfx/cubemap.hpp@@
+
+@@LISTING:engine/src/gfx/cubemap.cpp@@
+
+@@LISTING:shaders/skybox.vert.hlsl@@
+
+@@LISTING:shaders/skybox.frag.hlsl@@
+
+@@LISTING:scratch/verify_615.cpp@@
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">9</span>Build &amp; run</h2>
+
+  <p>The build is unchanged in shape; two new shaders and one new translation unit join it.</p>
+
+<figure class="listing">
+  <figcaption><span class="path">Linux / macOS</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8</code></pre>
+</figure>
+
+<figure class="listing">
+  <figcaption><span class="path">Windows (MSVC)</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j8</code></pre>
+</figure>
+
+  <p>Then the harness. Build it optimised — §E runs forty brute-force integrals at a million
+     samples each:</p>
+
+<figure class="listing">
+  <figcaption><span class="path">the harness</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">ENGINE_CFLAGS="-O2" sh scratch/build_verify_615.sh</code></pre>
+</figure>
+
+  <p>and the demo, with and without the environment:</p>
+
+<figure class="listing">
+  <figcaption><span class="path">the demo</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">cd build/demos
+./gltf_view --hdr                    # the picture this demo drew yesterday
+./gltf_view --hdr --env              # lit by the sky, and standing in it
+./gltf_view --hdr --env --env-size 16   # the source cube, starved</code></pre>
+</figure>
+
+  <h3>Expected result</h3>
+
+  <p>
+    <code>--env</code> logs the bake before the first frame:
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">console</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">baking environment (128x128 source)...
+  irradiance 32^2, prefilter 6 levels, brdf lut 64^2 — 5.16 s</code></pre>
+</figure>
+
+  <p>
+    Five seconds is the right cost for an offline step and the wrong one for a frame, which is the
+    entire reason this technique precomputes. It is also why the bake happens on first use rather
+    than in the constructor: a run without <code>--env</code> should not pay for maps it never reads.
+  </p>
+
+  <p>
+    Then the picture changes in three ways, and it is worth looking for each one separately:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The background is the sky.</strong> Note which part of the sky: the orbit camera sits
+      26° above the scene with a 50° field of view, so the horizon falls about one degree
+      <em>above</em> the top of the frame and the entire background is the lower hemisphere. It is a
+      gradient rather than a flat colour — the ground fades toward the horizon, because real ground
+      is lit by the sky above it and is brightest where it faces the most sky.
+    </li>
+    <li>
+      <strong>Surfaces know which way is up.</strong> Compare the top and the underside of any object
+      against the <code>--hdr</code>-only render. Previously both received the same
+      <code>(0.05, 0.06, 0.08)</code>; now the upward faces pick up the sky and the downward ones the
+      ground.
+    </li>
+    <li>
+      <strong>The metals stop being black.</strong> This is the one to spend a moment on, because it
+      is the debt from 6.4 being paid. Without <code>--env</code>, a metallic material away from the
+      key light is essentially the background colour. With it, it reflects a blurred sky whose blur
+      radius is its own roughness.
+    </li>
+  </ul>
+
+  <p>
+    <code>--env-size 16</code> starves the source cube, and the failure is instructive: rough
+    materials look identical — a cosine convolution has nothing finer than 60° to lose — while a
+    polished one shows visible facets, because the mirror is reading level 0 of a 16-texel face,
+    where a texel is 5.6° across.
+  </p>
+
+  <p>And the harness:</p>
+
+<figure class="listing">
+  <figcaption><span class="path">verify_615</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">verify_615 — Lesson 6.15: Skybox and Image-Based Lighting
+
+== A  THE FACES: SDL'S ORDER, AND THE ROUND TRIP ==
+== B  THE WEIGHT: SOLID ANGLES, AND THE 1% THAT NEVER GOES AWAY ==
+== C  THE EXACT HALF: A UNIFORM ENVIRONMENT MUST REPRODUCE LESSON 6.2 ==
+== D  THE SKY: A BAKED CUBE AGAINST THE FUNCTION IT CAME FROM ==
+== E  THE SPLIT SUM: AGAINST BRUTE FORCE, AND THE MEASUREMENT THAT LIED ==
+== F  THE LEVEL: THE LOBE'S ANSWER AGAINST THE ONE EVERYBODY SHIPS ==
+== G  CONVERGENCE AND QUANTISATION: SAMPLES, BYTES, AND LOST ENERGY ==
+== H  HALF FLOATS: THE ONLY WAY HDR DATA REACHES THE DEVICE ==
+== I  THE GOLDEN ==
+== J  THE GPU: CUBE TEXTURES, SIX FACES, SIX LEVELS ==
+
+54 checks, 0 failures</code></pre>
+</figure>
+
+  <p>
+    Among them, §I: the reference render is <strong>byte-identical, hash E917C06C</strong>, for the
+    twenty-fourth lesson running. That argument was checked <em>before</em> a line of this lesson was
+    written, and it turned out to be structural six times over — twice 6.14's three. The fixture's
+    <code>lighting</code> struct has no environment field; <code>shade()</code> never calls
+    <code>image_based_light</code>; <code>cube_map</code>, <code>environment</code> and the BRDF
+    table are types the fixture never constructs; <code>microfacet.hpp</code>'s two new functions are
+    called by neither <code>shade()</code> nor <code>cook_torrance_specular</code>; the half-float
+    pair has no CPU-raster caller; and every shader and GPU change is gated behind
+    <code>ibl_intensity</code>, which defaults to 0.
+  </p>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common pitfalls &amp; debugging</h2>
+
+  <p>
+    Four of the five below happened during this lesson. Two of them produced <em>plausible</em>
+    output, which is the kind worth the most words.
+  </p>
+
+  <h3>10.1 A channel-order mistake that looks like "IBL is too dark"</h3>
+
+  <p>
+    <strong>Symptom.</strong> The specular half of IBL vanishes at normal incidence and survives at
+    grazing angles. Head-on a metal sphere is black; toward its silhouette a rim of reflection
+    appears. The diffuse half is perfect.
+  </p>
+
+  <p>
+    <strong>Cause.</strong> <code>make_brdf_lut</code> packed <code>scale</code> and
+    <code>bias</code> with a hand-written shift — <code>(bias &lt;&lt; 8) | scale</code> — reasoning
+    about an RGBA word. <code>engine::texture</code> stores <strong>ARGB</strong>, so red is bits
+    16–23 and <code>scale</code> went into <em>blue</em>.
+  </p>
+
+  <p>
+    <strong>Why it was hard.</strong> Green is bits 8–15 in both layouts, so <code>bias</code> read
+    back <em>correctly</em>. And the shader computes <code>F0 × scale + bias</code>: with
+    <code>scale</code> reading zero, the specular term becomes <code>bias</code> alone — which is
+    ~0 at normal incidence and ~0.078 at grazing. So the picture was not obviously broken. It was
+    dim in a way that invited tuning.
+  </p>
+
+  <p>
+    <strong>Fix.</strong> Use <code>pack_argb</code> from <code>colour.hpp</code>, which has had the
+    right answer since Lesson 1.6. A packing spelled out at the call site is a packing that can
+    disagree with the one the engine uses — and the same mistake appeared a second time, in the
+    harness's ARGB→RGBA unpack for the GPU upload.
+  </p>
+
+  <p>
+    <strong>How to catch it in five seconds.</strong> Print the table. <code>scale</code> at
+    <span class="eq-plain">(n·v = 0.9, roughness = 0.1)</span> must be 1.000: a smooth surface seen
+    head-on reflects all of F0 and nothing more. If it is 0, you have this bug.
+  </p>
+
+  <h3>10.2 A Monte Carlo estimate that has not converged</h3>
+
+  @@FIG_NOISE@@
+
+  <p>
+    <strong>Symptom.</strong> The split sum appears to be 20% dark at roughness 0.25 — a number of
+    the right order, with no sign of being wrong.
+  </p>
+
+  <p>
+    <strong>Cause.</strong> The reference was brute force at 8,192 importance samples, against an
+    environment containing a 6000:1 sun disc. With a lobe a couple of degrees wide and a source
+    smaller than that, the estimator's variance is enormous: whether a given run's samples hit the
+    disc changes the answer by a factor of two. Measured, 8,192 against 1,000,000 disagree by
+    <strong>1.98×</strong>; with the sun removed, the same two counts agree to
+    <strong>0.040%</strong>.
+  </p>
+
+  <p>
+    <strong>The rule.</strong> Lesson 6.14 established one: <em>check that a measurement can produce
+    a non-null result before believing a null one.</em> This is its mirror — <em>check that a
+    non-null result has converged before believing it</em> — and both are the same rule underneath:
+    establish what your instrument can see before you read it. The cheap test is to run at two sample
+    counts and compare; if they differ, the smaller one is measuring its own noise.
+  </p>
+
+  <h3>10.3 A seam test that measures nothing</h3>
+
+  <p>
+    <strong>Symptom.</strong> The CPU sampler's cross-face seam measures 0.0000%. Twice.
+  </p>
+
+  <p>
+    <strong>First cause.</strong> The probe directions never crossed a face boundary, so the test
+    compared a face with itself. <em>Fix:</em> assert the crossing before measuring the difference —
+    the harness now reports "31 of 31 probe pairs land on different faces" as its own check.
+  </p>
+
+  <p>
+    <strong>Second cause, and the better one.</strong> They did cross, and the answer was
+    <em>still</em> zero — because <code>sky_radiance</code> depends only on <code>d.y</code>. Along a
+    vertical face edge our sky is literally constant, so the two clamped edge texels hold the same
+    value and there is nothing for a seam to break.
+  </p>
+
+  <p>
+    <strong>A null result from an environment that cannot exhibit the defect is not evidence that
+    the defect is absent.</strong> The harness now measures on a probe environment that varies with
+    <em>azimuth</em> — the axis a vertical face edge actually separates — and finds the seam at
+    <strong>12.09%</strong> at 16×16, one texel's worth of the function, exactly as a clamp instead
+    of a face step should cost. It then reports the sky's 1.06 × 10⁻⁷ alongside, because "this
+    environment happens to be seamless" is itself worth knowing.
+  </p>
+
+  <h3>10.4 A build that cannot find a shader it just compiled</h3>
+
+  <p>
+    <strong>Symptom.</strong> Adding <code>skybox.vert</code> and rebuilding gives
+  </p>
+
+<figure class="listing">
+  <figcaption><span class="path">make</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">No rule to make target `shaders/skybox.frag.json',
+needed by `demos/sandbox_shaders.stamp'</code></pre>
+</figure>
+
+  <p>
+    <strong>Cause.</strong> <code>engine_use_shaders</code> made the copy-stamp depend on shader
+    <em>files</em> produced by custom commands in the top-level directory, while the stamp target
+    lives in <code>demos/</code>. The Makefile generator cannot resolve a cross-directory file
+    dependency without a target-level edge as well.
+  </p>
+
+  <p>
+    <strong>Why nobody hit it for fourteen lessons, which is the nastiest part.</strong> Once a
+    shader has been built once, <em>the file exists</em> — and <code>make</code> is perfectly happy
+    to depend on an existing file it has no rule for. So every shader added before this one worked
+    from its second build onward, and the bug sat waiting for the next person to add one. A build
+    from a genuinely clean tree would have fired it on all twenty-three at once.
+  </p>
+
+  <p>
+    <strong>Fix.</strong> One line: <code>add_dependencies(${target}_shaders ${shader_targets})</code>.
+    Depend on the shader targets, not only on their outputs.
+  </p>
+
+  <h3>10.5 The ambient term applied twice</h3>
+
+  <p>
+    <strong>Symptom.</strong> With the environment on, everything is washed out and the shadows have
+    no contrast — and turning <code>env_intensity</code> down to about 0.6 makes it look fine.
+  </p>
+
+  <p>
+    <strong>Cause.</strong> <code>shade()</code> already added <code>albedo × ambient</code> and the
+    IBL term was added on top. <em>Fix:</em> subtract it (§6.6). <strong>And notice how close this
+    one comes to escaping</strong> — tuning the intensity produces an acceptable picture, so the bug
+    survives as a "magic number" that will be wrong the first time anyone changes
+    <code>lighting::ambient</code>.
+  </p>
+
+  <h3>10.6 Two more, for the record</h3>
+
+  <ul>
+    <li>
+      <strong>A cube map bound to a <code>Texture2D</code>.</strong> The validation layer catches it;
+      on a driver without one, the result is a black reflection and no error. Check the shader's
+      declared type before anything else.
+    </li>
+    <li>
+      <strong>A repeat-addressed BRDF table.</strong> An interpolated normal on a silhouette can give
+      a very slightly negative <span class="eq-plain">n·v</span>, which under any address mode but
+      CLAMP wraps to the far edge of the table and reads the roughest, most grazing entry there is —
+      a bright rim on exactly the pixels where it is most visible. The shader
+      <code>saturate</code>s it <em>and</em> the sampler clamps, which is belt and braces on purpose.
+    </li>
+  </ul>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>11.1 — Sixteen bits for the table (guided).</strong>
+        <code>make_brdf_lut</code> stores <code>scale</code> and <code>bias</code> as bytes, which
+        the code calls its one real compromise. Measure it properly: for each of a grid of
+        <span class="eq-plain">(n·v, roughness)</span>, compare the sampled table against
+        <code>integrate_brdf</code> directly, and report the worst absolute error and the worst error
+        <em>as a fraction of the specular term it multiplies</em>. Then say which of the two numbers
+        an artist would care about, and why they are different.
+      </p>
+      <p class="hint">
+        <strong>Hint.</strong> §G already measures the first at 0.01118. The second needs the
+        prefiltered radiance it multiplies, which varies by three orders of magnitude across the sky.
+        The answer is that a fixed absolute error on a multiplier is a <em>relative</em> error on the
+        result, so it is invisible in a bright reflection and significant in a dark one.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>11.2 — Bake the sky without its sun (guided).</strong> §4.3 found the split sum 73%
+        dark with a sun disc in the environment, and noted that production renderers keep the sun as
+        a separate analytic light. Do that: bake the environment with
+        <code>sun_radiance = {0,0,0}</code>, set the engine's directional light to match the disc's
+        total power, and compare the result against brute force over the <em>full</em> sky.
+      </p>
+      <p class="hint">
+        <strong>Hint.</strong> The disc's irradiance is its radiance times its solid angle,
+        <span class="eq-plain">2π(1 − cos θ)</span> — at 1° that is 9.57 × 10⁻⁴ sr. The comparison
+        should improve dramatically for rough materials and barely move for smooth ones; explaining
+        <em>why</em> is the exercise.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>11.3 — Spherical harmonics for the diffuse half.</strong> An irradiance map is a
+        cube of 6 × 32² = 6,144 texels representing a function with no detail finer than about 60°.
+        That is wildly redundant. Nine spherical-harmonic coefficients (order 2, three channels)
+        reproduce it to within a couple of per cent — Ramamoorthi &amp; Hanrahan's result, in
+        §12's reading. Implement the projection and the evaluation, and measure the error against
+        <code>irradiance_map</code> texel for texel.
+      </p>
+      <p class="hint">
+        <strong>Hint.</strong> Projection is one pass over the source cube accumulating
+        <span class="eq-plain">L<sub>i</sub>(d) · Y<sub>lm</sub>(d) · dω</span> — the same loop
+        <code>irradiance_map</code> already has, with the cosine replaced by a basis function.
+        Evaluation is a quadratic form in the normal. You should find 27 floats replacing 73 KB, and
+        the bake time going from four seconds to a few milliseconds.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>11.4 — Prefilter on the GPU (engine challenge).</strong> Five seconds is acceptable
+        for a lesson and unacceptable for a loading screen. Move the prefilter onto the device: render
+        each face of each level with a fragment shader that importance-samples the previous level,
+        using the <code>COLOR_TARGET</code> usage <code>create_cube</code> does not currently request
+        and <code>SDL_GPUColorTargetInfo</code>'s <code>layer_or_depth_plane</code> and
+        <code>mip_level</code> fields.
+      </p>
+      <p class="hint">
+        <strong>Hint.</strong> Six faces × six levels is 36 render passes with a full-screen triangle
+        each, which sounds like a lot and is a millisecond. Use the CPU result as the reference:
+        the two should agree to within the sampler's filtering differences, and where they do not,
+        the likely cause is the handedness note in §3.1.
+      </p>
+    </li>
+
+    <li>
+      <p>
+        <strong>11.5 — Multi-scattering compensation (engine challenge).</strong> §G measures the
+        BRDF table summing to 0.3276 at roughness 1 — <strong>67% of the energy is missing</strong>,
+        because the Smith G models single scattering only. Implement Fdez-Agüera's single-term
+        compensation (§12), and check two things: that the table's energy comes back to near 1, and
+        that a rough white metal under a uniform environment now reflects close to the radiance it
+        is standing in.
+      </p>
+      <p class="hint">
+        <strong>Hint.</strong> The compensation is built from the same <code>scale + bias</code> you
+        already have, so it costs no new table. Watch out that it must not push the table
+        <em>above</em> 1 — a surface that reflects more than arrives is the failure Lesson 6.2
+        measured at 1.1386 and 6.4 fixed.
+      </p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; next</h2>
+
+  <p>
+    The engine's ambient term is no longer a constant. It is an environment map — radiance as a
+    function of direction, on the six faces of a cube — and the same texture is the sky behind the
+    scene and the light falling on it, so a reflection cannot disagree with its surroundings.
+  </p>
+
+  <p>What the engine gained:</p>
+
+  <ul>
+    <li><strong>Cube maps</strong>, CPU and GPU, with the face table written once as data and
+        asserted against SDL's enum, and with the right-handed/left-handed mirror <em>measured</em>
+        rather than assumed.</li>
+    <li><strong>An irradiance map</strong> — the diffuse half, which is exact for Lambert and which
+        reproduces Lesson 6.2's <code>albedo × ambient</code> to 1.3 × 10⁻⁵ on the environment 6.2
+        assumed.</li>
+    <li><strong>A prefiltered environment chain and a BRDF table</strong> — the split sum, whose two
+        approximations are named separately and whose error is measured, decomposed into the bake's
+        contribution and the technique's, and shown to have a <em>shape</em>: 0.08% at roughness
+        0.10, 5.8% at near-normal incidence, 29.0% at grazing, 73.0% with a sun.</li>
+    <li><strong>A derived roughness-to-level mapping</strong>, from 6.14's closed-form lobe width —
+        and the finding that the folklore everybody ships is within 0.77 of a level of it.</li>
+    <li><strong>Half floats</strong>, because HDR data has no other way onto the device.</li>
+    <li><strong>A skybox</strong> with no geometry, on both renderers.</li>
+  </ul>
+
+  <p>
+    And three habits carried forward. The <em>identity element</em> pattern got its fourth instance
+    (black, for an addition). The <em>derived versus fitted</em> boundary is marked in the source in
+    two places. And 6.14's rule about null measurements acquired its mirror — check a result has
+    converged before you believe it — which caught a 20% error that was entirely Monte Carlo noise.
+  </p>
+
+  <p>
+    <strong>What is still missing, stated plainly.</strong> One probe, infinitely far away: no
+    parallax, no local reflections, no second room. No multi-scattering compensation, so two thirds
+    of the energy is lost at full roughness. And the prefilter runs on the CPU in five seconds, which
+    is a loading screen you would not ship. All three are exercises, and all three are what a
+    production IBL system adds on top of exactly what we built.
+  </p>
+
+  <p>
+    <strong>Next</strong> — the renderer now draws everything in the scene every frame, including the
+    objects behind the camera. Lesson 6.16 extracts the frustum's six planes, tests the AABBs Lesson
+    6.8 already computes against them, and feeds what survives into the instanced draws that have
+    been sitting built and unused since 4.5.
+  </p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Brian Karis, “Real Shading in Unreal Engine 4”</strong> (SIGGRAPH 2013 Physically Based
+      Shading course notes). The source of the split-sum approximation, the
+      <span class="eq-plain">(n·l)</span> prefilter weighting, and the two-term BRDF table. Short,
+      and the pages on what was tried and rejected are the valuable ones.
+    </li>
+    <li>
+      <strong>Sébastien Lagarde &amp; Charles de Rousiers, “Moving Frostbite to PBR”</strong>
+      (SIGGRAPH 2014). The most thorough published account of an IBL pipeline, including the
+      <span class="eq-plain">n = v = r</span> assumption's consequences and what Frostbite does about
+      them. §4.9 is the section to read first.
+    </li>
+    <li>
+      <strong>Ravi Ramamoorthi &amp; Pat Hanrahan, “An Efficient Representation for Irradiance
+      Environment Maps”</strong> (SIGGRAPH 2001). Nine coefficients for the diffuse half, with the
+      proof that the cosine convolution kills everything above order 2. Exercise 11.3.
+    </li>
+    <li>
+      <strong>Carmelo Fdez-Agüera, “A Multiple-Scattering Microfacet Model for Real-Time Image-Based
+      Lighting”</strong> (JCGT 2019). The energy compensation Exercise 11.5 asks for, in a form that
+      reuses the table you already have.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th edition</strong>, §10.3 (environment mapping) and §10.5
+      (irradiance environment mapping). The standard textbook treatment, and the place to read about
+      the alternatives to a cube — octahedral maps in particular.
+    </li>
+    <li>
+      <strong>The OpenGL specification</strong>, §8.13 (“Cube Map Texture Selection”). The
+      <code>sc</code>/<code>tc</code>/<code>ma</code> table of §3.1, normatively. Worth reading once
+      so you know where the signs come from rather than copying them.
+    </li>
+    <li>
+      <strong>Preetham, Shirley &amp; Smits, “A Practical Analytic Model for Daylight”</strong>
+      (SIGGRAPH 1999), and Hosek &amp; Wilkie's 2012 successor. Physically-based sky models, for when
+      the gradient-and-a-disc of <code>sky_settings</code> stops being enough.
+    </li>
+    <li>
+      <strong>SDL3 wiki</strong>: <code>SDL_GPUTextureCreateInfo</code>,
+      <code>SDL_GPUCubeMapFace</code>, <code>SDL_GPUTextureRegion</code>. The three pages behind
+      §7.1, and the place to confirm that <code>layer_count_or_depth</code> must be exactly 6.
+    </li>
+  </ul>

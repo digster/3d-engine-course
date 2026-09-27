@@ -1,0 +1,91 @@
+<svg viewBox="0 0 900 526" role="img" aria-labelledby="f88f-t f88f-d">
+  <title id="f88f-t">Choosing the cell size</title>
+  <desc id="f88f-d">Entries and pair tests against cell size, with the fitted cost model.</desc>
+  <defs>
+    <marker id="e-i-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grn-f88f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<rect x="74" y="46" width="500" height="300" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="324.0" y="32" class="sm" text-anchor="middle">both wings are cubic, which is why the floor is flat</text>
+<line x1="91.33086048165174" y1="46" x2="91.33086048165174" y2="346" class="grid" stroke-width="0.6"/>
+<text x="91.33086048165174" y="362" class="xs muted" text-anchor="middle">0.1 m</text>
+<line x1="270.1654302408259" y1="46" x2="270.1654302408259" y2="346" class="grid" stroke-width="0.6"/>
+<text x="270.1654302408259" y="362" class="xs muted" text-anchor="middle">1 m</text>
+<line x1="449.0" y1="46" x2="449.0" y2="346" class="grid" stroke-width="0.6"/>
+<text x="449.0" y="362" class="xs muted" text-anchor="middle">10 m</text>
+<line x1="74" y1="346.0" x2="574" y2="346.0" class="grid" stroke-width="0.6"/>
+<text x="66" y="350.0" class="xs muted" text-anchor="end">1e3</text>
+<line x1="74" y1="276.24926580320516" x2="574" y2="276.24926580320516" class="grid" stroke-width="0.6"/>
+<text x="66" y="280.24926580320516" class="xs muted" text-anchor="end">1e4</text>
+<line x1="74" y1="206.49853160641032" x2="574" y2="206.49853160641032" class="grid" stroke-width="0.6"/>
+<text x="66" y="210.49853160641032" class="xs muted" text-anchor="end">1e5</text>
+<line x1="74" y1="136.7477974096155" x2="574" y2="136.7477974096155" class="grid" stroke-width="0.6"/>
+<text x="66" y="140.7477974096155" class="xs muted" text-anchor="end">1e6</text>
+<line x1="74" y1="66.99706321282065" x2="574" y2="66.99706321282065" class="grid" stroke-width="0.6"/>
+<text x="66" y="70.99706321282065" class="xs muted" text-anchor="end">1e7</text>
+<text x="324.0" y="380" class="xs muted" text-anchor="middle">cell size</text>
+<text x="22" y="196.0" class="xs muted" text-anchor="middle">count</text>
+<path d="M 91.33,54.06 L 162.50,129.06 L 216.33,179.74 L 270.17,221.75 L 301.66,242.31 L 324.00,254.13 L 341.33,261.81 L 355.49,267.58 L 377.83,275.28 L 395.17,279.72 L 431.67,289.26 L 480.49,294.45 L 556.67,299.41" fill="none" stroke="#5082e6" stroke-width="2.2"/>
+<path d="M 91.33,89.64 L 162.50,170.11 L 216.33,209.14 L 270.17,241.27 L 301.66,252.19 L 324.00,256.64 L 341.33,251.35 L 355.49,249.45 L 377.83,241.68 L 395.17,230.53 L 431.67,208.65 L 480.49,162.36 L 556.67,92.36" fill="none" stroke="#e05c5c" stroke-width="2.2"/>
+<path d="M 91.33,48.33 L 162.50,124.21 L 216.33,172.85 L 270.17,212.58 L 301.66,230.31 L 324.00,239.52 L 341.33,241.56 L 355.49,243.34 L 377.83,241.57 L 395.17,234.72 L 431.67,217.63 L 480.49,173.76 L 556.67,104.28" fill="none" stroke="#5ac878" stroke-width="2.6"/>
+<line x1="362.9" y1="46.0" x2="362.9" y2="346.0" stroke="#f0961e" stroke-width="1.6" fill="none" stroke-dasharray="6 4"/>
+<text x="362.89364759302214" y="62" class="xs" text-anchor="start">  model minimum 3.30 m</text>
+<line x1="335.9" y1="306.0" x2="335.9" y2="346.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<text x="335.86136832599914" y="298" class="xs" text-anchor="middle">auto 2.33 m</text>
+<line x1="608.0" y1="56.0" x2="628.0" y2="56.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="636" y="60" class="xs" text-anchor="start">entries — one per (proxy, cell)</text>
+<line x1="608.0" y1="73.0" x2="628.0" y2="73.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="636" y="77" class="xs" text-anchor="start">pair tests inside buckets</text>
+<line x1="608.0" y1="90.0" x2="628.0" y2="90.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="636" y="94" class="xs" text-anchor="start">the cost model, a·entries + b·tests</text>
+<line x1="608.0" y1="107.0" x2="628.0" y2="107.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="636" y="111" class="xs" text-anchor="start">where the model is least</text>
+<text x="608" y="148" class="xs muted" text-anchor="start">§6 — 4000 proxies, sparse</text>
+<text x="608" y="168" class="xs muted" text-anchor="start">cell m</text>
+<text x="746" y="168" class="xs muted" text-anchor="end">entries</text>
+<text x="824" y="168" class="xs muted" text-anchor="end">tests</text>
+<text x="880" y="168" class="xs muted" text-anchor="end">ms</text>
+<line x1="608" y1="176.0" x2="886" y2="176.0" class="grid" stroke-width="1.0"/>
+<text x="608" y="193.0" class="xs" text-anchor="start">1</text>
+<text x="746" y="193.0" class="xs mono" text-anchor="end">60,434</text>
+<text x="824" y="193.0" class="xs mono" text-anchor="end">31,728</text>
+<text x="880" y="193.0" class="xs mono" text-anchor="end">0.680</text>
+<text x="608" y="210.0" class="xs" text-anchor="start">1.5</text>
+<text x="746" y="210.0" class="xs mono" text-anchor="end">30,656</text>
+<text x="824" y="210.0" class="xs mono" text-anchor="end">22,129</text>
+<text x="880" y="210.0" class="xs mono" text-anchor="end">0.393</text>
+<text x="608" y="227.0" class="xs" text-anchor="start">2</text>
+<text x="746" y="227.0" class="xs mono" text-anchor="end">20,752</text>
+<text x="824" y="227.0" class="xs mono" text-anchor="end">19,105</text>
+<text x="880" y="227.0" class="xs mono" text-anchor="end">0.242</text>
+<text x="608" y="244.0" class="xs" text-anchor="start">2.5</text>
+<text x="746" y="244.0" class="xs mono" text-anchor="end">16,109</text>
+<text x="824" y="244.0" class="xs mono" text-anchor="end">22,747</text>
+<text x="880" y="244.0" class="xs mono" text-anchor="end">0.186</text>
+<text x="608" y="261.0" class="xs" text-anchor="start">3</text>
+<text x="746" y="261.0" class="xs mono" text-anchor="end">13,314</text>
+<text x="824" y="261.0" class="xs mono" text-anchor="end">24,223</text>
+<text x="880" y="261.0" class="xs mono" text-anchor="end">0.192</text>
+<text x="608" y="278.0" class="xs" text-anchor="start">4</text>
+<text x="746" y="278.0" class="xs mono" text-anchor="end">10,324</text>
+<text x="824" y="278.0" class="xs mono" text-anchor="end">31,306</text>
+<text x="880" y="278.0" class="xs mono" text-anchor="end">0.212</text>
+<text x="608" y="295.0" class="xs" text-anchor="start">5</text>
+<text x="746" y="295.0" class="xs mono" text-anchor="end">8,917</text>
+<text x="824" y="295.0" class="xs mono" text-anchor="end">45,228</text>
+<text x="880" y="295.0" class="xs mono" text-anchor="end">0.266</text>
+<text x="608" y="312.0" class="xs" text-anchor="start">8</text>
+<text x="746" y="312.0" class="xs mono" text-anchor="end">6,509</text>
+<text x="824" y="312.0" class="xs mono" text-anchor="end">93,129</text>
+<text x="880" y="312.0" class="xs mono" text-anchor="end">0.556</text>
+<text x="50" y="408" class="xs muted" text-anchor="start">Halve the cell and each object claims eight times as many of them; double it and each cell holds eight times as many</text>
+<text x="50" y="425" class="xs muted" text-anchor="start">objects, whose pair loop is quadratic. Both wings go as the cube, so the minimum sits where a·E(s) = b·T(s) and moves</text>
+<text x="50" y="442" class="xs muted" text-anchor="start">as the SIXTH ROOT of the scene's density — which is why one formula that never looks at density can serve. Measured:</text>
+<text x="50" y="459" class="xs muted" text-anchor="start">the model's optimum is 3.30 m (2.13× the mean longest side) on this scene and 2.05 m (1.32×) on one four times denser.</text>
+<text x="50" y="476" class="xs muted" text-anchor="start">The two constants came out at 8.1 and 5.5 nanoseconds on BOTH scenes, because they are properties of the machine</text>
+<text x="50" y="493" class="xs muted" text-anchor="start">rather than of the crowd.</text>
+</svg>

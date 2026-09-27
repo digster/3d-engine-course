@@ -1,0 +1,489 @@
+  <h3>4.9 &nbsp; The sort, as a small file of its own</h3>
+
+  <p>
+    <code>draw_order.hpp</code> is forty lines of code and a page of argument. Two things about its
+    shape are worth pausing on.
+  </p>
+
+  <p>
+    <strong>It sorts keys, not draws.</strong> A <code>draw_key</code> is twelve bytes — an index, a
+    depth, a mode. <code>gpu_draw_item</code> is 140. Permuting the small records and then walking
+    the caller's array in the order they name keeps the sort's memory traffic proportional to the
+    number of objects rather than to the size of whatever a draw happens to be. It is the argument
+    Lesson 5.6 made about the ECS, arriving in a much smaller place.
+  </p>
+
+  <p>
+    <strong>The partition is one line, and it is the line most likely to be written backwards:</strong>
+  </p>
+
+  <pre><code class="lang-cpp">const auto first_blended = std::stable_partition(
+    keys.begin(), keys.end(),
+    [](const draw_key&amp; k) { return k.mode != alpha_mode::blend; });
+</code></pre>
+
+  <p>
+    <code>!= blend</code>, not <code>== opaque</code>. Masked geometry goes with the <em>opaque</em>
+    geometry, because a discarded fragment writes no depth and occludes nothing, so no order can be
+    wrong. Reading <code>alpha_mode</code> as a scale from solid to see-through puts every leaf of
+    every tree into a per-frame sort in exchange for precisely nothing.
+  </p>
+
+  <p>
+    <code>stable_partition</code> and not a two-pass copy, because the caller's opaque ordering is
+    worth preserving — it is usually the pipeline-sorted order Lesson 4.8 worked for, and undoing
+    it to make room for transparency would trade three pipeline binds for one per draw.
+  </p>
+
+  <p>
+    Finally, one counter, in the spirit of 4.8's <code>ideal_pipeline_binds</code>:
+    <code>out_of_order</code> counts adjacent pairs that arrived wrong, measured <em>before</em> the
+    sort runs. It is one pass rather than an O(n²) inversion count, so it is a <strong>lower
+    bound</strong> on the work and says so — in the harness's six-item list it reports 1 while two
+    entries actually have to move. What it answers exactly is <em>"did this frame's draw list
+    arrive already sorted"</em>, which is the question worth asking every frame: a scene whose
+    objects barely move usually answers yes, and that is when a cached, re-validated order starts to
+    look attractive.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete code listings</h2>
+
+  <p>
+    Four new files, and the harness. Every other file this lesson touches is listed in the manifest
+    below with what changed in it; the narrated excerpts in §4 are complete as shown.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Files touched by Lesson 6.11</caption>
+    <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/blend.hpp</code></td><td>new</td>
+          <td>The vocabulary: <code>alpha_mode</code>, <code>alpha_storage</code>,
+              <code>texel_sample</code>, <code>over</code></td></tr>
+      <tr><td><code>engine/src/gfx/blend.cpp</code></td><td>new</td>
+          <td>Compositing in linear light, and the deliberately wrong version beside it</td></tr>
+      <tr><td><code>engine/include/engine/gfx/draw_order.hpp</code></td><td>new</td>
+          <td><code>view_depth</code>, <code>draw_key</code>, <code>order_report</code></td></tr>
+      <tr><td><code>engine/src/gfx/draw_order.cpp</code></td><td>new</td>
+          <td>Stable partition, back-to-front sort, and what the sort was worth</td></tr>
+      <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td>
+          <td><code>alpha_storage</code> on <code>texture</code>; <code>sample_rgba</code></td></tr>
+      <tr><td><code>engine/src/gfx/texture.cpp</code></td><td>modified</td>
+          <td><code>fetch</code> carries alpha; <code>sample</code> becomes a wrapper</td></tr>
+      <tr><td><code>engine/include/engine/gfx/mipmap.hpp</code></td><td>modified</td>
+          <td><code>mip_options</code>, <code>coverage_of</code>,
+              <code>sample_mipped_rgba</code></td></tr>
+      <tr><td><code>engine/src/gfx/mipmap.cpp</code></td><td>modified</td>
+          <td>Alpha-weighted averaging; the coverage bisection</td></tr>
+      <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>modified</td>
+          <td><code>mode</code>, <code>alpha</code>, <code>alpha_cutoff</code>,
+              <code>needs_sorting()</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+          <td><code>fill_style</code> gains four transparency fields</td></tr>
+      <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+          <td><code>depth_probe</code>, <code>commit_transparent</code>, the alpha out-parameter</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gltf.hpp</code></td><td>modified</td>
+          <td><code>mode</code> and <code>alpha_cutoff</code> on the desc; two report counters</td></tr>
+      <tr><td><code>engine/src/gfx/gltf.cpp</code></td><td>modified</td>
+          <td><code>alphaMode</code> read at last, as a switch</td></tr>
+      <tr><td><code>engine/src/asset/asset_store.cpp</code></td><td>modified</td>
+          <td>Three fields across the desc→material boundary, unconverted</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_pipeline.hpp</code></td><td>modified</td>
+          <td><code>blend()</code>, <code>depth_write()</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_pipeline.cpp</code></td><td>modified</td>
+          <td>The eight fields of <code>SDL_GPUColorTargetBlendState</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
+          <td><code>blend_style</code>; nine pipelines indexed <code>[style][blend]</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+          <td>The nested creation loop; the ideal-bind matrix</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td><code>material_uniforms</code> 32 → 48 bytes; both fields derived</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+          <td>The fourth channel, <code>clip</code>, and alpha out of both encode paths</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>blend.cpp</code>, <code>draw_order.cpp</code></td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>--alpha</code>, <code>--no-sort</code>, <code>--blend-encoded</code></td></tr>
+      <tr><td><code>scratch/verify_611.cpp</code></td><td>new</td>
+          <td>49 checks, nine sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/blend.hpp@@
+
+  @@LISTING:engine/src/gfx/blend.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/draw_order.hpp@@
+
+  @@LISTING:engine/src/gfx/draw_order.cpp@@
+
+  @@LISTING:scratch/verify_611.cpp@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">6</span>Build &amp; run</h2>
+
+  <pre><code class="lang-shell"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>The transparency showcase — two overlapping panes of glass and a cutout leaf card:</p>
+
+  <pre><code class="lang-shell">./build/demos/gltf_view --alpha --pose 1.3</code></pre>
+
+  <p>
+    <code>--pose</code> picks where on the orbit the view sits; 1.3 puts the camera on the light's
+    side of the scene, which is where glass has something to be lit by. Then the two failures, each
+    one keystroke away:
+  </p>
+
+  <pre><code class="lang-shell">./build/demos/gltf_view --alpha --pose 1.3 --no-sort         # draw order ignored
+./build/demos/gltf_view --alpha --pose 1.3 --blend-encoded   # composite on stored bytes</code></pre>
+
+  <p>And the harness:</p>
+
+  <pre><code class="lang-shell">sh scratch/build_verify_611.sh</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    A green ellipse with a <strong>clean, hard edge</strong> and no card behind it — that is the
+    alpha test; the leaf texture is a disc of opaque green in a square of nothing, and the square is
+    genuinely absent rather than drawn in black. Two overlapping panes, one blue and one red, with
+    the scene visible through both and a distinctly different colour where they cross. The near
+    pane's colour dominates that crossing region.
+  </p>
+
+  <p>Then, on the console:</p>
+
+  <pre><code class="lang-shell">gltf_view: 8 object(s), 44 triangles
+  draw order    : 6 opaque (1 of them masked), 2 blended, 1 adjacent pair(s) out of order before sorting</code></pre>
+
+  <p>
+    Six in the unsorted pass and <em>one of them masked</em>, which is the leaf card sitting happily
+    among the opaque draws. Two blended, and one adjacent pair that arrived wrong — the panes are
+    built near-first, which is exactly the wrong order, so the sort has real work to do every frame.
+  </p>
+
+  <p>
+    Run it again with <code>--no-sort</code> and the crossing region changes colour: red over blue
+    instead of blue over red. It is not subtle once you know where to look, and it is completely
+    invisible if you do not — which is the reason the flag exists. <strong>11,761 pixels of 129,600
+    differ</strong> between the two.
+  </p>
+
+  <p>
+    With <code>--blend-encoded</code> the whole picture is <em>darker</em> wherever glass covers
+    anything, and nowhere else. <strong>27,643 pixels differ</strong>, and every one of them is a
+    pixel a pane of glass touched.
+  </p>
+
+  <p>The harness ends:</p>
+
+  <pre><code class="lang-shell">== H  CPU vs GPU — WHERE THE BLENDER SITS ==
+  half-coverage white over black, by the HARDWARE blender:
+    _SRGB target, shader does not encode : code 188
+    UNORM target, shader encodes         : code 127
+
+49 checks, 0 failures</code></pre>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>Only one pane of glass is visible, and the others have vanished</h3>
+    <p><strong>Symptom.</strong> Several transparent objects, and exactly one draws. The others are
+       gone completely, not dim.</p>
+    <p><strong>Cause.</strong> Depth writes are still enabled on the blended pipeline. The first
+       transparent surface drawn wrote depth across its whole area, and everything behind it now
+       fails the test.</p>
+    <p><strong>Fix.</strong> <code>desc.depth_write(false)</code> on the GPU side; on the CPU side,
+       <code>depth_probe</code> instead of <code>depth_test</code>. Note that this reads as a
+       culling bug or a failed load, not as a depth bug — which is why it is worth recognising by
+       shape.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Blending is configured perfectly and changes nothing</h3>
+    <p><strong>Symptom.</strong> Every blend factor and op is set, the material's alpha is 0.5, and
+       the surface draws fully opaque.</p>
+    <p><strong>Cause.</strong> <code>enable_blend</code> is false. Every other field of
+       <code>SDL_GPUColorTargetBlendState</code> is ignored without it, and there is no error,
+       because a state you have not enabled is a legal thing to describe.</p>
+    <p><strong>Fix.</strong> The enable. And generalise the lesson: 6.10 hit the same shape twice
+       (<code>max_lod = 0</code>, <code>max_anisotropy</code> without
+       <code>enable_anisotropy</code>). <strong>When a feature does nothing at all, suspect an
+       enable or a clamp before suspecting the arithmetic.</strong></p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Cutouts have a dark outline that gets worse with distance</h3>
+    <p><strong>Symptom.</strong> Leaves, fences and decals are edged in black. It is barely visible
+       up close and unmistakable a few metres away.</p>
+    <p><strong>Cause.</strong> Straight-alpha filtering, worsened at every mip level. The
+       transparent texels are black, and both the bilinear filter and the downsample average that
+       black into the visible edge at full weight (§3.4).</p>
+    <p><strong>Fix.</strong> Premultiply the image, or set <code>mip_options::alpha_weighted</code>.
+       Distinguish it from a <em>lighting</em> problem by the tell: the darkening follows the alpha
+       edge exactly, and is absent in the interior of the cutout where every neighbour is
+       opaque.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Foliage thins out as the camera pulls back</h3>
+    <p><strong>Symptom.</strong> A tree loses leaves with distance. Walk toward it and they come
+       back.</p>
+    <p><strong>Cause.</strong> Averaging and thresholding do not commute (§3.5). Every mip level's
+       alpha has been pulled toward its local mean, so a fixed cutoff rejects a growing fraction.</p>
+    <p><strong>Fix.</strong> <code>mip_options::coverage_cutoff</code>, set to the <em>same</em>
+       number the renderer will test against. Setting it to a different one preserves a coverage
+       nobody is going to measure.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Transparent surfaces flicker between two appearances as the camera moves</h3>
+    <p><strong>Symptom.</strong> Two coplanar or near-coplanar transparent objects swap which is in
+       front, every few frames, and the swap is visible as a colour change.</p>
+    <p><strong>Cause.</strong> Two entries with equal or nearly-equal sort depths and an
+       <em>unstable</em> sort, which is free to return either order and does — as their depths
+       wobble in the last float bit.</p>
+    <p><strong>Fix.</strong> <code>std::stable_sort</code>. It cannot make a tie correct, but it
+       makes it consistent, which turns a flicker into a fixed (and possibly wrong) choice — a much
+       easier thing to see and to fix at the content level.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A hand-written GPU harness segfaults on exit, after every check has passed</h3>
+    <p><strong>Symptom.</strong> All the output is correct; the process dies during teardown.</p>
+    <p><strong>Cause.</strong> An explicit <code>gpu.destroy()</code> at the end of a scope, with
+       shaders, meshes and samplers declared <em>after</em> the device. C++ destroys in reverse
+       declaration order, which is already exactly right — device declared first, so destroyed
+       last. Calling <code>destroy()</code> by hand runs the device's teardown in the
+       <em>middle</em> of that sequence, and the shader destructors then release handles on a freed
+       device.</p>
+    <p><strong>Fix.</strong> Delete the explicit teardown and let RAII do what it was already
+       doing. <strong>An explicit <code>destroy()</code> just before a scope ends is almost always
+       a sign that somebody did not trust the ordering they already had.</strong> This one cost a
+       real debugging session in this lesson.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>An alpha test at the boundary behaves differently in two places</h3>
+    <p><strong>Symptom.</strong> <code>coverage_of</code> reports a coverage that does not match
+       what the renderer draws, by a texel or two around the edge.</p>
+    <p><strong>Cause.</strong> One of them uses <code>&gt;</code> and the other
+       <code>&gt;=</code>. A cutoff is a comparison and comparisons have edges.</p>
+    <p><strong>Fix.</strong> Pick one — ours discards on <code>a &lt; cutoff</code>, so the boundary
+       belongs to the visible side — and make the measurement use the same one. A coverage number
+       measured with a different comparison from the renderer's describes an image the renderer
+       never draws.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>8.1 — Summon the wrong composite <span class="tag">guided</span></h3>
+    <p>
+      Run the demo with <code>--alpha --pose 1.3</code> and then again with
+      <code>--blend-encoded</code>, and diff the two images. Predict, before you look, which pixels
+      differ. Then verify the 42.9% number by hand: composite white over black at half coverage
+      both ways and decode the two results.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        Only pixels a blended surface covered can differ, because <code>blend_encoded</code> is read
+        exactly once, in <code>commit_transparent</code>. If the leaf card's pixels differ too, the
+        masked path is blending when it should be testing.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.2 — Make the halo <span class="tag">guided</span></h3>
+    <p>
+      Build a 64×64 cutout whose transparent texels are bright <em>magenta</em> rather than black,
+      filter across the edge with straight alpha, and describe the artefact. Then set the texture's
+      <code>alpha_storage</code> to <code>premultiplied</code> (premultiplying the texels first) and
+      confirm it disappears.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        Magenta is worth using precisely because it is not black: it proves that the halo is not
+        "darkening" but "whatever colour the invisible texels happen to hold", which is a much more
+        useful mental model — and it is why some assets have a <em>bright</em> fringe.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.3 — The intersecting quads, for real <span class="tag">engine</span></h3>
+    <p>
+      Add two blended quads to the demo that actually intersect, and confirm that neither draw
+      order produces a correct picture. Then implement the cheapest genuine improvement: split each
+      quad along the intersection line into two, and sort the four pieces.
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        The split is a BSP-style operation and it is exactly what the Quake-era engines did with
+        transparent surfaces. Note what it costs: geometry that depends on the other geometry in
+        the scene, which cannot be built once at load time if either object moves. That cost is why
+        OIT exists, and doing the split by hand once is the most convincing possible argument for
+        it.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.4 — A cutout shadow <span class="tag">engine</span></h3>
+    <p>
+      The shadow pass ignores alpha entirely, so the leaf card casts a solid rectangular shadow and
+      the glass panes cast opaque ones. Fix the first: make <code>depth_only</code> fills honour
+      <code>alpha_mode::mask</code>, so a chain-link fence casts a chain-link shadow. Then decide
+      what a <em>blended</em> surface should cast, and defend your answer.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The first half is small: <code>depth_only</code> currently skips the fragment entirely, and
+        a masked shadow needs the alpha — so it needs the texture fetch but nothing else in the
+        shading equation. The second half has no clean answer, which is the point: real engines
+        either treat blended geometry as casting nothing (cheap, and glass mostly does not cast a
+        hard shadow) or reach for coloured/translucent shadow maps, which is a different data
+        structure.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.5 — Sort by the right point <span class="tag">engine</span></h3>
+    <p>
+      <code>order_draws</code> sorts by the object's <em>origin</em>. Find a scene arrangement where
+      that is visibly wrong, then change the key to use the object's bounding-box centre (Lesson
+      6.8's <code>aabb</code> is right there) and confirm the fix. Report what
+      <code>out_of_order</code> did in both cases.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        A long thin object whose origin is at one end is the easy case — a wall of glass whose pivot
+        is at its left edge. The deeper point is that <em>no</em> single point is right for an
+        object with extent, which is the same limitation as §3.6's ceiling wearing a smaller hat.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; next</h2>
+
+  <p>The engine gained four capabilities and lost one comfortable assumption.</p>
+
+  <ul>
+    <li>
+      <strong>Alpha masking</strong>, on both renderers, with the depth write moved after the
+      fragment — the software rasterizer's version of the constraint that costs hardware its
+      early-Z.
+    </li>
+    <li>
+      <strong>Alpha blending</strong>, on both renderers, composited in linear light. Nine
+      pipelines where there were three, because a second axis of state multiplies rather than adds.
+    </li>
+    <li>
+      <strong>Premultiplied alpha</strong>, as a property of image <em>data</em> beside
+      <code>texel_space</code>, plus a coverage-preserving mip chain — the two halves of "what
+      happens when you average a half-covered texel".
+    </li>
+    <li>
+      <strong>A per-frame back-to-front sort</strong>, bucketed so that masked geometry stays out
+      of it, and with the ceiling of the whole approach named rather than glossed.
+    </li>
+    <li>
+      And the glTF importer's <strong>last silent gap</strong> is closed: <code>alphaMode</code> and
+      <code>alphaCutoff</code> are read, so a downloaded asset's foliage is foliage.
+    </li>
+  </ul>
+
+  <p>
+    The assumption we lost is Lesson 3.1's, and it is worth stating as a loss because it was doing
+    so much quiet work: <strong>the z-buffer is a sort, and it only sorts things that stop the
+    light.</strong> Everything opaque in this course has been order-free for eight lessons. From
+    here on, some of the frame is not.
+  </p>
+
+  <p>
+    Three numbers to carry forward. Half-coverage white over black is code <strong>188</strong> in
+    linear light and code <strong>127</strong> if you let the hardware lerp sRGB codes — the same
+    <strong>42.2%</strong> shortfall 6.10 measured in a naive mip chain, because it is the same
+    arithmetic wearing a different feature. An alpha-tested fill runs at <strong>1.05×</strong> an
+    opaque one while writing 36% of the pixels, because every discarded fragment was fully shaded
+    first. And one composite costs <strong>3.14×</strong> a byte lerp on the CPU, for a conversion a
+    GPU with an <code>_SRGB</code> target performs for nothing.
+  </p>
+
+  <p>
+    <strong>Next: 6.12 — HDR and Tonemapping.</strong> This lesson clamped every composite into
+    [0, 1] because an 8-bit target has nowhere to put the excess, and said so in
+    <code>linear_rgb</code>'s own doc comment back in Lesson 1.6. 6.12 is where that stops being
+    true — and it arrives immediately after transparency for a reason worth noticing in advance:
+    blending is the one operation whose result depends on <em>what is already in the target</em>,
+    so the day the target stops being 8-bit sRGB is the day every blend factor has to be re-read
+    with a clear head.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Porter, T. and Duff, T., "Compositing Digital Images", SIGGRAPH 1984.</strong> The
+      original, and unusually readable for a foundational paper. The whole algebra of compositing
+      operators — <code>over</code> is one of twelve — and the argument for premultiplied storage,
+      made in 1984 and still the argument.
+    </li>
+    <li>
+      <strong>Castaño, I., "Computing Alpha Mipmaps" (2010).</strong> The coverage-preserving
+      rescale in §3.5, including the bisection. Short, practical, and the source everybody cites
+      when foliage stops dissolving.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §5.5 "Transparency, Alpha, and Compositing".</strong>
+      The standard treatment, including the order-independent techniques this lesson names and does
+      not build — weighted blended OIT (§5.5.2) and depth peeling.
+    </li>
+    <li>
+      <strong>McGuire, M. and Bavoil, L., "Weighted Blended Order-Independent Transparency",
+      JCGT 2013.</strong> The most practical OIT method for real-time work, and the one to read
+      first if §3.6's ceiling is in your way.
+    </li>
+    <li>
+      <strong>glTF 2.0 specification, §5.19 "Material".</strong> <code>alphaMode</code>,
+      <code>alphaCutoff</code> and the exact wording of the double-sided normal rule. Worth reading
+      the three paragraphs directly rather than through an importer.
+    </li>
+    <li>
+      <strong>SDL3 wiki: <code>SDL_GPUColorTargetBlendState</code>.</strong> The eight fields, and
+      the sentence about <code>enable_color_write_mask</code> that explains why we leave the mask
+      alone.
+    </li>
+    <li>
+      <strong>Gritz, L. and d'Eon, E., "The Importance of Being Linear", GPU Gems 3, ch. 24.</strong>
+      Lesson 6.1 recommended this and it is worth a second visit now that something blends: the
+      chapter's compositing section is precisely §3.2 of this lesson.
+    </li>
+  </ul>

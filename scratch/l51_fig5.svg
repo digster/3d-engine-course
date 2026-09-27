@@ -1,0 +1,60 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="l51f5-t l51f5-d">
+  <title id="l51f5-t">The test that had to exist first</title>
+  <desc id="l51f5-d">Seven numbered steps from writing the characterization test through two verified transformations, and the seven pinned frames with their hashes.</desc>
+  <defs>
+    <marker id="e-i-l51f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l51f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l51f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="20" y="20" class="sm">The order of operations, and it is the whole method</text>
+<rect x="20" y="40" width="10" height="20" fill="#f0961e"/>
+<text x="40" y="54" class="xs mono">1. write --shot</text>
+<text x="230" y="54" class="xs muted">before a single file moved</text>
+<rect x="20" y="66" width="10" height="20" fill="#f0961e"/>
+<text x="40" y="80" class="xs mono">2. capture</text>
+<text x="230" y="80" class="xs muted">7 frames, 1,209,600 bytes, hash 905BF27E</text>
+<rect x="20" y="92" width="10" height="20" fill="#5082e6"/>
+<text x="40" y="106" class="xs mono">3. MOVE 2,239 lines</text>
+<text x="230" y="106" class="xs muted">engine/, demos/, new headers</text>
+<rect x="20" y="118" width="10" height="20" fill="#5ac878"/>
+<text x="40" y="132" class="xs mono">4. run --shot</text>
+<text x="230" y="132" class="xs muted">byte-identical</text>
+<rect x="20" y="144" width="10" height="20" fill="#5082e6"/>
+<text x="40" y="158" class="xs mono">5. REDESIGN the API</text>
+<text x="230" y="158" class="xs muted">15 parameters &#8594; 8</text>
+<rect x="20" y="170" width="10" height="20" fill="#5ac878"/>
+<text x="40" y="184" class="xs mono">6. run --shot</text>
+<text x="230" y="184" class="xs muted">byte-identical</text>
+<rect x="20" y="196" width="10" height="20" fill="#5ac878"/>
+<text x="40" y="210" class="xs mono">7. verify_50, which LINKS</text>
+<text x="230" y="210" class="xs muted">byte-identical, from outside the demo</text>
+<text x="20" y="234" class="xs t-hi">Two verifications, not one: a move that changes nothing, then a change that moves nothing.</text>
+<text x="20" y="250" class="xs muted">Either alone would have left the other unaccounted for.</text>
+<text x="20" y="262" class="xs muted">the seven pinned frames, and what each one exists to reach:</text>
+<rect x="20.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="66.0" y="288" class="xs" text-anchor="middle">solids</text>
+<text x="66.0" y="302" class="xs mono muted" text-anchor="middle">0C2ABCDE</text>
+<rect x="118.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="164.0" y="288" class="xs" text-anchor="middle">cycle</text>
+<text x="164.0" y="302" class="xs mono muted" text-anchor="middle">A60DAAC1</text>
+<rect x="216.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="262.0" y="288" class="xs" text-anchor="middle">intersect</text>
+<text x="262.0" y="302" class="xs mono muted" text-anchor="middle">481B36C3</text>
+<rect x="314.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="360.0" y="288" class="xs" text-anchor="middle">z-fight</text>
+<text x="360.0" y="302" class="xs mono muted" text-anchor="middle">941E7023</text>
+<rect x="412.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="458.0" y="288" class="xs" text-anchor="middle">floor</text>
+<text x="458.0" y="302" class="xs mono muted" text-anchor="middle">C650A746</text>
+<rect x="510.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="556.0" y="288" class="xs" text-anchor="middle">model</text>
+<text x="556.0" y="302" class="xs mono muted" text-anchor="middle">81727C17</text>
+<rect x="608.0" y="272" width="92.0" height="42" rx="2" class="fill-soft grid" stroke-width="1"/>
+<text x="654.0" y="288" class="xs" text-anchor="middle">near plane</text>
+<text x="654.0" y="302" class="xs mono muted" text-anchor="middle">7A140628</text>
+<text x="20" y="334" class="xs">The seventh was added because the first six all reported <tspan class="mono">straddle = 0</tspan>: <tspan class="t-hi">the near-plane clipper was never being called</tspan>.</text>
+<text x="20" y="350" class="xs muted">A characterization test that does not reach a branch cannot pin it. Frame 6 puts the camera on the floor: 8 triangles straddle, 32 in, 36 out.</text>
+</svg>

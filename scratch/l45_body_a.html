@@ -1,0 +1,707 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-04-first-triangle.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.4 — The First Triangle</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-06-uniforms.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.6 — Uniform Data and the Matrix Upload</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.5</div>
+    <h1>Vertex Buffers and Layouts</h1>
+    <p class="deck">
+      Three vertices typed into the source became a triangle. Now: 1,225 vertices read off a
+      disk, each carrying a position, a normal and a texture coordinate, arranged in memory the
+      way the hardware wants them, described by three numbers that nothing checks — and drawn
+      seven times without seven copies. This is the lesson where the engine's geometry finally
+      lives on the device.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-04-first-triangle.html">4.4 — The First Triangle</a>,
+          <a href="04-01-how-gpus-work.html">4.1 — How GPUs Actually Work</a>,
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="02-12-wireframe-mesh.html">2.12 — Meshes and Indices</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_mesh.hpp</code>, <code>src/gfx/gpu_mesh.cpp</code>,
+            <code>src/gfx/gpu_buffer.hpp</code>, <code>src/gfx/gpu_buffer.cpp</code>,
+            <code>src/gfx/gpu_pipeline.hpp</code>, <code>src/gfx/gpu_pipeline.cpp</code>,
+            <code>src/gfx/gpu_shader.hpp</code>, <code>src/gfx/gpu_shader.cpp</code>,
+            <code>shaders/mesh.vert.hlsl</code>, <code>shaders/mesh.frag.hlsl</code>,
+            <code>src/main.cpp</code>, <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Seven lit, spinning tori drawn by the GPU from one vertex buffer, one index buffer
+            and one draw call — with the layout checked against the shader's own reflection, and
+            every claim about bytes and cache lines measured rather than asserted.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…describe a vertex layout with pitch, offset and format, and compute by hand the byte
+          address any attribute of any vertex will be fetched from.</li>
+      <li>…say why a vertex element format answers <em>two</em> questions with two different
+          answers — how many bytes it occupies and what type the shader receives — and use the
+          gap between them to make a vertex 43% smaller for free.</li>
+      <li>…choose between interleaved and separate attribute arrays, with a reason that survives
+          being asked "for which pass?".</li>
+      <li>…check a C++ vertex layout against the shader's own reflection, and state precisely
+          which mistakes that catches and which it cannot.</li>
+      <li>…recognise a wrong pitch and a wrong offset from the shape of the wreckage they
+          produce, without a debugger.</li>
+      <li>…use an index buffer, and quantify what it saves on your own mesh in both bytes and
+          vertex-shader invocations.</li>
+      <li>…draw one mesh many times with per-instance data, and explain why instancing costs one
+          enum value rather than a new shader stage.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-tape">The buffer is a tape; the layout is a ruler</a></li>
+          <li><a href="#intuition-arrange">Two ways to arrange the same bytes</a></li>
+          <li><a href="#intuition-twice">A contract written in two languages</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-address">The address arithmetic, with real numbers</a></li>
+          <li><a href="#theory-format">What a format is — and the two questions it answers</a></li>
+          <li><a href="#theory-location">Locations, and who checks them</a></li>
+          <li><a href="#theory-widening">Supplying less than the shader asks for</a></li>
+          <li><a href="#theory-indices">Indices: the arithmetic of sharing</a></li>
+          <li><a href="#theory-rate">Vertex rate and instance rate</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-vertex">The interleaved vertex, and the layout beside it</a></li>
+          <li><a href="#impl-mesh">A mesh on the device</a></li>
+          <li><a href="#impl-check">Reading the shader's half of the contract</a></li>
+          <li><a href="#impl-pitch">Watching a wrong pitch</a></li>
+          <li><a href="#impl-index">Indexed against expanded, in bytes</a></li>
+          <li><a href="#impl-instance">Twenty-eight bytes a frame</a></li>
+          <li><a href="#impl-shrink">Making Lesson 4.4's triangle 43% smaller</a></li>
+          <li><a href="#impl-frame">The frame, counted</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the geometry Lesson 4.4 drew, in its entirety:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp, Lesson 4.4</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr gpu_vertex k_triangle[3] = {
+    {  0.15f, -0.55f, 0.0f,  0.92f, 0.35f, 0.31f, 1.0f },
+    {  0.85f, -0.55f, 0.0f,  0.35f, 0.82f, 0.47f, 1.0f },
+    {  0.50f,  0.55f, 0.0f,  0.37f, 0.59f, 0.92f, 1.0f },
+};</code></pre>
+  </figure>
+
+  <p>
+    Three vertices. Eighty-four bytes. Already in clip space, so no matrix was needed; each
+    carrying a colour, so no texture was needed; typed by hand, so the layout could hardly be
+    wrong. Every one of those conveniences was deliberate — a first triangle should be about
+    getting a pipeline built, not about anything else — and every one of them is now gone.
+  </p>
+
+  <p>
+    <code>assets/torus.obj</code> has been sitting in this repository since Lesson 3.5. It is
+    <strong>1,225 vertices and 2,304 triangles</strong>. Each vertex carries a position, a
+    normal and a texture coordinate: <strong>39,200 bytes</strong> of geometry, none of it
+    written by us, all of it in model space. Module 3 drew it on the CPU at a few frames a
+    second. Getting it onto the GPU raises four questions that three hand-typed vertices never
+    could:
+  </p>
+
+  <ol>
+    <li>
+      <strong>How are the bytes arranged?</strong> Lesson 3.5 stores positions, normals and uvs
+      in three separate arrays. The hardware fetches a vertex as a unit. Those are not the same
+      shape, and something has to convert — which raises the question of which shape is right,
+      which turns out to depend on what you are about to do with it.
+    </li>
+    <li>
+      <strong>How does the shader know what it is looking at?</strong> A vertex buffer is bytes.
+      There is nothing in it that says where one vertex ends and the next begins, or which of
+      those bytes are a normal. You tell the pipeline, in three numbers per attribute, and the
+      hardware believes you.
+    </li>
+    <li>
+      <strong>What happens to the sharing?</strong> Our torus has 2,304 triangles naming 6,912
+      corners between them, and only 1,225 distinct vertices to name. Lesson 2.12 built the
+      index array for exactly this reason. Does the GPU have one?
+    </li>
+    <li>
+      <strong>How do we draw it more than once?</strong> A scene with seven tori in it should
+      not need seven copies of the torus.
+    </li>
+  </ol>
+
+  <p>
+    And there is a fifth question, which is really the first one wearing a disguise. Lesson 4.4
+    ended by observing that the vertex is declared twice — once in HLSL and once in C++ — with
+    nothing checking that the halves agree, and left the cross-check as an exercise. That was
+    tolerable for two attributes typed a screen apart. At six attributes across two buffers it
+    is not tolerable at all, because <em>every one of the mistakes you can make here creates a
+    pipeline successfully and draws something.</em> We measured that in Lesson 4.4 and we will
+    measure it again, more thoroughly, in a moment: of six broken layouts, SDL refuses exactly
+    one.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Not yet</span>
+    <p>
+      <strong>What this lesson does not have.</strong> A uniform buffer. The camera in
+      <code>shaders/mesh.vert.hlsl</code> is a pile of <code>static const</code> floats, and the
+      per-instance rotation is a cosine and a sine rather than a matrix, because a matrix has to
+      arrive from somewhere and that somewhere is Lesson 4.6. Nothing about the projection is
+      simplified — it is Lesson 2.10's matrix written out as arithmetic, line for line — but the
+      camera cannot move until next lesson. There is also no depth test until Lesson 4.7, which
+      is why the tori are laid out so they barely overlap.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-tape">2.1 The buffer is a tape; the layout is a ruler</h3>
+
+  <p>
+    Forget graphics for a paragraph. You are handed a roll of paper tape with numbers printed
+    along it, and told it contains a list of records. You cannot read it. Not because the numbers
+    are unclear — because <em>nothing on the tape says where a record starts</em>. It could be a
+    list of thirty-two-byte records or a list of eight-byte records; the bytes are identical
+    either way.
+  </p>
+
+  <p>
+    So you are given three more things, and now you can read it: how far apart the records are
+    (call it the <strong>pitch</strong>), where within a record each field sits (its
+    <strong>offset</strong>), and how to interpret the bytes at that spot (its
+    <strong>format</strong>). With those, reading field <em>f</em> of record <em>i</em> is one
+    line of arithmetic:
+  </p>
+
+  <div class="eq">
+    \[ \text{address} = \text{base} + i \times \text{pitch} + \text{offset}_f \]
+  </div>
+
+  <p class="eq-plain">
+    In words: start at the buffer, step forward <em>i</em> whole records, then step forward again
+    to where this field lives inside the record.
+  </p>
+
+  <p>
+    That is the entire mechanism. A GPU's vertex fetch is that formula, in fixed-function
+    silicon, run once per attribute per vertex — and the three numbers it uses are exactly the
+    three you hand to <code>SDL_GPUVertexBufferDescription</code> and
+    <code>SDL_GPUVertexAttribute</code>. There is no validation step in the middle where the
+    hardware notices that your pitch is wrong, because <em>there is nothing to notice against</em>.
+    Any pitch produces addresses; any addresses produce bytes; any bytes produce floats. The
+    picture is the only place the mistake becomes visible, and §4.4 below shows exactly what it
+    looks like when it does.
+  </p>
+
+  <h3 id="intuition-arrange">2.2 Two ways to arrange the same bytes</h3>
+
+  <p>
+    Our torus has 1,225 vertices, each with a position (three floats), a normal (three floats)
+    and a texture coordinate (two floats). That is 39,200 bytes however you arrange them, and
+    there are two sensible arrangements.
+  </p>
+
+  <p>
+    <strong>Interleaved</strong> puts one vertex's data together: position, normal, uv, then the
+    next vertex's position, and so on. <strong>Separate</strong> — sometimes called planar, or
+    "structure of arrays" — puts one <em>attribute's</em> data together: every position, then
+    every normal, then every uv. Lesson 3.5 chose separate arrays, and said at the time that
+    Module 4 would revisit the decision with a diagram. Here is the diagram.
+  </p>
+
+@@FIG_LAYOUT@@
+
+  <p>
+    The argument for interleaving is the one Lesson 4.1 spent a whole section measuring: memory
+    arrives in <strong>cache lines</strong>, sixty-four bytes at a time, and you pay for the line
+    whether you use all of it or not. A vertex shader reads a whole vertex. Interleaved, that
+    whole vertex is thirty-two contiguous bytes — half a line — so it arrives in one transaction
+    and the neighbouring vertex arrives free with it. Separate, the same vertex is twelve bytes
+    here, twelve bytes a hundred kilobytes away, and eight bytes somewhere else again: three
+    addresses, three transactions, and at worst five lines because a twelve-byte field can
+    straddle a boundary.
+  </p>
+
+  <p>
+    That is the bottom-left number in the figure, and it is measured rather than reasoned:
+    <strong>1 line per vertex interleaved, up to 5 separate.</strong>
+  </p>
+
+  <p>
+    And then the bottom-right number, which is why this is a genuine trade and not a rule.
+    Consider a pass that reads <em>only positions</em> — a shadow map, or a depth pre-pass, both
+    of which arrive in Module 6. Sweeping every position touches
+    <strong>613 cache lines</strong> in the interleaved buffer, because every line dragged in
+    carries twelve useful bytes and twenty wasted ones, and <strong>230</strong> in the separate
+    one, where every byte of every line is a position. Separate wins that pass by
+    <strong>2.7×</strong>.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The honest answer</span>
+    <p>
+      <strong>So which?</strong> Interleaved, for this engine, for now — because every pass we
+      have reads the whole vertex, and the layout that is right for the common case is the right
+      default. Real engines split the difference: a very common production layout is
+      <em>position in its own buffer, everything else interleaved in a second</em>, which makes
+      the depth-only pass fast without making the main pass slow. We will not build that until
+      there is a depth pass to justify it — but notice that SDL_GPU already supports it with no
+      new concepts at all, because a "separate" layout is just more than one
+      <code>vertex_buffer</code> slot, and Lesson 4.5's instance buffer is already the second
+      slot.
+    </p>
+  </div>
+
+  <h3 id="intuition-twice">2.3 A contract written in two languages</h3>
+
+  <p>
+    Here is the sentence Lesson 4.4 ended on, and it is worth restating because everything in
+    §3.3 follows from it:
+  </p>
+
+  <blockquote>
+    <p>
+      The vertex is declared twice, in two languages, and nothing checks that they agree.
+    </p>
+  </blockquote>
+
+  <p>
+    In HLSL you write <code>float3 position : TEXCOORD0</code>. In C++ you write
+    <code>FLOAT3 at offset 0, location 0</code>. The two are joined by the number
+    <strong>0</strong> and by nothing else — not by a name, not by a type, not by a header they
+    both include. If you renumber the semantics in the shader and forget the C++, the wrong
+    attribute arrives, silently, at full frame rate.
+  </p>
+
+  <p>
+    Except that there <em>is</em> a third document, and we have been generating it since Lesson
+    4.3 without using this half of it. When <code>shadercross</code> compiles a shader it also
+    emits a JSON reflection, and Lesson 4.3 read four numbers out of it — the resource counts SDL
+    demands. The same file has been carrying the vertex inputs all along:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">build/shaders/mesh.vert.json</span>
+      <span class="tag">generated</span>
+      <span class="lang" data-lang="json">JSON</span>
+    </figcaption>
+    <pre><code class="lang-json">{ "samplers": 0, "storage_textures": 0, "storage_buffers": 0, "uniform_buffers": 0,
+  "inputs": [{ "name": "input.position",  "type": "float3", "location": 0 },
+             { "name": "input.normal",    "type": "float3", "location": 1 },
+             { "name": "input.uv",        "type": "float2", "location": 2 },
+             { "name": "input.placement", "type": "float4", "location": 3 },
+             { "name": "input.spin",      "type": "float2", "location": 4 },
+             { "name": "input.tint",      "type": "float4", "location": 5 }],
+  "outputs": [ ... ] }</code></pre>
+  </figure>
+
+  <p>
+    That is the shader's half of the contract, in machine-readable form, produced by the compiler
+    that read the actual HLSL. Comparing it against our half is a loop over two small arrays. It
+    is the whole of <code>pipeline_desc::check_layout</code>, it settles exercise 4.4.4, and it
+    is the only thing in this engine that will ever notice a renumbered semantic.
+  </p>
+
+@@FIG_CONTRACT@@
+
+  <p>
+    Read the lower half of that figure carefully, because it is the reason the upper half
+    matters. Six layouts were built and handed to <code>SDL_CreateGPUGraphicsPipeline</code>.
+    Five of them are wrong. <strong>SDL refused exactly one</strong> — the layout whose shader
+    input nothing supplies, where Metal's compiler produced a genuinely excellent message
+    ("Vertex attribute input_uv(2) is missing from the vertex descriptor"). The other four were
+    created without a word and drew something.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-address">3.1 The address arithmetic, with real numbers</h3>
+
+  <p>
+    Take our interleaved vertex: pitch 32, position at offset 0, normal at offset 12, uv at
+    offset 24. Suppose the buffer begins at address <em>B</em>, and the vertex shader is running
+    for vertex 700. Where does its normal come from?
+  </p>
+
+  <div class="eq">
+    \[ B + 700 \times 32 + 12 \;=\; B + 22{,}400 + 12 \;=\; B + 22{,}412 \]
+  </div>
+
+  <p class="eq-plain">
+    Base, plus seven hundred whole vertices at thirty-two bytes each, plus twelve bytes into that
+    vertex. Twelve bytes are read from there and interpreted as three consecutive
+    <code>float</code>s, because the format says <code>FLOAT3</code>.
+  </p>
+
+  <p>
+    Now make one mistake — declare the pitch as 28 instead of 32 — and run the same arithmetic:
+  </p>
+
+  <div class="eq">
+    \[ B + 700 \times 28 + 12 \;=\; B + 19{,}600 + 12 \;=\; B + 19{,}612 \]
+  </div>
+
+  <p class="eq-plain">
+    Base, plus seven hundred vertices at <em>twenty-eight</em> bytes each, plus twelve.
+  </p>
+
+  <p>
+    That is <strong>2,800 bytes early</strong>, which is eighty-seven and a half vertices back.
+    Not eighty-seven: <em>eighty-seven and a half</em>. The address does not land on a vertex
+    boundary at all, so the three floats read as a normal are the last two floats of one vertex's
+    normal and the first float of its uv. The result is a perfectly valid <code>float3</code>
+    made of pieces of two different fields of the wrong vertex, and the hardware has no way to
+    know and no reason to care.
+  </p>
+
+  <p>
+    Two things follow, and both matter for diagnosis. First, <strong>the error accumulates</strong>:
+    vertex 1 is four bytes off, vertex 700 is 2,800 bytes off, vertex 1,224 is 4,896 bytes off.
+    The mesh does not shift — it disintegrates progressively, worse the further into the buffer
+    you look. Second, <strong>the first vertex is always right</strong>, because <em>i</em> is
+    zero and the pitch never multiplies anything. A triangle drawn from three vertices at the
+    very start of a buffer can look perfectly correct with a completely wrong pitch, which is
+    exactly how this bug survives a small test and appears on a real mesh.
+  </p>
+
+  <h3 id="theory-format">3.2 What a format is — and the two questions it answers</h3>
+
+  <p>
+    <code>SDL_GPUVertexElementFormat</code> looks like a type name and behaves like two. Ask it
+    "how many bytes does this attribute occupy in the buffer?" and ask it "what type does the
+    shader receive?", and for some formats you get two different answers. That gap is not a wart;
+    it is one of the most useful things fixed-function hardware still does for free.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">A representative slice of <code>SDL_GPUVertexElementFormat</code>. The last two rows
+      are where the two questions come apart.</caption>
+    <thead>
+      <tr><th>format</th><th>bytes in the buffer</th><th>type in the shader</th><th>what the hardware does on the way</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>FLOAT3</code></td><td>12</td><td><code>float3</code></td><td>nothing</td></tr>
+      <tr><td><code>FLOAT4</code></td><td>16</td><td><code>float4</code></td><td>nothing</td></tr>
+      <tr><td><code>UBYTE4</code></td><td>4</td><td><code>uint4</code></td><td>nothing — these are integers and stay integers</td></tr>
+      <tr><td><code>UBYTE4_NORM</code></td><td><strong>4</strong></td><td><strong><code>float4</code></strong></td><td>divides each byte by 255, giving 0…1</td></tr>
+      <tr><td><code>SHORT2_NORM</code></td><td>4</td><td><code>float2</code></td><td>divides each short by 32,767, giving −1…1</td></tr>
+      <tr><td><code>HALF4</code></td><td>8</td><td><code>float4</code></td><td>expands 16-bit floats to 32-bit</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Worked example.</strong> A colour channel stored as the byte <code>235</code> arrives
+    in the shader as 235 ÷ 255 = <strong>0.921569</strong>. Lesson 4.4's triangle asked for
+    0.92. The difference is 0.0015 — and since the render target is itself eight bits per
+    channel, both values write the code 235 at full brightness. Four bytes of storage have
+    replaced sixteen, the shader's declaration has not changed by a character, and the arithmetic
+    that made it possible cost nothing, because it happens in the fetch unit rather than in your
+    shader.
+  </p>
+
+  <p>
+    We put that to work in §4.7: Lesson 4.4's vertex goes from <strong>28 bytes to 16</strong>,
+    a 43% saving, and §G of the harness confirms the two pictures cover exactly the same 47,124
+    pixels and differ nowhere by more than one code out of 255.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Six characters</span>
+    <p>
+      <strong>The <code>_NORM</code> suffix is the whole difference and it is easy to miss.</strong>
+      <code>UBYTE4</code> and <code>UBYTE4_NORM</code> occupy the same four bytes and differ by
+      six characters. Use the first where you meant the second and a colour of
+      <code>(235, 89, 79)</code> arrives in a <code>float4</code> as 235.0, 89.0, 79.0 — which,
+      after clamping, is white. That is a real bug with an unhelpful symptom, and
+      <code>check_layout</code> catches it, because the reflection says <code>float4</code> and
+      <code>UBYTE4</code> presents as <code>uint4</code>.
+    </p>
+  </div>
+
+  <h3 id="theory-location">3.3 Locations, and who checks them</h3>
+
+  <p>
+    A <code>location</code> is an integer, and it is the only thing joining your buffer to the
+    shader's inputs. In HLSL it is the index on the <code>TEXCOORD</code> semantic — Lesson 4.3
+    established that SDL requires every non-system-value semantic to be <code>TEXCOORDn</code>,
+    numbered from zero with no gaps, precisely so that this join is a small integer rather than a
+    string match. In C++ it is the first argument to <code>pipeline_desc::attribute</code>.
+  </p>
+
+  <p>
+    Two rules govern them, and they come from different places. SDL's header states the first
+    plainly: <em>"All vertex attribute locations provided to an SDL_GPUVertexInputState must be
+    unique."</em> It does not say what happens if they are not, and a rule with no stated
+    consequence is one you want to be checking yourself. The second is not stated anywhere,
+    because it is not a rule at all — it is just what happens: <strong>a location the shader
+    never declares is ignored, and a location nothing supplies reads undefined data.</strong>
+  </p>
+
+  <p>
+    Those two failures are wildly asymmetric in consequence, and it is worth being clear about
+    which is which:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Measured in <code>verify_45</code> §A. "Created" means
+      <code>SDL_CreateGPUGraphicsPipeline</code> returned an object and the frame drew.</caption>
+    <thead>
+      <tr><th>the mistake</th><th><code>check_layout</code></th><th>pipeline creation</th><th>what you see</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>pitch four bytes short</td><td><strong>caught</strong></td><td>created</td><td>a shattered cloud</td></tr>
+      <tr><td>pitch four bytes long</td><td>silent</td><td>created</td><td>a shattered cloud</td></tr>
+      <tr><td>position and normal offsets swapped</td><td>silent</td><td>created</td><td>the mesh collapses to a sphere</td></tr>
+      <tr><td>an attribute the shader never declares</td><td><strong>caught</strong></td><td>created</td><td>nothing — it is simply ignored</td></tr>
+      <tr><td>a shader input nothing supplies</td><td><strong>caught</strong></td><td><strong>REFUSED</strong></td><td>a clear error message</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Notice the shape of that table. <strong>The one case SDL refuses is the one that would have
+    been most obvious anyway</strong> — an unfed input produces geometry stretching to infinity,
+    which is hard to miss. The silent ones are the ones that draw a plausible-looking wrong
+    picture. This is the same temperament Lesson 4.3 found in shader creation, which validates
+    the entry point's name and none of the four resource counts, and it is why an engine grows
+    its own checks: not because the API is bad, but because the API cannot know what you meant.
+  </p>
+
+  <p>
+    Be equally clear about what our own check <em>cannot</em> see. A pitch that is too
+    <em>long</em> passes, because every attribute still fits inside an over-long vertex — nothing
+    about the declaration is inconsistent, it is just wrong. Swapped offsets pass, because
+    <code>FLOAT3</code> at 12 and <code>FLOAT3</code> at 0 are both perfectly legal placements of
+    a <code>float3</code>. A checker that catches three of five mistakes and says so is worth
+    having; one that catches three of five and implies it caught them all is worse than nothing.
+  </p>
+
+  <h3 id="theory-widening">3.4 Supplying less than the shader asks for</h3>
+
+  <p>
+    A layout may legally supply <code>FLOAT3</code> to a shader input declared
+    <code>float4</code>. This is common — a colour without alpha, a position without w — and the
+    hardware fills in the components you did not supply. With <em>what</em>, though? SDL's header
+    does not say. Vulkan's specification and D3D12's both fill missing components with
+    <strong>(0, 0, 0, 1)</strong>, but SDL_GPU's contract is SDL's, not the backend's, and this
+    course does not repeat a fact it has not checked.
+  </p>
+
+  <p>
+    So we measured it, and the measurement is unusually direct. The per-instance record's fourth
+    component <em>is the scale</em>. Supply <code>FLOAT3</code> instead of <code>FLOAT4</code>
+    and the mesh is drawn at whatever the hardware put in w — 0 makes it vanish, 1 makes it
+    appear at unit scale. Coverage reads the answer straight off the screen:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden"><code>verify_45</code> §F. One torus, 512 × 288 offscreen target, Metal backend.</caption>
+    <thead><tr><th>layout</th><th>pixels covered</th><th>reading</th></tr></thead>
+    <tbody>
+      <tr><td><code>FLOAT4</code>, scale 0.62 supplied</td><td>3,696</td><td>the reference</td></tr>
+      <tr><td><code>FLOAT3</code>, w filled by hardware</td><td><strong>9,944</strong></td><td>&nbsp;</td></tr>
+      <tr><td><code>FLOAT4</code>, scale 1.00 supplied</td><td><strong>9,944</strong></td><td>identical — so w was filled with 1</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Not approximately identical. <strong>The same number.</strong> On this machine, on Metal, the
+    missing w is 1, which agrees with what Vulkan and D3D12 require — so the behaviour is almost
+    certainly uniform across SDL_GPU's backends, and now it is a thing we have seen rather than a
+    thing we assumed. <code>check_layout</code> reports this case as a <em>note</em> rather than a
+    problem, for exactly that reason.
+  </p>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify on your backend</span>
+    <p> measured on Metal only. If you are on Windows or Linux, run
+      <code>verify_45</code> §F and check that your backend agrees; the authoritative statements
+      for the other two are in the Vulkan specification (§22.1.1, "Attribute Location and
+      Component Assignment") and D3D12's input-assembler documentation. If a backend ever
+      disagreed, this is the section that would have to change.
+    </p>
+  </div>
+
+  <h3 id="theory-indices">3.5 Indices: the arithmetic of sharing</h3>
+
+  <p>
+    Lesson 2.12 introduced the index array with an argument about an icosahedron: twelve corners,
+    twenty faces, sixty corner-slots to fill. Store a vertex per corner-slot and you store sixty;
+    store twelve and name them sixty times and you store twelve. The GPU has exactly this,
+    spelled <code>SDL_GPU_BUFFERUSAGE_INDEX</code>, and the numbers on a real mesh are more
+    dramatic than on a toy one.
+  </p>
+
+  <p>
+    Our torus: 2,304 triangles, so <strong>6,912 corner-slots</strong>, drawn from
+    <strong>1,225 distinct vertices</strong>. Every vertex is named, on average,
+    6,912 ÷ 1,225 = <strong>5.64 times</strong>.
+  </p>
+
+@@FIG_INDEX@@
+
+  <p>
+    In bytes, on the device, measured both ways:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden"><code>verify_45</code> §E. The same mesh, uploaded twice.</caption>
+    <thead>
+      <tr><th></th><th>vertices</th><th>vertex bytes</th><th>index bytes</th><th>total</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>indexed</td><td>1,225</td><td>39,200</td><td>13,824</td><td><strong>53,024</strong></td></tr>
+      <tr><td>expanded</td><td>6,912</td><td>221,184</td><td>0</td><td><strong>221,184</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>4.17× smaller.</strong> And note where the win comes from: the index buffer is not
+    free — it costs 13,824 bytes of its own — but it removes 181,984 bytes of duplicated
+    vertices. It pays for itself roughly thirteen times over, and the reason is simply that an
+    index is two bytes and a vertex is thirty-two. Anything that lets you write the small thing
+    instead of the big thing 6,912 times is going to win.
+  </p>
+
+  <p>
+    <strong>Why two bytes?</strong> Because <code>SDL_GPUIndexElementSize</code> has exactly two
+    values, <code>_16BIT</code> and <code>_32BIT</code>, and sixteen bits can name 65,536 distinct
+    vertices. That number has been in <code>mesh.hpp</code> since Lesson 3.5 as
+    <code>k_max_mesh_vertices</code>, with a comment saying it came from the hardware rather than
+    from us. This is the lesson where the claim gets cashed: <code>gpu_mesh::create</code>
+    refuses a mesh above it, and the loader has been refusing one since 3.5.
+  </p>
+
+  <p>
+    The second saving is subtler and is the one the figure's lower strip is about. An expanded
+    draw must invoke the vertex shader once per vertex, and it has 6,912 of them: <strong>6,912
+    invocations, exactly, with no possibility of doing better</strong>. An indexed draw can do
+    better, because hardware keeps a small <em>post-transform cache</em> of recently transformed
+    vertices keyed by index — so a vertex named six times may be transformed once. May. The best
+    case is 1,225 and the worst is 6,912, and where you actually land depends on the order the
+    triangles appear in, which is a property of the file.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why "vertex cache optimisation" is a thing</span>
+    <p>
+      <strong>Reordering pays off here, and nowhere else.</strong> Reordering a mesh's
+      triangles so that consecutive ones share vertices does not change what is drawn by a single
+      pixel; it changes how often the cache hits, and therefore how many times the vertex shader
+      runs. It is a pure win available at import time, and Forsyth's linear-speed algorithm (in
+      Further Reading) is the standard one. We are not implementing it — but you now know exactly
+      what it would be optimising, which is more than most people who invoke it do. Lesson 4.9's
+      RenderDoc capture is where you can finally see the real invocation count instead of a range.
+    </p>
+  </div>
+
+  <h3 id="theory-rate">3.6 Vertex rate and instance rate</h3>
+
+  <p>
+    Seven tori. One torus's worth of geometry. The mechanism is one field of one struct.
+  </p>
+
+  <p>
+    <code>SDL_GPUVertexBufferDescription</code> has an <code>input_rate</code>, and it takes one
+    of two values. <code>SDL_GPU_VERTEXINPUTRATE_VERTEX</code> means the cursor into this buffer
+    advances by <code>pitch</code> once per vertex — the behaviour you have been assuming all
+    along, and the one Lesson 4.4 used without noticing there was a choice.
+    <code>SDL_GPU_VERTEXINPUTRATE_INSTANCE</code> means it advances once per
+    <em>instance</em>. So while the vertex shader runs 1,225 times for instance 3, every one of
+    those runs reads element 3 of the instance buffer.
+  </p>
+
+@@FIG_RATE@@
+
+  <p>
+    Everything else is identical. It is an ordinary buffer, created with the ordinary
+    <code>_VERTEX</code> usage bit, bound with the ordinary
+    <code>SDL_BindGPUVertexBuffers</code>, read by ordinary attributes at ordinary locations.
+    <strong>The shader cannot tell.</strong> Look at the input struct in
+    <code>mesh.vert.hlsl</code> and there is nothing marking locations 3, 4 and 5 as per-instance
+    — because from the shader's point of view they are simply six values that arrived.
+  </p>
+
+  <p>
+    That is worth sitting with for a moment, because it is a small piece of very good API design
+    and it is easy to walk past. Instancing could have been a separate draw path, a separate
+    shader stage, a separate buffer type. It is none of those. It is <em>the same everything</em>
+    with a different rate on the cursor, which means every tool you already have — layouts,
+    formats, <code>check_layout</code>, the reflection JSON — works on instance data unchanged.
+  </p>
+
+  <p>
+    The last argument of <code>SDL_DrawGPUIndexedPrimitives</code> that we have been passing
+    <code>1</code> since Lesson 4.4 is the instance count. Passing 7 draws seven tori. The cost
+    on the CPU is one integer; the cost in memory is <strong>28 bytes per instance</strong>,
+    against 53,024 bytes of geometry that is uploaded once at startup and never moves again —
+    <strong>0.37% of the data on the device changes per frame.</strong>
+  </p>
+
+  <p>
+    That ratio is the whole argument for instancing, and it is also the reason the per-instance
+    buffer needs a different kind of object from the geometry: it is written every frame, so it
+    keeps its staging buffer and cycles it, which §4.6 unpacks.
+  </p>

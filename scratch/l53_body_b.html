@@ -1,0 +1,1050 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-categories">4.1 &nbsp; Categories, based where SDL says</h3>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/core/log.hpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">enum log_category : int
+{
+    log_core = SDL_LOG_CATEGORY_CUSTOM,   ///&lt; clock, input, fixed_step, profiler
+    log_platform,                         ///&lt; window, renderer, the app lifecycle
+    log_gfx,                              ///&lt; the CPU rasterizer, meshes, textures
+    log_gpu,                              ///&lt; SDL_GPU: devices, pipelines, uploads
+    log_asset,                            ///&lt; files: images, OBJ, the asset system
+
+    log_category_count
+};</code></pre>
+  </figure>
+
+  <p>
+    Three decisions in eight lines.
+  </p>
+
+  <p>
+    <strong>Based at <code>SDL_LOG_CATEGORY_CUSTOM</code>, not at a number.</strong> SDL's header
+    reserves everything from that enumerator upward for applications, and says so in a comment.
+    Writing <code>= 20</code> instead would work today and break the week SDL adds a category —
+    silently, by making two different things share an integer.
+  </p>
+
+  <p>
+    <strong>Five, and they are nouns.</strong> Each names a part of the program. If one of your
+    categories is an adjective you have written a level and mislabelled it (§2.2). Five is also
+    deliberately few: a person can hold five in their head, and merging two later costs one
+    <code>grep</code> while splitting one costs nothing at all.
+  </p>
+
+  <p>
+    <strong><code>log_category_count</code> is not a category.</strong> It is the end marker that
+    lets us iterate, and it is what makes this possible in <code>log.cpp</code>:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/core/log.cpp — the table cannot drift from the enum</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">static_assert(std::size(k_categories) == static_cast&lt;std::size_t&gt;(log_category_count)
+                                      - static_cast&lt;std::size_t&gt;(log_core),
+              "every log_category needs a name — add it to k_categories");</code></pre>
+  </figure>
+
+  <p>
+    Add an enumerator and forget the name, and the build stops with that sentence. The
+    alternative — two lists that must agree — is two lists that eventually will not, and the
+    symptom would be a category that prints as <code>?</code> and cannot be typed into
+    <code>--log</code>.
+  </p>
+
+  <h3 id="impl-floor">4.2 &nbsp; The compile-time floor, and why not <code>#if</code></h3>
+
+  <p>
+    SDL's filtering is a runtime comparison. That is right for most messages and wrong for one
+    kind: a <code>trace</code> call inside a loop that runs a million times a frame still costs a
+    call and a branch a million times, even when it prints nothing. So the macros carry a
+    compile-time floor as well.
+  </p>
+
+  <p>
+    The obvious way to write that is <code>#if</code>:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">the obvious version, which we did not use</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#if ENGINE_LOG_MIN_PRIORITY &lt;= 1
+#  define ENGINE_LOG_TRACE(cat, ...) SDL_LogTrace((cat), __VA_ARGS__)
+#else
+#  define ENGINE_LOG_TRACE(cat, ...) ((void)0)      // &lt;- the problem
+#endif</code></pre>
+  </figure>
+
+  <p>
+    In a release build that discards the arguments <em>without compiling them</em>. So a trace
+    call that names a variable somebody later renamed keeps compiling in release, and breaks the
+    day a colleague builds in debug — a failure discovered by the person least able to explain
+    it. Logging that only compiles in one configuration rots, quietly, in the configuration
+    nobody builds.
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/core/log.hpp — what we used instead</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#define ENGINE_LOG_AT(priority_value, sdl_fn, category, ...)                   \
+    do {                                                                       \
+        if constexpr ((priority_value) &gt;= ENGINE_LOG_MIN_PRIORITY)             \
+        {                                                                      \
+            sdl_fn(static_cast&lt;int&gt;(category), __VA_ARGS__);                   \
+        }                                                                      \
+    } while (false)</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>if constexpr</code></span>
+    <p>
+      <code>if constexpr (cond)</code> with a compile-time constant condition <em>discards</em>
+      the branch that is not taken — the statement is removed before code generation, so nothing
+      reaches the object file. What it does <strong>not</strong> do is skip checking it: for
+      non-template code the discarded branch is still parsed, name-resolved and type-checked.
+    </p>
+    <p>
+      That is exactly the pair of properties we want. The deletion of <code>#if</code>, with the
+      type-checking of ordinary code. §4.5's measurement (Figure 6) confirms both halves: a disabled
+      <code>ENGINE_LOG_TRACE</code> compiles to the same four bytes as an empty function, and the
+      object file does not even reference <code>SDL_LogTrace</code>.
+    </p>
+    <p>
+      The <code>do { … } while (false)</code> around it is the standard idiom that makes a
+      multi-statement macro behave like a single statement, so that
+      <code>if (x) ENGINE_LOG_INFO(…); else …</code> parses the way it reads.
+    </p>
+  </div>
+
+  <h3 id="impl-parser">4.3 &nbsp; A parser that changes nothing when it fails</h3>
+
+  <p>
+    <code>set_log_levels("gfx=debug,*=warn")</code> is forty lines of string handling, and one
+    design decision worth more than the other thirty-nine: <strong>it validates the whole spec
+    before applying any of it.</strong>
+  </p>
+
+  <p>
+    Consider the straightforward implementation — parse a token, call
+    <code>SDL_SetLogPriority</code>, parse the next. Now feed it
+    <code>gfx=debug,gpu=nonsens</code>. The first entry is applied, the second fails, and you
+    return an error. The user now has a program in a state they did not ask for and did not
+    choose: <em>partially</em> configured, with no way to tell which half took. They will spend
+    the next twenty minutes wondering why <code>gpu</code> is quiet.
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/core/log.cpp — two passes</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    pending parsed[log_category_count - log_core + 1];
+    int count = 0;
+
+    /* …pass one: parse and validate every entry into `parsed`,
+       returning false on the first token that does not make sense… */
+
+    // Pass two: nothing below here can fail.
+    for (int i = 0; i &lt; count; ++i)
+    {
+        if (parsed[i].category &gt;= 0) { SDL_SetLogPriority(parsed[i].category, parsed[i].priority); }
+        else { /* `*` — every one of OUR categories */ }
+    }</code></pre>
+  </figure>
+
+  <p>
+    A rejected spec is now a <em>no-op</em>, which is the only behaviour a user can reason about:
+    either the whole thing took effect or none of it did. The harness pins it (§7, §C) by setting
+    a level, feeding a spec whose <em>last</em> entry is bad, and asserting the good first entry
+    did <strong>not</strong> apply.
+  </p>
+
+  <p>
+    One smaller decision, stated because it is a choice and not an oversight: <code>*</code> means
+    <em>our</em> categories, not everything. Silencing SDL's own diagnostics is not ours to do on
+    a user's behalf — and if they want that, <code>SDL_LOGGING</code> is right there, documented,
+    with the same grammar. Which is why we borrowed the grammar: two things a person might type
+    should not need two mental models.
+  </p>
+
+  <h3 id="impl-sink">4.4 &nbsp; A file sink that tees</h3>
+
+  <p>
+    <code>set_log_file(path)</code> uses <code>SDL_SetLogOutputFunction</code>, and the
+    interesting line is this one:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/core/log.cpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    // Capture whoever currently owns the hook BEFORE installing ours, so the
+    // chain is honest even if somebody else got here first.
+    SDL_GetLogOutputFunction(&amp;g_previous_output, &amp;g_previous_userdata);
+    g_log_file = file;
+    SDL_SetLogOutputFunction(tee_to_file, nullptr);</code></pre>
+  </figure>
+
+  <p>
+    <code>SDL_SetLogOutputFunction</code> <em>replaces</em>. Install a file writer and call it
+    done, and you have written a "log to a file" feature that silently costs the user their
+    console — which is not what anybody means by "also log to a file". Capturing the previous
+    hook and calling it makes the sink <em>additive</em>, which is what the word "also" has to
+    mean.
+  </p>
+
+  <p>
+    Two details worth stealing. The file is written <em>first</em> and the console second: if the
+    program dies inside the rest of the chain, the file already has the line, and log files exist
+    for the runs that ended badly. And SDL holds a mutex across the output callback, so the file
+    is written from one thread at a time even when Module 9's job system is pushing messages from
+    several — a guarantee we get for free by living inside SDL's hook rather than beside it.
+  </p>
+
+  <h3 id="impl-verify">4.5 &nbsp; Three macros, and a bug in one of them</h3>
+
+  <p>
+    The assertion macros are one line each:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/core/assert.hpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#define ENGINE_ASSERT(condition) SDL_assert(condition)          // debug only
+#define ENGINE_CHECK(condition)  SDL_assert_release(condition)  // every build</code></pre>
+  </figure>
+
+  <p>
+    The third is not, and the story of why is the most useful thing in this section.
+  </p>
+
+  <p>
+    <code>ENGINE_VERIFY(expr)</code> exists for the case the other two cannot express: an
+    operation whose <em>result</em> is an invariant but whose <em>execution</em> is required.
+    <code>ENGINE_VERIFY(pool.release(handle))</code> — must run, must succeed. Every codebase has
+    had the bug this prevents at least once: an <code>assert(do_the_thing())</code> that stops
+    doing the thing the moment somebody builds with optimisation.
+  </p>
+
+  <p>
+    Here is how it was first written, and it is wrong in a way that took a measurement to find:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">the first version — do not use this</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#ifdef NDEBUG
+#  define ENGINE_VERIFY(expression) ((void)(expression))
+#else
+#  define ENGINE_VERIFY(expression) SDL_assert(expression)
+#endif</code></pre>
+  </figure>
+
+  <p>
+    That reads correctly. In a release build the expression is evaluated and not checked; in a
+    debug build it is evaluated and checked. Both branches evaluate. What could go wrong?
+  </p>
+
+  <p>
+    <strong>§3.3.1.</strong> SDL decides its assertion level from <code>__OPTIMIZE__</code>, not
+    from <code>NDEBUG</code>. So in a build with <code>-O2</code> and no <code>-DNDEBUG</code> —
+    which is exactly what CMake's <code>RelWithDebInfo</code> is, and what a great many people's
+    "just make it fast" build is — we take the <code>#else</code> branch, and
+    <code>SDL_assert</code> is at level 1, where it expands to:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_assert.h — <code>SDL_disabled_assert</code></span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">#define SDL_disabled_assert(condition) \
+    do { (void) sizeof ((condition)); } while (SDL_NULL_WHILE_LOOP_CONDITION)</code></pre>
+  </figure>
+
+  <p>
+    <code>sizeof</code> is an unevaluated context. <strong>The expression is compiled and never
+    runs.</strong> So <code>ENGINE_VERIFY</code> — the macro whose entire purpose is to guarantee
+    evaluation — silently stopped evaluating, in precisely one configuration, which is the bug it
+    was written to prevent, reintroduced by the fix for it.
+  </p>
+
+  <p>
+    This was not spotted by reading. It was spotted by compiling a probe four ways and looking at
+    the sizes, which is Figure 5:
+  </p>
+
+  @@FIG_BUILD_MATRIX@@
+
+  <p>
+    <code>with_verify</code> was <strong>4 bytes</strong> in Figure 6's <code>-O2</code> column — the
+    same as an empty function, a bare <code>ret</code>, with the assignment gone. The fix is to
+    stop delegating and gate on the thing that actually decides:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/core/assert.hpp — the version that ships</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#define ENGINE_VERIFY(expression)                                              \
+    do {                                                                       \
+        const bool engine_verify_result_ = static_cast&lt;bool&gt;(expression);      \
+        if constexpr (SDL_ASSERT_LEVEL &gt;= 2)                                   \
+        {                                                                      \
+            SDL_assert(engine_verify_result_);                                 \
+        }                                                                      \
+        else                                                                   \
+        {                                                                      \
+            (void)engine_verify_result_;                                       \
+        }                                                                      \
+    } while (false)</code></pre>
+  </figure>
+
+  <p>
+    Evaluate always, into a named value; assert on the <em>value</em>, only where debug
+    assertions are live. 16 bytes at <code>-O2</code> now, and the assignment happens. §7's §G is
+    the regression test, and it runs in all three configurations.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The general lesson, which is bigger than this macro</span>
+    <p>
+      <strong>When you gate your own machinery on a build flag, find out what your dependencies
+      gate theirs on.</strong> We assumed <code>NDEBUG</code> because that is what
+      <code>&lt;cassert&gt;</code> uses. SDL uses <code>__OPTIMIZE__</code>. Both are reasonable;
+      they simply are not the same switch, and the four-configuration table in Figure 6 exists
+      because reasoning about this was not enough — column 3 and column 2 are exact inverses of
+      each other, and neither is what you would guess.
+    </p>
+  </div>
+
+  <h3 id="impl-convert">4.6 &nbsp; 76 call sites, by rule rather than by mood</h3>
+
+  <p>
+    Converting the engine means picking a level and a category for 76 existing calls. Do that by
+    hand and you get 76 judgement calls made at 76 different moments — which is how a level
+    system loses its meaning before it has one.
+  </p>
+
+  <p>
+    So the classification is a written rule applied by a program,
+    <code>scratch/convert_logs_53.py</code>. Category comes from the file's directory, because
+    that is what a category <em>is</em>. Level comes from an ordered list of patterns, and the
+    order matters:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">scratch/convert_logs_53.py</span>
+                <span class="lang" data-lang="py">Python</span></figcaption>
+    <pre><code class="lang-py"># Ordered: the first pattern that matches wins, so "— continuing" beats "failed".
+LEVEL_RULES = [
+    (r"— continuing|ignoring the second|continuing unsynchronised", "ENGINE_LOG_WARN"),
+    (r"failed|cannot |could not |refus|not created|exceeds|beyond the|malformed|…",
+     "ENGINE_LOG_ERROR"),
+]
+DEFAULT_LEVEL = "ENGINE_LOG_INFO"</code></pre>
+  </figure>
+
+  <p>
+    "<code>— continuing</code>" beating "<code>failed</code>" <em>is</em> §3.1's rule in code: a
+    message that says both is a message about a recovery, and a recovery is a warning. Four of
+    the 76 came out wrong and were corrected by hand — the script prints its classification for
+    every site precisely so that reviewing them is possible.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The demos were deliberately not converted</span>
+    <p>
+      122 <code>SDL_Log</code> calls remain in <code>demos/</code>, and that is the correct
+      answer rather than a job left undone. <strong>A demo <em>is</em> the application.</strong>
+      <code>SDL_LOG_CATEGORY_APPLICATION</code> at <code>info</code> is exactly what its output
+      is, and it is on by default because the person who ran the program asked for it.
+    </p>
+    <p>
+      That split is the whole result: <code>./build/demos/pong</code> now prints its own line and
+      nothing else, and <code>--log platform=info</code> brings the engine back.
+    </p>
+  </div>
+
+  <p>
+    One consequence had to be handled explicitly. <code>sandbox --trace</code> prints the GPU
+    command log — which is emitted on the <code>gpu</code> category, which this lesson just made
+    silent. So the flag that asks for the report also raises the level that lets it out:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/sandbox/main.cpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    if (trace_and_exit &amp;&amp; !engine::set_log_levels("gpu=info"))
+    {
+        return 1;
+    }</code></pre>
+  </figure>
+
+  <p>
+    One line, and without it <code>--trace</code> would have become a flag that silently does
+    nothing — which is worse than no flag, because it looks like the feature is broken rather
+    than the logging.
+  </p>
+
+  <h3 id="impl-image">4.7 &nbsp; One subsystem, converted end to end</h3>
+
+  <p>
+    <code>load_image</code> becomes the third instance of §3.4's pattern:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/gfx/image.hpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">struct image_report
+{
+    image_status status = image_status::cannot_open;
+
+    int width = 0;
+    int height = 0;
+    int source_channels = 0;
+
+    std::size_t bytes = 0;        ///&lt; decoded: width * height * 4
+    std::size_t file_bytes = 0;   ///&lt; read from disk, so bytes/file_bytes is the ratio
+
+    [[nodiscard]] bool ok() const { return status == image_status::ok; }
+};
+
+[[nodiscard]] image_report load_image(const char* path, image_data&amp; out);</code></pre>
+  </figure>
+
+  <p>
+    One detail in the implementation is worth more than the struct. The dimensions are recorded
+    <em>before</em> the size check:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/gfx/image.cpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    report.width = w;
+    report.height = h;
+    report.source_channels = channels_in_file;
+
+    if (w &lt;= 0 || h &lt;= 0
+        || static_cast&lt;std::size_t&gt;(w) * static_cast&lt;std::size_t&gt;(h) &gt; k_max_image_texels)
+    {
+        ENGINE_LOG_ERROR(log_asset, "load_image: %s is %dx%d, beyond the %zu-texel ceiling", …);
+        SDL_free(file);
+        report.status = image_status::too_large;
+        return report;
+    }</code></pre>
+  </figure>
+
+  <p>
+    So a <em>rejected</em> image still reports what it was. <code>too_large</code> with no
+    dimensions makes you open the file yourself to find out how large; a report that describes
+    the thing it refused is the difference between a diagnosis and a complaint.
+  </p>
+
+  <p>
+    And the call site — there is exactly one, which is Lesson 5.1's boundary paying out again —
+    shows §3.1.1's ownership rule in practice:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/sandbox/main.cpp</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    const engine::image_report img = engine::load_image(
+        engine::asset_path("uv_grid.png").c_str(), uv_image);
+
+    if (!img.ok())
+    {
+        // NOT an error line. load_image already logged one, with the path and
+        // the reason, at the point that knew them. What the demo adds is the
+        // CONSEQUENCE — the thing it knows and the loader does not.
+        SDL_Log("  texture         : uv_grid.png did not load (%s) — [T] will do nothing",
+                engine::name_of(img.status));
+    }</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       5 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">5</span>What It Cost, and What It Bought</h2>
+
+  <p>
+    All of the following comes out of <code>scratch/measure_53.py</code>, so it can be
+    re-derived rather than trusted.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Where the engine's 197 <code>SDL_Log</code> calls went.</caption>
+    <thead><tr><th></th><th>Before</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td>raw <code>SDL_Log</code> in <code>engine/</code></td><td>76</td><td><strong>0</strong></td></tr>
+      <tr><td>raw <code>SDL_Log</code> in <code>demos/</code></td><td>121</td><td>122 <em>(correct — a demo is the application)</em></td></tr>
+      <tr><td>engine calls carrying a category and a level</td><td>0</td><td><strong>92</strong></td></tr>
+      <tr><td>…at <code>error</code></td><td>—</td><td>54</td></tr>
+      <tr><td>…at <code>info</code></td><td>—</td><td>25</td></tr>
+      <tr><td>…at <code>warn</code> / <code>debug</code> / <code>critical</code> / <code>trace</code></td><td>—</td><td>6 / 4 / 2 / 1</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The category split is <code>gpu</code> 56, <code>platform</code> 14, <code>asset</code> 8,
+    <code>core</code> 7 — and <code>gfx</code> <strong>zero</strong>. That is worth reporting
+    rather than hiding: the CPU rasterizer, three modules of it, does not log a single thing. It
+    is a pure function of its inputs with no files to open and no drivers to negotiate with, so
+    there is nothing for it to say. The category stays because Module 6 will fill it, but an
+    empty category is a fair criticism and it is better read here than discovered later.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>What each macro emits, in bytes, per build configuration. An empty function is
+             20&nbsp;B at <code>-O0</code> and 4&nbsp;B at <code>-O2</code>; anything equal to
+             that emitted nothing at all.</caption>
+    <thead>
+      <tr><th></th><th><code>-O0</code></th><th><code>-O0 -DNDEBUG</code></th>
+          <th><code>-O2</code></th><th><code>-O2 -DNDEBUG</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td>empty function</td><td>20</td><td>20</td><td>4</td><td>4</td></tr>
+      <tr><td><code>ENGINE_LOG_TRACE</code></td><td>80</td><td>28</td><td>44</td><td><strong>4</strong></td></tr>
+      <tr><td><code>ENGINE_LOG_DEBUG</code></td><td>80</td><td>28</td><td>44</td><td><strong>4</strong></td></tr>
+      <tr><td><code>ENGINE_LOG_INFO</code></td><td>80</td><td>80</td><td>44</td><td>44</td></tr>
+      <tr><td><code>ENGINE_ASSERT</code></td><td>148</td><td>148</td><td><strong>4</strong></td><td><strong>4</strong></td></tr>
+      <tr><td><code>ENGINE_CHECK</code></td><td>148</td><td>148</td><td>100</td><td>100</td></tr>
+      <tr><td><code>ENGINE_VERIFY</code></td><td>180</td><td>180</td><td>16</td><td>16</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    And the symbols the object file still references, which is the same claim from the other
+    side:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">python3 scratch/measure_53.py</span></figcaption>
+    <pre><code class="lang-bash">-O0              SDL_LogDebug, SDL_LogInfo, SDL_LogTrace, SDL_ReportAssertion
+-O0 -DNDEBUG     SDL_LogInfo, SDL_ReportAssertion
+-O2              SDL_LogDebug, SDL_LogInfo, SDL_LogTrace, SDL_ReportAssertion
+-O2 -DNDEBUG     SDL_LogInfo, SDL_ReportAssertion</code></pre>
+  </figure>
+
+  <p>
+    In the shipping configuration <code>SDL_LogTrace</code> and <code>SDL_LogDebug</code> are not
+    referenced at all — the calls did not become cheap, they stopped existing. That is what
+    <code>if constexpr</code> bought, and it is a stronger statement than a byte count because a
+    linker can act on it.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The acceptance tests, all green</span>
+    <ul>
+      <li><strong>Engine chatter off, application output on, from the command line, without
+          editing code</strong> — and it needed no flag at all: <code>./build/demos/pong</code>
+          prints one line, its own. <code>--log platform=info</code> adds the engine's.</li>
+      <li><strong>No debug-only assertion in a release build</strong> — measured:
+          <code>ENGINE_ASSERT</code> is 4 bytes at <code>-O2</code>, identical to an empty
+          function, and <code>verify_53</code> §F confirms it does not fire there.</li>
+      <li><strong>The golden is still byte-identical</strong> — 7 frames, 1,209,616 bytes, hash
+          <code>905BF27E</code>.</li>
+      <li><code>hello_cube --shot</code> byte-identical; <code>sandbox --trace</code> unchanged
+          and still cross-checking.</li>
+      <li><code>verify_45</code>…<code>verify_52</code> all still pass;
+          <code>verify_53</code> is 60 checks / 0 failures, and passes in all three build
+          configurations.</li>
+    </ul>
+  </div>
+
+  <h3 id="cost-residue">5.1 &nbsp; What is still on the wrong side</h3>
+
+  <ul>
+    <li><strong>61 <code>bool</code>-returning functions are untouched.</strong> Most are honest
+        (§3.4, rule 3), but not all — <code>gpu_texture::create_sampled</code> has four distinct
+        failure modes and returns one bit. Converting them is a lesson of its own, and it should
+        happen when a caller actually needs to branch, not before.</li>
+    <li><strong><code>obj_status</code>, <code>gpu_status</code> and <code>image_status</code>
+        are three enums, not one.</strong> Deliberate: a per-subsystem enum names its own failure
+        modes precisely, and a single engine-wide <code>status</code> becomes a junk drawer where
+        <code>bad_format</code> means six different things. The <em>shape</em> is unified; the
+        vocabularies are not, and should not be.</li>
+    <li><strong>No log rotation, no timestamps of our own, no structured output.</strong> The
+        file sink is 30 lines and writes what SDL formatted. When a session log matters enough to
+        want JSON lines and a size cap, that is the moment to add them.</li>
+    <li><strong><code>log_gfx</code> has no users.</strong> See above. Module 6.</li>
+  </ul>
+
+  <!-- =================================================================
+       6 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">6</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/core/log.hpp</code></td><td><span class="badge new">new</span></td><td>Categories, the six macros, the compile-time floor</td></tr>
+      <tr><td><code>engine/src/core/log.cpp</code></td><td><span class="badge new">new</span></td><td>Names, the two-pass parser, the tee-ing file sink</td></tr>
+      <tr><td><code>engine/include/engine/core/assert.hpp</code></td><td><span class="badge new">new</span></td><td>Three macros, and what each survives</td></tr>
+      <tr><td><code>engine/include/engine/gfx/image.hpp</code></td><td><span class="badge mod">modified</span></td><td><code>image_report</code></td></tr>
+      <tr><td><code>engine/src/gfx/image.cpp</code></td><td><span class="badge mod">modified</span></td><td>…and the loader that fills it in</td></tr>
+      <tr><td><code>engine/include/engine/platform/platform.hpp</code></td><td><span class="badge mod">modified</span></td><td><code>argc</code>/<code>argv</code> in the config, for <code>--log</code></td></tr>
+      <tr><td><code>engine/src/platform/platform.cpp</code></td><td><span class="badge mod">modified</span></td><td>Reads <code>--log</code> first; its own messages levelled</td></tr>
+      <tr><td><code>engine/src/platform/app.cpp</code></td><td><span class="badge mod">modified</span></td><td>Fills in <code>argv</code> so every app gets the flag</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td><span class="badge mod">modified</span></td><td><code>src/core/log.cpp</code></td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td><span class="badge mod">modified</span></td><td><code>--trace</code> raises <code>gpu=info</code>; the report call site</td></tr>
+      <tr><td><code>scratch/convert_logs_53.py</code></td><td><span class="badge new">new</span></td><td>The 76-site conversion, by written rule</td></tr>
+      <tr><td><code>scratch/verify_53.cpp</code></td><td><span class="badge new">new</span></td><td>60 checks, in three build configurations</td></tr>
+      <tr><td><code>scratch/measure_53.py</code></td><td><span class="badge new">new</span></td><td>Every number in §5</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.1 &nbsp; The new core headers</h3>
+
+  @@LISTING:engine/include/engine/core/log.hpp@@
+  @@LISTING:engine/src/core/log.cpp@@
+  @@LISTING:engine/include/engine/core/assert.hpp@@
+
+  <h3>6.2 &nbsp; The subsystem converted end to end</h3>
+
+  @@LISTING:engine/include/engine/gfx/image.hpp@@
+  @@LISTING:engine/src/gfx/image.cpp@@
+
+  <h3>6.3 &nbsp; The tools</h3>
+
+  @@LISTING:scratch/convert_logs_53.py@@
+
+  <p>
+    <code>engine/src/platform/platform.cpp</code>, <code>app.cpp</code> and
+    <code>demos/sandbox/main.cpp</code> are listed whole in Lesson 5.2; this lesson's changes to
+    them are the levelled messages (mechanical — see <code>convert_logs_53.py</code> above), the
+    two <code>argc</code>/<code>argv</code> fields, and these two blocks:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/platform.cpp — first thing in start()</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    // FIRST, before anything that could want to say something. A `--log` flag
+    // that only took effect after start-up would be unable to explain a
+    // start-up failure, which is the failure people most want explained.
+    if (cfg.argv != nullptr &amp;&amp; !configure_logging(cfg.argc, cfg.argv))
+    {
+        return false;
+    }</code></pre>
+  </figure>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/app.cpp — so every app gets the flag</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    app_config cfg = self-&gt;configure(argc, argv);
+
+    // Filled in for the app rather than by it: `--log` should work on every
+    // program built on the engine, including the ones whose author never heard
+    // of it. An app that genuinely wants to own the flag sets `argv` itself and
+    // gets whatever it set.
+    if (cfg.argv == nullptr)
+    {
+        cfg.argc = argc;
+        cfg.argv = argv;
+    }</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       7 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">7</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j8</code></pre>
+  </figure>
+
+  <h3 id="build-expect">7.1 &nbsp; What you should see</h3>
+
+  <p>
+    Start with the thing that changed most, which is what a program says when you have not asked
+    it anything:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the default — the engine has nothing to say</span></figcaption>
+    <pre><code class="lang-bash">$ ./build/demos/pong
+Pong — [W]/[S] move  [C] two-player  [K] collision rule  [Esc] quit</code></pre>
+  </figure>
+
+  <p>
+    One line. Before this lesson that same run printed the SDL version, the surface, and every
+    other start-up remark the platform layer had. Now ask for them:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">…and one flag brings the engine back</span></figcaption>
+    <pre><code class="lang-bash">$ ./build/demos/pong --log platform=info
+platform: SDL 3.4.12, surface=renderer, assertions level 2, log floor trace
+Pong — [W]/[S] move  [C] two-player  [K] collision rule  [Esc] quit</code></pre>
+  </figure>
+
+  <p>
+    The flag works on every program built on the engine — <code>pong</code>,
+    <code>hello_cube</code>, <code>sandbox</code>, and anything you write — because
+    <code>platform::start</code> reads it and <code>app_runner::init</code> supplies
+    <code>argv</code> whether or not the program thought about it. Things worth typing:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">specs</span></figcaption>
+    <pre><code class="lang-bash">--log gpu=debug              # everything the GPU layer says, nothing else
+--log gfx=trace,platform=info
+--log info                   # a bare level means every one of our categories
+--log '*=quiet'              # silence the engine completely; the demo still talks
+--log gpu=nonsense           # rejected, with a message, and NOTHING applied</code></pre>
+  </figure>
+
+  <h3 id="build-verify">7.2 &nbsp; Verifying</h3>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the harness — three times</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_53.sh
+ENGINE_CFLAGS="-O2"          sh scratch/build_verify_53.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_53.sh</code></pre>
+  </figure>
+
+  <p>
+    Running it three ways is the point, not thoroughness for its own sake: §F and §G are written
+    to <em>report the difference</em> rather than to assume a configuration.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the three summaries</span></figcaption>
+    <pre><code class="lang-bash">-O0            [PASS] this harness was built at SDL_ASSERT_LEVEL 2
+               [PASS] a false ENGINE_ASSERT fired once (1)
+               60 checks, 0 failure(s) — ALL PASS
+
+-O2            [PASS] this harness was built at SDL_ASSERT_LEVEL 1
+               [PASS] a false ENGINE_ASSERT did NOT fire in this build (0)
+               59 checks, 0 failure(s) — ALL PASS
+
+-O2 -DNDEBUG   [PASS] this harness was built at SDL_ASSERT_LEVEL 1
+               [PASS] a false ENGINE_ASSERT did NOT fire in this build (0)
+               59 checks, 0 failure(s) — ALL PASS</code></pre>
+  </figure>
+
+  <p>
+    And §F is worth looking at directly, because it does the thing people assume cannot be
+    done — fires assertions on purpose and reads them back:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">verify_53 §F</span></figcaption>
+    <pre><code class="lang-bash">=== F. Assertions, fired and counted ===
+  [PASS] a false ENGINE_ASSERT fired once (1)
+  [PASS] a false ENGINE_CHECK fired, and would fire in a release build too
+  [PASS] TRUE conditions fire nothing (2)
+  [PASS] SDL_GetAssertionReport lists 2 distinct assertion(s)
+        verify_53.cpp:295  side_effect == 1  (x1)
+        verify_53.cpp:282  side_effect == 1  (x1)
+  [PASS] …and the report carries the CONDITION TEXT, file and line</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">and the numbers in §5</span></figcaption>
+    <pre><code class="lang-bash">python3 scratch/measure_53.py</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       8 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">8</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">1 · Your new log line does not appear</span>
+    <p><strong>Symptom.</strong> You add <code>ENGINE_LOG_INFO(log_gpu, …)</code>, run, and see
+       nothing.</p>
+    <p><strong>Cause.</strong> Working as designed. Engine categories default to
+       <code>error</code> (§3.2).</p>
+    <p><strong>Fix.</strong> <code>--log gpu=info</code>. If you meant it to be visible always,
+       you meant a different level — ask §3.1's question: did the operation happen?</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">2 · …and it still does not appear, at any level</span>
+    <p><strong>Symptom.</strong> <code>--log gpu=trace</code> and still silence.</p>
+    <p><strong>Cause.</strong> The compile-time floor. In a build with <code>-DNDEBUG</code>,
+       <code>ENGINE_LOG_TRACE</code> and <code>ENGINE_LOG_DEBUG</code> are not compiled at all —
+       no runtime setting can bring back a call that does not exist.</p>
+    <p><strong>Fix.</strong> Build without <code>NDEBUG</code>, or pass
+       <code>-DENGINE_LOG_MIN_PRIORITY=1</code>. The start-up line prints the floor:
+       <code>--log platform=info</code> and read <code>log floor</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">3 · One problem, five log lines</span>
+    <p><strong>Symptom.</strong> A missing texture produces a wall of "failed" messages from
+       every layer.</p>
+    <p><strong>Cause.</strong> §3.1.1's rule broken — each layer logged its own error on the way
+       up.</p>
+    <p><strong>Fix.</strong> Only the deepest point logs; callers propagate silently and add the
+       <em>consequence</em> if they have one. When reviewing, the question is "does the caller's
+       line say something the callee's could not?"</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">4 · An assertion stops firing partway through a session</span>
+    <p><strong>Symptom.</strong> It trips once, you continue, and it never mentions it again even
+       though the condition is still false.</p>
+    <p><strong>Cause.</strong> The handler returned <code>SDL_ASSERTION_ALWAYS_IGNORE</code> —
+       possibly you, in a dialog. It latches in a <code>static</code> inside that one macro
+       expansion (§3.3).</p>
+    <p><strong>Fix.</strong> Expected behaviour, not a bug. <code>SDL_GetAssertionReport()</code>
+       still lists it with a <code>trigger_count</code>, which is often the number you actually
+       wanted.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">5 · Code inside an assertion stops running in release</span>
+    <p><strong>Symptom.</strong> Works at <code>-O0</code>, misbehaves at <code>-O2</code>, and
+       the difference is a line inside <code>ENGINE_ASSERT</code>.</p>
+    <p><strong>Cause.</strong> <code>ENGINE_ASSERT</code>'s condition is <em>compiled but not
+       evaluated</em> when disabled — SDL wraps it in <code>sizeof</code>. And it disables at
+       <code>-O2</code> alone, not at <code>-DNDEBUG</code> (§3.3.1).</p>
+    <p><strong>Fix.</strong> <code>ENGINE_VERIFY</code>, which guarantees evaluation. This is
+       exactly the bug §4.5 shipped and then measured its way out of.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">6 · <code>--log</code> silently does nothing</span>
+    <p><strong>Symptom.</strong> The flag is accepted, no error, no change.</p>
+    <p><strong>Cause.</strong> Something else parsed <code>argv</code> and your program never
+       passed it to the config — <code>app_config::argv</code> is null, so
+       <code>platform::start</code> has nothing to scan.</p>
+    <p><strong>Fix.</strong> Set <code>.argc</code> / <code>.argv</code> in the config, or call
+       <code>engine::configure_logging(argc, argv)</code> yourself. Under
+       <code>ENGINE_MAIN</code> it is filled in for you.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">7 · The log file exists but is empty</span>
+    <p><strong>Symptom.</strong> <code>set_log_file</code> returned true and the file has zero
+       bytes.</p>
+    <p><strong>Cause.</strong> Almost always the level, not the file. SDL filters
+       <em>before</em> the output hook, so a message below its category's threshold never reaches
+       your sink at all.</p>
+    <p><strong>Fix.</strong> Raise the level as well as opening the file — they are independent
+       controls. <code>verify_53</code> §E pins this behaviour deliberately.</p>
+  </div>
+
+  <!-- =================================================================
+       9 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">9</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>9.1 — Find the level that is wrong.</strong> Run
+         <code>./build/demos/sandbox --log '*=trace' 2&gt;&amp;1 | head -40</code> and read every
+         line against §3.1's meanings. At least one is at the wrong level. Find it, argue why,
+         and change it.</p>
+      <details><summary>Hint</summary>
+        <p>Ask the mechanical question, not the aesthetic one: <em>did the operation
+           happen?</em> Look especially at messages that describe a fallback or a default being
+           used.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>There is more than one defensible answer, which is the point — a level scheme is only
+           worth having if disagreements about it are decidable. The clearest case is
+           <code>gpu_scene: depth target …</code> at <code>info</code>: it fires once per
+           resize as well as at start-up, which makes it closer to "what I did" than "what I
+           am". Whatever you pick, write the <em>reason</em> next to the change; a level with no
+           stated reason is the thing this lesson set out to remove.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.2 — A category for your game.</strong> Add a sixth category — but for the
+         <em>demo</em>, not the engine. Give <code>pong</code> its own
+         <code>PONG_LOG_GAMEPLAY</code> based at <code>engine::log_category_count</code>, log a
+         line when a rally ends, and confirm you can silence the engine while keeping it with
+         <code>--log '*=quiet'</code>.</p>
+      <details><summary>Hint</summary>
+        <p><code>enum { pong_gameplay = engine::log_category_count };</code> and then
+           <code>SDL_LogInfo(pong_gameplay, …)</code>. Note what you will discover about
+           <code>--log '*=quiet'</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>It works, and the interesting part is <em>why</em> <code>*=quiet</code> does not
+           silence it: our <code>*</code> deliberately means the five engine categories, not
+           "everything" (§4.3). So a game's own categories are outside the engine's filter, which
+           is correct — the engine has no business silencing the application — and it is also a
+           limitation worth noticing. A real engine exposes a registration call so a game's
+           categories can join the table. That is a good next thing to build, and it is why
+           <code>log_category_count</code> is public.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.3 — Prove the compile-time floor.</strong> Reproduce Figure 6's measurement
+         yourself, then extend it: add a function containing
+         <code>ENGINE_LOG_TRACE</code> inside a loop of a million iterations, and measure it at
+         <code>-O2</code> with and without <code>-DNDEBUG</code>. How much does a filtered-out
+         trace call cost when it is compiled in?</p>
+      <details><summary>Hint</summary>
+        <p><code>scratch/measure_53.py</code>'s <code>probe_sizes()</code> is the harness; add a
+           function to <code>PROBE</code>. For the runtime cost, time the loop rather than
+           measuring its size — the interesting number is nanoseconds per suppressed call, and
+           Lesson 3.10's profiler already knows how to measure that honestly.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>A suppressed <code>SDL_LogTrace</code> is a function call plus a table lookup plus a
+           comparison — small, and not zero. Multiply by a million and it is a measurable slice
+           of a frame, which is the entire justification for the compile-time floor existing at
+           all. Note the honest conclusion this leads to: the floor matters for
+           <code>trace</code>, is arguable for <code>debug</code>, and would be actively wrong
+           for <code>error</code>.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.4 — Assert something real.</strong> <code>framebuffer::row(int y)</code>
+         currently trusts its caller. Add an <code>ENGINE_ASSERT</code> that <code>y</code> is in
+         range, then write a harness section — modelled on <code>verify_53</code> §F — that
+         installs a counting handler and <em>proves</em> it fires for <code>y = -1</code> and
+         does not for <code>y = 0</code>.</p>
+      <details><summary>Hint</summary>
+        <p><code>SDL_SetAssertionHandler</code> with a handler returning
+           <code>SDL_ASSERTION_IGNORE</code> — not <code>ALWAYS_IGNORE</code>, or your second
+           call will not be counted (§3.3).</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>The mechanics are twenty lines. The interesting part is deciding whether it should be
+           <code>ENGINE_ASSERT</code> or <code>ENGINE_CHECK</code>: <code>row()</code> is called
+           once per scanline, which is 180 times a frame — cheap enough for either — but it
+           returns a pointer that the caller then writes through, so a bad <code>y</code>
+           corrupts memory rather than producing a wrong picture. That is the argument for
+           <code>ENGINE_CHECK</code>, and it is the shape of argument §3.3's "only where
+           continuing is worse than stopping" is asking for.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.5 — The engine challenge: build the thing we declined.</strong> Write
+         <code>engine::result&lt;T&gt;</code> — a value <em>or</em> an error, in one return, in
+         the shape of C++23's <code>std::expected</code>. Then convert <code>load_image</code> to
+         return <code>result&lt;image_data&gt;</code> and argue, in a comment, whether the engine
+         should adopt it.</p>
+      <details><summary>Hint</summary>
+        <p>A union-like storage plus a discriminant, <code>[[nodiscard]]</code> on the type
+           itself, <code>operator bool</code>, <code>value()</code> and <code>error()</code>.
+           Keep the error payload allocation-free — a fixed char buffer, not a
+           <code>std::string</code> — and notice what that forces you to decide about truncation.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>About 120 lines for a usable subset. What you will find: the type is pleasant at the
+           call site and the conversion is mechanical, and then you hit the two real questions.
+           <em>What is <code>E</code>?</em> One engine-wide enum makes the type simple and the
+           errors vague; a per-subsystem enum makes <code>result</code> a template on two
+           parameters and viral through every signature. <em>And where does the diagnostic
+           detail go?</em> — because <code>obj_report</code>'s twelve statistics are useful on
+           <em>success</em> too, and <code>expected</code> has nowhere to put them.</p>
+        <p>That second point is the honest answer to the whole exercise, and it is why the
+           engine's convergent shape is a report rather than an <code>expected</code>: our
+           loaders return facts, not just values, and they return them whether or not they
+           worked. A defensible conclusion either way — but write down which problem your
+           codebase actually has before adopting a type for the other one.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       10 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">10</span>Recap &amp; Next</h2>
+
+  <p>The engine gained:</p>
+
+  <ul>
+    <li><strong>Two axes instead of none.</strong> Five categories based at
+        <code>SDL_LOG_CATEGORY_CUSTOM</code>, six levels with written meanings, and a
+        <code>--log</code> flag that works on every program built on the engine.</li>
+    <li><strong>Silence by default</strong>, for free — because SDL's own default table already
+        says <code>*=error</code> and our categories are not SDL's.</li>
+    <li><strong>A rule for who logs a failure</strong>, and the retirement of "returns false and
+        has already logged" as an unwritten contract.</li>
+    <li><strong>Three assertion macros</strong> whose survival across build configurations is
+        measured rather than assumed — including one whose first version was wrong.</li>
+    <li><strong><code>image_report</code></strong>, making the third instance of the shape the
+        engine had already converged on twice.</li>
+  </ul>
+
+  <div class="callout ok">
+    <span class="label">The through-line</span>
+    <p>
+      <strong>A codebase that has solved the same problem twice has told you something. Look for
+      the pattern you already have before designing the one you do not.</strong> The satisfying
+      version of this lesson invents <code>result&lt;T&gt;</code> and converts 61 functions to
+      it. The useful version notices that <code>obj_report</code> and <code>gpu_report</code>
+      were written a module apart, by nobody trying to match the other, and arrived at the same
+      shape — and that the honest work is naming it and fixing the one case that was worse.
+    </p>
+  </div>
+
+  <p>
+    <strong>Next:</strong> Lesson 5.4 asks a question that has been quietly accumulating since
+    Module 3. Every resource in this engine is handed around as a reference or a raw pointer —
+    <code>mesh_data</code>, <code>texture</code>, <code>gpu_texture</code>, the objects in a
+    scene. That works because everything is a local of <code>main</code> and nothing is ever
+    destroyed. The moment an asset system can <em>unload</em> something, every pointer to it
+    becomes a question nobody can answer: <em>is this still valid?</em>
+  </p>
+
+  <p>
+    The answer engines reach for is a <strong>handle</strong> — an index plus a generation
+    counter — and it is one of those designs that looks like an indirection tax until you see
+    what it buys: stale references become <em>detectable</em> instead of undefined, storage
+    becomes relocatable so a pool can compact, and serialization becomes trivial because a handle
+    is just two integers. It is also the last piece of scaffolding before the ECS, which is four
+    lessons of Module 5 and is built entirely out of them.
+  </p>
+
+  <!-- =================================================================
+       11 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">11</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>SDL3, <code>SDL_log.h</code> and <code>src/SDL_log.c</code></strong> — the
+        primary source for §3.2. Read the <code>SDL_LogCategory</code> enum down to
+        <code>SDL_LOG_CATEGORY_CUSTOM</code>, then find the default-priority switch in the
+        <code>.c</code> file. It is thirty lines and it decided this lesson's design.</li>
+    <li><strong>SDL3, <code>SDL_assert.h</code></strong> — read
+        <code>SDL_enabled_assert</code> and <code>SDL_disabled_assert</code> in full. They are
+        short, and the <code>while</code> loop and the <code>sizeof</code> are both load-bearing
+        in ways the documentation does not emphasise.</li>
+    <li><strong>SDL3, <code>SDL_HINT_LOGGING</code> in <code>SDL_hints.h</code></strong> — the
+        documented default table, and the grammar we borrowed for <code>--log</code>.</li>
+    <li><strong>John Lakos, <em>Large-Scale C++</em>, vol. 1 §6</strong> — on defensive
+        programming and the distinction between contract violations and runtime errors. Lakos is
+        more formal than we are and worth reading for the vocabulary: <em>narrow contracts</em>,
+        and what a precondition actually promises.</li>
+    <li><strong>Andrei Alexandrescu, "Systematic Error Handling in C++" (2012)</strong> — the
+        talk that popularised the expected-style return in C++, and still the clearest account of
+        why an error is a <em>value</em>. Watch it before doing Exercise 9.5.</li>
+    <li><strong>P0709, "Zero-overhead deterministic exceptions" (Herb Sutter)</strong> — the
+        proposal that explains <em>why</em> engine cores turn exceptions off, in more detail and
+        more sympathetically than the usual folklore. Section 1 is the honest cost accounting.</li>
+    <li><strong>Jason Gregory, <em>Game Engine Architecture</em>, 3rd ed., §3.2</strong> — on
+        assertions in shipping games, including the case for keeping some. The discussion of what
+        a console certification process does to your assertion policy is the practical version of
+        §3.3.1.</li>
+    <li><strong>Bruce Dawson, "Zombie Processes Are Eating Your Memory" and the rest of
+        <em>Random ASCII</em></strong> — not about logging as such, but the best working example
+        in the field of what a person can diagnose from a log they did not produce, which is the
+        audience §2.1 asks you to write for.</li>
+  </ul>

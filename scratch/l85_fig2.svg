@@ -1,0 +1,344 @@
+<svg viewBox="0 0 900 420" role="img" aria-labelledby="l85f2-t l85f2-d">
+  <title id="l85f2-t">Two shapes and their Minkowski difference: overlap becomes containment of the origin, and distance becomes distance to the origin.</title>
+  <desc id="l85f2-d">Three panels. The first shows a blue pentagon A and a green quadrilateral B with the segment between their closest points. The second shows the single set A minus B, drawn in grey, with the origin marked outside it and an arrow v from the origin to its nearest point, whose length is the same number as in the first panel. The third shows the difference set when the shapes overlap, with the origin inside it.</desc>
+  <defs>
+    <marker id="e-i-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-purple-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-amber-l85f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The substitution the whole algorithm rests on.</text>
+<text x="20" y="42" class="xs muted" text-anchor="start">A question about a PAIR becomes a question about a POINT.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+8
+"
+ 
+y
+=
+"
+6
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+2
+8
+8
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+0
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="18" y="80" class="xs muted" text-anchor="start">1 · two shapes, in the world</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+3
+0
+6
+"
+ 
+y
+=
+"
+6
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+2
+8
+8
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+0
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="316" y="80" class="xs muted" text-anchor="start">2 · one set: A ⊖ B</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+6
+0
+4
+"
+ 
+y
+=
+"
+6
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+2
+8
+8
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+0
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="614" y="80" class="xs muted" text-anchor="start">3 · and when they overlap</text>
+<path d="M 37.60,200.00 L 64.00,156.00 L 112.40,164.80 L 125.60,217.60 L 72.80,261.60 Z" fill="none" stroke="#5082e6" stroke-width="1.4"/>
+<path d="M 200.40,248.40 L 253.20,230.80 L 244.40,169.20 L 196.00,178.00 Z" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<text x="77.2" y="202.2" class="sm t-hi" text-anchor="middle">A</text>
+<text x="222.4" y="206.6" class="sm t-hi" text-anchor="middle">B</text>
+<line x1="125.6" y1="217.6" x2="198.2" y2="213.2" stroke="#f0961e" stroke-width="2.2" fill="none"/>
+<circle cx="125.6" cy="217.6" r="3.2" fill="#f0961e"/>
+<circle cx="198.2" cy="213.2" r="3.2" fill="#f0961e"/>
+<text x="152.0" y="346" class="xs t-hi" text-anchor="middle">distance = 1.6530 m</text>
+<path d="M 303.00,201.00 L 309.00,243.00 L 333.00,285.00 L 366.00,279.00 L 402.00,249.00 L 399.00,201.00 L 390.00,165.00 L 357.00,159.00 L 321.00,171.00 Z" fill="none" stroke="#8f918a" stroke-width="1.5"/>
+<line x1="443.0" y1="222.0" x2="457.0" y2="222.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="450.0" y1="215.0" x2="450.0" y2="229.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="450.00" y1="222.00" x2="400.51" y2="225.09" stroke="#9b7ede" stroke-width="2.0" marker-end="url(#e-purple-l85f2)"/>
+<text x="450.0" y="328" class="xs t-hi" text-anchor="middle">|v| = 1.6530 m</text>
+<text x="450.0" y="346" class="xs muted" text-anchor="middle">the same number as panel 1</text>
+<text x="462.0" y="210.0" class="xs" text-anchor="start">origin</text>
+<path d="M 676.00,190.50 L 682.00,232.50 L 706.00,274.50 L 739.00,268.50 L 775.00,238.50 L 772.00,190.50 L 763.00,154.50 L 730.00,148.50 L 694.00,160.50 Z" fill="none" stroke="#8f918a" stroke-width="1.5"/>
+<line x1="741.0" y1="222.0" x2="755.0" y2="222.0" stroke="#e05c5c" stroke-width="1.6" fill="none"/>
+<line x1="748.0" y1="215.0" x2="748.0" y2="229.0" stroke="#e05c5c" stroke-width="1.6" fill="none"/>
+<text x="748.0" y="328" class="xs t-hi" text-anchor="middle">the origin is INSIDE</text>
+<text x="748.0" y="346" class="xs muted" text-anchor="middle">so the shapes overlap</text>
+<line x1="757.0" y1="222.0" x2="798.0" y2="222.0" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="802.0" y="226.0" class="xs" text-anchor="start">origin</text>
+</svg>

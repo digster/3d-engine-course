@@ -1,0 +1,77 @@
+<svg viewBox="0 0 980 409.5" role="img" aria-labelledby="f4-t f4-d">
+  <title id="f4-t">Why a velocity constraint drifts: the step follows a tangent</title>
+  <desc id="f4-d">Left: a bob on a circle moves along the tangent for one step and lands outside the circle by the drift. Right: the measured radius of a rod spun at 5 m/s over 60 steps against the Pythagorean recurrence, and a table showing that a rigid body on a pin loses rho times (omega h) squared of its energy per step.</desc>
+  <defs>
+    <marker id="e-i-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-red-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-amber-f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="26" y="34" class="sm" text-anchor="start">One step, drawn with h twenty times too big</text>
+<path d="M 290.00,280.00 L 289.87,272.32 L 289.46,264.65 L 288.79,257.00 L 287.86,249.38 L 286.66,241.80 L 285.19,234.26 L 283.47,226.78 L 281.48,219.36 L 279.23,212.02 L 276.73,204.76 L 273.98,197.59 L 270.98,190.52 L 267.73,183.56 L 264.25,176.72 L 260.53,170.00 L 256.57,163.42 L 252.39,156.98 L 247.98,150.69 L 243.36,144.55 L 238.53,138.59 L 233.49,132.79 L 228.25,127.18 L 222.82,121.75 L 217.21,116.51 L 211.41,111.47 L 205.45,106.64 L 199.31,102.02 L 193.02,97.61 L 186.58,93.43 L 180.00,89.47" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<circle cx="70.0" cy="280.0" r="3.5" fill="#8f918a"/>
+<text x="64" y="296" class="xs muted" text-anchor="middle">pin</text>
+<line x1="70.0" y1="280.0" x2="276.7" y2="204.8" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="169.36618828644993" y="258.37778423417643" class="xs mono" text-anchor="middle">r</text>
+<circle cx="276.7" cy="204.8" r="4.0" fill="#5082e6"/>
+<line x1="276.73" y1="204.76" x2="239.11" y2="101.39" stroke="#5082e6" stroke-width="1.8" marker-end="url(#e-blue-f4)"/>
+<text x="284.73237657289985" y="153.75556846835286" class="xs" text-anchor="start">v·h, along the tangent</text>
+<circle cx="239.1" cy="101.4" r="4.0" fill="#e05c5c"/>
+<line x1="70.0" y1="280.0" x2="239.1" y2="101.4" stroke="#e05c5c" stroke-width="1.2" fill="none" stroke-dasharray="5 4"/>
+<text x="140.55508040353814" y="184.69469009095147" class="xs mono" text-anchor="end">√(r² + (v·h)²)</text>
+<line x1="221.3" y1="120.2" x2="239.1" y2="101.4" stroke="#e05c5c" stroke-width="2.2" fill="none"/>
+<text x="249.11016080707628" y="123.38938018190294" class="xs" text-anchor="start">drift δ ≈ v²h²/2r</text>
+<text x="26" y="322" class="xs muted" text-anchor="start">The velocity solve leaves the bob moving exactly along the tangent. The</text>
+<text x="26" y="337" class="xs muted" text-anchor="start">position update follows the tangent for a whole step, and a tangent is not the</text>
+<text x="26" y="352" class="xs muted" text-anchor="start">circle. Next step the solve removes the radial part of v — which keeps r × v</text>
+<text x="26" y="367" class="xs muted" text-anchor="start">and so shrinks v as r grows.</text>
+<text x="560" y="34" class="sm" text-anchor="start">A rod spun at 5 m/s, no correction, 60 steps</text>
+<rect x="560" y="64" width="360" height="150" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="560" y1="214.0" x2="920" y2="214.0" class="grid" stroke-width="0.6"/>
+<text x="554" y="218.0" class="xs mono" text-anchor="end">1.00</text>
+<line x1="560" y1="176.49999999999994" x2="920" y2="176.49999999999994" class="grid" stroke-width="0.6"/>
+<text x="554" y="180.49999999999994" class="xs mono" text-anchor="end">1.05</text>
+<line x1="560" y1="138.99999999999991" x2="920" y2="138.99999999999991" class="grid" stroke-width="0.6"/>
+<text x="554" y="142.99999999999991" class="xs mono" text-anchor="end">1.10</text>
+<line x1="560" y1="101.50000000000006" x2="920" y2="101.50000000000006" class="grid" stroke-width="0.6"/>
+<text x="554" y="105.50000000000006" class="xs mono" text-anchor="end">1.15</text>
+<line x1="560" y1="64.0" x2="920" y2="64.0" class="grid" stroke-width="0.6"/>
+<text x="554" y="68.0" class="xs mono" text-anchor="end">1.20</text>
+<path d="M 560.00,214.00 L 566.00,211.40 L 572.00,208.83 L 578.00,206.28 L 584.00,203.76 L 590.00,201.26 L 596.00,198.79 L 602.00,196.34 L 608.00,193.92 L 614.00,191.52 L 620.00,189.14 L 626.00,186.78 L 632.00,184.44 L 638.00,182.13 L 644.00,179.83 L 650.00,177.56 L 656.00,175.30 L 662.00,173.07 L 668.00,170.85 L 674.00,168.65 L 680.00,166.47 L 686.00,164.31 L 692.00,162.16 L 698.00,160.03 L 704.00,157.92 L 710.00,155.83 L 716.00,153.75 L 722.00,151.68 L 728.00,149.64 L 734.00,147.61 L 740.00,145.59 L 746.00,143.59 L 752.00,141.60 L 758.00,139.63 L 764.00,137.67 L 770.00,135.72 L 776.00,133.79 L 782.00,131.88 L 788.00,129.97 L 794.00,128.08 L 800.00,126.20 L 806.00,124.33 L 812.00,122.48 L 818.00,120.64 L 824.00,118.81 L 830.00,116.99 L 836.00,115.19 L 842.00,113.39 L 848.00,111.61 L 854.00,109.84 L 860.00,108.07 L 866.00,106.32 L 872.00,104.58 L 878.00,102.86 L 884.00,101.14 L 890.00,99.43 L 896.00,97.73 L 902.00,96.04 L 908.00,94.36 L 914.00,92.69 L 920.00,91.04" fill="none" stroke="#9b7ede" stroke-width="1.5"/>
+<circle cx="566.0" cy="211.4" r="3.6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<circle cx="572.0" cy="208.8" r="3.6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<circle cx="620.0" cy="189.1" r="3.6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<circle cx="740.0" cy="145.6" r="3.6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<circle cx="920.0" cy="91.0" r="3.6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="560.0" y="230" class="xs mono" text-anchor="middle">0</text>
+<text x="680.0" y="230" class="xs mono" text-anchor="middle">20</text>
+<text x="800.0" y="230" class="xs mono" text-anchor="middle">40</text>
+<text x="920.0" y="230" class="xs mono" text-anchor="middle">60</text>
+<text x="740.0" y="246" class="xs muted" text-anchor="middle">step</text>
+<line x1="560.0" y1="260.0" x2="580.0" y2="260.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="588" y="264" class="xs" text-anchor="start">the recurrence r² += (v h)², v r conserved</text>
+<line x1="560.0" y1="277.0" x2="580.0" y2="277.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="588" y="281" class="xs" text-anchor="start">measured — agrees to 1.7e-07</text>
+<text x="560" y="308" class="xs muted" text-anchor="start">And for a body on a pin: only the orbit is projected</text>
+<text x="560" y="328" class="xs muted" text-anchor="start">pin offset</text>
+<text x="718" y="328" class="xs muted" text-anchor="end">ρ</text>
+<text x="818" y="328" class="xs muted" text-anchor="end">lost per step</text>
+<text x="908" y="328" class="xs muted" text-anchor="end">ρ (ω h)²</text>
+<line x1="560" y1="336.0" x2="914" y2="336.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="353.0" class="xs" text-anchor="start">d = 0.25 W</text>
+<text x="718" y="353.0" class="xs mono" text-anchor="end">0.4261</text>
+<text x="818" y="353.0" class="xs mono" text-anchor="end">0.001778</text>
+<text x="908" y="353.0" class="xs mono" text-anchor="end">0.001779</text>
+<text x="560" y="370.0" class="xs" text-anchor="start">d = 0.50 W</text>
+<text x="718" y="370.0" class="xs mono" text-anchor="end">0.7481</text>
+<text x="818" y="370.0" class="xs mono" text-anchor="end">0.002986</text>
+<text x="908" y="370.0" class="xs mono" text-anchor="end">0.002987</text>
+<text x="560" y="387.0" class="xs" text-anchor="start">d = 1.00 W</text>
+<text x="718" y="387.0" class="xs mono" text-anchor="end">0.9224</text>
+<text x="818" y="387.0" class="xs mono" text-anchor="end">0.003597</text>
+<text x="908" y="387.0" class="xs mono" text-anchor="end">0.003598</text>
+</svg>

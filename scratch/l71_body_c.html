@@ -1,0 +1,449 @@
+  <h2 id="lock">5. Gimbal lock, as a number</h2>
+
+  <h3>5.1 Ask about rates, not about positions</h3>
+
+  <p>
+    §2.3 showed you the rig locking and said the loss is "a direction of motion in the
+    parameterisation". To turn that into arithmetic, stop asking where the three knobs
+    <em>put</em> the aircraft and start asking what happens when you <em>turn</em> them.
+  </p>
+
+  <p>
+    Suppose you turn the three knobs at rates <code>(ψ̇, θ̇, φ̇)</code> — radians per second of yaw,
+    pitch and roll. The aircraft then spins at some angular velocity <strong>ω</strong>, which
+    <a href="../conventions.html#rotational">Conventions §9b</a> defines as a single vector whose
+    direction is the axis and whose length is the rate. What is the relationship?
+  </p>
+
+  <p>
+    It is simpler than it looks, and you can read it straight off §2.1's picture. Angular velocities
+    about a common point <em>add as vectors</em>. Each knob contributes a spin about its own axis,
+    at its own rate, and those three axes are exactly the three §2.1 identified:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \boldsymbol\omega \;=\; \dot\psi\,\hat{\mathbf y} \;+\; \dot\theta\,\big(R_y(\psi)\hat{\mathbf x}\big) \;+\; \dot\phi\,\big(R_y(\psi)R_x(\theta)\hat{\mathbf z}\big) \]</span>
+    <span class="eq-plain">omega = d_yaw * (world +Y) + d_pitch * (the +X the yaw carried) + d_roll * (the +Z both carried)</span>
+  </div>
+
+  <p>
+    That is linear in the rates, so it is a matrix times the rate vector — and the matrix's columns
+    are just those three axes, written in world coordinates. This is the <strong>Jacobian</strong>
+    of the angles-to-rotation map, and <code>euler_rate_jacobian</code> is four lines because that
+    is genuinely all it is:
+  </p>
+
+  <p class="mono">
+    column 0 = (0, 1, 0)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; yaw's axis, which never moves<br>
+    column 1 = Ry(ψ)·(1, 0, 0)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; pitch's axis, carried by the yaw<br>
+    column 2 = Ry(ψ)·Rx(θ)·(0, 0, 1)&nbsp; roll's axis, carried by both
+  </p>
+
+  <h3>5.2 The determinant, which is the answer</h3>
+
+  <p>
+    A 3×3 matrix's determinant is the signed volume of the box its columns span
+    (<a href="02-06-mat4.html">2.6</a>). So <code>det J</code> asks: <em>how much volume do the
+    three knob axes enclose?</em> If they are mutually perpendicular, one unit. If they are coplanar
+    — if one of them lies in the plane of the other two — zero, and the three knobs between them can
+    only reach a two-dimensional sheet of angular velocities out of a three-dimensional space.
+  </p>
+
+  <p>
+    Figure 4 is that box, at three pitches.
+  </p>
+
+  @@FIG_JACOBIAN@@
+
+  <p>
+    Compute it. With <code>a</code>, <code>b</code>, <code>c</code> the three columns, the
+    determinant is the triple product <code>a · (b × c)</code>. Column <code>a</code> is
+    <code>(0,1,0)</code>, so the whole thing collapses to the y component of <code>b × c</code>,
+    which is <code>−(b<sub>x</sub>c<sub>z</sub> − b<sub>z</sub>c<sub>x</sub>)</code>. With
+    <code>b = (c<sub>y</sub>, 0, −s<sub>y</sub>)</code> and
+    <code>c = (s<sub>y</sub>c<sub>p</sub>, −s<sub>p</sub>, c<sub>y</sub>c<sub>p</sub>)</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \det J \;=\; -\big(c_y \cdot c_yc_p - (-s_y)\cdot s_yc_p\big) \;=\; -c_p\,(c_y^2 + s_y^2) \;=\; -\cos\theta \]</span>
+    <span class="eq-plain">det J = -(cy * cy*cp + sy * sy*cp) = -cp * (cy^2 + sy^2) = -cos(pitch)</span>
+  </div>
+
+  <p>
+    <strong><code>det J = −cos(pitch)</code>.</strong> The yaw does not appear — it cancelled
+    against itself, which it had to, because turning the whole aircraft about the vertical cannot
+    change how well its controls work. The minus sign is nothing: it says the ordering
+    (yaw, pitch, roll) is an odd permutation relative to a right-handed frame, and if we had listed
+    the columns as (pitch, yaw, roll) it would be positive. The magnitude is the content.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §A.6</strong> — the Jacobian at yaw 30°, pitch 40°, written row by row:</p>
+<pre><code>      [ +0.000000  +0.866025  +0.383022 ]
+      [ +1.000000  +0.000000  -0.642788 ]
+      [ +0.000000  -0.500000  +0.663414 ]
+      det J = -0.766044,  -cos(40) = -0.766044</code></pre>
+    <p>
+      Read it by columns, because the columns are the thing. Column 0 is <code>(0,1,0)</code>, the
+      vertical. Column 1 is <code>(0.866025, 0, −0.5)</code>, which is <code>(cos 30°, 0,
+      −sin 30°)</code> — world +X swung 30° round the vertical, exactly as the yaw should have
+      swung it. Column 2 is <code>(0.383022, −0.642788, 0.663414)</code>, and its middle entry is
+      <code>−sin 40°</code> — the roll axis has been tipped 40° below the horizontal by the pitch.
+      Every number in that matrix is somewhere you can point at in Figure 1.
+    </p>
+    <p>
+      And the determinant by hand: <code>b × c</code> has y component
+      <code>−(0.866025 × 0.663414 − (−0.5) × 0.383022) = −(0.574533 + 0.191511) = −0.766044</code>,
+      and dotting with <code>(0,1,0)</code> keeps exactly that. <code>cos 40° = 0.766044</code>.
+    </p>
+  </div>
+
+  <p>
+    <code>verify_71</code> §C.1 checks <code>det J + cos(pitch) = 0</code> across 3,249 poses:
+    worst error <code>5.960e-08</code>.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The measurement needed no new API</span>
+    <p>
+      <code>std::abs(determinant(euler_rate_jacobian(e)))</code> is "how far from gimbal lock am
+      I", on a scale from 1 to 0, in one expression. <code>determinant</code> has been in
+      <code>mat3.hpp</code> since Lesson 2.6, where it was introduced as "the factor by which
+      volumes change". Nothing was added to make this measurable — the pieces were already there
+      and nobody had put them together. That is worth noticing as a habit: when a phenomenon feels
+      un-measurable, the first question is not "what function do I need" but "what is it the
+      determinant, the norm or the trace of".
+    </p>
+  </div>
+
+  <h3>5.3 What exactly dies</h3>
+
+  <p>
+    The determinant tells you that a dimension is lost. It does not tell you <em>which</em> knob
+    combination is wasted or <em>which</em> direction of spin is unreachable. For that, look at
+    <code>JᵀJ</code> — the matrix of all the dot products between columns — which is where every
+    question about lengths and angles of the columns lives.
+  </p>
+
+  <p>
+    All three columns are unit length. Column 0 is <code>(0,1,0)</code>. Column 1 is a rotated
+    <code>x̂</code>, so unit. Column 2 is
+    <code>(s<sub>y</sub>c<sub>p</sub>, −s<sub>p</sub>, c<sub>y</sub>c<sub>p</sub>)</code>, whose
+    squared length is <code>c<sub>p</sub>²(s<sub>y</sub>² + c<sub>y</sub>²) + s<sub>p</sub>²</code>
+    = <code>c<sub>p</sub>² + s<sub>p</sub>²</code> = 1. And of the three dot products between
+    different columns, two are zero — yaw's axis is perpendicular to pitch's by construction, and
+    pitch's is perpendicular to roll's because they are two axes of the same orthonormal frame. The
+    only one left is <code>column 0 · column 2 = −sin(pitch)</code>. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ J^{\mathsf T}J \;=\; \begin{bmatrix} 1 & 0 & -s_p \\ 0 & 1 & 0 \\ -s_p & 0 & 1 \end{bmatrix} \]</span>
+    <span class="eq-plain">J^T J = [[1, 0, -sin(pitch)], [0, 1, 0], [-sin(pitch), 0, 1]]</span>
+  </div>
+
+  <p>
+    One number, in two corners, and it is the sine of the pitch. That is the entire pathology,
+    written down: <strong>the yaw axis and the roll axis are not perpendicular, and how far from
+    perpendicular they are is exactly the pitch.</strong> At pitch 0 they are at right angles; at
+    pitch 90 they are the same line.
+  </p>
+
+  <p>
+    The eigenvectors of that matrix can be read off by inspection. <code>(0,1,0)</code> is one, with
+    eigenvalue 1 — the pitch knob is uninvolved, as you would expect, since it is perpendicular to
+    both the others. And <code>(1, 0, ±1)</code> are the other two, with eigenvalues
+    <code>1 ∓ s<sub>p</sub></code>. So the <em>singular values</em> of <code>J</code> — the gains
+    it applies to the best and worst input directions — are the square roots:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \sigma \;=\; \Big\{\sqrt{1 + |\sin\theta|},\;\; 1,\;\; \sqrt{1 - |\sin\theta|}\Big\} \]</span>
+    <span class="eq-plain">sigma = { sqrt(1 + |sin pitch|),  1,  sqrt(1 - |sin pitch|) }</span>
+  </div>
+
+  <p>
+    Check it against the determinant, which is the product of the singular values:
+    <code>√(1+|s|) · 1 · √(1−|s|) = √(1−s²) = |cos θ|</code>. It agrees.
+  </p>
+
+  <p>
+    And the weakest input direction is the eigenvector <code>(1, 0, +1)</code> when the pitch is
+    positive — <strong>turn the yaw knob and the roll knob at the same rate, and almost nothing
+    happens</strong>. That is the key you hold down in the demo. Below the horizon the sign flips
+    and it is opposite rates instead, which is a detail the demo has to get right or the effect
+    reverses and looks like a bug in the demo rather than a fact about the map.
+  </p>
+
+  <h3>5.4 The same thing, seen algebraically</h3>
+
+  <p>
+    There is a second route to §5.3's conclusion that needs no derivatives at all, and meeting the
+    same fact twice from different directions is how you know you have understood it. Set
+    <code>pitch = +90°</code> in §4.2's matrix, so <code>c<sub>p</sub> = 0</code> and
+    <code>s<sub>p</sub> = 1</code>, and collapse:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R(\psi, 90^\circ, \phi) \;=\; \begin{bmatrix} \cos(\psi-\phi) & \sin(\psi-\phi) & 0 \\ 0 & 0 & -1 \\ -\sin(\psi-\phi) & \cos(\psi-\phi) & 0 \end{bmatrix} \]</span>
+    <span class="eq-plain">At pitch +90 the matrix is built entirely from cos(yaw - roll) and sin(yaw - roll).</span>
+  </div>
+
+  <p>
+    Entry (0,0) was <code>c<sub>y</sub>c<sub>r</sub> + s<sub>y</sub>s<sub>p</sub>s<sub>r</sub></code>,
+    which with <code>s<sub>p</sub> = 1</code> is
+    <code>c<sub>y</sub>c<sub>r</sub> + s<sub>y</sub>s<sub>r</sub></code> — the cosine
+    difference identity, so <code>cos(ψ − φ)</code>. Entry (0,1) was
+    <code>s<sub>y</sub>s<sub>p</sub>c<sub>r</sub> − c<sub>y</sub>s<sub>r</sub></code>, which is
+    <code>sin(ψ − φ)</code>. The rest follow.
+  </p>
+
+  <p>
+    <strong>Yaw and roll appear only as their difference.</strong> Two knobs, one number. Every
+    <code>(ψ, φ)</code> pair on a line of constant <code>ψ − φ</code> produces the <em>identical</em>
+    matrix, so there is an entire one-parameter family of poses that are the same orientation.
+    Figure 5 is that family.
+  </p>
+
+  @@FIG_COLLAPSE@@
+
+  <p>
+    At <code>pitch = −90°</code> the same collapse happens with the signs arranged so that
+    <code>ψ + φ</code> survives instead — the other diagonal. <code>verify_71</code> §C.4 checks
+    both: moving yaw and roll each by +47° at pitch +90° produces <code>0.0000°</code> of actual
+    rotation, and the same joint move at pitch 0 produces <strong>65.51°</strong>, which is what two
+    near-orthogonal 47° turns should give (<code>47√2 = 66.47</code>, and the small shortfall is the
+    axes not being exactly orthogonal at that pose). The second number is the control, and it is
+    there because a check whose degenerate case reads as a pass is not a check — a lesson this
+    course has now learned three times.
+  </p>
+
+  <h3>5.5 How much it costs, in units you can feel</h3>
+
+  <p>
+    The smallest singular value, <code>σ<sub>min</sub></code>, has an operational meaning worth
+    stating plainly: <strong>turn the knobs at a combined rate of 1 rad/s and, in the worst
+    direction, the aircraft turns at <code>σ<sub>min</sub></code> rad/s.</strong> Invert it and you
+    get the price: to turn the aircraft at 1 rad/s in that direction you must turn the knobs at
+    <code>1/σ<sub>min</sub></code>.
+  </p>
+
+  @@FIG_CONDITIONING@@
+
+  <p>
+    Read the numbers off Figure 6 and the shape of the problem becomes concrete. At 10° from lock it
+    costs you a factor of 8; at 1° a factor of 81; at a tenth of a degree, 810. At a
+    <em>hundredth</em> of a degree from vertical you would need <strong>8,100 rad/s</strong> of knob
+    — 464,000 degrees per second — for one radian per second of aircraft. That is the real-world
+    failure: a control loop running a yaw-pitch-roll parameterisation does not stop near the
+    singularity, it <em>saturates and lurches</em>, because the correction it computes is physically
+    impossible and it takes whatever fraction of it the actuators can deliver.
+  </p>
+
+  <p>
+    <code>verify_71</code> §C.2 checks the closed form against a brute-force sweep of a million unit
+    rate vectors per pose — apply <code>J</code> to each and keep the smallest output length, which
+    is the definition of the smallest singular value and assumes nothing about §5.3's algebra. Worst
+    disagreement over the range: <code>1.788e-07</code>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The bug this harness found in itself</span>
+    <p>
+      The formula derived in §5.3 is <code>σ<sub>min</sub> = √(1 − |sin p|)</code>, and it is
+      correct. It is also <strong>unusable in <code>float</code> exactly where it matters</strong>.
+      At pitch 89.99° the true sine is <code>1 − 1.5e-8</code>, which is closer to 1.0 than a
+      <code>float</code> can represent; the subtraction returns <em>exactly zero</em>, and the
+      conditioning number comes out <code>inf</code>. The first draft of Figure 6's table printed
+      <code>inf</code> at a pose that is nowhere near singular.
+    </p>
+    <p>
+      The algebra removes it. Multiply above and below by <code>(1 + |sin p|)</code>:
+    </p>
+    <div class="eq">
+      <span class="katex-src">\[ 1 - s \;=\; \frac{(1-s)(1+s)}{1+s} \;=\; \frac{1 - s^2}{1+s} \;=\; \frac{c^2}{1+s} \qquad\Longrightarrow\qquad \sigma_{\min} = \frac{|\cos\theta|}{\sqrt{1 + |\sin\theta|}} \]</span>
+      <span class="eq-plain">1 - s = (1-s)(1+s)/(1+s) = (1 - s^2)/(1+s) = c^2/(1+s), so sigma_min = |cos p| / sqrt(1 + |sin p|)</span>
+    </div>
+    <p>
+      No subtraction of two nearly-equal numbers, accurate all the way in, and it is the red dashed
+      line in Figure 6 that separates from the blue one and then falls off a cliff. Note where the
+      separation <em>starts</em>: at 89.9° the naive form already reads 0.0012449 against a true
+      0.0012340, which is 0.9% wrong while still looking entirely plausible. The cliff is the part
+      you notice; the drift before it is the part that gets shipped.
+    </p>
+  </div>
+
+  <h3 id="lock-repeated">5.6 Where the other twelve orders put their hole</h3>
+
+  <p>
+    §2.2 promised a reason to prefer the three-distinct-axis families, and now the machinery is here
+    to give it. Take a proper-Euler order — <code>z-x-z</code>, say, which is what orbital elements
+    use — and set the middle angle to zero. Then <code>R = R<sub>z</sub>(α) R<sub>x</sub>(0)
+    R<sub>z</sub>(γ) = R<sub>z</sub>(α + γ)</code>: the first and third turns are about the same
+    axis and only their sum survives. Exactly the same collapse, by exactly the same mechanism.
+  </p>
+
+  <p>
+    But look at <em>where</em>. The singularity of a repeated-axis order is at middle angle
+    <strong>0°</strong> — which is the identity, the rest pose, the value every field is initialised
+    to and every editor opens at. A Tait–Bryan order puts its hole at ±90°, somewhere you can
+    arrange never to go. The repeated-axis orders put theirs where everything starts.
+  </p>
+
+  <h2 id="extract">6. Going backwards, and the branch that admits defeat</h2>
+
+  <h3>6.1 Inverting the map</h3>
+
+  <p>
+    Sometimes you have a matrix and need the three numbers: a debug panel showing the orientation of
+    a bone, an exporter writing a file, an editor field a designer is about to type over.
+    <code>euler_from_rotation</code> does it, and §4.2's structure hands you the recipe.
+  </p>
+
+  <p>
+    Entry (1,2) is <code>−sin(pitch)</code> and nothing else, so the pitch comes out of an arcsine
+    of it. That fixes <code>cos(pitch)</code> too, and then the remaining entries split cleanly:
+  </p>
+
+  <p class="mono">
+    r(0,2) = sin(yaw)·cos(pitch)&nbsp;&nbsp;&nbsp;&nbsp;r(2,2) = cos(yaw)·cos(pitch)<br>
+    r(1,0) = cos(pitch)·sin(roll)&nbsp;&nbsp;&nbsp;r(1,1) = cos(pitch)·cos(roll)
+  </p>
+
+  <p>
+    Each pair is a <em>(sine, cosine)</em> of the angle we want, scaled by a common factor of
+    <code>cos(pitch)</code>. <code>atan2</code> takes a (y, x) pair and returns the angle, and — this
+    is the useful part — a common positive scale factor on both arguments does not change the
+    answer, because <code>atan2</code> is about the <em>direction</em> of the vector, not its
+    length. So the <code>cos(pitch)</code> divides out and the yaw is
+    <code>atan2(r(0,2), r(2,2))</code>, the roll is <code>atan2(r(1,0), r(1,1))</code>.
+  </p>
+
+  <p>
+    That common factor is also the whole of the problem. When <code>cos(pitch)</code> goes to zero,
+    those four entries all go to zero together, and <code>atan2(0, 0)</code> is asking for the
+    direction of a vector with no length.
+  </p>
+
+  <h3>6.2 What the degenerate branch keeps, and what it gives up</h3>
+
+  <p>
+    §5.4 says exactly what is recoverable at lock: the difference <code>ψ − φ</code>, and nothing
+    about the two separately. So the honest thing for the extraction to do is to recover that
+    difference, put it somewhere, and <em>say so</em>. We put it in the yaw and set the roll to
+    zero, and return a <code>degenerate</code> flag.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §D.2</strong> — feeding in a pose that is exactly at lock:</p>
+<pre><code>  in:  yaw  +20.00 pitch  +90.00 roll  -35.00
+  out: yaw  +55.00 pitch  +90.00 roll   +0.00  (cos_pitch 4.371e-08, degenerate YES)
+  matrix recovered to 6.537e-06°, but yaw moved by 35.00° and roll by 35.00°</code></pre>
+    <p>
+      Both halves of that matter. The yaw came back as 55°, which is <code>20 − (−35)</code> — the
+      difference, exactly as §5.4 predicts, and the whole of the recoverable information. The roll
+      came back as zero, which is not what went in. <strong>And the matrix is reproduced
+      correctly.</strong> Round-trip those three output numbers through
+      <code>rotation_from_euler</code> and you get the input rotation back to six millionths of a
+      degree. Nothing about the <em>orientation</em> was lost; what was lost is the
+      <em>split</em>, and no implementation can do better because there is nothing better to do.
+    </p>
+    <p>
+      Note also <code>cos_pitch 4.371e-08</code> rather than <code>0</code>. That is
+      <code>cos(π/2)</code> in <code>float</code> — <code>π/2</code> is not representable, so its
+      cosine is not zero. If you ever write <code>if (cos_pitch == 0.0f)</code> you will have
+      written a branch that does not fire at the one pose it exists for.
+    </p>
+  </div>
+
+  <h3>6.3 Where the threshold goes, and the argument that was wrong</h3>
+
+  <p>
+    So the extraction needs a threshold, and the header's first draft justified it like this: near
+    lock the yaw comes out of <code>atan2</code> of two quantities proportional to
+    <code>cos(pitch)</code>, so a <code>float</code>'s ~1e-7 of error in a matrix entry reaches the
+    recovered angle <em>divided by</em> <code>cos(pitch)</code>. Put the floor at 1e-4 and the
+    amplification is bounded at about 0.06°.
+  </p>
+
+  <p>
+    Then we measured it, and there was no amplification at all, at any pitch. The argument had
+    missed something: <strong>floating-point error is relative, not absolute.</strong> The two
+    entries <code>atan2</code> reads are themselves proportional to <code>cos(pitch)</code>, so when
+    <code>cos(pitch)</code> is 1e-4 the entries are around 1e-4 and their <em>absolute</em> error is
+    around 1e-11. The ratio survives, and so does the angle.
+  </p>
+
+  <p>
+    That is a property of a matrix that <code>rotation_from_euler</code> has just built, and of
+    nothing else. A rotation that has come down a transform hierarchy (Lesson 5.9), or out of a
+    file, or through a few hundred compositions, carries absolute error of about 1e-7 spread across
+    all nine entries — and then the division is entirely real:
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §D.3</strong> — 200 trials of ±1e-7 per entry, worst recovered yaw error:</p>
+<pre><code>   90 - pitch    cos_pitch     clean err  perturbed err   flagged
+      1.0000°    1.745e-02      0.00000°       0.00041°        no
+      0.1000°    1.745e-03      0.00000°       0.00384°        no
+      0.0200°    3.490e-04      0.00000°       0.02029°        no
+      0.0057°    9.950e-05      (in yaw)  (all flagged)       YES
+      0.0020°    3.488e-05      (in yaw)  (all flagged)       YES
+      0.0005°    8.778e-06      (in yaw)  (all flagged)       YES</code></pre>
+    <p>
+      The perturbed column is <code>1.2e-7 rad / cos_pitch</code>, converted to degrees — check it:
+      at <code>cos_pitch = 3.49e-4</code> that is 0.0197°, and the measurement is 0.0203°. At the
+      threshold of 1e-4 it would be 0.07°, which is below what any consumer of these angles will
+      notice, and 1e-4 is where it was put. The threshold corresponds to being within
+      <strong>0.0057°</strong> of vertical.
+    </p>
+    <p>
+      The "(all flagged)" cells are the part of this table it would have been easiest to get wrong.
+      Every perturbed trial below the threshold reports <code>degenerate</code> and is skipped, so
+      the running worst stays at its initial 0.0 — and the table would print the best-looking number
+      in it at the worst pose in it. Lesson 6.16 shipped exactly that shape, printing
+      <code>identical=YES</code> on two failed file reads. Count what you actually measured, and
+      print a dash when the count is zero.
+    </p>
+  </div>
+
+  <p>
+    Reaching 0.0057° at all depends on one detail in the implementation.
+    <code>cos_pitch</code> is computed as <code>hypot(r(0,2), r(2,2))</code> and not as the obvious
+    <code>√(1 − sin²)</code>, for exactly the reason §5.5 gave: the obvious form hits zero a full
+    0.01° early. And the pairing is neat rather than a trick — those two entries are
+    <code>sin(yaw)·cos(pitch)</code> and <code>cos(yaw)·cos(pitch)</code>, so their length
+    <em>is</em> <code>|cos(pitch)|</code>. <strong>The conditioning of the yaw extraction is the
+    length of the vector whose angle the yaw extraction takes.</strong> Same two numbers, one gives
+    you the answer and the other gives you your confidence in it.
+  </p>
+
+  <h3>6.4 It is not a true inverse, and cannot be</h3>
+
+  <p>
+    <code>std::asin</code> returns values in [−90°, +90°], so the extraction can never report a
+    pitch outside that strip. Feed it a matrix built with pitch 100° and it comes back as something
+    else entirely:
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §D.4</strong></p>
+<pre><code>  pitch 100° comes back as yaw -170.0 pitch +80.0 roll +180.0
+      — same rotation, 1.465e-05° apart</code></pre>
+    <p>
+      That is not a bug and cannot be fixed. The map from triples to rotations is many-to-one —
+      §5.4 showed an entire <em>line</em> of triples mapping to one rotation, and here is a much
+      more ordinary example of the same thing — so its inverse has to choose. Choosing the shortest
+      pitch is the choice every library makes, and the one thing an implementation owes you is that
+      the triple it returns names the rotation you gave it. This one does, to fifteen millionths of
+      a degree.
+    </p>
+  </div>
+
+  <p>
+    The practical consequence is worth stating because it bites: <strong>do not round-trip through
+    Euler angles in a loop.</strong> Reading a rotation out as angles, adjusting one, and writing it
+    back is a perfectly good thing to do once, in an editor, with a human watching. Doing it every
+    frame means an orientation that silently teleports to a different triple the moment it crosses
+    the pitch strip boundary, and a slider that was at 100 last frame is at 80 this frame with two
+    other fields changed.
+  </p>

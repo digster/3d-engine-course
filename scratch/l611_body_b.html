@@ -1,0 +1,725 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3>3.1 &nbsp; The <code>over</code> operator, from coverage</h3>
+
+  <p>
+    Take the leaf edge again: a fraction <em>a</em> of the pixel is source, the remaining
+    <em>1 − a</em> is whatever was already there. The pixel's honest colour is the average over its
+    own area, weighted by how much area each contributes:
+  </p>
+
+  <div class="eq">\[ C_{\text{out}} \;=\; C_{\text{src}}\,a \;+\; C_{\text{dst}}\,(1-a) \]</div>
+  <div class="eq-plain">out = src × a + dst × (1 − a)</div>
+
+  <p>
+    Porter and Duff named this <strong><code>over</code></strong> in 1984, and the name is worth
+    keeping because it is a statement about coverage rather than about opacity. Notice that it is
+    just a <strong>lerp</strong> — and knowing that it is a lerp is what tells you, immediately and
+    without further argument, that it must be evaluated in linear light. Lesson 2.4 settled that
+    for vertex colours, 3.9 settled it for texture filtering, 6.10 settled it for mip chains, and
+    this is the fourth appearance of the same fact.
+  </p>
+
+  @@FIG_OVER@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> Half-coverage white over black — the case to have at your
+       fingertips, because every mistake in this subject is a variation on it.</p>
+    <div class="eq-plain">in light:   1.0 × 0.5 + 0.0 × 0.5 = 0.5</div>
+    <p>
+      Half the light. Lesson 6.1 established what half the light is stored as, and it is
+      <strong>not</strong> 128:
+    </p>
+    <div class="eq-plain">encode(0.5) = code 188</div>
+    <p>
+      Now do the same lerp on the stored bytes, which is what everyone writes first:
+    </p>
+    <div class="eq-plain">on bytes:   255 × 0.5 + 0 × 0.5 = code 128 → emits 0.2159 of white</div>
+    <p>
+      So the naive composite delivers <strong>0.2159 / 0.5029 = 42.9%</strong> of the light it
+      should — <strong>56.8% too dark</strong>. Every pane of glass in the scene, every fade, every
+      smoke puff.
+    </p>
+  </div>
+
+  <p>
+    And <code>over</code> is <strong>not commutative</strong>. The harness makes that concrete with
+    red and blue at 75% coverage: red over blue gives (225, 0, 137) and blue over red gives
+    (137, 0, 225). Everything in §3.6 follows from that one line — and note in passing that at
+    <em>exactly</em> 0.5 the two orderings coincide, which is a real trap for a test, because the
+    most obvious coverage to pick is the one value at which the property you are demonstrating is
+    invisible.
+  </p>
+
+  <h3>3.2 &nbsp; Where the error lives, and why it survives review</h3>
+
+  <p>
+    The 42.9% above is a single point. Sweeping the whole range says something more useful about
+    why this bug is so persistent.
+  </p>
+
+  @@FIG_SPACE@@
+
+  <p>
+    The two curves <strong>touch at both ends</strong>. At <em>a</em> = 0 the composite is the
+    destination and at <em>a</em> = 1 it is the source, and both are exact in either space, because
+    no averaging happened. So a fade-to-black starts correctly and finishes correctly; it is only
+    <em>wrong in the middle</em>, where it is fastest and least examined. The worst gap is
+    <strong>0.2898 of full white at a = 0.55</strong> — over a fifth of the display's entire range,
+    from one missing pair of transfer functions.
+  </p>
+
+  <p>
+    There is a second reason it survives, and it is the one that reaches all the way into hardware:
+    <strong>a GPU will make this exact mistake for you, for free, if you let it.</strong> Blending
+    happens in the ROP, <em>after</em> the fragment shader returns, on whatever bit pattern is
+    sitting in the colour target. Which means:
+  </p>
+
+  <ul>
+    <li>
+      On an <code>_SRGB</code> target, the hardware decodes the destination, blends in linear light,
+      and re-encodes. Exactly <code>blend_over</code>, in fixed-function silicon, at no cost.
+    </li>
+    <li>
+      On a plain <code>UNORM</code> target with a shader that encodes its own output, the hardware
+      lerps sRGB <em>codes</em>. Exactly <code>blend_over_encoded</code>.
+    </li>
+  </ul>
+
+  <div class="callout">
+    <span class="label">A comment from Lesson 6.1, coming due</span>
+    <p>
+      <code>scene.frag.hlsl</code> has carried this note since 6.1, written when nothing in the
+      engine blended:
+    </p>
+    <blockquote>
+      <p>
+        <code>encode_output == 1</code> — the swapchain is plain SDR, whose values are already sRGB
+        codes, so we must encode. <strong>Correct for opaque geometry and wrong the moment anything
+        blends.</strong>
+      </p>
+    </blockquote>
+    <p>
+      §H of the harness renders the same quad twice, changing nothing but the target format and
+      that one flag, and reads back the centre pixel. <strong>Code 188 on the <code>_SRGB</code>
+      target; code 127 on the <code>UNORM</code> one</strong> — 42.2% of the light. A prediction
+      written six lessons ago, measured.
+    </p>
+    <p>
+      And note what cannot fix it: the shader. By the time the blend runs, the shader has returned.
+      The only fix is the target's format, which is pipeline state chosen before any pixel exists.
+    </p>
+  </div>
+
+  <h3>3.3 &nbsp; What each mode does to the depth buffer</h3>
+
+  <p>
+    Lesson 3.1 built the z-buffer and described it in a sentence worth quoting exactly:
+    <em>the depth buffer is a sort</em>. It resolves visibility <strong>per pixel</strong>, which
+    means the order the pixels arrived in cannot matter. That property has been quietly holding up
+    every demo in this course for eight lessons, and it is easy to stop noticing you have it.
+  </p>
+
+  <p>It survives alpha masking. It does not survive blending. Here is precisely why.</p>
+
+  <h4>Masking: shade first, then commit</h4>
+
+  <p>
+    A masked fragment compares its coverage against a cutoff. Below it, the fragment does not
+    exist: no colour, <em>and no depth</em>. Above it, the fragment is written at full strength, as
+    opaque as any other — the alpha decided existence and was then thrown away, which is the whole
+    difference between a test and a blend.
+  </p>
+
+  <p>
+    The consequence is that masked geometry occludes exactly what it draws and nothing else, so it
+    can be drawn in any order, with the opaque geometry, and comes out right. But it costs one
+    thing, and the cost is structural rather than arithmetic:
+  </p>
+
+  <p class="lede">
+    The depth write has to move <em>after</em> the fragment, because the fragment is what decides
+    whether there is a fragment.
+  </p>
+
+  <p>
+    That is not a quirk of our rasterizer. It is why hardware disables <strong>early-Z</strong> for
+    any shader containing <code>discard</code> or <code>clip</code>: the depth test can no longer
+    run ahead of shading when shading determines coverage. The same dependency, in silicon. Seeing
+    it appear independently in a software rasterizer and in a GPU is the best evidence available
+    that it is a fact about the problem rather than about either implementation.
+  </p>
+
+  <h4>Blending: test, but never write</h4>
+
+  <p>
+    A blended fragment must <strong>test</strong> depth — transparent geometry behind a wall is
+    behind the wall — and must <strong>not write</strong> it. The reason is one sentence: a
+    transparent surface does not occlude what is behind it, because what is behind it is visible
+    through it.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The symptom of getting this wrong, which does not look like a depth bug</span>
+    <p>
+      Enable blending and leave depth writes on, and the <em>first</em> transparent surface drawn
+      writes depth across its whole area. Every transparent surface further away then fails the
+      depth test and vanishes. You see exactly one pane of glass — whichever happened to be drawn
+      first — and the others are simply absent.
+    </p>
+    <p>
+      It reads as a culling bug, or as geometry that failed to load. §D of the harness checks the
+      positive form: after a blended fill the depth buffer is <em>still at the far plane</em>, and
+      a second, farther blended surface still reaches the pixel.
+    </p>
+  </div>
+
+  <h3>3.4 &nbsp; Premultiplied alpha, and what it is actually for</h3>
+
+  <p>
+    Premultiplied alpha is usually introduced as an optimisation — one multiply fewer in the blend
+    — which is both true and beside the point. Nobody adopts a storage convention to save a
+    multiply. The reason it exists is:
+  </p>
+
+  <p class="lede">
+    Premultiplied is the representation in which <strong>averaging</strong> is already correct.
+  </p>
+
+  <p>
+    Consider what a bilinear fetch does at a cutout edge. It averages four texels — colour and
+    alpha, independently, with the same weights. Two of those texels are leaf; two are empty. And
+    the "empty" texels have <em>something</em> in their colour channels, because an image format
+    stores four numbers per texel whether or not they mean anything, and what an image editor
+    leaves in a cleared region is almost always black.
+  </p>
+
+  @@FIG_PREMUL@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The harness filters exactly across such an edge (§C).</p>
+    <p>
+      The leaf is <code>0xFF00C000</code>, whose green decodes to <strong>0.5271</strong> of full
+      green. The transparent texels are <code>0x00000000</code>. Filtering with
+      <strong>straight</strong> alpha:
+    </p>
+    <div class="eq-plain">green = (0.5271 + 0.5271 + 0 + 0) / 4 = 0.2636   ← half the leaf</div>
+    <p>
+      The edge texel now carries a colour that is 50% too dark, and the darkening is proportional
+      to how transparent its neighbours are. <strong>That deficit is the dark halo</strong> you see
+      outlining cutouts in engines that get this wrong — it is not an outline anybody drew, it is
+      invisible black being averaged in at full weight.
+    </p>
+    <p>Weight each texel by its own coverage instead:</p>
+    <div class="eq-plain">green = (0.5271×1 + 0.5271×1 + 0×0 + 0×0) / (1 + 1 + 0 + 0) = 0.5271</div>
+    <p>
+      The leaf's colour, intact. And that weighted average is <em>arithmetically identical</em> to
+      premultiplying, averaging, and dividing back out — which is why an image stored premultiplied
+      gets this behaviour for free, from an ordinary unweighted filter that knows nothing about it.
+    </p>
+  </div>
+
+  <p>
+    So the two forms of <code>over</code> are:
+  </p>
+
+  <div class="eq">\[
+    \text{straight:}\quad C_{\text{out}} = C_{\text{src}}\,a + C_{\text{dst}}(1-a)
+    \qquad
+    \text{premultiplied:}\quad C_{\text{out}} = C_{\text{src}} + C_{\text{dst}}(1-a)
+  \]</div>
+  <div class="eq-plain">straight: src×a + dst×(1−a)     premultiplied: src + dst×(1−a)</div>
+
+  <p>
+    One multiply apart, and one <code>SDL_GPUBlendFactor</code> apart —
+    <code>SRC_ALPHA</code> becomes <code>ONE</code>. The property that matters is that the
+    premultiplied form <strong>composes associatively</strong>: compositing A over B and then over
+    C gives the same answer as A over (B over C). A bilinear filter, a mip downsample and an
+    antialiasing resolve are all averages of already-composited fragments, and all three are
+    correct on premultiplied data and wrong on straight data.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The honest limit</span>
+    <p>
+      Un-premultiplying is <strong>lossy</strong>, unavoidably. At <em>a</em> = 1/255 the division
+      multiplies every rounding error by 255, so a nearly-transparent texel comes back as noise.
+      The harness asserts that the round trip fails there rather than pretending it does not. Which
+      is why premultiplication properly belongs at load time on data with more than eight bits per
+      channel — or nowhere.
+    </p>
+  </div>
+
+  <h3>3.5 &nbsp; Coverage, and the tree that thins out</h3>
+
+  <p>
+    Lesson 6.10 built a mip chain and 6.10 §9 promised this connection by name. Here it is, and it
+    is one of the most recognisable artefacts in real-time graphics.
+  </p>
+
+  <p>
+    A leaf texture covers some fraction of its area — say 36%. Downsample it, and every 2×2 block's
+    alpha is replaced by the block's mean. Do that four or five times and the alpha channel has
+    been smoothed toward its local average everywhere. Now apply an alpha test at 0.5.
+  </p>
+
+  @@FIG_COVERAGE@@
+
+  <p>
+    The fraction passing the test <em>falls</em>. At level 6 an ordinary chain passes 0.2500 where
+    the source passed 0.3635 — <strong>31.2% of the foliage has evaporated</strong> — and the
+    visible result is a tree that gets sparser as you walk away from it, until the branches are
+    bare.
+  </p>
+
+  <p class="lede">
+    Nothing in the chain is wrong. <strong>Averaging and thresholding do not commute</strong>, and
+    only one of the two operations is the mip chain's business.
+  </p>
+
+  <p>
+    The fix, due to Ignacio Castaño (2010), does not touch the alpha test: it rescales each level's
+    alpha channel so that the fraction passing the test is <em>preserved</em>. Coverage is a step
+    function of the scale factor — it moves only when some texel crosses the cutoff — which rules
+    out Newton's method and rules in bisection, since bisection needs nothing but monotonicity.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example, including where it stops.</strong></p>
+    <p>
+      With <code>coverage_cutoff</code> set, every level down to 8×8 holds the source's 0.3635 to
+      within <strong>0.0115</strong>. Below that it cannot, and the reason is arithmetic rather
+      than a defect:
+    </p>
+    <div class="eq-plain">level 6 is 4×4 = 16 texels → coverage can only be k/16</div>
+    <p>
+      0.3635 is not a multiple of 1/16, and a <em>uniform</em> scale can only move the answer
+      between values the sorted alpha list already separates. So the achievable coverages jump, and
+      the rescale lands at 0.2500. By that level the whole leaf is a few pixels on screen and the
+      error is a rounding of one texel — but it is worth measuring where a technique stops rather
+      than widening a tolerance until the test passes.
+    </p>
+  </div>
+
+  <h3>3.6 &nbsp; Draw order, and where sorting runs out</h3>
+
+  <p>
+    Because <code>over</code> is not commutative, the order of transparent draws is part of the
+    answer. And there is no per-pixel structure that can rescue us, because the information needed
+    — every fragment along the ray, sorted — is exactly what a depth buffer throws away in order to
+    be one number deep.
+  </p>
+
+  <p>So the engine acquires its first <strong>per-frame sort</strong>. Three properties:</p>
+
+  @@FIG_ORDER@@
+
+  <ul>
+    <li>
+      <strong>Back to front.</strong> Farthest first, because <code>over</code> composites the
+      source on top of what is already there, so what is already there must be everything further
+      away. Getting this backwards is not a crash; it is the near pane of glass tinting the far one
+      instead of the other way round, which is easy to miss with only two objects.
+    </li>
+    <li>
+      <strong>Axial depth, not distance.</strong> <code>dot(p − eye, forward)</code>, the same
+      quantity Lesson 6.9 chose for cascade selection and for the same reason. Two objects side by
+      side ten metres ahead have identical axial depth; by <em>distance</em> the off-axis one is
+      <strong>16.6% farther</strong>, which would sort apart two panes that never overlap.
+    </li>
+    <li>
+      <strong>Stable.</strong> Two transparent objects at the same depth have no correct order, and
+      an unstable sort is free to pick a different one every frame as their depths wobble in the
+      last bit. Stability makes "no correct order" at least mean "the same order as last frame",
+      which is the difference between a tie and a flicker.
+    </li>
+  </ul>
+
+  <h4>And the ceiling</h4>
+
+  <p>
+    Now the honest part. Take two blended quads that <strong>intersect</strong>. Left of the
+    crossing line, quad A is in front; right of it, quad B is. A per-object order can draw A first
+    or B first. The correct picture needs <em>both</em>, on opposite sides of one line.
+  </p>
+
+  <p>
+    This is not a better sort waiting to be written. It is the ceiling of the entire per-object
+    approach, and the techniques that go past it — weighted blended OIT, depth peeling, per-pixel
+    linked lists — are each a substantial piece of machinery that this course does not build.
+    <strong>Naming the limit is the deliverable here.</strong> An engine that sorts per object and
+    says so is honest; one that sorts per object and implies otherwise will have somebody spending
+    an afternoon looking for the bug in the sort.
+  </p>
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">4</span>Implementation</h2>
+
+  <h3>4.1 &nbsp; The vocabulary: <code>blend.hpp</code></h3>
+
+  <p>
+    Two enums and four functions, in a new header, and the shape of them is the argument of §2
+    written down. <code>alpha_mode</code> is what a surface <em>is</em>; <code>alpha_storage</code>
+    is how an image's bytes <em>mean</em>.
+  </p>
+
+  <pre><code class="lang-cpp">enum class alpha_mode { opaque, mask, blend };
+enum class alpha_storage { straight, premultiplied };
+
+inline constexpr float k_default_alpha_cutoff = 0.5f;   // glTF §5.19.2
+</code></pre>
+
+  <p>
+    The compositing operators are <code>constexpr</code> and take <code>linear_rgb</code>, which is
+    the type system carrying §3.1's rule for us — there is no overload that will composite a
+    <code>Uint32</code> without going through a decode:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr linear_rgb over(linear_rgb src, float a, linear_rgb dst)
+{
+    const float inv = 1.0f - a;
+    return {src.r * a + dst.r * inv,
+            src.g * a + dst.g * inv,
+            src.b * a + dst.b * inv};
+}
+</code></pre>
+
+  <p>
+    And one type that is deliberately <em>not</em> a four-channel colour:
+  </p>
+
+  <pre><code class="lang-cpp">struct texel_sample
+{
+    linear_rgb colour{};
+    float alpha = 1.0f;
+};
+</code></pre>
+
+  <p>
+    A <code>linear_rgba</code> would invite <code>for (int i = 0; i &lt; 4; ++i)</code>, and three
+    of those four iterations would be arithmetic on light while the fourth is arithmetic on
+    coverage. They are only accidentally the same instruction. Keeping them in separate members
+    costs nothing at runtime — four floats either way — and makes the wrong operation something you
+    have to <em>write out</em> rather than get for free from a loop bound.
+  </p>
+
+  <h3>4.2 &nbsp; The sampler grows a fourth channel — without moving a bit of the other three</h3>
+
+  <p>
+    <code>sample</code> has been discarding the alpha byte since Lesson 3.9. <code>fetch</code>'s
+    own comment said so: <em>"nothing in this engine reads a texture's alpha yet"</em>. Transparency
+    is the use.
+  </p>
+
+  <p>
+    The tempting move is to add a second function beside <code>sample</code>. That is two copies of
+    a filtering rule, and the day they disagree is the day a textured surface changes colour when
+    somebody makes it transparent. So instead the four-channel version becomes the
+    <em>implementation</em> and the three-channel one becomes a wrapper:
+  </p>
+
+  <pre><code class="lang-cpp">linear_rgb sample(const texture&amp; image, const sampler&amp; samp, float u, float v)
+{
+    return sample_rgba(image, samp, u, v).colour;
+}
+</code></pre>
+
+  <p>
+    Which puts a very sharp constraint on the refactor: <strong>the reference render has been
+    byte-identical since Lesson 5.2, and it samples textures.</strong> Floating-point addition is
+    not associative, so reordering three multiply-adds would move the last bit of a great many
+    texels. The bilinear lerp therefore keeps the colour channels in exactly their old order and
+    adds the alpha alongside:
+  </p>
+
+  <pre><code class="lang-cpp">const auto lerp = [](const texel_sample&amp; a, const texel_sample&amp; b, float t) {
+    return texel_sample{{a.colour.r + (b.colour.r - a.colour.r) * t,
+                         a.colour.g + (b.colour.g - a.colour.g) * t,
+                         a.colour.b + (b.colour.b - a.colour.b) * t},
+                        a.alpha + (b.alpha - a.alpha) * t};
+};
+</code></pre>
+
+  <p>
+    §A of the harness checks 4,221 sample points and finds <strong>zero</strong> where
+    <code>sample</code> and <code>sample_rgba().colour</code> differ — bit for bit, not
+    approximately.
+  </p>
+
+  <p>
+    Inside <code>fetch</code> the asymmetry is two lines of code and is the file's whole thesis:
+  </p>
+
+  <pre><code class="lang-cpp">// the COLOUR branches on texel_space, because a colour may or may not have
+// been through the transfer function...
+if (image.space() == texel_space::linear) { /* value / 255 */ }
+else                                      { /* to_linear   */ }
+
+// ...and the ALPHA does not, in either arm, because it never measured light.
+constexpr float inv_255 = 1.0f / 255.0f;
+return {to_linear(texel), static_cast&lt;float&gt;((texel &gt;&gt; 24) &amp; 0xFFu) * inv_255};
+</code></pre>
+
+  <p>
+    The harness asserts that directly: alpha 128 reads as 0.5020 in <em>both</em> texel spaces,
+    while the colour reads 0.5020 in one and 0.2159 in the other.
+  </p>
+
+  <h3>4.3 &nbsp; <code>alpha_storage</code> goes on the texture, not the sampler</h3>
+
+  <p>
+    Where should "is this image premultiplied?" live? The sampler is the wrong home, and Lesson 6.7
+    already settled the argument for the analogous question about colour space:
+    <code>mipmap.cpp</code> states the resulting rule outright — <em>read the space from the data,
+    not from a parameter; a caller who has to remember which of their textures is a normal map is a
+    caller who will get the third one wrong.</em>
+  </p>
+
+  <p>
+    A caller who has to remember which of their textures is premultiplied is the same caller. So
+    <code>texture</code> gains a second such property, fixed at construction beside
+    <code>texel_space</code>, and <code>build_mips</code> reads it exactly as it already reads the
+    colour space.
+  </p>
+
+  <h3>4.4 &nbsp; The rasterizer: where the depth write goes</h3>
+
+  <p>
+    This is the substantive change to <code>raster.cpp</code>, and it is worth reading as a
+    <em>reordering</em> rather than as an addition. The opaque path is unchanged, character for
+    character — one branch on a value that is constant for the whole triangle stands in front of
+    it:
+  </p>
+
+  <pre><code class="lang-cpp">if (simple)
+{
+    if (depth_test(zrow, x, f0, f1, f2))
+    {
+        float ignored;
+        if (!depth_only) { row[x] = fragment(f0, f1, f2, ignored); }
+    }
+}
+else
+{
+    shade_transparent(row, zrow, x, f0, f1, f2);
+}
+</code></pre>
+
+  <p>
+    <code>depth_test</code> tests <em>and writes</em>. The transparent path needs the two halves
+    separated, so there is now a <code>depth_probe</code> that reads and writes nothing — and
+    separating them is the whole of what "disable depth writes" means:
+  </p>
+
+  <pre><code class="lang-cpp">const auto depth_probe = [&amp;](const float* zrow, int x, float f0, float f1, float f2) -> bool {
+    if (zrow == nullptr) { return true; }
+    const float z = depth-&gt;quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+    return z &lt; zrow[x];
+};
+</code></pre>
+
+  <p>
+    With that, the transparent fragment's sequence is: <em>probe, shade, then commit</em>. The probe
+    first is not an optimisation bolted on — it is what keeps a fragment hidden behind a wall from
+    being shaded at all, which §G measures as costing <strong>0.94×</strong> an equivalent opaque
+    fill. A GPU cannot do this: early-Z is a fixed-function stage configured for the whole draw, so
+    a shader containing <code>discard</code> loses it for <em>every</em> fragment of that draw. We
+    get the probe for free because our "early Z" is an <code>if</code> we control, and it is worth
+    being explicit that our answer is not everybody's.
+  </p>
+
+  <p>
+    Then the commit, which is shared by both traversals because two copies of a rule with an
+    ordering constraint in it is two rules:
+  </p>
+
+  <pre><code class="lang-cpp">if (masked)
+{
+    if (a &lt; style.alpha_cutoff) { return; }
+
+    // NOW the depth write. A discarded fragment must leave the depth buffer
+    // alone, or the hole in the leaf occludes whatever is behind it.
+    if (zrow != nullptr)
+    {
+        zrow[x] = depth-&gt;quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+    }
+    row[x] = colour;
+    return;
+}
+
+// BLENDING. No depth write — the absence is the feature.
+row[x] = style.blend_encoded
+       ? blend_over_encoded(row[x], colour, a)
+       : blend_over(row[x], colour, a, style.encode, style.src_storage);
+</code></pre>
+
+  <p>
+    <code>blend_encoded</code> is the deliberately wrong version, kept for the same reason
+    <code>draw_line_naive</code> (1.4), <code>blend_space::encoded</code> (2.4) and
+    <code>interpolation::affine</code> (3.2) are kept: a failure you can summon with one keystroke
+    teaches more than a paragraph describing it. This one is worth 56.8% of the light.
+  </p>
+
+  <h3>4.5 &nbsp; The fragment gains an out-parameter, and why not a return value</h3>
+
+  <p>
+    The fill's <code>fragment</code> lambda returns a packed <code>Uint32</code>. It now also has
+    to produce a coverage. A pair return would have changed the call site that nineteen lessons of
+    measurements were taken through; an ignored reference costs one store that the optimiser
+    deletes, and every colour expression stays character for character what it was.
+  </p>
+
+  <p>
+    The coverage itself is one line at the top and one line per textured path:
+  </p>
+
+  <pre><code class="lang-cpp">out_alpha = style.opacity;                       // the material's own factor
+// ...and where a texture is sampled:
+out_alpha = style.opacity * s.alpha;             // glTF: they MULTIPLY
+</code></pre>
+
+  <p>
+    Note that this is the <em>opposite</em> of the rule <code>tint</code> and
+    <code>albedo_map</code> follow, where the texture <strong>replaces</strong> the factor because
+    both of them <em>are</em> the albedo and a surface has one albedo (3.9). Here they compose,
+    because they are two different statements: the image says which <em>parts</em> of the surface
+    are there, and the factor says how transparent the <em>whole</em> surface is. A glass pane with
+    a decal on it needs both, and glTF specifies the multiply.
+  </p>
+
+  <h3>4.6 &nbsp; The GPU: a second axis, and therefore a product</h3>
+
+  <p>
+    <code>pipeline_desc::blend()</code> is nine lines and every one of them maps onto §3.4's
+    arithmetic:
+  </p>
+
+  <pre><code class="lang-cpp">SDL_GPUColorTargetBlendState&amp; b = colour_targets_[0].blend_state;
+b.enable_blend = true;
+
+b.src_color_blendfactor = premultiplied ? SDL_GPU_BLENDFACTOR_ONE
+                                        : SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+b.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+b.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+b.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+b.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+b.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+</code></pre>
+
+  <div class="callout warn">
+    <span class="label">The enable, and the zeroes</span>
+    <p>
+      <code>enable_blend = true</code> is the line to check first when blending appears to do
+      nothing: without it every other field here is ignored, the state is filled in perfectly, the
+      picture is unchanged, and there is no error to explain it. Lesson 6.10 met this exact shape
+      twice — <code>max_lod = 0</code> clamping a whole mip chain away, and
+      <code>max_anisotropy</code> being ignored without <code>enable_anisotropy</code>.
+      <strong>When a feature "does nothing", suspect an enable or a clamp.</strong>
+    </p>
+    <p>
+      The alpha factors are set explicitly for a related reason: their zero-initialised value is
+      <code>SDL_GPU_BLENDFACTOR_INVALID</code>, which is not a synonym for "the same as the colour
+      ones".
+    </p>
+  </div>
+
+  <p>
+    Then the part that is more interesting than the state itself. <code>surface_style</code> is one
+    axis with three values, so the renderer has held three pipelines since Lesson 4.8. Transparency
+    is <em>not</em> a fourth value of that axis — a blended surface is still solid, two-sided or
+    wireframe, and every combination is legitimate. It is a second axis, so:
+  </p>
+
+  <div class="eq-plain">3 surface styles × 3 blend styles = 9 pipelines</div>
+
+  <p>
+    The pipeline count <strong>multiplied</strong> rather than growing. That is the real cost of
+    transparency at the API level, and it is worth feeling at nine, because it is exactly how every
+    real engine ends up with a pipeline cache keyed on a hash of the whole state object. Add MSAA
+    in 6.14 and it is 18. Add a depth-only variant and it is 27. Nobody enumerates that; they build
+    the state, hash it, and create on a miss. We enumerate, because nine is countable and because
+    <code>create_ms()</code> then measures what the extra six cost — <strong>0.05 ms in
+    total</strong>, on a warm driver cache.
+  </p>
+
+  <p>
+    And note what did <em>not</em> multiply it: <code>alpha_mode::mask</code> added zero pipelines,
+    because masking is a uniform and a <code>clip</code>. The claim §2 made about 6.5's line is
+    visible here as a number.
+  </p>
+
+  <h3>4.7 &nbsp; The shader, and a block that finally had to grow</h3>
+
+  <p>
+    The fragment shader keeps a channel it was already fetching, and gains a one-instruction test:
+  </p>
+
+  <pre><code class="lang-hlsl">const float4 sampled4 = albedo_map.Sample(albedo_sampler, input.uv);
+const float3 sampled  = sampled4.rgb;
+const float3 base     = lerp(albedo, sampled, textured);
+
+const float src_alpha = alpha * lerp(1.0f, sampled4.a, textured);
+clip(src_alpha - alpha_cutoff);
+</code></pre>
+
+  <p>
+    <code>clip(x)</code> discards when <em>x</em> is negative, so a cutoff of <strong>0 disables
+    the test</strong> — nothing with non-negative coverage can be discarded. That is why there is no
+    <code>alpha_mode</code> uniform and no shader variant: <code>uniforms_of</code> pushes the
+    cutoff for a <code>mask</code> material and 0 for everything else, derived from the mode in one
+    place, so a <code>blend</code> material cannot accidentally clip its own soft edges away.
+  </p>
+
+  <p>
+    Two floats is not free, though, and this is the first time that has been true. Lesson 6.7 got
+    its <code>normal_mapped</code> flag for nothing, because 6.4 had left a <code>pad0</code>
+    behind and a flag is exactly the size of a pad. There is no pad left:
+  </p>
+
+  <div class="eq-plain">32 bytes → 40 of payload → 48 of registers (a cbuffer allocates in float4s)</div>
+
+  <p>
+    A whole third register for eight bytes. Worth stating plainly rather than hiding behind a
+    <code>static_assert</code>, because the answer at scale is not "add fewer fields" — it is to
+    stop pushing per-draw constants and index into a storage buffer instead, which is Module 9's
+    territory. (Lesson 6.7's harness asserted the block was 32 bytes; that assertion has been
+    amended, and 6.7's claim <em>that the flag cost zero</em> remains true of 6.7.)
+  </p>
+
+  <h3>4.8 &nbsp; The importer's last silent gap</h3>
+
+  <p>
+    Two lines of <code>gltf.cpp</code>, and they close the loop §1 opened:
+  </p>
+
+  <pre><code class="lang-cpp">switch (m.alpha_mode)
+{
+case cgltf_alpha_mode_opaque: desc.mode = alpha_mode::opaque; break;
+case cgltf_alpha_mode_mask:   desc.mode = alpha_mode::mask;   break;
+case cgltf_alpha_mode_blend:  desc.mode = alpha_mode::blend;  break;
+default:                      desc.mode = alpha_mode::opaque; break;
+}
+desc.alpha_cutoff = m.alpha_cutoff;
+</code></pre>
+
+  <p>
+    Spelt as a switch rather than cast, which is Lesson 6.4's rule about enums crossing a boundary:
+    <code>cgltf_alpha_mode</code> and <code>engine::alpha_mode</code> happen to agree in order
+    today, and a <code>static_cast</code> would turn the day either of them gains a value into a
+    silent remapping of every material in every asset. The switch stops compiling instead.
+  </p>
+
+  <p>
+    The gap is <em>removed</em> rather than reported, so there is no new <code>gltf_status</code>.
+    What the report gains is two counters — <code>masked_materials</code> and
+    <code>blended_materials</code> — which are counts of what the file asked for rather than
+    complaints about it. They also tell a caller whether this model needs <code>order_draws</code>
+    at all: a scene with <code>blended_materials == 0</code> does not.
+  </p>

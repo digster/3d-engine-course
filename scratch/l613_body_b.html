@@ -1,0 +1,453 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3 id="t-sep">3.1 Separability, and why it is not enough</h3>
+
+  <p>
+    Start with the naïve thing, so the cost is on the table. A 2-D Gaussian of standard deviation
+    <code>σ</code> is
+  </p>
+
+  <div class="eq">\[ G(x, y) = \frac{1}{2\pi\sigma^{2}} \exp\!\left(-\frac{x^{2} + y^{2}}{2\sigma^{2}}\right) \]</div>
+  <div class="eq-plain">G(x, y) = exp(−(x² + y²) / 2σ²) / (2πσ²)</div>
+
+  <p>
+    The exponent splits, because <code>exp(a + b) = exp(a)·exp(b)</code>:
+  </p>
+
+  <div class="eq">\[ G(x, y) = \underbrace{\frac{1}{\sqrt{2\pi}\sigma}e^{-x^{2}/2\sigma^{2}}}_{G(x)} \cdot \underbrace{\frac{1}{\sqrt{2\pi}\sigma}e^{-y^{2}/2\sigma^{2}}}_{G(y)} \]</div>
+  <div class="eq-plain">G(x, y) = G(x) · G(y)</div>
+
+  <p>
+    That is <strong>separability</strong>, and it is the standard first optimisation: instead of one
+    <code>N×N</code> pass costing <code>N²</code> taps per pixel, do a horizontal <code>N</code>-tap
+    pass and then a vertical one, for <code>2N</code>. It is a genuine win and it is not remotely
+    enough.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> How wide does the kernel have to be?</p>
+    <p>
+      A Gaussian is negligible past about ±3σ, so an <code>N</code>-tap kernel covers
+      <code>σ ≈ N/6</code>. For a glow with a useful reach of 64 pixels we need <code>σ = 64</code>,
+      so <code>N = 385</code> taps per axis. At 960×540 that is
+    </p>
+    <div class="eq-plain">518,400 pixels × 2 passes × 385 taps = 399,168,000 texel fetches, per frame</div>
+    <p>
+      Four hundred million fetches for one effect, at 60 Hz, is twenty-four billion a second. It is
+      not a close call.
+    </p>
+  </div>
+
+  <h3 id="t-down">3.2 Downsampling buys the same reach twice over</h3>
+
+  <p>
+    Here is the move. Suppose we halve the image first, and then apply a kernel of the <em>same
+    number of texels</em> to the half-size version.
+  </p>
+
+  <p>Two things happen at once, and it is worth separating them:</p>
+
+  <ol>
+    <li><strong>The kernel is twice as wide in the original's terms.</strong> One texel at half
+        resolution spans two pixels of the full image, so a 5-tap kernel there reaches as far as a
+        10-tap kernel would have. <em>Reach doubles for free.</em></li>
+    <li><strong>There are a quarter as many pixels to shade.</strong> Half the width times half the
+        height. <em>Cost quarters.</em></li>
+  </ol>
+
+  <p>
+    So each halving gives a factor of two in reach and a factor of four in cost, and the two
+    compound down the chain. Six levels reach 2<sup>6</sup> = 64 half-resolution texels — 128 full
+    pixels — using kernels that are never bigger than 3×3.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The whole pyramid, at 960×540, starting at half size.</p>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>level</th><th>size</th><th>texels</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>480 × 270</td><td>129,600</td></tr>
+        <tr><td>1</td><td>240 × 135</td><td>32,400</td></tr>
+        <tr><td>2</td><td>120 × 67</td><td>8,040</td></tr>
+        <tr><td>3</td><td>60 × 33</td><td>1,980</td></tr>
+        <tr><td>4</td><td>30 × 16</td><td>480</td></tr>
+        <tr><td>5</td><td>15 × 8</td><td>120</td></tr>
+        <tr><td></td><td><strong>total</strong></td><td><strong>172,620</strong></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>
+      172,620 against the full frame's 518,400 is <strong>0.3330</strong> — and that is the same
+      one third Lesson 6.10 met in a mip chain, for exactly the same reason:
+      <code>¼ + ¹⁄₁₆ + ¹⁄₆₄ + … = ⅓</code>. At 8 bytes a texel it is <strong>1.32 MB</strong>
+      against the HDR target's 3.96 MB.
+    </p>
+    <p>
+      The fragment count is the same arithmetic run twice. The bright pass writes level 0
+      (129,600 fragments), five downsamples write levels 1–5 (43,020), and five upsamples write
+      levels 4–0 (172,500). Total <strong>345,120</strong> — which is
+      <strong>0.666 of a single full-screen pass</strong>. The entire bloom is cheaper than drawing
+      one full-screen quad.
+    </p>
+  </div>
+
+  @@FIG_CHAIN@@
+
+  <h3 id="t-tail">3.3 What the pyramid's kernel actually is</h3>
+
+  <p>
+    Now the claim that the cost argument usually crowds out. We are not merely approximating a wide
+    Gaussian cheaply. Adding every level's contribution on the way back up means the final kernel is
+  </p>
+
+  <div class="eq">\[ K(r) \;\approx\; \sum_{i=0}^{n-1} w_i \, G_{\sigma_i}(r), \qquad \sigma_i = 2^{i}\sigma_0 \]</div>
+  <div class="eq-plain">K(r) ≈ Σ wᵢ · G(r; σᵢ)   with σᵢ doubling at every level</div>
+
+  <p>
+    A sum of Gaussians at geometrically spaced widths. That is a well-known way to build an
+    approximately power-law envelope: at any radius <code>r</code>, the level whose <code>σ</code>
+    is closest to <code>r</code> dominates, and because the widths form a geometric series, the
+    dominant contribution scales like a power of <code>r</code> rather than dying exponentially.
+  </p>
+
+  <p>
+    That is a prediction, so it should be measured rather than asserted. <code>verify_613</code> §E
+    puts a single pixel of 1000 into a black 256×256 buffer, runs the real chain over it, and takes
+    the radial average at each octave.
+  </p>
+
+  @@FIG_TAIL@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>radius (texels)</th><th>the pyramid</th><th>log-log slope over the previous octave</th>
+          <th>one Gaussian, σ = 16</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>4</td><td>3.116390</td><td>—</td><td>0.96923323</td></tr>
+      <tr><td>8</td><td>0.861392</td><td>−1.86</td><td>0.88249690</td></tr>
+      <tr><td>16</td><td>0.213734</td><td><strong>−2.01</strong></td><td>0.60653066</td></tr>
+      <tr><td>32</td><td>0.046928</td><td>−2.19</td><td>0.13533528</td></tr>
+      <tr><td>64</td><td>0.007804</td><td>−2.59</td><td>0.00033546</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A log-log slope of <strong>−2.01</strong> is an inverse-square tail, which is what we were
+    trying to get. Compare the Gaussian column honestly, though — the two are not normalised
+    against each other, so comparing them row by row would be meaningless. The fair comparison is
+    the <em>ratio over an octave</em>, which no choice of scale can change:
+  </p>
+
+  <div class="eq-plain">from r = 32 to r = 64:   pyramid falls 6.0×,   Gaussian falls 403×</div>
+
+  <p>
+    A factor of sixty-seven in how the two decay. The Gaussian is not a dimmer version of the
+    pyramid's tail; it does not have one.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Where the power law ends, and why that is honest rather than a caveat.</strong> Look
+      at the last row: the slope steepens to −2.59. That is not noise. Six levels reach 64 texels
+      and no further, so past the pyramid's reach there is no level left to contribute and the tail
+      does not decay — it <em>stops</em>. A seventh level would move the cliff out by an octave, at
+      a cost of 30 texels. <code>k_max_bloom_levels</code> is 8 for this reason.
+    </p>
+  </div>
+
+  <h3 id="t-tent">3.4 The upsample filter, derived</h3>
+
+  <p>
+    Going back up, each level has to be magnified by two and added to the one below. What filter?
+  </p>
+
+  <p>
+    The answer is already decided, because bilinear magnification <em>is</em> a filter and we should
+    find out which one. Convolve a box with a box. In the discrete case, with the unit box
+    <code>[1 1]</code>:
+  </p>
+
+  <div class="eq-plain">[1 1] ∗ [1 1] = [1 2 1]</div>
+
+  <p>
+    A <strong>tent</strong> — a triangle. So the natural 2× upsample kernel is not something chosen
+    for looking symmetric; it is what you get by applying the box filter that bilinear interpolation
+    already is, twice. In 2-D it is that vector's outer product:
+  </p>
+
+  <div class="eq">\[ \frac{1}{16}\begin{bmatrix} 1 & 2 & 1 \\ 2 & 4 & 2 \\ 1 & 2 & 1 \end{bmatrix} \]</div>
+  <div class="eq-plain">[1 2 1; 2 4 2; 1 2 1] / 16</div>
+
+  <p>
+    The weights sum to exactly 16/16 = 1, so the filter widens without brightening or darkening.
+    Every energy claim later in this lesson rests on that, which is why <code>verify_613</code> §C
+    asserts it before anything else: upsampling a constant 3.0 returns exactly 3.0.
+  </p>
+
+  <p>
+    And there is a second reason to like it. Applying a tent once per level means the composite
+    kernel is a repeated convolution — and repeated convolution of any well-behaved kernel with
+    itself approaches a Gaussian, by the central limit theorem. Each level's contribution is
+    Gaussian-ish without anyone computing a Gaussian.
+  </p>
+
+  <h3 id="t-tap">3.5 One tap is four texels</h3>
+
+  <p>
+    Going down, we want a 2×2 box average. Written naïvely that is four fetches and three adds per
+    destination texel. It is one fetch.
+  </p>
+
+  <p>
+    Bilinear filtering returns <code>lerp(lerp(a, b, tx), lerp(c, d, tx), ty)</code>. Place the
+    sample at the corner exactly shared by all four texels and both fractional weights are 0.5, so
+    every one of the four products is ¼ — which is the unweighted mean. The texture unit's
+    filtering hardware computes the box average for us, in hardware that was going to run anyway.
+  </p>
+
+  @@FIG_IDENTITIES@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A 2×2 block holding 1, 2, 4, 8.</p>
+    <div class="eq-plain">bilinear at texel coordinate (1.0, 1.0) → 3.750000     (1 + 2 + 4 + 8) / 4 = 3.75</div>
+    <p>
+      Exact. Which is why <code>gpu_bloom</code>'s sampler is <code>filter::linear</code>, where the
+      6.12 resolve's was deliberately <code>filter::nearest</code>. <strong>Here the filter mode is
+      carrying arithmetic, not smoothing.</strong> Set it to nearest and every stage silently
+      becomes a point decimation — and because five more levels of blurring follow, nothing looks
+      obviously broken. It just aliases.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <p>
+      <strong>Where that sample goes, and why <code>SV_Position</code> rather than <code>uv</code>.</strong>
+      The corner beneath destination texel <code>x</code> is at source texel coordinate
+      <code>2x + 1</code>. It is tempting to get there via the interpolated <code>uv</code>, since
+      <code>uv × source_width</code> looks like the same thing — but it is only the same thing when
+      the source is <em>exactly</em> twice the destination, and integer halving breaks that at every
+      odd level (135 halves to 67, and 67 doubles to 134). All three bloom shaders therefore compute
+      the tap from <code>SV_Position</code>, which makes the relationship between the two grids
+      explicit and exact at every level. That is also what lets the GPU agree with
+      <code>engine::downsample</code> to the last bit rather than to the last even dimension.
+    </p>
+  </div>
+
+  <h3 id="t-knee">3.6 The threshold, and the corner we have to round off</h3>
+
+  <p>
+    The bright pass decides what blooms. The naïve version is a subtraction:
+  </p>
+
+  <div class="eq-plain">f(x) = max(x − T, 0)</div>
+
+  <p>
+    It works and it flickers. The reason is in the <em>derivative</em>, not the value: at
+    <code>x = T</code> the slope jumps from 0 to 1. A pixel drifting from 0.999 to 1.001 goes from
+    contributing nothing to contributing its full excess, and the set of pixels at exactly
+    <code>T</code> is a contour in the image that moves as the camera moves. The artefact is a
+    crawling, shimmering edge along every gradient that happens to cross the threshold — which
+    reads like a sampling bug rather than a thresholding one.
+  </p>
+
+  <p>
+    So round the corner. We want a function that is 0 below <code>T − k</code>, is exactly
+    <code>x − T</code> above <code>T + k</code>, and joins both smoothly. That is three conditions:
+  </p>
+
+  <ul>
+    <li>value 0 at <code>T − k</code>,</li>
+    <li>slope 0 at <code>T − k</code> (to match the flat branch),</li>
+    <li>slope 1 at <code>T + k</code> (to match the linear branch).</li>
+  </ul>
+
+  <p>
+    Three conditions, three coefficients: a quadratic, and exactly one fits. Take
+    <code>t = x − T + k</code>, which is 0 at the lower join and <code>2k</code> at the upper:
+  </p>
+
+  <div class="eq">\[ f(x) = \frac{(x - T + k)^{2}}{4k} \qquad\text{for } x \in [T-k,\; T+k] \]</div>
+  <div class="eq-plain">f(x) = (x − T + k)² / 4k</div>
+
+  <p>Check all four joins, which takes one line each:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>at</th><th>quadratic gives</th><th>branch gives</th><th>agree?</th></tr></thead>
+    <tbody>
+      <tr><td>value at <code>T − k</code></td><td>0² / 4k = 0</td><td>0</td><td>yes</td></tr>
+      <tr><td>slope at <code>T − k</code></td><td>2(0) / 4k = 0</td><td>0</td><td>yes</td></tr>
+      <tr><td>value at <code>T + k</code></td><td>(2k)² / 4k = k</td><td>(T+k) − T = k</td><td>yes</td></tr>
+      <tr><td>slope at <code>T + k</code></td><td>2(2k) / 4k = 1</td><td>1</td><td>yes</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@FIG_KNEE@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> <code>T = 1</code>, <code>k = 0.5</code>, measured by the harness.</p>
+    <div class="eq-plain">f(0.5) = 0.000000   f'(0.5) = 0.0000
+f(1.0) = 0.125000   f'(1.0) = 0.5000      ← k/4, and half the final slope
+f(1.5) = 0.500000   f'(1.5) = 1.0002</div>
+    <p>
+      Note <code>f(T) = k/4</code>: a pixel sitting <em>exactly</em> at the threshold contributes a
+      quarter of the knee width, not nothing. That is the whole difference between a soft cut and a
+      hard one. And the flicker, measured: through a hard threshold 0.999 gives 0.000000 and 1.001
+      gives 0.001000; through the knee they give 0.124501 and 0.125501 — a difference of
+      1.0 × 10⁻³ instead of a discontinuity in slope.
+    </p>
+  </div>
+
+  <h3 id="t-exposure">3.7 Where the exposure goes</h3>
+
+  <p>
+    One question remains before any code: is the threshold measured on scene values or on
+    exposure-corrected values?
+  </p>
+
+  <p>
+    It has to be the second, and the argument is short. The threshold's job is to separate "will
+    look bright on the display" from "will not". That is a question about the <em>finished
+    image</em>, and the exposure is exactly what decides it. Put the threshold in scene-referred
+    units instead and the same geometry blooms differently depending on how bright the sun is,
+    while a dim room viewed at a high exposure — which looks perfectly bright on screen — blooms
+    nothing at all. The bug reads as <em>"the bloom turns itself off indoors"</em>.
+  </p>
+
+  <p>So the bright pass multiplies by the exposure, and therefore the resolve must not do it again:</p>
+
+  <div class="eq-plain">resolve = curve( scene × exposure  +  intensity × bloom )
+where bloom already carries the exposure, applied during the bright pass</div>
+
+  <p>
+    Which produces an architectural observation we will need in §6, and it is worth stating in its
+    own right:
+  </p>
+
+  <p class="lede">
+    Exposure is not a stage in the stack. It is a property of the frame that several stages have to
+    agree about.
+  </p>
+
+  <p>
+    <code>verify_613</code> §H measures the disagreement: giving the bloom exposure 4 while the
+    scene gets exposure 1 changes <strong>4,064 of 4,096 pixels</strong>. The glow and the picture
+    it sits on were photographed at different shutter speeds.
+  </p>
+
+  <h3 id="t-order">3.8 And the composite goes before the curve</h3>
+
+  <p>
+    The last ordering question, and the one that decides where bloom sits in the stack at all.
+  </p>
+
+  <p>
+    Physically it is settled already: the scattering happens in the lens, <em>before</em> the sensor
+    responds. The sensor sees direct light plus scattered light and applies its response curve to
+    the sum. A bloom is light, so it is photographed by the same curve as the light that did not
+    scatter.
+  </p>
+
+  <p>
+    But the arithmetic says it too, and more bluntly. The curve's output is already in
+    <code>[0, 1]</code>. Add anything to that and the result is above 1, and the encode clips it. So
+    every glow grows a flat white core — and the brighter the source, the bigger the core.
+  </p>
+
+  @@FIG_ORDER@@
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> A 4×4 patch of 400.0 on a field of 0.2, resolved through ACES
+      both ways, in <code>verify_613</code> §H.
+    </p>
+    <div class="eq-plain">composited BEFORE the curve:   32 of 4,096 pixels clip
+composited AFTER  the curve:  324 of 4,096 pixels clip      — ten times as many</div>
+    <p>
+      Ten times the clipped area, which is precisely the artefact bloom was introduced to remove,
+      reintroduced one pass later. And this is <em>why</em> a bloom cannot be bolted onto the end of
+      the scene shader: at that point the tonemap has not happened yet, but neither has the rest of
+      the image.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       4 — THE PAYOFF
+       ================================================================= -->
+  <h2 id="payoff"><span class="num">4</span>The payoff, as a prediction with an exponent</h2>
+
+  <p>
+    Back to §2's claim, which we can now state sharply enough to be wrong.
+  </p>
+
+  <p>
+    Suppose the glow's profile is <code>B(r) = C · L · r⁻²</code> for a source of luminance
+    <code>L</code>. A glow texel is visible if it exceeds some fixed threshold <code>τ</code> — say,
+    the value that ends up as code 128 on the display. Then the glow is visible out to radius
+  </p>
+
+  <div class="eq">\[ C L r^{-2} = \tau \qquad\Rightarrow\qquad r = \sqrt{\frac{CL}{\tau}} \;\propto\; \sqrt{L} \]</div>
+  <div class="eq-plain">r ∝ √L</div>
+
+  <p>and therefore the visible <em>area</em> is</p>
+
+  <div class="eq">\[ A = \pi r^{2} \;\propto\; L \]</div>
+  <div class="eq-plain">A ∝ L — linearly</div>
+
+  <p class="lede">
+    The area of the glow is linear in the luminance the display could not represent. Not
+    approximately monotonic — linear, with a constant of proportionality.
+  </p>
+
+  <p>
+    That is falsifiable, so <code>verify_613</code> §F falsifies it or does not. It takes the linear
+    value that ACES plus the sRGB encode turns into exactly code 128 — <strong>0.14927</strong> —
+    and counts how many texels of the finished bloom exceed it, for single pixels at three
+    luminances a decade apart.
+  </p>
+
+  @@FIG_AREA@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>L</th><th>glow area (texels)</th><th>area / L</th><th>radius</th><th>radius / √L</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>100</td><td>115</td><td>1.150</td><td>6.05</td><td>0.60503</td></tr>
+      <tr><td>1,000</td><td>1,238</td><td>1.238</td><td>19.85</td><td>0.62775</td></tr>
+      <tr><td>10,000</td><td>11,399</td><td>1.140</td><td>60.24</td><td>0.60236</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Over <strong>three decades</strong> of source luminance, <code>area / L</code> holds to within
+    <strong>8.6%</strong> and <code>radius / √L</code> to within 4%. The prediction survives, with
+    the constant it predicted.
+  </p>
+
+  <p>
+    And the control: the same three values through a clamp are three identical single white dots.
+    The information was sitting in the HDR buffer after Lesson 6.12, intact, and there was no way to
+    show it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Where it stops, measured rather than hedged.</strong> Push <code>L</code> to 6.12's
+      55,917 and the law breaks: the prediction wants a radius of about 146 texels and the buffer is
+      128 across, so the glow fills the screen and the measurement saturates at 16,384 texels. That
+      is not the law failing, it is the law running out of room — and it is also a real rendering
+      constraint. A source bright enough to bloom past the frame has nowhere left to put its area
+      either, which is why exposure has to do some of this work and bloom cannot do all of it.
+    </p>
+  </div>

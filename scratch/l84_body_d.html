@@ -1,0 +1,455 @@
+  <h2 id="mtv">8. The minimum translation, and where it stops being an answer</h2>
+
+  <p>
+    When the search finds a separating axis it returns immediately, because one witness is a
+    complete proof and nothing examined later could change the answer. When it does not, all fifteen
+    have been examined and we have fifteen overlap depths — and the smallest of them is the
+    <strong>minimum translation vector</strong>: the shortest push that would end the overlap.
+  </p>
+
+  <p>
+    It is the natural output of the search rather than an extra calculation. Every candidate already
+    computed its overlap on the way to failing to separate; keeping the smallest costs a comparison.
+  </p>
+
+  <h3>8.1 Which way does it point?</h3>
+
+  <p>
+    A candidate axis has no inherent direction — <code>L</code> and <code>−L</code> cast the same
+    shadow and produce the same overlap. So the sign has to be chosen, once, in one place, and this
+    engine chooses:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Convention.</strong> <code>collide(a, b)</code> returns an axis pointing <strong>from
+      <code>a</code> toward <code>b</code></strong>. Translating <code>b</code> by
+      <code>+axis × depth</code> separates them; translating <code>a</code> by
+      <code>−axis × depth</code> does too. Written on conventions.html §9e, and checked rather than
+      assumed.
+    </p>
+  </div>
+
+  <p>
+    "Checked rather than assumed" is the part that matters. A contact normal pointing the wrong way
+    produces a solver that pulls objects <em>together</em> instead of pushing them apart, and that
+    bug does not look like a sign error — it looks like an instability. Things stick, vibrate,
+    and sink slowly into the floor, and you go looking at the integrator.
+  </p>
+
+  <p>
+    So the harness takes 84,586 overlapping pairs, moves the second box by its own reported axis and
+    depth, and asks again:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>84,586 overlapping pairs, pushed by their own answer</th><th>Result</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Separated afterwards</td><td><strong>84,586 / 84,586</strong></td></tr>
+      <tr><td>Worst residual overlap</td><td>1.431e−06 m</td></tr>
+      <tr><td>CONTROL — pushed only <em>half</em> the depth, still overlapping</td><td>84,586 / 84,586</td></tr>
+      <tr><td>CONTROL — pushed the same distance the <em>wrong</em> way, still overlapping</td><td>84,586 / 84,586</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The first control says the depth is not generous — half of it is never enough, so the answer is
+    not merely "some number big enough". The second says the direction is not arbitrary.
+  </p>
+
+  <p>
+    And the second control is <em>provable</em>, which is the nicest thing in this section. Push
+    <code>b</code> by <code>−depth·L</code>. On the winning axis the overlap doubles. On any other
+    candidate <code>M</code>, moving a distance <code>depth</code> along <code>L</code> changes the
+    centre offset along <code>M</code> by at most <code>depth × |L · M| ≤ depth</code> — and
+    <code>M</code>'s overlap was <em>at least</em> <code>depth</code> to begin with, because
+    <code>depth</code> is the minimum. So no candidate's overlap can be driven below zero, and the
+    boxes cannot come apart. The measurement matching a bound you derived first is worth more than
+    the measurement alone.
+  </p>
+
+  <h3>8.2 The shallowest way out is not the way in</h3>
+
+  <p>
+    Two unit cubes, centres <code>(1.5, 0.2, 0.1)</code> apart. The overlaps are 0.5 m on
+    <code>x</code>, 1.8 m on <code>y</code> and 1.9 m on <code>z</code>, so the MTV is
+    <strong>0.5000 m along +x</strong>.
+  </p>
+
+  <p>
+    Suppose the second cube got there by falling: it came in travelling mostly downward. The
+    minimum translation does not care. It pushes sideways, because sideways is shorter. For a
+    shallow overlap that is exactly what you want — it is the smallest correction that fixes the
+    problem, and it is what a resting contact needs to stay stable.
+  </p>
+
+  @@FIG_MTV@@
+
+  <p>
+    Now push the same two cubes nearly on top of each other: centres <code>(0.1, 0.05, 0)</code>
+    apart. The shallowest escape is now <strong>1.9000 m</strong>, and applying it teleports a cube
+    most of two metres in one frame.
+  </p>
+
+  <p>
+    This is the MTV's real limit, and it is a <em>regime</em> rather than a bug. The minimum
+    translation is the right answer while an object is shallowly embedded and becomes nonsense once
+    it is more than about half buried — and past halfway it can push an object out the side it
+    never entered, or straight through to the other side. Three things follow, and they are
+    Module 8's remaining shape:
+  </p>
+
+  <ul>
+    <li><strong>Do not let overlaps get deep.</strong> 8.6's speculative contacts create a contact
+        slightly <em>before</em> objects touch, so the solver acts while the depth is still
+        millimetres.</li>
+    <li><strong>Do not correct position with a teleport.</strong> 8.9 applies an impulse, and 8.10
+        removes residual penetration gradually with Baumgarte stabilisation rather than all at
+        once.</li>
+    <li><strong>Prefer the direction of motion when you have it.</strong> Continuous collision
+        detection asks "when did they first touch?" rather than "how do I get them apart now?", and
+        it is the only correct answer for a bullet.</li>
+  </ul>
+
+  <h2 id="sphere-box">9. A sphere against a box, including from inside</h2>
+
+  <p>
+    A sphere against a box is the one test in this file that is not a SAT, and its idea is worth
+    more than the code.
+  </p>
+
+  <p>
+    Carry the sphere's centre into the box's own axes — where the box is an AABB — and find the
+    closest point on the box. If that point is farther than the radius, they are apart; if it is
+    closer, the direction to it is the normal and the difference is the depth. The whole thing is
+    <em>one</em> geometric question: <em>where is the nearest bit of this box to that point?</em>
+  </p>
+
+  <h3>9.1 The clamp, and the 27 cases it does not enumerate</h3>
+
+  <p>
+    A point can be in one of 27 regions relative to a box: inside, beyond one of six faces, beyond
+    one of twelve edges, or beyond one of eight corners. The closest point is on a face, on an edge,
+    at a corner, or is the point itself — four different answers, and a case analysis over 27
+    regions is an afternoon and a bug.
+  </p>
+
+  <pre><code class="lang-cpp">const vec3 closest{std::clamp(p.x, -h.x, h.x),
+                   std::clamp(p.y, -h.y, h.y),
+                   std::clamp(p.z, -h.z, h.z)};</code></pre>
+
+  <p>
+    Three lines, no cases. The reason it works is worth saying out loud, because the same argument
+    appears in §6 and will appear again in 8.6: <strong>a box is a product of three intervals</strong>,
+    so its axes do not interact. Each coordinate of the closest point depends only on the same
+    coordinate of <code>p</code>, and "which of the 27 regions is this?" is a question the clamp
+    answers without ever asking it. Clamp on two axes and you get an edge; clamp on three and you
+    get a corner; clamp on none and you get the point back.
+  </p>
+
+  @@FIG_SPHERE_BOX@@
+
+  <p>
+    Carrying the point into the box's axes is Lesson 2.5's identity doing real work:
+    <code>dot(p − c, uᵢ)</code> is the <code>i</code>-th coordinate of <code>p</code> in the box's
+    frame, which is the <em>transpose</em> of the axis matrix applied to the offset — and the
+    transpose is the inverse because the axes are orthonormal. Three dot products in, three
+    scaled adds out.
+  </p>
+
+  <h3>9.2 The case that is not an edge case</h3>
+
+  <p>
+    And then the centre is inside the box. The clamp does nothing, the distance is zero, and the
+    direction is <code>0/0</code>.
+  </p>
+
+  <p>
+    It is tempting to file that under "degenerate input" and move on. Do not: <strong>it is what a
+    fast sphere looks like on the frame after it tunnels into a wall</strong>, which is a thing that
+    happens in every game, every session. Of 100,000 random sphere/box pairs in the harness's
+    fixture, <strong>8,829 have the centre inside the box</strong> — 8.8%, and those are random
+    placements rather than adversarial ones.
+  </p>
+
+  <p>
+    The version that stops at the clamp — which is what you write if you stop at the obvious
+    version — returns a <strong>zero normal on every one of them</strong>. Not a NaN, which would at
+    least be loud. A zero vector, which a solver will happily normalise into a NaN four functions
+    later, or silently apply as an impulse of no direction, producing a sphere that sits inside a
+    wall being pushed nowhere.
+  </p>
+
+  <p>
+    The answer is the nearest face: find the axis on which the centre is least deeply inside, push
+    out along it, and add the radius on top. It is the same minimum-translation rule from §8 applied
+    to six candidates instead of fifteen. A 0.25 m ball with its centre 5 cm inside a 0.2 m wall
+    comes back with <code>depth = 0.3000 m</code> along the near face's normal — which is
+    <code>0.25 + 0.05</code>, and which you can check by hand.
+  </p>
+
+  <h2 id="parallel">10. When two edges are parallel</h2>
+
+  <p>
+    Now for the part of this lesson where the folklore and the measurement disagree, and the
+    measurement wins.
+  </p>
+
+  <p>
+    The nine edge-edge candidates are cross products of unit vectors, and <code>|u × v| = sin θ</code>.
+    When two edges are parallel the cross product is zero, and there is a well-known piece of advice
+    that goes with that: <em>guard the cross products or objects will fall through each other.</em>
+  </p>
+
+  <h3>10.1 The degenerate case is the common case</h3>
+
+  <p>
+    First, why anyone cares. It is easy to read "when two edges happen to be parallel" as a rare
+    coincidence. It is not rare — it is the default:
+  </p>
+
+  <p>
+    <strong>Two objects standing on the same floor have parallel up axes, whatever their yaw.</strong>
+    A crate on a floor, two crates side by side, a character on a platform, every prop in every
+    room: one of the nine cross products is degenerate in the single most common arrangement a game
+    ever produces.
+  </p>
+
+  <p>
+    And it is never <em>exactly</em> degenerate, which turns out to matter more. Both axes arrive
+    through a quaternion-to-matrix conversion, so two "identical" up axes differ in the last couple
+    of bits, and their cross product comes out around <strong>1.22e−07</strong> rather than zero.
+    Figure 8 measures exactly that.
+  </p>
+
+  @@FIG_PARALLEL@@
+
+  <h3>10.2 Two formulations of the same fifteen tests</h3>
+
+  <p>
+    The engine ships two. They answer the same question and they respond to degeneracy completely
+    differently, which is the whole of this section.
+  </p>
+
+  <p>
+    <strong><code>collide</code> normalises.</strong> It builds each candidate axis, divides by its
+    length, and tests. Normalising costs a square root per cross axis — up to nine of them — and it
+    is not optional here, because the <em>depth</em> has to be comparable across candidates. The
+    overlap <em>test</em> is invariant to the axis's length (both sides scale together), but an
+    unnormalised depth comes out in units of <code>|L| = sin θ</code>, so comparing an edge-edge
+    depth against a face depth compares metres against metres-times-sine and picks the wrong winner.
+  </p>
+
+  <p>
+    <strong><code>overlaps</code> does not.</strong> It builds <code>R = Aᵀ B</code> — the nine dot
+    products between the two boxes' axes — takes the element-wise absolute value, and expresses all
+    fifteen tests in those nine numbers plus the offset in A's frame. No cross product is ever
+    formed and no axis is ever normalised, which is correct for a boolean and costs no square roots
+    at all. It is the formulation you will find printed in Ericson's <em>Real-Time Collision
+    Detection</em> §4.4.1, and in most engines.
+  </p>
+
+  <p>
+    The nine edge-edge entries of that table look arbitrary in print. They are not — they fall out
+    of two identities, and we write them as a loop over cyclic indices rather than nine transcribed
+    blocks:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      For L = Aᵢ × Bⱼ:  Aₖ · L = det(Aₖ, Aᵢ, Bⱼ), which is zero for k = i and ±R[·][j] otherwise;
+      and Bₖ · L = Aᵢ · (Bⱼ × Bₖ), which is ±R[i][·] because B is a right-handed orthonormal frame.
+    </p>
+  </div>
+
+  <p>
+    So each entry is a pair of <code>|R|</code> terms picked out by the cyclic index, and the table
+    in the books is this loop unrolled. Deriving it rather than copying it is also how you check it:
+    §7.6 put the two formulations against each other on 200,000 random pairs and they agreed on all
+    200,000.
+  </p>
+
+  <h3>10.3 Which one the folklore is actually about</h3>
+
+  <p>
+    Here is the fixture. Two crates meeting at a corner, sharing an up axis, yawed 0.65 rad about
+    it, overlapping on two axes, sliding along the third — 400 configurations, all of them genuinely
+    overlapping (ground truth is the same fifteen axes computed in <code>double</code>, where the
+    direction error of a cross product is <code>10⁻¹⁶/sin θ</code> and stays below <code>10⁻⁸</code>
+    everywhere in the sweep). Then break the shared axis by a tilt, and sweep the tilt down to zero.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>tilt, rad</th><th>min <code>|aᵢ × bⱼ|</code></th><th>normalised (ours, unguarded)</th><th>absR, no epsilon</th><th>absR + epsilon</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1e−01</td><td>9.98e−02</td><td>0 / 400</td><td>0 / 400</td><td>0 / 400</td></tr>
+      <tr><td>1e−03</td><td>1.00e−03</td><td>0 / 400</td><td>0 / 400</td><td>0 / 400</td></tr>
+      <tr><td>1e−05</td><td>1.00e−05</td><td>0 / 400</td><td>0 / 400</td><td>0 / 400</td></tr>
+      <tr><td>1e−06</td><td>1.10e−06</td><td>0 / 400</td><td>0 / 400</td><td>0 / 400</td></tr>
+      <tr><td>1e−07</td><td>2.58e−07</td><td><strong>0 / 400</strong></td><td><strong>188 / 400</strong></td><td>0 / 400</td></tr>
+      <tr><td>exactly shared</td><td>1.22e−07</td><td><strong>0 / 400</strong></td><td><strong>89 / 400</strong></td><td>0 / 400</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The counts are false separations: solid objects, interpenetrating, reported as not touching.
+  </p>
+
+  <p>
+    <strong>The normalised form never fails — at any angle, with the guard removed entirely.</strong>
+    That is not luck, and it is not that the fixture was too kind. It is a theorem, and it is the
+    same theorem the whole lesson is built on read in the other direction:
+  </p>
+
+  <div class="callout">
+    <p>
+      If two convex bodies overlap then <strong>no</strong> direction separates them — not merely
+      none of the fifteen. So an axis whose direction is pure rounding error is still
+      <em>a direction</em>, and it reports an overlap exactly like a good one would. Rounding cannot
+      invent a gap, because there is no direction in which one exists.
+    </p>
+  </div>
+
+  <p>
+    <strong>The unnormalised form fails badly</strong>, and the mechanism is specific. Its test on
+    axis <code>aᵢ × bⱼ</code> compares quantities that <em>all</em> scale with
+    <code>|aᵢ × bⱼ|</code> — the left-hand side is built from <code>R</code> entries that are
+    <code>O(sin θ)</code>, and so is the right. As the edges approach parallel, both sides shrink
+    toward zero while the rounding error in them does not, because that error comes from dot
+    products of <code>O(1)</code> vectors. Below about <code>10⁻⁷</code> the comparison is noise
+    against noise, and it comes out either way.
+  </p>
+
+  <p>
+    Adding a small positive number to every <code>|R|</code> term lifts the right-hand side back
+    above the noise floor. That biases the comparison toward reporting an overlap, which is the safe
+    direction: a false overlap costs one narrow-phase call, and a false separation costs an object
+    falling through the floor. With the epsilon: <strong>zero</strong> false separations on the same
+    fixture.
+  </p>
+
+  <h3>10.4 So what is our guard for?</h3>
+
+  <p>
+    <code>collide</code> still skips cross axes shorter than <code>sqrt(k_parallel_sin2)</code>, and
+    now we can say honestly what that is buying, which is three smaller things rather than
+    correctness:
+  </p>
+
+  <ul>
+    <li><strong>It skips redundant work.</strong> A parallel edge pair spans no face of the
+        Minkowski sum — the face it would generate has no area — so anything it could separate is
+        already separated by a face normal.</li>
+    <li><strong>It keeps the MTV honest.</strong> A near-zero cross normalises to an arbitrary
+        direction, and an arbitrary direction that happened to win the minimum would be a contact
+        normal pointing nowhere in particular.</li>
+    <li><strong>It avoids <code>0/0</code>.</strong> An exactly-zero cross normalises to NaN. Every
+        comparison against NaN is false, so even that fails safe — but relying on that is relying on
+        an accident rather than on a decision.</li>
+  </ul>
+
+  <p>
+    And the control at the far end is the one that makes the point stick: <strong>an exactly
+    degenerate axis is the harmless case.</strong> Two axis-aligned cubes, where every cross product
+    is a true zero, give the right answer in all three formulations — the unnormalised test compares
+    <code>0 &gt; 0</code>, which is false, which is correct. The damage is done by the axis that is
+    <em>almost</em> zero.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The control that explains why this bug survives.</strong> On 200,000 pairs at
+      <em>random</em> orientations, the degeneracy guard fired <strong>0 times out of 1,800,000
+      candidate axes</strong>. Random test data does not generate this bug — the probability of two
+      uniformly random axes being parallel to within <code>10⁻³</code> is essentially zero — and the
+      configuration that does generate it is the one every scene is full of. A test suite built on
+      random inputs and a game built on floors disagree completely about which inputs are typical.
+    </p>
+  </div>
+
+  <h2 id="precision">11. Where the precision floor is</h2>
+
+  <p>
+    One more thing nobody warns you about, and it has nothing to do with the algorithm.
+  </p>
+
+  <p>
+    Take two 1 m cubes with a 1 mm gap between them and ask for the gap. Then move both of them away
+    from the origin — together, keeping everything about their relationship identical — and ask
+    again.
+  </p>
+
+  @@FIG_PRECISION@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>distance from origin</th><th>reported gap</th><th>error</th><th>ulp(d)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0 m</td><td>1.000e−03</td><td>4.668e−08</td><td>—</td></tr>
+      <tr><td>1 m</td><td>9.999e−04</td><td>7.253e−08</td><td>1.192e−07</td></tr>
+      <tr><td>100 m</td><td>9.995e−04</td><td>5.494e−07</td><td>7.629e−06</td></tr>
+      <tr><td>1 km</td><td>9.766e−04</td><td>2.344e−05</td><td>6.104e−05</td></tr>
+      <tr><td>10 km</td><td>9.766e−04</td><td>2.344e−05</td><td>9.766e−04</td></tr>
+      <tr><td>100 km</td><td><strong>−0.000e+00</strong></td><td>1.000e−03</td><td>7.812e−03</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    At a kilometre the gap is wrong by 2.3%. At 10 km the error has reached the size of the thing
+    being measured. At 100 km the answer is exactly zero: <strong>two boxes a millimetre apart are
+    reported as touching.</strong>
+  </p>
+
+  <p>
+    Nothing about the algorithm changed and nothing about the boxes changed. Only where they are.
+  </p>
+
+  <p>
+    The cause is in the first line of the test, and it is 8.3's lesson arriving for the third time in
+    this module: <em>a derivation says what to compute, not how.</em> The offset
+    <code>t = b.centre − a.centre</code> subtracts two numbers of the size of the <strong>world</strong>
+    to produce one of the size of a <strong>crate</strong>. A <code>float</code> has 24 bits of
+    significand, so at 10 km its neighbours are 0.98 mm apart — the millimetre gap is no longer a
+    representable difference, and it was gone before <code>collide</code> was called.
+  </p>
+
+  <p>
+    The control confirms which step loses it: recomputing the same gap in <code>double</code>, from
+    the same <code>float</code> centres, still gives <strong>9.765625e−04</strong>. The centres
+    themselves cannot express the configuration. <code>10000 + 1.001</code> rounds to
+    <code>10001.000977</code>, and no amount of careful arithmetic afterwards can recover the
+    0.000023 that was discarded on the way in.
+  </p>
+
+  <p>
+    Three consequences, all of them things real engines do:
+  </p>
+
+  <ul>
+    <li><strong>Large worlds recentre.</strong> A "floating origin" periodically shifts everything so
+        that the player is near zero. Renderers do it for depth precision; physics needs it for
+        exactly this reason.</li>
+    <li><strong>Solvers work in contact-local coordinates.</strong> 8.9's impulses are computed from
+        offsets to the contact point, never from world positions, so the subtraction happens once at
+        the smallest scale available.</li>
+    <li><strong>Manifolds store offsets, not points.</strong> 8.7 keeps contact points as vectors
+        from each body's centre, which stays accurate as the body travels — and which is also what
+        makes them re-projectable next frame.</li>
+  </ul>
+
+  <p>
+    The engine-facing summary is one sentence: <strong>every quantity in a collision test should be
+    a difference taken as early as possible.</strong> <code>gap_on_axis</code> takes it in its first
+    line, which is why the numbers above degrade gracefully instead of collapsing at 100 m.
+  </p>

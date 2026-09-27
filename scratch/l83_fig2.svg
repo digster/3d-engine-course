@@ -1,0 +1,48 @@
+<svg viewBox="0 0 900 384" role="img" aria-labelledby="l83f2-t l83f2-d">
+  <title id="l83f2-t">A point mass and the two axes it does and does not resist</title>
+  <desc id="l83f2-d">A three-kilogram point mass sits two metres from the origin. An axis running through the mass meets no resistance at all — the moment is exactly zero — while an axis across it meets m r squared, twelve. The right-hand column reads the expression term by term: the identity term resists every axis, and the outer product takes all of it back along r.</desc>
+  <defs>
+    <marker id="e-i-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blue-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amber-l83f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="40" y="62" width="340" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="40" y="46" class="xs muted" text-anchor="start">a 3 kg point mass at (0, 2, 0)</text>
+<circle cx="210.0" cy="242.0" r="3" fill="#8f918a"/>
+<text x="204.0" y="258.0" class="xs muted" text-anchor="end">origin</text>
+<line x1="210.00" y1="242.00" x2="210.00" y2="180.00" stroke="#ebc860" stroke-width="2.0" marker-end="url(#e-amber-l83f2)"/>
+<text x="218.0" y="211.0" class="xs mono" text-anchor="start">r</text>
+<circle cx="210.0" cy="180.0" r="7" fill="#8f918a"/>
+<text x="224.0" y="176.0" class="xs mono" text-anchor="start">m = 3 kg</text>
+<line x1="210.0" y1="136.0" x2="210.0" y2="310.0" stroke="#5ac878" stroke-width="2.0" fill="none" stroke-dasharray="5 4"/>
+<text x="202.0" y="130.0" class="xs" text-anchor="middle">y — through the mass</text>
+<line x1="114.0" y1="180.0" x2="306.0" y2="180.0" stroke="#e05c5c" stroke-width="2.0" fill="none" stroke-dasharray="5 4"/>
+<text x="52" y="170.0" class="xs" text-anchor="start">x — across it</text>
+<line x1="40.0" y1="334.0" x2="60.0" y2="334.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="68" y="338" class="xs" text-anchor="start">spun about y:  I = 0.0000  — no resistance at all</text>
+<line x1="40.0" y1="351.0" x2="60.0" y2="351.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="68" y="355" class="xs" text-anchor="start">spun about x:  I = 12.0000  = m r²</text>
+<text x="430" y="46" class="xs muted" text-anchor="start">…and that is exactly what the expression says</text>
+<line x1="430" y1="68" x2="860" y2="68" class="grid" stroke-width="1.0"/>
+<text x="430" y="88" class="xs mono" text-anchor="start">|r|² · 1</text>
+<text x="550" y="88" class="xs muted" text-anchor="start">resist EVERY axis by m r²</text>
+<text x="430" y="108" class="xs mono" text-anchor="start">− r ⊗ r</text>
+<text x="550" y="108" class="xs muted" text-anchor="start">…then take it all back along r</text>
+<text x="430" y="128" class="xs mono" text-anchor="start">= the tensor</text>
+<text x="550" y="128" class="xs muted" text-anchor="start">m r² across, exactly 0 along</text>
+<text x="430" y="178" class="xs muted" text-anchor="start">The outer product a ⊗ b is the OTHER thing you can do</text>
+<text x="430" y="194" class="xs muted" text-anchor="start">with a pair of vectors: the dot product gives a number,</text>
+<text x="430" y="210" class="xs muted" text-anchor="start">this gives a matrix. Read it as an action rather than</text>
+<text x="430" y="226" class="xs mono" text-anchor="start">a formula — (a ⊗ b)v measures how much of v lies along</text>
+<text x="430" y="242" class="xs muted" text-anchor="start">b, and hands back that much of a. Its rank is one, so it</text>
+<text x="430" y="258" class="xs muted" text-anchor="start">flattens all of space onto a line: never a transformation</text>
+<text x="430" y="274" class="xs t-hi" text-anchor="start">you would want, always a TERM in something else.</text>
+<text x="430" y="302" class="xs muted" text-anchor="start">checked against r × (ω × r) over 20,000 random pairs:</text>
+<text x="430" y="318" class="xs mono" text-anchor="start">worst relative difference 1.208e-06</text>
+</svg>

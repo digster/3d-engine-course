@@ -1,0 +1,35 @@
+<svg viewBox="0 0 760 292" role="img" aria-labelledby="l618f1-t l618f1-d">
+  <title id="l618f1-t">Three files: what each one knows about</title>
+  <desc id="l618f1-d">A chain from font.hpp to overlay.hpp forking into two consumers, the CPU compositor and the SDL_GPU overlay. Neither of the first two mentions SDL_GPU, so the same batch can be rendered by both and compared.</desc>
+  <defs>
+    <marker id="e-i-l618f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">The split that makes the comparison in §11 possible at all.</text>
+<rect x="30" y="62" width="176" height="54" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="30" y="62" width="176" height="54" rx="3" fill="none" stroke="#f0961e" stroke-width="1.2"/>
+<text x="118.0" y="86" class="xs mono" text-anchor="middle">font.hpp</text>
+<text x="118.0" y="104" class="xs muted" text-anchor="middle">outlines -&gt; coverage</text>
+<line x1="212" y1="89.0" x2="248" y2="89.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l618f1)"/>
+<rect x="254" y="62" width="176" height="54" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="254" y="62" width="176" height="54" rx="3" fill="none" stroke="#5082e6" stroke-width="1.2"/>
+<text x="342.0" y="86" class="xs mono" text-anchor="middle">overlay.hpp</text>
+<text x="342.0" y="104" class="xs muted" text-anchor="middle">strings -&gt; quads</text>
+<line x1="436" y1="89.0" x2="468" y2="43.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l618f1)"/>
+<rect x="474" y="16" width="270" height="54" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="474" y="16" width="270" height="54" rx="3" fill="none" stroke="#5ac878" stroke-width="1.2"/>
+<text x="609.0" y="38" class="xs mono" text-anchor="middle">composite_overlay</text>
+<text x="609.0" y="56" class="xs muted" text-anchor="middle">a framebuffer, on the CPU</text>
+<line x1="436" y1="89.0" x2="468" y2="135.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l618f1)"/>
+<rect x="474" y="108" width="270" height="54" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="474" y="108" width="270" height="54" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.2"/>
+<text x="609.0" y="130" class="xs mono" text-anchor="middle">gpu_overlay</text>
+<text x="609.0" y="148" class="xs muted" text-anchor="middle">SDL_GPU, one draw call</text>
+<line x1="20" y1="212" x2="740" y2="212" class="grid" stroke-width="1.2"/>
+<text x="20" y="230" class="xs" text-anchor="start">Neither of the first two mentions SDL_GPU, which is why `hello_cube` — a program with no GPU device — has text.</text>
+<text x="20" y="250" class="xs t-ok" text-anchor="start">And it is why the same batch can be rendered both ways and compared: 68 of 16384 pixels differ, by at most one sRGB code.</text>
+<text x="20" y="270" class="xs muted" text-anchor="start">The control — the same comparison against a deliberately wrong CPU render — reports 934 differing pixels.</text>
+</svg>

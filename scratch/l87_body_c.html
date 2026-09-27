@@ -1,0 +1,353 @@
+  <h2 id="faces">5. Asking a shape for its face</h2>
+
+  <p>
+    <code>support_face</code> returns the whole feature a shape presents in a direction: a point, a
+    segment, or a polygon. The counts are not a limitation of the implementation — they are the
+    actual dimensions of the contact features these shapes have.
+  </p>
+
+@@FIG_FACES@@
+
+  <h3>The box: an argmax over three numbers</h3>
+
+  <p>
+    A box has six faces and the one to return is the one whose outward normal leans into
+    <code>d</code> hardest. That is an argmax over three absolute dot products, and it is a strictly
+    better-behaved question than “is this vertex on the supporting plane”: the three candidates are
+    generally well separated, and a tie between two of them means the two faces are equally good
+    answers, so either is correct and only reproducibility is at stake.
+  </p>
+
+  <pre><code class="lang-cpp">    int best = 0;
+    float best_abs = -1.0f;
+    float sign = 1.0f;
+    for (int i = 0; i &lt; 3; ++i)
+    {
+        const float p = dot(box.axis(i), d);
+        const float a = std::fabs(p);
+        if (a &gt; best_abs)
+        {
+            best_abs = a;
+            best = i;
+            sign = (p &gt;= 0.0f) ? 1.0f : -1.0f;
+        }
+    }</code></pre>
+
+  <p>
+    Note the <code>&gt;</code> rather than <code>&gt;=</code>: a direction exactly between two faces
+    keeps the lower axis index, deterministically. This is <code>support_local</code>'s
+    <code>&gt;= 0</code> argument one dimension up.
+  </p>
+
+  <h3>The winding, which is load-bearing</h3>
+
+  <p>
+    The four corners have to come back in order around the face, and in a specific order:
+    <strong>counter-clockwise about the face's own outward normal</strong>. That is
+    conventions.html §7, the same winding the rasteriser has used since 3.5 and the GPU since 4.4,
+    and here it is not decoration. §7's clipper builds each side plane as
+    <code>cross(edge, normal)</code>, which points <em>out</em> of the polygon only if the winding is
+    counter-clockwise. Reverse it and every side plane faces inward, every incident point is
+    classified outside, and the manifold comes back empty on exactly the contacts that matter most.
+  </p>
+
+  <p>
+    Getting it right is one observation. If <code>(i, j, k)</code> is a cyclic permutation of a
+    right-handed frame then <code>axis(j) × axis(k) = axis(i)</code>, so walking
+    <code>−e₀−e₁ → +e₀−e₁ → +e₀+e₁ → −e₀+e₁</code> turns counter-clockwise about
+    <code>+axis(i)</code>: the first two edges are <code>2e₀</code> then <code>2e₁</code>, whose
+    cross product is <code>4·h<sub>j</sub>·h<sub>k</sub>·axis(i)</code>. On the <em>negative</em>
+    face the outward normal is <code>−axis(i)</code>, so the two in-plane vectors swap and the same
+    walk turns counter-clockwise about the normal that is actually outward.
+  </p>
+
+  <pre><code class="lang-cpp">    const vec3 e0 = (sign &gt;= 0.0f) ? uj : uk;
+    const vec3 e1 = (sign &gt;= 0.0f) ? uk : uj;
+
+    f.normal = n;
+    f.count = 4;
+    f.v[0] = centre - e0 - e1;
+    f.v[1] = centre + e0 - e1;
+    f.v[2] = centre + e0 + e1;
+    f.v[3] = centre - e0 + e1;</code></pre>
+
+  <p>
+    §5's control checks it by hand: reverse a face's winding and count how many of the incident
+    face's four vertices the side planes accept. The answer is <strong>0 of 4</strong>, on a contact
+    that is plainly there.
+  </p>
+
+  <h3>The sphere and the capsule: the honest answers</h3>
+
+  <p>
+    A ball has no flat feature. <code>support_face(sphere, d)</code> returns one vertex, and that is
+    the truth rather than a shortfall. It is tempting to fabricate a small disc around the support
+    point so that a ball “stacks properly”, and the lie shows up immediately as a ball that will not
+    roll — the disc resists rotation that nothing is resisting.
+  </p>
+
+  <p>
+    A capsule has exactly one flat feature, and it is one-dimensional: the line where the
+    cylindrical side meets the supporting plane, which exists only when the query direction is
+    perpendicular to the spine. Everything else — the two caps, and every shoulder between them — is
+    spherical. So the capsule is the first shape with a tolerance, and it is a tolerance on how
+    perpendicular counts as perpendicular:
+  </p>
+
+  <pre><code class="lang-cpp">    if (along * along &lt;= k_face_gather_sin * k_face_gather_sin &amp;&amp; p2 &gt; 0.0f)
+    {
+        // the side: a two-vertex segment along the spine
+    }
+    else
+    {
+        // one point: a cap, or a shoulder
+    }</code></pre>
+
+  <p>
+    §5 measures 1,041 side hits and 18,959 cap hits over 20,000 random directions and shapes, and
+    every returned vertex is exactly <code>radius</code> from the spine segment — worst case
+    <strong>1.19e−07 m</strong>, which is float's own resolution and needs no second opinion at all,
+    because “is this point on the capsule” is a one-line exact test.
+  </p>
+
+  <h3>The hull: the one that has no answer</h3>
+
+  <p>
+    And then a <code>hull</code>, which is where it gets interesting. 8.5 made <code>hull</code> a
+    <em>point cloud</em> on purpose — a span of vertices with no topology — because that is what an
+    artist's convex collider is when it arrives, and because <code>support</code> needs nothing more.
+    <code>support_face</code> does. A face of a point cloud is the set of vertices on its supporting
+    plane, and deciding whether a vertex is <em>on</em> a plane is 8.6 §7's problem again: a
+    comparison whose two sides are equal in exact arithmetic.
+  </p>
+
+  <p>
+    The gather tolerance has to be an angle rather than a distance, and the derivation is one line.
+    A vertex <code>w</code> metres across a face sits <code>w·sin θ</code> below the supporting plane
+    when the query direction is <code>θ</code> off the face normal. So the tolerance that admits a
+    whole face is <code>sin θ</code> times the shape's own extent:
+  </p>
+
+  <pre><code class="lang-cpp">    const float eps = gather_sin * std::sqrt(extent2);</code></pre>
+
+  <p>
+    A constant in metres here would gather half the hull on a doorknob and one vertex on a car —
+    8.5 §11's argument, in a new place.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And there is no value of <code>gather_sin</code> that is right, because the question
+      is topological and a point cloud has no topology.</strong> §5 sweeps it on a 24-sided prism,
+      querying the true normal of one of its side faces:
+    </p>
+    <pre><code class="lang-text">     gather_sin   side face    bulge      end cap
+     0.002         4 vertices  0.0000 m   8 vertices
+     0.010         4 vertices  0.0000 m   8 vertices
+     0.050         8 vertices  0.0338 m   8 vertices
+     0.200         8 vertices  0.0990 m   8 vertices</code></pre>
+    <p>
+      Too tight and a cylinder's side contact drops to a bare edge — two points, no support polygon,
+      and the thing rolls when it should not. Too loose and three flat faces are merged into one
+      polygon that bulges 34 mm. On a hand-authored collider, with genuinely flat faces whose normals
+      are well apart, any value in a wide range gives the same answer; on a tessellated curve there
+      is no value that does. The only real fix is to give <code>hull</code> its faces, and §12 says
+      so plainly rather than pretending the tolerance is a tuning matter.
+    </p>
+  </div>
+
+  <h3>Two details in the hull's implementation that are easy to get wrong</h3>
+
+  <p>
+    <strong>The gathered vertices arrive in index order, which is not an order.</strong> They are in
+    whatever order the exporter wrote them, and a polygon whose vertices are not in order around its
+    own boundary is not a polygon: its edges cross, <code>cross(edge, normal)</code> points in
+    scattered directions, and the clipper rejects everything. So they are sorted by angle about the
+    face's centroid — and the frame that angle is measured in starts at the
+    <em>lowest-indexed</em> gathered vertex, which is what makes local index 0 the same vertex on
+    every frame. Local indices are half of every contact id.
+  </p>
+
+  <p>
+    <strong>The face's normal is not the query direction.</strong> Up to the sort it has to be, because
+    a point and a segment have no plane of their own. A polygon does, and it is a different vector:
+    the gather admits a face up to <code>k_face_gather_sin</code> off the query, so the two can
+    differ by nearly three degrees, and §7 clips against the <em>reference face's plane</em>. Using
+    the query direction there would tilt every side plane by that angle and mis-measure every depth.
+  </p>
+
+  <pre><code class="lang-cpp">    vec3 newell{};
+    for (int i = 0; i &lt; count; ++i)
+    {
+        newell += cross(f.v[i], f.v[(i + 1) % count]);
+    }</code></pre>
+
+  <p>
+    Newell's method rather than one cross product of two edges, because the gathered set is only
+    <em>approximately</em> planar — it is defined by a tolerance, after all — and a cross product of
+    the first two edges reads whatever noise those particular three vertices carry. Newell's sum is
+    <code>Σ vᵢ × vᵢ₊₁</code>, which for a planar polygon is exactly twice its area times its normal
+    and for a nearly planar one is the area-weighted average of every triple. It is also translation
+    invariant, which is why it can be computed on centre-relative vertices without a correction.
+  </p>
+
+  <h3>Decimation, and where it goes</h3>
+
+  <p>
+    A <code>contact_face</code> holds eight vertices. A tessellated cylinder's end cap has as many
+    as the artist drew, and the honest thing is to inscribe a polygon in it rather than to refuse.
+    The order of operations is the whole of it: <strong>decimate after the angular sort</strong>,
+    keeping every <code>⌈n/8⌉</code>-th vertex, so what is kept is a polygon inscribed in the true
+    face and every contact point it produces is still on the surface. Decimate before the sort and
+    the result is eight vertices in exporter order, which is not a shape.
+  </p>
+
+  <p>
+    The cost is predictable before it is measured. The kept octagon's edges cut the chord of the
+    true rim, so the deepest shortfall is at each edge's midpoint:
+    <code>r(1 − cos(π/8))</code>. For <code>r = 0.5</code> that is
+    <strong>0.03806 m</strong>, and §5 measures <strong>0.03806</strong>.
+  </p>
+
+  <h2 id="reference">6. Reference, incident, and how parallel is parallel</h2>
+
+  <p>
+    Two shapes, two features. Now they have to be clipped against each other, and clipping is not
+    symmetric: one polygon supplies the planes and the other gets cut. Which is which is a decision,
+    and it changes the answer.
+  </p>
+
+  <div class="callout">
+    <p>
+      The <strong>reference face</strong> supplies the side planes <em>and</em> the plane every depth
+      is measured from. The <strong>incident face</strong> is the one cut. The reference is the more
+      face-like of the two: the one whose own plane normal agrees best with the contact normal.
+    </p>
+  </div>
+
+@@FIG_REFINC@@
+
+  <p>
+    A feature counts as a face at all only when it has three or more vertices <em>and</em> its normal
+    is within <code>face_cos</code> of the contact normal. The second condition is the one that
+    matters, and it is easy to leave out: <code>support_face</code> always returns a box's dominant
+    face, even when the contact is really on one of its edges, and clipping against a face thirty
+    degrees off the contact normal produces four points none of which describes the contact.
+  </p>
+
+  <pre><code class="lang-cpp">    const float cos_a = dot(fa.normal, n);
+    const float cos_b = dot(fb.normal, -n);
+    const bool a_is_face = (fa.count &gt;= 3) &amp;&amp; (cos_a &gt;= cfg.face_cos);
+    const bool b_is_face = (fb.count &gt;= 3) &amp;&amp; (cos_b &gt;= cfg.face_cos);</code></pre>
+
+  <p>
+    Note the sign on the second: <code>normal</code> points from <code>a</code> toward
+    <code>b</code>, so <code>a</code>'s surface faces along <code>+n</code> and <code>b</code>'s
+    faces back along <code>−n</code>. Getting one of these backwards returns the far side of the
+    shape and produces a manifold whose points are a whole diameter away — which looks, on screen,
+    exactly like a body being flung across the level by a solver that is working perfectly.
+  </p>
+
+  <h3>What the tolerance actually decides</h3>
+
+  <p>
+    The first version of this section measured the wrong thing, and the mistake is instructive
+    enough to keep. It checked that the two claimed surface points lie on their shapes, and reported
+    a flat zero across four decades of <code>face_cos</code> — which is true <em>by construction</em>
+    at every tolerance, because one of those points is the incident vertex and the other is its
+    shadow on the reference plane. A tautology dressed as a result.
+  </p>
+
+  <p>
+    What a loose tolerance actually buys is a contact <em>normal</em> perpendicular to a face that is
+    a long way from the direction the two shapes are really pressing. 8.4's SAT is the exact minimum
+    translation for two boxes (8.6 §8 proved it), so it is the reference to measure against:
+  </p>
+
+  <pre><code class="lang-text">     face_cos   face%   mean pts   normal vs exact MTV
+                                     median     worst
+     0.50000   100.0    3.285      0.0000   44.8024 deg
+     0.90000    93.9    3.177      0.0000   25.8336 deg
+     0.99000    71.7    2.689      0.0000    8.1094 deg
+     0.99900    59.3    2.381      0.0000    2.5611 deg
+     0.99999    52.8    2.213      0.0000    0.2576 deg</code></pre>
+
+  <p>
+    The last column is <code>acos(face_cos)</code> exactly: <code>acos(0.999) = 2.5626°</code>,
+    measured 2.5611. That is what makes this a knob rather than a magic number — choose the largest
+    normal error a solver can live with, and take its cosine — and it is also the bound to quote
+    when someone asks how wrong the manifold's normal can be.
+  </p>
+
+  <p>
+    Tightening it has a cost too, and it is in the second and third columns: the fraction of contacts
+    classified as face contacts falls from 59.3% to 52.8%, and the mean contact count with it. Those
+    are real face contacts dropping to edge contacts because EPA's own tolerance nudged the normal a
+    hundredth of a degree off a face normal, and each one is a body that was resting on a polygon and
+    is now resting on a line.
+  </p>
+
+  <h3>Whose normal the manifold reports, and why it is not EPA's</h3>
+
+  <p>
+    A design decision worth defending. <code>contact_manifold::normal</code> is the
+    <em>reference face's</em> own normal, oriented from <code>a</code> toward <code>b</code> — not
+    the normal EPA returned. The two are close and they are not the same, and the difference is
+    deliberate.
+  </p>
+
+  <p>
+    A face normal is a cross product of two edges of a real shape. EPA's normal is the normal of a
+    triangle approximating a face of the difference set, converged to a tolerance. On a box-on-box
+    contact both are exact, because the difference set has a genuinely flat face and EPA terminates
+    on it — which makes box-on-box the one fixture that cannot show the difference. §6 uses a ball
+    instead, which 8.6 §9 measured as EPA's worst case:
+  </p>
+
+  <pre><code class="lang-text">     (a) a 0.4 m ball resting on a floor, jittered a
+         micron a frame, 4000 frames.
+         EPA normal, worst off +y  : 0.001172 deg
+         face normal, worst off +y : 0.000000 deg
+         frames where it was EXACTLY (0,1,0) : 4000</code></pre>
+
+  <p>
+    Four thousand frames of a bit-exact <code>(0, 1, 0)</code>, against a normal that wobbles by a
+    thousandth of a degree. That thousandth is harmless on its own and it is not harmless in a
+    solver: a normal that changes every frame means a tangent basis that changes every frame, which
+    means friction impulses that do not carry, which means a stack that shivers.
+  </p>
+
+  <p>
+    And over random box pairs, against the SAT's exact answer:
+  </p>
+
+  <pre><code class="lang-text">                          median      99th       worst
+         EPA   , all     0.00000   0.00001    0.0163 deg
+         face  , all     0.00000   1.12663    2.5600 deg
+         EPA   , agree   0.00000   0.00001    0.0163 deg
+         face  , agree   0.00000   0.00000    0.0000 deg</code></pre>
+
+  <p>
+    “Agree” means the SAT's exact axis came from the same shape's face the manifold clipped against
+    — 36,113 of 39,403 face contacts — and there the manifold's normal is <strong>bit-exact</strong>.
+    Where they do not agree, the normal is snapped to the reference face, by at most
+    <code>acos(face_cos)</code>. On a flat contact the face normal <em>is</em> the answer and EPA's
+    is an approximation to it; off one, the snapping is the trade a solver wants, because a normal
+    that is piecewise constant does not shake a stack and one that is merely accurate does.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>An aside on measuring angles, because this section's first numbers were the
+      instrument.</strong> <code>acos(dot(a, b))</code> is the obvious spelling and it has a
+      resolution floor: for a small angle <code>t</code>, <code>dot</code> is <code>1 − t²/2</code>,
+      so all the information about <code>t</code> lives in the last bits of a number near 1. Two unit
+      <code>float</code> vectors give a dot product good to about 1e−7, which recovers <code>t</code>
+      only to <code>√(2e−7)</code> radians — <strong>0.036°</strong>. The first version of this
+      section reported the reference-face normal as “0.0198° off the exact MTV”, and that number was
+      the instrument rather than the normal. The chord <code>|a − b|</code> is the angle to first
+      order and loses nothing: <code>2·asin(|a−b|/2)</code> is exact at every angle, and near zero it
+      is a subtraction of two nearly equal vectors, which carries full relative precision. Sterbenz's
+      lemma again, 8.5 §11's argument in a measuring instrument rather than in the engine.
+    </p>
+  </div>

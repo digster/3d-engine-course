@@ -1,0 +1,354 @@
+  <h2 id="sampling">4. Sampling: the bracket, and the cursor</h2>
+
+  <p>
+    Everything a sampler does reduces to one question asked once per channel per frame:
+    <strong>which two keys is this time between?</strong> Once you have the pair, the rest is a
+    normalised parameter and an interpolation, and both are three lines.
+  </p>
+
+  <p>
+    Say it precisely, because the precision is where the off-by-ones live. Given keys with strictly
+    increasing times <code>t₀ &lt; t₁ &lt; … &lt; tₙ₋₁</code>, find the largest <code>i</code> with
+    <code>keyᵢ.time ≤ t</code>, clamped into <code>[0, n−2]</code> so that <code>keyᵢ₊₁</code> always
+    exists. Then
+  </p>
+
+  <div class="eq">\[ u \;=\; \frac{t - t_i}{t_{i+1} - t_i} \]</div>
+
+  <p class="eq-plain">
+    …u is how far into the interval the time falls, from 0 at the left key to 1 at the right one.
+  </p>
+
+  <p>
+    Push real numbers through it. A 30 Hz track has keys at multiples of <code>1/30</code>, so the
+    third and fourth keys are at <code>0.1333</code> and <code>0.2000</code>. Ask for
+    <code>t = 0.1800</code>:
+  </p>
+
+  <div class="eq">\[ i = 2, \qquad
+      u = \frac{0.1800 - 0.1333}{0.2000 - 0.1333} = \frac{0.0467}{0.0667} = 0.7000 \]</div>
+
+  <p>
+    Seven tenths of the way from key 2 to key 3. That is the whole of sampling, and the figure below
+    is that calculation drawn.
+  </p>
+
+  @@FIG_BRACKET@@
+
+  <h3>4.1 The search you can usually skip</h3>
+
+  <p>
+    Finding <code>i</code> is a search over a sorted array, and the textbook answer is a binary
+    search: <code>log₂(n)</code> comparisons, each of them a branch the predictor cannot help with,
+    per channel per joint per frame. On a 301-key track that is 8.2 unpredictable branches,
+    multiplied by sixty-nine channels, multiplied by however many characters are on screen.
+  </p>
+
+  <p>
+    But look at what is actually being asked. Playback is not a random access pattern. The time this
+    frame is a few milliseconds after the time last frame, which means the answer is nearly always
+    <strong>the same answer as last frame, or the next one</strong>. A search that starts from
+    scratch every frame is throwing away a near-perfect prediction.
+  </p>
+
+  <p>
+    So keep the answer. That is what <code>track_cursor</code> is, and the lookup becomes:
+  </p>
+
+  <pre><code class="lang-cpp">template &lt;typename Key&gt;
+std::uint32_t walk(const std::vector&lt;Key&gt;&amp; keys, float t, std::uint32_t cursor)
+{
+    const auto last = static_cast&lt;std::uint32_t&gt;(keys.size() - 2u);
+    if (cursor &gt; last) { cursor = last; }
+
+    // Backwards: a seek, or the moment the clip looped. Not a walk.
+    if (keys[cursor].time &gt; t) { return search(keys, t); }
+
+    for (std::uint32_t step = 0; step &lt; k_walk_limit; ++step)
+    {
+        if (cursor &gt;= last || keys[cursor + 1u].time &gt; t) { return cursor; }
+        ++cursor;
+    }
+
+    // Still not there: this is a forward seek wearing a walk's clothes.
+    return (cursor &lt; last &amp;&amp; keys[cursor + 1u].time &lt;= t) ? search(keys, t) : cursor;
+}</code></pre>
+
+  <p>
+    In the ordinary case that is <em>one comparison that fails</em>. The interesting part is the
+    three ways out of the ordinary case, and the middle one was not in the first draft.
+  </p>
+
+  <p>
+    <strong>Backwards is a search, not a walk.</strong> A time that moved backwards means a seek, or
+    a scrub, or — once per cycle, on every looping clip in the game — the wrap. The first version of
+    this function walked backwards too, with a second <code>while</code>, on the argument that the
+    wrap happens once per cycle and is therefore amortised away. That argument is very nearly right,
+    and the measurement is worth having anyway. Here are three strategies timed on one key array,
+    with the driver advancing <strong>exactly one key interval per lookup</strong> so that the only
+    difference between the two rows is the track length:
+  </p>
+
+  <pre>   one lookup per key interval, best of three:
+     keys   two walks   walk+search   binary
+       31     1.548 ns     1.324 ns    3.626 ns
+      301     1.729 ns     0.985 ns   10.183 ns
+   the cursor beats the search by 2.74x and 10.34x</pre>
+
+  <p>
+    So the search fallback is worth <strong>14% at 31 keys and 43% at 301</strong> — a modest win,
+    stated as one. What it really buys is the <em>shape</em> of the worst case: a wrap costs
+    <code>n</code> steps in the retired version and <code>log₂(n)</code> in this one, so the cost of
+    a seek stops growing with the clip. And look at the column the cursor exists for at all: against
+    a pure binary search it is <strong>2.74× on a short track and 10.34× on a long one</strong>, and
+    the ratio grows because <code>log₂(n)</code> grows and 1 does not.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The first version of that measurement was measuring two things</span>
+    <p>
+      It varied the wrap period by changing the driver's <em>step size</em> — so each lookup on the
+      "more wraps" row also crossed ten intervals instead of one, and the forward walk gave up and
+      fell into the search every time. It reported 43% for the wrap alone, confidently and wrongly.
+      A benchmark with two independent variables in it is a benchmark with none.
+    </p>
+  </div>
+
+  <p>
+    <strong>A long forward run is a seek too.</strong> Ordinary playback advances the cursor by one
+    interval every frame or two, so the walk limit can be small; four leaves room for a clip whose
+    keys are denser than the frame rate (120 Hz keys sampled at 60 advances two) without ever paying
+    <code>log₂(n)</code> on a frame that did not jump. A caller sampling a 30 Hz clip at 10 Hz
+    crosses three intervals a frame and still walks; one that seeks across the whole clip searches,
+    which is the right answer.
+  </p>
+
+  <h3>4.2 A stale cursor costs time, not truth</h3>
+
+  <p>
+    This is the property that makes the whole optimisation safe to live with, and it is worth
+    stating as a guarantee rather than a hope: <strong>both loops are driven by the key times, not
+    by trust.</strong> A cursor left over from a different clip, or from a seek the caller forgot to
+    announce, or from an uninitialised vector, changes how many comparisons the lookup does and
+    nothing else.
+  </p>
+
+  <p>
+    The harness's control for that is deliberately harsher than "do not warm the cursor". Lesson 7.6
+    ended with a rule — <em>ask what your control would say if the thing were completely broken</em>
+    — after one of its checks ran at the bind pose, where every palette matrix is the identity and
+    the wrong rule gives the right answer. An unwarmed cursor of 0 is the <em>correct</em> answer on
+    frame 0, so it proves nothing. So §A.3 jams every cursor at index 9999 and demands the poses come
+    back bit-identical to a from-scratch binary search:
+  </p>
+
+  <pre>   977 samples over 6.97 s of a 1.00 s clip
+   worst position gap between the two routes 0.000e+00
+  [PASS] A.1  cursor and binary search agree to the bit
+  [PASS] A.2  and after a backward jump, still to the bit
+   CONTROL cursors jammed at 9999: same poses yes
+  [PASS] A.3  CONTROL: a stale cursor costs time, not truth</pre>
+
+  <p>
+    That is also why <code>sample_at</code> exists in the public header beside <code>sample</code>.
+    It is the same function with the cursor replaced by a binary search — useful in its own right for
+    one-off lookups where there is no previous frame to remember, and indispensable as the thing
+    <code>sample</code> is checked against. Two implementations that must agree to the bit is a much
+    stronger test than one implementation checked against a description of itself.
+  </p>
+
+  <h2 id="rules">5. Three fields, three rules</h2>
+
+  <p>
+    Now the other half of a sample: given the bracket and <code>u</code>, produce the value. A
+    <code>transform</code> has three fields and they live in three different kinds of space, so this
+    is not one rule applied three times. It is three decisions, and exactly one of them was left open
+    by Lesson 7.5.
+  </p>
+
+  <h3>5.1 Position: lerp, and there is no case to answer</h3>
+
+  <p>
+    A position is a point in an affine space, and the only structure a point has is the straight
+    line to another point. A straight line traversed at constant speed is the unique path between two
+    positions that <em>invents no information</em>; anything curved would be a claim about a
+    trajectory that the two endpoints simply do not contain. glTF says the same thing in symbols —
+    its <code>LINEAR</code> mode is <code>vₜ = (1−t)·vₖ + t·vₖ₊₁</code>, componentwise — and there is
+    no interesting alternative to consider.
+  </p>
+
+  <h3>5.2 Rotation: nlerp, with a number behind it</h3>
+
+  <p>
+    Lesson 7.5 spent half a lesson measuring this exact tradeoff and arrived at a threshold: nlerp
+    walks the same great circle as slerp (excess turning 0.00%) on a schedule that is wrong, and the
+    error stays under half a degree up to an arc of <strong>73.50°</strong>, for 3.42× less work.
+    The only question left is whether the arcs a <em>clip</em> contains are inside that.
+  </p>
+
+  <p>
+    They are, by three orders of magnitude, and the way to see it is to stop thinking about
+    quaternions and think about limbs. A key interval at 30 Hz is 1/30 s. A limb turning at
+    <code>r</code> degrees per second therefore moves <code>r/30</code> degrees between two adjacent
+    keys:
+  </p>
+
+  <pre>   rate deg/s   at 30 Hz   nlerp err   slerp
+           90      3.00    0.000033   exact
+          180      6.00    0.000264   exact
+          360     12.00    0.002112   exact
+          720     24.00    0.016921   exact
+   worst over every rate above             0.016921 deg</pre>
+
+  <p>
+    720°/s is two full turns a second — a punch, a whip crack, the fastest thing a limb does. It
+    moves <strong>24° between keys</strong>, and nlerp lags slerp by <strong>0.0169°</strong>, which
+    is a thousandth of the threshold. Inside a clip, nlerp is not a compromise; it is free and
+    exact to anything anyone could see.
+  </p>
+
+  @@FIG_ARCS@@
+
+  <p>
+    The specification agrees, and says so in a way worth quoting because it is unusually candid.
+    glTF's <code>LINEAR</code> mode, targeting a rotation, says spherical linear interpolation
+    <strong>SHOULD</strong> be used; then Appendix C, having given the slerp formula, adds that
+    <em>implementations may approximate these equations to reach application-specific accuracy and/or
+    performance targets</em>, and notes that when the arc is close to zero, spherical linear
+    interpolation turns into regular linear interpolation. That is the same observation from the
+    other end, written by people who expected exactly this decision to be made.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The factor of two charges rent in the documentation too</span>
+    <p>
+      Writing this lesson turned up a defect in a doc comment this course shipped in Lesson 7.5.
+      <code>quat_nlerp</code>'s comment quoted a table — <em>0.13° at 30°, 4.07° at 90°, 26.34° at
+      150°</em> — and then argued from it that "under about 30° of arc … is where a 30 Hz animation
+      clip's adjacent keyframes live". Both halves are true and they are in <strong>different
+      units</strong>. The table is in <em>sphere</em> arcs and <em>sphere</em> degrees; the sentence
+      is thinking in rotation angles, which are double. Read as sphere arcs, that sentence claims a
+      clip's keys are 60° of rotation apart, which is 1,800°/s and nothing a limb does. Both tables
+      are now written out in the header, labelled. A quantity with a factor of two in it needs its
+      unit said every single time, and a comment is not exempt.
+    </p>
+  </div>
+
+  <h3>5.3 Scale: the decision Lesson 7.5 left open</h3>
+
+  <p>
+    Lesson 7.5's twelfth section asked the reader to write <code>transform_slerp</code>, and named
+    the open question inside it: position lerps, rotation slerps, and scale could go either way. It
+    is time to settle it, and the honest way to settle it is with a picture rather than a preference.
+  </p>
+
+  <p>
+    The two candidates are <strong>linear</strong> — equal <em>differences</em> in equal times — and
+    <strong>geometric</strong> — equal <em>ratios</em>:
+  </p>
+
+  <div class="eq">\[ s_{\text{lin}}(t) = (1-t)\,a + t\,b, \qquad
+      s_{\text{geo}}(t) = a\left(\frac{b}{a}\right)^{t} = e^{(1-t)\ln a + t \ln b} \]</div>
+
+  <p class="eq-plain">
+    …the first adds the same amount each step; the second multiplies by the same factor each step.
+  </p>
+
+  <p>
+    On a growth from 1 to 8 they disagree loudly, and the disagreement is exactly the gap between
+    the arithmetic and geometric means:
+  </p>
+
+  <div class="eq">\[ \frac{a+b}{2} - \sqrt{ab} \;=\; \frac{1+8}{2} - \sqrt{8}
+      \;=\; 4.500 - 2.828 \]</div>
+
+  <p>
+    And the geometric one is the better-looking curve. Scale composes by multiplication all the way
+    down a hierarchy, and perceived size is closer to logarithmic than to linear, so "equal ratios
+    per second" is what steady growth looks like to an eye. If the argument stopped there,
+    geometric would win.
+  </p>
+
+  @@FIG_SCALE@@
+
+  <p>
+    Three things settle it for the lerp anyway, in increasing order of how hard they are to argue
+    with.
+  </p>
+
+  <p>
+    <strong>First, the gap is invisible over the range content uses.</strong> Squash and stretch
+    lives between about 0.8 and 1.25, and the harness measures the worst midpoint gap over that band
+    at <strong>0.62%</strong>. A full doubling is 6.07%. The 59.10% of the 1-to-8 example needs a
+    ratio no rig animates — and if a rig ever does, see the last paragraph of this section.
+  </p>
+
+  <p>
+    <strong>Second, a scale of zero is legal, common, and has no logarithm.</strong> Scaling an
+    object to 0 is how animators make things vanish, and mirrored rigs carry a negative scale down
+    one side. Geometric interpolation does not shrink toward zero; it <em>teleports</em>:
+  </p>
+
+  <pre>   geometric 1 -> 0, by t:
+       t    a*(b/a)^t     lerp
+    0.00     1.000000    1.0000
+    0.01     0.000000    0.9900
+    0.25     0.000000    0.7500
+    0.50     0.000000    0.5000
+    1.00     0.000000    0.0000
+   CONTROL ln(-1) = NaN, ln(0) = -inf</pre>
+
+  <p>
+    The object disappears on the first frame after <code>t = 0</code> rather than over the second the
+    animator asked for. A rule that needs a special case for the most common extreme value of its own
+    input is not the rule.
+  </p>
+
+  <p>
+    <strong>Third, and decisively, the file format says linear.</strong> glTF defines
+    <code>LINEAR</code> as componentwise lerp for every animated property that is not a rotation.
+    An importer that log-lerps scale plays the file differently from every other viewer on earth,
+    which is a correctness bug wearing a mathematician's coat. The interpolation rule is not ours to
+    choose once we accept content from a tool.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The answer to somebody who wants geometric growth is a keyframe</span>
+    <p>
+      Not a runtime rule. The gap between the two schedules is the arithmetic-minus-geometric mean of
+      the <em>per-segment</em> ratio, and splitting the span cuts that ratio by an <code>n</code>-th
+      root. Measured: one key spans 1→8 with a 59.10% gap, three keys span ratios of 2 with 6.07%,
+      and six keys span ratios of √2 with <strong>1.51%</strong>. The animator already has the tool
+      and already knows how to use it. A policy the content pipeline can express does not belong in
+      the sampler.
+    </p>
+  </div>
+
+  <h3>5.4 The name, and why it is not <code>transform_slerp</code></h3>
+
+  <p>
+    Which leaves the function. Lesson 7.5's exercise asked for <code>transform_slerp</code>, and that
+    name is wrong: exactly one of the three fields slerps, and calling the whole thing after the rule
+    that governs a third of it is the kind of name that makes a caller believe the position is
+    travelling on an arc. <code>transform_blend</code> claims nothing:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline transform transform_blend(const transform&amp; a, const transform&amp; b, float t)
+{
+    return {.position = lerp(a.position, b.position, t),
+            .rotation = quat_nlerp(a.rotation, b.rotation, t),
+            .scale    = lerp(a.scale, b.scale, t)};
+}</code></pre>
+
+  <p>
+    Three lines, three arguments, all of them above. <code>transform_blend_slerp</code> sits beside
+    it with <code>quat_slerp</code> in the middle, for the caller whose arcs are <em>not</em> small —
+    and §7 is about how to find out which you are, rather than guessing.
+  </p>
+
+  <p>
+    One more thing hides in that snippet, and it is the reason §8 is short. <code>quat_nlerp</code>
+    calls <code>nearest</code> internally. So the sampler pays for the double cover without a single
+    line in this file mentioning it, which is what a well-placed primitive looks like from the
+    outside.
+  </p>

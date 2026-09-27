@@ -1,0 +1,796 @@
+
+  <div class="widget" id="w310">
+    <div class="widget-controls">
+      <label>the phase is <output id="w310po">96</output>% of the frame
+        <input type="range" id="w310p" min="1" max="99" value="96"></label>
+      <label>you made it <output id="w310so">1.30</output>× faster
+        <input type="range" id="w310s" min="0" max="600" value="38"></label>
+    </div>
+    <div class="widget-controls">
+      <button type="button" data-p="96" data-s="1.30">our encode fix</button>
+      <button type="button" data-p="96" data-s="64">an infinitely fast fill</button>
+      <button type="button" data-p="3.3" data-s="10">the vertex stage, 10×</button>
+      <button type="button" data-p="50" data-s="4">half the frame, 4×</button>
+    </div>
+    <div id="w310bars"></div>
+    <p class="widget-readout" id="w310r"></p>
+  </div>
+
+  <p>
+    Drag the second slider to the far right on the default setting: the phase is 96% of the frame
+    and you have made it 64× faster, which no real optimisation ever is, and the frame is 18.2×
+    faster rather than 64×. Now drag the <em>first</em> slider down to 50% and watch the whole
+    curve collapse — the same heroic 64× on half a frame buys 1.97×. The lesson is in which
+    slider moves the answer, and it is not the one you spend your week on.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-profiler"><span class="num">4.1</span>The profiler, and what it refuses to do</h3>
+
+  <p>
+    The new file is <code>src/core/profile.hpp</code>, and it goes in <code>core/</code> rather
+    than <code>gfx/</code> for the reason all of Module 5's structure will eventually turn on:
+    measuring time is not a graphics concern. The physics step will want a zone, the asset loader
+    will want a zone, and none of them should have to include a rasterizer to get one.
+  </p>
+
+  <p>
+    Start with the zones. They are an <code>enum class</code> with a <code>count</code> sentinel
+    last, which is the standard C++ idiom for "this enum also indexes an array":
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/core/profile.hpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">enum class zone
+{
+    build, collect, sort, fill, overlay, present,
+    count      ///&lt; Not a zone: the number of them. Must stay last.
+};
+
+inline constexpr int k_zone_count = static_cast&lt;int&gt;(zone::count);</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ — <code>inline constexpr</code> at namespace scope</span>
+    <p>
+      <code>inline</code> on a variable is a C++17 feature and it means exactly what it means on a
+      function: <em>this definition may appear in every translation unit that includes the header,
+      and they are all the same object.</em> Without it, every <code>.cpp</code> that includes this
+      header gets its own <code>k_zone_count</code> — harmless for a constant, and a real
+      one-definition-rule problem the moment somebody takes its address. Lesson 2.12 met the same
+      rule from the other side with <code>inline constexpr</code> mesh arrays; this is the
+      scalar case.
+    </p>
+  </div>
+
+  <p>
+    Now the instrument itself. <code>scope_timer</code> is the entire public interface for
+    measuring something, and it is eleven lines:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/core/profile.hpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">class scope_timer
+{
+public:
+    scope_timer(profiler&amp; p, zone z)
+        : prof_(p), zone_(z), start_(profiler::now_ticks()) {}
+
+    ~scope_timer() { prof_.add(zone_, prof_.to_ns(profiler::now_ticks() - start_)); }
+
+    scope_timer(const scope_timer&amp;)            = delete;
+    scope_timer&amp; operator=(const scope_timer&amp;) = delete;
+    scope_timer(scope_timer&amp;&amp;)                 = delete;
+    scope_timer&amp; operator=(scope_timer&amp;&amp;)      = delete;
+
+private:
+    profiler&amp; prof_;
+    zone      zone_;
+    Uint64    start_;
+};</code></pre>
+  </figure>
+
+  <p>
+    Two decisions in there are worth defending. It is a <strong>class rather than a matched pair
+    of calls</strong> for the reason RAII exists at all (Lesson 0.5): a phase with an early
+    <code>return</code> in the middle of it would skip the closing call and silently lose the
+    measurement, whereas a destructor runs on every path out of a scope including the ones you did
+    not think of. And all four copy and move operations are <strong>deleted</strong>, because two
+    live copies would each report the interval on destruction and the zone would count it twice.
+    Deleting them makes that unwritable rather than merely discouraged — the same move
+    <code>vertex</code> made in Lesson 2.4, where bundling attributes with positions made a whole
+    class of bug impossible to type.
+  </p>
+
+  <p>
+    Then the part most profilers leave out: the profiler measures <em>itself</em> at construction.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/core/profile.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">    freq_ = SDL_GetPerformanceFrequency();
+    if (freq_ == 0) { freq_ = 1; }
+    resolution_ns_ = 1.0e9 / static_cast&lt;double&gt;(freq_);
+
+    constexpr int k_calibration_reps = 100000;
+    const Uint64 t0 = now_ticks();
+    for (int i = 0; i &lt; k_calibration_reps; ++i)
+    {
+        const scope_timer t{*this, zone::build};
+    }
+    const Uint64 t1 = now_ticks();
+    overhead_ns_ = static_cast&lt;double&gt;(to_ns(t1 - t0)) / k_calibration_reps;
+
+    // The calibration ran real `add` calls, so `current_` is now full of
+    // measurement noise. Clear it: a profiler must not report its own setup.
+    current_.fill(0);</code></pre>
+  </figure>
+
+  <p>
+    That is §2.2's rule made executable. The engine logs both numbers at startup and the
+    arithmetic that follows from them, so the first line of every run tells you what you are
+    allowed to measure on <em>this</em> machine:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">stdout</span> <span class="tag">output</span></figcaption>
+    <pre><code>profiler: counter resolves to 41.67 ns, a scope_timer costs 25.79 ns
+          -&gt; instrument nothing shorter than 4.17 us</code></pre>
+  </figure>
+
+  <p>
+    Notice that the calibration loop's body is an unnamed-looking object with a name —
+    <code>const scope_timer t{...}</code> — and the name is doing real work. Write
+    <code>scope_timer{*this, zone::build};</code> without one and you get a temporary that is
+    destroyed at the end of the <em>statement</em> rather than the end of the scope. Here those
+    happen to be the same point, so it would work; in a real zone it would be a timer that closes
+    immediately and reports nothing. It is one of the most common C++ RAII mistakes and it fails
+    completely silently, so the habit is: <strong>always name your guard.</strong>
+  </p>
+
+  <p>
+    One arithmetic detail in <code>to_ns</code> is worth pausing on, because it is the single most
+    common way this class of code is written wrong:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/core/profile.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">    return (ticks * 1000000000ull) / freq_;</code></pre>
+  </figure>
+
+  <p>
+    Multiply first, then divide. The other order — <code>ticks / freq_ * 1e9</code> — performs an
+    integer division that truncates to whole seconds <em>before</em> scaling, so every interval
+    shorter than a second reports as exactly zero. It compiles, it runs, and it produces a
+    profiler in which every zone is free.
+  </p>
+
+  <h3 id="impl-median"><span class="num">4.2</span>The median, in one call</h3>
+
+  <p>
+    §2.4 settled that a frame budget wants a median. The ring buffer holds
+    <code>k_history = 120</code> frames — two seconds at 60 Hz, long enough to be stable and short
+    enough to respond when you press a key and the cost genuinely changes — and the median comes
+    out of it like this:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/core/profile.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] Uint64 median_of(const std::array&lt;Uint64, profiler::k_history&gt;&amp; ring, int n)
+{
+    if (n &lt;= 0) { return 0; }
+
+    std::array&lt;Uint64, profiler::k_history&gt; scratch{};
+    std::copy(ring.begin(), ring.begin() + n, scratch.begin());
+
+    const auto mid = scratch.begin() + n / 2;
+    std::nth_element(scratch.begin(), mid, scratch.begin() + n);
+    return *mid;
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>std::nth_element</code> is a <strong>partial sort</strong>: it puts the <em>k</em>-th
+    element where it would be in a sorted range and leaves everything else merely partitioned
+    around it — smaller on the left, larger on the right, in no particular order. That is
+    <em>O(n)</em> rather than the <em>O(n log n)</em> a full sort costs, and the ordering it does
+    not produce is information we would have thrown away anyway. It is exactly the right algorithm
+    for this and almost nobody reaches for it.
+  </p>
+
+  <p>
+    The copy is not laziness either. The ring is the record; sorting it in place would destroy the
+    chronological order that makes it a history at all, and a profiler that corrupts its own data
+    when you read it is a profiler you will debug at the worst possible moment.
+  </p>
+
+  <h3 id="impl-zones"><span class="num">4.3</span>Cutting the frame into zones</h3>
+
+  <p>
+    In <code>main.cpp</code> the frame is now bracketed, and <em>where</em> the brackets go is a
+    decision rather than a formality:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">    while (running)
+    {
+        prof.begin_frame();
+
+        SDL_Event event;
+        while (SDL_PollEvent(&amp;event)) { /* ... */ }
+        // ... the whole frame ...
+        prof.end_frame();
+        SDL_RenderPresent(renderer);
+    }</code></pre>
+  </figure>
+
+  <p>
+    The frame starts <strong>before the event drain</strong>, because draining events is work the
+    frame does and a budget that starts after it has a hole in it by construction. It ends
+    <strong>before <code>SDL_RenderPresent</code></strong>, because with vsync on that call blocks
+    until the display is ready, and a budget whose largest bar is "waiting for the monitor" tells
+    you nothing about your renderer. The HUD prints the wall-clock frame time beside the engine
+    total so the gap between the two is visible rather than hidden — and that gap is worth
+    understanding, because it is why <strong>a frame-rate counter cannot tell you that you made
+    anything faster</strong>. With vsync on, it reads 60 either way.
+  </p>
+
+  <p>
+    Inside, each phase gets a named guard:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">                {
+                    const engine::scope_timer z{prof, engine::zone::collect};
+                    collect_triangles(scene_tris, scratch, scene, scene_count,
+                                      view_from_world, pr, order, scene_clip, culling,
+                                      nsrc, eval, lights, correct_normals, &amp;scene_normals,
+                                      eye_world, spec_model);
+                }
+
+                const bool want_painter = (hs == hidden_surface::painter);
+
+                if (want_painter)
+                {
+                    const engine::scope_timer z{prof, engine::zone::sort};
+                    sort_back_to_front(scene_tris);
+                }</code></pre>
+  </figure>
+
+  <p>
+    The sort is the interesting one. It used to live inside <code>draw_triangles</code>, where it
+    would have been counted as part of <code>fill</code> and quietly inflated the fragment stage's
+    number. Instrumentation forced it out into <code>sort_back_to_front</code>, a named function
+    with two callers — the demo, which times it, and <code>draw_triangles</code>, which still does
+    it for anyone who does not care. <strong>One rule, one place, two callers</strong>: the same
+    discipline Lesson 3.4 established when <code>is_front_facing</code> got a name so the demo
+    could ask the rasterizer's question without re-typing its answer.
+  </p>
+
+  <p>
+    That is worth generalising, because it will keep happening: <strong>instrumentation shapes the
+    code it measures.</strong> The harness's renderer projects <em>all</em> triangles into a vector
+    and only then rasterizes them, which is not how you would write a naive renderer — the obvious
+    version projects and fills one triangle at a time — and the difference exists entirely so that
+    <code>collect</code> and <code>fill</code> can be measured apart. Pretending otherwise is how
+    people end up with a profiler whose zones interleave and whose numbers cannot be trusted.
+  </p>
+
+  <p>
+    Not every phase is a lexical scope, though. The HUD runs to the bottom of the loop through
+    several hundred lines of per-demo text, so it is timed with an explicit pair instead:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">        const Uint64 hud_t0 = engine::profiler::now_ticks();
+        // ... several hundred lines of SDL_RenderDebugText ...
+        prof.add(engine::zone::overlay,
+                 prof.to_ns(engine::profiler::now_ticks() - hud_t0));</code></pre>
+  </figure>
+
+  <p>
+    This is why <code>profiler::add</code> is public rather than a private detail of
+    <code>scope_timer</code>. RAII covers the case where a phase is a scope, which is most of them;
+    when it is not, the honest answer is to expose the primitive rather than to contort the code
+    into a scope it does not naturally have. Note also that <code>overlay</code> now accumulates
+    from <em>two</em> places in the frame — the debug-draw call early on and the HUD at the end —
+    which <code>add</code> supports by design. A zone is a category of work, not a point in time.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A zone that reads zero</span>
+    <p>
+      <code>build</code> reports <strong>0.00 µs</strong>, and it is not broken. Placing four
+      objects takes well under the 4.17 µs floor from §2.2, so the counter genuinely cannot
+      resolve it. That is worth keeping rather than deleting, because it is the rule from §2.2
+      appearing in the engine's own output: <strong>a zone that reads zero is either work you are
+      not doing or work you cannot measure</strong>, and the two look identical in a table. If you
+      ever need <code>build</code>'s real cost, it is a differential benchmark's job (§3.5), not a
+      zone's.
+    </p>
+  </div>
+
+  <h3 id="impl-hud"><span class="num">4.4</span>The budget on screen</h3>
+
+  <p>
+    <kbd>3</kbd> toggles the budget panel. It draws a <strong>stacked</strong> bar rather than one
+    bar per zone, and that is the whole design: separate bars answer "how big is
+    <code>fill</code>?", while a stacked bar answers "what is a frame <em>made of</em>?", which is
+    the question a budget exists for. It also makes the unmeasured remainder impossible to
+    overlook, because it is the gap at the end rather than a row you can skip reading.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">    SDL_SetRenderDrawColor(r, 110, 112, 128, 255);
+    const SDL_FRect rest{cursor, y + 11.0f, std::max(0.0f, x + k_bar_w - cursor), k_bar_h};
+    SDL_RenderFillRect(r, &amp;rest);</code></pre>
+  </figure>
+
+  <p>
+    The remainder is drawn to the end of the bar so the bar is always <em>exactly full</em>, in a
+    desaturated grey that deliberately does not look like a phase — because it is not one. It is
+    the part of the frame nobody is measuring, and giving it a cheerful colour of its own would
+    suggest otherwise.
+  </p>
+
+  <p>
+    The panel covers part of the render, which is not a compromise for want of screen space. It is
+    what a profiler HUD <em>is</em>: it obscures the thing it is measuring, which is why it lives
+    on a key and why its own cost is charged to <code>overlay</code> rather than being quietly
+    free.
+  </p>
+
+  <h3 id="impl-prediction"><span class="num">4.5</span>The prediction, and getting it wrong</h3>
+
+  <p>
+    Now the measurement §1 promised. Same scene, same camera; each object drawn alone, timing only
+    the fill.
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th></th><th>triangles</th><th>covered px</th><th>fill</th><th>ns / triangle</th><th>ns / pixel</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>floor</strong></td><td>2</td><td>30,882</td><td>1,390.14 µs</td><td>695,069</td><td>45.01</td></tr>
+      <tr><td><strong>torus</strong></td><td>2,304</td><td>2,678</td><td>171.78 µs</td><td>74.6</td><td>64.14</td></tr>
+      <tr><td><strong>ratio</strong></td><td>1,152×</td><td>0.09×</td><td><strong>0.12×</strong></td><td>0.0001×</td><td>1.42×</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 1.</span> The prediction from §1 was that the torus, with 1,152
+    times the triangles, would cost about a thousand times more. It costs <strong>eight times
+    less</strong>. Read across the bottom row: the triangle ratio is 1,152 and the time ratio is
+    0.12, so they are not merely uncorrelated — they point in opposite directions. Now read the
+    last column, which is the only one where the two objects resemble each other at all: 45.01
+    against 64.14 nanoseconds per covered pixel, a factor of 1.42. <em>That</em> is what the fill
+    is paid for.
+  </figcaption>
+  </figure>
+
+  <p>
+    The remaining 1.42× is itself informative rather than noise. The torus's triangles are tiny —
+    about 1.2 pixels each — so each one pays the per-triangle setup in <code>fill_triangle</code>
+    (the area, the reorientation, three colour decodes, the pre-divides) against barely any pixels
+    to spread it over. It is the same effect as §3.3's crossing, seen from inside a single draw
+    call.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Why get a prediction wrong on purpose?</span>
+    <p>
+      Because the alternative is to measure without predicting, and then every result looks
+      reasonable in hindsight. A written-down prediction is the only way to notice that your model
+      of the machine is wrong — and noticing that is worth more than the measurement, because the
+      model is what you will use on the next question, when there is no time to measure. Do this
+      every time. Write the number down where you cannot revise it.
+    </p>
+  </div>
+
+  <h3 id="impl-ladder"><span class="num">4.6</span>Where the fill actually goes</h3>
+
+  <p>
+    The fill is 96% of the frame, so it is where the work is. §3.5's ladder, run on one fixed
+    piece of geometry — two triangles covering 272,223 pixels at 960×540, steeply raked so the
+    perspective correction is doing real work:
+  </p>
+
+  @@FIG_LADDER@@
+
+  <p>
+    Three things in Figure 5 are worth stopping on, and only one of them is the one this lesson
+    goes on to fix.
+  </p>
+
+  <p>
+    <strong>The perspective divide is free.</strong> Its delta is −0.018 ns/px, which is to say it
+    is below the noise. Lesson 3.2 introduced it with an honest warning — "one divide per pixel,
+    and it is the honest cost of this lesson" — and the measurement says the warning was
+    unnecessary. The divide sits in a dependency chain that is already waiting on other things, so
+    the out-of-order machinery hides it entirely. This is exactly the kind of claim that
+    <em>cannot</em> be settled by reading code, and it is why 3.2 said it would be measured rather
+    than asserting a number.
+  </p>
+
+  <p>
+    <strong>The depth test is nearly free too</strong> — 0.27 ns/px, one compare and one
+    conditional store, on a buffer being walked in perfect order. Lesson 3.1 argued the z-buffer
+    was worth its memory; it turns out to be worth its time by an even wider margin.
+  </p>
+
+  <p>
+    <strong>And the sRGB encode costs 6.09 ns/px</strong>, which is <strong>2.1× everything above
+    it combined</strong>. Coverage, colour interpolation, the perspective divide and the depth
+    test together come to 2.94; converting the answer to a storable pixel costs more than twice
+    that. It is three <code>std::pow</code> calls per pixel — one per channel — and a
+    <code>pow</code> is not an instruction, it is a library function containing a logarithm, a
+    multiply and an exponential.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Nobody would have guessed this from the code</span>
+    <p>
+      Look at where attention naturally goes in that loop. The texture fetch is the most visually
+      interesting thing in it. The perspective divide is the thing Lesson 3.2 spent 5,000 words on.
+      The depth test is the thing with a whole lesson named after it. <code>to_encoded</code> is a
+      one-line call at the end that has been there, unremarked, since Lesson 2.4 — and it is the
+      largest single item. Cost does not distribute itself according to how much you thought about
+      something.
+    </p>
+  </div>
+
+  <h3 id="impl-encode"><span class="num">4.7</span>Four candidates for one function</h3>
+
+  <p>
+    So: make <code>linear_to_srgb</code> cheaper. The obvious move is a lookup table, and it does
+    not exist — Lesson 1.6 already explained why. Decoding has 256 possible inputs so it fits in a
+    kilobyte; encoding takes a continuous float, and there is nothing to index.
+  </p>
+
+  <p>
+    "There is nothing to index" is true about the <em>input</em>. Here are four candidates, of
+    which the second and third both come from noticing that:
+  </p>
+
+  <ol>
+    <li><strong>Exact</strong> — <code>std::pow</code>, what we have.</li>
+    <li><strong>A fitted polynomial in nested square roots.</strong> Below the toe
+        (<code>x ≤ 0.0031308</code>) the exact function is <code>12.92 · x</code>, one multiply, so
+        keep it exactly. Above it, fit
+        <span class="mono">a√x + b⁴√x + c⁸√x + dx</span> — three <em>chained</em> square roots,
+        each a single hardware instruction, and four multiply-adds.</li>
+    <li><strong>A table indexed by the <em>output</em>.</strong> There are only 256 possible
+        answers, so there are only 255 places where the answer changes, and those tabulate
+        <em>exactly</em>. The lookup becomes "how many thresholds is this value above", which is a
+        binary search.</li>
+    <li><strong>A uniform table indexed by the input</strong>, 4,096 entries — the thing Lesson 1.6
+        said could not work, built anyway so that "could not work" has a number attached.</li>
+  </ol>
+
+  <div class="callout note">
+    <span class="label">The coefficients are fitted here, not quoted from anywhere</span>
+    <p>
+      <code>scratch/fit_srgb.py</code> derives them: least squares in that basis, reweighted
+      toward minimax over sixty passes, constrained to be exact at white so that
+      <code>1.0</code> encodes to <code>255</code> — the one value a reader will check against a
+      screenshot. Excluding the toe from the fit is what makes it good: every basis function has an
+      <em>infinite</em> slope at zero and the truth has a slope of 12.92, so a fit forced to cover
+      the toe spends all its freedom there and is worse everywhere. Measured: including the toe
+      costs 3 codes of worst-case error; excluding it costs 0.0115.
+    </p>
+  </div>
+
+  @@FIG_ENCODE@@
+
+  <p>
+    Figure 6 draws the result. At any honest scale the fit and the exact curve are the same line;
+    the difference only becomes visible magnified 770,000×, and when it does you can see it
+    <em>oscillate about zero</em>, which is what a minimax fit looks like and is why the error is a
+    wobble rather than a bias. Now time all four, and check them:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>candidate</th><th>ns/call</th><th>speedup</th><th>error (codes)</th><th>worst</th><th>% differing</th><th>round trip</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>exact (<code>std::pow</code>)</td><td>3.497</td><td>1.00×</td><td>—</td><td>0</td><td>0.00%</td><td>0/256</td></tr>
+      <tr><td><strong>fitted sqrt chain</strong></td><td><strong>1.856</strong></td><td><strong>1.88×</strong></td><td><strong>0.0115</strong></td><td>1</td><td>0.60%</td><td>0/256</td></tr>
+      <tr><td>threshold table + bsearch</td><td>6.919</td><td>0.51×</td><td>exact</td><td>1</td><td>0.00%</td><td>0/256</td></tr>
+      <tr><td>uniform input table, 4096</td><td>0.994</td><td>3.52×</td><td>0.4022</td><td>1</td><td>3.66%</td><td>0/256</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 2.</span> Four implementations of one function. The
+    <code>error (codes)</code> column is the error <em>before</em> rounding, and it is the column
+    that decides the question — <code>worst</code> is already quantised, so everything accurate to
+    better than half a code reports 1 and they all look alike.
+  </figcaption>
+  </figure>
+
+  <p>
+    Two of those rows are surprises worth naming.
+  </p>
+
+  <p>
+    <strong>The exact threshold table is slower than <code>pow</code>.</strong> 6.919 ns against
+    3.497 — a "speedup" of 0.51×. It is a beautiful idea, it is exactly correct, and it loses,
+    because eight dependent L1 loads in a binary search is a longer latency chain than a modern
+    <code>powf</code>. This is precisely the kind of candidate that gets shipped on the strength of
+    the argument for it, and the only reason it is not in the engine is that somebody timed it.
+  </p>
+
+  <p>
+    <strong>The naive table is the fastest thing on the list.</strong> 0.994 ns, 3.52×, nearly
+    twice as fast as the polynomial we are about to ship. It also passes the round trip, so it
+    cannot be dismissed on correctness the easy way. Rejecting it takes an actual argument, and
+    the first argument tried did not survive contact with the data.
+  </p>
+
+  <h3 id="impl-failed"><span class="num">4.8</span>The hypothesis the data refused</h3>
+
+  <p>
+    The objection to the table writes itself: it occupies <strong>16 KiB of cache</strong>, and a
+    fill loop is already dragging a colour buffer and a depth buffer — four megabytes between
+    them — past the same cache. In a microbenchmark the table is the only thing in memory. In a
+    real frame it should be evicted constantly.
+  </p>
+
+  <p>
+    So <code>verify_310</code> §F2 runs all four again with a framebuffer-sized stream running
+    alongside — one colour store and one depth store per encode, which is exactly what a fragment
+    does. The result:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>       candidate                     alone ns loaded ns   penalty
+       exact (std::pow)                 3.492     3.576     1.02x
+       fitted sqrt chain                1.853     1.870     1.01x
+       threshold table + bsearch        6.959     7.234     1.04x
+       uniform input table, 4096        1.020     1.003     0.98x</code></pre>
+  </figure>
+
+  <p>
+    <strong>No penalty. For any of them.</strong> The 16 KiB table costs nothing measurable even
+    with four megabytes streaming past it, and the argument this section was written to make is
+    simply false on this machine — because, as §4.10 shows, this CPU's L2 is large enough that a
+    few megabytes are nearly free. The test is kept, with its result, because a hypothesis that
+    got tested and failed is worth more to you than one that was quietly dropped. It may well hold
+    on a machine with a smaller L2, which is exactly the argument for measuring on the machine you
+    ship to instead of reasoning from a cache diagram.
+  </p>
+
+  <p>
+    The real reason is in the accuracy column, and it is one number:
+    <strong>0.0115 codes against 0.4022</strong>, a factor of 35. Both round to within one code at
+    8 bits, which is why the <code>worst</code> column cannot see the difference — but 0.4 is
+    nearly the entire half-code budget, and 0.0115 is a hundredth of it. Push both against a deeper
+    target and the hidden gap becomes the whole answer:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>     THE SAME TWO ERRORS, AGAINST A DEEPER TARGET
+       candidate                       8-bit codes   16-bit codes
+       fitted sqrt chain                    0.0115            3.0
+       uniform table, 4096                  0.4022          103.4</code></pre>
+  </figure>
+
+  <p>
+    Module 6 renders into a float target and encodes at the end of a post-processing stack that
+    may convert several times over. The polynomial's error is a property of the <em>curve</em> and
+    stays where it is; the table's is a property of its <em>cell width</em> and only shrinks if you
+    make the table bigger. An approximation that is only good enough because the output format is
+    coarse is an approximation with an expiry date, and this one expires in three modules.
+  </p>
+
+  <div class="callout verify">
+    <span class="label">Two wrong reasons, one right one</span>
+    <p>
+      This section reached the conclusion it originally set out to reach, by a route that has
+      nothing to do with the argument it started with. That is common and it is worth being
+      unembarrassed about — but only if you go back and change the argument. Shipping the right
+      decision with the reasoning that failed is how folklore is manufactured: the next person
+      inherits "tables blow the cache" as received wisdom, with a measurement sitting right there
+      that says otherwise.
+    </p>
+  </div>
+
+  <h3 id="impl-ship"><span class="num">4.9</span>Shipping it, and the default that changes nothing</h3>
+
+  <p>
+    The fit goes into <code>colour.cpp</code> as four named constants and eight lines:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/colour.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">float linear_to_srgb_fast(float linear)
+{
+    if (linear &lt;= 0.0031308f)
+    {
+        return linear * 12.92f;
+    }
+
+    const float s1 = std::sqrt(linear);
+    const float s2 = std::sqrt(s1);
+    const float s3 = std::sqrt(s2);
+
+    return k_srgb_a * s1 + k_srgb_b * s2 + k_srgb_c * s3 + k_srgb_d * linear;
+}</code></pre>
+  </figure>
+
+  <p>
+    The three square roots are <em>chained</em> — each one's input is the previous one's output —
+    so this is a latency chain of about three instructions, not a throughput win of three. That is
+    still an order of magnitude better than a <code>pow</code>, and the measurement says 1.88×.
+  </p>
+
+  <p>
+    The NaN guard and the clamp in <code>linear_to_srgb_u8_fast</code> are identical to the exact
+    version's, and that is deliberate rather than duplicated by accident: they are not part of the
+    approximation, they are part of what "encode a float into a byte" <em>means</em>.
+    <code>std::sqrt</code> of a negative is a NaN too, so skipping the guard here would reintroduce
+    exactly the undefined cast Lesson 3.3 closed.
+  </p>
+
+  <p>
+    Then the choice becomes pipeline state, in an enum whose two values are not right and wrong:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/colour.hpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">enum class encode_mode
+{
+    exact,   ///&lt; std::pow, to the last bit. Offline renderers, reference tests.
+    fast     ///&lt; The square-root fit. The right default for real-time work.
+};</code></pre>
+  </figure>
+
+  <p>
+    This is the first knob in this engine that is <strong>neither</strong>.
+    <code>blend_space::encoded</code>, <code>interpolation::affine</code> and
+    <code>draw_line_naive</code> are all kept so a <em>mistake</em> can be summoned with one
+    keystroke; this one is kept because both answers are defensible and the choice belongs to
+    whoever knows what the pixels are for.
+  </p>
+
+  <p>
+    And <code>fill_style::encode</code> defaults to <code>exact</code>, which is a decision about
+    the <em>course</em> rather than about renderers. Every measured claim in Lessons 3.1 through
+    3.9 — "0 of 4096 texels differ", "bit-identical", "17,275 px, 0 differ" — was made against the
+    exact encode, and a default that silently moved 0.60% of those pixels by one code would quietly
+    falsify nine lessons' worth of arithmetic. The demo selects <code>fast</code> for itself. It is
+    the same bargain <code>vertex::inv_w = 1</code> made in 3.2 and an unbound
+    <code>albedo</code> made in 3.9: <strong>a default that changes nothing is what lets a feature
+    be added to a pipeline object without auditing its call sites.</strong>
+  </p>
+
+  <p>
+    Now the payoff, and Amdahl checking our arithmetic:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>     320x180
+       fill   1568.08 -&gt;  1207.29 us   (1.30x)
+       FRAME  1632.71 -&gt;  1268.83 us   (1.29x)   fill was 96.0% of it
+       Amdahl ceiling from those two numbers: 1.284x; measured 1.287x
+
+     1280x720
+       fill  22843.46 -&gt; 17749.71 us   (1.29x)
+       FRAME 23015.92 -&gt; 17934.83 us   (1.28x)   fill was 99.3% of it
+       Amdahl ceiling from those two numbers: 1.284x; measured 1.283x</code></pre>
+  </figure>
+
+  <p>
+    A 1.30× faster fill, a 1.29× faster frame, and the two agree with the formula from §3.4 to
+    three digits. And the price, measured the way every comparison in Module 3 has been measured —
+    render it both ways and count:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>I. WHAT IT COST, IN PIXELS
+     2657 of 473199 shaded px differ (0.56%), worst channel delta 1/255</code></pre>
+  </figure>
+
+  <p>
+    0.56% of pixels, each off by one code out of 255, for 29% of the frame back. <kbd>4</kbd>
+    toggles it live and the HUD prints that pixel count, which is the only way to see that
+    anything happened at all — one code is invisible, which is the entire point, and a knob whose
+    effect you cannot see is a knob you should be suspicious of. Watching the count go to zero and
+    back is what proves the toggle reaches the rasterizer rather than the HUD lying about it.
+  </p>
+
+  <h3 id="impl-cache"><span class="num">4.10</span>Cache, first contact</h3>
+
+  <p>
+    One more measurement, because Module 3 has been accumulating memory without ever asking what it
+    costs. <code>vertex</code> went from 28 bytes to 52 in Lesson 3.8. The colour and depth buffers
+    are two separate streams. A 64×64 texture is 16 KiB and a 2048×2048 one is 16 MiB. Which of
+    those matters?
+  </p>
+
+  <p>
+    Sample a texture 2,097,152 times at random coordinates, holding the sample count and the access
+    pattern fixed so that the <em>only</em> variable is how many bytes it lands in. Random rather
+    than sequential, because a sequential walk is prefetched perfectly and would measure the
+    prefetcher:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>          size        KiB   nearest ns  bilinear ns   vs 32x32
+         32x32            4         2.25         8.08      1.00x
+         64x64           16         2.38         8.18      1.06x
+        128x128          64         2.32         8.33      1.03x
+        256x256         256         2.37         8.24      1.06x
+        512x512        1024         2.29         8.45      1.02x
+       1024x1024       4096         2.34         8.50      1.04x
+       2048x2048      16384         3.88        12.89      1.72x</code></pre>
+  </figure>
+
+  <p>
+    A cliff, and <strong>not where the folklore puts it</strong>. Everything up to four megabytes
+    is free on this machine, because its L2 is enormous; only at 16 MiB does the data have to come
+    from main memory, and then a fetch costs 1.7× more for running exactly the same instructions.
+    "The texture must fit in L1" is advice for a different computer, and repeating it here would be
+    quoting somebody else's constants — the specific error §1 warned about.
+  </p>
+
+  <p>
+    The second cache measurement is the one that changes how you read every other number on this
+    page. §4.6's ladder says a nearest fetch costs about 9 ns inside the fill; the table above says
+    2.3 ns. Both are right. With a control to isolate it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_310.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>     A 64x64 FETCH, ALONE AND WITH THE BUFFERS A FILL WOULD BE MOVING
+       fetch alone, tight loop:          2.26 ns
+       fetch + encode + 2 stores:       14.60 ns
+       CONTROL: same, minus the fetch:   9.47 ns
+       -&gt; the fetch IN SITU costs 5.13 ns, against 2.26 alone (2.27x)</code></pre>
+  </figure>
+
+  <p>
+    The same instruction sequence, 2.27× more expensive, because in a tight loop consecutive
+    fetches overlap in the pipeline and in situ each one sits in a dependency chain — its uv comes
+    from the perspective divide, its result feeds the encode — with nothing to overlap with.
+    <strong>A function's cost is not a property of the function.</strong> It is a property of the
+    function and its surroundings, which is why §3.5's ladder measures inside the real loop and why
+    a microbenchmark can only ever be a hypothesis about a real one.
+  </p>
+
+  <h3 id="impl-capstone"><span class="num">4.11</span>The capstone</h3>
+
+  <p>
+    Press <kbd>Tab</kbd> to the scene demo, <kbd>C</kbd> to the model scene, <kbd>M</kbd> for a
+    texture, <kbd>G</kbd> to per-pixel, <kbd>U</kbd> to cull back faces, and <kbd>3</kbd> for the
+    budget. What is on screen is the whole of Module 3 at once: a textured, lit, z-buffered,
+    back-face-culled, near-plane-clipped, perspective-correct 3-D scene, loaded from a file,
+    rendered by code you wrote, every pixel of it, on the CPU — with a budget beneath it that
+    accounts for every microsecond and a unit cost you could quote to somebody else.
+  </p>
+
+  <p>
+    The number to sit with is <strong>45.47 ns per covered pixel</strong>. A frame at 1280×720
+    covers about 475,000 pixels, so that is 21.6 ms — over budget at 60 Hz, from one object and a
+    floor. Module 4's GPU does the same work at a scale that makes those units meaningless, and the
+    reason will not be that its code is cleverer. It is that it does thousands of these at once.
+    Every idea it uses to do that — coverage, interpolation, depth, sampling, shading — is the one
+    you just built, and you now know what each of them costs.
+  </p>

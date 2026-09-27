@@ -1,0 +1,117 @@
+<svg viewBox="0 0 760 330" role="img" aria-labelledby="f77e-t f77e-d">
+  <title id="f77e-t">Closing a loop, and wrapping a negative time</title>
+  <desc id="f77e-d">Two key timelines, one whose last key lands on the duration and one a frame short, with the resulting loop seam; and a table of what a negative playback time does with and without a clamp.</desc>
+  <defs>
+    <marker id="e-i-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-rose-f77e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<text x="380.0" y="28" class="sm" text-anchor="middle">the frame that is missing, and the time that is negative</text>
+<text x="194.0" y="62.0" class="xs" text-anchor="middle">where the last key lands</text>
+<line x1="44.0" y1="84.0" x2="344.0" y2="84.0" class="ink-soft" stroke-width="1.1"/>
+<line x1="44.0" y1="78.0" x2="44.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="54.0" y1="78.0" x2="54.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="64.0" y1="78.0" x2="64.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="74.0" y1="78.0" x2="74.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="84.0" y1="78.0" x2="84.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="94.0" y1="78.0" x2="94.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="104.0" y1="78.0" x2="104.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="114.0" y1="78.0" x2="114.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="124.0" y1="78.0" x2="124.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="134.0" y1="78.0" x2="134.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="144.0" y1="78.0" x2="144.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="154.0" y1="78.0" x2="154.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="164.0" y1="78.0" x2="164.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="174.0" y1="78.0" x2="174.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="184.0" y1="78.0" x2="184.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="194.0" y1="78.0" x2="194.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="204.0" y1="78.0" x2="204.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="214.0" y1="78.0" x2="214.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="224.0" y1="78.0" x2="224.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="234.0" y1="78.0" x2="234.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="244.0" y1="78.0" x2="244.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="254.0" y1="78.0" x2="254.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="264.0" y1="78.0" x2="264.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="274.0" y1="78.0" x2="274.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="284.0" y1="78.0" x2="284.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="294.0" y1="78.0" x2="294.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="304.0" y1="78.0" x2="304.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="314.0" y1="78.0" x2="314.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="324.0" y1="78.0" x2="324.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="334.0" y1="78.0" x2="334.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="344.0" y1="78.0" x2="344.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<line x1="344.0" y1="72.0" x2="344.0" y2="96.0" class="hi" stroke-width="1.4"/>
+<text x="344.0" y="64.0" class="xs muted" text-anchor="middle">duration</text>
+<text x="44.0" y="110.0" class="xs" text-anchor="start">31 keys, last at 1.000</text>
+<text x="44.0" y="126.0" class="xs mono" text-anchor="start">loop seam 0.0000°</text>
+<line x1="44.0" y1="160.0" x2="344.0" y2="160.0" class="ink-soft" stroke-width="1.1"/>
+<line x1="44.0" y1="154.0" x2="44.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="54.0" y1="154.0" x2="54.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="64.0" y1="154.0" x2="64.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="74.0" y1="154.0" x2="74.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="84.0" y1="154.0" x2="84.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="94.0" y1="154.0" x2="94.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="104.0" y1="154.0" x2="104.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="114.0" y1="154.0" x2="114.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="124.0" y1="154.0" x2="124.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="134.0" y1="154.0" x2="134.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="144.0" y1="154.0" x2="144.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="154.0" y1="154.0" x2="154.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="164.0" y1="154.0" x2="164.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="174.0" y1="154.0" x2="174.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="184.0" y1="154.0" x2="184.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="194.0" y1="154.0" x2="194.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="204.0" y1="154.0" x2="204.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="214.0" y1="154.0" x2="214.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="224.0" y1="154.0" x2="224.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="234.0" y1="154.0" x2="234.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="244.0" y1="154.0" x2="244.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="254.0" y1="154.0" x2="254.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="264.0" y1="154.0" x2="264.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="274.0" y1="154.0" x2="274.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="284.0" y1="154.0" x2="284.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="294.0" y1="154.0" x2="294.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="304.0" y1="154.0" x2="304.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="314.0" y1="154.0" x2="314.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="324.0" y1="154.0" x2="324.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="334.0" y1="154.0" x2="334.0" y2="166.0" class="grid" stroke-width="1.0"/>
+<line x1="344.0" y1="148.0" x2="344.0" y2="172.0" class="hi" stroke-width="1.4"/>
+<text x="344.0" y="140.0" class="xs muted" text-anchor="middle">duration</text>
+<rect x="334.09999999999997" y="150.0" width="9.900000000000034" height="20" rx="2" fill="#ec7a8c" stroke="#ec7a8c" stroke-width="1.2" fill-opacity="0.35"/>
+<text x="339.04999999999995" y="200.0" class="xs muted" text-anchor="middle">one frame</text>
+<text x="44.0" y="186.0" class="xs" text-anchor="start">30 keys, last at 0.967</text>
+<text x="44.0" y="202.0" class="xs mono" text-anchor="start">loop seam 5.8215°</text>
+<text x="44.0" y="252.0" class="xs muted" text-anchor="start">root travel over the cycle 1.2000 units —</text>
+<text x="44.0" y="268.0" class="xs muted" text-anchor="start">which is the walk working, not the loop failing.</text>
+<text x="388.0" y="74.0" class="xs muted" text-anchor="start">t</text>
+<text x="510.0" y="74.0" class="xs muted" text-anchor="end">u</text>
+<text x="606.0" y="74.0" class="xs muted" text-anchor="end">extrapolates</text>
+<text x="688.0" y="74.0" class="xs muted" text-anchor="end">freezes</text>
+<line x1="388.0" y1="82.0" x2="694.0" y2="82.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="99.0" class="xs" text-anchor="start">-0.033</text>
+<text x="510.0" y="99.0" class="xs mono" text-anchor="end">-0.99</text>
+<text x="606.0" y="99.0" class="xs mono" text-anchor="end">0.015°</text>
+<text x="688.0" y="99.0" class="xs mono" text-anchor="end">5.763°</text>
+<text x="388.0" y="116.0" class="xs" text-anchor="start">-0.100</text>
+<text x="510.0" y="116.0" class="xs mono" text-anchor="end">-3.00</text>
+<text x="606.0" y="116.0" class="xs mono" text-anchor="end">0.800°</text>
+<text x="688.0" y="116.0" class="xs mono" text-anchor="end">16.458°</text>
+<text x="388.0" y="133.0" class="xs" text-anchor="start">-0.300</text>
+<text x="510.0" y="133.0" class="xs mono" text-anchor="end">-9.00</text>
+<text x="606.0" y="133.0" class="xs mono" text-anchor="end">21.995°</text>
+<text x="688.0" y="133.0" class="xs mono" text-anchor="end">26.630°</text>
+<text x="388.0" y="150.0" class="xs" text-anchor="start">-0.600</text>
+<text x="510.0" y="150.0" class="xs mono" text-anchor="end">-18.00</text>
+<text x="606.0" y="150.0" class="xs mono" text-anchor="end">100.007°</text>
+<text x="688.0" y="150.0" class="xs mono" text-anchor="end">16.458°</text>
+<text x="388.0" y="44.0" class="xs" text-anchor="start">a time below zero, two ways to be wrong</text>
+<text x="388.0" y="178.5" class="xs muted" text-anchor="start">std::fmod(−0.1, 1.0) is −0.1, not 0.9.</text>
+<text x="388.0" y="194.5" class="xs muted" text-anchor="start">Clamped, the pose sticks on the first key — loud,</text>
+<text x="388.0" y="210.5" class="xs muted" text-anchor="start">and bounded by the clip’s own range. Unclamped, it</text>
+<text x="388.0" y="226.5" class="xs muted" text-anchor="start">extrapolates: 0.8° out at a tenth of a second,</text>
+<text x="388.0" y="242.5" class="xs muted" text-anchor="start">100° out at six tenths, and still climbing.</text>
+<text x="380.0" y="308" class="xs muted" text-anchor="middle">a duration SHORTER than the keys cuts the cycle: 42.78° of seam and 1,035 keys past the end.</text>
+</svg>

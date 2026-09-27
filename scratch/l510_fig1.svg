@@ -1,0 +1,53 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f1-t l510f1-d">
+  <title id="l510f1-t">A hard-coded keycode compared with an action, a binding and a value</title>
+  <desc id="l510f1-d">Above, a switch on a scancode and the four things it cannot do. Below, the same decision expressed as a named action, a binding that maps a signal onto it, and a value published once per frame.</desc>
+  <defs>
+    <marker id="e-i-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l510f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One level of indirection, and the four things it buys.</text>
+<text x="24" y="48" class="xs t-bad" text-anchor="start">TODAY — the keycode IS the decision</text>
+<rect x="60" y="60" width="300" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="210" y="76" class="xs mono" text-anchor="middle">case SDL_SCANCODE_C: ride_camera();</text>
+<line x1="370" y1="72" x2="396" y2="72" class="ink-soft" stroke-width="1.0"/>
+<rect x="410" y="52" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="535" y="65" class="xs muted" text-anchor="middle">cannot be rebound</text>
+<rect x="410" y="74" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="535" y="87" class="xs muted" text-anchor="middle">is about ONE device</text>
+<rect x="410" y="96" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="535" y="109" class="xs muted" text-anchor="middle">cannot be recorded</text>
+<rect x="410" y="118" width="250" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="535" y="131" class="xs muted" text-anchor="middle">says the wrong thing</text>
+<line x1="366" y1="72" x2="404" y2="72" stroke="#e05c5c" stroke-width="1.2" marker-end="url(#e-b-l510f1)"/>
+<line x1="24" y1="154" x2="696" y2="154" class="grid" stroke-width="1.2"/>
+<text x="24" y="176" class="xs t-ok" text-anchor="start">LESSON 5.10 — a NAME in the middle</text>
+<rect x="40" y="192" width="200" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="140" y="206" class="xs mono" text-anchor="middle">an ACTION</text>
+<rect x="40" y="214" width="200" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="140" y="228" class="xs mono" text-anchor="middle">"ride_camera"</text>
+<text x="140" y="248" class="xs muted" text-anchor="middle">a name the game means</text>
+<line x1="242" y1="218" x2="262" y2="218" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f1)"/>
+<rect x="264" y="192" width="200" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="364" y="206" class="xs mono" text-anchor="middle">a BINDING</text>
+<rect x="264" y="214" width="200" height="20" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="364" y="228" class="xs mono" text-anchor="middle">C  -&gt;  +1</text>
+<text x="364" y="248" class="xs muted" text-anchor="middle">one signal, mapped onto it</text>
+<line x1="466" y1="218" x2="486" y2="218" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f1)"/>
+<rect x="488" y="192" width="200" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="588" y="206" class="xs mono" text-anchor="middle">a VALUE</text>
+<rect x="488" y="214" width="200" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="588" y="228" class="xs mono" text-anchor="middle">1.0  held  pressed</text>
+<text x="588" y="248" class="xs muted" text-anchor="middle">published once per frame</text>
+<rect x="60" y="272" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="360" y="285" class="xs muted" text-anchor="middle">a settings screen can change it</text>
+<rect x="60" y="294" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="360" y="307" class="xs muted" text-anchor="middle">a keyboard, a mouse, a gamepad — same action</text>
+<rect x="60" y="316" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="360" y="329" class="xs muted" text-anchor="middle">a replay records the INTENTION, not the key</text>
+<rect x="60" y="338" width="600" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="360" y="351" class="xs muted" text-anchor="middle">the code says what it does</text>
+<text x="24" y="382" class="xs t-hi" text-anchor="start">None of the four is a performance argument, and this lesson measures nothing. It is a design lesson and says so.</text>
+</svg>

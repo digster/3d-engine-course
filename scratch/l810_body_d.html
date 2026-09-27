@@ -1,0 +1,404 @@
+  <h2 id="split">8. Split impulse, and the slop</h2>
+
+  <p>
+    The energy is not an accident of Baumgarte's arithmetic. It is structural: the correction is
+    expressed as a velocity, and a velocity is a thing a body <em>keeps</em>. So do the same
+    arithmetic against a velocity the body does not keep.
+  </p>
+
+  <p>
+    Give each body a second, shadow velocity — a <code>pseudo_velocity</code>, twenty-four bytes,
+    zeroed at the start of every step. Run the same solve against it, with the same lever arms,
+    the same effective masses and the same non-negativity clamp, targeting the same bias. Then, at
+    the end of the step, move the bodies by <code>pseudo * h</code> as well as by
+    <code>velocity * h</code>, and throw the pseudo velocity away.
+  </p>
+
+  @@FIG_CORRECTION@@
+
+  <p>
+    That is Erin Catto's split impulse, and the accounting is exact: the position moves by the
+    same amount Baumgarte would have moved it, and the momentum the body carries into the next
+    step is untouched. Nothing survives.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§F — the same three fixtures, side by side</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     start mm    correction       departure m/s    final depth mm
+         10.0    Baumgarte              0.06001            0.0000
+         10.0    split impulse          0.00000            5.0000
+         50.0    Baumgarte              0.54004            0.0000
+         50.0    split impulse          0.00000            5.0000
+        100.0    Baumgarte              1.14006            0.0000
+        100.0    split impulse          0.00000            5.0000
+
+  AND IT IS NOT SLOWER. Time to remove 1/e of a 50 mm overlap on a held
+  crate, against the closed form's 74.69 ms:
+     Baumgarte  83.33 ms     split impulse  83.33 ms     difference 0.00 ms</code></pre>
+  </div>
+
+  <p>
+    Zero departure at every depth, at the same time constant to the frame. The last two columns of
+    the first table are worth reading together: Baumgarte reaches <em>zero</em> final depth because
+    it does not stop at the surface, and split impulse reaches 5.000&nbsp;mm because it stops at
+    the slop, which is where a resting contact belongs.
+  </p>
+
+  <p>
+    It costs a second solve. §13 prices one position iteration at <strong>46%</strong> of a
+    velocity one, which is about what you would guess from what it leaves out: no friction to clip,
+    no restitution, one target per point instead of three. Three position iterations against eight
+    velocity ones is the default, and §13's table is why.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The position pass runs entirely after the velocity pass, not interleaved with it.</strong>
+      The separations it reads are ones the velocity pass is about to make stale, so interleaving
+      spends corrections on a geometry that is still moving. It is also the reason
+      <code>contact_constraint</code> needs a second accumulator, <code>pseudo_impulse</code>: the
+      position problem is its own sequence of inequalities and needs its own projection onto
+      <code>j ≥ 0</code>, for exactly the reason 8.9 gave for the first one.
+    </p>
+  </div>
+
+  <h3>The slop, measured rather than assumed</h3>
+
+  <p>
+    Every engine has a penetration slop and every explanation of it is the same: a correction that
+    drives the overlap to <em>exactly</em> zero has no rest state, because at zero depth the
+    contact separates, next frame's gravity puts it back, and the cycle has no fixed point. The
+    stack breathes at 60&nbsp;Hz. The slop gives it somewhere to sit.
+  </p>
+
+  <p>
+    That is a testable claim, so this section set out to test it, and the measurement refused it.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§F — height peak-to-peak over 2 s after a 30 s settle, sleeping off</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     slop mm   1 crate split   1 crate Baum.   5 tower split   resting depth mm
+        0.00            0.00            0.00         1801.25              1.204
+        0.50            0.00            0.00         9085.89              3.109
+        2.00            0.00            0.00            0.00              1.999
+        5.00            0.00            0.00            0.00              4.999
+       20.00            0.00            0.00            0.00              9.165
+     (micrometres. A crate is half a metre.)</code></pre>
+  </div>
+
+  <p>
+    A single resting crate is <strong>bit-for-bit motionless at a slop of zero</strong>, under
+    either correction. It has to be: the correction is geometric, so it removes 20% of what is
+    left each step and <em>never reaches zero</em>, which means the contact never separates and
+    there is nothing to oscillate. The folklore describes a correction that removes the whole
+    overlap in one step, which is <code>β = 1</code>, which nobody ships.
+  </p>
+
+  <p>
+    What actually needs the slop is contacts that <strong>compete</strong>. Five crates at zero
+    slop move 1.80&nbsp;mm peak to peak; at half a millimetre, 9.09&nbsp;mm; and at two millimetres
+    and above, nothing at all. Each contact in a stack asks for its own separation, they cannot all
+    have it simultaneously, and the slop is the band inside which they stop asking.
+  </p>
+
+  <p>
+    And the cost of the knob is in the last column, exactly: <strong>the resting depth is the
+    slop</strong>. Five millimetres buys complete stillness and is invisible under a half-metre
+    crate. It is also the one place this engine's "one unit is one metre" convention bites, because
+    five millimetres is enormous under a marble — scale it with your content, the way
+    <code>time_scale_for_length_scale</code> from 8.2 says to scale everything else.
+  </p>
+
+  <h2 id="islands">9. Islands</h2>
+
+  <p>
+    Everything so far solves <em>all</em> the contacts, <em>every</em> step. On a level with ten
+    thousand crates in twenty separate rooms, that is a great deal of arithmetic establishing that
+    nothing in room seventeen has anything to say to room three.
+  </p>
+
+  <p>
+    Two bodies are in the same <strong>island</strong> when a chain of contacts joins them.
+    Everything in an island has to be solved together, because an impulse anywhere in it propagates
+    everywhere in it; and nothing in one island can influence another <em>this step</em>, by
+    construction. Three things fall out of that, and only the first is what people usually build
+    islands for:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Sleeping becomes decidable.</strong> "Is this body quiet?" is not a question you can
+      usefully answer about one body — the crate on top of a pile is perfectly quiet right up until
+      the crate at the bottom is nudged. "Is this whole island quiet?" is answerable, and §10 is
+      why it is the only version of the question worth asking.
+    </li>
+    <li>
+      <strong>The solve is parallelisable.</strong> Two islands share no body, so two threads can
+      solve them with no synchronisation at all — no locks, no atomics, no false sharing beyond
+      whatever the allocator did. Module 9's job system is where that is collected; the partition
+      is here, and it is the hard part.
+    </li>
+    <li>
+      <strong>Convergence is per-island.</strong> A residual of 10⁻⁶ in one tower is not improved
+      by sweeping the tower on the other side of the level, so an early-out can be taken island by
+      island. This engine does not take one, because a joint changes what "converged" means and
+      that is 8.11's problem.
+    </li>
+  </ol>
+
+  <h3>The one rule</h3>
+
+  <p>
+    Building the partition is a textbook union–find over the contact graph. The rule that makes it
+    <em>useful</em> is one sentence, and getting it wrong is the difference between a feature and
+    nothing at all.
+  </p>
+
+  @@FIG_ISLANDS@@
+
+  <p>
+    <strong>A body that cannot move is not a bridge.</strong> The floor touches everything. Let a
+    contact through a fixed body join its two neighbours and every object standing on the ground is
+    in one island — so a single rolling marble anywhere in the level keeps ten thousand crates
+    awake forever. That is not a slow simulation; it is <em>no sleeping at all</em>, in exactly the
+    scene sleeping exists for.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§G — a yard of twenty towers of five, one floor, 101 bodies</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     islands reported by the solver:            20
+     manifolds:                                 100
+
+  CONTROL, the same contacts through a union-find that lets a FIXED body
+  join its neighbours:
+     fixed bodies are not bridges (this engine):   20 islands
+     fixed bodies ARE bridges (the usual bug):      1 islands
+
+  THE PARTITION: 20 islands, smallest 5 bodies, largest 5,
+  100 bodies placed of 100 dynamic (the floor is in none).
+
+  COST: 101 bodies, 100 contacts, union-find and labelling:
+     0.250 us  (2.48 ns per body)</code></pre>
+  </div>
+
+  <p>
+    Twenty against one, on the same contacts, with the rule as the only difference. And the rule is
+    <em>safe</em> rather than merely convenient: an impulse applied to a fixed body changes nothing
+    that any other contact can read, because its velocity is never written. It propagates nothing,
+    so it joins nothing. A kinematic body is the same — gameplay owns its velocity and the solver
+    cannot change it — so a lift does not weld its passengers to the floor beneath it.
+  </p>
+
+  <p>
+    A body with no contacts at all gets its own island of one. That is not a special case in the
+    implementation and it is the right answer: a crate in flight is quiet nowhere, so its island
+    never sleeps.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The output array is the scratch.</strong> A union–find wants a parent array of
+      <em>n</em> ints and the answer is a label array of <em>n</em> ints, and they are never both
+      live — the parents are finished with the moment the labels begin. So <code>island_of</code>
+      is the parent array for the first half of <code>build_islands</code> and the answer for the
+      second, and the whole thing allocates nothing on a scene whose size has not changed. It costs
+      one trick, which is that a root's label has to be encoded so it cannot be mistaken for a
+      parent index — and the obvious encoding, <code>−label − 1</code>, sends label 0 to
+      <code>−1</code>, which is already the sentinel for "no island". §12 is the hour that cost.
+    </p>
+  </div>
+
+  <h2 id="sleeping">10. Sleeping</h2>
+
+  <p>
+    An island whose every body has been quiet for long enough stops being simulated. Nothing
+    integrates it and none of its contacts are solved, which on a settled scene is nearly all of
+    the cost:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — a yard of twenty towers, once it has settled</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">  A YARD OF TWENTY TOWERS falls asleep at frame 168 (2.80 s):
+     sleeping bodies 100 of 100, sleeping islands 20 of 20
+     manifolds handed in 100, manifolds SOLVED 0
+     solve cost asleep 3.041 us   awake 130.750 us   43.0x</code></pre>
+  </div>
+
+  <p>
+    Forty-three times, and the honest half of it in the next two lines: the broadphase and the
+    narrow phase are <em>unchanged</em>. Sleeping saves the solve and the integration, not the
+    detection — a sleeping body still has its bounding box gridded and its pairs tested every
+    frame, because that is how it finds out something has arrived.
+  </p>
+
+  <p>
+    A caller can take most of the rest back, because two bodies that are both asleep cannot have
+    moved relative to each other, so their pair does not need testing:
+    <strong>51.5&nbsp;µs&nbsp;→&nbsp;7.1</strong>, with 80 of 100 pairs skipped. It costs one frame
+    of wake-up lag on the second body of a sleeping pair, and it is a caller-side rule rather than
+    an engine one, because only the caller knows whether its narrow phase has side effects.
+  </p>
+
+  <h3>The test cannot run before the solve</h3>
+
+  <p>
+    This is the finding that is not in the textbooks, and it is 8.9's restitution artifact wearing
+    a different hat.
+  </p>
+
+  @@FIG_SLEEP@@
+
+  <p>
+    A semi-implicit step applies gravity to every dynamic body <em>before</em> the solver looks. So
+    a crate that has been motionless on a floor for a minute is, at that instant, travelling
+    downward at <code>g·h</code> — <strong>0.1635 m/s</strong> at 60&nbsp;Hz, which is more than
+    three times any sleep threshold a designer would accept. A sleep test placed there never fires,
+    at any setting, and the symptom is indistinguishable from thresholds that are merely too tight:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — 100 crates that have been still for six seconds, threshold 0.05 m/s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     read BEFORE the solve:    0 of 100 quiet, fastest 0.1836 m/s
+     read AFTER the solve:    96 of 100 quiet, fastest 0.0629 m/s
+     g*h at 60 Hz is 0.1635 m/s, which is 3.3x the threshold.</code></pre>
+  </div>
+
+  <p>
+    So the sleep test runs at the very end of <code>contact_solver::solve</code>, after the
+    write-back. <em>Waking</em>, though, has to run at the beginning — an island that has just
+    acquired a moving neighbour must be solved on the frame it acquires it, not the frame after —
+    and those are two different things that read like one. <code>wake_islands</code> and
+    <code>update_sleep</code> are separate functions for that reason and no other.
+  </p>
+
+  <h3>Waking, which is the half that has to be right</h3>
+
+  <p>
+    Falling asleep is an optimisation. Waking is <em>correctness</em>: a body that should have woken
+    and did not is a crate hanging in the air, a door that will not open, a lift that ignores the
+    player standing on it. The rule that does almost all of it is one sentence, and it needs no
+    event, no callback and no dirty list:
+  </p>
+
+  <p>
+    <strong>An island is asleep only when every one of its bodies is; otherwise all of them are
+    woken.</strong> A moving body that collides with a sleeping pile is joined to it by
+    <code>build_islands</code>, so the pile's island now contains something awake, so the pile
+    wakes. The graph does the work.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — a 20 kg crate thrown at one of four sleeping towers</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     first frame anything else woke: 11 (0.183 s after the throw)
+     bodies awake on that frame: 6 of 21
+     still awake 3 s later: 4</code></pre>
+  </div>
+
+  <p>
+    Six of twenty-one on the frame of contact: the thrown crate and all five of the tower it hit.
+    The other three towers never notice.
+  </p>
+
+  <h3>Why per island, and not per body</h3>
+
+  <p>
+    A body asleep is, to everything else in the simulation, an <em>immovable</em> body: the solver
+    still sees its contacts, and nothing integrates it. So sleeping the top crate of a tower on its
+    own turns it into a fixed body, and fixed bodies do not fall. That is emulated exactly by
+    setting <code>kind = body_kind::fixed</code>, which is not an approximation — it is the same
+    statement made in the type system:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — control: a crate thrown at the BOTTOM of a sleeping three-crate tower</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     rule          bottom crate moved m    top crate fell m    top awake
+     per island                 70.5702              0.5000           no
+     per body                   63.2080              0.0000          n/a</code></pre>
+  </div>
+
+  <p>
+    The island rule knocks the bottom crate seventy metres down the floor and the tower comes down
+    half a metre onto it. The per-body rule knocks the bottom crate sixty-three metres away and the
+    two above it <strong>stay exactly where they were</strong>, hanging in the air with nothing
+    underneath them, indefinitely. That is the whole argument for the island being the unit, in one
+    number that is exactly zero.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And note which experiment this is.</strong> The obvious one — teleport the support
+      away — is unfair, because a support removed by teleport is invisible to <em>both</em> rules:
+      nothing collided, so nothing in the contact graph changed. That is what <code>wake</code> is
+      for, and it is why its doc comment says to call it after anything that writes to a body from
+      outside the step. The experiment that separates the two rules has to involve a collision.
+    </p>
+  </div>
+
+  <h3>The thresholds, and the clock</h3>
+
+  <p>
+    Two thresholds, because there are two quantities: a linear speed in m/s and an angular one in
+    rad/s. They are not derivable from each other — a half-metre crate turning at 0.1&nbsp;rad/s
+    has corner speeds of 3.5&nbsp;cm/s, so one number in metres per second cannot express both
+    without knowing the body's size.
+  </p>
+
+  <p>
+    And the linear threshold has a floor that the <em>solver</em> sets, not the designer. A settled
+    stack does not reach zero velocity; it reaches whatever residual the iteration count leaves,
+    and a threshold below that residual never fires:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — a yard of twenty five-crate towers, eight iterations, given 20 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     threshold m/s    bodies asleep    time to sleep s
+            0.0005               60              never
+            0.0020               70              never
+            0.0100               75              never
+            0.0200              100              19.15
+            0.0500              100              2.800
+            0.1000              100              0.950
+            0.2000              100              0.566</code></pre>
+  </div>
+
+  <p>
+    The default of 0.05 is a factor of 2.5 above the floor, not the comfortable margin it looks
+    like, and one notch below it a quarter of the crates never qualify however long you wait. A
+    stiffer scene — a taller stack, a heavier lid — leaves more residual and wants a larger
+    threshold. The symptom of getting it wrong is a pile that is visibly still and measurably
+    expensive, which is a bug nobody files.
+  </p>
+
+  <p>
+    The timer is what stops an oscillation being mistaken for rest: a crate rocking on one edge is
+    momentarily motionless twice a cycle, and an engine sleeping on the instantaneous test freezes
+    it mid-rock at a visible angle. Half a second, which is thirty frames.
+  </p>
+
+  <p>
+    Which is also why <code>wake</code> resets the clock and not only the flag — and the obvious
+    test does not show it. A woken body that is then <em>shoved</em> does not care, because it is
+    no longer a sleep candidate and <code>update_sleep</code> resets its timer on the first frame
+    anyway: both versions travel 1.0027&nbsp;m. The case that shows it is the quiet one.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — a sleeping crate, woken, then left alone</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     what happens next     flag only    wake() as shipped
+     shoved at 2 m/s        1.0027 m     1.0027 m
+     woken and left alone      1 frames     30 frames until asleep again</code></pre>
+  </div>
+
+  <p>
+    One frame against thirty. A body woken so that gameplay can do something with it next frame is
+    asleep again before gameplay gets there.
+  </p>

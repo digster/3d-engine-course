@@ -1,0 +1,383 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-08-audio.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-02-forces-and-bodies.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.2 — Forces, Gravity, and Linear Rigid Bodies</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.1</div>
+    <h1>Integrators: Why One Explodes</h1>
+    <p class="deck">
+      Eighty-three lessons in, this engine can rasterize a triangle by hand, light it with a
+      microfacet BRDF, cast a cascaded shadow into it, skin a character across it and put a sound
+      beside it — and <em>nothing in it moves on its own</em>. Every position in every demo so far
+      was authored: a sine of time, a key press, a keyframe, a slider. Module 8 is the subsystem that
+      computes where things are from how they are <em>moving</em>, and before mass, before shapes,
+      before contacts, there is one question in the way. You have a position, a velocity, and an
+      acceleration. Advance all three by <code>h</code> seconds. Go. The answer that occurs to
+      everybody first is <strong>unconditionally unstable</strong> — not inaccurate, not
+      needs-a-smaller-step, but <em>wrong at every step size there is</em>, adding energy on every
+      step forever. Swap two lines so the position moves at the velocity it has just been given and
+      the same arithmetic preserves phase-space area <strong>exactly</strong>. Same loads, same
+      multiplies, measured at <strong>0.994 ns against 0.963 ns</strong> per body per step, which is
+      a difference smaller than the run-to-run noise. This lesson is about why, and the why is one
+      number: the determinant of a 2×2 matrix, which is <strong>1 + h²ω²</strong> for one rule and
+      <strong>exactly 1</strong> for the other. On a 1 Hz spring at 60 Hz that surplus is
+      1.0966% <em>per step</em>, which is ×1.92 energy per second, <strong>×1.13 × 10¹⁷ in one
+      minute</strong> — a one-centimetre overlap becomes 3,357 km. Along the way: why the standard
+      yardstick (order of accuracy) is blind to all of this and reads both Euler variants as
+      respectable; what semi-implicit Euler actually conserves, which is <em>not</em> energy but a
+      sheared cousin of it, held to <strong>4.6 × 10⁻⁶</strong> over 3,600 steps while the true
+      energy wobbles by exactly <code>hω</code>; why that shadow quantity being an ellipse rather
+      than a hyperbola <em>is</em> the stability limit <code>hω &lt; 2</code>, verified by bisection
+      at <strong>0.3182939 against 0.3183099</strong>; why gravity alone forgives everything and your
+      first falling-cube demo will look fine; and why <code>v *= 0.99f</code> makes four different
+      games on four different monitors.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>,
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor: Engine and Demos</a>,
+          <a href="07-07-sampling-blending.html">7.7 — Sampling and Blending Animations</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/integrate.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/integrate.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/integrate/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_81.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_81.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>advance a state through time</strong>, and can tell you whether
+            the step size you picked is a step size that works. <code>engine::phys</code> is one
+            header and one source file: three integration rules over a <code>motion</code> of two
+            vectors, exact linear drag, a frame-rate-independent damping factor, and four
+            diagnostics — <code>spring_energy</code>, <code>shadow_energy</code>,
+            <code>area_factor</code> and a <code>max_stable_step</code> that returns
+            <strong>zero</strong> for explicit Euler, because that zero is the lesson. <strong>Nine
+            measured sections, twelve of them controls</strong>, including one that runs the order
+            measurement on a system with no restoring force (where every rule is exact, so the result
+            must be meaningless rather than good) and one that evaluates the determinant at
+            <code>h = 0</code> (where the answer must be 1 for reasons that have nothing to do with
+            integration). The <code>integrate</code> demo draws all three rules in <em>phase
+            space</em>, where one spirals out of the panel and two trace a single closed curve, and
+            it runs Lesson 1.4's accumulator <em>nested inside the application's own</em> — because
+            the simulation rate is the variable under study and the frame rate is not.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive an Euler step from the Taylor expansion, and say exactly which term it throws
+          away.</li>
+      <li>…explain why "first order" describes a limit as <code>h → 0</code> and why a game is asking
+          the opposite question.</li>
+      <li>…write one step of an integrator as a 2×2 matrix and compute its determinant, and say what
+          that determinant does to energy.</li>
+      <li>…state why explicit Euler has no stable step size on an oscillator, and produce the number
+          that would be needed to fake one.</li>
+      <li>…name the quantity semi-implicit Euler conserves, and show that it being an ellipse is the
+          same statement as <code>hω &lt; 2</code>.</li>
+      <li>…choose a step size from a stiffness, and recognise when the answer is "this should not be
+          a spring at all".</li>
+      <li>…explain why gravity forgives every integrator and a contact forgives none.</li>
+      <li>…write frame-rate-independent damping, and say what the two-character version costs.</li>
+      <li>…justify making an integrator a template, with a measurement rather than a feeling.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine where nothing moves on its own</a></li>
+      <li><a href="#intuition">Building intuition: a step is a bet that the slope holds</a></li>
+      <li><a href="#taylor">The theory: Taylor, and what "first order" buys you</a></li>
+      <li><a href="#order">The yardstick that cannot see the bug</a></li>
+      <li><a href="#phase">Phase space, and the one number</a></li>
+      <li><a href="#shadow">What semi-implicit Euler actually conserves</a></li>
+      <li><a href="#gravity">Gravity, where the choice very nearly does not matter</a></li>
+      <li><a href="#drag">Velocity-dependent forces are a different problem</a></li>
+      <li><a href="#impl">The implementation</a></li>
+      <li><a href="#budget">The budget, and the free lunch</a></li>
+      <li><a href="#limits">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine where nothing moves on its own</h2>
+
+  <p>
+    Go back through the demos in this repository and ask of each one: <em>what decided where that
+    thing is?</em> In <code>hello_cube</code> a sine of the clock. In <code>gimbal</code> three
+    sliders. In <code>rig</code> a keyframe sampled and blended. In <code>ecs_swarm</code> a formula
+    per entity. In <code>audio</code> a circle parameterised by time. In every single case the answer
+    is the same: <strong>a person wrote down where it would be</strong>, and the program evaluated
+    that function of time.
+  </p>
+
+  <p>
+    That is a perfectly good way to make things move, and it is what animation is. It is also the
+    exact opposite of what physics is. A physics engine does not know where anything will be. It
+    knows where everything is <em>now</em>, how fast each thing is going, and what forces are acting
+    — and from those three it works out where everything is a moment later, and then does it again.
+    Nobody authors the arc of a thrown box. The arc is what falls out.
+  </p>
+
+  <p>
+    So the first question of Module 8 is not about mass, or shapes, or contacts, or friction. It is
+    the question that has to be answered before any of those mean anything:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>You know <code>x</code> and <code>v</code>, and a force tells you how fast
+      <code>v</code> is changing. Advance both by <code>h</code> seconds.</strong>
+    </p>
+  </div>
+
+  <p>
+    Half of that question has been answered since Module 1. Lesson 1.4 built
+    <code>engine::fixed_step</code>, derived the accumulator, and established why the frame rate must
+    not decide how far the simulation advances — a 144 Hz machine and a 30 Hz machine must agree
+    about where the ball lands, so the simulation gets its own clock and a <em>constant</em>
+    <code>h</code>. That class has been sitting in <code>core/</code> for eight modules doing exactly
+    one job, and this lesson does not touch it. It has always handed out the <code>h</code>; this
+    lesson is about what runs inside it.
+  </p>
+
+  <p>
+    And here is the shape of the trouble, stated up front because it is not what you would guess. The
+    two lines that first occur to you —
+  </p>
+
+  <pre><code class="lang-cpp">position += velocity * h;      // using the velocity you HAD
+velocity += acceleration * h;</code></pre>
+
+  <p>
+    — are <strong>explicit Euler</strong>, and on a spring they are not approximately right. They add
+    energy on every step. Not sometimes, not when <code>h</code> is too big, not when the spring is
+    too stiff: <em>always</em>, at every step size, by a factor you can write down in closed form. A
+    simulation built on those two lines does not drift; it <em>diverges</em>, and it diverges
+    exponentially. The fix is to swap them so the position moves at the velocity it has just been
+    given, and the swap is free.
+  </p>
+
+  <p>
+    You might reasonably ask why, if this is so catastrophic, anybody ever ships it — and the honest
+    answer is §7. Under gravity alone, all three rules in this lesson behave, and their error grows
+    <em>linearly</em> at about eight centimetres per second of falling. Your first cube-falling demo
+    will look completely correct. The disaster is reserved for forces that depend on
+    <strong>where the body is</strong>, and by the end of this module essentially every force does:
+    a contact that pushes a box out of the floor is a stiff spring, a joint that holds an elbow
+    together is a stiff spring, a suspension arm and a soft-body edge and a spring-damper camera are
+    all springs. <code>a = −ω²x</code> is not a toy problem chosen because it is easy to analyse. It
+    is the linearisation of every restoring force in Module 8, and an integrator that cannot survive
+    it cannot carry anything we build on top of it.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: a step is a bet that the slope holds</h2>
+
+  <p>
+    Forget springs for a moment and think about a car. The speedometer says 60 km/h. Where are you in
+    one minute?
+  </p>
+
+  <p>
+    One kilometre further on — obviously. And that answer is <em>exactly</em> right if and only if
+    the needle does not move for the whole minute. If you are braking, you travel less than a
+    kilometre; if you are accelerating, more. The error is not mysterious and it is not random: it is
+    entirely accounted for by <em>how much the speed changed</em> during the minute.
+  </p>
+
+  <p>
+    That is an Euler step, complete. You take the rate you have, assume it holds for the duration of
+    the step, and multiply. The whole of the method is the word <em>assume</em>, and the whole of the
+    error is that the assumption is false: the rate you used is the rate at the <em>start</em> of the
+    step, and by the end it is something else.
+  </p>
+
+  @@FIG_TANGENT@@
+
+  <p>
+    Figure 1 is that picture drawn properly. The grey curve is where the quantity actually goes; the
+    red line is the tangent at the moment you sampled it, extended by <code>h</code>; the amber gap
+    is what you got wrong. Notice what controls the gap. It is not the value, and it is not the
+    slope — a straight line has a slope and no gap at all. It is the <strong>curvature</strong>: how
+    fast the slope itself is changing. A step across a straight stretch is free; a step across a bend
+    costs you the bend.
+  </p>
+
+  <p>
+    Now the part that is easy to miss. In a physics step there are <em>two</em> of these bets, not
+    one, and they are usually described as though there were only one:
+  </p>
+
+  <ul>
+    <li><strong>Position from velocity.</strong> You assume the velocity holds across the step. Its
+        curvature is the acceleration.</li>
+    <li><strong>Velocity from acceleration.</strong> You assume the acceleration holds across the
+        step. Its curvature is how fast the force is changing, which for a spring is
+        <code>−ω²·v</code> — proportional to how fast you are already going.</li>
+  </ul>
+
+  <p>
+    Two bets, and here is the question the rest of this lesson turns on: <strong>do you have to make
+    them independently?</strong> The obvious code makes them independent — it computes both updates
+    from the same starting state, as though the two lines were happening simultaneously. But they are
+    not simultaneous; they are two lines in a program, and the second one runs after the first.
+    Whichever you do second, you could do it <em>using the answer from the first</em>. That is free
+    information, and explicit Euler throws it away.
+  </p>
+
+  <h2 id="taylor">3. The theory: Taylor, and what "first order" buys you</h2>
+
+  <p>
+    Let us make the picture into arithmetic. Write the true position a step later as a function of
+    everything you know now. If the motion is smooth — and it is, between collisions — the value at
+    <code>t + h</code> is the value at <code>t</code> plus the slope times <code>h</code>, plus a
+    correction for the fact that the slope was changing, plus a correction for the fact that
+    <em>that</em> was changing, and so on forever:
+  </p>
+
+  <div class="eq">
+    \[
+    x(t+h) \;=\; x(t) \;+\; h\,v(t) \;+\; \frac{h^{2}}{2}\,a(t) \;+\; \frac{h^{3}}{6}\,\dot a(t)
+    \;+\; \cdots
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In plain text: <code>x(t+h) = x + h·v + (h²/2)·a + (h³/6)·ȧ + …</code> — the position, plus the
+    velocity's contribution over the step, plus the acceleration's, plus the jerk's, forever.
+  </p>
+
+  <p>
+    That is the Taylor series, and you do not have to take it on faith. Each term is the previous
+    one's rate of change, given the same treatment: velocity is how fast position changes, so over
+    <code>h</code> seconds it contributes <code>h·v</code>. Acceleration is how fast <em>velocity</em>
+    changes, so the velocity was not really <code>v</code> for the whole step — it averaged
+    <code>v + (h/2)·a</code>, which contributes the extra <code>(h²/2)·a</code>. The pattern
+    continues, each term picking up another factor of <code>h</code> and another division.
+  </p>
+
+  <p>
+    <strong>Explicit Euler is that series truncated after two terms.</strong> That is the entire
+    definition. It keeps <code>x + h·v</code> and throws away everything from <code>(h²/2)·a</code>
+    onward, which — since <code>h</code> is small and the terms shrink — is dominated by the one you
+    dropped first. So the error <em>in a single step</em> is about <code>(h²/2)·a</code>. This is
+    called the <strong>local</strong> error, and it is <code>O(h²)</code>.
+  </p>
+
+  <p>
+    But you do not take one step. To simulate <code>T</code> seconds you take <code>T/h</code> of
+    them, and if each costs you <code>O(h²)</code> and there are <code>T/h</code> of them, the bill is
+    <code>T·O(h)</code>. One factor of <code>h</code> is paid back by having to take more steps. That
+    is the <strong>global</strong> error, it is <code>O(h)</code>, and "first order" means exactly
+    this and nothing more: <em>halve the step and the error after a fixed amount of simulated time
+    roughly halves.</em>
+  </p>
+
+  <h3 id="worked-step">3.1 One step, by hand</h3>
+
+  <p>
+    Numbers, because a formula you have not pushed a number through is a formula you do not own. Take
+    the spring this whole lesson uses: a 1 Hz oscillator, so <code>ω = 2π = 6.283185</code> rad/s, and
+    <code>a = −ω²x = −39.478418·x</code>. Start it pulled out to <code>x = 1</code> m and released, so
+    <code>v = 0</code>. Step size <code>h = 1/60 s</code>.
+  </p>
+
+  <p>
+    The exact answer is available in closed form, which is precisely why this problem is the test
+    case: <code>x(t) = cos(ωt)</code> and <code>v(t) = −ω·sin(ωt)</code>. At
+    <code>t = h = 0.0166667</code>, <code>ωt = 0.1047198</code>, and so
+  </p>
+
+  <div class="eq">
+    \[
+    x_{\text{exact}} = \cos(0.1047198) = 0.9945219, \qquad
+    v_{\text{exact}} = -6.283185\sin(0.1047198) = -0.6567717
+    \]
+  </div>
+
+  <p>
+    Now the three rules, each pushed through by hand. The acceleration at the start is
+    <code>a₀ = −39.478418 × 1 = −39.478418</code> m/s², and <code>h·a₀ = −0.6579736</code>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>rule</th><th>what it computes</th><th>x after one step</th><th>error</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>explicit Euler</td>
+        <td><code>x ← 1 + (1/60)(0) </code><br><code>v ← 0 + (1/60)(−39.478418)</code></td>
+        <td><code>1.0000000</code></td>
+        <td><code>+0.0054781</code></td>
+      </tr>
+      <tr>
+        <td>semi-implicit Euler</td>
+        <td><code>v ← 0 + (1/60)(−39.478418)</code><br><code>x ← 1 + (1/60)(−0.6579736)</code></td>
+        <td><code>0.9890338</code></td>
+        <td><code>−0.0054881</code></td>
+      </tr>
+      <tr>
+        <td>velocity Verlet</td>
+        <td><code>x ← 1 + 0 + ½(1/60)²(−39.478418)</code><br>then <code>v</code> from the average
+            of <code>a₀</code> and <code>a₁</code></td>
+        <td><code>0.9945169</code></td>
+        <td><code>−0.0000050</code></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Three things in that table are worth more than the table. First, <strong>the two Euler rules end
+    up with exactly the same velocity</strong>, <code>−0.6579736</code>, because they run the
+    identical velocity line — the only thing they disagree about is which velocity the
+    <em>position</em> line was told to move at. Second, their position errors are
+    <strong>equal and opposite</strong>, both of size <code>0.005488</code>, and that number is
+    <code>½h²ω²x = 0.5 × (1/3600) × 39.478418 = 0.0054831</code> — the Taylor term both of them
+    dropped, appearing once with each sign. Explicit Euler did not move at all when it should have
+    moved inward; semi-implicit Euler moved inward too far by the same amount.
+  </p>
+
+  <p>
+    Third, velocity Verlet's position error is <code>5.0 × 10⁻⁶</code>, a thousand times smaller —
+    because the term it adds, <code>½·a·h²</code>, <em>is</em> the term the other two dropped. What is
+    left over is the next one down, the <code>h⁴</code> term, and <code>cos</code>'s fourth-order
+    coefficient gives <code>ω⁴h⁴/24 = 5.01 × 10⁻⁶</code>. The arithmetic closes.
+  </p>
+
+  <p>
+    So far this looks like an ordinary accuracy story: three methods, three error sizes, pick the one
+    you can afford. That story is wrong, and the next section is the measurement that shows it is
+    wrong.
+  </p>

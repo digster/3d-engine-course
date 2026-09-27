@@ -1,0 +1,43 @@
+<svg viewBox="0 0 760 412" role="img" aria-labelledby="f77h-t f77h-d">
+  <title id="f77h-t">A rotation track with inconsistent signs</title>
+  <desc id="f77h-d">Two quaternions one degree apart on a circle, with the second's antipode marked; and the measured error of interpolating across that flipped interval without the nearest comparison, peaking at 180 degrees.</desc>
+  <defs>
+    <marker id="e-i-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-rose-f77h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">two keys, one degree apart, written with opposite signs</text>
+<circle cx="186.00" cy="164.00" r="88.00" fill="none" class="grid" stroke-width="1.1"/>
+<line x1="186.0" y1="164.0" x2="218.96538022060025" y2="82.40782079812271" class="ink-soft" stroke-width="1.2"/>
+<circle cx="218.97" cy="82.41" r="3.6" fill="#60c4ce"/>
+<text x="208.96538022060025" y="76.40782079812271" class="xs mono" text-anchor="end">qₖ</text>
+<line x1="186.0" y1="164.0" x2="227.3134975251584" y2="86.30061182841443" class="ink-soft" stroke-width="1.2"/>
+<circle cx="227.31" cy="86.30" r="3.6" fill="#60c4ce"/>
+<text x="237.3134975251584" y="80.30061182841443" class="xs mono" text-anchor="start">qₖ₊₁</text>
+<line x1="186.0" y1="164.0" x2="144.6865024748416" y2="241.69938817158555" class="ink-soft" stroke-width="1.2" stroke-dasharray="3 4"/>
+<circle cx="144.69" cy="241.70" r="3.6" fill="#ec7a8c"/>
+<text x="144.6865024748416" y="259.69938817158555" class="xs mono" text-anchor="middle">−qₖ₊₁</text>
+<text x="186.0" y="280.0" class="xs muted" text-anchor="middle">−q and q are the SAME ORIENTATION and not the</text>
+<text x="186.0" y="296.0" class="xs muted" text-anchor="middle">same point. A lerp between the two teal dots</text>
+<text x="186.0" y="312.0" class="xs muted" text-anchor="middle">travels 1°; between a teal and the rose, 359°.</text>
+<rect x="396.0" y="82.0" width="320.0" height="180.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="556.0" y="60.0" class="xs" text-anchor="middle">one flipped interval, played by a lerp with no nearest</text>
+<path d="M 418.00,238.00 L 473.53,195.52 L 556.41,154.63 L 639.30,130.12 L 694.00,112.95" fill="none" stroke="#ec7a8c" stroke-width="1.4"/>
+<circle cx="418.00" cy="238.00" r="3.0" fill="#ec7a8c"/>
+<circle cx="473.53" cy="195.52" r="3.0" fill="#ec7a8c"/>
+<circle cx="556.41" cy="154.63" r="3.0" fill="#ec7a8c"/>
+<circle cx="639.30" cy="130.12" r="3.0" fill="#ec7a8c"/>
+<circle cx="694.00" cy="112.95" r="3.0" fill="#ec7a8c"/>
+<line x1="410.0" y1="238.0" x2="702.0" y2="238.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="700.0" y="256.0" class="xs muted" text-anchor="end">nearest, and this engine</text>
+<text x="388.0" y="242.0" class="xs mono" text-anchor="end">0°</text>
+<text x="388.0" y="179.4736842105263" class="xs mono" text-anchor="end">90°</text>
+<text x="388.0" y="116.94736842105263" class="xs mono" text-anchor="end">180°</text>
+<text x="556.0" y="280.0" class="xs muted" text-anchor="middle">one keyframe interval, 0.033 s to 0.067 s</text>
+<text x="380.0" y="336.0" class="xs muted" text-anchor="middle">validate reports 690 sign flips; canonicalise_rotations negates 345 keys and they go to zero.</text>
+<text x="380.0" y="354.0" class="xs muted" text-anchor="middle">This engine samples both versions IDENTICALLY (0.000e+00°), because nearest is inside quat_nlerp.</text>
+<text x="380.0" y="372.0" class="xs muted" text-anchor="middle">What the pass buys is the count — and every consumer that is not this engine.</text>
+</svg>

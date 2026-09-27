@@ -1,0 +1,342 @@
+  <h2 id="demo">9. Watching it, and breaking it on purpose</h2>
+
+  <p>
+    “Expand the polytope toward its closest face” is a sentence. The thing it describes is a shape
+    growing until it presses against a wall you cannot see, and that is worth watching.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <p>
+    <code>demos/epa</code> has two panels. The right one is 8.5's difference-set view, with the
+    silhouette traced through the set's own support function and the origin as a white cross —
+    except that now the cross is <em>inside</em>, because the shapes overlap. The gold mesh is the
+    expanding polytope and the pink line runs from the origin to its closest face.
+  </p>
+
+  <p>
+    The left panel is new, and it earns its place by making the answer a <em>position</em> rather
+    than a number. It draws a ghost of the second shape at the place the current answer would push
+    it to. Step the search with <strong>[S]</strong> and watch the ghost climb out: while the lower
+    bound is short the ghost is still buried in the first shape, which is what an unconverged lower
+    bound <em>is</em>. A number that is 60% of the answer is an abstraction; a crate that is still
+    40% inside a wall is not.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And the pink line only ever gets longer.</strong> 8.5's demo drew the same vector and
+      it only ever got shorter. Same panel, same colour, same set — and the direction of travel is
+      reversed, because one algorithm is walking in from outside and the other is pushing out from
+      inside. Putting the two demos side by side is the fastest way to see that EPA is not a
+      separate algorithm but the same sandwich with the bread swapped.
+    </p>
+  </div>
+
+  <p>
+    Preset 3 is the one to sit with: two crates standing on the same floor, §5's arrangement. The
+    panel reports <code>seed vertices: 2 extra</code>, which is the two support calls the flat
+    triangle needed before there was a polytope at all. And <strong>[F]</strong> drops the flood
+    fill from the visibility test — the textbook formulation — so §7's failure can be watched
+    rather than read about: the status flips to <code>stalled</code> and the ghost stops short of
+    coming free.
+  </p>
+
+  <p>
+    The demo builds its own polytope rather than only calling <code>epa_penetration</code>, for the
+    same reason 8.5's demo drove its own loop: a single-stepping visualiser needs the iteration,
+    not the answer. It uses only <code>cso_support</code>, which <code>gjk.hpp</code> exposes for
+    exactly this, so 5.1's boundary is intact — and the panel prints the real
+    <code>epa_penetration</code>'s answer beside its own, so the picture and the engine can be seen
+    to agree.
+  </p>
+
+  <h2 id="converge">10. Polytopes terminate, curves do not</h2>
+
+  <p>
+    8.5 §9 asked which shapes make GJK <em>finish</em> and which only make it <em>converge</em>,
+    and the answer was crisp: a polytope has finitely many vertices, so a search that improves the
+    simplex can only improve it finitely often; a curved shape has infinitely many, so the error
+    halves forever. Box, hull and sphere were flat against tolerance; only the capsule genuinely
+    converged.
+  </p>
+
+  <p>
+    Ask the same question of EPA and one row changes places dramatically.
+  </p>
+
+  @@FIG_CONVERGE@@
+
+  <p>
+    Box and hull are flat, for the same reason as before with the inequality reversed: the
+    polytope's vertices are vertices of the difference set, that set is finite, and once the
+    boundary face has been found there is nothing beyond it. The tolerance never stopped them — the
+    duplicate check did.
+  </p>
+
+  <p>
+    And the sphere, which was GJK's <em>easiest</em> case at exactly one iteration, is EPA's worst
+    by a factor of six, climbing from 28.6 expansions at a loose tolerance to the 60-expansion cap
+    at a tight one.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Same shape, same support function, opposite behaviour — and the asymmetry is
+      geometric rather than numerical.</strong> The nearest point of a ball to an <em>exterior</em>
+      point lies on the line to its centre, so GJK's very first support call, taken along the
+      centre-to-centre direction, lands on the answer. There is nothing to refine. But the nearest
+      <em>boundary</em> point from inside is on a sphere of directions, and EPA's polytope
+      approximates that boundary with flat triangles: every triangle is a chord, every chord
+      under-reaches, and no finite number of them is ever exact. GJK <em>walks to</em> a curved
+      surface; EPA has to <em>cover</em> it.
+    </p>
+  </div>
+
+  <p>
+    Which is the concrete argument for keeping 8.4's closed forms rather than replacing them with
+    the general algorithm. <code>collide(sphere, sphere)</code> is a subtraction and a square root
+    and it is exact; EPA needs sixty expansions to get within a tolerance of the same number.
+    Generality is a property of the interface, not an instruction to use it everywhere.
+  </p>
+
+  <h3>10.1 Which makes the iteration cap load-bearing</h3>
+
+  <p>
+    A cap on a loop that terminates is defensive programming. A cap on a loop that only converges
+    is what turns “converges” into “returns”, so its value is a real decision. §G.2 measures it on
+    a ball deep inside a crate — the worst case there is — against 8.4's exact closed form:
+  </p>
+
+  <pre><code class="lang-text">  G.2  the cap, on the shape that never finishes
+
+       a ball deep inside a crate, tolerance 1e-4
+
+       cap    hit the cap   mean depth error
+        12    51.55%        8.866e-03 m
+        20    11.12%        6.347e-04 m
+        32     0.86%        1.609e-05 m
+        48     0.01%        9.391e-06 m</code></pre>
+
+  <p>
+    Thirty-two is the shipped default, and the last row is why. Going to 48 removes 98% of the
+    remaining cap hits and improves the answer by <strong>1.6 microns</strong> — because at that
+    point the error is no longer the iteration count, it is the flat-triangle approximation of a
+    curved surface. Buying accuracy you cannot use with work you do pay for is the wrong trade.
+  </p>
+
+  <h2 id="accuracy">11. How close, and where it gives out</h2>
+
+  <p>
+    §H asks the question that a tolerance is supposed to answer: if I set it to <code>x</code>,
+    what do I get? The reference is §3.3's exact box MTV, computed in double over the thirty signed
+    face normals of the difference polytope.
+  </p>
+
+  @@FIG_ACCURACY@@
+
+  <p>
+    The maximum error tracks <code>tolerance × size</code> to within a factor of 1.4 across four
+    decades, which is 8.5 §11's finding inherited intact: <strong><code>tolerance</code> is a
+    relative quantity, not a distance</strong>, and “set it to a millimetre” remains a category
+    error. The two tightest rows flatten out at about 5e−08 because that is where <code>float</code>
+    itself runs out on metre-sized geometry, not where the algorithm does.
+  </p>
+
+  <h3>11.1 The shallow end, which is where a physics engine lives</h3>
+
+  <p>
+    A resting contact has a penetration depth of microns. §H.2 walks two cubes face to face from a
+    10 cm overlap down to nothing:
+  </p>
+
+  <pre><code class="lang-text">  H.2  two 1 m cubes, face to face, walked into contact
+
+       overlap      status      depth        error
+       1e-01  proven       1.000e-01  +2.235e-08
+       1e-02  proven       1.000e-02  -9.313e-09
+       1e-03  proven       1.000e-03  -1.292e-08
+       1e-04  proven       1.000e-04  +1.660e-08
+       1e-05  proven       1.001e-05  +1.358e-08
+       1e-06  proven       1.013e-06  +1.328e-08
+       1e-07  proven       1.192e-07  +1.921e-08
+       0e+00  touching     0.000e+00  +0.000e+00</code></pre>
+
+  <p>
+    Seven decades, with an absolute error that stays at a few times <code>1e−08</code> — which is
+    <em>not</em> <code>tolerance × size</code> and is much better than it. The reason is §10's in
+    reverse: two cubes face to face produce a difference set that is a box, the answer is on a
+    genuine face of it, and the expansion reaches that face exactly. Curvature is what costs
+    accuracy; flat contacts, which is most of them, are free.
+  </p>
+
+  <p>
+    The last row is the honest one. At zero overlap the status is <code>touching</code> rather than
+    <code>proven</code>, the depth is zero, and the normal is still the direction along which the
+    two are least overlapping — which is what a solver wants at a resting contact: nothing to push
+    out now, and a direction to push along the moment they press together.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This table is the one that changed the design.</strong> Its first version had
+      <code>stalled</code> and <code>5.774e−05</code> in the 1e−04 row, 42% low, which is §7's
+      torn horizon. Its second had them back again at tight tolerances, which is §8.4's containment
+      question asked too early. Two of this lesson's four bugs were found by one fixture that took
+      nine lines to write, because it walked a parameter across decades instead of sampling it at
+      random. <strong>A sweep finds what a sample misses.</strong>
+    </p>
+  </div>
+
+  <h3>11.2 And 8.5's precision cure, inherited</h3>
+
+  <p>
+    8.4 §11 measured a 1 mm gap between two boxes decaying to exactly zero at 100 km from the world
+    origin. 8.5 §11 built the cure into <code>convex</code>: every support point is returned
+    relative to its own shape's centre, so the single world-sized subtraction
+    <code>b.origin − a.origin</code> happens once, outside the loop, where Sterbenz's lemma makes it
+    exact. EPA inherits it by inheriting <code>cso_support</code>, and §H.3 is the check that it
+    really did — two arms which are <em>not</em> two implementations, since the same
+    <code>epa.cpp</code> is in both columns and only the <code>convex</code> view differs.
+  </p>
+
+  <p>
+    The relative form holds at 1.5e−08 m from two metres out to 1.8 million; the naive world-space
+    form degrades to a full centimetre. The reference in both columns is the exact MTV of the boxes
+    <em>as <code>float</code> stored them</em>, so the comparison measures arithmetic rather than
+    geometry: what the positions themselves threw away is gone either way, and no formulation
+    recovers information that was never held.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>An earlier version of this fixture measured a difference of exactly zero at every
+      distance, and the fixture was the problem.</strong> It used half extents of 0.5, which is a
+      multiple of the float grid spacing at every scale below 2<sup>21</sup>, so
+      <code>centre + half</code> stayed exact even a million metres out and the naive arm never
+      suffered. Half extents of 0.37 are a multiple of nothing. A null result from a fixture that
+      cannot express the effect is not a null result.
+    </p>
+  </div>
+
+  <h2 id="budget">12. The budget, and two struct definitions</h2>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    EPA is fourteen times GJK, and that is the shape of the answer rather than a defect. GJK on
+    these pairs runs three or four iterations and stops; EPA runs eight to sixteen expansions, each
+    of which scans every face twice — once to find the closest and once for visibility — and
+    rebuilds a chunk of the surface. The work is genuinely there.
+  </p>
+
+  <p>
+    The depth table on the right is the same fact seen from the side: a deeper overlap is a bigger
+    difference set with the origin further from its boundary, so there is more polytope to build.
+    Six expansions at a shallow overlap, sixteen at a deep one, and the cost tracks it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Which is one more argument for a solver that stops objects getting deep in the first
+      place.</strong> 8.10's warm-started sequential impulses will keep a stack settled with
+      penetrations of microns, and the narrow phase is quietly one of the things that pays for it.
+      A physics engine that lets things sink is not merely ugly; it is slower.
+    </p>
+  </div>
+
+  <h3>12.1 Nothing allocates, and that is measured rather than claimed</h3>
+
+  <p>
+    The polytope lives on the stack: 64 vertices and 128 faces, about six and a half kilobytes, with
+    no heap anywhere. §I.2 replaces the global <code>operator new</code> and counts, the way 6.17
+    §9 did, and reports zero over a thousand queries. An allocation in a per-pair loop is a lock, a
+    cache miss and a variance source, and none of those show up in a profile as themselves.
+  </p>
+
+  <h3>12.2 And then two struct definitions were worth 20.5%</h3>
+
+  <p>
+    The first working version of this file ran at <strong>1344.04 ns</strong> per pair. The shipped
+    one runs at <strong>1068.14</strong>, and the two were measured <em>back to back</em> — the
+    library rebuilt with the initialisers restored, timed, rebuilt without them, timed — because
+    run-to-run spread on this machine is a few per cent and a “before” taken an hour earlier would
+    be quoting drift as a finding. The entire difference is this, applied twice:
+  </p>
+
+  <pre><code class="lang-cpp">struct face
+{
+    int v[3] = {0, 0, 0};   // ← these
+    vec3 n{};               // ←
+    float d = 0.0f;         // ←
+    bool alive = false;     // ←
+};</code></pre>
+
+  <p>
+    A default member initialiser on any member makes the whole type
+    non-trivially-default-constructible, and that property propagates into arrays of it. So
+    <code>polytope p;</code> — an ordinary local variable, declared once per query — wrote four
+    kilobytes of zeroes into the face array that the seed overwrote on the next line. Worse,
+    <code>expand</code>'s horizon array is three kilobytes and is declared <em>per pass</em>, so a
+    ten-expansion query paid it ten times.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Default member initialisers are a good default and this is where they stop
+      being one.</strong> They are excellent on a type callers construct by hand, because they
+      remove a whole class of uninitialised-read bug for free. They are wrong on a type that exists
+      as a hundred slots of scratch space, every one of which is written before it is read. The
+      tell is the array, not the struct.
+    </p>
+  </div>
+
+  <p>
+    The third array was left alone, and the reason is in the file:
+  </p>
+
+  <pre><code class="lang-cpp">/// THE THIRD ARRAY IS LEFT ALONE ON PURPOSE. `gjk_vertex` carries member
+/// initialisers of its own, so `vert` below is 2.3 KB that `polytope p;` zeroes —
+/// the same waste `face` had. Giving this file a trivially-constructible mirror
+/// type and converting at the boundary was tried and measured back to back:
+/// **1054.4 ns against 1053.1**, inside the noise, because the compiler can see
+/// that every slot below `vertex_count` is written before it is read and the
+/// array is touched once per query rather than once per pass. A change that buys
+/// nothing still costs a reader, so it was reverted.</code></pre>
+
+  <p>
+    Two of the three mattered and one did not, and the difference between them is not obvious from
+    the source: it is once-per-pass against once-per-query, and whether the compiler could see far
+    enough to elide it. Which is the whole argument for measuring the change rather than reasoning
+    about it — and for measuring the change you <em>did not</em> make, so the file can say why.
+  </p>
+
+  <h2 id="notyet">13. What this does not do</h2>
+
+  <p>
+    Three honest limits, all of which are somebody else's lesson.
+  </p>
+
+  <p>
+    <strong>One contact point is not a contact manifold.</strong> EPA returns a single pair of
+    witness points, and for a box resting flat on the floor that is one corner of a square. A solver
+    given one point will rock the box on that corner; it needs four, and it needs them to be the
+    <em>same</em> four next frame or the box will judder as they swap. That is 8.7, which clips the
+    two contacting faces against each other to generate the manifold and keys it on feature ids so
+    it persists.
+  </p>
+
+  <p>
+    <strong>The normal is discontinuous, and no amount of care fixes it.</strong> The depth is a
+    continuous function of the configuration, but the <em>direction</em> that achieves it jumps the
+    moment the minimising face changes — slide a box along a wall toward a corner and the MTV
+    swings ninety degrees at the instant the corner takes over. That is a property of the minimum,
+    not of the algorithm; every EPA has it, and it is another reason 8.7's persistent manifold
+    matters more than it looks.
+  </p>
+
+  <p>
+    <strong>A curved shape is approximated, forever.</strong> §10 is not a tuning problem. If your
+    scene is mostly spheres and capsules, keep the closed forms — and 8.8's broadphase will make
+    that dispatch cheap by narrowing the candidate set before anyone asks what shape anything is.
+  </p>

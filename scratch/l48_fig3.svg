@@ -1,0 +1,54 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="f48c-t f48c-d">
+  <title id="f48c-t">Why the geometry gained normals</title>
+  <desc id="f48c-d">At a cube's corner three faces meet at one position, and each wants a different normal. A vertex holds one, so flat shading must write the position three times: a cube's 8 positions become 36 vertices, an icosahedron's 12 become 60. None of the built-in meshes carries an authored normal, and a vertex shader — which sees one vertex — cannot compute a face normal the way the software rasterizer's per-triangle loop did.</desc>
+  <defs>
+    <marker id="e-i-f48c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f48c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f48c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">a corner where three faces meet &#8212; <tspan class="t-hi">one position, three normals</tspan></text>
+  <polygon points="168.0,168.0 106.0,137.0 106.0,92.4 168.0,123.4" fill="#d1344a" fill-opacity="0.30" stroke="#d1344a" stroke-width="1"/>
+  <line x1="137.0" y1="130.2" x2="107.8" y2="113.2" stroke="#d1344a" stroke-width="1.6" marker-end="url(#e-i-f48c)"/>
+  <text x="99.2" y="112.2" class="xs mono lbl-x" text-anchor="middle">&#8722;x</text>
+  <polygon points="168.0,168.0 230.0,137.0 230.0,92.4 168.0,123.4" fill="#2b6fd4" fill-opacity="0.30" stroke="#2b6fd4" stroke-width="1"/>
+  <line x1="199.0" y1="130.2" x2="228.2" y2="113.2" stroke="#2b6fd4" stroke-width="1.6" marker-end="url(#e-i-f48c)"/>
+  <text x="236.8" y="112.2" class="xs mono lbl-z" text-anchor="middle">+z</text>
+  <polygon points="168.0,168.0 106.0,137.0 168.0,106.0 230.0,137.0" fill="#2f9e4f" fill-opacity="0.30" stroke="#2f9e4f" stroke-width="1"/>
+  <line x1="168.0" y1="137.0" x2="168.0" y2="103.0" stroke="#2f9e4f" stroke-width="1.6" marker-end="url(#e-i-f48c)"/>
+  <text x="168.0" y="97.0" class="xs mono lbl-y" text-anchor="middle">+y</text>
+  <circle cx="168.0" cy="168.0" r="4" class="hi-fill"/>
+  <text x="168.0" y="190.0" class="xs" text-anchor="middle">one position</text>
+  <text x="30" y="252" class="xs muted">A vertex carries exactly one normal.</text>
+  <text x="30" y="268" class="xs muted">Three faces meeting here want three, so</text>
+  <text x="30" y="284" class="xs muted">FLAT has to write the position three times</text>
+  <text x="30" y="300" class="xs muted">&#8212; and then the sharing is gone.</text>
+  <text x="376" y="52" class="xs muted">mesh</text>
+  <text x="526" y="52" class="xs muted" text-anchor="end">positions</text>
+  <text x="606" y="52" class="xs muted" text-anchor="end">flat</text>
+  <text x="686" y="52" class="xs muted" text-anchor="end">smooth</text>
+  <text x="376" y="74" class="xs mono">cube</text>
+  <text x="526" y="74" class="xs mono muted" text-anchor="end">8</text>
+  <text x="606" y="74" class="xs mono t-bad" text-anchor="end">36</text>
+  <text x="686" y="74" class="xs mono t-ok" text-anchor="end">8</text>
+  <text x="376" y="100" class="xs mono">quad</text>
+  <text x="526" y="100" class="xs mono muted" text-anchor="end">4</text>
+  <text x="606" y="100" class="xs mono t-bad" text-anchor="end">6</text>
+  <text x="686" y="100" class="xs mono t-ok" text-anchor="end">4</text>
+  <text x="376" y="126" class="xs mono">icosahedron</text>
+  <text x="526" y="126" class="xs mono muted" text-anchor="end">12</text>
+  <text x="606" y="126" class="xs mono t-bad" text-anchor="end">60</text>
+  <text x="686" y="126" class="xs mono t-ok" text-anchor="end">12</text>
+  <line x1="376" y1="158" x2="686" y2="158" class="grid" stroke-width="0.75"/>
+  <text x="376" y="180" class="xs">None of the three carries an authored normal.</text>
+  <text x="376" y="200" class="xs muted">The software rasterizer computed a face normal</text>
+  <text x="376" y="216" class="xs muted">inside its per-triangle loop, from the three corners.</text>
+  <text x="376" y="240" class="xs t-bad">A vertex shader sees ONE vertex.</text>
+  <text x="376" y="260" class="xs muted">So the fallback stops being the renderer&#8217;s job and</text>
+  <text x="376" y="276" class="xs muted">becomes the importer&#8217;s &#8212; which is where every real</text>
+  <text x="376" y="292" class="xs muted">engine already puts it.</text>
+  <text x="376" y="318" class="xs">And a runtime toggle became a <tspan class="t-hi">build-time</tspan></text>
+  <text x="376" y="334" class="xs">decision: flat and smooth no longer share a buffer.</text>
+</svg>

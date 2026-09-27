@@ -1,0 +1,771 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-01-how-gpus-work.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.1 — How GPUs Actually Work</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-03-shader-toolchain.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.3 — The Shader Toolchain</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.2</div>
+    <h1>The SDL_GPU Mental Model</h1>
+    <p class="deck">
+      Nine objects, of which you have already built five. The four that are new all exist for
+      one reason: from this lesson on, a function call no longer <em>does</em> the thing it
+      names — it writes the thing down, and someone else does it later, on another processor.
+      Everything difficult about GPU programming comes out of that one sentence.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-01-how-gpus-work.html">4.1 — How GPUs Actually Work</a>,
+          <a href="03-09-textures.html">3.9 — Textures</a>,
+          <a href="01-05-framebuffer.html">1.5 — The Framebuffer</a>,
+          <a href="../conventions.html">Conventions</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_device.hpp</code>, <code>src/gfx/gpu_device.cpp</code>,
+            <code>src/gfx/gpu_present.hpp</code>, <code>src/gfx/gpu_present.cpp</code>,
+            <code>src/main.cpp</code>, <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd><code>engine --gpu</code> puts your software rasterizer's picture on screen with
+            <strong>the GPU carrying it</strong> — no <code>SDL_Renderer</code>, no shaders —
+            and draws you a live graph of where the frame's time really went.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name every object in SDL_GPU and say which of your own types it replaces, and which
+          four have no counterpart at all because a software rasterizer has only one processor.</li>
+      <li>…explain the difference between <em>recording</em> a command and <em>executing</em> it,
+          and measure the gap on your own machine — here it is <strong>25×</strong>.</li>
+      <li>…say exactly what a fence promises, and demonstrate the bug you get without one.</li>
+      <li>…get a CPU framebuffer onto the screen through a transfer buffer, a texture and a
+          blit, and account for every byte of the three copies it takes.</li>
+      <li>…predict what an <code>SDL_FColor</code> clear value becomes in memory, for both an
+          <code>_UNORM</code> and an <code>_UNORM_SRGB</code> target, and check your prediction.</li>
+      <li>…recognise a GPU measurement that cannot be true, and find out why.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-order">A phone call, and a work order</a></li>
+          <li><a href="#intuition-memory">Two memories, and the room between them</a></li>
+          <li><a href="#intuition-map">The nine objects, five of which you own</a></li>
+          <li><a href="#intuition-swapchain">Why the swapchain is borrowed</a></li>
+          <li><a href="#intuition-opengl">An honest sidebar: why not OpenGL</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-fence">What a fence actually promises</a></li>
+          <li><a href="#theory-cycle">Cycling, and the bug it exists to prevent</a></li>
+          <li><a href="#theory-flight">Frames in flight: latency against throughput</a></li>
+          <li><a href="#theory-clear">A float clear becomes bytes</a></li>
+          <li><a href="#theory-fit">The letterbox, by hand</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-device">The device, and the claim</a></li>
+          <li><a href="#impl-ask">Asking instead of assuming</a></li>
+          <li><a href="#impl-present">Three hops from a pixel to the display</a></li>
+          <li><a href="#impl-srgb">The transfer-function trap</a></li>
+          <li><a href="#impl-frame">The frame, and where the waiting really is</a></li>
+          <li><a href="#impl-impossible">A number that could not be true</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is a piece of code that does exactly what it says. You have written thousands of lines
+    like it since Lesson 1.5, and never once had to wonder about it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">what every line of Modules 1-3 has meant</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">fb.put_pixel(10, 20, red);
+const Uint32 c = fb.pixel_at(10, 20);   // c is red. Obviously.</code></pre>
+  </figure>
+
+  <p>
+    The second line reads back what the first line wrote, because the first line
+    <em>happened</em>. It happened on this processor, in this thread, before the next statement
+    began. That is such a basic property of a program that it does not feel like a property at
+    all — it feels like what a program <em>is</em>.
+  </p>
+
+  <p>
+    Now here is the same idea in SDL_GPU. Clear a texture to a known colour, copy it back to the
+    CPU, and read it. Four calls, no shaders, nothing exotic:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the same idea, and it is wrong</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(device);
+
+SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, &amp;target, 1, nullptr);  // clear to grey
+SDL_EndGPURenderPass(pass);
+
+SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cb);
+SDL_DownloadFromGPUTexture(copy, &amp;src, &amp;dst);                              // copy it back
+SDL_EndGPUCopyPass(copy);
+
+SDL_SubmitGPUCommandBuffer(cb);
+
+const Uint8* px = (const Uint8*)SDL_MapGPUTransferBuffer(device, tb, false);
+printf("%u\n", px[0]);    // the grey we cleared to?</code></pre>
+  </figure>
+
+  <p>
+    It prints garbage. Not sometimes — <strong>64 times out of 64</strong> in this lesson's
+    harness, which fills the destination with the byte <code>0xAB</code> beforehand so that
+    "nothing was written here yet" is visible rather than merely suspected. Every one of those
+    64 reads came back <code>0xAB</code>. Add one call — a wait on a fence — and the same 64
+    trials are correct 64 times.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode, precisely</span>
+    <p>
+      <code>SDL_SubmitGPUCommandBuffer</code> returned before the clear had happened. It returned
+      before the <em>copy</em> had happened. It returned, in fact, before the GPU had necessarily
+      looked at the command buffer at all — its job is to hand the work over, not to perform it.
+      The read that followed was a read of memory nobody had written yet.
+    </p>
+    <p>
+      And notice the shape of this bug. It is not a crash, not an assertion, not an error return.
+      Every call succeeded. On a slower GPU it would be wrong by more; on a faster machine, or a
+      smaller texture, it might come back <em>right</em> often enough to look like working code.
+      This lesson's harness reports "wrong 64 / 64", but a version of it that read one byte
+      instead of a quarter of a megabyte would sometimes report zero, and that is much worse —
+      because then you would ship it.
+    </p>
+  </div>
+
+  <p>
+    So the problem is not that SDL_GPU has nine new nouns in it. You could learn nine nouns in an
+    afternoon. The problem is that <strong>the meaning of a function call has changed</strong>,
+    and every one of the new nouns is there to manage the consequences. Learn the nouns without
+    the sentence and you will write code that works on your machine and fails on someone else's,
+    for reasons that never appear in a debugger.
+  </p>
+
+  <p>
+    Lesson 4.1 established what the GPU <em>is</em>: a wide, lockstep machine that is slower per
+    lane and wins anyway. This lesson is about the wire between you and it. By the end you will
+    have your own rasterizer's picture on screen, carried there entirely by SDL_GPU, with no
+    shader anywhere in the program — and a graph, drawn by your own <code>fill_rect</code>, of
+    exactly where the frame's 16.667 milliseconds went.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-order"><span class="num">2.1</span>A phone call, and a work order</h3>
+
+  <p>
+    Every graphics call you have made so far has been a <em>phone call</em>. You said "put a red
+    pixel at (10, 20)"; by the time you stopped speaking, the pixel was red. The call and the
+    effect were one event, and they were one event because the thing being asked and the thing
+    doing the asking were the same processor.
+  </p>
+
+  <p>
+    From here, a graphics call is a <em>work order</em>. You are not doing the work and you are
+    not talking to whoever will. You are filling in a sheet of paper: clear this target to grey;
+    then copy those bytes over there; then draw these triangles. Filling in the sheet is fast,
+    because writing "resurface the driveway" takes a second and resurfacing a driveway does not.
+    When the sheet is complete you hand it over — <code>SDL_SubmitGPUCommandBuffer</code> — and
+    that is a separate act from the work being done.
+  </p>
+
+  <p>
+    This is not an analogy that gets stretched until it breaks. It is very nearly the literal
+    implementation: a command buffer is a chunk of memory into which the driver appends packets,
+    and submitting it makes the GPU's front end start reading them. You can measure the
+    difference between writing the order and doing the work, and you should, because the ratio
+    is the most important number in this lesson:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>call</th><th>what it is</th><th>measured</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>SDL_AcquireGPUCommandBuffer</code></td><td>fetch a blank sheet</td><td>0.0009 ms</td></tr>
+      <tr><td>48 × <code>SDL_BlitGPUTexture</code></td><td>write 48 lines on it</td><td>0.1846 ms <span class="muted">(0.0038 each)</span></td></tr>
+      <tr><td><code>SDL_SubmitGPUCommandBuffer…</code></td><td>hand it over</td><td>0.0024 ms</td></tr>
+      <tr><td><strong>everything the CPU does</strong></td><td></td><td><strong>0.1879 ms</strong></td></tr>
+      <tr><td><code>SDL_WaitForGPUFences</code></td><td>wait for the work itself</td><td><strong>4.7815 ms</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 1.</span> One command buffer containing 48 full-screen copies of a
+    2048×2048 texture — 1.5 GB of memory traffic. Describing that work costs the CPU
+    <strong>0.1879 ms</strong>; the work itself takes <strong>4.7815 ms</strong>, a factor of
+    <strong>25.45</strong>. Every number here is from <code>scratch/verify_42.cpp</code> §C, run
+    on this lesson's machine, and the ratio is the point: while the GPU spends 4.78 ms, the CPU
+    has 4.59 ms of it free.
+  </figcaption>
+  </figure>
+
+  @@FIG_TIMELINE@@
+
+  <p>
+    Figure 1 is that table drawn to scale, and it is worth looking at until it stops being
+    surprising. The block on the CPU lane is not small because the picture is stylised; it is
+    small because 0.1879 is small next to 4.7815. That empty space to its right is the whole
+    reason a GPU program is structured the way it is: <strong>the CPU is free during the work it
+    just described</strong>, and an engine that does not use that time is leaving most of its
+    frame on the floor.
+  </p>
+
+  <p>
+    It also shows the one arrow going the other way. The dashed line back up to the CPU lane is a
+    <em>fence</em>, and its position is the answer to the failure in §1: the fence is where the
+    work finished, and nothing about that work may be believed before it.
+  </p>
+
+  <h3 id="intuition-memory"><span class="num">2.2</span>Two memories, and the room between them</h3>
+
+  <p>
+    The second new idea is that there is more than one kind of memory, and you cannot reach the
+    important one.
+  </p>
+
+  <p>
+    A GPU texture lives in memory arranged for the GPU's benefit. It is not a row-major array of
+    <code>Uint32</code> like <code>engine::framebuffer</code>; it is tiled, so that the four
+    texels of a 2×2 quad (Lesson 4.1 §2.3) are adjacent rather than a row apart, and it may be
+    losslessly compressed, and its exact arrangement is a trade secret that differs between
+    vendors and between two GPUs from the same vendor. You cannot write to it with
+    <code>memcpy</code>, and the reason is not that SDL is being protective — it is that
+    <em>you do not know where anything is</em>.
+  </p>
+
+  <p>
+    So there is a third region: memory that both processors can address, laid out plainly, whose
+    only purpose is to be a staging area. SDL calls it a <strong>transfer buffer</strong>. You
+    <code>memcpy</code> into it; the GPU copies out of it into whatever arrangement it prefers.
+    Every pixel that goes from your framebuffer to the screen takes both hops, and no API can
+    remove that, because it is the shape of the machine rather than a wart in the interface.
+  </p>
+
+  @@FIG_HOPS@@
+
+  <p>
+    Figure 2 is worth reading twice: once left to right, for the route, and once for the dashed
+    vertical line. To the left of that line, work happens when you call it. To the right, calling
+    it only writes it down. The <code>memcpy</code> into the transfer buffer is <em>real work,
+    now</em>, on the CPU, and this lesson measures it at 0.0028 ms for a 320×180 frame. The
+    upload and the blit are recorded in microseconds and performed later.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>
+      On a machine with unified memory — every Apple silicon Mac, every console, most phones —
+      the CPU and GPU are looking at the same physical DRAM, and a hypothetical perfect API could
+      sometimes skip the staging copy. SDL_GPU does not expose that, because it must also run on a
+      discrete GPU across a PCIe bus, where the copy is a genuine journey across the motherboard.
+      This is the ninety-percent picture; the missing ten percent is that on some hardware the
+      transfer buffer's copy is cheaper than it looks, which the numbers in §4.6 will show.
+    </p>
+  </div>
+
+  <h3 id="intuition-map"><span class="num">2.3</span>The nine objects, five of which you own</h3>
+
+  <p>
+    Here is the part that is much better news than it sounds. SDL_GPU's object model is not nine
+    unfamiliar things. It is four unfamiliar things and five renames.
+  </p>
+
+  @@FIG_MODEL@@
+
+  <p>
+    Count the two colours in Figure 3. Five rows are objects you designed and implemented, in
+    some cases three modules ago, and Module 3 shaped several of them deliberately so that this
+    moment would be an observation rather than a leap — Lesson 3.9's <code>engine::sampler</code>
+    mirrors <code>SDL_GPUSamplerCreateInfo</code> field for field, and Lesson 4.1 counted
+    <code>fill_style</code>'s ten fields against
+    <code>SDL_GPUGraphicsPipelineCreateInfo</code>'s nine.
+  </p>
+
+  <p>
+    That mirroring is not a claim to be taken on trust; it is a test. This lesson's harness
+    checks that our enumerators still have the same values as SDL's, which is what makes the
+    "rename" language honest:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">scratch/verify_42.log</span></figcaption>
+    <pre><code>=== G. The object model, counted ===
+  ok   engine::filter::nearest == SDL_GPU_FILTER_NEAREST
+  ok   engine::filter::linear == SDL_GPU_FILTER_LINEAR
+  ok   engine::address_mode::repeat == SDL_GPU_SAMPLERADDRESSMODE_REPEAT
+  ok   engine::address_mode::mirrored_repeat == SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT
+  ok   engine::address_mode::clamp_to_edge == SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE
+  ok   engine::cull_mode::none == SDL_GPU_CULLMODE_NONE
+  ok   engine::cull_mode::front == SDL_GPU_CULLMODE_FRONT
+  ok   engine::cull_mode::back == SDL_GPU_CULLMODE_BACK</code></pre>
+  </figure>
+
+  <p>
+    Keep that check. If SDL ever inserts an enumerator, this fails <em>here</em>, with a name and
+    a line number, instead of failing as a mesh that culls the wrong faces in a lesson six weeks
+    from now.
+  </p>
+
+  <p>
+    Now the four that are new — the device, the command buffer, the transfer buffer and the
+    fence. Look at what they have in common. A <strong>device</strong> is a connection to another
+    processor. A <strong>command buffer</strong> is a message to another processor. A
+    <strong>transfer buffer</strong> is shared ground because the other processor's memory is not
+    yours. A <strong>fence</strong> is how you learn that the other processor has finished. There
+    is no fifth idea hiding: all four are the same idea, which is that there are two machines
+    now, and your rasterizer never needed any of them because it was only ever one.
+  </p>
+
+  <h3 id="intuition-swapchain"><span class="num">2.4</span>Why the swapchain is borrowed</h3>
+
+  <p>
+    One object deserves separate treatment, because it behaves unlike the rest: the
+    <strong>swapchain texture</strong>.
+  </p>
+
+  <p>
+    Since Lesson 1.5 you have owned your framebuffer. You allocated it, you kept it for the whole
+    run, you cleared it at the top of each frame. A swapchain texture is the opposite in every
+    respect. You do not create it; you <em>ask for one</em> each frame, and give it back by
+    submitting the command buffer that referenced it. There are usually two or three of them and
+    you do not choose which you get. It is write-only — you cannot sample it, and you cannot read
+    it back. And you may be handed <code>nullptr</code>, which is not an error.
+  </p>
+
+  <p>
+    The reason is that the display owns these images, not you. At any instant one of them is
+    being scanned out to a physical panel, sixty times a second, whatever your program is doing.
+    Handing you that one would show the reader half of a half-drawn frame. So the display keeps a
+    small set and lends you one that it is <em>not</em> currently scanning — and if the GPU has
+    fallen behind and every image is spoken for, the honest answer to "may I have one?" is
+    "wait", which is what <code>SDL_WaitAndAcquireGPUSwapchainTexture</code> does, and what a
+    minimised window's <code>nullptr</code> means.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This is where a vsynced frame actually waits</span>
+    <p>
+      Not in <code>SDL_SubmitGPUCommandBuffer</code>, and not in a present call — SDL_GPU does not
+      have one, because presentation is implied by having acquired the image. In this lesson's
+      probe, running at 60 Hz, <strong>16.002 ms of a 16.667 ms frame</strong> is spent inside
+      the acquire. Your program is not slow. It is waiting for a monitor, which is a completely
+      different problem with completely different solutions, and knowing which one you are looking
+      at is most of performance work.
+    </p>
+  </div>
+
+  <h3 id="intuition-opengl"><span class="num">2.5</span>An honest sidebar: why not OpenGL</h3>
+
+  <p>
+    A fair question at this point is why we are learning fences and command buffers at all, when
+    OpenGL would let us write <code>glClear</code> and be done. It deserves a straight answer
+    rather than a fashion argument, and part of that answer is that OpenGL is genuinely still
+    good at some things.
+  </p>
+
+  <p>
+    <strong>What OpenGL gets right:</strong> it is the easiest 3D API to start in, because the
+    driver hides exactly the machinery this lesson is about. It runs on hardware from 2008. Its
+    tutorial literature is the best-covered ground in graphics — LearnOpenGL is a superb resource
+    and much of its <em>content</em> transfers directly to what we are doing. If your goal is a
+    small tool, a visualiser, or a plot window, OpenGL is a perfectly professional choice today.
+  </p>
+
+  <p>
+    <strong>What it costs:</strong>
+  </p>
+
+  <ul>
+    <li>
+      <strong>The state machine.</strong> OpenGL has one enormous global context; every call
+      mutates it, and a function's behaviour depends on the last few hundred calls. Lesson 4.1
+      §3.4 argued the opposite design — state gathered into an immutable object, validated once —
+      and measured the usual justification for it and found that one false. The real reason
+      stands: a pipeline object is validated and compiled once, at creation, rather than
+      re-checked at every draw.
+    </li>
+    <li>
+      <strong>The hidden asynchrony is still there.</strong> This is the important one, and it is
+      widely misunderstood. OpenGL does not remove the two-processor problem; it hides it. Your
+      <code>glDrawArrays</code> also returns before the work happens, and the driver silently
+      inserts synchronisation when you touch a resource it is still using. That is convenient
+      right up to the moment your frame time doubles for no visible reason, and then you are
+      debugging a synchronisation you cannot see and did not write.
+    </li>
+    <li>
+      <strong>It is deprecated on macOS</strong> — frozen at 4.1, from 2011, and formally
+      deprecated since 2018. It works today. Planning a five-year project around it does not.
+    </li>
+    <li>
+      <strong>SDL_GPU is SDL3's flagship path</strong>, and it maps onto Vulkan, D3D12 and Metal —
+      the three APIs that current hardware is actually designed for. The concepts in this lesson
+      are those APIs' concepts, so what you learn here transfers to all three.
+    </li>
+  </ul>
+
+  <p>
+    The honest summary: OpenGL is a fine way to draw a triangle and a poor way to learn how the
+    machine works, because its whole design is dedicated to not telling you. We are here to learn
+    how the machine works.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-fence"><span class="num">3.1</span>What a fence actually promises</h3>
+
+  <p>
+    A fence is an object that becomes signalled when every command in the submission that produced
+    it has finished executing. That is the whole definition, and the useful part is what it does
+    <em>not</em> say.
+  </p>
+
+  <p>
+    It does not say the commands ran in the order you wrote them — they may not have, as long as
+    the result is as if they did. It does not tell you how far along the work is; there is no
+    percentage. It is one bit: not yet, or done. And it applies to <em>one submission</em>, not to
+    the device — a second command buffer submitted afterwards has its own fence and its own
+    answer.
+  </p>
+
+  <p>
+    SDL gives you three ways to use that bit, and they are the three shapes of every
+    synchronisation problem you will meet:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>call</th><th>what it does</th><th>when you want it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>SDL_WaitForGPUFences</code></td>
+        <td>blocks this thread until signalled</td>
+        <td>a readback you cannot proceed without</td>
+      </tr>
+      <tr>
+        <td><code>SDL_QueryGPUFence</code></td>
+        <td>returns the bit without blocking</td>
+        <td>"is last frame's screenshot ready yet?" — checked each frame, acted on when true</td>
+      </tr>
+      <tr>
+        <td><code>SDL_WaitForGPUIdle</code></td>
+        <td>blocks until <em>everything</em> is done</td>
+        <td>shutdown, and almost nothing else</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 2.</span> The three ways to ask. Note that a fence you acquire must
+    be released with <code>SDL_ReleaseGPUFence</code>, which is easy to forget in an error path —
+    it is a reference-counted object, not a value.
+  </figcaption>
+  </figure>
+
+  <p>
+    Now, the cost. Waiting on a fence is not expensive in itself; the wait in §1's fix takes
+    under a millisecond. What is expensive is what waiting <em>prevents</em>: while the CPU is
+    blocked, it is not recording the next frame, so the GPU will have nothing to start on when it
+    finishes. You do not pay the duration of the wait. You pay the overlap you gave up.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — what a sync costs, in real numbers</span>
+    <p>
+      This lesson's harness (§E) submits the same work 32 times — 8 blits of a 1024×1024 texture
+      each, so about 0.184 ms of GPU work per submission — in two ways.
+    </p>
+    <ul>
+      <li><strong>Waiting on every fence:</strong> 9.438 ms total, <strong>0.295 ms</strong> per
+          submission.</li>
+      <li><strong>Waiting only on the last one:</strong> 5.904 ms total, <strong>0.184 ms</strong>
+          per submission.</li>
+    </ul>
+    <p>
+      The speedup is <strong>1.60×</strong>, and read the pipelined figure again: 0.184 ms per
+      submission is <em>exactly the GPU time per submission</em>. Pipelined, the GPU never idles,
+      so the total is the GPU work and nothing else. Stalled, each round trip adds 0.111 ms of
+      handshake — the CPU waiting for the GPU, then the GPU waiting for the CPU — and 32 of those
+      is the 3.5 ms difference.
+    </p>
+    <p>
+      Note what this does <em>not</em> say: it does not say a sync costs 1.6×. It says a sync costs
+      one round trip, and whether that matters depends entirely on whether the machine had
+      anything else to do. §4.5 measures a case where the answer is <em>nothing at all</em>, which
+      is exactly why this bug survives long enough to reach production.
+    </p>
+  </div>
+
+  <h3 id="theory-cycle"><span class="num">3.2</span>Cycling, and the bug it exists to prevent</h3>
+
+  <p>
+    Here is a problem you now have and did not have last lesson. You <code>memcpy</code> this
+    frame's pixels into the transfer buffer and record an upload. Next frame you do it again. But
+    is the GPU finished with the first upload? If it is not, your second <code>memcpy</code> is
+    overwriting bytes that a pending command is going to read — and the image on screen becomes
+    an interleaving of two frames.
+  </p>
+
+  <p>
+    Every low-level graphics API has this problem. Vulkan makes you solve it by hand, with
+    per-frame resources and explicit barriers, and it is where most people's first Vulkan renderer
+    goes wrong. SDL_GPU's answer is a single <code>bool</code> named <code>cycle</code>, and the
+    header states the rule plainly enough to be worth quoting: when a resource is used in a
+    pending command buffer it is <em>bound</em>, and if you write to a bound resource with
+    <code>cycle = true</code>, SDL hands you a different internal copy instead.
+  </p>
+
+  <p>
+    So <code>cycle</code> means: <em>if this is busy, give me a fresh one</em>. The resource is a
+    ring buffer wearing the disguise of a single object, and the handle you hold stays valid while
+    the storage underneath rotates.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode, and why you will not see it</span>
+    <p>
+      Pass <code>false</code> where you should pass <code>true</code> and everything looks perfect
+      — on a machine where the GPU keeps up. The corruption appears only when the GPU falls behind
+      far enough that last frame's upload has not been consumed, which means it appears on slower
+      hardware, under load, in someone else's hands. It shows as a horizontal band of the previous
+      frame, usually near the top, flickering.
+    </p>
+    <p>
+      Two rules keep you out of it. Cycle when you write to a resource that a previous frame may
+      still be reading — which for a per-frame upload path means <em>every frame</em>. And never
+      cycle a resource you are about to only partially update, because cycling makes the
+      <strong>whole</strong> resource undefined, not just the part you touched.
+    </p>
+  </div>
+
+  <h3 id="theory-flight"><span class="num">3.3</span>Frames in flight: latency against throughput</h3>
+
+  <p>
+    The swapchain has a small number of images, and SDL lets you set how many frames may be
+    pending on the GPU at once — <code>SDL_SetGPUAllowedFramesInFlight</code>, minimum 1, maximum
+    3, default 2. This is one of the few knobs in the whole API that changes how the program
+    <em>feels</em> rather than how fast it runs, and the reason is worth deriving rather than
+    memorising.
+  </p>
+
+  <p>
+    Let the CPU take <em>C</em> milliseconds to prepare a frame and the GPU take <em>G</em> to
+    execute it. With <em>F</em> frames allowed in flight:
+  </p>
+
+  <div class="eq">
+    \[ \text{throughput} \;=\; \frac{1}{\max(C,\,G)} \qquad\text{(for } F \ge 2\text{)},
+       \qquad \text{latency} \;\approx\; F \cdot \max(C,\,G) \]
+    <p class="eq-plain">
+      throughput = 1 / max(C, G) once F ≥ 2; latency ≈ F × max(C, G)
+    </p>
+  </div>
+
+  <p>
+    In prose, because the equation must never be the only carrier of the fact: <em>with two or
+    more frames in flight the CPU and the GPU overlap, so the frame rate is set by whichever of
+    them is slower — but the picture you are looking at was prepared F frames ago, so every extra
+    frame of overlap is an extra frame of delay between moving the mouse and seeing the result.</em>
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — three settings, by hand</span>
+    <p>
+      Take <code>C = 4 ms</code> and <code>G = 6 ms</code>, and a display fast enough not to be
+      the limit.
+    </p>
+    <ul>
+      <li>
+        <strong>F = 1.</strong> No overlap at all: the CPU prepares (4), hands over, waits for the
+        GPU (6), and only then starts the next. A frame every <code>4 + 6 = 10 ms</code> — 100 fps
+        — and latency is one frame, 10 ms.
+      </li>
+      <li>
+        <strong>F = 2.</strong> The CPU prepares frame N+1 while the GPU runs frame N. Every 6 ms a
+        frame completes — <code>1/max(4, 6)</code>, so 167 fps, a <strong>1.67× throughput
+        gain</strong> — and the CPU is idle 2 ms in every 6. Latency is about 12 ms.
+      </li>
+      <li>
+        <strong>F = 3.</strong> Throughput is unchanged at 167 fps, because the GPU was already
+        saturated and a third queued frame cannot make it faster. Latency rises to about 18 ms.
+      </li>
+    </ul>
+    <p>
+      That asymmetry is the whole design rule. <strong>Going from 1 to 2 buys real throughput;
+      going from 2 to 3 buys only latency</strong>, and buys it in the wrong direction. Two is the
+      default because two is where the gain stops. Raise it to three when frame times are erratic
+      and you would rather absorb a spike than drop a frame; lower it to one when input latency is
+      the product — a competitive shooter, or anything on a head-mounted display, where 18 ms of
+      queue is the difference between a game and a nausea generator.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Not a per-frame call</span>
+    <p>
+      SDL's documentation is explicit that <code>SDL_SetGPUAllowedFramesInFlight</code> "will stall
+      and flush the command queue to prevent synchronization issues". Call it once at a settings
+      change, never inside a loop — and expect the frame it runs in to produce nonsense
+      measurements, which is why the probe's log says so out loud when you press <kbd>3</kbd>.
+    </p>
+  </div>
+
+  <h3 id="theory-clear"><span class="num">3.4</span>A float clear becomes bytes</h3>
+
+  <p>
+    <code>SDL_GPUColorTargetInfo::clear_color</code> is an <code>SDL_FColor</code> — four floats.
+    Your framebuffer stores four bytes. Something has to convert, and the conversion is not the
+    one most people assume, so let us predict it and then measure it.
+  </p>
+
+  <p>
+    An <code>_UNORM</code> format stores a number in <code>[0, 1]</code> spread evenly across the
+    byte range: the stored byte is the float times 255, rounded. There is no transfer function
+    anywhere. A <code>_UNORM_SRGB</code> format stores the same range, but applies the sRGB
+    <em>encode</em> on write and the matching <em>decode</em> on read, so that shaders always work
+    in linear light while memory holds an encoding that spends more of its 256 codes in the dark
+    tones, where the eye can tell them apart. That is the argument of Lesson 1.6, implemented in
+    hardware.
+  </p>
+
+  <div class="eq">
+    \[ \text{byte}_{\text{UNORM}} = \mathrm{round}(255\,v), \qquad
+       \text{byte}_{\text{SRGB}} = \mathrm{round}\!\left(255\left(1.055\,v^{1/2.4} - 0.055\right)\right) \]
+    <p class="eq-plain">
+      UNORM: byte = round(255 × v). sRGB: byte = round(255 × (1.055 × v^(1/2.4) − 0.055)), for v
+      above 0.0031308.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — where does 0.5 land?</span>
+    <p><strong>Into an <code>R8G8B8A8_UNORM</code> target.</strong></p>
+    <ul>
+      <li><code>255 × 0.5 = 127.5</code>, which rounds to <strong>128</strong>.</li>
+    </ul>
+    <p><strong>Into an <code>R8G8B8A8_UNORM_SRGB</code> target.</strong></p>
+    <ul>
+      <li><code>0.5<sup>1/2.4</sup> = 0.5<sup>0.41667</sup> = e<sup>0.41667 × ln 0.5</sup>
+          = e<sup>−0.28881</sup> = 0.74915</code></li>
+      <li><code>1.055 × 0.74915 − 0.055 = 0.79035 − 0.055 = 0.73535</code></li>
+      <li><code>255 × 0.73535 = 187.51</code>, which rounds to <strong>188</strong>.</li>
+    </ul>
+    <p>
+      And the measurement, from clearing a 1×1 target of each format and downloading the byte:
+      <strong>128</strong> and <strong>188</strong>. Both predictions exact, and the sRGB one
+      matches <code>engine::linear_to_srgb_u8</code> — <em>our</em> function, written in Lesson
+      1.6 — to the code, at all five test values.
+    </p>
+  </div>
+
+  @@FIG_CLEAR@@
+
+  <p>
+    Figure 4 draws both answers. The single most useful sentence to take from it is this:
+    <strong>the clear colour is always linear light, and the format decides what gets stored.</strong>
+    You never encode a clear colour yourself. If you do — if you pass 188/255 to an sRGB target
+    because you wanted mid-grey — the hardware encodes your already-encoded value and you get 226,
+    which is the washed-out picture that Module 6 will teach you to recognise on sight.
+  </p>
+
+  <p>
+    Two smaller results from the same experiment, both worth knowing and neither worth guessing:
+    values outside <code>[0, 1]</code> are <strong>clamped, not wrapped</strong> (−0.5 → 0,
+    1.5 → 255), and the <code>_UNORM_SRGB</code> transfer function applies to the three colour
+    channels only. Alpha is linear in both formats, because alpha is a coverage fraction rather
+    than a colour and encoding it would be meaningless.
+  </p>
+
+  <h3 id="theory-fit"><span class="num">3.5</span>The letterbox, by hand</h3>
+
+  <p>
+    One piece of arithmetic stands between our 320×180 framebuffer and the window: they are not
+    the same size, and the window can be resized to any shape at all. Stretching to fill would
+    make every circle in the scene an ellipse, so we fit the largest rectangle of the source's
+    aspect ratio inside the target and centre it.
+  </p>
+
+  <p>
+    The comparison is best done without dividing. The source is proportionally wider than the
+    target when <code>src_w / src_h &gt; dst_w / dst_h</code>, and multiplying both sides by the
+    positive quantity <code>src_h × dst_h</code> turns that into
+    <code>src_w × dst_h &gt; dst_w × src_h</code> — the same question, in integers, with no
+    rounding and no division by zero.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — 320×180 into a 1024×768 window</span>
+    <ul>
+      <li>Is the source proportionally wider? <code>320 × 768 = 245,760</code> against
+          <code>1024 × 180 = 184,320</code>. Yes, so we fill the <em>width</em>.</li>
+      <li><code>w = 1024</code>, and <code>h = 1024 × 180 / 320 = 576</code>.</li>
+      <li><code>x = (1024 − 1024) / 2 = 0</code>, <code>y = (768 − 576) / 2 = 96</code>.</li>
+    </ul>
+    <p>
+      So the image lands at <code>(0, 96)</code> at 1024×576, with 96-pixel bars above and below.
+      Check it: 1024/576 = 1.778 = 16:9, the source's aspect ratio, preserved exactly.
+      <code>fit_centred</code> returns precisely this, and §H of the harness asserts it along with
+      the two-bars-at-the-side case and both degenerate inputs.
+    </p>
+  </div>

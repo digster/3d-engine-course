@@ -1,0 +1,282 @@
+  <h2 id="sweeps">3. What a second sweep buys</h2>
+
+  <p>
+    One crate, four points, warm starting off and the position correction off so that iteration is
+    the only variable. Ask the solver for <em>n</em> sweeps from an identical settled state and
+    read off the residual — the worst <code>|u_n − target|</code> over the four points after the
+    last sweep.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — one crate on a floor, four contact points, cold</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">   iters    residual m/s     ratio to previous
+       1      2.0296e-02            -
+       2      9.9972e-03       0.4926 per iteration
+       4      3.0210e-03       0.5497 per iteration
+       8      2.3918e-04       0.5305 per iteration
+      16      1.6755e-06       0.5379 per iteration
+      32      1.1418e-08       0.7321 per iteration   (at the float floor)
+      64      1.1420e-08       1.0000 per iteration   (at the float floor)
+   mean contraction over the 4 rows above the float floor: 0.5276</code></pre>
+  </div>
+
+  <p>
+    Each row doubles the iteration count, so the per-iteration factor is the <em>n</em>-th root of
+    the row-to-row one. It comes out at 0.53 and stays there over four decades of residual, which
+    is precisely the claim §2 derived: the error is multiplied by a constant matrix each sweep, so
+    it decays geometrically. The last two rows are excluded from the mean and the reason is not
+    tidiness — at 1.14&nbsp;×&nbsp;10⁻⁸ the residual has stopped being a measurement of the solver
+    and started being a measurement of <code>float</code>. Including them would report a
+    contraction of 0.64 where the solver's is 0.53.
+  </p>
+
+  <p class="worked">
+    <strong>Worked: choosing an iteration count from an accuracy target.</strong> You want the
+    residual under 10⁻⁴ m/s, which is a tenth of a millimetre per second — a body that would drift
+    six millimetres in a minute. Starting from 2.03&nbsp;×&nbsp;10⁻², you need to shrink by a
+    factor of 203, and each sweep buys 1/0.53 = 1.89. So
+    <code>n = ln(203)/ln(1.89) = 5.30/0.636 = 8.3</code> sweeps. The table says eight gets you to
+    2.39&nbsp;×&nbsp;10⁻⁴ and sixteen to 1.68&nbsp;×&nbsp;10⁻⁶, which brackets the prediction
+    exactly where it should.
+  </p>
+
+  <p>
+    And the residual is not an abstraction. Let the same crate run for fifteen seconds with no
+    position correction, so that all that holds it up is the velocity solve, and the residual
+    becomes a distance:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — and what the residual DOES, over 15 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">   iters    sink mm     final residual m/s
+       1     113.720       2.3728e-02
+       2      27.360       1.4022e-02
+       4       7.250       3.2872e-03
+       8       1.121       2.4168e-04
+      16       1.171       1.6315e-06
+      32       2.155       6.5957e-09</code></pre>
+  </div>
+
+  <p>
+    Read the first four rows and the last two separately, because they are measuring different
+    things. From one pass to eight the sink falls by a hundred-fold and tracks the residual: that
+    is the creep being solved. From eight to thirty-two it stops falling and wobbles around a
+    millimetre or two — which is <em>not</em> the solver getting worse. It is the arrival depth,
+    which iteration has never had anything to do with, arriving early. §6 is about that number and
+    this is the first place it shows itself.
+  </p>
+
+  <h3>The control</h3>
+
+  <p>
+    If iteration were helping for some reason other than the one claimed — a warm-up effect, an
+    accumulator settling, something numerical — then a contact with <em>nothing to iterate
+    against</em> would improve too. A sphere on a floor is one point of one manifold. There is no
+    second impulse to disturb the first, so the very first pass should be exact and every later one
+    should have nothing to do:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — control</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">  CONTROL, one sphere = one point = nothing to iterate against:
+     1 pass 2.5247e-13   16 passes 2.5247e-13   improvement 1.0000x</code></pre>
+  </div>
+
+  <p>
+    2.5&nbsp;×&nbsp;10⁻¹³ is zero as far as a <code>float</code> is concerned, and sixteen passes
+    reproduce it to the last bit. <strong>A four-point manifold is already a system</strong> — you
+    do not need two bodies to need a solver, and that is worth internalising before the stacks
+    arrive, because it means the thing you are debugging when a single crate misbehaves is the same
+    thing you will be debugging when a pyramid does.
+  </p>
+
+  <h2 id="warm">4. Warm starting, and the bug it was hiding</h2>
+
+  <p>
+    Eight sweeps of a four-point manifold is nothing. Eight sweeps of a five-crate tower's twenty
+    points, every frame, is still nothing. The trouble is that a tower needs far more than eight
+    from a cold start, and the reason is §2's last observation: a Gauss–Seidel sweep carries
+    information across <em>one</em> contact, so a chain of five contacts needs roughly five sweeps
+    before the bottom of it has heard about the top, and then several more before the answer
+    settles.
+  </p>
+
+  <p>
+    But we are not starting cold. On the previous frame the solver worked out exactly how hard each
+    point had to push, and on this frame — for a stack that has not moved — the answer is almost
+    the same. That answer is already in the manifold. It has been since 8.7, and the machinery to
+    get it there took four lessons:
+  </p>
+
+  @@FIG_WARM@@
+
+  <p>
+    The loop closes in <code>prepare_contacts</code>: with
+    <code>solver_config::warm_start</code> set, each constraint's accumulator begins at the
+    impulse the matched point inherited, and <code>warm_start_contacts</code> applies those
+    impulses to the bodies <em>once</em> before the sweeps begin. The solve therefore starts from
+    the velocity the scene would have if last frame's answer were still right — and on a settled
+    stack it very nearly is.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§B — a five-crate tower, and what warm starting is worth</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">  A FIVE-CRATE TOWER, settled, asked to reach a residual of 1e-04:
+     cold (every accumulator starts at zero):  400 iterations   (the limit; it did not get there)
+     warm (each starts from last frame's):      89 iterations
+
+  AT THE EIGHT ITERATIONS THIS ENGINE SHIPS, over 20 s, no position
+  correction, so all that holds the tower up is the velocity solve:
+     warm    top crate sink mm    deepest mm    final residual
+     no             2019.78       199.919      2.7324e-04
+     yes              40.14         9.165      4.6848e-07
+
+  THE MATCH RATE on a settled tower, 600 frames: 11708 of 11994 points
+  inherited an impulse (97.62%).</code></pre>
+  </div>
+
+  <p>
+    Two metres of sink is not a tower that settles badly; it is a tower that has fallen over and
+    into the floor. The warm one holds within four centimetres of where it was built, at the same
+    eight iterations and the same cost — because the impulses are <em>already there</em>. Warm
+    starting is free in time and costs one <code>bool</code>.
+  </p>
+
+  <h3>What it is, exactly, and what it is not</h3>
+
+  <p>
+    A warm start is an <strong>initial guess</strong>. It does not make the solve more accurate; it
+    starts the iteration closer to the answer. That distinction is not philosophy, because it
+    predicts something testable: a guess that is <em>wrong</em> should be worse than no guess at
+    all. Scale every inherited impulse by a known factor before the solve and watch:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§B — control: a guess that is wrong by a known amount</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     scale    iters to 1e-04    residual at 8    top crate m/s after 1 s
+       0.0               400       2.3484e-02                    0.5975
+       0.5               400       1.3542e-02                    0.3209
+       1.0                89       1.3309e-04                    0.0048
+       2.0               400       3.8701e-02                    0.6080
+       5.0                52       2.7670e-01                    1.5402</code></pre>
+  </div>
+
+  <p>
+    Doubling the inherited impulse is worse than discarding it: 2.0 fails to converge in 400
+    sweeps where 0.0 also fails, but with a larger residual and six times the leftover motion. That
+    is the prediction confirmed, and it is also the argument for the accumulator clamp — a warm
+    start hands the solver a number it has no reason to trust, and the projection onto
+    <code>j ≥ 0</code> is what stops an untrustworthy number becoming an unbounded one.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And then read the ×5 row, because it is the warning that goes with every convergence
+      number in this lesson.</strong> Fifty-two iterations looks like the second-best result in the
+      table. The last column says the tower is moving at 1.54&nbsp;m/s: the solver has thrown the
+      stack into the air, and a solver that has launched everything has nothing left to disagree
+      with itself about. <strong>The residual measures consistency, not correctness.</strong> Every
+      time this lesson quotes one, there is a second measurement beside it saying where the bodies
+      actually are.
+    </p>
+  </div>
+
+  <h3>The knob 8.7 left at zero</h3>
+
+  <p>
+    <code>manifold_config::keep_slop</code> keeps clipped points that are slightly
+    <em>separated</em> rather than only ones that penetrate, and 8.7 left it at zero so that every
+    number that lesson printed was a real overlap. Its doc comment says a solver wants a small
+    positive value, because a point a tenth of a millimetre clear this frame is a contact next
+    frame, and having it already in the manifold with its impulse warm is what stops a stack
+    breathing. That claim is now testable:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§B — <code>keep_slop</code>, 600 frames of a settled five-crate tower</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     keep_slop    mean points/frame    inherited %
+         0.000               19.990         97.62
+         0.002               19.985         98.09
+         0.010               20.000         98.17</code></pre>
+  </div>
+
+  <p>
+    Half a percent. It is real, it is in the direction the doc comment predicted, and it is much
+    smaller than that comment implies — twenty points a frame out of a possible twenty means the
+    manifolds were essentially complete already, because the position correction is holding the
+    tower at a depth where all four corners of every contact are genuinely overlapping. The knob
+    earns its default of zero. Turn it up when your contacts are marginal; do not turn it up
+    hoping to fix a stack.
+  </p>
+
+  <h3>And the bug warm starting was hiding</h3>
+
+  <p>
+    Here is the thing that came out of building this, and it is three lessons old.
+  </p>
+
+  <p>
+    <code>contact_point::tangent_impulse</code> is two floats. 8.9's doc comment calls them "the
+    accumulated tangential impulses in the batch's tangent basis", and that is exactly what they
+    are: <em>coordinates</em>. A coordinate is meaningless without the frame it was measured in,
+    and the frame was never stored anywhere. Each frame, <code>prepare_contacts</code> calls
+    <code>tangent_basis(normal, t1, t2)</code> and gets a fresh basis — and
+    <code>tangent_basis</code>, reasonably enough, seeds its cross product from whichever axis the
+    normal is <em>least</em> aligned with, by comparing the magnitudes of the normal's components.
+  </p>
+
+  <p>
+    On a crate resting on a floor the normal is very nearly <code>(0, 1, 0)</code>. Which means the
+    choice of basis comes down to a comparison between <code>|n.x|</code> and <code>|n.z|</code>,
+    two numbers that are both about 10⁻⁵ and wander around each other from frame to frame. When
+    they cross, the basis rotates by ninety degrees — and last frame's friction, applied as though
+    nothing had happened, acts <em>sideways</em>.
+  </p>
+
+  @@FIG_BASIS@@
+
+  <div class="listing">
+    <figcaption><span class="path">§B — the basis flip, over 20 s of a ten-crate tower</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     manifold-frames whose basis rotated by more than 30 deg:
+     113 of 11830 (0.96%), worst rotation 134.6 deg
+
+     basis stored    sideways drift mm    top crate y    standing
+     yes                        155.43         4.7030         yes
+     no (pre-8.10)              379.54         4.6923         yes</code></pre>
+  </div>
+
+  <p>
+    The fix is two dot products and it is exact: store the basis on the manifold alongside the
+    impulses, rebuild the world-space friction impulse in the frame it was measured in, and
+    re-measure it in this frame's. <code>contact_manifold</code> gains a
+    <code>vec3 tangent[2]</code>, <code>write_back</code> fills it, <code>carry_impulses</code>
+    carries it, and <code>prepare_contacts</code> rotates. Twenty-four bytes per manifold.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The bug class is worth more than the bug.</strong> Nothing in the type system was ever
+      going to catch this: both versions are two floats called <code>tangent_impulse</code>, both
+      compile, both look right in a debugger, and the symptom — a tower that leans — names no
+      subsystem at all. What found it was a <em>probe</em>: having decided the drift was suspicious,
+      compute the basis independently in the harness and count how often it moves. Whenever you
+      cache a quantity that lives in a frame, cache the frame. 8.9 learned the same lesson in the
+      opposite direction, when the restitution artifact turned out to be about <em>when</em> a
+      velocity was read rather than what it was.
+    </p>
+  </div>
+
+  <p>
+    And be honest about the size of it: at 24 iterations the fix takes the tower's sideways drift
+    from 380&nbsp;mm to 155, which is a factor of 2.4 and not a factor of ten. At eight iterations
+    the ten-crate tower falls over either way, for the reason §14 measures. This is a correctness
+    fix — the old code was applying a cached vector in the wrong frame, which is simply wrong — and
+    the measurement is what keeps the claim proportionate.
+  </p>

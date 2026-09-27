@@ -1,0 +1,73 @@
+<svg viewBox="0 0 760 378" role="img" aria-labelledby="l617f6-t l617f6-d">
+  <title id="l617f6-t">A chain has nothing to alias; a tree does</title>
+  <desc id="l617f6-d">On the left, this engine's frame drawn as a linear chain in which every intermediate is alive while the next is produced. On the right, a branching frame in which two half-resolution scratch targets are used one after the other and can therefore share one texture.</desc>
+  <defs>
+    <marker id="e-i-l617f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Why the saving is not there: a chain, against a tree.</text>
+<text x="40" y="56" class="xs t-bad" text-anchor="start">OUR FRAME — a CHAIN</text>
+<rect x="48" y="74" width="120" height="28" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="48" y="74" width="120" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="108" y="92" class="xs mono" text-anchor="middle">scene</text>
+<line x1="108" y1="104" x2="108" y2="114" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="48" y="116" width="120" height="28" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="48" y="116" width="120" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="108" y="134" class="xs mono" text-anchor="middle">bright</text>
+<line x1="108" y1="146" x2="108" y2="156" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="48" y="158" width="120" height="28" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="48" y="158" width="120" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="108" y="176" class="xs mono" text-anchor="middle">down x5</text>
+<line x1="108" y1="188" x2="108" y2="198" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="48" y="200" width="120" height="28" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="48" y="200" width="120" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="108" y="218" class="xs mono" text-anchor="middle">up x5</text>
+<line x1="108" y1="230" x2="108" y2="240" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="48" y="242" width="120" height="28" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="48" y="242" width="120" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="108" y="260" class="xs mono" text-anchor="middle">resolve</text>
+<text x="198" y="150" class="xs muted" text-anchor="start">every stage's output is</text>
+<text x="198" y="164" class="xs muted" text-anchor="start">the next stage's input,</text>
+<text x="198" y="178" class="xs muted" text-anchor="start">and the pyramid's six</text>
+<text x="198" y="192" class="xs muted" text-anchor="start">levels are ALL live at</text>
+<text x="198" y="206" class="xs muted" text-anchor="start">the turn. Nothing is</text>
+<text x="198" y="220" class="xs muted" text-anchor="start">dead while anything</text>
+<text x="198" y="234" class="xs muted" text-anchor="start">else is alive.</text>
+<line x1="390" y1="46" x2="390" y2="348" class="grid" stroke-width="1.2"/>
+<text x="420" y="56" class="xs t-ok" text-anchor="start">A FRAME THAT WOULD PAY — a TREE</text>
+<rect x="410" y="74" width="120" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="410" y="74" width="120" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.1"/>
+<text x="470" y="91" class="xs mono" text-anchor="middle">fill source</text>
+<line x1="470" y1="102" x2="470" y2="124" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="410" y="128" width="120" height="26" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="410" y="128" width="120" height="26" rx="3" fill="none" stroke="#f0961e" stroke-width="1.1"/>
+<text x="470" y="145" class="xs mono" text-anchor="middle">effect A</text>
+<line x1="470" y1="156" x2="470" y2="178" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="410" y="182" width="120" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="410" y="182" width="120" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.1"/>
+<text x="470" y="199" class="xs mono" text-anchor="middle">A -&gt; source</text>
+<line x1="470" y1="210" x2="470" y2="232" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="410" y="236" width="120" height="26" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="410" y="236" width="120" height="26" rx="3" fill="none" stroke="#f0961e" stroke-width="1.1"/>
+<text x="470" y="253" class="xs mono" text-anchor="middle">effect B</text>
+<line x1="470" y1="264" x2="470" y2="286" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<rect x="410" y="290" width="120" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="410" y="290" width="120" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.1"/>
+<text x="470" y="307" class="xs mono" text-anchor="middle">composite</text>
+<rect x="600" y="128" width="116" height="26" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="600" y="128" width="116" height="26" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.1"/>
+<text x="658" y="145" class="xs mono" text-anchor="middle">scratch A</text>
+<line x1="532" y1="141" x2="596" y2="141" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<text x="658" y="168" class="xs muted" text-anchor="middle">live [1, 2]</text>
+<rect x="600" y="236" width="116" height="26" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<rect x="600" y="236" width="116" height="26" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.1"/>
+<text x="658" y="253" class="xs mono" text-anchor="middle">scratch B</text>
+<line x1="532" y1="249" x2="596" y2="249" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l617f6)"/>
+<text x="658" y="276" class="xs muted" text-anchor="middle">live [3, 4]</text>
+<text x="420" y="336" class="xs muted" text-anchor="start">A dies before B is born, so BOTH land</text>
+<text x="420" y="350" class="xs muted" text-anchor="start">on pool slot 1 and 131,072 bytes come</text>
+<text x="420" y="364" class="xs muted" text-anchor="start">back (§7.3).</text>
+</svg>

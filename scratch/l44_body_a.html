@@ -1,0 +1,527 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-03-shader-toolchain.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.3 — The Shader Toolchain</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-05-vertex-buffers.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.5 — Vertex Buffers and Layouts</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.4</div>
+    <h1>The First Triangle</h1>
+    <p class="deck">
+      Three vertices, one pipeline object, one draw call — and the first pixel in this course
+      whose colour was computed by hardware rather than by code you wrote. It is more machinery
+      than you expect, every piece of it earns its place, and at the end we check the result
+      against your own rasterizer, pixel by pixel.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-03-shader-toolchain.html">4.3 — The Shader Toolchain</a>,
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="02-02-triangle-edge-functions.html">2.2 — Triangles</a>,
+          <a href="03-04-back-face-culling.html">3.4 — Back-face Culling</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_pipeline.hpp</code>, <code>src/gfx/gpu_pipeline.cpp</code>,
+            <code>src/gfx/gpu_buffer.hpp</code>, <code>src/gfx/gpu_buffer.cpp</code>,
+            <code>src/main.cpp</code>, <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A gradient triangle, drawn by the GPU, sharing a window with the software
+            rasterizer's picture — and a measurement that finally answers the question Lesson 4.3
+            left open.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…build an <code>SDL_GPUGraphicsPipeline</code>, and say what each of its nine fields
+          decides.</li>
+      <li>…get geometry onto the device and describe its layout so the shader receives what you
+          meant.</li>
+      <li>…record a draw call, and explain why it needs a render pass, a pipeline and a binding
+          before it can say "three vertices".</li>
+      <li>…say where the shader compile happens — with a number, and with the confidence that
+          comes from having predicted it a lesson earlier.</li>
+      <li>…recognise the two silent failures that make a first triangle invisible, and test for
+          each.</li>
+      <li>…compare a hardware rasterizer with your own and account for every pixel of the
+          difference.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-why">Why so much machinery for one triangle</a></li>
+          <li><a href="#intuition-pipeline">The pipeline is the missing argument list</a></li>
+          <li><a href="#intuition-pointers">A struct full of pointers</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-fields">Nine fields, and what each decides</a></li>
+          <li><a href="#theory-layout">The layout, and the contract nothing checks</a></li>
+          <li><a href="#theory-draw">What a draw call actually says</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-desc">Describing the pipeline</a></li>
+          <li><a href="#impl-buffer">Three vertices on the device</a></li>
+          <li><a href="#impl-frame">The draw, in the frame</a></li>
+          <li><a href="#impl-compile">Where the compile was hiding</a></li>
+          <li><a href="#impl-pixels">Checking it in pixels</a></li>
+          <li><a href="#impl-compare">Against your own rasterizer</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    In Lesson 2.2 you drew your first triangle. Here is the entire call:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Lesson 2.2, and every lesson since</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">engine::fill_triangle(fb, a, b, c, style);</code></pre>
+  </figure>
+
+  <p>
+    One function, five arguments, and the pixels appear. You have three GPU objects now — a
+    device, four shaders, a way to get bytes onto the hardware — so the corresponding call ought
+    to be about as short. It is not. There is no <code>SDL_DrawTriangle</code>, and the call that
+    does exist cannot be made yet:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="c">C</span>
+    </figcaption>
+    <pre><code class="lang-cpp">extern SDL_DECLSPEC void SDLCALL SDL_DrawGPUPrimitives(
+    SDL_GPURenderPass *render_pass,
+    Uint32 num_vertices,
+    Uint32 num_instances,
+    Uint32 first_vertex,
+    Uint32 first_instance);</code></pre>
+  </figure>
+
+  <p>
+    Read it for what is <em>missing</em>. No vertices. No colours. No shader. No target. Four
+    integers and a render pass, and every one of those integers is an index into something the
+    call does not mention.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The gap</span>
+    <p>
+      <code>fill_triangle</code> takes its arguments <em>at the call</em>. A GPU draw call takes
+      almost none of them: everything it needs was <strong>bound beforehand</strong> — the
+      geometry to a slot, the shaders and all the render state to a <em>pipeline object</em>, the
+      output to a render pass. The draw call says only "three vertices, once, from the start",
+      and the answer to "which three, drawn how, into what" is state you set up earlier.
+    </p>
+    <p>
+      So the work of this lesson is not the draw. It is <strong>assembling everything the draw
+      refuses to ask for</strong>, and doing it in an order where each piece is legal.
+    </p>
+  </div>
+
+  <p>
+    That is genuinely more code than a beginner expects, and it is the reason "my first triangle"
+    is a rite of passage in every modern graphics API rather than a five-minute exercise. It also
+    has a second, quieter difficulty. Lesson 4.3 established that SDL checks a shader's entry
+    point and not its resource counts; this lesson finds the same temperament in pipeline
+    creation, where <strong>most wrong descriptions are accepted without complaint</strong> and
+    the triangle simply does not appear.
+  </p>
+
+  <p>
+    And there is a debt to settle. Lesson 4.3 measured <code>SDL_CreateGPUShader</code> at eight
+    microseconds, observed that this cannot possibly include compiling a shader, and wrote down a
+    prediction about where the compile really happens. §4.4 of this lesson answers it — and the
+    answer comes with a second finding that nearly went into print as a fact.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-why"><span class="num">2.1</span>Why so much machinery for one triangle</h3>
+
+  <p>
+    Count what <code>fill_triangle</code> actually needed, by the end of Module 3. It took a
+    framebuffer, three vertices and a <code>fill_style</code> — and that <code>fill_style</code>
+    had grown to ten fields: interpolation mode, shading mode, blend space, cull mode, a light, a
+    material, a specular model, an eye position, a texture binding, an encode mode.
+  </p>
+
+  <p>
+    Lesson 4.1 counted those ten against <code>SDL_GPUGraphicsPipelineCreateInfo</code>'s nine and
+    observed that they are the same object. This lesson is where that observation becomes a call.
+    The machinery is not new; <strong>it is your own <code>fill_style</code>, plus the two things
+    a second processor forces you to make explicit</strong>: where the geometry lives, and what
+    the output looks like.
+  </p>
+
+  <p>
+    So the honest way to read this lesson's code is as a translation. Everything in it existed in
+    Module 3, in a form you wrote:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>what you wrote</th><th>where it goes now</th><th>lesson</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>style.cull</code>, and the winding test</td>
+          <td><code>rasterizer_state.cull_mode</code>, <code>.front_face</code></td><td>3.4</td></tr>
+      <tr><td><code>style.shade</code> and the fragment body</td>
+          <td>the fragment shader, from Lesson 4.3</td><td>3.6–3.8</td></tr>
+      <tr><td>the vertex loop in <code>collect_triangles</code></td>
+          <td>the vertex shader</td><td>2.8–2.10</td></tr>
+      <tr><td><code>mesh::vertices</code>, an array in RAM</td>
+          <td>an <code>SDL_GPUBuffer</code>, and a layout describing it</td><td>2.12</td></tr>
+      <tr><td>the depth test</td>
+          <td><code>depth_stencil_state</code> — off today, on in 4.7</td><td>3.1</td></tr>
+      <tr><td><code>framebuffer</code>, chosen by being passed in</td>
+          <td>the render pass's colour target, whose <em>format</em> the pipeline must match</td>
+          <td>1.5</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 1.</span> Nothing in this lesson is a new idea. What changes is
+    <em>when</em> each decision is made: all of them before the draw, none of them at it.
+  </figcaption>
+  </figure>
+
+  <h3 id="intuition-pipeline"><span class="num">2.2</span>The pipeline is the missing argument list</h3>
+
+  <p>
+    Here is the shortest way to think about a pipeline object, and it survives contact with the
+    details: <strong>it is the argument list of <code>fill_triangle</code>, hoisted out of the
+    call and frozen.</strong>
+  </p>
+
+  <p>
+    Our fill took its style per call, so it could change per triangle — and Lesson 3.8 used
+    exactly that, rebinding a material per triangle, while noting in the code that
+    <em>a GPU cannot do this</em>. Now you can see why not. The state is not a parameter the
+    hardware reads; it is compiled into the machine code that runs. Changing it means a different
+    program, which means a different pipeline object.
+  </p>
+
+  <p>
+    Lesson 4.1 measured the usual justification for that design — that baking state in spares the
+    inner loop a branch — and found it <strong>false</strong>: hoisting our own per-pixel branch
+    on draw-constant state measured 0.93×, which is nothing. The real reason was validation and
+    compilation, and this lesson is where you can finally watch that happen, with a stopwatch.
+  </p>
+
+  <h3 id="intuition-pointers"><span class="num">2.3</span>A struct full of pointers</h3>
+
+  <p>
+    One practical hazard, worth meeting before it costs you an afternoon.
+    <code>SDL_GPUGraphicsPipelineCreateInfo</code> does not <em>contain</em> its vertex layout; it
+    points at it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="c">C</span>
+    </figcaption>
+    <pre><code class="lang-cpp">typedef struct SDL_GPUVertexInputState
+{
+    const SDL_GPUVertexBufferDescription *vertex_buffer_descriptions;
+    Uint32 num_vertex_buffers;
+    const SDL_GPUVertexAttribute *vertex_attributes;
+    Uint32 num_vertex_attributes;
+} SDL_GPUVertexInputState;</code></pre>
+  </figure>
+
+  <p>
+    Three of the create-info's fields are arrays reached through pointers — the buffer
+    descriptions, the attributes, and the colour target descriptions. Which means the obvious
+    helper function is a bug:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the obvious thing, and it is wrong</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_GPUGraphicsPipelineCreateInfo make_info()   // NEVER do this
+{
+    SDL_GPUVertexAttribute attrs[2] = { /* ... */ };   // dies at the closing brace
+
+    SDL_GPUGraphicsPipelineCreateInfo info{};
+    info.vertex_input_state.vertex_attributes = attrs;  // ...and this points at it
+    return info;
+}</code></pre>
+  </figure>
+
+  <p>
+    The compiler says nothing. The returned struct is a set of perfectly valid-looking fields and
+    a pointer into a dead stack frame, and what happens next depends on what the next function
+    call happened to write there. That is why this lesson's <code>pipeline_desc</code> is a
+    <em>class</em> rather than a function: it owns the arrays, so the pointers live exactly as
+    long as the description does.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — returning a struct that points at yourself</span>
+    <p>
+      This is the same hazard as returning a <code>std::string_view</code> of a local
+      <code>std::string</code>, or a <code>std::span</code> of a local array, and it is worth
+      recognising as a shape rather than as three separate rules: <strong>a type that holds a
+      non-owning reference must not outlive what it refers to</strong>, and returning it by value
+      is the easiest way to make it try.
+    </p>
+    <p>
+      C++ gives you no help here. The fix is to make ownership explicit — put the arrays and the
+      struct that points at them in one object, so they have one lifetime. Our
+      <code>mesh_data</code>/<code>mesh</code> pair from Lesson 3.5 solved the same problem the
+      same way.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-fields"><span class="num">3.1</span>Nine fields, and what each decides</h3>
+
+  @@FIG_FIELDS@@
+
+  <p>
+    Figure 1 is the whole create-info. Nine fields at the top level and fifty-three once the
+    nested state structs are expanded — which is the count Lesson 4.1 arrived at from the other
+    direction, by asking what <code>fill_style</code> would have to become.
+  </p>
+
+  <p>
+    Three of them deserve attention now, because they are the three that produce silence rather
+    than errors when they are wrong.
+  </p>
+
+  <p>
+    <strong>The rasterizer state</strong> holds the cull mode and the winding, and every enum in it
+    has its first enumerator at zero. So a zero-initialised rasterizer state means "counter-
+    clockwise is front-facing, cull nothing" — which is why a forgotten <code>cull_mode</code>
+    shows up as <em>no culling at all</em> rather than as a mistake. We set all three explicitly,
+    every time, and §3.3 measures what happens when the winding disagrees with them.
+  </p>
+
+  <p>
+    <strong>The target format</strong> is not a choice. It must equal the format of the texture the
+    pipeline will render into, and for the swapchain that is negotiated between the display, the
+    compositor and the driver — which is why Lesson 4.2 asked for it and logged it. Note that our
+    <code>pipeline_desc</code> takes it from the device rather than accepting it as a parameter:
+    a value that must match something is better read from that something than passed in by a
+    caller who might be guessing.
+  </p>
+
+  <p>
+    <strong>The vertex input state</strong> is the subject of §3.2, and of the whole of Lesson 4.5.
+  </p>
+
+  <p>
+    Now the more interesting question: which of these does SDL check? The bottom of Figure 1 is
+    four creation attempts, and the answer is <em>one of them</em>.
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>description</th><th>result</th><th>what happens next</th></tr></thead>
+    <tbody>
+      <tr><td>correct</td><td>created</td><td>the triangle appears</td></tr>
+      <tr><td>a colour format the target does not have</td><td><strong>created</strong></td>
+          <td>the frame completes and draws — on this backend</td></tr>
+      <tr><td>an attribute at a location the shader never declared</td><td><strong>created</strong></td>
+          <td>the attribute is ignored</td></tr>
+      <tr><td>no vertex layout, but the shader has inputs</td><td>REFUSED</td>
+          <td><em>"Vertex function has input attributes but no vertex descriptor was set"</em></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 2.</span> Measured. Only the last is caught — and when SDL does
+    refuse, the driver's message is excellent, naming the exact problem. The lesson is not that
+    the API is careless; it is that <strong>creation succeeding tells you very little</strong>, so
+    the checks have to be yours.
+  </figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">One mistake that is worse than an error</span>
+    <p>
+      Two of these trials are missing from the harness, and the reason is worth knowing. Swapping
+      the two shaders between slots is not caught either — but it does not fail politely. A
+      <em>vertex</em> shader in the fragment slot is refused with a Metal error about an
+      interrupted compiler connection, after which the next pipeline creation in that process
+      crashed; and a <em>fragment</em> shader in the vertex slot segfaults immediately.
+    </p>
+    <p>
+      Both were reproduced three times in an isolated one-trial program before being written down.
+      SDL_GPU does not validate which stage a shader was compiled for, so keep the two straight
+      yourself — the type system will not, because both are <code>SDL_GPUShader*</code>.
+    </p>
+  </div>
+
+  <h3 id="theory-layout"><span class="num">3.2</span>The layout, and the contract nothing checks</h3>
+
+  <p>
+    The GPU receives a block of bytes and a shader that declares typed inputs. Something has to
+    say which bytes are which, and that is the vertex input state: a <em>pitch</em> per buffer,
+    and an <em>attribute</em> per shader input.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — our vertex, byte by byte</span>
+    <p>
+      The struct is seven floats:
+    </p>
+    <figure class="listing">
+      <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+      <pre><code class="lang-cpp">struct gpu_vertex
+{
+    float x, y, z;      // CLIP SPACE already: triangle.vert applies no matrix.
+    float r, g, b, a;   // linear, 0..1
+};</code></pre>
+    </figure>
+    <ul>
+      <li><code>sizeof(gpu_vertex)</code> = 7 × 4 = <strong>28 bytes</strong>, and that is the
+          <em>pitch</em>: the distance from one vertex to the next.</li>
+      <li><code>x</code> sits at offset <strong>0</strong>, is three floats, and feeds shader
+          input location <strong>0</strong> — which is <code>TEXCOORD0</code>, which is
+          <code>position</code> in <code>triangle.vert.hlsl</code>.</li>
+      <li><code>r</code> sits at offset <strong>12</strong> (three floats in), is four floats, and
+          feeds location <strong>1</strong> — <code>TEXCOORD1</code>, <code>colour</code>.</li>
+    </ul>
+    <p>
+      Which is exactly what the description says, with <code>offsetof</code> doing the arithmetic
+      so that inserting a field later cannot silently invalidate a hand-written 12:
+    </p>
+    <figure class="listing">
+      <figcaption><span class="path">src/main.cpp</span> <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+      <pre><code class="lang-cpp">    desc.vertex_buffer(0, sizeof(gpu_vertex))
+        .attribute(0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(gpu_vertex, x))
+        .attribute(1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(gpu_vertex, r));</code></pre>
+    </figure>
+  </div>
+
+  <p>
+    Now notice what has just happened. <strong>The same vertex is declared in two places, in two
+    languages, and nothing checks that they agree.</strong> The HLSL says
+    <code>float3 position : TEXCOORD0; float4 colour : TEXCOORD1;</code>. The C++ says 28 bytes,
+    FLOAT3 at 0, FLOAT4 at 12. If those descriptions drift apart — a field inserted, a semantic
+    renumbered, a <code>float3</code> that became a <code>float4</code> — you get geometry that is
+    wrong rather than absent, which is much harder to diagnose.
+  </p>
+
+  <p>
+    Lesson 4.3's reflection file already knows the shader's half of this contract; its
+    <code>inputs</code> array lists every location with its type. Exercise 4.4.4 uses it to check
+    the C++ half against it at startup, which is the sort of assertion that turns a mystery into a
+    line number.
+  </p>
+
+  <h3 id="theory-draw"><span class="num">3.3</span>What a draw call actually says</h3>
+
+  <p>
+    With the pipeline built and the buffer bound, the draw is finally legal — and it says less than
+    you would think:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_DrawGPUPrimitives(draw_pass, 3, 1, 0, 0);</code></pre>
+  </figure>
+
+  <p>
+    Three vertices; one instance; start at vertex zero; start at instance zero. The
+    <em>meaning</em> of those three vertices — whether they are a triangle, three points, or two
+    ends of a line — is not here either. It is <code>primitive_type</code>, back in the pipeline,
+    and the difference is measurable from one buffer:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>primitive type</th><th>pixels covered</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><code>TRIANGLELIST</code></td><td>20,808</td><td>the filled triangle</td></tr>
+      <tr><td><code>LINESTRIP</code></td><td>410</td><td>two edges of it, one pixel wide</td></tr>
+      <tr><td><code>POINTLIST</code></td><td><strong>0</strong></td><td>see below</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 3.</span> The same three vertices, the same shaders, the same draw
+    call — read three ways. Changing the reading means a different pipeline, which is why Lessons
+    2.1 and 2.2 could get away with being different <em>functions</em>.
+  </figcaption>
+  </figure>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify</span>
+    <p>
+      <code>POINTLIST</code> drew <strong>zero</strong> pixels here, and this lesson does not
+      claim to know why with certainty. The likely cause is that Metal requires a vertex shader to
+      write a point size (<code>[[point_size]]</code>, reached from HLSL through the
+      <code>PSIZE</code> semantic) before it will rasterize points, and ours does not — so the
+      points have no extent. ⚠ VERIFY against your own backend before relying on point rendering;
+      the measurement above is real, the explanation is a hypothesis, and the two are being kept
+      apart deliberately.
+    </p>
+  </div>

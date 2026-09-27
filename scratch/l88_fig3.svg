@@ -1,0 +1,45 @@
+<svg viewBox="0 0 900 510" role="img" aria-labelledby="f88c-t f88c-d">
+  <title id="f88c-t">The broadphase contract</title>
+  <desc id="f88c-d">Nested sets showing that the broadphase's output must contain the true pairs.</desc>
+  <defs>
+    <marker id="e-i-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grn-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amb-f88c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<ellipse cx="250" cy="150" rx="200" ry="112" fill="none" stroke="#8f918a" stroke-width="1.4" stroke-dasharray="5 4"/>
+<ellipse cx="250" cy="158" rx="132" ry="78" fill="none" stroke="#f0961e" stroke-width="1.8"/>
+<ellipse cx="250" cy="172" rx="66" ry="44" fill="none" stroke="#5ac878" stroke-width="2.0"/>
+<text x="250" y="58" class="xs muted" text-anchor="middle">every pair — n(n−1)/2</text>
+<text x="250" y="100" class="xs" text-anchor="middle">what the broadphase reports</text>
+<text x="250" y="176" class="xs" text-anchor="middle">pairs that really touch</text>
+<line x1="346.00" y1="124.00" x2="490.00" y2="104.00" stroke="#f0961e" stroke-width="1.6" marker-end="url(#e-amb-f88c)"/>
+<text x="500" y="100" class="sm" text-anchor="start">A FALSE POSITIVE lives here.</text>
+<text x="500" y="120" class="xs muted" text-anchor="start">It costs exactly one narrow-phase call — 432 ns —</text>
+<text x="500" y="137" class="xs muted" text-anchor="start">and the answer that comes back is correct. The</text>
+<text x="500" y="154" class="xs muted" text-anchor="start">broadphase is allowed as many of these as it likes.</text>
+<line x1="290.00" y1="208.00" x2="490.00" y2="204.00" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-red-f88c)"/>
+<text x="500" y="198" class="sm" text-anchor="start">A FALSE NEGATIVE cannot live here.</text>
+<text x="500" y="218" class="xs muted" text-anchor="start">There is no stage downstream that could notice. The</text>
+<text x="500" y="235" class="xs muted" text-anchor="start">pair is simply never asked about, the objects pass</text>
+<text x="500" y="252" class="xs muted" text-anchor="start">through each other, and the bug presents as</text>
+<text x="500" y="269" class="xs muted" text-anchor="start">“sometimes things fall through the floor” with no</text>
+<text x="500" y="286" class="xs muted" text-anchor="start">line of code to blame.</text>
+<text x="60" y="341" class="xs muted" text-anchor="start">§3 — checked against the oracle</text>
+<text x="464" y="341" class="xs muted" text-anchor="end">measured</text>
+<line x1="60" y1="349.0" x2="470" y2="349.0" class="grid" stroke-width="1.0"/>
+<text x="60" y="366.0" class="xs" text-anchor="start">pairs the grid missed</text>
+<text x="464" y="366.0" class="xs mono" text-anchor="end">0</text>
+<text x="60" y="383.0" class="xs" text-anchor="start">frames the two sets matched</text>
+<text x="464" y="383.0" class="xs mono" text-anchor="end">12 / 12</text>
+<text x="60" y="400.0" class="xs" text-anchor="start">true pairs over those frames</text>
+<text x="464" y="400.0" class="xs mono" text-anchor="end">5,230</text>
+<text x="60" y="426" class="xs muted" text-anchor="start">Every approximation in this file is therefore made in one direction on purpose: round the cell range outward, keep a</text>
+<text x="60" y="443" class="xs muted" text-anchor="start">proxy the grid cannot place rather than dropping it, and reject a candidate only when a cheap exact test says so. The</text>
+<text x="60" y="460" class="xs muted" text-anchor="start">grid in fact achieves equality rather than containment, because it runs the AABB test itself — but it is the</text>
+<text x="60" y="477" class="xs muted" text-anchor="start">containment that is the contract, and it is the containment 8.9's speculative margin will start leaning on.</text>
+</svg>

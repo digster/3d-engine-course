@@ -1,0 +1,951 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="03-08-shading-models.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">3.8 — Flat, Gouraud and Per-Pixel Shading</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="03-10-profiling-capstone.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">3.10 — Profiling, and the Module 3 Capstone</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 3 — Software Rasterizer II: Depth, Light, Texture · Lesson 3.9</div>
+    <h1>Texture Mapping and Bilinear Filtering</h1>
+    <p class="deck">
+      Every colour this engine has ever produced came from a rule. Today one comes from an array
+      somebody painted — and the four lines that change in the fill loop are the least
+      interesting part of the lesson. The interesting part is the three questions you have to
+      answer before <code>image[y][x]</code> is a defensible thing to write.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4–5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-02-perspective-correct.html">3.2 — Perspective-Correct Interpolation</a>,
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="03-08-shading-models.html">3.8 — Flat, Gouraud and Per-Pixel Shading</a>,
+          <a href="01-06-colour.html">1.6 — Colour, and an Honest Teaser of sRGB</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd>
+          <code>src/gfx/texture.hpp</code> <em>(new)</em>,
+          <code>src/gfx/texture.cpp</code> <em>(new)</em>,
+          <code>src/gfx/mesh.hpp</code>, <code>src/gfx/mesh.cpp</code>,
+          <code>src/gfx/raster.hpp</code>, <code>src/gfx/raster.cpp</code>,
+          <code>src/main.cpp</code>, <code>CMakeLists.txt</code>
+        </dd>
+
+        <dt>Milestone</dt>
+        <dd>
+          A sampler that matches SDL_GPU's conventions field for field, a textured and lit floor,
+          and a 1:1 blit that is <strong>bit-identical</strong> to the image it came from — which
+          turns out to be a surprisingly strong test of everything else.
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what a texel <em>is</em> — a sample, not a square — and derive the half-texel
+          offset from that sentence rather than memorising it.</li>
+      <li>…state where texture coordinate (0,&nbsp;0) lives in SDL_GPU, cite the header that says
+          so, and explain why an OBJ file disagrees.</li>
+      <li>…place the uv flip at the one point in the pipeline where it belongs, and justify why
+          neither the parser nor the sampler is that point.</li>
+      <li>…implement the three address modes, and name a real use for each — including why
+          <code>i % n</code> is the wrong modulus.</li>
+      <li>…derive bilinear filtering as two lerps then one, and show the order does not
+          matter.</li>
+      <li>…explain why the sRGB decode belongs <em>before</em> the filter and not after, and say
+          what the wrong order costs in light.</li>
+      <li>…say what "albedo" means precisely enough that texture × light stops being a
+          convention and becomes a consequence.</li>
+      <li>…recognise minification aliasing, say why bilinear filtering cannot fix it, and name
+          what does.</li>
+      <li>…spot a benchmark that measures the wrong thing — including the one this lesson nearly
+          published.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-measure">An image is a set of measurements</a></li>
+          <li><a href="#intuition-three">Three questions before it is a lookup</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-space">Texel space</a></li>
+          <li><a href="#theory-origin">Where (0,&nbsp;0) is, and who disagrees</a></li>
+          <li><a href="#theory-address">Addressing: three answers, all correct</a></li>
+          <li><a href="#theory-half">The half texel, derived</a></li>
+          <li><a href="#theory-bilinear">Bilinear as a double lerp</a></li>
+          <li><a href="#theory-decode">Decode before filter</a></li>
+          <li><a href="#theory-albedo">Texture × light, and what albedo means</a></li>
+          <li><a href="#theory-minify">What this lesson does not solve</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-texture">The image, and what its texels mean</a></li>
+          <li><a href="#impl-wrap">Addressing, in one function</a></li>
+          <li><a href="#impl-sample">The two samplers</a></li>
+          <li><a href="#impl-fill">Four lines in the fill loop</a></li>
+          <li><a href="#impl-flip">The flip, at the import boundary</a></li>
+          <li><a href="#impl-demo">Four keys, and two comparisons</a></li>
+          <li><a href="#impl-cost">A benchmark that measured the wrong thing</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is every source of colour in this engine as it stands, in the order we built them.
+    Lesson 2.2 filled a triangle with a constant. Lesson 2.4 blended three corner colours.
+    Lesson 3.2 added <code>checker_at(u, v)</code>, which computes a checkerboard from a
+    formula. Lessons 3.6 through 3.8 evaluated a lighting equation. Five sources, and every one
+    of them is a <em>rule</em>: a short piece of arithmetic that turns a position into a colour.
+  </p>
+
+  <p>
+    Rules are wonderful. They cost no memory, they are exact at any magnification, and
+    <code>checker_at</code> is the reason we could check uv layouts for seven lessons without an
+    artist. But there is a category of thing a rule cannot express, and it is most of what you
+    see on a screen: wood grain, a face, rust on a bolt, a logo, lichen on stone. You cannot
+    write the formula for a face. The formula <em>is</em> the face — several million numbers of
+    it — and at that point you have stopped writing a rule and started storing an image.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The gap, precisely</span>
+    <p>
+      Lesson 3.8 shaded every surface in the scene per fragment, with one exception it named at
+      the time: <strong>the floor</strong>. It stayed unlit, and the reason was not an oversight.
+      <code>shading::uv_checker</code> computes a finished colour from a rule, and there is no
+      <em>albedo</em> in it — nothing for a quantity of light to multiply. The floor has been the
+      only surface in this scene that light does not touch since Lesson 3.6.
+    </p>
+  </div>
+
+  <p>
+    So there are two things to fix, and they turn out to be the same fix. We need a colour that
+    comes from data rather than arithmetic, and we need that colour to be the kind of quantity a
+    light can multiply. Both arrive the moment the fragment reads a <em>texture</em>.
+  </p>
+
+  <p>
+    And then the actual work starts. Because a texture is an array — 64 by 64 numbers, say —
+    and the question the fill loop asks is <em>"what colour is at u = 0.31, v = 0.77?"</em>
+    That question has no direct answer. There is no entry in the array at 0.31. The array holds
+    4,096 numbers and the question has infinitely many possible inputs, so every texture lookup
+    that has ever run has been an act of <strong>reconstruction</strong>: inventing a continuous
+    function from a discrete set of samples, and doing it fast enough to run once per pixel.
+  </p>
+
+  <p>
+    That reconstruction is what this lesson is about. The array index is four lines of code. The
+    three questions you have to answer before those four lines mean anything are the rest of it.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-measure">2.1 An image is a set of measurements</h3>
+
+  <p>
+    Think about how a photograph is made. Light falls on a grid of sensor wells for a fraction of
+    a second, and each well reports one number: how much light landed <em>there</em>. Not "how
+    much light landed in this little square region" — although that is closer to the physical
+    truth for a real sensor — but, in the model every graphics system uses, <strong>how much
+    light there was at that point</strong>.
+  </p>
+
+  <p>
+    So a 64×64 image is 4,096 measurements of a continuous scene, taken on a regular grid. And
+    the natural mental picture — a grid of little coloured squares, like a mosaic — is
+    <em>wrong</em> in a way that produces real bugs. A mosaic tile has an extent, and a value
+    that is constant over that extent. A measurement has a <strong>position</strong> and no
+    extent at all.
+  </p>
+
+  <p>
+    Figure 1 draws both pictures over the same four numbers. Look at where the samples sit.
+  </p>
+
+@@FIG_SAMPLE@@
+
+  <p>
+    This is the sentence to carry out of this lesson, because half its content follows from it
+    mechanically:
+  </p>
+
+  <blockquote>
+    <p>A texel is a <strong>sample</strong>, not a square. Its value belongs at its centre.</p>
+  </blockquote>
+
+  <p>
+    Four samples spread evenly across the unit interval do not sit at 0, ¼, ½, ¾ — they sit at
+    ⅛, ⅜, ⅝, ⅞. The interval is divided into four <em>equal shares</em>, and the sample is in the
+    middle of its share. That is the half-texel offset, and notice that we have not written a
+    formula yet; it is a consequence of what the numbers are.
+  </p>
+
+  <p>
+    Notice the second thing Figure 1 shows, too, which is where the reconstruction
+    <em>stops</em>. Joining the samples with straight lines gives a value everywhere between the
+    first and last sample — but outside them, there is nothing to interpolate <em>with</em>.
+    That gap is not a rounding detail. It is a whole design decision, and it has a name.
+  </p>
+
+  <h3 id="intuition-three">2.2 Three questions before it is a lookup</h3>
+
+  <p>
+    Before <code>image[y][x]</code> is a defensible thing to write, three questions have to be
+    settled. Each has a visible, nameable failure if you get it wrong, and each is settled
+    independently of the other two.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The three questions a texture lookup must answer</caption>
+      <thead>
+        <tr><th>Question</th><th>Answer</th><th>The failure if you get it wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Where is (0, 0)?</strong></td>
+          <td>Top-left, <code>v</code> increasing downwards. Not a taste question — it is what
+              SDL_GPU does, and §3.2 quotes the header.</td>
+          <td>Everything is upside down. Obvious on a face, invisible on a checkerboard, and
+              therefore usually discovered late.</td>
+        </tr>
+        <tr>
+          <td><strong>What is outside [0, 1]?</strong></td>
+          <td>Three answers, all useful: repeat, mirror, clamp. §3.3.</td>
+          <td>A smeared streak running to the horizon, or a hairline seam along every tile
+              boundary.</td>
+        </tr>
+        <tr>
+          <td><strong>What is between texels?</strong></td>
+          <td>Either the nearest one, or a weighted blend of four. §3.4 and §3.5.</td>
+          <td>A blocky mosaic — or, if you forget the half texel, an image that is soft
+              <em>and</em> shifted, in a way nearest-neighbour sampling cannot show you.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Those three questions are exactly the fields of a GPU sampler object. That is not a
+    coincidence and it is worth taking seriously: <code>SDL_GPUSamplerCreateInfo</code> has
+    <code>min_filter</code>, <code>mag_filter</code>, <code>mipmap_mode</code>,
+    <code>address_mode_u</code>, <code>address_mode_v</code>, <code>address_mode_w</code>, and
+    nine more fields for things we will not need until Module 6. Our sampler will mirror it —
+    same names, same enumerator order — so that Module 4's port is a rename rather than a
+    re-education.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Where the image comes from</span>
+    <p>
+      We are <strong>not</strong> writing an image decoder this lesson, and the boundary is
+      deliberate rather than a shortcut. Decoding PNG or JPEG is a <em>compression</em> problem,
+      not a graphics one: it is Huffman codes and DEFLATE and colour-space chunks, and none of it
+      teaches you anything about rendering. <code>stb_image</code> is the approved answer (course
+      conventions §4) and it arrives with the asset pipeline.
+    </p>
+    <p>
+      Everything in this lesson takes an array of texels and does not care where the array came
+      from — which is precisely why generating it in memory costs us nothing. Our test images are
+      a checkerboard and an orientation chart, both computed at startup.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-space">3.1 Texel space</h3>
+
+  <p>
+    A texture coordinate <code>u</code> runs 0 to 1 across the image, whatever the image's
+    resolution — that independence is the whole point, and it is what lets you swap a 64×64
+    texture for a 4096×4096 one without touching a mesh. To index the array we need to convert
+    that into a coordinate measured in texels, and there is exactly one sensible way:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ x_{\text{texel}} = u \cdot N \]</span>
+    <span class="eq-plain">x_texel = u * N</span>
+  </div>
+
+  <p>
+    In this coordinate, the image occupies <code>[0, N]</code>, integers are the
+    <strong>boundaries between texels</strong>, and texel <code>i</code> occupies the interval
+    <code>[i, i+1)</code> — with its <em>value</em> living at the midpoint <code>i + 0.5</code>.
+    Both facts matter and they answer different questions:
+  </p>
+
+  <ul>
+    <li><strong>"Which texel does this point land in?"</strong> — the nearest-neighbour question.
+        The answer is <code>floor(x_texel)</code>, and the half texel plays no part in it.</li>
+    <li><strong>"Which two texel <em>centres</em> does this point lie between?"</strong> — the
+        bilinear question. Here the half texel is unavoidable, and §3.4 does it properly.</li>
+  </ul>
+
+  <div class="worked">
+    <span class="label">Worked example — an 8-texel row, sampled at u = 0.31</span>
+    <p>
+      <code>x_texel = 0.31 × 8 = 2.48</code>. The point is 2.48 texels in from the left edge.
+    </p>
+    <ul>
+      <li><strong>Nearest:</strong> <code>floor(2.48) = 2</code>. The point lies inside texel 2's
+          interval <code>[2, 3)</code>, so the answer is texel 2's value.</li>
+      <li><strong>Bilinear:</strong> texel centres are at 2.5 and 1.5, so 2.48 lies between the
+          centres of texels <strong>1 and 2</strong> — not 2 and 3. It is 0.98 of the way from
+          centre 1 to centre 2, so the answer is <code>0.02 × texel[1] + 0.98 × texel[2]</code>.
+      </li>
+    </ul>
+    <p>
+      Note that the two disagree about which texels are even involved, and that is correct. They
+      are answering different questions.
+    </p>
+  </div>
+
+  <p>
+    One thing worth flagging before we go further. <code>std::floor</code>, never a cast to
+    <code>int</code> — a cast truncates <em>toward zero</em>, so <code>-0.4</code> and
+    <code>+0.4</code> would both land in texel 0 and the image would grow a doubled column
+    straddling the origin. This is the same argument <code>checker_at</code> made in Lesson 3.2,
+    and it matters for the same reason: texture coordinates go negative routinely, the moment a
+    mesh is tiled or a uv is offset or animated.
+  </p>
+
+  <h3 id="theory-origin">3.2 Where (0, 0) is, and who disagrees</h3>
+
+  <p>
+    Lesson 3.5 loaded texture coordinates from an OBJ file, stored them exactly as written, and
+    left a question open in the STATE block — flagged, deliberately, because nothing yet could
+    make the answer <em>observable</em>:
+  </p>
+
+  <blockquote>
+    <p>
+      "⚠ THE uv ORIGIN IS STILL OPEN: exporters write v bottom-up, SDL_GPU samples top-down; we
+      store the file's numbers and settle the flip in 3.9, where a sampler first makes it
+      observable."
+    </p>
+  </blockquote>
+
+  <p>
+    A sampler is the first thing in this engine that can tell the difference, so this is where it
+    gets settled. And it gets settled by <strong>reading the header</strong>, not by trying both
+    and keeping the one that looks right. From the "Coordinate System" section of
+    <code>SDL3/SDL_gpu.h</code>, verbatim:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>Texture Coordinates:</strong> The top-left corner has an x,y coordinate of
+      <code>(0, 0)</code> and extends to the bottom-right corner at <code>(1.0, 1.0)</code>.
+      +Y is down.
+    </p>
+  </blockquote>
+
+  <p>
+    So <code>v = 0</code> is the <strong>top</strong> row of the image and <code>v</code>
+    increases downwards. That is consistent with everything else on the screen side of the
+    projection: the framebuffer counts rows downward from the top (Lesson 1.5), and the viewport
+    transform flips y on the way there (Lesson 2.11). One boundary, crossed once, in a place with
+    a name.
+  </p>
+
+  <p>
+    Wavefront OBJ does not agree. It writes <code>vt</code> with the origin at the
+    <strong>bottom</strong> left and <code>v</code> increasing upwards — the older,
+    mathematician's convention, and what every exporter emits. Figure 2 shows the same
+    coordinate landing on two different colours.
+  </p>
+
+@@FIG_ORIGIN@@
+
+  <div class="worked">
+    <span class="label">Worked example — the same number, two answers</span>
+    <p>
+      Take the orientation chart: a 64×64 image whose top-left quadrant is red, top-right green,
+      bottom-left blue, bottom-right amber. Ask both conventions for the colour at
+      <code>(u, v) = (0.25, 0.25)</code>.
+    </p>
+    <ul>
+      <li><strong>Texture space:</strong> v = 0.25 is a quarter of the way <em>down</em> from the
+          top, so the row is <code>0.25 × 64 = 16</code>, in the top half. Column 16, also in the
+          left half. → <strong>red</strong>.</li>
+      <li><strong>OBJ space:</strong> v = 0.25 is a quarter of the way <em>up</em> from the
+          bottom, i.e. row <code>(1 − 0.25) × 64 = 48</code>, in the bottom half. →
+          <strong>blue</strong>.</li>
+    </ul>
+    <p>
+      Confirmed against the real sampler in <code>verify_39</code> §G, which probes all four
+      quadrants and the white corner mark: <code>(0.02, 0.02)</code> returns
+      <code>0.89 0.86 0.81</code>, the near-white mark, so <code>v = 0</code> really is the top.
+    </p>
+  </div>
+
+  <p>
+    The transform between them is a single subtraction, <code>v → 1 − v</code>. The interesting
+    question is not <em>what</em> but <strong>where</strong>, and there are three candidate homes
+    with only one right answer.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Three places the uv flip could live</caption>
+      <thead><tr><th>Candidate</th><th>Verdict</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>In the OBJ parser</td>
+          <td><strong>No</strong></td>
+          <td>Lesson 3.5 settled that a loader stores what the file says, so two loads of a file
+              are reproducible and diffable. A parser is not a place where data may quietly
+              differ from its source.</td>
+        </tr>
+        <tr>
+          <td>In the sampler</td>
+          <td><strong>No</strong></td>
+          <td>The sampler is SDL_GPU's, and SDL_GPU will not flip anything for us. A sampler that
+              "helpfully" flipped would be correct in this renderer and wrong in Module 4's —
+              the worst possible place to hide a convention.</td>
+        </tr>
+        <tr>
+          <td>In the <strong>import step</strong></td>
+          <td><strong>Yes</strong></td>
+          <td>The boundary where somebody else's data becomes ours. This is where every real
+              engine puts it: Assimp calls it <code>aiProcess_FlipUVs</code>; Unity and Unreal do
+              it on import and never mention it again.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    One property makes that safe, and it is not obvious. <code>1 − v</code> is a reflection of
+    the entire <code>v</code> axis about 0.5, so what does it do to a <em>tiled</em> coordinate
+    like 2.5 — two and a half tiles up? It gives −1.5, whose fractional part under
+    <code>repeat</code> is 0.5: half way down a tile, which is the same point of the same tile.
+    <strong>The flip commutes with wrapping.</strong> That is what lets it be applied once, at
+    load, and then forgotten. Measured over 100,000 random coordinates in
+    <code>verify_39</code> §G: worst disagreement <code>6.5e-06</code>, which is float rounding
+    and nothing else.
+  </p>
+
+  <h3 id="theory-address">3.3 Addressing: three answers, all correct</h3>
+
+  <p>
+    What is texel 5 of a 4-texel image? The question sounds like a mistake, but every tiled
+    surface asks it constantly — our floor's uvs run from roughly −3 to +3, because they are
+    computed from world position divided by a cell size. There are three useful answers, and a
+    real sampler offers all three <em>per axis</em>, because a strip of road wants to repeat
+    along its length and clamp across its width.
+  </p>
+
+@@FIG_ADDRESS@@
+
+  <p>
+    Read the periods off Figure 3. <code>repeat</code> cycles with period 4.
+    <code>mirrored_repeat</code> cycles with period 8 — <code>0,1,2,3,3,2,1,0</code> — doubling
+    the edge texel at every fold, which is exactly what makes it continuous there.
+    <code>clamp_to_edge</code> has no period at all: it holds 0 to the left and 3 to the right,
+    forever.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">The wrong modulus</span>
+    <p>
+      <code>i % n</code> is <strong>not</strong> the repeat rule. C++'s <code>%</code> truncates
+      toward zero, so <code>-1 % 4</code> is <code>-1</code>, not <code>3</code>. Index −1 then
+      falls out of range, gets clamped by whatever safety net you have, and paints a one-texel
+      stripe along precisely the boundary a tiling texture was supposed to cross invisibly.
+    </p>
+    <p>
+      The fix is one line — <code>m = i % n; if (m &lt; 0) m += n;</code> — and adding
+      <code>n</code> once is enough, because <code>i % n</code> is already in
+      <code>(−n, n)</code>.
+    </p>
+  </div>
+
+  <p>
+    Mirroring has a one-line definition worth knowing, because it makes the implementation
+    obvious: <strong>index <code>−1−k</code> maps to the same texel as index <code>k</code></strong>.
+    That is what "reflect about the boundary at 0" means, and it forces the doubled edge texel
+    rather than making it a choice. <code>verify_39</code> §B checks that identity over every
+    index from −32 to 32.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — mirrored_repeat, i = 5, n = 4</span>
+    <p>
+      Period <code>2n = 8</code>. Fold: <code>m = 5 % 8 = 5</code>. Since <code>5 ≥ 4</code> we
+      are in the reflected half, so the answer is <code>2n − 1 − m = 8 − 1 − 5 =
+      <strong>2</strong></code>.
+    </p>
+    <p>
+      Check it against the reflection identity: index 5 should mirror index
+      <code>−1 − 5 = −6</code>… and going the other way, <code>−1 − 2 = −3</code>, which the
+      table gives as 2 as well. The sequence reads <code>… 2 3 3 2 …</code> across the fold at
+      index 4, and the repeated 3 is the edge texel appearing on both sides of its own boundary.
+    </p>
+  </div>
+
+  <p>
+    There is one more thing to say about addressing, and it is the detail that separates a
+    sampler that seams from one that does not. Under bilinear filtering, the address mode must be
+    applied to <strong>each of the four texel indices independently</strong>, after the
+    neighbours are chosen. Wrapping the <em>coordinate</em> first and then taking neighbours puts
+    both neighbours inside the image, so a repeating texture blends the last texel with the last
+    texel instead of with the first — a hairline seam along every tile boundary, present only in
+    the filtered mode, and very easy to blame on the geometry.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Measured</span>
+    <p>
+      With the indices addressed independently, sampling either side of <code>u = 1</code> gives
+      the identical colour to the last bit: <code>verify_39</code> §B reports a difference of
+      <code>0.0000000</code> across both <code>u = 0</code> and <code>u = 1</code>. And under
+      <code>clamp_to_edge</code>, sampling far outside at <code>u = 2.5</code> returns the edge
+      texel <em>exactly</em> — difference <code>0.0000000</code> — which is the smear, working as
+      designed.
+    </p>
+  </div>
+
+  <h3 id="theory-half">3.4 The half texel, derived</h3>
+
+  <p>
+    Now the part that produces more texture bugs than everything else in this lesson combined.
+    We know from §2.1 that texel <code>i</code>'s value lives at texel-space coordinate
+    <code>i + 0.5</code>. Bilinear filtering blends the two texels whose <em>centres</em> bracket
+    the sample point. So: given <code>x_texel</code>, which two centres bracket it, and by how
+    much?
+  </p>
+
+  <p>
+    The centres are at <code>0.5, 1.5, 2.5, …</code> — which is an annoying set to take a floor
+    of. So shift the coordinate so that the centres land on the integers:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ x_c = x_{\text{texel}} - \tfrac{1}{2} = u \cdot N - \tfrac{1}{2} \]</span>
+    <span class="eq-plain">x_c = u * N - 0.5</span>
+  </div>
+
+  <p>
+    and now the whole thing falls out with no special cases at all: <code>i₀ = floor(x_c)</code>
+    is the left texel, <code>i₀ + 1</code> is the right one, and <code>t = x_c − i₀</code> is how
+    far along we are between them. One subtraction buys the entire indexing scheme.
+  </p>
+
+  <p>
+    Leave that subtraction out — and this is the plausible mistake, the one you make if you
+    picture texels as little squares whose corners are at their indices — and every sample lands
+    half a texel from where it belongs. Figure 4 measures exactly that on a step image.
+  </p>
+
+@@FIG_HALF@@
+
+  <div class="worked">
+    <span class="label">Worked example — sampling exactly at a texel centre</span>
+    <p>
+      An 8-texel row, sampled at texel 3's centre: <code>u = (3 + 0.5) / 8 = 0.4375</code>.
+      What <em>should</em> come back is texel 3's value, unmodified — a filter that alters a
+      value at the point that value was measured is not a filter, it is a bug.
+    </p>
+    <ul>
+      <li><strong>With the offset:</strong> <code>x_c = 0.4375 × 8 − 0.5 = 3.5 − 0.5 = 3.0</code>.
+          So <code>i₀ = 3</code> and <code>t = 0</code>. The weights are <code>(1, 0)</code> and
+          the answer is texel 3, <strong>exactly</strong>.</li>
+      <li><strong>Without it:</strong> <code>x_c = 3.5</code>, so <code>i₀ = 3</code> and
+          <code>t = 0.5</code>. The answer is <code>½ × texel[3] + ½ × texel[4]</code> — a blend
+          of two texels at the one place where no blending should happen at all.</li>
+    </ul>
+    <p>
+      Swept over every texel centre of a 16×16 image, <code>verify_39</code> §C measures the
+      worst error as <strong>0.000000000</strong> with the offset and <strong>0.625</strong>
+      without it. Not "close" — zero.
+    </p>
+  </div>
+
+  <p>
+    So the error is a blur. It is also a <em>shift</em>, and Figure 4 pins the size of it: on a
+    step image whose edge sits at <code>u = 0.5</code>, the correct ramp crosses half brightness
+    at exactly <code>u = 0.5000</code>, and the offsetless one crosses at <code>0.4375</code>.
+    The gap is <code>0.0625</code> of the image, which on eight texels is
+    <strong>half of one texel</strong> — measured by bisection to four decimal places, and it
+    comes out <code>−0.5000</code>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Why this survives in real codebases</span>
+    <p>
+      <strong>Nearest-neighbour sampling cannot see this error at all.</strong> Nearest asks
+      "which texel contains this point", and shifting your idea of where the value lives inside
+      a texel does not change which texel a point is in. <code>verify_39</code> §C sweeps 160,801
+      sample positions: under nearest, <strong>0</strong> of them change. Under bilinear,
+      <strong>160,632</strong> of them do — 99.9% of the image.
+    </p>
+    <p>
+      So a texture pipeline can carry this bug for years while everything looks sharp and
+      correct, and reveal it the day somebody enables filtering — at which point the symptom is
+      "filtering makes everything look soft and slightly misaligned", and the filter gets blamed.
+    </p>
+  </div>
+
+  <p>
+    One more consequence, and it is the reason this lesson's headline test is what it is. Get the
+    half texel right and a texture drawn at <strong>1:1</strong> — one screen pixel per texel —
+    comes back <em>bit-identical</em> to the source image, because every sample lands exactly on
+    a centre and every set of weights is <code>(1, 0, 0, 0)</code>. Get it wrong and a 1:1 blit
+    is soft. That is the bug behind every UI toolkit whose icons look faintly blurry, and it is
+    checked in <code>verify_39</code> §A: <strong>0 of 4,096</strong> texels differ, under
+    <em>both</em> filters, against <strong>1,779</strong> for the control.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The half texel exists at both ends</span>
+    <p>
+      Constructing that 1:1 test taught something the first draft got backwards. This rasterizer
+      evaluates a fragment's attributes at the pixel's <strong>integer</strong> coordinate — the
+      edge functions in <code>fill_triangle</code> are stepped over integers — so pixel
+      <code>i</code>'s sample point is <code>i</code>. A texel's value lives at
+      <code>(i + 0.5) / N</code>. Lining those up requires offsetting the quad's uvs by half a
+      texel, so <code>u</code> runs from <code>0.5/N</code> to <code>1 + 0.5/N</code>, not from
+      0 to 1.
+    </p>
+    <p>
+      The half-unit question is not a texture quirk. It is what happens <em>whenever</em> a
+      continuous coordinate is mapped onto a discrete grid, and this engine has the same question
+      at the framebuffer end that it has at the texture end. Lesson 2.11 answered one; this one
+      answers the other; a 1:1 blit is exact only when both are answered consistently.
+    </p>
+  </div>
+
+  <h3 id="theory-bilinear">3.5 Bilinear as a double lerp</h3>
+
+  <p>
+    In two dimensions the sample point is surrounded by four texel centres rather than bracketed
+    by two, and the construction is the obvious one done twice. Interpolate along <code>u</code>
+    on the top pair. Interpolate along <code>u</code> on the bottom pair. Then interpolate
+    between <em>those two results</em> along <code>v</code>. Three lerps, and the name says so:
+    <strong>bi</strong>-linear.
+  </p>
+
+@@FIG_LERP@@
+
+  <p>
+    Write it out. With <code>c₀₀, c₁₀, c₀₁, c₁₁</code> the four texels and <code>tu, tv</code>
+    the two fractions:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{top} = (1-t_u)\,c_{00} + t_u\,c_{10}, \qquad
+                              \text{bot} = (1-t_u)\,c_{01} + t_u\,c_{11} \]</span>
+    <span class="eq-plain">top = (1 - tu) * c00 + tu * c10;   bot = (1 - tu) * c01 + tu * c11</span>
+  </div>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{result} = (1-t_v)\,\text{top} + t_v\,\text{bot} \]</span>
+    <span class="eq-plain">result = (1 - tv) * top + tv * bot</span>
+  </div>
+
+  <p>
+    Multiply that out and the four texels each pick up one weight:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ w_{00} = (1-t_u)(1-t_v), \quad w_{10} = t_u(1-t_v), \quad
+                              w_{01} = (1-t_u)t_v, \quad w_{11} = t_u t_v \]</span>
+    <span class="eq-plain">w00 = (1-tu)(1-tv);  w10 = tu(1-tv);  w01 = (1-tu)tv;  w11 = tu*tv</span>
+  </div>
+
+  <p>
+    Two things follow immediately from that expansion, and both are worth more than the formula.
+  </p>
+
+  <p>
+    <strong>The order of the axes does not matter.</strong> Do <code>v</code> first and
+    <code>u</code> second and you multiply out to the identical four weights. There is no hidden
+    asymmetry, no convention to remember. Checked over 200,000 random coordinates in
+    <code>verify_39</code> §D: worst disagreement <code>5.96e-08</code>, which is float rounding.
+  </p>
+
+  <p>
+    <strong>The weights sum to 1.</strong> Expand:
+    <code>(1−tu)(1−tv) + tu(1−tv) + (1−tu)tv + tu·tv</code> factors to
+    <code>(1−tv)[(1−tu) + tu] + tv[(1−tu) + tu] = (1−tv) + tv = 1</code>. So this is an
+    <em>average</em>, and an average cannot brighten or darken: filtering a constant image returns
+    the constant, exactly. <code>verify_39</code> §D checks that too, over 20,000 samples — worst
+    deviation <code>0.000e+00</code> — because a weight bug that a busy image hides, a flat image
+    exposes immediately.
+  </p>
+
+  <div class="callout note">
+    <span class="label">You have seen this shape three times now</span>
+    <p>
+      A weighted average of corner values whose weights sum to one, where the weights are
+      products of distances. That is barycentric interpolation (Lesson 2.3), it is Gouraud
+      shading (2.4), and it is this. The Math Toolbox has been calling them "three ideas wearing
+      different clothes" since Module 2; this is the third of them arriving, and it is the same
+      idea on a quadrilateral rather than a triangle.
+    </p>
+    <p>
+      The one real difference: barycentric weights are <em>affine</em> in position, so barycentric
+      interpolation of a linear function is exact. Bilinear weights contain the product
+      <code>tu·tv</code>, which is not affine — bilinear interpolation is only
+      <em>piecewise</em> smooth, and its second derivative is discontinuous at every texel
+      boundary. That is why a strongly magnified bilinear texture has a faint diamond-quilt look
+      rather than looking genuinely smooth, and it is what bicubic filtering exists to fix.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — the four weights at tu = 0.62, tv = 0.35</span>
+    <div class="tbl-scroll">
+      <table>
+        <caption class="visually-hidden">Bilinear weights worked out</caption>
+        <thead><tr><th>Texel</th><th>Weight</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td><code>c₀₀</code> (top-left)</td><td>(1−0.62)(1−0.35) = 0.38 × 0.65</td><td><strong>0.2470</strong></td></tr>
+          <tr><td><code>c₁₀</code> (top-right)</td><td>0.62 × 0.65</td><td><strong>0.4030</strong></td></tr>
+          <tr><td><code>c₀₁</code> (bottom-left)</td><td>0.38 × 0.35</td><td><strong>0.1330</strong></td></tr>
+          <tr><td><code>c₁₁</code> (bottom-right)</td><td>0.62 × 0.35</td><td><strong>0.2170</strong></td></tr>
+          <tr><td colspan="2"><em>sum</em></td><td><strong>1.0000</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      These are the numbers drawn in Figure 5, and they are worth adding up by hand once. Note
+      the sanity check built into them: the largest weight is <code>c₁₀</code>, and the sample
+      point is indeed nearest the top-right corner — 0.62 along in <code>u</code>, only 0.35 down
+      in <code>v</code>.
+    </p>
+  </div>
+
+  <h3 id="theory-decode">3.6 Decode before filter</h3>
+
+  <p>
+    Here is a question with a wrong answer that produces a picture nobody can quite explain.
+    A texture's texels are <strong>sRGB-encoded</strong> — that is what a PNG holds, that is what
+    an artist authored, and it is what our <code>Uint32</code> texels are, like every other stored
+    colour in this engine. Bilinear filtering has to average four of them. Do you average the
+    stored bytes and then decode, or decode each and then average?
+  </p>
+
+  <p>
+    Lesson 1.6 answered this and Lesson 2.4 answered it again for vertex colours. A stored value
+    is not a measure of light; it has been through a curve. Averaging encoded values does not
+    average light. So the decode must come <strong>first</strong>, and the filter operates on
+    quantities of light.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — a black texel and a white texel, sampled between them</span>
+    <p>
+      Stored values 0 and 255; the sample lands exactly halfway, so both weights are ½.
+    </p>
+    <ul>
+      <li><strong>Decode, then filter (correct).</strong> The linear values are 0 and 1, so the
+          average is <code>0.5</code> — half the light, which is what "halfway between black and
+          white" physically means. Encoding 0.5 for storage gives
+          <code>1.055 × 0.5^(1/2.4) − 0.055 = 0.7354</code>, i.e. stored
+          <strong>188</strong>.</li>
+      <li><strong>Filter, then decode (wrong).</strong> The average byte is 127.5, i.e. stored
+          <strong>128</strong>. Decoding <em>that</em> gives
+          <code>((0.5 + 0.055)/1.055)^2.4 = 0.2139</code> — barely a fifth of the light, where
+          half was wanted.</li>
+    </ul>
+    <p>
+      The wrong order delivers <strong>42.8%</strong> of the light it should. Swept over all
+      65,536 possible texel pairs in <code>verify_39</code> §E, the worst case is the pair
+      <code>(0, 255)</code> itself, off by <strong>0.286</strong> of full light. That is not a
+      rounding detail; it is a fifth of the dynamic range.
+    </p>
+  </div>
+
+  <p>
+    This is also, precisely, why GPUs have sRGB texture <em>formats</em>. An
+    <code>SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB</code> texture is decoded
+    <strong>in the sampler, before filtering, in hardware, for free</strong>. Bind the same bytes
+    as a plain <code>UNORM</code> format and the hardware filters the encoded values — the wrong
+    answer above, at full speed. The format is not a hint about what the data means; it is an
+    instruction about where the decode happens.
+  </p>
+
+  <p>
+    Which settles a design question for our sampler: <code>sample()</code> returns
+    <code>linear_rgb</code>, not <code>Uint32</code>. The decode lives inside the sampler, which
+    puts it before the filter automatically and leaves no way to get the order wrong at a call
+    site.
+  </p>
+
+  <h3 id="theory-albedo">3.7 Texture × light, and what albedo means</h3>
+
+  <p>
+    Now the payoff, and it is a one-line change that only looks trivial because the previous
+    section did the work.
+  </p>
+
+  <p>
+    Lessons 3.6 to 3.8 evaluated <code>shade(albedo, n, to_eye, …)</code>, and
+    <code>albedo</code> was a colour interpolated from the corners. What <em>is</em> an albedo?
+    It is a <strong>reflectance</strong>: the fraction of arriving light that a surface sends
+    back, per channel. A red surface has a high albedo in red and a low one in green and blue,
+    which is the whole of why it is red.
+  </p>
+
+  <p>
+    A fraction multiplies. That is what a fraction is for. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ L_{\text{out}} = \text{albedo} \times L_{\text{in}} \]</span>
+    <span class="eq-plain">outgoing light = albedo * incoming light</span>
+  </div>
+
+  <p>
+    and both sides have to be <em>linear</em> quantities for the multiply to mean anything.
+    Our sampler already returns linear light, so an image drops straight into the albedo slot
+    with no conversion at all. Texture and light multiply — not by convention, but because that
+    is what the two things are.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Measured, not asserted</span>
+    <p>
+      <code>verify_39</code> §F renders the floor three times: textured and unlit (that is the
+      albedo), white and lit (that is the light), and textured and lit. Then it checks, per
+      pixel, that the third is the product of the first two. Over 32,301 covered pixels,
+      <strong>0</strong> are off by more than 0.02, and the worst disagreement is
+      <strong>0.0076</strong> — which is two units of 8-bit quantisation
+      (<code>1/255 = 0.0039</code>), i.e. the residue of storing three renders in bytes and
+      nothing else.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — one lit texel, end to end</span>
+    <p>
+      A texel stores 232 (<code>0xE8</code>, the checkerboard's light square). The fragment's
+      Lambert term works out at 0.62.
+    </p>
+    <ol>
+      <li><strong>Decode.</strong> <code>232/255 = 0.909804</code>, and
+          <code>((0.909804 + 0.055)/1.055)^2.4 = 0.8070</code>. So this texel reflects 80.7% of
+          the light that hits it.</li>
+      <li><strong>Multiply.</strong> <code>0.8070 × 0.62 = 0.5003</code>.</li>
+      <li><strong>Encode.</strong> <code>1.055 × 0.5003^(1/2.4) − 0.055 = 0.7355</code>, so the
+          pixel stores <strong>188</strong>.</li>
+    </ol>
+    <p>
+      Notice what happened to the numbers: a 38% reduction in <em>light</em> came out as a
+      reduction from 232 to 188 in <em>stored value</em> — 19%. Do that arithmetic on the stored
+      bytes instead (<code>232 × 0.62 = 144</code>) and you get a surface far too dark. This is
+      Lesson 1.6's error, and it is now reachable from three different directions.
+    </p>
+  </div>
+
+  <h3 id="theory-minify">3.8 What this lesson does not solve</h3>
+
+  <p>
+    Bilinear filtering fixes <strong>magnification</strong>: a texture stretched larger than its
+    own resolution, where each screen pixel falls between a few texels and wants a smooth blend.
+    That is the common case for a wall you are standing next to, and it is why bilinear is the
+    default.
+  </p>
+
+  <p>
+    It does nothing whatsoever for <strong>minification</strong> — a texture sampled at less than
+    its own resolution, where one screen pixel covers <em>many</em> texels. And the honest
+    statement of why is a counting argument: bilinear reads exactly four texels, always, no
+    matter how many the pixel covers.
+  </p>
+
+@@FIG_MINIFY@@
+
+  <p>
+    Figure 6 traces that with real rays. On our floor running to the horizon, one screen pixel
+    covers 0.60 texels at the bottom of the frame and <strong>62.46</strong> texels two rows
+    below the horizon. Bilinear reads four of them. Near row 103 the two curves cross — that is
+    the point at which "enough" stops being enough — and past it the sampler is reading a
+    shrinking fraction of what the pixel actually covers: at the horizon, <code>4 / 62.46</code>,
+    about <strong>6.4%</strong>.
+  </p>
+
+  <p>
+    The visible symptom is <strong>sparkle</strong>: move the camera by a fraction of a pixel and
+    the four texels each pixel happens to land on change completely, so distant detail crawls and
+    fizzes. Measured, with a camera nudge far smaller than one pixel:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Sparkle against texture fineness</caption>
+      <thead>
+        <tr><th>Texture</th><th>Pixels changed by a sub-pixel camera nudge</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>64px, 4 cells</td><td>2,598 of 32,301 — <strong>8.0%</strong></td></tr>
+        <tr><td>64px, 8 cells</td><td>5,233 — <strong>16.2%</strong></td></tr>
+        <tr><td>64px, 16 cells</td><td>10,515 — <strong>32.6%</strong></td></tr>
+        <tr><td>64px, 32 cells</td><td>20,927 — <strong>64.8%</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Read that table carefully, because it contains a correction to the usual explanation. All
+    four images are 64 texels across, so the <em>footprint is identical in every row</em> —
+    62.46 texels per pixel at the horizon, whichever one is bound. What changes is how much
+    <strong>contrast</strong> sits inside that footprint. So aliasing is not caused by a pixel
+    covering many texels; it is caused by a pixel covering many texels <em>that disagree</em>,
+    and the sampler having no way to average them.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>
+      The fix is to have, precomputed, a <em>smaller</em> version of the texture in which those
+      disagreeing texels have already been averaged, and to choose which version to read based on
+      the footprint. That is <strong>mipmapping</strong>, it costs 33% more memory, and it is
+      Module 6 — along with anisotropic filtering, which handles the case Figure 6 really shows:
+      a footprint that is long in one direction and short in the other, where a single square
+      average blurs more than it should.
+    </p>
+    <p>
+      What is worth taking from today is the diagnosis rather than the cure: when distant detail
+      sparkles, the sampler is not broken. It is being asked a question it does not have the
+      information to answer.
+    </p>
+  </div>

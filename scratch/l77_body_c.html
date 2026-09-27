@@ -1,0 +1,356 @@
+  <h2 id="looping">6. Looping, the seam, and the negative time</h2>
+
+  <p>
+    A walk cycle is played for as long as the character walks, which is longer than the clip. So the
+    time has to be mapped onto the clip, and the map is <code>fmod</code> — except that it is not,
+    and the two ways it is not are both worth having met.
+  </p>
+
+  <h3>6.1 The duration is authored, not derived</h3>
+
+  <p>
+    The obvious definition of a clip's length is "the largest time on any key". It is wrong, and it
+    is wrong for exactly the clips people care most about.
+  </p>
+
+  <p>
+    Bake a two-second walk at 30 Hz. Sixty frames. If the baker writes one key per frame, the last
+    key lands at frame 59, which is <code>59/30 = 1.9667 s</code>. Loop at that and the cycle is one
+    frame short: it restarts one frame early, every cycle, forever. The exporter knows the intended
+    length; the key times only know where somebody happened to put a key.
+  </p>
+
+  <p>
+    So <code>duration</code> is a field, and the baker's job is to make the last key land on it —
+    <code>frames + 1</code> samples over <code>frames</code> intervals, which is the
+    <code>&lt;=</code> in the demo's loop that is easy to write as <code>&lt;</code>:
+  </p>
+
+  <pre><code class="lang-cpp">const int frames = static_cast&lt;int&gt;(k_clip_seconds * k_bake_hz);
+for (int f = 0; f &lt;= frames; ++f)          // &lt;=, not &lt;
+{
+    const float t = static_cast&lt;float&gt;(f) / k_bake_hz;
+    …
+}</code></pre>
+
+  <p>
+    And because that is easy to get wrong and invisible when you do, <code>validate</code> measures
+    it. Sample the clip at <code>t = 0</code> and again at <code>t = duration</code>, compare the two
+    poses, and report the worst difference:
+  </p>
+
+  <pre>   keys at 30 Hz over 1.00 s:
+     closed (last key AT 1.000)  31 keys
+     open   (last key at 0.967)  30 keys
+   loop gap, closed     0.0000 deg  0.000e+00 units
+   loop gap, open       5.8215 deg  0.000e+00 units</pre>
+
+  <p>
+    <strong>5.82°</strong> — one frame of a walk's fastest joint, stepped over once per cycle. It is
+    a tick, not a glitch, and it is genuinely hard to find by looking at the character, because the
+    animation is correct at every instant except one.
+  </p>
+
+  @@FIG_WRAP@@
+
+  <div class="callout warn">
+    <span class="label">Root motion is a loop discontinuity by design, and the first instrument could not tell</span>
+    <p>
+      The first version of this measurement included every joint, and it reported a
+      <strong>1.200-unit</strong> seam on a walk cycle that is perfect. Of course it did: the root
+      carries the character forward, so it is <em>supposed</em> to end the cycle 1.2 units from where
+      it started. A walk with zero there is one that moonwalks on the spot. An instrument that cannot
+      tell root motion from a broken loop reports every correct walk as broken, so
+      <code>clip_report</code> now splits them — <code>root_travel</code> for joints with no parent,
+      <code>loop_gap_position</code> for everything else. The fixture reports
+      <strong>1.2000 units of travel</strong> and <strong>0.000e+00 of seam</strong>, which is two
+      facts where there was one confused one.
+    </p>
+  </div>
+
+  <p>
+    That split also names something the engine does not do yet, and §10 says so plainly: nothing
+    <em>applies</em> that root travel to the character's world transform, so a looping clip snaps
+    the character back to the origin on every wrap. Extracting root motion is its own piece of
+    design and it is not in this lesson.
+  </p>
+
+  <p>
+    The control for the seam measurement is worth reading too, because it is a case where the two
+    obvious wrong durations fail differently:
+  </p>
+
+  <pre>   CONTROL duration on a 1.0 s clip:
+     1.5 -> gap  0.0000 deg, 0 keys out of range
+     0.5 -> gap 42.7780 deg, 1035 keys out of range</pre>
+
+  <p>
+    A duration <em>longer</em> than the keys cannot produce a seam at all — the sampler holds the
+    last key, which for a closed loop is the first one again, so the clip simply pauses before
+    restarting. A duration <em>shorter</em> cuts the cycle off in the middle: 42.78° of seam, plus a
+    thousand keys reported past the end. Same mistake, two completely different symptoms.
+  </p>
+
+  <h3>6.2 <code>std::fmod</code> is not <code>wrap_time</code></h3>
+
+  <p>
+    Here is the whole function, and the two lines that are not <code>fmod</code>:
+  </p>
+
+  <pre><code class="lang-cpp">float wrap_time(const clip&amp; c, float t)
+{
+    if (!(c.duration &gt; 0.0f)) { return 0.0f; }
+    if (!c.loops) { return std::clamp(t, 0.0f, c.duration); }
+
+    float wrapped = std::fmod(t, c.duration);
+    if (wrapped &lt; 0.0f) { wrapped += c.duration; }
+    return wrapped;
+}</code></pre>
+
+  <p>
+    <code>std::fmod(-0.1f, 1.0f)</code> is <code>-0.1f</code>, not <code>0.9f</code>. C's
+    <code>fmod</code> takes the sign of the dividend, which is the right answer to a question about
+    remainders and the wrong answer to a question about phase. One add fixes it. And a negative
+    playback time is not exotic: it arrives the moment anything scrubs backwards, runs a time
+    dilation below 1.0 with an offset, or starts a cross-fade with a negative lead-in.
+  </p>
+
+  <p>
+    What makes this worth a section rather than a footnote is what happens <em>next</em>, because
+    there are <strong>two different wrong things</strong> and which one you get is decided three
+    functions away, by whether the sampler clamps its normalised parameter.
+  </p>
+
+  <pre>   CONTROL the same times with NO clamp on u:
+        t       u    extrapolated   frozen
+    -0.033   -0.99       0.015 deg   5.763 deg
+    -0.100   -3.00       0.800 deg  16.458 deg
+    -0.300   -9.00      21.995 deg  26.630 deg
+    -0.600  -18.00     100.007 deg  16.458 deg</pre>
+
+  <p>
+    Read the two columns against each other, because the moral is not the obvious one.
+  </p>
+
+  <p>
+    <strong>Clamped</strong> — which is what this engine does — the pose sticks on the clip's first
+    key for as long as the time stays negative. The character <em>freezes</em>. That error is
+    immediately visible, and it is <em>bounded</em>: it can never exceed the range of motion the clip
+    itself contains, so 16.458° is roughly as bad as it gets.
+  </p>
+
+  <p>
+    <strong>Unclamped</strong>, <code>u</code> goes negative and the pose extrapolates backwards out
+    of the start of the clip. At a thirtieth of a second back that is <strong>0.015°</strong> — you
+    could not see it with a protractor. At a tenth of a second, 0.8°. And then it keeps going:
+    <strong>100°</strong> at six tenths, with no bound at all.
+  </p>
+
+  <p>
+    So the clamp produces the <em>louder</em> error and the unclamped version produces the
+    <em>quieter</em> one, and the quiet one is worse. It is finite, it is smooth, it moves in a
+    plausible direction, and it is wrong — which is Lesson 7.5's rule about finite-and-wrong,
+    arriving from a direction that lesson did not consider. The clamp is the right choice precisely
+    because it fails where you can see it.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Wrap the clock; do not let it accumulate</span>
+    <p>
+      <code>wrap_time</code> gives the right answer for any float, so it is tempting to keep a
+      playhead that just adds <code>dt</code> forever. Do not, and the reason is a measurement
+      nobody expects: <strong><code>std::fmod</code> is not constant time.</strong> Its cost grows
+      with the <em>quotient</em>, so a one-second clip whose clock has reached 6,666 seconds does ten
+      times the reduction a ten-second clip does. Timed directly, with nothing else in the loop:
+      <code>1.603 ns</code> on a bounded clock against <code>5.901 ns</code> on a grown one for a
+      ten-second duration, and <code>3.798</code> against <code>7.726</code> for a one-second one.
+      A program left running overnight pays for every hour of it, on every sample, forever. The
+      <code>rig</code> demo wraps its playhead every fixed step for exactly this reason.
+    </p>
+  </div>
+
+  <h2 id="blending">7. Cross-fading, and the one step that ruins it</h2>
+
+  <p>
+    A character that can play one clip is a character that teleports between animations. What makes
+    motion look continuous is the <strong>cross-fade</strong>: sample two clips at the same instant
+    and blend the results, sliding the weight from 0 to 1 over a fifth of a second.
+  </p>
+
+  <p>
+    Which sounds like it should be the same weighted sum Lesson 7.6 spent a whole lesson on. It is
+    not, and the difference is the most important thing in this section.
+  </p>
+
+  <h3>7.1 Two weighted sums, on two different things</h3>
+
+  <p>
+    Lesson 7.6's blend sums <strong>matrices</strong>:
+  </p>
+
+  <div class="eq">\[ v' \;=\; \sum_i w_i \,\mathrm{skin}_i\, v \]</div>
+
+  <p>
+    and that was <em>forced</em>. A vertex near an elbow is influenced by two joints at once, and
+    there is nowhere else to put the weights: the thing being weighted is the effect of several
+    matrices on one point. The price was exact and unavoidable — the sum of two rotations is not a
+    rotation, so a twisted limb collapses to <code>cos(θ/2)</code> of its radius.
+  </p>
+
+  <p>
+    A cross-fade has a choice, because the two things being blended are two <em>poses</em>, and a
+    pose is a list of <code>transform</code>s. Blend those:
+  </p>
+
+  <div class="eq">\[ \mathrm{out}_j \;=\; \mathrm{transform\_blend}(a_j,\, b_j,\, w) \]</div>
+
+  <p class="eq-plain">
+    …joint by joint, in local space, before anything is composed.
+  </p>
+
+  <p>
+    And now read what came out. <code>transform_blend</code>'s rotation field is
+    <code>quat_nlerp</code>, which <em>normalises</em>. So the blended rotation is a unit quaternion,
+    which is a rotation, which means the blended <code>transform</code> is a genuine placement — and
+    a placement's <code>position</code> field is the bone's length, untouched by the rotation blend.
+    <strong>Bone lengths are preserved exactly.</strong> The collapse that dominated Lesson 7.6
+    simply does not arise, because nothing here is being averaged that is not closed under averaging.
+  </p>
+
+  <h3>7.2 The cheap wrong version, and what it costs</h3>
+
+  <p>
+    The wrong version is not stupid, which is what makes it worth building. It is what you reach for
+    if the thing you have in hand is the composed model matrices — say, because a renderer handed you
+    two <code>model_from_joint</code> arrays and you would like something halfway between them:
+  </p>
+
+  <pre><code class="lang-cpp">for (std::size_t j = 0; j &lt; posed_.size(); ++j)
+{
+    posed_[j] = matrix_lerp(posed_a_[j], posed_b_[j], fade_);
+}</code></pre>
+
+  <p>
+    Sixteen independent lerps. Same inputs, same weight, one step later in the pipeline. And it is
+    linear blend skinning one level up, with all of 7.6's consequences and one new one.
+  </p>
+
+  @@FIG_BLEND_RENDER@@
+
+  <p>
+    The right-hand tube is shorter and visibly thinner toward its tip. Both are the same cause and
+    the derivation is short enough to do here.
+  </p>
+
+  <p>
+    Joint <code>j</code>'s position in pose A is <code>p<sub>j</sub><sup>A</sup></code> and in pose B
+    is <code>p<sub>j</sub><sup>B</sup></code>. A matrix lerp averages the translation columns, so the
+    blended joint sits at the midpoint of the two. Bone <code>k</code> runs from joint
+    <code>k−1</code> to joint <code>k</code>, so its blended length is
+  </p>
+
+  <div class="eq">\[ \left|\frac{(p_k^A - p_{k-1}^A) + (p_k^B - p_{k-1}^B)}{2}\right|
+      \;=\; \left|\frac{d^A + d^B}{2}\right| \;=\; L\,\cos(\Delta_k/2) \]</div>
+
+  <p class="eq-plain">
+    …the average of two unit vectors an angle apart is shorter than either, by the cosine of half
+    that angle.
+  </p>
+
+  <p>
+    That is the same isoceles triangle Lesson 7.6 drew for the candy wrapper, and it is here for the
+    same reason. But <code>Δ<sub>k</sub></code> is different, and the difference is the new part.
+    Bone <code>k</code>'s direction is joint <code>k−1</code>'s own axis, and joint <code>k−1</code>
+    has <em>accumulated</em> every rotation above it in the chain. Two poses that differ by
+    <code>δ</code> at every joint differ by <code>(k−1)·δ</code> at bone <code>k</code>, so the whole
+    chain becomes
+  </p>
+
+  <div class="eq">\[ \text{chain} \;=\; \sum_{k=1}^{n-1} \cos\!\left(\frac{(k-1)\,\delta}{2}\right) \]</div>
+
+  <p>
+    A prediction with no free parameters. Measure it on a six-joint chain of unit bones, blended
+    half and half, sweeping <code>δ</code>:
+  </p>
+
+  <pre>   per-joint   pose blend   matrix blend   cos(d/2)
+      gap deg   chain len      chain len    predicts
+          0.0     5.00000        5.00000     5.00000
+          5.0     5.00000        4.97150     4.97150
+         10.0     5.00000        4.88662     4.88662
+         20.0     5.00000        4.55657     4.55657
+         30.0     5.00000        4.03906     4.03906
+         45.0     5.00000        3.01367     3.01367
+   worst bone-length error, pose route  2.980e-07
+   worst gap from sum cos(k d / 2)      4.768e-07</pre>
+
+  @@FIG_BLEND_CURVE@@
+
+  <p>
+    At twenty degrees per joint — which is a perfectly ordinary difference between a walk pose and a
+    turn pose — the limb loses <strong>0.4434 units of five</strong>. The pose route holds at
+    5.00000 to six figures, with the worst individual bone out by 2.980e−07, which is float noise.
+  </p>
+
+  <p>
+    <strong>And the error grows down the chain, which is where it bites.</strong> Bone 1 is untouched
+    (<code>Δ = 0</code>), bone 5 carries <code>4δ</code>. So a matrix cross-fade barely moves the
+    hips and ruins the hands and the feet — which is where the sword is attached, where the foot
+    plants, and where a player looks.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The control that makes the disagreement mean something</span>
+    <p>
+      At <code>w = 0</code> and <code>w = 1</code> there is nothing to blend, so the two routes
+      <em>must</em> agree exactly — if they did not, the gap in between would be a property of the
+      instrument rather than of the blend. Measured: <strong>6.743e−07</strong>. That is 7.6's rule
+      applied again: a control has to be one the broken thing would fail.
+    </p>
+  </div>
+
+  <h3>7.3 Knowing which regime you are in</h3>
+
+  <p>
+    §5.2 argued that nlerp is free inside a clip because adjacent keyframes are a few degrees apart.
+    A cross-fade has no such guarantee: it blends two poses chosen by gameplay, which can be as far
+    apart as the content allows. So <code>blend_poses</code> returns a small report, and the field
+    that matters is <code>worst_arc</code>:
+  </p>
+
+  <pre><code class="lang-cpp">struct pose_blend_report
+{
+    std::size_t joints = 0;
+    float worst_arc = 0.0f;     ///< radians, the whole rotation angle
+    std::size_t flips = 0;
+};</code></pre>
+
+  <p>
+    Read it against Lesson 7.5's threshold: a few degrees and nlerp is exact; over 73.50° and you
+    want <code>transform_blend_slerp</code>, or a shorter fade, or a better-chosen pair of clips.
+  </p>
+
+  <p>
+    Computing it honestly took one decision worth copying. The metric that is well conditioned near
+    zero is <code>angle_between</code>, which costs twelve multiplies and an <code>atan2</code> —
+    far too much to run per joint per frame to answer a question about a single joint. But
+    <code>|scalar|</code> is monotonically <em>decreasing</em> in the rotation angle, and the sampler
+    computes it anyway for <code>nearest</code>. So the loop tracks the <strong>argmin</strong> with
+    one dot product each, and the expensive metric runs exactly once, on the winner.
+  </p>
+
+  <p>
+    One thing to be careful about when reading it: <code>worst_arc</code> is a <em>local</em> arc.
+  </p>
+
+  <pre>   blend report: 6 joints, worst arc 20.000 deg, 0 flips
+     (the LOCAL arc: every joint differs by 20. The TIP has
+      accumulated 100, and that is not this number.)</pre>
+
+  <p>
+    The chain above differs by 20° at every joint and 100° at the tip, and the report says 20 —
+    correctly, because the thing being interpolated is the per-joint transform and the per-joint arc
+    is what sets nlerp's error. The accumulated angle is a property of the composition, and §7.2 is
+    about what <em>it</em> does. Substituting one for the other would over-report the interpolation
+    error by the depth of the skeleton.
+  </p>

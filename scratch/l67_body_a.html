@@ -1,0 +1,431 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-06-gltf.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.6 — glTF 2.0 Loading</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-08-shadow-mapping.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.8 — Shadow Mapping: Bias, Acne, and PCF</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.7</div>
+    <h1>Normal Mapping and the TBN Derivation</h1>
+    <p class="deck">
+      Every surface this engine has ever drawn is exactly as flat as its triangles. The fix is not
+      more geometry — it is to <em>lie about the normal</em>, per pixel, from an image. But a
+      stored direction is meaningless without a frame to express it in, and finding that frame is
+      the whole lesson: <strong>T and B are whatever two vectors make the triangle's edges and its
+      uv deltas agree</strong>, which is two equations in two unknowns and nothing more mysterious.
+      Along the way the engine finally answers a question Lesson 6.6 had to walk away from —
+      <strong>is this image colour, or is it data?</strong> — and the answer turns out to have been
+      sitting in the GPU path since Lesson 4.7, with no counterpart on the CPU side at all.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-06-normals-and-lambert.html">3.6 — Normals and Lambert</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>,
+          <a href="06-06-gltf.html">6.6 — glTF 2.0 Loading</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/src/gfx/texture.cpp</code>,
+            <code>engine/include/engine/gfx/mesh.hpp</code>,
+            <code>engine/src/gfx/mesh.cpp</code>,
+            <code>engine/include/engine/gfx/material.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/clip.hpp</code>,
+            <code>engine/src/gfx/clip.cpp</code>,
+            <code>engine/include/engine/gfx/soft_renderer.hpp</code>,
+            <code>engine/src/gfx/soft_renderer.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_mesh.hpp</code>,
+            <code>engine/src/gfx/gpu_mesh.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/gltf.hpp</code>,
+            <code>engine/src/gfx/gltf.cpp</code>,
+            <code>engine/include/engine/asset/asset_store.hpp</code>,
+            <code>engine/src/asset/asset_store.cpp</code>,
+            <code>shaders/scene.vert.hlsl</code>, <code>shaders/scene.frag.hlsl</code>,
+            <code>shaders/mesh.vert.hlsl</code>,
+            <code>demos/gltf_view/main.cpp</code>, <code>demos/sandbox/main.cpp</code>,
+            <code>scratch/verify_67.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Per-pixel normals in <strong>both renderers</strong>, from a tangent frame derived from
+            the uv chart, with a texture that knows whether it holds colour or data. 33 checks
+            green; the reference render <strong>byte-identical</strong> for the sixteenth
+            lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the tangent and bitangent from a triangle's edges and its uv deltas, rather than
+          copying the formula.</li>
+      <li>…say why a tangent is a <code>vec4</code>, and what breaks on a symmetric model if it is
+          not.</li>
+      <li>…explain why a normal is transformed by the inverse transpose and a tangent by the plain
+          model matrix, from what each one <em>is</em>.</li>
+      <li>…decide where a colour space belongs in a texture API, using what the hardware already
+          does rather than taste.</li>
+      <li>…recognise the lavender of a normal map as arithmetic rather than convention, and say why
+          "no change" is not exactly representable in eight bits.</li>
+      <li>…build a test whose tolerance is <em>derived from the encoding</em>, and tell that from a
+          tolerance that was widened until it passed.</li>
+      <li>…widen a shared vertex layout without silently breaking every pipeline that consumes
+          it.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem: Flat Is All We Have</a></li>
+      <li><a href="#idea">The Idea, and Why It Needs a Frame</a></li>
+      <li><a href="#space">Colour, or Data? The Question 6.6 Deferred</a></li>
+      <li><a href="#derive">Deriving the Tangent Frame</a></li>
+      <li><a href="#handed">The Fourth Component</a></li>
+      <li><a href="#basis">The Basis Change, and the Lavender</a></li>
+      <li><a href="#matrix">Which Matrix Carries a Tangent</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#gpu">The GPU Port, and a Layout That Widened</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run, and What You Should See</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem: Flat Is All We Have</h2>
+
+  <p>
+    Run <code>gltf_view --model torus.obj</code> as Lesson 6.6 left it. The torus is smooth, lit,
+    and — if you look at it for a moment — completely characterless. It is a shape, not a surface.
+    There is no grain, no pitting, no weave, nothing that says what it is made of.
+  </p>
+
+  <p>
+    The engine has exactly one lever for that, and it is the wrong one: <em>add triangles.</em>
+    Lesson 3.6 established that shading is a function of the normal, Lesson 3.8 made it per-pixel,
+    and Lessons 6.2 through 6.4 built a physically-based BRDF on top — but every one of those
+    consumes a normal that came from the geometry. To make a surface look bumpy, the geometry has
+    to <em>be</em> bumpy.
+  </p>
+
+  <p>
+    Price that. The torus is 2,304 triangles and reads as smooth at arm's length. To give it visible
+    surface detail — a fabric weave, say, at a millimetre scale — you would need triangles at a
+    millimetre scale, which on an object this size is tens of millions. For one prop. The vertex
+    buffer alone would be hundreds of megabytes, and the rasterizer would spend all of it on
+    triangles smaller than a pixel, which is the worst case for every renderer ever built.
+  </p>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    So: do not add the geometry. <strong>Add the normal.</strong> Shading only ever consults the
+    normal, so a surface that <em>reports</em> a bumpy normal will shade exactly as though it were
+    bumpy — and reporting takes one texture lookup instead of ten million triangles.
+  </p>
+
+  <div class="callout">
+    <span class="label">What this trick cannot do, said up front</span>
+    <p>A normal map lies to the shading and to nothing else. The silhouette stays smooth, because
+       the silhouette is geometry. Bumps do not occlude one another, because occlusion is geometry.
+       Nothing casts a shadow onto anything else on the same surface, and at a grazing angle the
+       illusion collapses entirely — you are looking along a flat plane that claims to be rough.</p>
+    <p>Those are real limits with real names, and each has a technique that addresses it: parallax
+       mapping moves the sample point to fake the occlusion, and displacement mapping gives up and
+       moves the vertices. Both are out of scope here. This is the ninety-percent picture, and the
+       missing ten percent is the silhouette.</p>
+  </div>
+
+  <!-- =================================================================
+       2 — THE IDEA
+       ================================================================= -->
+  <h2 id="idea"><span class="num">2</span>The Idea, and Why It Needs a Frame</h2>
+
+  <p>
+    Storing a normal per texel sounds like the whole design, and it nearly is. The problem is
+    <em>which</em> normal.
+  </p>
+
+  <p>
+    The obvious version — store the world-space normal directly — fails immediately, and it fails in
+    a way worth understanding rather than just avoiding. A world-space normal map is correct for
+    exactly one orientation of the object. Rotate the torus and every normal in the image is now
+    wrong; the lighting slides around the surface as if the bumps were painted on the world rather
+    than on the object. And the same map could never be shared between two objects, or tiled, or
+    mirrored, because it encodes where the surface <em>is</em> rather than what it is like.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The insight the whole technique rests on</span>
+    <p>Store the normal <strong>relative to the surface</strong>, not relative to the world.</p>
+    <p>"Tilted a bit toward increasing <em>u</em>, and a bit toward increasing <em>v</em>" is a
+       statement that stays true when the object rotates, that means the same thing on the left half
+       of a model and the right, and that can be tiled across a wall. It is a statement about the
+       <em>material</em>, which is exactly what a texture ought to be.</p>
+  </div>
+
+  <p>
+    And now the whole difficulty of this lesson appears in one sentence. If the map says "tilted
+    toward increasing <em>u</em>", the renderer has to know <strong>which way in world space
+    <em>u</em> increases</strong> — and that is not something the geometry has ever been asked
+    before. A mesh knows where its vertices are and which way its normals point. Nowhere does it
+    record the direction, in metres, that you would walk to make <em>u</em> go up.
+  </p>
+
+  <p>
+    That direction is the <strong>tangent</strong>, conventionally <em>T</em>. Its partner, the
+    direction of increasing <em>v</em>, is the <strong>bitangent</strong>, <em>B</em>. Together with
+    the normal <em>N</em> they form an orthonormal frame — the <strong>TBN basis</strong> — and a
+    normal map's three numbers are coordinates in it.
+  </p>
+
+  <div class="callout">
+    <span class="label">A naming annoyance worth clearing up once</span>
+    <p>You will see <em>B</em> called the <strong>binormal</strong> in older material, including
+       some very good older material. It is a misnomer borrowed from differential geometry, where a
+       curve's Frenet frame genuinely has a binormal. A surface does not have one; what it has is a
+       second tangent. <strong>Bitangent</strong> is the correct word and the one glTF uses, and the
+       only reason to know "binormal" is so that you recognise it in somebody else's code.</p>
+  </div>
+
+  <p>
+    So the plan for the rest of this lesson has three parts, and they are genuinely independent:
+    work out what the numbers in the image <em>mean</em> (§3), work out what the frame <em>is</em>
+    (§4–§6), and get the frame from the vertex to the fragment through two renderers (§8–§9).
+  </p>
+
+  <!-- =================================================================
+       3 — COLOUR OR DATA
+       ================================================================= -->
+  <h2 id="space"><span class="num">3</span>Colour, or Data? The Question 6.6 Deferred</h2>
+
+  <p>
+    Lesson 6.6 read a glTF material's <code>normalTexture</code> slot, counted it, and did not load
+    it. The reason it gave was one sentence, and it is time to pay for it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gltf.hpp — as 6.6 left it</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// Both are deferred for one concrete reason: they are **linear data in an
+/// image**, and `texture` (3.9) stores sRGB-encoded texels because `sample`
+/// decodes on read. A roughness map read through an sRGB decode is wrong by the
+/// gamma curve everywhere except 0 and 1.
+bool wants_metallic_roughness_texture = false;
+bool wants_normal_texture = false;</code></pre>
+  </figure>
+
+  <p>
+    Every texture in this engine before now has been an albedo — an authored colour, sRGB-encoded
+    like every stored colour since Lesson 1.6 — so <code>sample</code> could decode
+    unconditionally and be right every single time. A normal map breaks that. Its three channels
+    are a <em>direction</em>, packed into bytes. Running a direction through the sRGB transfer
+    function is arithmetic on numbers that were never a colour.
+  </p>
+
+  <p>
+    How wrong? One number settles it, and it is the number the whole section turns on.
+  </p>
+
+  @@FIG_SPACE@@
+
+  <p>
+    The byte <strong>128</strong> is what a flat normal map stores for <em>x</em> and <em>y</em> —
+    "no tilt in either direction". Read as data it means <strong>0.50196</strong>, which maps to a
+    tilt of essentially zero. Read as a colour it means <strong>0.21586</strong>, which maps to
+    −0.568 — so the "flat" direction becomes (−0.568, −0.568, 1), and every surface in the scene is
+    tilted <strong>38.8°</strong>, in the same direction, everywhere.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And it does not look like a bug</span>
+    <p>38.8° of uniform tilt does not produce a black screen or a crash. It produces lighting that
+       is subtly, consistently wrong — every surface behaving as though the light were somewhere
+       slightly different from where it is.</p>
+    <p>The usual diagnosis is "this normal map was authored too strong", and the usual fix is to
+       reduce its strength, which makes the picture <em>less wrong</em> without making it right.
+       That is why this is worth a type rather than a comment.</p>
+  </div>
+
+  <h3>Where the colour space belongs</h3>
+
+  <p>
+    Three places it could live, and this decision has to be made <strong>once</strong>, because both
+    normal maps and the still-deferred metallic-roughness maps read through it. A per-call answer is
+    two answers.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Three candidate homes for a texture's colour space, and the
+        argument against two of them</caption>
+      <thead><tr><th>Where</th><th>The case for</th><th>The case against</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>on the <strong>texture</strong></td>
+          <td>It is a property of the stored data. <code>sample</code> becomes correct without the
+              caller knowing anything.</td>
+          <td>A field on a type Lesson 6.5 argued should be pure data.</td>
+        </tr>
+        <tr>
+          <td>on the <strong>sampler</strong></td>
+          <td>The decode <em>happens</em> in the sampler — <code>texture.hpp</code> says so
+              already, quoting SDL.</td>
+          <td>It would let one image be sRGB in one binding and linear in another, which is a state
+              the hardware cannot represent.</td>
+        </tr>
+        <tr>
+          <td>a second <code>sample</code></td>
+          <td>Cheapest; no type changes at all.</td>
+          <td>The one that eventually gets called wrong, silently, in a fragment nobody is looking
+              at.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The hardware settles it, and the receipt was already in the repository:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_texture.hpp — since Lesson 4.7</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// @param srgb ask for an `_SRGB` format, so the SAMPLER decodes to linear on
+///             every read, for free. This is the single most important
+///             argument in the file […]
+[[nodiscard]] bool create_sampled(const gpu_device&amp; dev, SDL_GPUCommandBuffer* cb,
+                                  const image_data&amp; src, bool srgb,
+                                  const char* name = nullptr);</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Two halves of one idea, and no path between them</span>
+    <p><strong>The GPU has had a colour space since Lesson 4.7 and the software renderer has never
+       had the concept at all.</strong> In SDL_GPU the decode is declared by the texture's
+       <em>format</em> — <code>_UNORM</code> against <code>_UNORM_SRGB</code> — and performed by
+       the sampler. One image cannot be sRGB in one binding and linear in another, because the
+       format is a property of the memory.</p>
+    <p>This is the same shape of gap Lesson 6.6 found between <code>load_image</code> and
+       <code>sample</code>: one half complete, the other absent, and no code path crossing between
+       them until a feature needed both. It is worth writing down as a habit —
+       <strong>look for pairs of subsystems that ought to compose and have never been asked
+       to.</strong></p>
+    <p>And it settles the design without a preference: Lesson 3.9 built these types to mirror
+       SDL_GPU's <em>"so that when Module 4 replaces this file with a GPU sampler object, the change
+       is a rename and not a re-education"</em>. Mirroring includes mirroring where a decision
+       lives. It goes on the texture.</p>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/texture.hpp — the new enum</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">enum class texel_space
+{
+    /// **Colour.** Authored, sRGB-encoded, decoded through the transfer function
+    /// on every read.
+    srgb,
+
+    /// **Data.** A normal, a roughness, a metalness, a mask. The byte is a
+    /// number, `value / 255`, and no curve is applied.
+    linear
+};</code></pre>
+  </figure>
+
+  <p>
+    The whole cost of it is <strong>one branch, in the one function every read already goes
+    through</strong> — which is the argument for putting it there rather than at the call site.
+    There is exactly one <code>fetch</code>, so there is exactly one place the question can be
+    asked, and no caller can forget to ask it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/texture.cpp — the entire implementation of the idea</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">if (image.space() == texel_space::linear)
+{
+    constexpr float inv_255 = 1.0f / 255.0f;
+    return {static_cast&lt;float&gt;((texel &gt;&gt; 16) &amp; 0xFFu) * inv_255,
+            static_cast&lt;float&gt;((texel &gt;&gt; 8) &amp; 0xFFu) * inv_255,
+            static_cast&lt;float&gt;(texel &amp; 0xFFu) * inv_255};
+}
+
+return to_linear(texel);</code></pre>
+  </figure>
+
+  <p>
+    The branch is on a value that is constant for an entire draw, so it predicts perfectly. And the
+    default is <code>srgb</code>, which keeps every texture written before this lesson meaning
+    exactly what it meant — a default that changed the answer would have made this lesson a
+    re-baseline instead of an addition.
+  </p>
+
+  <h3>The space is part of the asset's identity</h3>
+
+  <p>
+    One consequence that falls straight out of Lesson 5.5. The same PNG read as colour and read as
+    data are <em>two different textures</em> with two different texel meanings; they cannot share a
+    cache entry, and a store keyed on the filename alone would hand the second requester the first
+    one's decode and be quietly wrong.
+  </p>
+
+  <p>
+    That is exactly what <code>mesh_import</code> established for geometry — <em>"these are part of
+    an asset's IDENTITY, not arguments to a function"</em> — arriving for a second type. So
+    <code>load_texture</code> takes the space, the key carries it, and 5.5's rule that
+    <strong>the default serialises to nothing</strong> applies unchanged:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Texture cache keys under the two colour spaces</caption>
+      <thead><tr><th>Request</th><th>Cache key</th><th>Image behind it</th></tr></thead>
+      <tbody>
+        <tr><td><code>load_texture("uv_grid.png")</code></td><td><code>uv_grid.png</code></td>
+            <td rowspan="2"><strong>one</strong>, decoded once —
+                <code>files_read = 1</code></td></tr>
+        <tr><td><code>load_texture("uv_grid.png", linear)</code></td>
+            <td><code>uv_grid.png|linear</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Two textures, one image. The bytes are the same and only the reading differs, which is precisely
+    what a two-level cache is for — and <code>verify_67</code> §A asserts both halves.
+  </p>

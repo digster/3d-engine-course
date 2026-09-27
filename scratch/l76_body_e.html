@@ -1,0 +1,394 @@
+  <h2 id="listings">11. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/anim/skeleton.hpp</code></td><td>new</td>
+          <td>The rig: <code>joint</code>, <code>skeleton</code>, the bind pose and its inverse, and
+              the three calls that turn a pose into a palette.</td></tr>
+      <tr><td><code>engine/include/engine/anim/skin.hpp</code></td><td>new</td>
+          <td>The weighting: <code>skin_influence</code>, <code>skinned_mesh</code>, validation,
+              repair, and linear blend skinning for points and for directions.</td></tr>
+      <tr><td><code>engine/src/anim/skeleton.cpp</code></td><td>new</td>
+          <td>Two flat loops, one matrix product per joint, and the bind-pose residual that tests a
+              whole rig with one number.</td></tr>
+      <tr><td><code>engine/src/anim/skin.cpp</code></td><td>new</td>
+          <td>Four multiply-adds per vertex, and the import-time repairs that keep them
+              branch-free.</td></tr>
+      <tr><td><code>engine/include/engine/math/transform.hpp</code></td><td>modified</td>
+          <td><code>local_from_parent</code> — the function Lesson 2.8 deliberately deferred until
+              something needed it.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>Two lines, and an honest note about the lint that did <em>not</em> catch them.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>anim/</code> translation units, with the argument for a new directory.</td></tr>
+      <tr><td><code>demos/rig/main.cpp</code></td><td>new</td>
+          <td>One tube, six joints, and a panel that prints the radius of its narrowest ring beside
+              the radius the derivation predicts.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>rig</code> target — and a stray <code>engine_use_assets(collector)</code>
+              removed from the <code>gimbal</code> block, where it had been copying a directory
+              neither program opens.</td></tr>
+      <tr><td><code>scratch/verify_76.cpp</code></td><td>new</td>
+          <td>Nine sections, 32 checks, eleven controls — including a Gauss-Jordan inverse written
+              from scratch so that §4's chain has something independent to be checked against.</td></tr>
+      <tr><td><code>scratch/build_verify_76.sh</code></td><td>new</td>
+          <td>The first Module 7 harness that links a library, and therefore the first that has to
+              check what build type that library was compiled at.</td></tr>
+      <tr><td><code>scratch/golden_76.cpp</code></td><td>new</td>
+          <td>The reference render, run as a real instrument because
+              <code>math/transform.hpp</code> is in the closure.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/anim/skeleton.hpp@@
+
+  @@LISTING:engine/include/engine/anim/skin.hpp@@
+
+  @@LISTING:engine/src/anim/skeleton.cpp@@
+
+  @@LISTING:engine/src/anim/skin.cpp@@
+
+  @@LISTING:engine/include/engine/math/transform.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/rig/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_76.cpp@@
+
+  @@LISTING:scratch/build_verify_76.sh@@
+
+  @@LISTING:scratch/golden_76.cpp@@
+
+  <h2 id="run">12. Build &amp; run</h2>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+
+  <p>
+    The configure step prints the umbrella lint's tally, and it moved by two this lesson:
+  </p>
+
+  <pre>-- engine: umbrella lists 84 of 85 public headers (1 documented exception)</pre>
+
+  <p>
+    Then the demo:
+  </p>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/rig
+
+# start somewhere
+./build/demos/rig --bend 70
+./build/demos/rig --twist 180 --segments 1      # the worst case
+./build/demos/rig --twist 180 --segments 4      # …and the fix
+
+# headless, deterministic
+./build/demos/rig --no-bind --shot scratch/x.ppm
+./build/demos/rig --weights --shot scratch/x.ppm</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> A pale grey tube standing on the origin with six joint
+    triads through it, on a near-black ground. Hold <kbd>Right</kbd> and it curls smoothly — the
+    surface stays continuous, which is the whole claim. The panel's top half tracks the pose; its
+    middle two lines are the measurement:
+  </p>
+
+  <pre>rig: twist 180.00 deg, 2 segments, binds on
+rig: min ring radius 0.26870 at 10, r cos(d/2) 0.26870
+rig: bind residual 0.000e+00, 6 joints, depth 6
+rig: 1 objects, 960 triangles, 23 debug lines</pre>
+
+  <p>
+    Those two numbers should agree to five decimal places in every mode and at every angle. If they
+    do not, the thing to suspect is the measurement rather than the skinning — see §8.3's box.
+  </p>
+
+  <p>
+    The keys, in the order that makes the point:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Key</th><th>What it does</th><th>What to look for</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>drive the bend, or the twist</td>
+          <td>the surface stays continuous through the joints; only the blend is doing that</td></tr>
+      <tr><td><kbd>N</kbd></td><td>inverse bind matrices off</td>
+          <td>the tube leaves the frame. §5.3 — the product has no meaning, not a small error</td></tr>
+      <tr><td><kbd>T</kbd></td><td>twist instead of bend</td>
+          <td>turn it to 180° and the tube pinches to a <em>point</em>, not to something small</td></tr>
+      <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>spread the twist over n joints</td>
+          <td>0.000, 0.707, 0.866, 0.924 — <code>cos(90°/n)</code> on the panel</td></tr>
+      <tr><td><kbd>W</kbd></td><td>the weighting, drawn</td>
+          <td>each ring in its blend of two joint colours; the pinch is where they are equal</td></tr>
+      <tr><td><kbd>B</kbd></td><td>the bind pose, in outline</td>
+          <td>where the mesh started, beside where it is</td></tr>
+      <tr><td><kbd>R</kbd></td><td>reset</td><td>back to the bind pose exactly</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="run-harness">12.1 The harness</h3>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_76.sh</code></pre>
+
+  <p>
+    The two extra lines are §10.1's finding, and the script will tell you if you skip them rather
+    than quietly producing numbers that are 18× too slow. It announces what it linked:
+  </p>
+
+  <pre>verify_76: build-rel/engine/libengine.a (Release)
+…
+32 / 32 checks passed</pre>
+
+  <p>
+    And the two earlier harnesses should still be green, because this lesson changed nothing they
+    measure:
+  </p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_75.sh   # 42 / 42
+sh scratch/build_verify_74.sh   # 42 / 42</code></pre>
+
+  <h3 id="run-golden">12.2 The golden render</h3>
+
+  <p>
+    <code>math/transform.hpp</code> gained a function, and that file is in
+    <code>demo_scene.cpp</code>'s include closure — so the structural argument that the picture
+    cannot have moved does not apply, and the render has to be run as a real instrument:
+  </p>
+
+  <pre><code class="lang-bash">python3 scratch/closure_76.py \
+    engine/include/engine/math/transform.hpp \
+    engine/include/engine/anim/skeleton.hpp \
+    demos/rig/main.cpp</code></pre>
+
+  <p>
+    It reports 70 files reachable from <code>demo_scene.cpp</code> plus the software render path,
+    and then, for the paths handed to it:
+  </p>
+
+  <pre>  IN CLOSURE  &lt;-- golden must RUN
+      engine/include/engine/math/transform.hpp
+  outside
+      engine/include/engine/anim/skeleton.hpp
+  outside
+      demos/rig/main.cpp
+VERDICT: golden must be run as a real instrument</pre>
+
+  <pre>golden_76: rc=0  ours=1382416 bytes  reference=1382416 bytes
+golden_76: identical=YES</pre>
+
+  <p>
+    Hash <code>E917C06C</code>, unchanged since Lesson 5.2 — the tenth consecutive byte-identical
+    run and the twenty-fifth lesson not to move a pixel.
+  </p>
+
+  <h2 id="pitfalls">13. Common pitfalls &amp; debugging</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>The mesh flies off, enormous, roughly along the limb</td>
+          <td>No inverse bind matrices — the palette is the posed joint matrices</td>
+          <td>§3.2. Multiply <code>model_from_joint</code> by <code>joint_from_model</code>. Check
+              by posing at the bind pose: it must reproduce the mesh exactly</td></tr>
+      <tr><td>The character renders correctly and never animates</td>
+          <td>The palette is identity because the skeleton was never baked</td>
+          <td><code>skeleton_report::unbaked</code> says so. Call
+              <code>bake_inverse_binds</code> after the joints are final, not before</td></tr>
+      <tr><td>The character is slightly too small and sunk into the floor</td>
+          <td>Weights do not sum to 1 — usually a dropped fifth influence</td>
+          <td>§6.1. <code>normalise_weights</code> at import. The scale factor is the weight
+              sum</td></tr>
+      <tr><td>One vertex draws a spike to a point between the feet</td>
+          <td>A vertex with no weight at all collapses to the model origin</td>
+          <td><code>skin_report::unweighted</code>. The repair is full weight on one joint</td></tr>
+      <tr><td>One limb lags by a frame, worse the further down the chain, only when moving fast</td>
+          <td>A joint's parent appears after it in the array, so it composes against last frame's
+              matrix</td>
+          <td>§4.3. <code>skeleton_report::out_of_order</code>. Topologically sort at import</td></tr>
+      <tr><td>The silhouette is right and the lighting crawls as the character moves</td>
+          <td>Normals skinned as points — the translation column applied</td>
+          <td>§7.1. <code>skin_directions</code>, not <code>skin_positions</code>. Measured at
+              156° of tilt</td></tr>
+      <tr><td>The mesh melts a little more every frame</td>
+          <td>Skinning in place: the bind positions were overwritten with the posed ones</td>
+          <td>Deform into a separate array. <code>skinned_mesh::bind</code> is never
+              written</td></tr>
+      <tr><td>A rare crash on exactly one asset, in the skinning loop</td>
+          <td>A zero-weight slot padded with an out-of-range joint index, read before the weight is
+              applied</td>
+          <td>§6. <code>skin_report::padded_indices</code>; clamp the index as well as the
+              weight</td></tr>
+      <tr><td>A twisted limb pinches to nothing</td>
+          <td>Nothing is broken. This is <code>cos(θ/2)</code></td>
+          <td>§8.2. More joints across the twist, or dual quaternions (§14)</td></tr>
+      <tr><td>A skinning benchmark says 150 ns per vertex</td>
+          <td>The <em>library</em> was built with no <code>CMAKE_BUILD_TYPE</code></td>
+          <td>§10.1. <code>-O2</code> on the harness does not reach what the harness links</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="exercises">14. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Break the bind, and watch the residual find it.</strong> After
+        <code>bake_inverse_binds</code>, rotate one joint's <code>local_bind</code> by a degree and
+        re-run <code>validate</code>. Plot the residual against the size of the nudge, for nudges
+        from 1e−5 to 1 radian.</p>
+      <p><em>What to notice:</em> it is linear, and it has no threshold. That is what makes it a
+        usable assertion rather than a heuristic — any residual above a few times 1e−6 on a rig of
+        this depth means something is genuinely wrong, and §4.2's depth table tells you how the
+        floor moves with the joint count.</p>
+    </li>
+    <li>
+      <p><strong>Attach a sword.</strong> Add a second mesh to <code>rig</code> — a cube will do —
+        parented to joint 4, and make it follow the limb. Then deliberately multiply it by
+        <code>palette[4]</code> instead and describe what happens.</p>
+      <p><em>Hint:</em> the right matrix is <code>posed_[4]</code>, and §5.2 says why.
+        <em>Sketch:</em> at the bind pose the wrong version puts the sword exactly where it would be
+        if it were part of the character's skin — which is to say, it does not move at all — and the
+        difference only appears once the joint moves. A bug that is invisible in the pose you test
+        in is the expensive kind.</p>
+    </li>
+    <li>
+      <p><strong>Skin the tangents.</strong> <code>skin_into</code> deliberately does not touch
+        <code>mesh_data::tangents</code>. Add it — one more <code>skin_directions</code> call — and
+        then re-orthogonalise each tangent against its skinned normal.</p>
+      <p><em>Hint:</em> Lesson 6.7's Gram-Schmidt step, <code>t − (t·n)n</code>, normalised. A
+        <code>vec4</code> tangent carries handedness in <code>w</code>, and <code>w</code> must be
+        copied rather than blended: it is a sign, not a quantity. <em>What to notice:</em> nothing
+        in Module 7 draws a normal-mapped skinned mesh, so this is work you cannot yet see — which
+        is exactly why the engine left it out rather than doing it quietly and wrongly.</p>
+    </li>
+    <li>
+      <p><strong>Build the normal palette.</strong> §9 accepts up to 36.9° of normal error for a
+        non-uniform joint scale. Build the correct palette — the inverse transpose of each skinning
+        matrix's linear part — blend normals against it, and measure both the error it removes and
+        the cost it adds.</p>
+      <p><em>Hint:</em> <code>transpose(inverse(linear_of(palette[j])))</code>, one per joint.
+        <em>What to notice:</em> §10 says per-joint work is 2.34% of the total, so the arithmetic is
+        nearly free and the real cost is a second array to store and, on the GPU, to upload.
+        Then ask the question the engine asked: is a rig that needs this a rig you should accept?</p>
+    </li>
+    <li>
+      <p><strong>Weight the tube properly.</strong> The demo's weighting is linear in the distance
+        between two joints, which is the simplest thing that works. Replace it with a smooth
+        falloff — <code>smoothstep</code> over the same interval — and compare the pinch.</p>
+      <p><em>What to notice:</em> the <em>worst</em> pinch does not move at all, because the ring at
+        the midpoint is still weighted 0.5/0.5 and §8.1 depends on nothing else. What changes is how
+        quickly the surface recovers on either side. Weighting redistributes the artifact; it cannot
+        remove it.</p>
+    </li>
+    <li>
+      <p><strong>An engine challenge: a topological sort at import.</strong> §4.3 puts the ordering
+        cost on the importer. Write it: take a skeleton whose joints are in arbitrary order, produce
+        the permutation that puts parents first, and apply it to the joints, the inverse binds
+        <em>and</em> every <code>skin_influence</code> that names them.</p>
+      <p><em>Hint:</em> Kahn's algorithm, or repeated passes until nothing moves. <em>What to
+        notice:</em> the third of those three is the one that gets forgotten, and forgetting it
+        produces a character whose vertices are attached to the wrong joints — which looks like a
+        weighting problem and is an indexing one. Write the check first:
+        <code>validate</code>'s <code>out_of_order</code> must be zero afterwards and the bind
+        residual must not have moved.</p>
+    </li>
+  </ol>
+
+  <h2 id="recap">15. Recap &amp; next</h2>
+
+  <p>
+    The engine can deform a surface. Not place an object — deform one continuous mesh by several
+    joints at once, which is the thing a transform hierarchy structurally cannot do and the thing
+    every character in every game is built on.
+  </p>
+
+  <p>
+    What made it tractable was refusing the vocabulary. A skinning matrix is
+    <code>model_from_joint</code> times <code>joint_from_model</code>; the inner labels agree because
+    they name one joint at two <em>times</em>, and the outer labels agree because both are model
+    space. From those two readings came everything else: the blend is well-typed because the
+    matrices share a domain and a codomain, the blend is not a rotation because that set is not
+    closed under addition, and at the bind pose the two factors are inverses, so the whole rig can
+    be tested with one number and no picture.
+  </p>
+
+  <p>
+    The inverse binds cost no inversions, because inverting a product reverses it and the inverse
+    chain composes with the same flat loop on the other side — which finally wrote the
+    <code>local_from_parent</code> that Lesson 2.8 declined to write until a caller existed. And the
+    artifact turned out to be a third sighting of the module's half-angle:
+    <code>cos(θ/2)</code> between two joints, <code>cos(θ/2n)</code> across <code>n</code> of them,
+    and the same cosine on the minor axis of an ellipse when the joint bends instead of twisting.
+  </p>
+
+  <p>
+    <strong>What is missing is the pose.</strong> Everything above takes
+    <code>std::span&lt;const transform&gt;</code> and does not care where those transforms came
+    from, and in this lesson they came from two sliders. <strong>Lesson 7.7</strong> replaces the
+    sliders with a clip: keyframes on a timeline, sampled at a time, interpolated between — which is
+    where 7.5's <code>quat_slerp</code> and <code>quat_nlerp</code> finally get the caller they were
+    built for, with the threshold already derived (under 73.50° of arc, nlerp is within half a
+    degree and 3.42× cheaper, and a 30 Hz clip's adjacent keyframes are far below that). Then
+    blending two clips, which is the same weighted sum as §1 one level up — and which inherits
+    §8's warning, because blending two poses that are far apart collapses a character for exactly
+    the reason a twisted forearm does.
+  </p>
+
+  <h2 id="reading">16. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Jacob Gundersen / Alan Watt &amp; Mark Watt, <em>Advanced Animation and Rendering
+        Techniques</em> (1992), ch. 16.</strong> One of the earliest careful write-ups of vertex
+        blending, from before it had settled on a name. Worth it for seeing the technique described
+        without the vocabulary that later grew around it.</li>
+    <li><strong>Ladislav Kavan et al., "Geometric Skinning with Approximate Dual Quaternion
+        Blending", ACM TOG 2008.</strong> The fix §10.2 names and does not build. It is the right
+        next step if the candy wrapper is unacceptable for your content, and it is honest about its
+        own artifact — the bulge on the outside of a bent joint — which is the trade rather than a
+        detail.</li>
+    <li><strong>Ilya Baran and Jovan Popović, "Automatic Rigging and Animation of 3D Characters",
+        SIGGRAPH 2007.</strong> Where the weights come from when nobody paints them: a heat
+        equation over the surface, which is what "automatic bind" means in every DCC tool. Read it
+        for why smooth falloff is the natural answer rather than a stylistic one — and then against
+        Exercise 5, which finds that smoothness does not touch the worst case.</li>
+    <li><strong>The glTF 2.0 specification, §3.7.4 "Skins".</strong> The format this engine will
+        import from, and the place to check two things this lesson asserted: that
+        <code>inverseBindMatrices</code> is an accessor of exactly the matrices §3 derives, and that
+        <code>skins.joints</code> is an arbitrary permutation of node indices — which is what puts
+        §4.3's topological sort on the importer.</li>
+    <li><strong>Real-Time Rendering (4th ed.), §4.4 "Vertex Blending".</strong> The standard
+        reference treatment, four pages, with the matrix palette and the GPU formulation. Its
+        equation 4.30 is §1's sum; reading it after this lesson is a good test of whether the
+        vocabulary has stopped being in the way.</li>
+    <li><strong>Marco Tarini et al., "Accurate and Efficient Lighting for Skinned Models",
+        Eurographics 2014.</strong> The paper for §9's compromise, taken seriously: what it costs
+        to transform normals correctly under skinning, and when the cheap rule is genuinely
+        enough.</li>
+    <li><strong>The CMake documentation on <code>CMAKE_BUILD_TYPE</code>.</strong> Unrelated to
+        skinning, and the reason §10.1's first set of numbers was wrong by a factor of eighteen. The
+        sentence to find is the one that says the default is empty.</li>
+  </ul>

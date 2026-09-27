@@ -1,0 +1,72 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l64f6-t l64f6-d">
+  <title id="l64f6-t">Hemispherical reflectance with and without Fresnel coupling</title>
+  <desc id="l64f6-d">Total reflectance R of a white surface against roughness, for an eye at 0 and at 75 degrees. Without coupling the surface reflects more light than arrives at every roughness, worst 1.2353 at grazing. With the two-crossing coupling it never exceeds 1, worst 0.9255 over a full sweep, where the common half-vector form still reaches 1.3395.</desc>
+  <defs>
+    <marker id="e-i-l64f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l64f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l64f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l64f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l64f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="420" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">The door shuts — and the two forms that do not</text>
+<rect x="96" y="62" width="470" height="250" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<line x1="96" y1="312.0" x2="566" y2="312.0" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="86" y="316.0" class="xs" text-anchor="end">0.0</text>
+<line x1="96" y1="228.66666666666669" x2="566" y2="228.66666666666669" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="86" y="232.66666666666669" class="xs" text-anchor="end">0.5</text>
+<line x1="96" y1="145.33333333333334" x2="566" y2="145.33333333333334" class="ink" stroke-width="1.6"/>
+<text x="86" y="149.33333333333334" class="xs" text-anchor="end">1.0</text>
+<line x1="96" y1="62.0" x2="566" y2="62.0" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="86" y="66.0" class="xs" text-anchor="end">1.5</text>
+<text x="574" y="149.33333333333334" class="xs" text-anchor="start">unity</text>
+<text x="40" y="187.0" class="sm" text-anchor="middle">R(v)</text>
+<text x="143.0" y="332" class="xs" text-anchor="middle">0.10</text>
+<rect x="101.0" y="106.11666666666667" width="18" height="205.88333333333333" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="123.0" y="138.66666666666666" width="18" height="173.33333333333334" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="145.0" y="159.05" width="18" height="152.95" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="167.0" y="159.43333333333334" width="18" height="152.56666666666666" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="237.0" y="332" class="xs" text-anchor="middle">0.30</text>
+<rect x="195.0" y="111.69999999999999" width="18" height="200.3" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="217.0" y="138.73333333333332" width="18" height="173.26666666666668" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="239.0" y="159.11666666666665" width="18" height="152.88333333333335" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="261.0" y="165.01666666666668" width="18" height="146.98333333333332" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="331.0" y="332" class="xs" text-anchor="middle">0.50</text>
+<rect x="289.0" y="127.21666666666667" width="18" height="184.78333333333333" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="311.0" y="139.2166666666667" width="18" height="172.7833333333333" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="333.0" y="159.6" width="18" height="152.4" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="355.0" y="180.53333333333336" width="18" height="131.46666666666664" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="425.0" y="332" class="xs" text-anchor="middle">0.70</text>
+<rect x="383.0" y="134.91666666666666" width="18" height="177.08333333333334" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="405.0" y="140.66666666666666" width="18" height="171.33333333333334" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="427.0" y="161.05" width="18" height="150.95" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="449.0" y="188.23333333333332" width="18" height="123.76666666666668" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="519.0" y="332" class="xs" text-anchor="middle">1.00</text>
+<rect x="477.0" y="139.71666666666667" width="18" height="172.28333333333333" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="499.0" y="143.28333333333336" width="18" height="168.71666666666664" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="521.0" y="163.66666666666666" width="18" height="148.33333333333334" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="543.0" y="193.03333333333333" width="18" height="118.96666666666667" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="331.0" y="352" class="sm" text-anchor="middle">roughness</text>
+<rect x="100" y="365" width="13" height="10" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="119" y="374" class="xs" text-anchor="start">uncoupled, eye at 75°</text>
+<rect x="222" y="365" width="13" height="10" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="241" y="374" class="xs" text-anchor="start">uncoupled, eye at 0°</text>
+<rect x="344" y="365" width="13" height="10" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="363" y="374" class="xs" text-anchor="start">COUPLED, eye at 0°</text>
+<rect x="466" y="365" width="13" height="10" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="485" y="374" class="xs" text-anchor="start">COUPLED, eye at 75°</text>
+<rect x="592" y="62" width="108" height="250" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="646" y="84" class="sm" text-anchor="middle">worst R(v)</text>
+<text x="646" y="100" class="xs" text-anchor="middle">over the sweep</text>
+<rect x="602" y="118" width="88" height="46" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="646" y="134" class="xs" text-anchor="middle">no coupling</text>
+<text x="646" y="154" class="sm" text-anchor="middle">1.4300</text>
+<rect x="602" y="180" width="88" height="46" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="646" y="196" class="xs" text-anchor="middle">1 - F(v·h)</text>
+<text x="646" y="216" class="sm" text-anchor="middle">1.3395</text>
+<rect x="602" y="242" width="88" height="46" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="646" y="258" class="xs" text-anchor="middle">two-crossing</text>
+<text x="646" y="278" class="sm" text-anchor="middle">0.9255</text>
+<text x="646" y="298" class="xs" text-anchor="middle">ours is the green</text>
+<text x="360.0" y="406" class="xs" text-anchor="middle">The coupled model never reaches 1 — and never quite reaches it, which is the other half of the story.</text>
+</svg>

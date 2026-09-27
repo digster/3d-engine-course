@@ -1,0 +1,513 @@
+
+  <!-- ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Everything above is a claim about hardware. The point of this section is that you can
+    <em>check</em> most of it without any hardware, by making the software rasterizer behave the
+    way the hardware does and measuring the difference.
+  </p>
+
+  <h3 id="impl-fragment"><span class="num">4.1</span>The fragment, extracted — and what it turned out to be</h3>
+
+  <p>
+    Two traversals need to share the per-pixel work, so it comes out of the loop into a lambda:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/raster.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">const auto fragment = [&amp;](float f0, float f1, float f2) -&gt; Uint32 {
+    const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+
+    if (style.shade == shading::uv_checker) { /* … */ }
+    else if (style.shade == shading::textured) { /* … */ }
+    else if (lit) { /* … */ }
+    else { /* … */ }
+};</code></pre>
+  </figure>
+
+  <p>
+    Look at what extracting it revealed. It is a function from three barycentric weights to a
+    colour, with every piece of pipeline state captured. <strong>That is a fragment shader.</strong>
+    It has been one since Lesson 3.6; it was simply spelt inline, so nobody had to notice. The one
+    thing separating it from the real article is that <em>the caller cannot supply it</em> — which
+    is Module 4's whole argument, and the reason this refactor belongs to a lesson rather than to
+    a tidying commit.
+  </p>
+
+  <p>
+    It also acquires a new obligation, and this is the part that needs care. It is now called for
+    lanes the triangle does <em>not</em> cover, so it has to be <strong>total</strong>: barycentric
+    weights go negative outside the triangle (Lesson 2.3 said so and called it useful),
+    <code>w_recip</code> can come back enormous or negative, and a <code>uv</code> can land
+    anywhere at all. Nothing in there reads out of bounds on such a lane —
+    <code>wrap_texel</code> folds any index into range (3.9) and <code>linear_to_srgb_u8</code>
+    refuses a NaN (3.3) — and whatever nonsense it computes is discarded. Both of those guards
+    were written for other reasons, and both are load-bearing here.
+  </p>
+
+  <h3 id="impl-quad"><span class="num">4.2</span>Walking in quads</h3>
+
+  <p>
+    The new traversal walks 2×2 blocks aligned to <em>even coordinates in the render target</em>,
+    not to the triangle:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/raster.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">const int qx0 = s.min_x &amp; ~1;
+const int qy0 = s.min_y &amp; ~1;</code></pre>
+  </figure>
+
+  <p>
+    That alignment is not a detail. It is why a triangle cannot arrange to be cheap by being
+    positioned well, and why the waste depends on its <em>size</em> rather than on where it lands.
+  </p>
+
+  <p>
+    Inside a block, the four lanes' edge values come from the ones the setup already computed,
+    because an edge function is affine and the steps are constants:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/raster.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">const int lw0[4] = {lane_w0, lane_w0 + s.step_x0,
+                    lane_w0 + s.step_y0, lane_w0 + s.step_x0 + s.step_y0};</code></pre>
+  </figure>
+
+  <p>
+    Lane order is top-left, top-right, bottom-left, bottom-right — which is exactly why
+    <code>ddx</code> is lane 1 minus lane 0 and <code>ddy</code> is lane 2 minus lane 0.
+  </p>
+
+  <p>Then the three lines that carry the whole lesson:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">src/gfx/raster.cpp</span> <span class="tag">excerpt</span></figcaption>
+    <pre><code class="lang-cpp">// THE DEPTH TEST IS FOR COVERED LANES ONLY.
+const bool visible = covered[i] &amp;&amp; depth_test(zrow, lx, f0, f1, f2);
+
+// The fragment runs whether or not this lane is covered.
+const Uint32 colour = fragment(f0, f1, f2);
+++local.shaded;
+
+if (visible) { fb.row(ly)[lx] = colour; }</code></pre>
+  </figure>
+
+  <p>
+    Moving that <code>fragment</code> call inside the <code>if (visible)</code> would make the
+    quad traversal cheap and stop it modelling anything. And the depth test being covered-only is
+    what keeps the output identical: a helper lane is not on the surface, so it must not write
+    depth.
+  </p>
+
+  <p>
+    One early-out survives, and it is the one hardware has too: <strong>a quad with no covered
+    lane is never issued at all.</strong> Without it the cost would be the bounding box rather
+    than the triangle.
+  </p>
+
+  <h3 id="impl-identical"><span class="num">4.3</span>The test: it must change nothing</h3>
+
+  <p>
+    A traversal that changes the picture is not a traversal, it is a bug. So the first check is
+    the same one Lesson 3.9 used for its 1:1 blit — <strong>bit-identical output</strong> — and
+    this time it covers the depth buffer too:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_41.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>B. THE QUAD TRAVERSAL CHANGES NOTHING IT WRITES
+     2306 triangles at 640x360
+     colour: 0 of 230400 px differ
+     depth:  0 of 230400 values differ
+     lanes: 166360 shaded, 145355 covered, 21005 helpers -&gt; 87.4% efficient</code></pre>
+  </figure>
+
+  <p>
+    Zero and zero, over 2,306 triangles of the Module 3 capstone scene — while shading 21,005
+    lanes whose results went nowhere. That pair of facts is the lesson in one measurement: the
+    hardware's model does more work for the same picture, and the extra work buys derivatives.
+  </p>
+
+  <h3 id="impl-cost"><span class="num">4.4</span>What the helpers cost</h3>
+
+  <p>
+    Now the same scene at six tessellations, timed both ways — and the prediction, made first:
+    if shading dominates, the quad traversal should be slower by exactly
+    <span class="mono">1 / efficiency</span>.
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>triangles</th><th>efficiency</th><th>scanline</th><th>quad</th>
+               <th>measured</th><th>predicted</th></tr></thead>
+    <tbody>
+      <tr><td>66</td><td>96.9%</td><td>4,477 µs</td><td>4,664 µs</td><td>1.04×</td><td>1.03×</td></tr>
+      <tr><td>258</td><td>94.6%</td><td>4,251</td><td>4,924</td><td>1.16×</td><td>1.06×</td></tr>
+      <tr><td>1,026</td><td>90.6%</td><td>4,292</td><td>5,242</td><td>1.22×</td><td>1.10×</td></tr>
+      <tr><td>2,306</td><td>87.4%</td><td>4,375</td><td>5,440</td><td>1.24×</td><td>1.14×</td></tr>
+      <tr><td>9,218</td><td>80.0%</td><td>4,534</td><td>6,087</td><td>1.34×</td><td>1.25×</td></tr>
+      <tr><td>36,866</td><td>72.6%</td><td>5,263</td><td>7,246</td><td>1.38×</td><td>1.38×</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 2.</span> The lane count predicts the slowdown to within 0.09×
+    across a 560× range of triangle counts. Where the measurement runs <em>above</em> the
+    prediction, the gap is the quad walk's own overhead — four coverage tests and a mask per
+    block, which the scanline loop does not pay. So the model is right and what it omits is the
+    <em>traversal</em>, not the shading.
+  </figcaption>
+  </figure>
+
+  <p>
+    Note what this means for the number Lesson 3.10 ended on. Our scene is <strong>87.4%</strong>
+    efficient, so on hardware roughly one fragment shader invocation in eight would be thrown
+    away — and at 36,866 triangles, more than one in four. That is the real content of "small
+    triangles are expensive", and it is why Nanite-style renderers and every LOD system ever
+    shipped care so much about triangle size rather than triangle count.
+  </p>
+
+  <h3 id="impl-drift"><span class="num">4.5</span>A 10% speedup that was not there</h3>
+
+  <p>
+    One thing happened while building this lesson that belongs in it.
+  </p>
+
+  <p>
+    After extracting the fragment into a lambda, the Module 3 harness reported the capstone
+    fragment at <strong>40.46 ns/px</strong> against the <strong>46.46</strong> Lesson 3.10
+    published. A behaviour-preserving refactor with a free 10% is a result, so it got measured
+    properly: two binaries differing <em>only</em> by the extraction, run alternately in one
+    session.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">controlled, alternating</span> <span class="tag">output</span></figcaption>
+    <pre><code>        old      new
+     41.309   40.314
+     41.608   41.446
+     41.628   42.209
+     42.231   41.968
+     43.083   42.536
+
+old  min 41.309  median 41.628
+new  min 40.314  median 41.968</code></pre>
+  </figure>
+
+  <p>
+    The minimums say 2.5% faster and the medians say 1% slower, which together say <strong>no
+    measurable difference</strong>. The 10% was session drift — and you can see the drift in the
+    data, because both columns climb monotonically as the machine warms up.
+  </p>
+
+  <div class="callout verify">
+    <span class="label">This is Lesson 3.10's own pitfall, violated within a day</span>
+    <p>
+      3.10 §7 says it in as many words: <em>never compare two numbers taken hours apart; measure
+      both variants in the same run, back to back.</em> It took one day to break that rule, on the
+      very code that lesson was written about. Two things follow. Lesson 3.10's published numbers
+      stand, unchanged. And <strong>a refactor's performance claim needs the same control as a
+      feature's</strong> — "it should be the same speed" is a prediction, and predictions get
+      measured.
+    </p>
+  </div>
+
+  <h3 id="impl-demo"><span class="num">4.6</span>Seeing it: one key</h3>
+
+  <p>
+    <kbd>5</kbd> cycles the traversal: scanline, quads, and quads with the helper lanes
+    <em>written</em> in debug magenta instead of discarded. That third mode is not a rendering
+    mode, it is a picture of the waste — every triangle grows a magenta fringe, and the fringe is
+    the same width whatever the triangle's size, which is precisely why small triangles suffer.
+  </p>
+
+  <p>
+    Magenta is this engine's "this value is not real" convention, used for the third time —
+    <code>checker_at</code> in 3.2, an unbound sampler in 3.9, helper lanes now. No real surface is
+    ever that colour by accident.
+  </p>
+
+  <p>
+    The budget panel gains a line reporting lanes shaded, lanes wasted, and the efficiency —
+    and it appears <em>only</em> under a quad traversal, because under <code>scanline</code> every
+    lane is covered by construction and a row reading "100% efficient" would be announcing that
+    the feature is switched off, dressed up as a result.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/gfx/raster.hpp</code></td><td>modified</td>
+          <td><code>traversal</code>, <code>quad_stats</code>, and a stats out-parameter on
+              <code>fill_triangle</code></td></tr>
+      <tr><td><code>src/gfx/raster.cpp</code></td><td>modified</td>
+          <td>The fragment and depth test extracted; the 2×2 quad walk beside the scanline
+              one</td></tr>
+      <tr><td><code>src/main.cpp</code></td><td>modified</td>
+          <td><kbd>5</kbd>, the lane-efficiency row in the budget panel, stats plumbed through
+              <code>draw_triangles</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption><span class="fignum">Table 3.</span> This lesson's file manifest. No new files —
+    everything here is a change to machinery that already existed, which is itself the point.
+  </figcaption>
+  </figure>
+
+  @@LISTING:src/gfx/raster.hpp@@
+  @@LISTING:src/gfx/raster.cpp@@
+  @@LISTING:src/main.cpp@@
+
+  <!-- ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span> <span class="tag">shell</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build -j
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span> <span class="tag">shell</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build --config Release -j
+.\build\Release\engine.exe</code></pre>
+  </figure>
+
+  <h3><span class="num">6.1</span>Expected result</h3>
+
+  <p>The scene looks exactly as it did at the end of Module 3. Then:</p>
+
+  <ul>
+    <li><strong>Press <kbd>5</kbd> once.</strong> Quad traversal. <em>Nothing changes.</em> That is
+        the result — check the budget panel's new line, which now reports lanes shaded and
+        wasted.</li>
+    <li><strong>Press <kbd>5</kbd> again.</strong> Helper lanes in magenta. Every triangle grows a
+        fringe.</li>
+    <li><strong>Now press <kbd>T</kbd> a few times</strong> to subdivide the floor, or <kbd>C</kbd>
+        to the model scene and watch the torus. As triangles shrink the magenta stops being a
+        fringe and becomes most of the object, and the efficiency figure falls with it.</li>
+    <li><strong>Watch <code>fill</code> in the budget</strong> as you switch. On the capstone scene
+        it rises by about a quarter — the price of a model your CPU has no reason to adopt and
+        your GPU has no way to avoid.</li>
+  </ul>
+
+  <p>Then the harness, which is where every number in this lesson comes from:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the harness</span> <span class="tag">shell</span></figcaption>
+    <pre><code>c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_41.cpp src/core/profile.cpp \
+    src/gfx/{mesh,obj,clip,raster,texture,framebuffer,depth_buffer,colour}.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_41
+./scratch/verify_41</code></pre>
+  </figure>
+
+  <!-- ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">"Small triangles are expensive" taken as folklore</span>
+    <p><strong>Symptom.</strong> An LOD system that reduces triangle counts and does not get
+       faster, or a tessellation setting nobody can justify.</p>
+    <p><strong>Cause.</strong> Triangle <em>count</em> is not the axis. Lesson 3.10 measured a
+       2-triangle floor costing eight times a 2,304-triangle torus; today's numbers say the cost
+       of a small triangle is its lane efficiency, which is a function of its <em>size in
+       pixels</em>.</p>
+    <p><strong>Fix.</strong> Reason in pixels per triangle, and pick LOD levels so that triangles
+       stay above a few pixels across at the distance they are shown. Below one pixel you are
+       paying full price for lanes you throw away.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A branch that was cheap in testing and expensive in the game</span>
+    <p><strong>Symptom.</strong> A shader branch benchmarks fine on a test scene and costs 30% in
+       production.</p>
+    <p><strong>Cause.</strong> Coherence, not the branch (§2.4). The test scene had large uniform
+       regions; the real one has the two sides interleaved at pixel scale.</p>
+    <p><strong>Fix.</strong> Measure with realistic data, and where possible move the branch out
+       of the shader entirely — sort draws by material, or use separate pipelines. That is the
+       same "specialise rather than branch" move §3.4 describes, and on a GPU it is the whole
+       reason shader variants exist.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Expecting <code>ddx</code>/<code>ddy</code> to work inside a branch</span>
+    <p><strong>Symptom.</strong> A texture sampled inside an <code>if</code> shows garbage mip
+       selection, or the compiler refuses outright.</p>
+    <p><strong>Cause.</strong> A derivative needs the neighbouring lane's value at the same point
+       in the program. If that lane took the other side of the branch, it does not have one.</p>
+    <p><strong>Fix.</strong> Sample outside the branch and select afterwards, or compute the
+       gradient outside and use an explicit-gradient sample. This is a real constraint you will
+       meet in Module 6, and it falls straight out of Figure 2.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A traversal change that "looks the same"</span>
+    <p><strong>Symptom.</strong> You add a quad walk, the image looks right, and something subtle
+       is wrong three lessons later.</p>
+    <p><strong>Cause.</strong> "Looks the same" is not a test. A helper lane that writes depth, or
+       a coverage rule that differs by one pixel at a shared edge, is invisible until it is not.</p>
+    <p><strong>Fix.</strong> Compare buffers, not impressions: <em>zero</em> pixels differing and
+       <em>zero</em> depth values differing, over a scene with thousands of shared edges. Lesson
+       3.9's bit-identical blit made the same argument, and both were caught by the same kind of
+       check.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Comparing a benchmark against a number from yesterday</span>
+    <p><strong>Symptom.</strong> A refactor appears to gain or lose 10%.</p>
+    <p><strong>Cause.</strong> Thermal and scheduling drift between sessions (§4.5). It happened
+       in this lesson.</p>
+    <p><strong>Fix.</strong> Build both variants, run them alternately in one session, and report
+       both the minimum and the median. If they disagree about the direction, you have no
+       result.</p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <h3>8.1 &nbsp;Predict before you measure</h3>
+  <p>
+    Before running anything: what lane efficiency would you expect for the <em>floor</em> alone —
+    two enormous triangles — and for a 192-segment torus? Write both down, then use
+    <kbd>5</kbd> and <kbd>C</kbd> to check.
+  </p>
+  <details><summary>Solution sketch</summary>
+    <p>The floor is close to 100%: two triangles covering tens of thousands of pixels have almost
+       no perimeter relative to their area. The torus at 192 segments measures 72.6%. The gap
+       between those two is the whole of §3.1, and it is why "how many triangles" is the wrong
+       question and "how big are they" is the right one.</p>
+  </details>
+
+  <h3>8.2 &nbsp;Make the block size a parameter</h3>
+  <p>
+    Generalise the quad walk to an arbitrary power-of-two block and reproduce Figure 4's four
+    curves from the real rasterizer rather than from the coverage-only sweep in
+    <code>verify_41</code> §D. Do the timings track the lane counts?
+  </p>
+  <details><summary>Hint</summary>
+    <p>The alignment mask <code>&amp; ~1</code> becomes <code>&amp; ~(block - 1)</code>, and the
+       four hard-coded lane offsets become two nested loops. Everything else is unchanged, which
+       is itself worth noticing.</p>
+  </details>
+
+  <h3>8.3 &nbsp;Implement <code>ddx</code></h3>
+  <p>
+    Give the fragment function access to its quad's four <code>uv</code> values and compute
+    <code>ddx(uv)</code> and <code>ddy(uv)</code>. Then use them: colour each pixel by
+    <code>log2(max(|ddx|, |ddy|) · texture_size)</code>, which is exactly the mip level a GPU
+    would select. Compare it against Lesson 3.9's traced footprint down the floor.
+  </p>
+  <details><summary>Hint</summary>
+    <p>You will have to shade all four lanes <em>before</em> writing any of them, which means
+       computing the quad's four fragments into a small array first. That restructuring is not
+       incidental — it is why the hardware works in quads in the first place.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>The level should rise steadily toward the horizon and match 3.9 §H's traced footprint of
+       0.60 texels per pixel at the bottom of the frame to 62.46 near the horizon — i.e. about six
+       mip levels. You have now built the input to mipmapping, three modules before Module 6
+       builds the mipmaps.</p>
+  </details>
+
+  <h3>8.4 &nbsp;Find the divergence cliff on your own machine (engine challenge)</h3>
+  <p>
+    <code>verify_41</code> §E assumes a warp of 32. Sweep the assumed warp width — 8, 16, 32, 64 —
+    against coherence and find where <em>your</em> curve steps. Then look up your GPU's actual
+    wavefront width and compare.
+  </p>
+  <details><summary>Hint</summary>
+    <p>The step happens where the run length crosses the group width, so the curve for an assumed
+       width of <em>W</em> should turn at a coherence of <em>W</em>. That is a falsifiable
+       prediction about a parameter you chose, which makes it a good test of whether the emulation
+       models anything at all.</p>
+  </details>
+
+  <h3>8.5 &nbsp;Occupancy, by hand (engine challenge)</h3>
+  <p>
+    Extend §F's chain experiment so each chain carries a small array of live values — 2, 4, 8, 16
+    floats — standing in for a shader's register usage. Plot throughput against
+    chains&nbsp;×&nbsp;registers. Where does it fall off, and why?
+  </p>
+  <details><summary>Solution sketch</summary>
+    <p>It falls off when the working set exceeds the physical register file and the compiler
+       starts spilling to the stack. That is exactly what happens on a GPU when a shader's
+       register count reduces occupancy: fewer groups fit, less latency is hidden, throughput
+       drops. You have reproduced an occupancy cliff on a CPU.</p>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <p>
+    Module 4 opens not with an API but with a model, and the model is now measured rather than
+    asserted:
+  </p>
+
+  <ul>
+    <li><strong>Wide, not fast.</strong> Eight independent chains of identical work run 7× faster
+        than one dependent chain, and 32 run 27× faster. A GPU is a machine built to always have
+        something else to do, and occupancy is that table.</li>
+    <li><strong>Lockstep, and what it costs.</strong> A warp executes both sides of a branch its
+        lanes disagree about. Measured: <strong>1.93×</strong> when incoherent,
+        <strong>1.00×</strong> when coherent, with the step exactly at the warp width.</li>
+    <li><strong>2×2 quads, and why they cannot be avoided.</strong> Derivatives are differences
+        between neighbouring lanes, so the neighbours must run. Efficiency falls from 96.3% on a
+        64-pixel triangle to 25.0% on a 1-pixel one, and it falls faster for every wider block.</li>
+    <li><strong>Eleven pipeline stages, all of which you have written.</strong></li>
+    <li><strong>A pipeline object with ten fields against SDL's nine</strong> — and the measured
+        finding that the usual justification for it (branch cost) is wrong, while the real one
+        (validation and compilation) is exactly why shaders exist.</li>
+  </ul>
+
+  <p>
+    The engine gained one enum and about a hundred lines, and produced a bit-identical image while
+    doing measurably more work. That is an unusual kind of change and worth naming: it is not a
+    feature, it is an <strong>instrument</strong> — a way of asking your own renderer a question
+    about a machine it is not running on.
+  </p>
+
+  <h3><span class="num">9.1</span>Next: 4.2</h3>
+
+  <p>
+    Now the API. <a href="../index.html">Lesson 4.2</a> introduces SDL_GPU's object model —
+    device, swapchain, command buffers, render passes, pipelines, buffers, textures, samplers —
+    and every one of them maps onto something in this repository, because you now know what each
+    one is <em>for</em>. It also carries the honest sidebar on why this course does not use
+    OpenGL.
+  </p>
+
+  <p>
+    Then 4.3 gives you a real fragment shader, which is the answer to all six of the pressures
+    Module 3 spent ten lessons accumulating.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Fabian Giesen, "A trip through the Graphics Pipeline 2011"</strong> — the standard
+        reference, and the best single account of quads, early-Z and hierarchical rasterization.
+        Read parts 6 and 7 alongside §3.1 of this lesson.</li>
+    <li><strong>Kayvon Fatahalian, "How a GPU Works" / CMU 15-869 lecture notes</strong> — the
+        clearest derivation of SIMT from first principles, arriving at the same place §2.1 does
+        and with better pictures.</li>
+    <li><strong>Peter Shirley et al., <em>Real-Time Rendering</em>, 4th ed., §3 and §23</strong> —
+        the pipeline as an abstraction, then the pipeline as silicon.</li>
+    <li><strong>SDL3 wiki, <a href="https://wiki.libsdl.org/SDL3/CategoryGPU">CategoryGPU</a></strong>
+        — the conventions this course pinned down in Module 2, from the source.</li>
+    <li><strong>Nanite's SIGGRAPH 2021 course notes (Brian Karis et al.)</strong> — what a
+        renderer looks like when it takes §3.1 completely seriously and rasterizes sub-pixel
+        triangles in software instead.</li>
+  </ul>

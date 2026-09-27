@@ -1,0 +1,387 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-03-complex-numbers.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.3 — Complex Numbers Rotate the Plane</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-05-slerp.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.5 — Slerp, and the Storage Swap</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.4</div>
+    <h1>Quaternions, Derived</h1>
+    <p class="deck">
+      Lesson 7.3 ended with a proof, not a promise: <strong>no three-dimensional number system can
+      do this job</strong>. Assume one spanned by <code>1</code>, <code>i</code> and <code>j</code>,
+      ask where <code>ij</code> has to land, and three lines of algebra demand a real number whose
+      square is −1. So there is a fourth component and it is forced. This lesson starts exactly
+      there and asks the question that proof leaves open: <em>forced to be what?</em> The answer
+      comes from a single geometric demand — <strong>space has no preferred direction</strong>, so
+      every unit imaginary must be a half-turn and square to −1 — and that one sentence forces
+      anticommutativity in three lines, forces every entry of the multiplication table, and hands
+      back <code>ijk = −1</code> as a consequence rather than as Hamilton's flourish. Multiplying
+      two of them out then produces something startling: <strong>the dot product and the cross
+      product are both inside the quaternion product</strong>, and the cross product is precisely
+      the term that changes sign when you swap the operands. Three sentences turn out to be one
+      fact — quaternions do not commute, the cross product is antisymmetric, rotations of space do
+      not commute — and that is the whole of what the fourth dimension charges. The half-angle is
+      not postulated either: 7.3 derived it in the plane with two mirrors and a protractor, and
+      here the same argument with <em>planes</em> instead of <em>lines</em> produces
+      <code>cos(θ/2) + sin(θ/2) n̂</code> <em>and</em> the sandwich <code>q v q̄</code> <em>and</em>
+      the double cover, none of them chosen, all three falling out of composing two reflections.
+      Then we measure everything: <strong>1.57× cheaper to compose, 1.57× dearer to apply</strong>
+      — so there is a crossover, and it is <strong>7.6 vectors</strong> — and an extraction with
+      <strong>no bad case anywhere</strong>, because four candidates that sum to 4 always leave one
+      of them at least 1, where Lesson 7.2's three needed a derived crossover at 120°. The
+      surprises are honest ones. An unrepaired quaternion walk drifts <em>worse</em> than a matrix
+      walk, and the reason is better than the result. 7.3's sharpest warning —
+      <code>renormalised_fast</code> lying with a perfect modulus — <em>inverts</em>: here it is
+      exact at <code>|q| = 1</code> and exact again at <code>|q| = 2</code>, and catastrophic
+      between, so a test sampling the two obvious points certifies a broken function. And the
+      engine change this header has promised since Module 2 does not happen in this lesson,
+      because the narrower type found something first: <strong>the field called
+      <code>rotation</code> has a caller that does not put a rotation in it.</strong>
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 7 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="07-01-euler-angles.html">7.1 — Euler Angles and Their Pathologies</a>,
+          <a href="07-02-axis-angle.html">7.2 — Axis-Angle and Rodrigues' Rotation Formula</a>,
+          <a href="07-03-complex-numbers.html">7.3 — Complex Numbers Rotate the Plane</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/quat.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/include/engine/math/transform.hpp</code>,
+            <code>demos/gimbal/main.cpp</code>,
+            <code>docs/shared/course.css</code>,
+            <code>scratch/verify_74.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_74.sh</code> <em>(new)</em>,
+            <code>scratch/golden_74.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine gains the representation the whole of Module 7 has been walking toward:
+            four floats, composing in 16 multiplies with no trigonometry, no singularity anywhere,
+            an extraction with no bad case, and a repair that costs one Taylor step instead of
+            Gram-Schmidt. <strong>42 checks green</strong>, ten of them controls — including one
+            that builds the <em>wrong</em> sandwich and demands that it reverse every composition.
+            The <code>gimbal</code> demo gains two modes: <kbd>C</kbd> performs the same two turns
+            in both orders and prints the gap three different ways, and <kbd>D</kbd> turns the
+            craft through two full revolutions beside a dial that goes round once.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the entire quaternion multiplication table, including <code>ijk = −1</code>, from
+          one geometric demand about space, and explain why <em>anticommutativity is what isotropy
+          costs</em>.</li>
+      <li>…point at the dot product and the cross product inside the quaternion product, and say
+          exactly which term is responsible for the failure to commute.</li>
+      <li>…derive <code>cos(θ/2) + sin(θ/2) n̂</code> and the sandwich <code>q v q̄</code> together,
+          from two reflections, without postulating either.</li>
+      <li>…explain the double cover, predict which operations must take an absolute value because
+          of it, and name the bug you get if you forget.</li>
+      <li>…implement matrix-to-quaternion extraction that has no bad case, and say why four
+          candidates buy something three could not.</li>
+      <li>…decide, with a number, whether to rotate a vector with a quaternion or to build the
+          matrix first.</li>
+      <li>…say what a quaternion cannot store, and recognise the class of bug that a narrower type
+          finds in code that was previously "correct".</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: forced to be <em>what</em>?</a></li>
+      <li><a href="#intuition">Building intuition: a rotation is two reflections</a></li>
+      <li><a href="#table">The table, forced by isotropy</a></li>
+      <li><a href="#product">The product, and the two famous halves inside it</a></li>
+      <li><a href="#mirrors">Mirrors in space: the sandwich and the half-angle, together</a></li>
+      <li><a href="#implementation">Implementation: the type</a></li>
+      <li><a href="#commute">The one price, made visible</a></li>
+      <li><a href="#cover">The double cover</a></li>
+      <li><a href="#extract">Extraction: four candidates, and no bad case</a></li>
+      <li><a href="#cost">What it costs, measured</a></li>
+      <li><a href="#cannot">What a quaternion cannot hold</a></li>
+      <li><a href="#scorecard">Four representations, side by side</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: forced to be <em>what</em>?</h2>
+
+  <p>
+    Lesson 7.3 spent most of its length in two dimensions, and it ended by proving that two
+    dimensions were not going to be enough. The proof is short and worth having in your head
+    before we go on, because everything below starts where it stops.
+  </p>
+
+  <div class="callout">
+    <span class="label">Lesson 7.3 §12.1, in four lines</span>
+    <p>
+      Suppose there were a three-dimensional number system spanned by <code>1</code>,
+      <code>i</code> and <code>j</code>, with <code>i² = j² = −1</code> and an associative product.
+      Then <code>ij</code> is a number in that system, so write it as <code>a + bi + cj</code>.
+      Multiply on the left by <code>i</code>. Associativity gives
+      <code>i(ij) = (ii)j = −j</code> on one side; expanding <code>i(a + bi + cj)</code> and
+      collecting gives <code>c²</code> as the coefficient of <code>j</code> on the other. Matching
+      them demands a <em>real</em> <code>c</code> with <code>c² = −1</code>. There is none.
+    </p>
+  </div>
+
+  <p>
+    So <code>ij</code> cannot live in the span of <code>1</code>, <code>i</code> and <code>j</code>.
+    It is a new basis element, call it <code>k</code>, and the system has four components. That is
+    settled, it was settled in the previous lesson, and <strong>this lesson does not repeat it</strong>.
+  </p>
+
+  <p>
+    What it leaves open is the interesting part. Knowing that a fourth component is <em>forced</em>
+    tells you nothing about what the arithmetic has to be. We know <code>i² = j² = −1</code>. We
+    have named <code>ij = k</code>. We do not yet know <code>ji</code>, or <code>k²</code>, or
+    <code>ik</code>, or any of the other nine entries — and if you have met quaternions before, you
+    have almost certainly met them as a table someone wrote down and asked you to accept.
+  </p>
+
+  <p>
+    We are not going to do that. There is a single geometric demand that fixes every entry, and it
+    is a sentence about space rather than a sentence about algebra. Finding it is §3.
+  </p>
+
+  <p>
+    Lesson 7.3 also left four explicit predictions on the page, in a callout, phrased so they could
+    be <em>checked</em> rather than re-motivated. Here they are again, because the rest of this
+    lesson is largely the business of discharging them:
+  </p>
+
+  <div class="callout">
+    <span class="label">The four predictions, from Lesson 7.3 §12.2</span>
+    <ol>
+      <li><strong>Four components.</strong> Proved above.</li>
+      <li><strong>The product will not commute.</strong> §4 shows it, and identifies the single
+          term responsible.</li>
+      <li><strong><code>cos(θ/2) + sin(θ/2) n̂</code>.</strong> §5 derives it from two mirrors, the
+          same argument 7.3 ran in the plane with a protractor.</li>
+      <li><strong>A double cover</strong> — two objects per rotation, exactly. §5 produces it
+          <em>inside the derivation</em>, as a sign nobody chose, before §8 names it.</li>
+    </ol>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: a rotation is two reflections</h2>
+
+  <p>
+    Before any algebra, here is the geometric fact the whole lesson rests on, and you can check it
+    at a table with two hands.
+  </p>
+
+  <p>
+    Hold your left hand flat and vertical — that is a mirror. Hold your right hand flat and
+    vertical too, at some angle to the first, and note that the two planes meet along a vertical
+    line. Now take an object and reflect it in the left plane, then reflect the result in the right
+    plane. <strong>The object ends up rotated about the line where the two planes meet</strong>,
+    and — this is the part that matters — <strong>it is rotated by twice the angle between the
+    planes</strong>, not by the angle between them.
+  </p>
+
+  <p>
+    Lesson 7.3 §7 established exactly this in two dimensions, where a mirror is a line rather than
+    a plane and you can draw the whole thing on graph paper. It measured it: mirrors 20° and 50°
+    apart produce a rotation of 60°, over 4,000 random mirror pairs at an agreement of
+    <code>3.8×10⁻⁶</code>. It also drew the consequence that mattered:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The sentence 7.3 wrote three lessons early</span>
+    <p>
+      Two mirrors <code>φ</code> apart generate a rotation of <code>2φ</code>. So <em>the object a
+      rotation is built out of carries half the angle of the rotation it generates.</em> That is the
+      <code>θ/2</code> in every quaternion, and it is a fact about reflections rather than a fact
+      about quaternions.
+    </p>
+  </div>
+
+  <p>
+    Everything in §5 is that sentence carried up one dimension. Nothing is halved on purpose;
+    nothing is a normalisation convention chosen to make a formula tidy. A rotation is two
+    reflections, a reflection has an angle, and the arithmetic doubles it.
+  </p>
+
+  <p>
+    Keep one more thing from 7.3 in view, because it removes the other mystery before we meet it.
+    That lesson asked why every quaternion text writes a rotation as the two-sided
+    <code>q v q̄</code> rather than the one-sided <code>z · v</code> the plane uses, and answered it
+    from the <em>other</em> end: in the plane, <code>z v z̄</code> collapses to the useless
+    <code>|z|² v</code> — measured at <code>9.6×10⁻⁷</code> over 4,000 cases — <em>precisely
+    because</em> complex multiplication commutes. The two-sided form is the normal case. The plane
+    was the special one, and it was special for exactly the reason that is about to disappear.
+  </p>
+
+  <h2 id="table">3. The table, forced by isotropy</h2>
+
+  <p>
+    We have <code>1</code>, <code>i</code>, <code>j</code>, <code>k</code>, and we know
+    <code>i² = j² = −1</code> and <code>ij = k</code>. Sixteen products, four known, twelve open.
+  </p>
+
+  <h3>3.1 The one demand</h3>
+
+  <p>
+    Here is the sentence that closes all twelve, and it is not an algebraic axiom:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Isotropy</span>
+    <p>
+      <strong>Space has no preferred direction.</strong> There is nothing special about the
+      <code>x</code> axis, so if <code>i</code> — the imaginary unit along <code>x</code> — squares
+      to −1, then <em>every</em> unit imaginary must square to −1, whichever way it points.
+    </p>
+  </div>
+
+  <p>
+    Notice what kind of statement that is. It is not "let us also require…", bolted on to make the
+    algebra close. It is a description of the thing we are trying to model. A number system for the
+    rotations of space that treated one direction differently from another would be describing a
+    different space from the one we live in. If the demand failed, the algebra would be wrong, not
+    merely inconvenient.
+  </p>
+
+  <p>
+    And it is checkable. §A.1 of this lesson's harness draws 20,000 unit vectors uniformly on the
+    sphere — by rejection rather than by a spherical-coordinate pair, because that pair clusters at
+    the poles and the whole question here is whether some direction is special — turns each into a
+    pure quaternion, and squares it:
+  </p>
+
+  <pre>A. THE TABLE, FORCED
+   worst |u^2 + 1| over 20000 axes:  2.980e-07
+  [PASS] A.1  every unit imaginary is a half-turn</pre>
+
+  <h3>3.2 What it forces, in three lines</h3>
+
+  <p>
+    Take <code>u = (i + j)/√2</code>. Its length is 1, so by the demand <code>u² = −1</code>.
+    Therefore
+  </p>
+
+  <div class="eq">\[ (i + j)^2 \;=\; 2u^2 \;=\; -2. \]</div>
+
+  <p>
+    Now expand the left-hand side the ordinary way, treating <code>i</code> and <code>j</code> as
+    symbols and being careful <em>not</em> to assume they commute:
+  </p>
+
+  <div class="eq">\[ (i+j)^2 \;=\; i^2 + ij + ji + j^2 \;=\; -2 + (ij + ji). \]</div>
+
+  <p>
+    Match the two lines and the bracket has to vanish:
+  </p>
+
+  <div class="eq">\[ ij + ji = 0, \qquad\text{that is,}\qquad ji = -ij = -k. \]</div>
+
+  <p class="eq-plain">
+    In prose, in case the typesetting is unavailable: <code>(i+j)²</code> must equal −2 because
+    <code>(i+j)/√2</code> is a unit imaginary; expanding it gives −2 plus <code>ij + ji</code>; so
+    <code>ij + ji = 0</code> and <code>ji = −ij</code>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">This is the load-bearing step of the lesson</span>
+    <p>
+      <strong>Anticommutativity was not assumed. It is what isotropy costs.</strong> Most
+      presentations introduce <code>ji = −ij</code> as part of the definition, which makes the
+      failure to commute look like a design choice somebody made and you have to live with. It is
+      the opposite: it is forced by the demand that space be the same in every direction, and any
+      commuting alternative would be describing a space that is not ours.
+    </p>
+  </div>
+
+  <h3>3.3 And then the rest of the table falls out</h3>
+
+  <p>
+    With <code>ji = −ij</code> and associativity, every remaining entry is one line. Watch the
+    <code>k²</code> one especially, because it is the one that looks like it ought to need its own
+    assumption:
+  </p>
+
+  <div class="eq">\[
+    \begin{aligned}
+      k^2 &amp;= (ij)(ij) = i(ji)j = i(-ij)j = -(ii)(jj) = -(-1)(-1) = -1 \\
+      jk  &amp;= j(ij) = (ji)j = (-ij)j = -i(jj) = i \\
+      ki  &amp;= (ij)i = -(ji)i = -j(ii) = j \\
+      ik  &amp;= i(ij) = (ii)j = -j \\
+      kj  &amp;= (ij)j = i(jj) = -i
+    \end{aligned}
+  \]</div>
+
+  <p>
+    Read the middle three and a pattern appears that is worth naming: <code>ij = k</code>,
+    <code>jk = i</code>, <code>ki = j</code> — the three <em>cyclic</em> products go forwards, and
+    the three anticyclic ones carry a minus. If that reminds you of the cross product, hold the
+    thought for one section; it is not a resemblance.
+  </p>
+
+  <h3>3.4 Hamilton's formula, as a consequence</h3>
+
+  <p>
+    Multiply the first two together:
+  </p>
+
+  <div class="eq">\[ ijk = (ij)k = k\,k = k^2 = -1. \]</div>
+
+  <p>
+    That is the formula William Rowan Hamilton is said to have cut into the stone of Broom Bridge
+    in Dublin in October 1843, after thirteen years of trying. It is quoted in nearly every
+    treatment as the defining relation of the quaternions — the thing you are handed. Here it
+    arrived as the last line of a derivation whose only input was that space has no preferred
+    direction.
+  </p>
+
+  @@FIG_FORCED@@
+
+  <h3>3.5 The control</h3>
+
+  <p>
+    Everything above would be equally true of a commuting algebra if the derivation had gone wrong
+    somewhere — <code>A.1</code> and <code>A.4</code> would both pass. So §A.5 checks the thing the
+    whole construction exists for:
+  </p>
+
+  <pre>   i*j = (0.0, 0.0, 0.0, 1.0)
+   j*i = (0.0, 0.0, 0.0, -1.0)
+  [PASS] A.2  ij = k and ji = -k
+  [PASS] A.3  jk = i, ki = j, ik = -j, kj = -i
+   i*j*k = (-1.0, 0.0, 0.0, 0.0)
+  [PASS] A.4  i^2 = j^2 = k^2 = ijk = -1
+  [PASS] A.5  CONTROL: the product does not commute
+   worst |(ab)c - a(bc)| over 20000:  1.788e-07
+  [PASS] A.6  the product is associative</pre>
+
+  <p>
+    <code>A.6</code> is there because the derivation of <code>k²</code>, <code>jk</code> and
+    <code>ki</code> leans on associativity at every step and nothing above actually verified that
+    the implementation has it. Associativity is easy to lose by a sign slip and impossible to
+    notice from a single product.
+  </p>

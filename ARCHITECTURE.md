@@ -1970,6 +1970,9 @@ docs/
     ├── check-page.js          # authoring-time: browser-side page verification
     ├── check-curriculum.py    # authoring-time: index vs lesson table consistency
     ├── check-builders.py      # authoring-time: every build_NN.py still makes its page
+    ├── check-continuity.py    # authoring-time: following the pages reproduces the engine
+    ├── continuity-known.txt   # ratchet: known continuity defects, may only shrink
+    ├── tests/                 # unit tests for the checkers (stdlib unittest)
     └── README.md              # authoring & visual style guide
 ```
 
@@ -3126,6 +3129,8 @@ python3 docs/_template/apply-shared.py --check   # before committing docs/ chang
 python3 docs/_template/apply-shared.py           # after editing lesson-template.html
 python3 docs/_template/check-curriculum.py       # index vs the lesson table
 python3 docs/_template/check-builders.py         # every generator still makes its page
+python3 docs/_template/check-continuity.py       # the pages, followed in order, reproduce HEAD
+python3 -m unittest discover docs/_template/tests  # the checkers' own tests
 cd docs && python3 -m http.server 8000           # then verify in a real browser
 ```
 
@@ -3151,6 +3156,29 @@ result with the published page, reporting **crashes, empty output and content di
 separate outcomes** — because a crashing builder writes nothing, so "the page did not change" is
 not evidence that it reproduces. It is in the pre-flight checklist (CLAUDE.md §11); the repair
 workflow and its helpers are `docs/_template/README.md` §15.
+
+**The generators' inputs are tracked although `scratch/` is ignored.** Everything a builder reads
+(traced with an audit hook: builders, prose fragments, SVGs, pins, harness sources) plus the
+generators behind them is force-added with `git add -f`, so `.gitignore` — Lesson 3.5's listing —
+stays as taught. `check-builders.py` builds its clone from `git ls-files`, so a forgotten `add`
+crashes the check instead of passing on one machine. Render captures, logs and probes stay
+untracked: they are output.
+
+#### Continuity: the pages must add up to the engine
+
+`check-builders.py` proves a page is what its builder says; `check-continuity.py` proves the
+pages say *enough*. It replays the course as a student would — every whole listing in course
+order, with Lesson 5.1's move script replayed exactly — and fails if a lesson's commit changed a
+file its page never lists whole (R2) or if the replay does not end at HEAD (R1). Known defects
+live in `continuity-known.txt`, a ratchet that may only shrink. See `docs/_template/README.md` §16.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` builds on Linux (GCC, Clang), Windows (MSVC) and macOS (Apple Clang),
+counts warnings in `engine/` and `demos/` per toolchain (step summary + build-log artifact), and
+runs the authoring checks with full git history. Version 1 does not pass `-Werror` and compiles
+no shaders (no runner has SDL_shadercross): it measures the cross-platform state first.
+`-Werror` and shader compilation with DXC are planned for Module 9's hardening lesson.
 
 ### Shaders (Module 4+)
 
@@ -3239,9 +3267,11 @@ Since Lesson 5.1 there is a documented procedure, and it is not optional for any
 
 ### Tests
 
-Unit tests under `tests/`, starting with `math` — it is pure, dependency-free, and every later
-subsystem's correctness rests on it. Module 9 covers a pragmatic testing strategy for the parts
-of an engine that resist unit testing.
+**The engine has no automated test suite yet.** Each lesson verifies itself with a harness
+(`scratch/verify_NN.cpp`, shipped on the page as a listing), but nothing reruns them, and there is
+no `tests/` directory or CTest target. Module 9's testing lesson (planned to move to the front of
+the module) adds one — starting with `math`, which is pure and underpins everything, and promoting harness
+slices into regression tests. The authoring checkers do have tests: `docs/_template/tests/`.
 
 ---
 

@@ -1,0 +1,584 @@
+  <!-- =================================================================
+       5 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">5</span>Implementation</h2>
+
+  <h3 id="i-lobe">5.1 The lobe, where it belongs</h3>
+
+  <p>
+    <code>ggx_lobe_half_angle</code> goes in <code>microfacet.hpp</code>, not in the new
+    antialiasing header, because it is a property of the <em>distribution</em> rather than of any
+    technique that consults it. Lesson 6.15's prefiltered environment maps will want the same
+    number for the same reason.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float ggx_lobe_half_angle(float alpha)
+{
+    const float a2 = std::clamp(alpha * alpha, 0.0f, 0.999999f);
+    const float s = alpha * std::sqrt(0.41421356f / (1.0f - a2));
+    return std::asin(std::clamp(s, 0.0f, 1.0f));
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>0.41421356</code> is <code>√2 − 1</code>, written out because HLSL has no
+    <code>&lt;numbers&gt;</code> and the two implementations have to agree digit for digit — the same
+    argument <code>k_inv_pi</code> made in 6.2. The clamp on <code>a2</code> keeps
+    <code>1 − α²</code> away from zero at roughness 1.
+  </p>
+
+  <h3 id="i-resolve">5.2 The resolve</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/antialias.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">            linear_rgb acc{};
+            for (int j = 0; j &lt; factor; ++j)
+            {
+                const Uint32* in = hi.row(y * factor + j);
+                for (int i = 0; i &lt; factor; ++i)
+                {
+                    const linear_rgb s = to_linear(in[x * factor + i]);
+                    acc.r += s.r;
+                    acc.g += s.g;
+                    acc.b += s.b;
+                }
+            }
+            out[x] = to_encoded({acc.r * inv, acc.g * inv, acc.b * inv});</code></pre>
+  </figure>
+
+  <p>
+    Decode every sample to light, average the light, encode <strong>once</strong>. That last word is
+    the half of 6.1's rule people forget — and the wrong version is kept selectable behind
+    <code>encoded_average</code>, for the same reason <code>tonemap::clamp</code> was kept in 6.12:
+    a failure you can switch on is worth more than one you have to describe.
+  </p>
+
+  <h3 id="i-filter">5.3 The filter</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/antialias.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">float filtered_alpha2(float alpha2, vec3 dndx, vec3 dndy)
+{
+    const float variance = k_specular_aa_sigma2 * (dot(dndx, dndx) + dot(dndy, dndy));
+    const float kernel = std::min(2.0f * variance, k_specular_aa_kappa);
+    return std::clamp(alpha2 + kernel, 0.0f, 1.0f);
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>dot(d, d)</code> and not <code>length(d)</code>. The quantity that adds under convolution
+    is the <em>variance</em>, not the standard deviation — which is the entire content of §3.6 and
+    the easiest thing to lose by reaching for a length out of habit.
+  </p>
+
+  <p>
+    And <code>filtered_roughness</code> does a double round trip on purpose: roughness → alpha,
+    filter, alpha → roughness. The filtering is a statement about the NDF's actual width;
+    <code>roughness</code> is a remapping chosen in 6.3 to make a slider feel linear. Filtering the
+    slider would be filtering the wrong quantity, and the error would grow with how nonlinear the
+    remap is.
+  </p>
+
+  <h3 id="i-gpu">5.4 The same three lines, on the GPU</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">shaders/scene.frag.hlsl</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-hlsl">        if (specular_aa &gt; 0.5f)
+        {
+            const float3 dndx = ddx(n);
+            const float3 dndy = ddy(n);
+            const float variance = 0.15915494f * (dot(dndx, dndx) + dot(dndy, dndy));
+            const float kernel = min(2.0f * variance, 0.18f);
+            alpha = clamp(alpha * alpha + kernel, 0.0f, 1.0f);
+            alpha = max(k_min_alpha, sqrt(alpha));
+        }</code></pre>
+  </figure>
+
+  <p>
+    This is the one place in the course where the <strong>GPU has it easier than the CPU</strong>,
+    and the reason is Lesson 4.1: fragments are shaded in 2×2 quads specifically so that a
+    neighbouring fragment is always available to subtract, which is what makes <code>ddx</code> a
+    single instruction. A scanline rasterizer has no neighbour, so a correct CPU version has to
+    derive the gradients from the triangle — exactly the position Lesson 6.10 was in when it needed
+    <code>uv_gradients</code> instead of <code>ddx(uv)</code>.
+  </p>
+
+  <p>
+    The uniform cost <strong>zero bytes</strong>: <code>specular_aa</code> is the slot that was
+    <code>alpha_pad0</code>, added by 6.11 to fill a register. That is the second time this block has
+    absorbed a new flag for free, after 6.7 took the padding 6.4 left.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why it is not a field of <code>material</code>.</strong> <code>uniforms_of</code>
+      takes it as a separate argument rather than deriving it from the material, and that is a real
+      distinction: whether to filter the NDF depends on how the surface is being <em>viewed</em>. The
+      same sphere at 400 pixels across and at 4 pixels across has the same roughness and needs very
+      different filtering. It is a render setting that happens to travel in the material's block.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — MSAA IN SDL_GPU
+       ================================================================= -->
+  <h2 id="msaa"><span class="num">6</span>MSAA in SDL_GPU</h2>
+
+  @@FIG_FRAME@@
+
+  <h3 id="m-ask">6.1 Ask the device; do not assume</h3>
+
+  <p>
+    <code>SDL_GPUTextureSupportsSampleCount</code> exists because MSAA support is <strong>per
+    format</strong>. On the machine this lesson was written on:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_614 §H</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-shell">  2x   R16G16B16A16_FLOAT yes   R8G8B8A8_UNORM yes
+  4x   R16G16B16A16_FLOAT yes   R8G8B8A8_UNORM yes
+  8x   R16G16B16A16_FLOAT NO    R8G8B8A8_UNORM NO</code></pre>
+  </figure>
+
+  <p>
+    8× is simply unavailable here. A lesson that hard-coded it would be teaching a bug, and a
+    program that refused to start without it would be worse behaviour than one that quietly runs at
+    4× and says so in the log — which is what <code>create_colour_target</code> does.
+  </p>
+
+  <h3 id="m-two">6.2 A multisample texture cannot be sampled</h3>
+
+  <p>
+    This is the fact that shapes everything else. You render <em>into</em> the multisample target
+    and read <em>from</em> the single-sample target it resolves into, so an MSAA frame needs two
+    colour targets where a plain one needs one — and <code>gpu_post_stack</code> grows a second
+    accessor to keep them straight:
+  </p>
+
+  <div class="eq-plain">scene_target()     — what the scene pass renders into (multisample, if MSAA is on)
+resolved_target()  — what everything downstream reads (always single-sample)</div>
+
+  <p>
+    Getting those backwards is a validation error on a debug device and undefined behaviour on a
+    release one, which is why <code>create_colour_target</code> silently drops the
+    <code>SAMPLER</code> usage when the sample count is above 1 rather than passing on a request the
+    driver cannot honour.
+  </p>
+
+  <h3 id="m-resolve">6.3 The resolve, and two fields that must both be right</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_post.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">    if (msaa_.valid())
+    {
+        ci.store_op = SDL_GPU_STOREOP_RESOLVE;
+        ci.resolve_texture = scene_.handle();
+        ci.resolve_mip_level = 0;
+        ci.resolve_layer = 0;
+    }</code></pre>
+  </figure>
+
+  <p>
+    <code>RESOLVE</code> rather than <code>RESOLVE_AND_STORE</code>, and SDL3's own header says why:
+    the first lets the driver <em>discard</em> the multisample memory afterwards and is "the most
+    performant method", while the second additionally writes the per-sample contents out and is "not
+    recommended". Nothing in this engine reads per-sample data, so keeping it would be paying
+    bandwidth for nothing.
+  </p>
+
+  <p>
+    <code>scene_target_info()</code> exists so a caller cannot assemble that struct and forget the
+    resolve. Omit either field and the frame renders perfectly into a texture nobody reads — which
+    looks like the scene pass failing rather than the resolve missing, and is a genuinely miserable
+    hour.
+  </p>
+
+  <h3 id="m-cost">6.4 What it costs, counted</h3>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>cost</th><th>before</th><th>with 4× MSAA</th></tr></thead>
+    <tbody>
+      <tr><td>scene colour target at 960×540</td><td>3.96 MB</td><td><strong>15.84 MB</strong> (plus the 3.96 it resolves into)</td></tr>
+      <tr><td>depth target</td><td>1×</td><td>4×, and it <em>must</em> match</td></tr>
+      <tr><td>scene pipelines</td><td>9</td><td>9 more — a pipeline's multisample state is baked in at creation</td></tr>
+      <tr><td>engine pipeline count</td><td>13</td><td><strong>22</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That pipeline number is worth pausing on. 6.11 made it nine (three surface styles × three blend
+    styles), 6.12 added the resolve, 6.13 added three for the bloom, and MSAA does not add one — it
+    <strong>doubles the scene set</strong>, because sample count is another axis of baked-in state.
+    Lesson 6.13 said the enumerate-versus-hash argument would stop being a curiosity; this is where
+    it stops.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And 6.13's ownership rule survived its first real test.</strong> The lesson before this
+      one claimed that <code>gpu_post_stack</code> should own "what crosses between stages" and
+      <code>gpu_bloom</code> should own its own intermediates. MSAA adds a target with a genuinely
+      new lifetime — written by the scene pass, read by nothing — and the rule placed it without
+      amendment: the <em>resolved</em> target crosses between stages and the stack owns it; the
+      multisample target is an intermediate of the scene pass. Only the allocation changed.
+    </p>
+    <p>
+      Which is a useful thing to know about a design: it was tested by a case it was not written for,
+      and it held.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">7</span>Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>status</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/antialias.hpp</code></td><td>new</td>
+          <td>settings, the resolve, and the NDF filter</td></tr>
+      <tr><td><code>engine/src/gfx/antialias.cpp</code></td><td>new</td>
+          <td>two prefilters that are the same operation</td></tr>
+      <tr><td><code>engine/include/engine/gfx/microfacet.hpp</code></td><td>modified</td>
+          <td><code>ggx_lobe_half_angle</code> — the closed form</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+          <td>sample counts, asked for rather than assumed</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+          <td>the support query and the fallback</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_pipeline.hpp</code></td><td>modified</td>
+          <td><code>samples()</code> — one field, and the two SDL reserves</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_pipeline.cpp</code></td><td>modified</td>
+          <td>the multisample state</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_post.hpp</code></td><td>modified</td>
+          <td>two colour targets, and the resolve the caller cannot forget</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_post.cpp</code></td><td>modified</td>
+          <td><code>scene_target_info</code>, and the fallback that drops MSAA cleanly</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
+          <td>nine more pipelines, and a depth target that must match</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+          <td>the sample count as part of the depth target's identity</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td><code>specular_aa</code>, in a slot that was already padding</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+          <td>seven lines, and <code>ddx</code> doing what the CPU cannot</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>antialias.cpp</code></td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>--aa</code>, <code>--spec-aa</code>, <code>--aa-encoded</code></td></tr>
+      <tr><td><code>scratch/verify_614.cpp</code></td><td>new</td>
+          <td>27 checks across eight sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/antialias.hpp@@
+  @@LISTING:engine/src/gfx/antialias.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_post.hpp@@
+  @@LISTING:engine/src/gfx/gpu_post.cpp@@
+  @@LISTING:scratch/verify_614.cpp@@
+
+  <!-- =================================================================
+       8 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">8</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell">cmake -S . -B build
+cmake --build build -j8
+sh scratch/build_verify_614.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell">cmake -S . -B build
+cmake --build build --config Debug -j8
+:: the harness is a single translation unit; build it as 6.13's was,
+:: substituting 614 for 613 throughout</code></pre>
+  </figure>
+
+  <h3>What the harness should say</h3>
+
+  <div class="eq-plain">27 checks, 0 failures</div>
+
+  <p>
+    Your §H table may differ from the one in §6.1 — that is the point of asking the device. If it
+    reports no MSAA on the float format at all, §H skips the rest cleanly and says so.
+  </p>
+
+  <h3>What to look at</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">the demo</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell"># the geometric half
+./build/demos/gltf_view --polish 0.10
+./build/demos/gltf_view --polish 0.10 --aa 4
+
+# the bug, on purpose: average the bytes instead of the light
+./build/demos/gltf_view --polish 0.10 --aa 4 --aa-encoded
+
+# the shading half — pan the camera and watch the highlight
+./build/demos/gltf_view --polish 0.08
+./build/demos/gltf_view --polish 0.08 --spec-aa</code></pre>
+  </figure>
+
+  <p>
+    <strong>Expected result.</strong> Differencing the 1× and 4× shots at 480×270:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">1x against 4x</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-shell">8,599 of 388,800 bytes differ (2.2%)
+distinct red values: 1x = 166   4x = 184</code></pre>
+  </figure>
+
+  <p>
+    Only <strong>2.2%</strong> of the image changes — and that 2.2% is what everybody notices.
+    Antialiasing is a small correction applied exactly where the eye is most sensitive to its
+    absence.
+  </p>
+
+  <p>
+    Then <code>--aa-encoded</code>, which differs from the correct resolve by up to
+    <strong>30 codes</strong> at the edges. Look for the dark fringe on every silhouette; once you
+    have seen it you will recognise it in other people's renderers.
+  </p>
+
+  <p>
+    For the shading half, <code>--spec-aa</code> changes 3.6% of the frame with a peak difference of
+    185 codes. The still frame looks <em>dimmer</em> at the highlight — that is the energy being
+    spread, and it is the price §4 measured. The payoff is only visible in motion.
+  </p>
+
+  <!-- =================================================================
+       9 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">9</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>Every silhouette has a thin dark outline</h3>
+    <p><strong>Symptom.</strong> Antialiasing is clearly working — the staircase is gone — but edges
+       look dirty, and the image is subtly darker overall.</p>
+    <p><strong>Cause.</strong> The resolve averaged sRGB bytes rather than linear light. A
+       half-covered edge lands on code 127 instead of 188 and delivers 21.2% of the light.</p>
+    <p><strong>Fix.</strong> Decode, average, encode once. Check it with the arithmetic rather than
+       the picture: a half-white half-black 2×2 block must resolve to <strong>188</strong>.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>MSAA does nothing for the sparkle</h3>
+    <p><strong>Symptom.</strong> Silhouettes are clean at 8×, and the highlight still flashes.</p>
+    <p><strong>Cause.</strong> Not a bug. MSAA multisamples coverage and shades once per primitive
+       per pixel, so on an interior pixel its answer <em>is</em> the single-sample answer.</p>
+    <p><strong>Fix.</strong> Filter the NDF (§3.6), or supersample, which shades per sample and
+       costs N². Reaching for a higher MSAA level is the one thing guaranteed not to help.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The render pass will not begin after enabling MSAA</h3>
+    <p><strong>Symptom.</strong> <code>SDL_BeginGPURenderPass</code> returns null, often several
+       frames after the setting changed.</p>
+    <p><strong>Cause.</strong> A mismatched sample count. Every attachment in a pass shares its
+       sample positions, so the colour target, the depth target and the pipeline must agree. The
+       "several frames later" part is the giveaway: a cached depth buffer was reused because its
+       size still matched.</p>
+    <p><strong>Fix.</strong> Put the sample count in the depth target's identity test, not just its
+       dimensions — which is what <code>ensure_depth</code> now does.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The MSAA frame renders correctly and displays nothing</h3>
+    <p><strong>Symptom.</strong> A RenderDoc capture shows the geometry drawn perfectly into the
+       scene target, and the screen is the clear colour.</p>
+    <p><strong>Cause.</strong> The resolve was not requested — <code>store_op</code> left at
+       <code>STORE</code>, or <code>resolve_texture</code> null — so the downstream passes read a
+       texture nothing ever wrote.</p>
+    <p><strong>Fix.</strong> <code>SDL_GPU_STOREOP_RESOLVE</code> plus a
+       <code>resolve_texture</code>. Build the struct in one place so it cannot be assembled wrong
+       twice.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A chrome surface goes matte at its own silhouette</h3>
+    <p><strong>Symptom.</strong> Specular AA works, and mirror-like objects develop a soft dull rim.</p>
+    <p><strong>Cause.</strong> The clamp on the added roughness is missing or too high. At a
+       silhouette the normal sweeps most of a hemisphere within one pixel, so the unclamped filter
+       asks for fully rough.</p>
+    <p><strong>Fix.</strong> <code>min(2σ², κ)</code> with <code>κ = 0.18</code>. It is a fit, and it
+       is the sort of number an artist should be allowed to change.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Your antialiasing measurement says the error is already zero</h3>
+    <p><strong>Symptom.</strong> A test compares the mean of an antialiased image against ground
+       truth and reports agreement at every sample count, including 1×.</p>
+    <p><strong>Cause.</strong> The mean is blind to aliasing. Across many pixels whose phases
+       differ, errors of opposite sign cancel exactly. The first draft of §D passed this way while
+       measuring nothing.</p>
+    <p><strong>Fix.</strong> Aliasing is a per-pixel phenomenon, so use a per-pixel statistic — RMS
+       deviation, or the worst pixel. More generally: before believing a null result, check that the
+       measurement is capable of a non-null one.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">10</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>10.1 — Find your own crossover <span class="tag">guided</span></h3>
+    <p>
+      §3.4 computes the crossover for a sphere 40 px in radius. Recompute it for the demo's torus at
+      the distance the demo actually uses, then set <code>--polish</code> just above and just below
+      your answer and confirm the sparkle appears where predicted.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        A torus is the harder case and that is the point: its normal turns fastest around the minor
+        radius, so the relevant <code>R</code> is the minor radius in pixels, not the major. Expect
+        the crossover to land at a <em>higher</em> roughness than the sphere's.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>10.2 — Per-pixel gradients on the CPU <span class="tag">engine challenge</span></h3>
+    <p>
+      The CPU specular AA in the demo estimates one normal variation for the whole scene. Do it
+      properly: derive <code>dn/dx</code> and <code>dn/dy</code> from the triangle, exactly as
+      Lesson 6.10's <code>uv_gradients</code> derives the uv gradients, and apply
+      <code>filtered_roughness</code> per fragment.
+    </p>
+    <p>
+      Then compare against the GPU on the same scene. They should agree closely and not exactly —
+      and working out <em>why</em> not is the real exercise. (Start with what <code>ddx</code>
+      actually computes across a 2×2 quad at a triangle edge.)
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>10.3 — A post-process AA, and a test of §6's claim <span class="tag">engine challenge</span></h3>
+    <p>
+      Implement FXAA as a stage in <code>gpu_post_stack</code>: detect edges from luminance
+      differences in the resolved image and blur along them. It is perhaps eighty lines of HLSL.
+    </p>
+    <p>
+      The interesting part is not the filter. Lesson 6.13 claimed that <code>gpu_post_stack</code> is
+      the right shape at two stages and stops being right at four or five. You are adding the third.
+      <strong>Report honestly whether it was comfortable</strong> — and if it was not, you have found
+      6.17's motivation a lesson early, which is worth more than the effect.
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>10.4 — Measure MSAA's real cost <span class="tag">guided</span></h3>
+    <p>
+      §6.4 claims 4× MSAA costs about 1.3× rather than 4×. Verify it on your own hardware: time the
+      scene pass at 1×, 2× and 4× with the profiling hooks from Lesson 3.10, and plot cost against
+      sample count.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The scaling depends on what your frame is limited by. A scene that is fragment-shading bound
+        will scale close to 1×, because the shader count does not change; one that is bandwidth bound
+        will scale much worse, because the target really is four times the size. Say which yours is.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>10.5 — Break the approximation <span class="tag">open</span></h3>
+    <p>
+      §3.6 flags that "α behaves as a standard deviation" is an approximation, because GGX's variance
+      is infinite. Construct a case where it visibly fails — a surface whose normal distribution
+      within a pixel is strongly bimodal, such as a sharp crease viewed edge-on — and compare the
+      filtered result against brute-force ground truth.
+    </p>
+    <p>
+      Then consider what a better filter would need to know. (This is an open research area; Kaplanyan
+      et al.'s "Filtering Distributions of Normals" is the place to start.)
+    </p>
+  </div>
+
+  <!-- =================================================================
+       11 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">11</span>Recap &amp; next</h2>
+
+  <p>
+    The engine can now antialias both of the things that were aliasing, and — more usefully — it can
+    tell you which one you are looking at.
+  </p>
+
+  <ul>
+    <li><strong>Two problems, not one.</strong> Geometric aliasing undersamples coverage; shading
+        aliasing undersamples the lighting. MSAA fixes the first and cannot touch the second,
+        because it multisamples coverage and shades once per primitive per pixel — which is the
+        optimisation that makes it affordable.</li>
+    <li><strong>The lobe has a closed form.</strong>
+        <code>sin t = α√((√2−1)/(1−α²))</code>, exact at every roughness, verified against a
+        bisection of the real NDF to 1.6 × 10⁻⁸ — and the familiar "about α wide" overstates it by
+        55%.</li>
+    <li><strong>The crossover is computable.</strong> Compare the lobe's width to the normal's
+        variation across a pixel. On a 40-pixel sphere that is roughness 0.2468, which places every
+        polished material from Lesson 6.12 in the aliasing regime.</li>
+    <li><strong>Prefiltering is the only cure, in both halves.</strong> Supersampling prefilters
+        coverage by integrating over the pixel's area; NDF filtering prefilters the lighting by
+        widening the lobe. Both throw information away, on purpose.</li>
+  </ul>
+
+  <p>And the result that reframes the subject:</p>
+
+  <p class="lede">
+    Antialiasing does not make a pixel correct. It makes it stable — by 2,034× here, while improving
+    accuracy by 2.4× and sometimes making it worse.
+  </p>
+
+  <p>
+    Which is worth carrying beyond this lesson. When you next evaluate a rendering technique, ask
+    what frequencies it removes rather than how accurate it is. A great many things in real-time
+    graphics are best understood as deliberate, well-chosen losses.
+  </p>
+
+  <p>
+    <strong>Next</strong> is Lesson 6.15, skyboxes and image-based lighting — where a surface stops
+    being lit by a handful of directions and starts being lit by everything around it. The
+    connection to this lesson is closer than it looks: prefiltering an environment map by roughness
+    is the same operation as §3.6, performed ahead of time instead of per fragment, and
+    <code>ggx_lobe_half_angle</code> is about to be asked how much of the sky one mip level should
+    cover.
+  </p>
+
+  <!-- =================================================================
+       12 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">12</span>Further reading</h2>
+
+  <ul>
+    <li><strong>Tokuyoshi &amp; Kaplanyan, <em>Improved Geometric Specular Antialiasing</em></strong>
+        (2019). The source of §3.6's constants and the practical form everyone ships. Short and
+        readable.</li>
+    <li><strong>Kaplanyan, Hill, Patney &amp; Lefohn, <em>Filtering Distributions of Normals for
+        Shading Antialiasing</em></strong> (HPG 2016). The fuller treatment, including what to do
+        when a single Gaussian is not a good enough model of the normals in a pixel.</li>
+    <li><strong>Matt Pettineo, <em>A Quick Overview of MSAA</em></strong>. The clearest available
+        explanation of what MSAA does and does not sample, with the hardware detail this lesson
+        summarises in one row of a table.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th ed., §5.4</strong> (Antialiasing). The standard
+        survey — SSAA, MSAA, coverage sampling, and the morphological and temporal families this
+        lesson does not build.</li>
+    <li><strong>Timothy Lottes, <em>FXAA</em></strong> (2009). The whitepaper for Exercise 10.3, and
+        a good example of a technique that is unapologetically an approximation and says so.</li>
+    <li><strong>Alan Wolfe, <em>Anti Aliasing and Nyquist</em></strong>. A gentle route into the
+        sampling theory §2 compresses into three paragraphs.</li>
+    <li><strong>SDL3 wiki: <code>SDL_GPUSampleCount</code>,
+        <code>SDL_GPUTextureSupportsSampleCount</code>, <code>SDL_GPUColorTargetInfo</code></strong>.
+        Every MSAA field this lesson uses was checked against the header rather than assumed, and the
+        wiki pages carry the same text.</li>
+  </ul>

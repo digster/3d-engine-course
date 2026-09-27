@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="l64f3-t l64f3-d">
+  <title id="l64f3-t">Every factor in the Cook-Torrance denominator, and its reason</title>
+  <desc id="l64f3-d">The 4 is the Jacobian of the map from light directions to microfacet normals. The (v dot h) that Jacobian introduces cancels against the projected area of the facets toward the light, which is (l dot h) and equal to it because h bisects l and v. The (n dot v) converts flux to radiance, which is defined per unit projected area. The (n dot l) is the BRDF's own definition as a quantity per unit irradiance.</desc>
+  <defs>
+    <marker id="e-i-l64f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l64f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l64f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l64f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l64f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="330" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">D G F / 4 (n·l)(n·v):  four factors, four reasons</text>
+<rect x="16.0" y="62" width="160" height="190" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="16.0" y="62" width="160" height="190" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="96.0" y="100" class="lg" text-anchor="middle">4</text>
+<text x="96.0" y="128" class="sm" text-anchor="middle">the Jacobian</text>
+<line x1="34.0" y1="142" x2="158.0" y2="142" class="grid" stroke-width="1.0"/>
+<text x="96.0" y="166" class="xs" text-anchor="middle">dω_h → dω_l stretches</text>
+<text x="96.0" y="186" class="xs" text-anchor="middle">by 4(v·h). Figure 2.</text>
+<rect x="192.0" y="62" width="160" height="190" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="192.0" y="62" width="160" height="190" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="272.0" y="100" class="lg" text-anchor="middle">(v·h)</text>
+<text x="272.0" y="128" class="sm" text-anchor="middle">CANCELS</text>
+<line x1="210.0" y1="142" x2="334.0" y2="142" class="grid" stroke-width="1.0"/>
+<text x="272.0" y="166" class="xs" text-anchor="middle">the facets' projected</text>
+<text x="272.0" y="186" class="xs" text-anchor="middle">area toward l is (l·h),</text>
+<text x="272.0" y="208" class="xs" text-anchor="middle">and l·h = v·h</text>
+<text x="272.0" y="228" class="xs" text-anchor="middle">because h bisects</text>
+<rect x="368.0" y="62" width="160" height="190" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="368.0" y="62" width="160" height="190" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="448.0" y="100" class="lg" text-anchor="middle">(n·v)</text>
+<text x="448.0" y="128" class="sm" text-anchor="middle">flux → radiance</text>
+<line x1="386.0" y1="142" x2="510.0" y2="142" class="grid" stroke-width="1.0"/>
+<text x="448.0" y="166" class="xs" text-anchor="middle">radiance is per unit</text>
+<text x="448.0" y="186" class="xs" text-anchor="middle">PROJECTED area</text>
+<rect x="544.0" y="62" width="160" height="190" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="544.0" y="62" width="160" height="190" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="624.0" y="100" class="lg" text-anchor="middle">(n·l)</text>
+<text x="624.0" y="128" class="sm" text-anchor="middle">the definition</text>
+<line x1="562.0" y1="142" x2="686.0" y2="142" class="grid" stroke-width="1.0"/>
+<text x="624.0" y="166" class="xs" text-anchor="middle">a BRDF is per unit</text>
+<text x="624.0" y="186" class="xs" text-anchor="middle">irradiance</text>
+<rect x="16.0" y="268" width="688.0" height="44" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="296" class="xs" text-anchor="middle">The (v·h) that the Jacobian introduces is cancelled by the one the projected area introduces — which is why the formula looks unmotivated.</text>
+</svg>

@@ -1,0 +1,52 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f49d-t f49d-d">
+  <title id="f49d-t">What instrumentation costs, measured against its noise floor</title>
+  <desc id="f49d-d">Recording time against the number of debug groups per frame. At one and eight groups the difference is inside the noise band and is not a result; at 32 and 128 it clears the floor and converges on about 183 nanoseconds per push-label-pop. The validation layer costs 1.17x on a three-draw frame, and naming a buffer costs 0.7 microseconds once, at load.</desc>
+  <defs>
+    <marker id="e-i-f49d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f49d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f49d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the cost of being able to debug &#8212; <tspan class="t-hi">and the noise floor it has to clear first</tspan></text>
+  <rect x="40.0" y="60.0" width="380.0" height="200.0" class="fill-soft ink" stroke-width="0.75"/>
+  <line x1="40.0" y1="260.0" x2="420.0" y2="260.0" class="grid" stroke-width="0.75"/>
+  <text x="32.0" y="264.0" class="xs muted" text-anchor="end">0.02</text>
+  <line x1="40.0" y1="193.3" x2="420.0" y2="193.3" class="grid" stroke-width="0.75"/>
+  <text x="32.0" y="197.3" class="xs muted" text-anchor="end">0.03</text>
+  <line x1="40.0" y1="126.7" x2="420.0" y2="126.7" class="grid" stroke-width="0.75"/>
+  <text x="32.0" y="130.7" class="xs muted" text-anchor="end">0.04</text>
+  <line x1="40.0" y1="60.0" x2="420.0" y2="60.0" class="grid" stroke-width="0.75"/>
+  <text x="32.0" y="64.0" class="xs muted" text-anchor="end">0.05</text>
+  <rect x="40.0" y="216.9" width="380.0" height="32.8" fill="#eb786e" fill-opacity="0.13" stroke="none"/>
+  <text x="412.0" y="210.9" class="xs t-bad" text-anchor="end">&#177; the noise floor (2.46 &#181;s)</text>
+  <circle cx="80.0" cy="233.3" r="4" fill="#5acdd7"/>
+  <text x="80.0" y="274.0" class="xs mono muted" text-anchor="middle">0</text>
+  <circle cx="156.0" cy="237.2" r="4" fill="#5acdd7"/>
+  <text x="156.0" y="274.0" class="xs mono muted" text-anchor="middle">1</text>
+  <circle cx="232.0" cy="227.2" r="4" fill="#5acdd7"/>
+  <text x="232.0" y="274.0" class="xs mono muted" text-anchor="middle">8</text>
+  <circle cx="308.0" cy="194.2" r="4" fill="#f0961e"/>
+  <text x="308.0" y="274.0" class="xs mono muted" text-anchor="middle">32</text>
+  <text x="298.0" y="188.2" class="xs t-hi" text-anchor="end">184 ns</text>
+  <circle cx="384.0" cy="78.1" r="4" fill="#f0961e"/>
+  <text x="384.0" y="274.0" class="xs mono muted" text-anchor="middle">128</text>
+  <text x="374.0" y="72.1" class="xs t-hi" text-anchor="end">182 ns</text>
+  <polyline points="80.0,233.3 156.0,237.2 232.0,227.2 308.0,194.2 384.0,78.1" class="hi" fill="none" stroke-width="1.5"/>
+  <text x="230.0" y="290.0" class="xs muted" text-anchor="middle">push + label + pop, per frame</text>
+  <text x="10.0" y="50.0" class="xs muted">ms to record</text>
+  <text x="452" y="62" class="xs muted">the validation layer</text>
+  <text x="452" y="82" class="xs mono">debug on   0.0267 ms</text>
+  <text x="452" y="98" class="xs mono">debug off  0.0228 ms</text>
+  <text x="452" y="116" class="xs t-hi">1.17x, on a 3-draw frame</text>
+  <text x="452" y="136" class="xs muted">per API CALL, so it scales</text>
+  <text x="452" y="152" class="xs muted">with how chatty the frame is</text>
+  <text x="452" y="188" class="xs muted">naming a buffer</text>
+  <text x="452" y="208" class="xs mono">unnamed  0.0011 ms</text>
+  <text x="452" y="224" class="xs mono">named    0.0018 ms</text>
+  <text x="452" y="242" class="xs t-ok">paid once, at load</text>
+  <text x="24" y="344" class="xs">At one group per frame the effect is <tspan class="t-hi">below the noise floor</tspan>, and the first version of this measurement reported a <tspan class="t-bad">negative cost for adding work</tspan> &#8212;</text>
+  <text x="24" y="360" class="xs">which is the tell. Scale the count until the effect clears the floor and a real per-call figure appears: <tspan class="t-hi">~182 ns</tspan>, converging.</text>
+  <text x="24" y="384" class="xs muted">The engine pushes 4 a frame. That is 0.73 &#181;s against a 16.7 ms budget &#8212; 0.004% of a frame. They ship on.</text>
+</svg>

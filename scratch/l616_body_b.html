@@ -1,0 +1,592 @@
+  <!-- =================================================================
+       4 — PRECISION
+       ================================================================= -->
+  <h2 id="precision"><span class="num">4</span>An honest digression: the far plane is in the wrong place</h2>
+
+  <p>
+    Check 2 in the list above has a sibling that does not pass as cleanly. The eye should be exactly
+    <code>far</code> behind the far plane — the far plane is <code>far</code> units down the view
+    axis and the eye is at the apex — so <code>signed_distance(far, eye)</code> should be
+    <code>100.0</code> for our default camera. It comes out as:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §B</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">float  d(eye, far)  = 99.998641968   asked for 100.0   error 1.358e-03
+near error 2.980e-07  vs  far error 1.358e-03   ratio 4557x</code></pre>
+  </figure>
+
+  <p>
+    An error of 1.36 × 10⁻³ on a quantity of 100 is a relative error of 1.4 × 10⁻⁵. A
+    <code>float</code> carries about 1.2 × 10⁻⁷ of relative precision, so this is roughly a hundred
+    times worse than the format should give. Meanwhile the near plane is accurate to 3.0 × 10⁻⁷,
+    which is one or two units in the last place — exactly what you would expect.
+  </p>
+
+  <p>
+    The obvious diagnosis is catastrophic cancellation in the extraction. The far plane is
+    <code>r₃ − r₂</code>, a difference of two rows, and for our camera those two rows are nearly
+    equal:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/probe_616.cpp</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">row3 = ( 0.000000 -0.342898 -0.939373  7.205739)
+row2 = ( 0.000000 -0.343930 -0.942199  6.926518)
+r3-r2= ( 0.000000  0.001032  0.002827  0.279220)   &lt;- cancellation</code></pre>
+  </figure>
+
+  <p>
+    Three digits of agreement wiped out. Case closed — except that this course does not close cases
+    on plausibility. So: redo the same subtraction in <code>double</code>, from the same
+    <code>float</code> matrix. If cancellation in the extraction is the problem, the
+    <code>double</code> version will be visibly better.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §B</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">float  d(eye, far)  = 99.998641968   error 1.358e-03
+double d(eye, far)  = 99.998641795   error 1.358e-03   &lt;- SAME. Not the subtraction.</code></pre>
+  </figure>
+
+  <p>
+    Seven digits of agreement between the two. The subtraction is <em>not</em> where the bits went.
+    Which leaves only one possibility: <strong>the matrix's far plane is genuinely not at
+    −100.</strong> The extraction is reporting, faithfully, a matrix that is slightly wrong.
+  </p>
+
+  <h3>4.1 Where it actually is</h3>
+
+  <p>
+    A point is on the far plane when <code>z_clip = w_clip</code>. From Lesson 2.10's projection,
+    <code>z_clip = A·z + B</code> and <code>w_clip = −z</code>, so
+  </p>
+
+  <div class="eq">\[ A z + B = -z \quad\Longrightarrow\quad z = \frac{-B}{A + 1} \]</div>
+
+  <p>
+    With near 0.3 and far 100, <code>A = 100/(0.3 − 100) = −1.003009081</code> in <code>float</code>.
+    And look at what the denominator does:
+  </p>
+
+  <div class="eq">\[ A + 1 = -1.003009081 + 1 = -3.009 \times 10^{-3} \]</div>
+
+  <p class="eq-plain">
+    <em>Two nearly-equal numbers, subtracted — in the matrix builder, not in the culler.</em> The
+    magnitude drops from about 1 to about 0.003, which discards roughly eight bits. An error of one
+    unit in the last place of <code>A</code> (1.19 × 10⁻⁷ at that magnitude) is therefore amplified
+    by <code>1/0.003009 = 332×</code> when it reaches the quotient. Solving numerically:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §B</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">A = -1.003009081   A + 1 = -3.009081e-03   &lt;- the cancellation, in perspective()
+the FLOAT matrix's far plane sits at z = -99.998217257
+the same in double:               z = -100.000000000
+amplification of A's last bit: 332x</code></pre>
+  </figure>
+
+  <p>
+    The full accounting, then: the matrix places its far plane 1.783 × 10⁻³ nearer than asked; the
+    extraction then adds 4.25 × 10⁻⁴ back in the other direction from its own rounding; the net is
+    the 1.358 × 10⁻³ we observed. Two independent errors, one dominant, both now named.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>Is this a bug worth fixing?</strong> No, and saying so is part of the lesson. A far
+      plane 1.8 millimetres short of 100 metres changes nothing: it culls a sliver of geometry the
+      depth buffer was about to render at <code>z ≈ 0.99999</code> anyway, and Lesson 4.7 already
+      measured that depth precision out there is worthless — the far 10% of a 0.3-to-100 frustum
+      shares about 0.2% of the depth range. What matters is that we now know <em>which</em> of two
+      candidate causes it was, so that when a real precision problem appears we are not looking at
+      the culler.
+    </p>
+    <p>
+      It is also a second, independent argument for the reversed-Z depth range the state block has
+      recorded since Lesson 4.7: <code>A + 1</code> does not cancel when the roles of near and far
+      are swapped.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       5 — BOXES
+       ================================================================= -->
+  <h2 id="boxes"><span class="num">5</span>Testing a box: one corner, not eight</h2>
+
+  <p>
+    Objects are not points. What we actually have per object is a bounding volume, and Lesson 6.8
+    already built one: <code>aabb</code>, in <code>engine/include/engine/gfx/bounds.hpp</code>, whose
+    header comment ends with a promise —
+  </p>
+
+  <blockquote>
+    <p>
+      "A sphere is smaller to store, cheaper to transform, and rotation-invariant… Lesson 6.16's
+      frustum culling will want both and will say so then."
+    </p>
+  </blockquote>
+
+  <p>So, now. The naive box test is eight points:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the naive version</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">// 6 planes x 8 corners = 48 dot products, and it is also WRONG:
+// a box can be outside the frustum with no corner outside any single plane.
+for (const plane&amp; pl : f.planes)
+{
+    bool all_out = true;
+    for (const vec3&amp; c : corners) { if (signed_distance(pl, c) &gt;= 0) { all_out = false; } }
+    if (all_out) { return false; }
+}</code></pre>
+
+  <p>
+    Forty-eight dot products, when six will do. For any given plane we do not need all eight corners
+    — we need the <em>one</em> that is furthest along the plane's inward normal, because if even that
+    one is outside then all eight are. And finding it needs no search:
+  </p>
+
+  <p class="eq-plain">
+    Per axis, take <code>max</code> where the normal's component is positive and <code>min</code>
+    where it is negative.
+  </p>
+
+  <p>
+    That is three comparisons, which a compiler turns into three branchless selects. The reasoning is
+    one line: <code>n · c</code> is a sum of three independent terms <code>nₓcₓ + n_yc_y +
+    n_zc_z</code>, and each is maximised independently by picking the extreme of that axis whose sign
+    matches the normal's. Maximising a sum of independent terms means maximising each term. There is
+    nothing deeper going on.
+  </p>
+
+  @@FIG_CORNER@@
+
+  <p>
+    The corner we want is usually called the <strong>positive vertex</strong>, and its opposite — the
+    <em>first</em> corner to fall outside — is the <strong>negative vertex</strong>. Testing both
+    gives three answers instead of two:
+  </p>
+
+  <ul>
+    <li><strong>Outside</strong> — the positive vertex is outside some plane, so all eight are, and
+        the box is rejected.</li>
+    <li><strong>Intersecting</strong> — positive vertex in, negative vertex out: the box straddles.</li>
+    <li><strong>Inside</strong> — even the negative vertex is inside every plane, so the whole box
+        is. <em>Nothing inside it needs testing at all.</em></li>
+  </ul>
+
+  <p>
+    That third state is the one that pays for bounding-volume hierarchies: a node classified
+    <code>inside</code> can accept its entire subtree without a single further test. We have no
+    hierarchy — that is Exercise 7 and Module 9's spatial structures — but <code>cull_report</code>
+    counts <code>fully_inside</code> anyway, because <strong>the way to find out whether a hierarchy
+    would pay is to count before you build one</strong>. Over 200,000 random boxes: 19,653 straddle
+    and 25,859 are wholly inside. More than half of the kept boxes could have been accepted in one
+    test by a structure we do not have.
+  </p>
+
+  <h3>5.1 The sphere, and the promise from 6.8</h3>
+
+  <p>
+    A sphere test is cheaper still: one dot product and one comparison per plane, with no corner
+    selection at all. The whole test is
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/frustum.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">if (signed_distance(pl, s.centre) &lt; -s.radius) { return false; }</code></pre>
+  </figure>
+
+  <p>
+    and the <code>−radius</code> rather than <code>0</code> is the whole content of it: a sphere is
+    outside only once its <em>centre</em> has gone further out than its radius reaches back. Compare
+    against zero instead and objects pop out of existence the instant their centre crosses the screen
+    edge — very visible, because the edge of the frame is where the eye is drawn to motion.
+  </p>
+
+  <p>
+    We derive the sphere from the box with <code>bounding_sphere</code>, and it is deliberately the
+    <strong>loose</strong> conversion — centre and half-diagonal, which for a cube is <code>√3</code>
+    too big in radius and <code>3√3π/6 ≈ 2.72×</code> too big in volume. That would be a defect if
+    the sphere <em>replaced</em> the box test. As a <em>pre-test</em> it is exactly the required
+    property: a volume that contains the box can only ever produce false keeps, never a false
+    reject, so the box test behind it is still the final word.
+  </p>
+
+  <h3>5.2 Does the pre-test pay? No.</h3>
+
+  <p>
+    Textbook advice says to run the cheap test first. This engine's own numbers disagree, and the
+    disagreement is instructive:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §G</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">MOSTLY-ON-SCREEN scene: visible 19283/20000 (96.4%)
+  plane tests:  box only 117172   with sphere pre-test 233550  (1.99x)
+  ns/box:       box only 58.625   with pre-test 116.581   -&gt; 1.99x SLOWER
+
+MOSTLY-OFF-SCREEN scene: visible 2076/20000 (10.4%)
+  plane tests:  box only 47396   with sphere pre-test 60033  (1.27x)
+  ns/box:       box only 35.910   with pre-test 57.798   -&gt; 1.61x SLOWER</code></pre>
+  </figure>
+
+  <p>
+    Slower in both regimes, and for two different reasons worth separating. On the mostly-visible
+    scene, almost nothing is rejected by either test, so the pre-test is pure added work and the
+    cost doubles — that one is unsurprising. On the mostly-<em>hidden</em> scene the pre-test is
+    doing its job, yet it <em>still</em> loses: because the sphere is 2.72× the box's volume, a great
+    many boxes the box test rejects immediately survive the sphere and get tested twice.
+  </p>
+
+  <p>
+    The general principle is not "pre-tests are bad". It is that a filter cascade pays only when the
+    cheap filter is both <em>much</em> cheaper and <em>nearly as selective</em>. Here it is about half
+    the price and substantially less selective, and that combination loses. The flag stays in the
+    API — with its measurement in the comment — because the answer would change for a much more
+    expensive precise test, which is precisely what an oriented-box or convex-hull test would be.
+  </p>
+
+  <!-- =================================================================
+       6 — CONSERVATIVE
+       ================================================================= -->
+  <h2 id="conservative"><span class="num">6</span>How wrong is it allowed to be?</h2>
+
+  <p>
+    A bounding-volume test is conservative in two directions, and only one of them is a rounding
+    error.
+  </p>
+
+  <p>
+    <strong>The first is obvious.</strong> The box is not the object. A box that straddles a plane is
+    kept even when the object inside it is wholly outside — rotate a long thin rod by 45° and its
+    axis-aligned box grows by up to <code>√3</code>, so there is a lot of empty space in there to
+    straddle with. That is the price of bounding anything at all, and it is why this engine keeps
+    <em>object-space</em> boxes and transforms them once rather than caching world-space ones and
+    re-transforming (which would compound the growth on every frame).
+  </p>
+
+  <h3>6.1 The two ways to get a world-space box, and why 6.8 and 6.16 choose differently</h3>
+
+  <p>
+    Lesson 6.8's <code>shadow_map::bounds_of</code> walks <em>every vertex</em> of every object to
+    build a tight world box, with a comment explaining why:
+  </p>
+
+  <blockquote>
+    <p>
+      "…a shadow map's texel density is inversely proportional to the box's side, so slack here is
+      resolution thrown away. This is the one place in the engine where the tight answer is worth a
+      pass over the vertices."
+    </p>
+  </blockquote>
+
+  <p>
+    Culling must <em>not</em> do that. Walking every vertex to decide whether to skip a draw costs
+    more than the draw — it is the very work we are trying to avoid, done eagerly. So we compute an
+    object-space box once per mesh and run it through <code>transformed()</code>, which returns the
+    box around the transformed <em>box</em>, not the box around the transformed <em>contents</em>.
+  </p>
+
+  <p>
+    <strong>The same two functions, opposite choices, both correct</strong>, because they are
+    optimising different things. And the cost of our choice is measurable rather than theoretical:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §F</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">icosahedron (uniform, spinning) tight r=1.4383  loose r=1.9332  volume ratio 2.4109
+slab   (non-uniform, spinning)  tight r=1.1134  loose r=1.1134  volume ratio 1.0000
+ground plane (checkered)        tight r=20.1246 loose r=20.1246 volume ratio 1.0000
+torus.obj                       tight r=3.1304  loose r=3.7639  volume ratio 1.9008
+12 objects; worst inflation 2.4109x; summed volume 1.3994x</code></pre>
+  </figure>
+
+  <p>
+    Ten of the twelve objects show a ratio of exactly 1.0000 — their transforms are axis-aligned, so
+    the box of the transformed box <em>is</em> the tight box. Only the two rotated meshes inflate, by
+    2.41× and 1.90×, and the whole scene's summed volume grows by 1.40×. Well inside the
+    <code>3√3 = 5.196</code> worst case for a cube rotated to its worst orientation, and cheap enough
+    that the alternative is not worth discussing.
+  </p>
+
+  <h3>6.2 The second conservatism, which is a genuine corner case</h3>
+
+  <p>
+    Here is the one that surprises people. <strong>A box can fail all six half-space tests while
+    being entirely outside the frustum.</strong>
+  </p>
+
+  <p>
+    The six tests ask "is this box wholly on the outside of <em>this</em> plane?" — six separate
+    questions, each answered independently. A large box positioned near a corner or edge of the
+    frustum can poke past each plane's boundary with a <em>different</em> corner, so no single plane
+    can reject it, and yet the box never enters the volume where all six conditions hold at once.
+  </p>
+
+  @@FIG_FALSE@@
+
+  <p>
+    The rate is easy to assert and easy to get wrong, so we measure it: 200,000 boxes scattered
+    across a 60-unit cube with sizes spanning three orders of magnitude, each classified by the
+    frustum test and separately by densely sampling its interior against the actual clip volume.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §E</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">boxes=200000  kept=45512 (22.76%)  of which straddling=19653, fully inside=25859
+really visible=45196 (22.60%)
+FALSE POSITIVES = 316  (0.158% of all boxes, 0.69% of KEPT boxes)
+[PASS] every really-visible box was kept (no false REJECTS — the fatal kind)</code></pre>
+  </figure>
+
+  <p>
+    <strong>0.69% of kept boxes.</strong> Not rare enough to forget about — if you are debugging why
+    an object off the top-left corner of the screen is still being drawn, this is why — and not
+    common enough to justify a more expensive test. The techniques that fix it (testing the
+    frustum's corners against the box's planes as well, a separating-axis test between the two
+    convex hulls) roughly double the cost to recover two-thirds of one percent.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>The asymmetry is the entire licence for this technique.</strong> Keeping something
+      invisible costs one draw call. Rejecting something visible is a hole in the picture. The
+      culler is allowed to be wrong in one direction and not the other, and the last line of that
+      output is the check that matters: <em>zero</em> visible boxes were rejected. Every other number
+      in this section is a performance figure; that one is a correctness figure.
+    </p>
+    <p>
+      Note also the direction of the ground-truth sampler's own error. It samples a lattice, so it
+      can <em>miss</em> a thin sliver of overlap and under-report visibility — which makes the
+      measured false-positive rate an upper bound. When your instrument is approximate, know which
+      way it leans.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — THE CROSSOVER
+       ================================================================= -->
+  <h2 id="crossover"><span class="num">7</span>The measurement that matters</h2>
+
+  <p>
+    Every article about frustum culling reports a cull rate. "We culled 78% of the scene." It is the
+    wrong number, and the reason is simple: <strong>a cull rate measures the scene, not the
+    technique.</strong> Point the camera at a wall and you will cull 99%; point it at the skybox and
+    you will cull nothing. Neither figure tells you whether the code was worth writing.
+  </p>
+
+  <p>The number that does is frame time. So: does culling ever lose?</p>
+
+  <h3>7.1 A sweep that found nothing, and why</h3>
+
+  <p>
+    The first attempt swept the object count — 4, 16, 64, 256, 1024, 4096 objects, half of them
+    behind the camera — expecting to find a small-scene regime where the test costs more than it
+    saves. It reported <code>CULL WINS</code> at every size, saving almost exactly 50% each time.
+  </p>
+
+  <p>
+    That is not a crossover. It is one ratio measured six times, and the reason is structural:
+    <strong>both sides scale linearly in object count.</strong> The test is O(n); the work it skips
+    is O(n); their ratio is independent of n. No amount of sweeping n will ever cross it.
+  </p>
+
+  <div class="callout note">
+    <p>
+      This is worth more than the eventual result. A sweep along an axis the effect does not depend
+      on produces six confident data points and zero information, and it looks exactly like a real
+      measurement — a table, a trend, a verdict column. <em>Before sweeping a parameter, ask what
+      would have to be true for the answer to depend on it.</em>
+    </p>
+  </div>
+
+  <h3>7.2 The crossover is in the cull rate, and it can be predicted</h3>
+
+  <p>
+    Culling costs <code>c</code> per object <em>always</em>, and saves <code>w</code> per object
+    <em>rejected</em>. At a cull rate <code>r</code>, the net change per object is
+    <code>c − r·w</code>, so it breaks even at
+  </p>
+
+  <div class="eq">\[ r_{\text{break-even}} = \frac{c}{w} \]</div>
+
+  <p>
+    Both terms are measurable in isolation. <code>c</code> is the culler run over a scene where
+    nothing is rejected (so the timing contains no saving at all); <code>w</code> is
+    <code>collect_triangles</code> divided by object count.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §H</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">c = cull test            58.268 ns/object  (spread 0.42)
+w = collect_triangles  23821.2   ns/object  (spread 0.05)
+predicted break-even cull rate = c/w = 0.2446%  (1 object in 409)</code></pre>
+  </figure>
+
+  <p>Prediction in hand, find it:</p>
+
+  @@FIG_CROSSOVER@@
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §H</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text"> cull rate   visible    no cull ns       cull ns    verdict
+      0.0%       512    12192625.0    12220125.0 cull loses
+      0.4%       510    12193458.3    12165958.3  CULL WINS
+      1.2%       506    12214208.3    12153958.3  CULL WINS
+      5.1%       486    12130875.0    11603583.3  CULL WINS
+     25.0%       384    11852833.3     9164833.3  CULL WINS
+     50.0%       256    11536625.0     6138125.0  CULL WINS</code></pre>
+  </figure>
+
+  <p>
+    At a cull rate of zero, culling loses by 27,500 ns over 512 objects — which is
+    <strong>53.7 ns per object</strong>, against a predicted <code>c</code> of 58.3. The loss is
+    exactly the cost of the test, because nothing was skipped. And the crossing sits between the 0%
+    and 0.4% samples, bracketing the predicted 0.2446%.
+  </p>
+
+  <p>
+    <strong>So: culling pays as soon as it rejects roughly one object in four hundred.</strong> That
+    is a low enough bar that on this engine it is essentially always worth doing — but it is worth
+    knowing it is a bar at all, and worth knowing how to compute it for a workload where
+    <code>w</code> is smaller. Replace <code>collect_triangles</code> with a GPU submission that
+    costs a few hundred nanoseconds of CPU time and the break-even rate climbs into the tens of
+    percent. <em>The same culler is a clear win on one renderer and a wash on another.</em>
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>One honesty note about that table.</strong> The culling arm allocates two
+      <code>std::vector</code>s per frame, which a real renderer would hoist out. §H measures that
+      overhead separately at 34.9 ns bare against 35.8 ns with the vectors — a 1.03× effect, small
+      enough not to move the conclusion, but measured rather than waved at. A benchmark that charges
+      one arm for the harness's convenience has measured the harness.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implement"><span class="num">8</span>Implementation: the culler</h2>
+
+  <p>
+    Two new files, and a shape borrowed from Lesson 6.11. <code>draw_order.hpp</code> already
+    established how this engine expresses "walk the draw list and compute something per object":
+    operate on <em>indices</em>, never on the draw items themselves, because a <code>gpu_draw_item</code>
+    is 140 bytes and permuting those to express a subset is moving the wrong thing. Its own comment
+    predicted this lesson by name:
+  </p>
+
+  <blockquote>
+    <p>
+      "Lesson 6.16's frustum culling wants this same traversal — walk the draw list, compute a
+      per-object quantity, partition — which is why the bucketing below is a general <code>span</code>
+      operation over indices rather than something wired into either renderer."
+    </p>
+  </blockquote>
+
+  <h3>8.1 The types</h3>
+
+  <p>
+    A <code>plane</code> is a normal and a constant, with <strong>positive meaning inside</strong>,
+    so that six tests can be one loop rather than six special cases. A <code>frustum</code> is six of
+    them with named indices — <code>k_left</code>, <code>k_right</code>, <code>k_bottom</code>,
+    <code>k_top</code>, <code>k_near_z</code>, <code>k_far_z</code> — so that a diagnostic reading
+    "rejected by plane 3" cannot silently mean a different plane after somebody reorders them.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong><code>k_near_z</code> and <code>k_far_z</code>, not <code>k_near</code> and
+      <code>k_far</code>.</strong> <code>&lt;windows.h&gt;</code> defines <code>near</code> and
+      <code>far</code> as macros — a relic of 16-bit segmented pointers that has outlived the
+      hardware by three decades. A member called <code>near</code> compiles on macOS and Linux and
+      fails on MSVC with an error pointing at whatever line happens to follow the macro expansion.
+      <code>mat4::perspective</code> dodged it the same way back in Lesson 2.10 (<code>near_z</code>,
+      <code>far_z</code>); this is that decision being kept rather than rediscovered.
+    </p>
+  </div>
+
+  <h3>8.2 The walk, and why it duplicates a loop on purpose</h3>
+
+  <p>
+    <code>cull_visible</code> writes survivor indices into a caller-provided span and fills in a
+    <code>cull_report</code>. The report's <code>plane_tests</code> field is the interesting one: it
+    counts <em>plane evaluations</em>, which is the unit the cost is actually paid in. Counting
+    objects hides the early exit entirely.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §D</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">boxes=50000  visible=11163  culled=38837  fully-inside=6330  plane tests=142637
+plane tests: 6.0 per SURVIVOR (all six), 1.95 per REJECT (early exit)
+rejected by:  left=16970  right=12250  bottom=4297  top=5302  near=18  far=0</code></pre>
+  </figure>
+
+  <p>
+    <strong>A scene that culls heavily is cheaper per object to cull than one that culls
+    nothing.</strong> That is backwards from most optimisations and it falls straight out of the
+    early exit: a rejected box averages 1.95 plane evaluations while a survivor always costs six.
+    The <code>rejected_by</code> breakdown is a diagnostic nothing else in the engine offers — a
+    scene rejecting most of its objects on <code>k_far_z</code> is telling you the far plane is too
+    close, and no other instrument would say so.
+  </p>
+
+  <p>
+    That loop is a deliberate duplicate of the one inside <code>intersects()</code>. Lesson 3.4 set
+    the rule when <code>is_front_facing</code> had the same problem: <em>instrumentation may
+    duplicate the question, never the answer.</em> So §D checks the two against each other on all
+    50,000 boxes, and against <code>classify</code> as well, rather than trusting that they still
+    agree.
+  </p>
+
+  <!-- =================================================================
+       9 — THE GOLDEN
+       ================================================================= -->
+  <h2 id="golden"><span class="num">9</span>What the golden can and cannot tell us</h2>
+
+  <p>
+    Since Lesson 5.1 this engine has carried a characterization test: eight frames rendered through
+    the software rasterizer with every input a constant, hashed to <code>E917C06C</code>, and
+    unchanged for twenty-four lessons. Twice this module it has caught a change that was not meant to
+    happen. The obvious question for this lesson: <em>does it check the culler?</em>
+  </p>
+
+  <p>
+    The reasoning goes: a correct frustum cull removes only objects contributing zero pixels, so the
+    picture must be identical; therefore the golden is a correctness test for the culler. That
+    reasoning is sound and the conclusion is still wrong, for a reason that has nothing to do with
+    the culler:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §J</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">reference shot: 14 objects across 8 frames, 0 culled
+[PASS] the golden's geometry is NEVER outside the frustum
+[PASS] …and the same code DOES cull an object moved 200 units off screen</code></pre>
+  </figure>
+
+  <p>
+    <strong>Nothing in the reference shot is ever off screen</strong> — not in any of the eight
+    frames, including the close-up from ankle height that Lesson 5.1 added specifically to reach the
+    near-plane clipper. So the golden cannot move, and its not moving proves nothing about the
+    culler. It is a <em>null result</em>.
+  </p>
+
+  <p>
+    Which brings in the rule Lessons 6.14 and 6.15 both paid to learn, now applied before it cost
+    anything: <strong>a null result is worthless until the same instrument has been shown to produce
+    a non-null one.</strong> Hence the second check — take frame 1's scene, move one object 200 units
+    down +x, and confirm the count goes from 0 to 1. It does. The zero is real.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>So Part 1 of this lesson has no picture-level test, and Part 2 needed one built.</strong>
+      That is why §10 ends with a GPU comparison rather than a golden hash: the instanced path's
+      correctness had to be established by rendering the same scene two ways and demanding identical
+      bytes. Knowing which of your instruments is blind to a change is as useful as having the
+      instrument.
+    </p>
+  </div>

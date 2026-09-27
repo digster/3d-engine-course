@@ -1,0 +1,48 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="l65f3-t l65f3-d">
+  <title id="l65f3-t">Where a handle belongs and where a pointer belongs</title>
+  <desc id="l65f3-d">A handle is how a material stores a reference to a texture: durable, four bytes, checkable, and unaffected when the pool reallocates. A pointer is how the fill loop reads it: one dereference with no lookup. bind_albedo is the named step between them, run once per draw. Storing pointers instead makes the scene dangle when a pool grows; resolving inside the loop adds a bounds check to every pixel.</desc>
+  <defs>
+    <marker id="e-i-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l65f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="340" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="28" class="lg" text-anchor="middle">Store a handle. Use a pointer. Resolve once, between.</text>
+<rect x="60" y="62" width="160" height="190" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="60" y="62" width="160" height="190" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="140.0" y="86" class="sm" text-anchor="middle">HANDLE</text>
+<text x="140.0" y="104" class="xs" text-anchor="middle">STORAGE</text>
+<line x1="74" y1="114" x2="206" y2="114" class="grid" stroke-width="1.0"/>
+<text x="140.0" y="136" class="xs" text-anchor="middle">durable</text>
+<text x="140.0" y="155" class="xs" text-anchor="middle">checkable</text>
+<text x="140.0" y="174" class="xs" text-anchor="middle">4 bytes</text>
+<text x="140.0" y="193" class="xs" text-anchor="middle">survives a realloc</text>
+<text x="140.0" y="240" class="xs" text-anchor="middle">material::albedo_map</text>
+<rect x="280" y="62" width="160" height="190" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="280" y="62" width="160" height="190" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="360.0" y="86" class="sm" text-anchor="middle">resolve</text>
+<text x="360.0" y="104" class="xs" text-anchor="middle">THE STEP</text>
+<line x1="294" y1="114" x2="426" y2="114" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="136" class="xs" text-anchor="middle">once per DRAW</text>
+<text x="360.0" y="155" class="xs" text-anchor="middle">a bounds check</text>
+<text x="360.0" y="174" class="xs" text-anchor="middle">+ a generation</text>
+<text x="360.0" y="193" class="xs" text-anchor="middle">compare</text>
+<text x="360.0" y="240" class="xs" text-anchor="middle">bind_albedo(m, pool)</text>
+<rect x="500" y="62" width="160" height="190" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="500" y="62" width="160" height="190" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="580.0" y="86" class="sm" text-anchor="middle">POINTER</text>
+<text x="580.0" y="104" class="xs" text-anchor="middle">THE HOT LOOP</text>
+<line x1="514" y1="114" x2="646" y2="114" class="grid" stroke-width="1.0"/>
+<text x="580.0" y="136" class="xs" text-anchor="middle">one dereference</text>
+<text x="580.0" y="155" class="xs" text-anchor="middle">no lookup</text>
+<text x="580.0" y="174" class="xs" text-anchor="middle">no branch</text>
+<text x="580.0" y="193" class="xs" text-anchor="middle">per PIXEL</text>
+<text x="580.0" y="240" class="xs" text-anchor="middle">texture_binding::image</text>
+<line x1="224" y1="157" x2="274" y2="157" class="ink" stroke-width="1.7" marker-end="url(#e-i-l65f3)"/>
+<line x1="444" y1="157" x2="494" y2="157" class="ink" stroke-width="1.7" marker-end="url(#e-i-l65f3)"/>
+<rect x="60" y="268" width="600" height="58" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="290" class="xs" text-anchor="middle">Wrong in one direction: the scene dangles the first time a pool grows.</text>
+<text x="360.0" y="312" class="xs" text-anchor="middle">Wrong in the other: a bounds check and a generation compare, per pixel.</text>
+</svg>

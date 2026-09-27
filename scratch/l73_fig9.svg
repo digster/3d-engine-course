@@ -1,0 +1,74 @@
+<svg viewBox="0 0 760 402" role="img" aria-labelledby="f73i-t f73i-d">
+  <title id="f73i-t">nlerp's speed ratio and its error, measured</title>
+  <desc id="f73i-d">Two panels. The left plots nlerp's fastest step divided by its slowest against the size of the arc, on a logarithmic scale from one to ten thousand. A blue curve is the closed form, secant squared of half the arc; seven amber dots are measurements at ten, thirty, sixty, ninety, one hundred and twenty, one hundred and fifty and one hundred and seventy-nine degrees, and each lands on the curve. The right panel is a bar chart of how far nlerp and slerp get from each other at the same value of t: 0.005 degrees at a ten-degree arc, four degrees at ninety, and seventy-seven degrees at a hundred and seventy-nine.</desc>
+  <defs>
+    <marker id="e-i-f73i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f73i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f73i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f73i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f73i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="212.0" y="32.0" class="sm" text-anchor="middle">nlerp's fastest step ÷ its slowest</text>
+<text x="212.0" y="48.0" class="xs muted" text-anchor="middle">measured at 20,000 steps; the curve is sec²(Ω/2)</text>
+<rect x="62.0" y="62.0" width="300.0" height="226.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="62.0" y1="288.0" x2="362.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="54.0" y="292.0" class="xs muted" text-anchor="end">1×</text>
+<line x1="62.0" y1="234.2" x2="362.0" y2="234.2" class="grid" stroke-width="0.8"/>
+<text x="54.0" y="238.2" class="xs muted" text-anchor="end">10×</text>
+<line x1="62.0" y1="180.4" x2="362.0" y2="180.4" class="grid" stroke-width="0.8"/>
+<text x="54.0" y="184.4" class="xs muted" text-anchor="end">100×</text>
+<line x1="62.0" y1="126.6" x2="362.0" y2="126.6" class="grid" stroke-width="0.8"/>
+<text x="54.0" y="130.6" class="xs muted" text-anchor="end">1,000×</text>
+<line x1="62.0" y1="72.8" x2="362.0" y2="72.8" class="grid" stroke-width="0.8"/>
+<text x="54.0" y="76.8" class="xs muted" text-anchor="end">10,000×</text>
+<line x1="62.0" y1="62.0" x2="62.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="62.0" y="304.0" class="xs muted" text-anchor="middle">0°</text>
+<line x1="137.0" y1="62.0" x2="137.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="137.0" y="304.0" class="xs muted" text-anchor="middle">45°</text>
+<line x1="212.0" y1="62.0" x2="212.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="212.0" y="304.0" class="xs muted" text-anchor="middle">90°</text>
+<line x1="287.0" y1="62.0" x2="287.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="287.0" y="304.0" class="xs muted" text-anchor="middle">135°</text>
+<line x1="362.0" y1="62.0" x2="362.0" y2="288.0" class="grid" stroke-width="0.8"/>
+<text x="362.0" y="304.0" class="xs muted" text-anchor="middle">180°</text>
+<path d="M 62.83,288.00 L 63.67,288.00 L 64.50,288.00 L 65.33,287.99 L 66.17,287.99 L 67.00,287.98 L 67.83,287.98 L 68.67,287.97 L 69.50,287.96 L 70.33,287.96 L 71.17,287.95 L 72.00,287.94 L 72.83,287.92 L 73.67,287.91 L 74.50,287.90 L 75.33,287.89 L 76.17,287.87 L 77.00,287.86 L 77.83,287.84 L 78.67,287.82 L 79.50,287.80 L 80.33,287.78 L 81.17,287.76 L 82.00,287.74 L 82.83,287.72 L 83.67,287.70 L 84.50,287.67 L 85.33,287.65 L 86.17,287.62 L 87.00,287.60 L 87.83,287.57 L 88.67,287.54 L 89.50,287.51 L 90.33,287.48 L 91.17,287.45 L 92.00,287.42 L 92.83,287.39 L 93.67,287.35 L 94.50,287.32 L 95.33,287.28 L 96.17,287.25 L 97.00,287.21 L 97.83,287.17 L 98.67,287.13 L 99.50,287.09 L 100.33,287.05 L 101.17,287.01 L 102.00,286.97 L 102.83,286.92 L 103.67,286.88 L 104.50,286.83 L 105.33,286.79 L 106.17,286.74 L 107.00,286.69 L 107.83,286.64 L 108.67,286.59 L 109.50,286.54 L 110.33,286.49 L 111.17,286.43 L 112.00,286.38 L 112.83,286.32 L 113.67,286.27 L 114.50,286.21 L 115.33,286.15 L 116.17,286.09 L 117.00,286.03 L 117.83,285.97 L 118.67,285.91 L 119.50,285.85 L 120.33,285.79 L 121.17,285.72 L 122.00,285.65 L 122.83,285.59 L 123.67,285.52 L 124.50,285.45 L 125.33,285.38 L 126.17,285.31 L 127.00,285.24 L 127.83,285.17 L 128.67,285.09 L 129.50,285.02 L 130.33,284.94 L 131.17,284.87 L 132.00,284.79 L 132.83,284.71 L 133.67,284.63 L 134.50,284.55 L 135.33,284.47 L 136.17,284.38 L 137.00,284.30 L 137.83,284.21 L 138.67,284.13 L 139.50,284.04 L 140.33,283.95 L 141.17,283.86 L 142.00,283.77 L 142.83,283.68 L 143.67,283.59 L 144.50,283.50 L 145.33,283.40 L 146.17,283.31 L 147.00,283.21 L 147.83,283.11 L 148.67,283.01 L 149.50,282.91 L 150.33,282.81 L 151.17,282.71 L 152.00,282.61 L 152.83,282.50 L 153.67,282.40 L 154.50,282.29 L 155.33,282.18 L 156.17,282.07 L 157.00,281.96 L 157.83,281.85 L 158.67,281.74 L 159.50,281.63 L 160.33,281.51 L 161.17,281.39 L 162.00,281.28 L 162.83,281.16 L 163.67,281.04 L 164.50,280.92 L 165.33,280.80 L 166.17,280.67 L 167.00,280.55 L 167.83,280.42 L 168.67,280.30 L 169.50,280.17 L 170.33,280.04 L 171.17,279.91 L 172.00,279.78 L 172.83,279.64 L 173.67,279.51 L 174.50,279.37 L 175.33,279.24 L 176.17,279.10 L 177.00,278.96 L 177.83,278.82 L 178.67,278.68 L 179.50,278.53 L 180.33,278.39 L 181.17,278.24 L 182.00,278.09 L 182.83,277.95 L 183.67,277.80 L 184.50,277.64 L 185.33,277.49 L 186.17,277.34 L 187.00,277.18 L 187.83,277.02 L 188.67,276.86 L 189.50,276.70 L 190.33,276.54 L 191.17,276.38 L 192.00,276.22 L 192.83,276.05 L 193.67,275.88 L 194.50,275.71 L 195.33,275.54 L 196.17,275.37 L 197.00,275.20 L 197.83,275.02 L 198.67,274.85 L 199.50,274.67 L 200.33,274.49 L 201.17,274.31 L 202.00,274.13 L 202.83,273.94 L 203.67,273.75 L 204.50,273.57 L 205.33,273.38 L 206.17,273.19 L 207.00,272.99 L 207.83,272.80 L 208.67,272.60 L 209.50,272.41 L 210.33,272.21 L 211.17,272.00 L 212.00,271.80 L 212.83,271.60 L 213.67,271.39 L 214.50,271.18 L 215.33,270.97 L 216.17,270.76 L 217.00,270.55 L 217.83,270.33 L 218.67,270.11 L 219.50,269.89 L 220.33,269.67 L 221.17,269.45 L 222.00,269.22 L 222.83,268.99 L 223.67,268.76 L 224.50,268.53 L 225.33,268.30 L 226.17,268.06 L 227.00,267.83 L 227.83,267.59 L 228.67,267.34 L 229.50,267.10 L 230.33,266.85 L 231.17,266.61 L 232.00,266.35 L 232.83,266.10 L 233.67,265.85 L 234.50,265.59 L 235.33,265.33 L 236.17,265.07 L 237.00,264.80 L 237.83,264.54 L 238.67,264.27 L 239.50,263.99 L 240.33,263.72 L 241.17,263.44 L 242.00,263.16 L 242.83,262.88 L 243.67,262.60 L 244.50,262.31 L 245.33,262.02 L 246.17,261.73 L 247.00,261.43 L 247.83,261.13 L 248.67,260.83 L 249.50,260.53 L 250.33,260.22 L 251.17,259.91 L 252.00,259.60 L 252.83,259.28 L 253.67,258.97 L 254.50,258.64 L 255.33,258.32 L 256.17,257.99 L 257.00,257.66 L 257.83,257.33 L 258.67,256.99 L 259.50,256.65 L 260.33,256.30 L 261.17,255.95 L 262.00,255.60 L 262.83,255.25 L 263.67,254.89 L 264.50,254.53 L 265.33,254.16 L 266.17,253.79 L 267.00,253.42 L 267.83,253.04 L 268.67,252.66 L 269.50,252.27 L 270.33,251.88 L 271.17,251.49 L 272.00,251.09 L 272.83,250.69 L 273.67,250.28 L 274.50,249.87 L 275.33,249.46 L 276.17,249.03 L 277.00,248.61 L 277.83,248.18 L 278.67,247.74 L 279.50,247.31 L 280.33,246.86 L 281.17,246.41 L 282.00,245.95 L 282.83,245.49 L 283.67,245.03 L 284.50,244.56 L 285.33,244.08 L 286.17,243.59 L 287.00,243.11 L 287.83,242.61 L 288.67,242.11 L 289.50,241.60 L 290.33,241.09 L 291.17,240.57 L 292.00,240.04 L 292.83,239.50 L 293.67,238.96 L 294.50,238.41 L 295.33,237.86 L 296.17,237.29 L 297.00,236.72 L 297.83,236.14 L 298.67,235.55 L 299.50,234.95 L 300.33,234.35 L 301.17,233.74 L 302.00,233.11 L 302.83,232.48 L 303.67,231.84 L 304.50,231.19 L 305.33,230.52 L 306.17,229.85 L 307.00,229.17 L 307.83,228.48 L 308.67,227.77 L 309.50,227.05 L 310.33,226.32 L 311.17,225.58 L 312.00,224.83 L 312.83,224.06 L 313.67,223.28 L 314.50,222.48 L 315.33,221.67 L 316.17,220.85 L 317.00,220.00 L 317.83,219.15 L 318.67,218.27 L 319.50,217.38 L 320.33,216.47 L 321.17,215.54 L 322.00,214.59 L 322.83,213.62 L 323.67,212.63 L 324.50,211.62 L 325.33,210.58 L 326.17,209.52 L 327.00,208.43 L 327.83,207.32 L 328.67,206.17 L 329.50,205.00 L 330.33,203.80 L 331.17,202.56 L 332.00,201.29 L 332.83,199.99 L 333.67,198.64 L 334.50,197.26 L 335.33,195.83 L 336.17,194.36 L 337.00,192.83 L 337.83,191.26 L 338.67,189.62 L 339.50,187.93 L 340.33,186.18 L 341.17,184.35 L 342.00,182.45 L 342.83,180.47 L 343.67,178.40 L 344.50,176.23 L 345.33,173.96 L 346.17,171.56 L 347.00,169.04 L 347.83,166.38 L 348.67,163.55 L 349.50,160.54 L 350.33,157.32 L 351.17,153.86 L 352.00,150.12 L 352.83,146.06 L 353.67,141.60 L 354.50,136.68 L 355.33,131.18 L 356.17,124.94 L 357.00,117.74 L 357.83,109.22 L 358.67,98.79 L 359.50,85.35 L 360.33,66.40" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="78.67" cy="287.77" r="3.4" fill="#f0961e"/>
+<circle cx="112.00" cy="286.33" r="3.4" fill="#f0961e"/>
+<circle cx="162.00" cy="281.27" r="3.4" fill="#f0961e"/>
+<circle cx="212.00" cy="271.78" r="3.4" fill="#f0961e"/>
+<circle cx="262.00" cy="255.59" r="3.4" fill="#f0961e"/>
+<circle cx="312.00" cy="224.80" r="3.4" fill="#f0961e"/>
+<circle cx="360.33" cy="66.39" r="3.4" fill="#f0961e"/>
+<text x="74.0" y="82.0" class="xs muted" text-anchor="start">closed form</text>
+<circle cx="158.00" cy="78.00" r="3.4" fill="#f0961e"/>
+<text x="166.0" y="82.0" class="xs muted" text-anchor="start">measured</text>
+<line x1="124.0" y1="78.0" x2="150.0" y2="78.0" class="grid" stroke-width="0.0"/>
+<line x1="124.0" y1="78.0" x2="150.0" y2="78.0" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<text x="577.0" y="32.0" class="sm" text-anchor="middle">how far apart, at the same t</text>
+<text x="577.0" y="48.0" class="xs muted" text-anchor="middle">worst orientation gap over the blend</text>
+<rect x="452.0" y="62.0" width="250.0" height="226.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="496.0" y="69.10285714285715" width="1.5" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="80.01714285714286" class="xs mono muted" text-anchor="end">10°</text>
+<text x="503.5" y="80.01714285714286" class="xs mono" text-anchor="start">0.005°</text>
+<rect x="496.0" y="101.38857142857142" width="1.5" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="112.30285714285714" class="xs mono muted" text-anchor="end">30°</text>
+<text x="503.5" y="112.30285714285714" class="xs mono" text-anchor="start">0.13°</text>
+<rect x="496.0" y="133.6742857142857" width="2.244165779531175" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="144.5885714285714" class="xs mono muted" text-anchor="end">60°</text>
+<text x="504.24416577953116" y="144.5885714285714" class="xs mono" text-anchor="start">1.12°</text>
+<rect x="496.0" y="165.96" width="8.186282797920972" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="176.87428571428572" class="xs mono muted" text-anchor="end">90°</text>
+<text x="510.18628279792097" y="176.87428571428572" class="xs mono" text-anchor="start">4.07°</text>
+<rect x="496.0" y="198.24571428571429" width="21.99624011104849" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="209.16" class="xs mono muted" text-anchor="end">120°</text>
+<text x="523.9962401110485" y="209.16" class="xs mono" text-anchor="start">10.95°</text>
+<rect x="496.0" y="230.53142857142856" width="52.924541298766364" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="241.44571428571427" class="xs mono muted" text-anchor="end">150°</text>
+<text x="554.9245412987664" y="241.44571428571427" class="xs mono" text-anchor="start">26.34°</text>
+<rect x="496.0" y="262.81714285714287" width="154.0" height="12.914285714285715" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.82"/>
+<text x="490.0" y="273.7314285714286" class="xs mono muted" text-anchor="end">179°</text>
+<text x="656.0" y="273.7314285714286" class="xs mono" text-anchor="start">76.65°</text>
+<text x="380.0" y="336" class="xs muted" text-anchor="middle">under 60° of arc the cheap blend is wrong by about a degree and nobody will ever see it;</text>
+<text x="380.0" y="354" class="xs muted" text-anchor="middle">at 150° it is wrong by 26° and the character's arm visibly lurches through the middle of the turn.</text>
+<text x="380.0" y="378" class="xs t-hi" text-anchor="middle">That is the whole decision, and it is a threshold on the ARC rather than a preference between two functions.</text>
+</svg>

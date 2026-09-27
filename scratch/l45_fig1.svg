@@ -1,0 +1,125 @@
+<svg viewBox="0 0 720 450" role="img" aria-labelledby="f45a-t f45a-d">
+  <title id="f45a-t">Interleaved and separate vertex layouts, byte by byte</title>
+  <desc id="f45a-d">Top: one vertex buffer of 32-byte records, position then normal then uv, with 64-byte cache lines drawn over it — each line holds exactly two whole vertices. Middle: the same data as three separate buffers, one per attribute. Bottom: two measurements. Fetching one vertex costs 1 cache line interleaved and up to 5 separate; sweeping every position costs 613 lines interleaved and 230 separate.</desc>
+  <defs>
+    <marker id="e-i-f45a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f45a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f45a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">one vertex is 32 bytes: FLOAT3 position (12) + FLOAT3 normal (12) + FLOAT2 uv (8)</text>
+  <text x="24" y="38" class="sm t-hi">INTERLEAVED &#8212; one vertex is contiguous</text>
+  <text x="24" y="76" class="sm">vertex buffer</text>
+  <text x="24" y="89" class="xs muted">slot 0, pitch 32</text>
+  <rect x="128.0" y="62" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="154.4" y="77" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="180.8" y="62" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="207.2" y="77" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="233.6" y="62" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="251.2" y="77" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="268.8" y="62" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="295.2" y="77" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="321.6" y="62" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="348.0" y="77" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="374.4" y="62" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="392.0" y="77" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="409.6" y="62" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="436.0" y="77" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="462.4" y="62" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="488.8" y="77" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="515.2" y="62" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="532.8" y="77" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="550.4" y="62" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="576.8" y="77" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="603.2" y="62" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="629.6" y="77" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="656.0" y="62" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="673.6" y="77" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="128.0" y="57" width="281.6" height="32" class="hi" fill="none" stroke-dasharray="3 3"/>
+  <text x="268.8" y="51" class="xs t-hi" text-anchor="middle">64-byte cache line &#8212; two whole vertices</text>
+  <rect x="409.6" y="57" width="281.6" height="32" class="hi" fill="none" stroke-dasharray="3 3"/>
+  <text x="550.4" y="51" class="xs t-hi" text-anchor="middle">64-byte cache line &#8212; two whole vertices</text>
+  <text x="128.0" y="102" class="xs muted">byte 0</text>
+  <text x="268.8" y="102" class="xs muted">32</text>
+  <text x="409.6" y="102" class="xs muted">64</text>
+  <text x="550.4" y="102" class="xs muted">96</text>
+  <text x="24" y="158" class="sm t-hi">SEPARATE — one attribute is contiguous</text>
+  <text x="24" y="180" class="sm">positions</text>
+  <text x="24" y="193" class="xs muted">slot 0, pitch 12</text>
+  <rect x="128.0" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="154.4" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="180.8" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="207.2" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="233.6" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="260.0" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="286.4" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="312.8" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="339.2" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="365.6" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="392.0" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="418.4" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="444.8" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="471.2" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <rect x="497.6" y="166" width="52.8" height="22" fill="#5082e6" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="524.0" y="181" class="xs mono t-inv" text-anchor="middle">pos</text>
+  <text x="24" y="226" class="sm">normals</text>
+  <text x="24" y="239" class="xs muted">slot 1, pitch 12</text>
+  <rect x="128.0" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="154.4" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="180.8" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="207.2" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="233.6" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="260.0" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="286.4" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="312.8" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="339.2" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="365.6" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="392.0" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="418.4" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="444.8" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="471.2" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <rect x="497.6" y="212" width="52.8" height="22" fill="#5ac878" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="524.0" y="227" class="xs mono t-inv" text-anchor="middle">nrm</text>
+  <text x="24" y="272" class="sm">uvs</text>
+  <text x="24" y="285" class="xs muted">slot 2, pitch 8</text>
+  <rect x="128.0" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="145.6" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="163.2" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="180.8" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="198.4" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="216.0" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="233.6" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="251.2" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="268.8" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="286.4" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="304.0" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="321.6" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="339.2" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="356.8" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="374.4" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="392.0" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="409.6" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="427.2" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="444.8" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="462.4" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="480.0" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="497.6" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <rect x="515.2" y="258" width="35.2" height="22" fill="#f0961e" fill-opacity="0.75" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="532.8" y="273" class="xs mono t-inv" text-anchor="middle">uv</text>
+  <text x="128.0" y="300" class="xs muted">three buffers, three base addresses, three fetches per vertex</text>
+  <rect x="24" y="322" width="672" height="106" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="342" class="sm">measured on our torus, 1225 vertices, 64-byte lines</text>
+  <text x="300" y="362" class="xs muted" text-anchor="middle">interleaved</text>
+  <text x="470" y="362" class="xs muted" text-anchor="middle">separate</text>
+  <text x="620" y="362" class="xs muted" text-anchor="middle">winner</text>
+  <text x="40" y="384" class="xs">lines to fetch ONE vertex</text>
+  <text x="300" y="384" class="xs mono t-ok" text-anchor="middle">1</text>
+  <text x="470" y="384" class="xs mono t-bad" text-anchor="middle">5</text>
+  <text x="620" y="384" class="xs t-hi" text-anchor="middle">interleaved</text>
+  <text x="40" y="408" class="xs">lines for a positions-only pass</text>
+  <text x="300" y="408" class="xs mono t-bad" text-anchor="middle">613</text>
+  <text x="470" y="408" class="xs mono t-ok" text-anchor="middle">230</text>
+  <text x="620" y="408" class="xs t-hi" text-anchor="middle">separate</text>
+</svg>

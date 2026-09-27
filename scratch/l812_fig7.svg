@@ -1,0 +1,124 @@
+<svg viewBox="0 0 980 597.5" role="img" aria-labelledby="g7-t g7-d">
+  <title id="g7-t">A knee loaded into its stop, and the position pass that could not repair it</title>
+  <desc id="g7-d">Left: a fixed thigh and a shin lying back, pushed by gravity into the lower stop, with the upper stop 150 degrees away; a table of the two rows inside 8.11's position pass, whose pseudo impulses are equal and cancel. Right: the knee angle over ten seconds under 8.11's and 8.12's passes, warm and cold.</desc>
+  <defs>
+    <marker id="e-i-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">A shin loaded into its stop, and 8.11's position pass</text>
+<path d="M 238.00,60.00 L 238.00,142.00 A 12.00 12.00 0 0 0 262.00,142.00 L 262.00,60.00 A 12.00 12.00 0 0 0 238.00,60.00 Z" fill="#8f918a" fill-opacity="0.15" stroke="#8f918a" stroke-width="1.6"/>
+<text x="268" y="90" class="xs muted" text-anchor="start">thigh, fixed</text>
+<path d="M 238.00,140.00 L 80.00,140.00 A 10.00 10.00 0 0 0 80.00,160.00 L 238.00,160.00 A 10.00 10.00 0 0 0 238.00,140.00 Z" fill="#5082e6" fill-opacity="0.15" stroke="#5082e6" stroke-width="1.6"/>
+<text x="160" y="180" class="xs muted" text-anchor="middle">shin, lying back</text>
+<circle cx="250.0" cy="150.0" r="4.0" fill="#f0961e"/>
+<line x1="100.00" y1="158.00" x2="100.00" y2="202.00" stroke="#8f918a" stroke-width="1.6" marker-end="url(#e-grey-g7)"/>
+<text x="106" y="210" class="xs" text-anchor="start">g</text>
+<line x1="250.0" y1="150.0" x2="50.0" y2="150.0" stroke="#5ac878" stroke-width="1.0" fill="none" stroke-dasharray="5 4"/>
+<text x="50" y="132" class="xs" text-anchor="start">lower stop: C = θ ≥ 0</text>
+<line x1="250.0" y1="150.0" x2="362.6" y2="85.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="2 4"/>
+<text x="368.58330249197707" y="89.00000000000001" class="xs muted" text-anchor="start">upper stop, 150° round</text>
+<text x="26" y="242" class="xs muted" text-anchor="start">Inside 8.11's pass, five seconds in</text>
+<text x="26" y="262" class="xs muted" text-anchor="start">row</text>
+<text x="230" y="262" class="xs muted" text-anchor="end">C rad</text>
+<text x="300" y="262" class="xs muted" text-anchor="end">bias</text>
+<text x="410" y="262" class="xs muted" text-anchor="end">pseudo impulse</text>
+<line x1="26" y1="270.0" x2="416" y2="270.0" class="grid" stroke-width="1.0"/>
+<text x="26" y="287.0" class="xs" text-anchor="start">lower stop</text>
+<text x="230" y="287.0" class="xs mono" text-anchor="end">-0.002951</text>
+<text x="300" y="287.0" class="xs mono" text-anchor="end">0.03541</text>
+<text x="410" y="287.0" class="xs mono" text-anchor="end">+0.006513</text>
+<text x="26" y="304.0" class="xs" text-anchor="start">upper stop</text>
+<text x="230" y="304.0" class="xs mono" text-anchor="end">+2.620945</text>
+<text x="300" y="304.0" class="xs mono" text-anchor="end">0.00000</text>
+<text x="410" y="304.0" class="xs mono" text-anchor="end">+0.006513</text>
+<text x="26" y="330.5" class="xs muted" text-anchor="start">The upper stop is not violated, so its bias is zero — and 8.11 solved it</text>
+<text x="26" y="345.5" class="xs muted" text-anchor="start">against that zero, as a hard 'no pseudo-velocity toward me'. It cancels</text>
+<text x="26" y="360.5" class="xs muted" text-anchor="start">the lower stop's correction exactly: the knee's pseudo spin after the</text>
+<text x="26" y="375.5" class="xs muted" text-anchor="start">pass is 3.6e-09 rad/s. 8.12 gives a satisfied row its speculative</text>
+<text x="26" y="390.5" class="xs muted" text-anchor="start">target, −C/h.</text>
+<rect x="560" y="56" width="360" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="560" y1="70.375" x2="920" y2="70.375" class="grid" stroke-width="0.6"/>
+<text x="554" y="74.375" class="xs mono" text-anchor="end">0°</text>
+<line x1="560" y1="127.875" x2="920" y2="127.875" class="grid" stroke-width="0.6"/>
+<text x="554" y="131.875" class="xs mono" text-anchor="end">-20°</text>
+<line x1="560" y1="185.375" x2="920" y2="185.375" class="grid" stroke-width="0.6"/>
+<text x="554" y="189.375" class="xs mono" text-anchor="end">-40°</text>
+<line x1="560" y1="242.875" x2="920" y2="242.875" class="grid" stroke-width="0.6"/>
+<text x="554" y="246.875" class="xs mono" text-anchor="end">-60°</text>
+<text x="560.0" y="302" class="xs mono" text-anchor="middle">0 s</text>
+<text x="632.0" y="302" class="xs mono" text-anchor="middle">2 s</text>
+<text x="704.0" y="302" class="xs mono" text-anchor="middle">4 s</text>
+<text x="776.0" y="302" class="xs mono" text-anchor="middle">6 s</text>
+<text x="848.0" y="302" class="xs mono" text-anchor="middle">8 s</text>
+<text x="920.0" y="302" class="xs mono" text-anchor="middle">10 s</text>
+<text x="740.0" y="30" class="sm" text-anchor="middle">Knee angle; the stop is at 0°</text>
+<path d="M 560.00,70.38 L 632.00,127.43 L 704.00,178.33 L 776.00,219.53 L 848.00,250.81 L 920.00,273.67" fill="none" stroke="#e05c5c" stroke-width="1.8" stroke-dasharray="8 4"/>
+<circle cx="632.0" cy="127.4" r="2.6" fill="#e05c5c"/>
+<circle cx="704.0" cy="178.3" r="2.6" fill="#e05c5c"/>
+<circle cx="776.0" cy="219.5" r="2.6" fill="#e05c5c"/>
+<circle cx="848.0" cy="250.8" r="2.6" fill="#e05c5c"/>
+<circle cx="920.0" cy="273.7" r="2.6" fill="#e05c5c"/>
+<path d="M 560.00,70.38 L 632.00,75.81 L 704.00,75.81 L 776.00,75.81 L 848.00,75.81 L 920.00,75.81" fill="none" stroke="#5ac878" stroke-width="1.8" stroke-dasharray="8 4"/>
+<circle cx="632.0" cy="75.8" r="2.6" fill="#5ac878"/>
+<circle cx="704.0" cy="75.8" r="2.6" fill="#5ac878"/>
+<circle cx="776.0" cy="75.8" r="2.6" fill="#5ac878"/>
+<circle cx="848.0" cy="75.8" r="2.6" fill="#5ac878"/>
+<circle cx="920.0" cy="75.8" r="2.6" fill="#5ac878"/>
+<path d="M 560.00,70.38 L 632.00,70.86 L 704.00,70.86 L 776.00,70.86 L 848.00,70.86 L 920.00,70.86" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<circle cx="632.0" cy="70.9" r="2.6" fill="#e05c5c"/>
+<circle cx="704.0" cy="70.9" r="2.6" fill="#e05c5c"/>
+<circle cx="776.0" cy="70.9" r="2.6" fill="#e05c5c"/>
+<circle cx="848.0" cy="70.9" r="2.6" fill="#e05c5c"/>
+<circle cx="920.0" cy="70.9" r="2.6" fill="#e05c5c"/>
+<path d="M 560.00,70.38 L 632.00,70.38 L 704.00,70.38 L 776.00,70.38 L 848.00,70.38 L 920.00,70.38" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<circle cx="632.0" cy="70.4" r="2.6" fill="#5ac878"/>
+<circle cx="704.0" cy="70.4" r="2.6" fill="#5ac878"/>
+<circle cx="776.0" cy="70.4" r="2.6" fill="#5ac878"/>
+<circle cx="848.0" cy="70.4" r="2.6" fill="#5ac878"/>
+<circle cx="920.0" cy="70.4" r="2.6" fill="#5ac878"/>
+<text x="26" y="435.5" class="sm" text-anchor="start">The same, magnified: the top 2.5°</text>
+<rect x="70" y="449.5" width="390" height="110" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="70" y1="467.8333333333333" x2="460" y2="467.8333333333333" class="grid" stroke-width="0.6"/>
+<text x="64" y="471.8333333333333" class="xs mono" text-anchor="end">0°</text>
+<line x1="70" y1="504.5" x2="460" y2="504.5" class="grid" stroke-width="0.6"/>
+<text x="64" y="508.5" class="xs mono" text-anchor="end">-1°</text>
+<line x1="70" y1="541.1666666666666" x2="460" y2="541.1666666666666" class="grid" stroke-width="0.6"/>
+<text x="64" y="545.1666666666666" class="xs mono" text-anchor="end">-2°</text>
+<path d="M 70.00,467.83 L 148.00,537.19 L 226.00,537.19 L 304.00,537.19 L 382.00,537.19 L 460.00,537.19" fill="none" stroke="#5ac878" stroke-width="1.8" stroke-dasharray="8 4"/>
+<circle cx="148.0" cy="537.2" r="2.6" fill="#5ac878"/>
+<circle cx="226.0" cy="537.2" r="2.6" fill="#5ac878"/>
+<circle cx="304.0" cy="537.2" r="2.6" fill="#5ac878"/>
+<circle cx="382.0" cy="537.2" r="2.6" fill="#5ac878"/>
+<circle cx="460.0" cy="537.2" r="2.6" fill="#5ac878"/>
+<path d="M 70.00,467.83 L 148.00,474.03 L 226.00,474.03 L 304.00,474.03 L 382.00,474.03 L 460.00,474.03" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<circle cx="148.0" cy="474.0" r="2.6" fill="#e05c5c"/>
+<circle cx="226.0" cy="474.0" r="2.6" fill="#e05c5c"/>
+<circle cx="304.0" cy="474.0" r="2.6" fill="#e05c5c"/>
+<circle cx="382.0" cy="474.0" r="2.6" fill="#e05c5c"/>
+<circle cx="460.0" cy="474.0" r="2.6" fill="#e05c5c"/>
+<path d="M 70.00,467.83 L 148.00,467.83 L 226.00,467.83 L 304.00,467.83 L 382.00,467.83 L 460.00,467.83" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<circle cx="148.0" cy="467.8" r="2.6" fill="#5ac878"/>
+<circle cx="226.0" cy="467.8" r="2.6" fill="#5ac878"/>
+<circle cx="304.0" cy="467.8" r="2.6" fill="#5ac878"/>
+<circle cx="382.0" cy="467.8" r="2.6" fill="#5ac878"/>
+<circle cx="460.0" cy="467.8" r="2.6" fill="#5ac878"/>
+<text x="466.0" y="478.03366666666665" class="xs mono" text-anchor="start">−0.1691</text>
+<text x="466.0" y="541.1883333333333" class="xs mono" text-anchor="start">−1.8915</text>
+<text x="70.0" y="573.5" class="xs mono" text-anchor="middle">0 s</text>
+<text x="265.0" y="573.5" class="xs mono" text-anchor="middle">5 s</text>
+<text x="460.0" y="573.5" class="xs mono" text-anchor="middle">10 s</text>
+<line x1="560.0" y1="326.0" x2="580.0" y2="326.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="588" y="330" class="xs" text-anchor="start">8.11's pass, no warm start: gives way without bound (−70.7° at 10 s)</text>
+<line x1="560.0" y1="343.0" x2="580.0" y2="343.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="588" y="347" class="xs" text-anchor="start">8.12's pass, no warm start: a steady lag, −1.8915°</text>
+<line x1="560.0" y1="360.0" x2="580.0" y2="360.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="588" y="364" class="xs" text-anchor="start">8.11's pass, warm: frozen at −0.1691°, never repaired</text>
+<line x1="560.0" y1="377.0" x2="580.0" y2="377.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="588" y="381" class="xs" text-anchor="start">8.12's pass, warm: 0.0000°, as Baumgarte always managed</text>
+</svg>

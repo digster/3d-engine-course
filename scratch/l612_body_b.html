@@ -1,0 +1,531 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3>3.1 &nbsp; Exposure, in units somebody can talk about</h3>
+
+  <p>
+    An exposure is a multiplier applied before the curve. You could expose a scene by typing
+    multipliers — 0.5, 0.001, 3 — and a great many engines have. The reason not to is that nobody
+    can reason about them, and there is a scale that a century of photography has already agreed on.
+  </p>
+
+  <p class="lede">
+    <strong>EV is a logarithmic scale of light, and one EV — one <em>stop</em> — is a factor of
+    two.</strong>
+  </p>
+
+  @@FIG_EXPOSURE@@
+
+  <p>
+    The conversion from an exposure value to a render-time multiplier is standardised rather than
+    derived, and it is worth being precise about which part is which:
+  </p>
+
+  <div class="eq">\[ L_{\max} = 1.2 \cdot 2^{\text{EV}_{100}} \qquad \text{exposure} = \frac{1}{L_{\max}} \]</div>
+  <div class="eq-plain">max_luminance = 1.2 × 2^EV100        exposure = 1 / max_luminance</div>
+
+  <p>
+    The <strong>2<sup>EV</sup></strong> is the definition of a stop and is not negotiable. The
+    <strong>1.2</strong> is not physics: it is <code>78 / (q × 100)</code> with <code>q = 0.65</code>
+    from ISO 12232's saturation-based speed definition — a calibration of real camera hardware. This
+    course takes it as given and says so; Lagarde and de Rousiers' <em>Moving Frostbite to PBR</em>
+    §5.1 works it through properly. Quoting a constant and saying that you are quoting it is a
+    different act from presenting it as a derivation.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example, and it is the one that matters.</strong> What EV is the engine
+       already using?</p>
+    <p>
+      <code>k_reference_irradiance = π</code> was chosen so a white surface renders at exactly 1.0.
+      "1.0 maps to white" is precisely "<code>L_max</code> = 1", so:
+    </p>
+    <div class="eq-plain">1 = 1.2 × 2^EV   →   EV = log2(1 / 1.2) = −0.2630</div>
+    <p>
+      The harness confirms that <code>exposure_from_ev100(k_reference_ev100)</code> returns
+      <strong>1.0000000</strong>. And that is the sentence worth taking away:
+    </p>
+    <p class="lede">
+      Lesson 6.2's choice <em>was</em> an exposure setting. It was simply the only one available.
+    </p>
+    <p>
+      Which turns this lesson from a replacement into a generalisation — the old behaviour is a
+      point on the new scale, not a special case beside it. Three real settings for calibration:
+      a dim room is EV 3 (white at 9.6), an overcast day is EV 12 (white at 4,915), full daylight
+      is EV 15 (white at 39,322).
+    </p>
+  </div>
+
+  <h3>3.2 &nbsp; What makes a curve legal</h3>
+
+  <p>
+    Now the second half. We need a function from <code>[0, ∞)</code> to <code>[0, 1]</code>, and
+    before choosing one it is worth writing down what a candidate has to satisfy — because these
+    three properties are what separate an operator from a preference, and every one of them has a
+    visible failure.
+  </p>
+
+  <ul>
+    <li>
+      <strong>Monotonic.</strong> Brighter in, brighter out. Fail this and a highlight can come out
+      <em>darker</em> than its own edge, which no amount of artistic intent will make read as an
+      image of anything.
+    </li>
+    <li>
+      <strong>Close to the identity near zero.</strong> Fail this and the dark end of every image
+      is wrong — and the dark end is where an sRGB encode spends most of its codes, so the error
+      lands exactly where it is most visible.
+    </li>
+    <li>
+      <strong>Bounded by 1.</strong> Fail this and it has not done its job; something downstream
+      will clamp, and you will have a curve <em>and</em> a clamp.
+    </li>
+  </ul>
+
+  <p>Everything after this is taste. Here are four.</p>
+
+  @@FIG_CURVES@@
+
+  <h4>Reinhard, derived in one line</h4>
+
+  <p>
+    We want to divide <em>x</em> by something that is about <strong>1</strong> for small
+    <em>x</em> (so the dark end is untouched) and about <strong><em>x</em></strong> for large
+    <em>x</em> (so the bright end flattens). The simplest function that is both is
+    <code>1 + x</code>:
+  </p>
+
+  <div class="eq">\[ f(x) = \frac{x}{1 + x} \]</div>
+  <div class="eq-plain">f(x) = x / (1 + x)</div>
+
+  <p>
+    That is the whole derivation. Check the three properties: the derivative is
+    <code>1/(1+x)²</code>, positive everywhere, so monotonic; <code>f'(0) = 1</code>, so it is the
+    identity to first order at the origin; and <code>f(x) &lt; 1</code> for every finite
+    <em>x</em>, so it is bounded.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">That last property is also its famous defect</span>
+    <p>
+      <code>f(x) &lt; 1</code> <em>strictly</em>. So pure white is unreachable — and it is worth
+      computing how unreachable, because the number is much smaller than people expect and the
+      arithmetic is a trap this whole module keeps setting.
+    </p>
+    <p>
+      Code 255 needs an <strong>encoded</strong> value of at least 254.5/255 = 0.998039. Inverting
+      the sRGB transform, that is a <strong>linear</strong> 0.995545. So:
+    </p>
+    <div class="eq-plain">x / (1 + x) = 0.995545   →   x = 223.5</div>
+    <p>
+      An input of <strong>224</strong>. So an image tonemapped this way has no pure white in it at
+      any brightness you would plausibly render, and looks washed out for exactly that reason.
+    </p>
+    <p>
+      <em>This paragraph first said 768</em>, from applying the 254.5/255 threshold in the wrong
+      space — the same confusion between a code and a quantity of light that Lessons 1.6, 2.4, 3.9,
+      6.10 and 6.11 each found in a different place, committed here by the person writing the
+      module about it. <code>verify_612</code> §C measures it rather than repeating it, which is
+      how it was caught.
+    </p>
+  </div>
+
+  <h4>The white point, also derived</h4>
+
+  <p>
+    So give the artist the dial the plain operator lacks: pick the value <em>W</em> you want to
+    render as pure white, and require <code>f(W) = 1</code> while keeping the shape. The answer is:
+  </p>
+
+  <div class="eq">\[ f(x) = \frac{x\left(1 + \dfrac{x}{W^2}\right)}{1 + x} \]</div>
+  <div class="eq-plain">f(x) = x(1 + x/W²) / (1 + x)</div>
+
+  <p>And the check is two lines of algebra rather than an assertion:</p>
+
+  <div class="eq-plain">f(W) = W(1 + W/W²)/(1+W) = W(1 + 1/W)/(1+W) = (W+1)/(1+W) = 1</div>
+
+  <p>
+    The harness drives it at <em>W</em> = 2, 4 and 11 and gets exactly 1.000000 each time. Note
+    also that as <em>W</em> → ∞ the extra factor vanishes and it becomes plain Reinhard, which is
+    the right behaviour for a generalisation to have.
+  </p>
+
+  <h4>ACES, which is a fit and not a model</h4>
+
+  <p>
+    The curve the industry actually ships is an approximation to the ACES reference rendering
+    transform — five constants published by Krzysztof Narkowicz in 2015:
+  </p>
+
+  <pre><code class="lang-cpp">return clamp((x * (2.51f * x + 0.03f)) / (x * (2.43f * x + 0.59f) + 0.14f), 0.0f, 1.0f);</code></pre>
+
+  <p>
+    There is no derivation to give, and pretending otherwise would be exactly the hand-waving this
+    course refuses. What it has that the Reinhard family does not is a <strong>toe</strong> and a
+    <strong>shoulder</strong>: it darkens the very bottom and rolls off the very top, which mimics
+    film and reads as "photographic" rather than "mathematically correct".
+  </p>
+
+  <p>
+    The toe has a price, and the harness prints it: a dark value of 0.02 — code 39 — comes out at
+    code <strong>26</strong>. <strong>Thirteen codes darker</strong>, in the region where the eye is
+    most sensitive. That is a real artistic choice being made on your behalf, and it is worth
+    knowing that you are accepting it rather than discovering it later as "the shadows look
+    crushed".
+  </p>
+
+  <h3>3.3 &nbsp; Per-channel, or on the luminance?</h3>
+
+  <p>
+    A curve takes one number. A colour is three. There are two defensible ways to reconcile that
+    and they give visibly different pictures — this is a real choice, like
+    <code>blend_space</code> in 2.4, not a tuning knob.
+  </p>
+
+  @@FIG_HUE@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A bright saturated orange — the colour a fire actually is —
+       at (8.0, 2.0, 0.4), through Reinhard both ways.</p>
+    <div class="eq-plain">per channel:   (0.8889, 0.6667, 0.2857)     red:blue = 3.11</div>
+    <div class="eq-plain">luminance:     (1.9230, 0.4808, 0.0962)     red:blue = 20.00</div>
+    <p>
+      The input's red:blue ratio is 20. <strong>Per-channel drops it to 3.11</strong>, because a
+      saturating curve compresses the big channel more than the small one — so the colour moves
+      toward white as it brightens. That is what film does, it is what people expect a highlight to
+      look like, and it is why it is the default.
+    </p>
+    <p>
+      <strong>Luminance-only holds it at exactly 20</strong>, because scaling a colour by a scalar
+      is a move along the ray from black through it, which preserves hue and saturation by
+      construction.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">And luminance-only does not solve the problem it appears to solve</span>
+    <p>
+      Look at its output again: <code>r = 1.9230</code>. The curve was applied to the
+      <em>luminance</em> and the luminance landed in range, but an individual channel did not — and
+      the encode will clamp it, shifting the hue anyway, at a threshold nobody chose.
+    </p>
+    <p>
+      Blue is the worst case, because its luminance weight is only <strong>0.0722</strong>. A pure
+      blue of (0, 0, 8) has a luminance of 0.5776 — comfortably mid-range — sails through the
+      curve, and arrives with <code>b = 5.0710</code> for <code>to_encoded</code> to clip.
+    </p>
+    <p>
+      So: per-channel desaturates predictably and stays in range by construction; luminance-only
+      preserves hue right up to the point where it does not. Neither is correct, both are
+      defensible, and the engine exposes the choice with the first as the default. Real pipelines
+      add a third answer — tonemap the luminance and then apply a controlled desaturation — which
+      is a knob this course names and does not build.
+    </p>
+  </div>
+
+  <h3>3.4 &nbsp; The resolve, and why its three steps cannot be reordered</h3>
+
+  @@FIG_RESOLVE@@
+
+  <p>Each wrong ordering has its own signature, and the harness measures both.</p>
+
+  <div class="worked">
+    <p><strong>Worked example 1: exposure after the curve.</strong></p>
+    <p>
+      Take (6.0, 3.0, 1.5) at exposure 0.25 through Reinhard. Done correctly — multiply, then curve
+      — the red channel lands at code <strong>203</strong>. Done backwards, code
+      <strong>128</strong>.
+    </p>
+    <p>
+      And the second number is not merely darker. Everything above about 4 had <em>already been
+      squeezed into the same place</em> by the curve before the multiply arrived, so the exposure
+      no longer has a range to select from — which is the whole reason it exists. An exposure
+      applied after a compression is a brightness slider wearing an exposure's name.
+    </p>
+  </div>
+
+  <div class="worked">
+    <p><strong>Worked example 2: the curve after the encode.</strong></p>
+    <p>
+      Mid grey, 0.5 of the light. Curved as <em>light</em>: <code>0.5/(1.5) = 0.3333</code>. Encode
+      it first — code 188, which is 0.7373 as a fraction — and curve <em>that</em>:
+      <code>0.7373/1.7373 = 0.4244</code>.
+    </p>
+    <p>
+      A curve applied to <em>codes</em> compresses exactly what the encode had carefully spread
+      out, and because the sRGB curve is steepest at the dark end, it crushes the shadows first.
+      This is Lesson 1.6's rule arriving for the sixth time in this module and the last time in
+      this course: <strong>arithmetic on light happens in linear space; the encode is the last step
+      and happens once.</strong>
+    </p>
+  </div>
+
+  <p>
+    Done in the right order, the payoff is the thing the whole lesson is for. Seven stops of input,
+    through a resolve, into eight bits, with nothing clipped:
+  </p>
+
+  <pre><code class="lang-shell"> 0.125->94   0.250->124   0.500->156   1.000->188   2.000->213   4.000->231   8.000->242   16.000->248</code></pre>
+
+  <h3>3.5 &nbsp; What an HDR target does to Lesson 6.11's rule</h3>
+
+  <p>
+    Lesson 6.11 spent a section establishing that compositing must decode both operands, blend in
+    linear light, and re-encode — and priced the round trip at 3.14× a naive byte lerp. That
+    machinery was <em>correct</em>. It is also, on a float target, <strong>entirely absent</strong>.
+  </p>
+
+  <p>
+    The destination is already linear light; so is the source; so <code>over</code> applies
+    directly. The harness measures one composite at <strong>9.25 ns</strong> on a float target
+    against <strong>75.12 ns</strong> on 8 bits — <strong>8.1× cheaper</strong>, and exactly correct
+    rather than correct-after-conversion.
+  </p>
+
+  <p class="lede">
+    An HDR buffer is not only about range. It is the buffer that <strong>holds the quantity the
+    arithmetic is defined on</strong> — and every conversion 6.11 had to perform was a symptom of
+    storing something else.
+  </p>
+
+  <p>
+    There is a second, sharper consequence. Compositing a value of 40 at quarter coverage over a
+    dim background gives <strong>10.19</strong>, and the float buffer keeps it. The 8-bit path
+    cannot reach that answer at all: 40 was already code 255 <em>before</em> the blend, so it would
+    have composited 1.0 and lost a factor of forty before the operator even ran. Some pictures are
+    not merely less accurate in 8 bits; they are unreachable.
+  </p>
+
+  <div class="callout">
+    <span class="label">And 6.11's <code>_SRGB</code>-versus-<code>UNORM</code> argument does not transfer</span>
+    <p>
+      6.11 established that hardware blending on a <code>UNORM</code> target with a shader that
+      encodes its own output lerps sRGB <em>codes</em>, at a cost of 42.2% of the light. It is worth
+      saying plainly that <strong>this does not carry over to a float target</strong>: there is no
+      transfer function in the ROP to be right or wrong about, because nothing in a float pipeline
+      stores codes.
+    </p>
+    <p>
+      Which also settles what happens to <code>encode_output</code>. That flag has always meant
+      "must <em>this</em> shader apply the transfer function?", and with the scene rendering to a
+      float target the answer there is permanently <em>no</em>. The question has not gone away — it
+      has moved to the pass that actually writes the display, which is the only place it was ever
+      answerable. Same number, third reason.
+    </p>
+  </div>
+
+  <h3>3.6 &nbsp; Measuring a frame: why metering is done in log space</h3>
+
+  <p>
+    One more piece of arithmetic, because it is the foundation of auto-exposure and because the
+    reason is not obvious. To choose an exposure automatically you need a number that says how
+    bright the frame is. The obvious candidate — the mean luminance — is useless.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A 100×100 frame at a uniform 0.05, with
+       <strong>one</strong> specular pixel at 5000.</p>
+    <div class="eq-plain">arithmetic mean = (9999 × 0.05 + 5000) / 10000 = 0.5500</div>
+    <p>
+      That single pixel — one ten-thousandth of the frame — contributes <strong>0.5 of the
+      0.55</strong>, which is ten times everything else put together. An auto-exposure driven by
+      this number stops down by three stops because one highlight came into view.
+    </p>
+    <p>The geometric mean — the exponential of the mean of the logs — gives:</p>
+    <div class="eq-plain">log-average = 0.05016</div>
+    <p>
+      It barely notices, because the log of a large number is a small number. The two disagree by
+      <strong>11×</strong> on the same image, and that gap is the difference between an exposure
+      that tracks the scene and one that flickers whenever something shiny turns toward the camera.
+    </p>
+  </div>
+
+  <p>
+    <code>measure()</code> returns both, for exactly this reason — a number you can compare against
+    a wrong one is worth more than a number on its own. It also counts pixels over the lid, which is
+    the diagnostic that tells you whether you have an HDR problem at all: run the demo's polished
+    scene and it reports <strong>126 of 129,600 pixels — 0.10%</strong>. A tenth of one percent of
+    the frame, and all of the information being destroyed is in it.
+  </p>
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">4</span>Implementation</h2>
+
+  <h3>4.1 &nbsp; Two passes, and why the tonemap is not in the scene shader</h3>
+
+  <p>
+    The tempting shortcut is to tonemap at the end of <code>scene.frag.hlsl</code>, where the
+    colour already is. It costs nothing extra. It is also wrong in three ways, each of which becomes
+    a real limitation within two lessons.
+  </p>
+
+  @@FIG_PASSES@@
+
+  <ul>
+    <li>
+      <strong>An exposure derived from the frame cannot be known while the frame is being drawn.</strong>
+      Auto-exposure reads the finished image's log-average, and that does not exist until the last
+      triangle has landed.
+    </li>
+    <li>
+      <strong>Bloom comes before the curve</strong> (Lesson 6.13) and operates on the whole image. A
+      per-fragment tonemap has already compressed the values bloom needs to find.
+    </li>
+    <li>
+      <strong>Blending would composite tonemapped values.</strong> <code>over</code> is linear in
+      light and a curve is not linear, so <code>f(a) over f(b)</code> is not
+      <code>f(a over b)</code>. Lesson 6.11's operator would quietly stop meaning what it means.
+    </li>
+  </ul>
+
+  <p>
+    So: the scene renders into a float target, and a second pass maps it down. That second pass is
+    the first thing in this engine whose cost scales with <em>pixels</em> rather than with geometry,
+    and it is the seed of 6.13's stack.
+  </p>
+
+  <h3>4.2 &nbsp; A full-screen triangle, from nothing</h3>
+
+  <p>
+    A post pass has no geometry, so binding a quad mesh would be inventing a vertex buffer for a
+    vertex shader to ignore. Instead the corners come from <code>SV_VertexID</code>:
+  </p>
+
+  <pre><code class="lang-hlsl">Output main(uint vertex_id : SV_VertexID)
+{
+    Output o;
+    o.uv = float2((vertex_id &lt;&lt; 1) &amp; 2, vertex_id &amp; 2);
+    o.position = float4(o.uv.x * 2.0f - 1.0f, 1.0f - o.uv.y * 2.0f, 0.0f, 1.0f);
+    return o;
+}</code></pre>
+
+  <p>
+    That expression gives uv (0,0), (2,0), (0,2) for ids 0, 1, 2. Mapping uv to clip space with the
+    standard flip — <code>x = uv.x·2 − 1</code>, <code>y = 1 − uv.y·2</code>, which is conventions
+    §6, since NDC's +y is up and a texture's v runs down — puts the corners at (−1,1), (3,1) and
+    (−1,−3). The screen is the square from (−1,−1) to (1,1), strictly inside that triangle;
+    everything outside is clipped by hardware at no cost.
+  </p>
+
+  <div class="callout">
+    <span class="label">One triangle and not two, and Lesson 4.1 is why</span>
+    <p>
+      The obvious shape for "cover the screen" is two triangles meeting along the diagonal. It
+      works, and it is measurably worse, for a reason this course already built the vocabulary for:
+      <strong>fragments are shaded in aligned 2×2 quads</strong> (4.1), so along the shared diagonal
+      every quad straddles <em>both</em> triangles and is issued twice, with half of each being
+      helper lanes.
+    </p>
+    <p>
+      One oversized triangle has no internal edge, so nothing is shaded twice. It is a small saving
+      and an excellent illustration of why 4.1's quad traversal was worth building: the reason to
+      prefer one shape over another here is invisible unless you know how a rasterizer issues work.
+    </p>
+  </div>
+
+  <p>The draw call is the whole of the geometry submission:</p>
+
+  <pre><code class="lang-cpp">SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);   // three vertices, one instance, nothing bound</code></pre>
+
+  <h3>4.3 &nbsp; The pipeline, and everything it does not have</h3>
+
+  <p>
+    <code>gpu_tonemap_pass::create</code> is short, and the absences are the interesting part —
+    each one is a sentence about what a post pass <em>is</em>:
+  </p>
+
+  <ul>
+    <li><strong>No vertex input.</strong> <code>gpu_mesh::describe</code> is never called, so
+        <code>num_vertex_buffers</code> and <code>num_vertex_attributes</code> stay zero.</li>
+    <li><strong>No depth.</strong> A triangle covering the screen has nothing to be occluded by, so
+        the pass is begun with a null depth target.</li>
+    <li><strong>No blending.</strong> The resolve <em>replaces</em> the swapchain's contents.</li>
+    <li><strong>No culling.</strong> A full-screen triangle's winding is an accident of how
+        <code>SV_VertexID</code> was turned into positions, not a fact about a surface.</li>
+  </ul>
+
+  <h3>4.4 &nbsp; The target, and the flag that is easy to forget</h3>
+
+  <pre><code class="lang-cpp">ti.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
+         | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);</code></pre>
+
+  <p>
+    <strong>Both usages.</strong> A scene buffer is written by one pass and read by the next, and
+    omitting <code>SAMPLER</code> produces a texture that renders perfectly and reads as undefined —
+    with no error on a release device, since Lesson 6.10 established that SDL's GPU validation lives
+    inside <code>if (device-&gt;debug_mode)</code>. This is the same pair
+    <code>create_depth(..., sampled)</code> documents for a shadow map, arriving on the colour side.
+  </p>
+
+  <p>The format is <code>R16G16B16A16_FLOAT</code>, and the choice is worth three sentences:</p>
+
+  <ul>
+    <li>
+      <strong>It holds the range.</strong> A half float reaches 65,504, and this engine's own
+      measured peak is 55,917 — inside it, but only just, which is a useful thing to know about
+      your content rather than a comfort.
+    </li>
+    <li>
+      <strong>Its precision is <em>relative</em>.</strong> Ten mantissa bits, so about three decimal
+      digits — at every magnitude. The dark end, where the eye is most sensitive and where an sRGB
+      encode spends most of its codes, gets the same relative accuracy as the bright end. This is
+      the answer to "why not 16-bit fixed point": fixed point spreads its steps evenly over a range
+      that is not perceived evenly.
+    </li>
+    <li>
+      <strong>It costs 2×, not 3×.</strong> Eight bytes a pixel against four. The CPU's
+      <code>hdr_buffer</code> stores three <code>float</code>s and pays <strong>3×</strong> —
+      6.22 MB against 2.07 MB at 960×540 — and that difference is entirely the half float.
+    </li>
+  </ul>
+
+  <h3>4.5 &nbsp; The software path: one hoist and one branch</h3>
+
+  <p>
+    The CPU rasterizer needs the shading equation's answer <em>un-encoded</em>. The whole change is
+    a code motion: everything in <code>fragment</code>'s <code>lit</code> branch moves into its own
+    lambda, and the encode stays behind at the boundary.
+  </p>
+
+  <pre><code class="lang-cpp">const auto shade_lit = [&amp;](float f0, float f1, float f2, float w_recip,
+                           float&amp; out_alpha) -&gt; linear_rgb { /* …the hundred lines… */ };
+
+// …and the 8-bit path becomes one line:
+else if (lit)
+{
+    return to_encoded(shade_lit(f0, f1, f2, w_recip, out_alpha), style.encode);
+}</code></pre>
+
+  <p>
+    Note what is <em>not</em> in <code>shade_lit</code>: <code>to_encoded</code>. That function is
+    the one thing in this engine that routinely exceeds 1.0, and until this lesson its answer was
+    clamped one line later, every time, with no way to ask for the real number.
+  </p>
+
+  <p>
+    The HDR fragment is then four lines, and deliberately not a second implementation:
+  </p>
+
+  <pre><code class="lang-cpp">const auto fragment_linear = [&amp;](float f0, float f1, float f2, float&amp; out_alpha) -&gt; linear_rgb {
+    if (lit)
+    {
+        const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+        out_alpha = style.opacity;
+        return shade_lit(f0, f1, f2, w_recip, out_alpha);
+    }
+    return to_linear(fragment(f0, f1, f2, out_alpha));
+};</code></pre>
+
+  <p>
+    That decode in the last line is exact enough, and it is worth saying why rather than hoping: the
+    other shading modes <em>cannot</em> exceed 1.0 by construction — a uv checker is two constants, a
+    texture sample is a reflectance, an interpolated vertex colour is a weighted average of values
+    in [0,1]. So the round trip loses at most the encode's own rounding, on values that had nowhere
+    else to go, and it buys one implementation of four shading modes instead of two.
+    <code>lit</code> is the only mode with a range to preserve, and it is the one that skips the
+    trip.
+  </p>

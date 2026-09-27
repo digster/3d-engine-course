@@ -1,0 +1,557 @@
+  <h2 id="gyroscopic">9. The term with no linear counterpart</h2>
+
+  <p>
+    So <code>ω</code> changes on its own. What is the equation that says how?
+  </p>
+
+  <p>
+    Differentiate <code>L = I_world ω</code> and be careful, because both factors depend on time:
+  </p>
+
+  <div class="eq">
+    \[
+    \boldsymbol{\tau} = \frac{d\mathbf{L}}{dt}
+      = \mathbf{I}\,\dot{\boldsymbol{\omega}} + \dot{\mathbf{I}}\,\boldsymbol{\omega}
+    \qquad\text{and}\qquad
+    \dot{\mathbf{I}}\,\boldsymbol{\omega} = \boldsymbol{\omega} \times (\mathbf{I}\,\boldsymbol{\omega})
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the second identity because <code>I_world</code> is being carried around by the body's own
+    rotation, so its rate of change applied to <code>ω</code> is that rotation applied to
+    <code>L</code>. Rearranged:
+  </p>
+
+  <div class="eq">
+    \[
+    \dot{\boldsymbol{\omega}} = \mathbf{I}^{-1}\bigl(\boldsymbol{\tau} - \boldsymbol{\omega} \times (\mathbf{I}\,\boldsymbol{\omega})\bigr)
+    \]
+  </div>
+
+  <p>
+    That is <strong>Euler's equation</strong>, and the extra term is the whole difference between
+    rotational and linear dynamics. <code>α = I⁻¹τ</code> is the part that looks like
+    <code>a = F/m</code>. The <code>ω × (I ω)</code> is the <strong>gyroscopic term</strong>, and it
+    has no linear counterpart at all — there is nothing in <code>F = ma</code> that corresponds to
+    it, because <code>m</code> does not rotate with the body.
+  </p>
+
+  <p>
+    It is also the entire source of tumbling. Drop it and a body spun about any axis spins about that
+    axis forever: <code>ω̇ = 0</code> when <code>τ = 0</code>, so <code>ω</code> is constant, and the
+    thrown book comes back the way it went up. Which is not what happens.
+  </p>
+
+  <h3>9.1 The obvious implementation diverges</h3>
+
+  <p>
+    Adding the term explicitly is four lines and it is the first thing anyone writes:
+    evaluate <code>ω × (I ω)</code> at the state you already have, subtract, multiply by
+    <code>h</code>. Here is what that does to a 1 kg box over sixty torque-free seconds, at four step
+    rates:
+  </p>
+
+<pre><code class="lang-text">  G.5  the SAME physics, three ways. Worst drift in |L|
+       over 60 torque-free seconds:
+
+      rate      explicit      implicit     momentum
+       30 Hz   3.2967e+11    4.6676e-01   3.8586e-04
+       60 Hz   1.6233e+00    3.4814e-01   8.0497e-04
+      240 Hz   1.8069e-01    1.2738e-01   3.0143e-03
+      960 Hz   3.9355e-02    3.0173e-02   1.1838e-02</code></pre>
+
+  <p>
+    At 30 Hz the body's angular momentum grows by a factor of 3 × 10¹¹, from nothing. At 60 Hz it
+    gains 162% of itself in a minute. That is not a small error — a debug overlay watching
+    <code>|L|</code> on a torque-free body would show it climbing steadily with no input.
+  </p>
+
+  <p>
+    And the reason is 8.1's, exactly. The gyroscopic term feeds <code>ω</code> back into itself
+    through a cross product, and a cross product with a fixed vector is a
+    <em>rotation</em> of <code>ω</code>. Lesson 8.1 measured what an explicit rule does to a
+    rotation: it scales it by <code>√(1 + (σh)²)</code> every step, because the update matrix's
+    determinant is <code>1 + h²σ²</code> and area in phase space is what determines whether something
+    grows. The one place in this engine that still integrates something explicitly is the one place
+    8.1's determinant still bites.
+  </p>
+
+  <h3>9.2 The implicit fix, which is 8.1's other determinant</h3>
+
+  <p>
+    The standard answer is to make the step implicit: instead of evaluating the term at the state you
+    have, ask what end-of-step angular velocity would be <em>consistent</em> with it. Write it as a
+    root-finding problem in the unknown <code>ω</code>, in body axes where <code>I</code> is constant:
+  </p>
+
+  <div class="eq">
+    \[
+    f(\boldsymbol{\omega}) = \mathbf{I}(\boldsymbol{\omega} - \boldsymbol{\omega}_0)
+      + h\,\boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega}) = \mathbf{0}
+    \]
+  </div>
+
+  <p>
+    Differentiate it — <code>d/dω [ω × Iω]</code> applied to a perturbation <code>δ</code> is
+    <code>δ × Iω + ω × Iδ</code>, which as matrices is <code>[ω]ₓ I − [Iω]ₓ</code> — and take one
+    Newton step:
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{aligned}
+    \mathbf{J} &= \mathbf{I} + h\bigl([\boldsymbol{\omega}_0]_\times \mathbf{I} - [\mathbf{I}\boldsymbol{\omega}_0]_\times\bigr) \\[4pt]
+    \boldsymbol{\omega}_1 &= \boldsymbol{\omega}_0 - \mathbf{J}^{-1} f(\boldsymbol{\omega}_0)
+    \end{aligned}
+    \]
+  </div>
+
+  <p>
+    One iteration is enough because <code>f(ω₀)</code> is already <code>O(h)</code> — a second
+    iteration would correct an <code>O(h²)</code> error in a scheme that is first-order anyway. This
+    is what Bullet does, and it is the reason <code>skew()</code> exists in <code>mat3.hpp</code>.
+  </p>
+
+  <p>
+    It works, in the sense that it stops diverging. Look at what it does instead: at 60 Hz it
+    <em>loses</em> 35%. That is 8.1's <strong>other</strong> determinant —
+    <code>1/(1 + h²σ²)</code>, the exact reciprocal of the explicit one — which is why backward
+    Euler damps rather than exploding, and why 8.1 said it is the same disease with the sign flipped.
+    Shippable. Not conserving anything.
+  </p>
+
+  <h3>9.3 The term is not physics</h3>
+
+  <p>
+    Here is the observation that reframes the whole section.
+  </p>
+
+  <p>
+    Look again at where <code>ω × (I ω)</code> came from. It is not a force, and it is not an effect.
+    It appeared in the algebra on the line where we differentiated <code>L = I(t) ω</code> and
+    <em>insisted that <code>ω</code> be the state variable</em>. <code>I</code> is turning with the
+    body, so holding <code>L</code> fixed <em>requires</em> <code>ω</code> to change, and the
+    gyroscopic term is precisely the size of that requirement.
+  </p>
+
+  <p>
+    Store <code>L</code> instead and it is not a term at all:
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{aligned}
+    \mathbf{L} &\mathrel{+}= \boldsymbol{\tau}\,h &&\text{exactly, since } d\mathbf{L}/dt = \boldsymbol{\tau} \\[4pt]
+    \boldsymbol{\omega} &= \mathbf{I}_{\text{world}}(q)^{-1}\,\mathbf{L} &&\text{derived, every step, from the new } q
+    \end{aligned}
+    \]
+  </div>
+
+  <p>
+    There is no Jacobian, no Newton iteration and no <code>ω × (I ω)</code> anywhere. The tumble
+    still happens — <code>L</code> did not move, <code>I_world</code> did, so <code>ω</code> must —
+    and it happens <em>because</em> the equations say so rather than because a correction term was
+    added to make it.
+  </p>
+
+  <p>
+    That is the third column, at 8.0e−04 against implicit's 3.5e−01. Three orders of magnitude, for
+    less code.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So why does every shipping engine store <code>ω</code>?</strong> Because a contact
+      solver speaks velocities. Lessons 8.9–8.11 iterate impulses against relative velocities at
+      contact points, dozens of times per body per frame, and every one of those iterations would
+      have to convert. The trade is between a cheap exact tumble and a cheap solver, and this module
+      needs the solver — so the engine keeps <code>ω</code> as the state and offers the momentum
+      formulation as a per-body mode for the handful of bodies whose tumbling the player will
+      actually look at.
+    </p>
+  </div>
+
+  @@FIG_MODES@@
+
+  <h3>9.4 The column that gets worse</h3>
+
+  <p>
+    Read the momentum column of G.5 downwards and something is wrong with it, in an interesting
+    direction:
+  </p>
+
+  <div class="eq">
+    \[
+    3.86\times10^{-4} \;\to\; 8.05\times10^{-4} \;\to\; 3.01\times10^{-3} \;\to\; 1.18\times10^{-2}
+    \]
+  </div>
+
+  <p>
+    A smaller step is a <em>worse</em> answer. That is the only table in this course where that
+    happens, and every instinct built over the last eighty-five lessons says it must be a bug.
+  </p>
+
+  <p>
+    It is not, and the reason is worth more than the number. The first two columns' errors are
+    <strong>truncation</strong>: they come from approximating a derivative over a finite step, so
+    halving the step halves the error. The momentum column's error is not truncation at all —
+    <em>nothing in the momentum formulation approximates <code>L</code></em>. The only thing that can
+    move it is arithmetic.
+  </p>
+
+  <p>
+    And there is arithmetic, because the engine stores <code>ω</code> rather than <code>L</code>. Each
+    step rebuilds <code>L</code> from the angular velocity and the orientation, adds the torque,
+    derives a new <code>ω</code>, and throws <code>L</code> away. That round trip — through two
+    rotation matrices — loses a little every time, and "a little, every time" grows with the
+    <strong>number</strong> of steps rather than their size. Run at 960 Hz for a minute and you have
+    done sixteen times as many round trips as at 60.
+  </p>
+
+  <p>
+    Storing <code>L</code> on the body would remove it entirely, at the cost of a conversion at every
+    solver iteration. That is a real trade and the engine does not currently take it; §13 names it as
+    standing debt.
+  </p>
+
+  <h3>9.5 …and conserving L is not enough</h3>
+
+  <p>
+    One more measurement, and it is the one that changed the implementation.
+  </p>
+
+  <p>
+    The momentum formulation conserves <code>L</code> <em>by construction</em>, whatever it does with
+    the orientation. Which means <code>|L|</code> cannot tell you whether the body is doing the
+    <strong>right thing</strong> with its momentum — it will look perfect either way. The second
+    conserved quantity can, and nothing in the formulation protects it:
+  </p>
+
+<pre><code class="lang-text">  G.6  the same formulation, with and without a half
+       step. Both conserve L; only one is right.
+
+      rate    pairing    |omega| range       worst dE
+       60 Hz  start      4.0559 .. 8.0350   9.714e-01
+       60 Hz  midpoint   4.0525 .. 4.4879   1.198e-04
+      240 Hz  start      4.0559 .. 5.4031   2.011e-01
+      240 Hz  midpoint   4.0524 .. 4.4880   8.316e-06
+      960 Hz  start      4.0559 .. 4.6033   2.570e-02
+      960 Hz  midpoint   4.0524 .. 4.4880   6.584e-06</code></pre>
+
+  <p>
+    Advancing the orientation by the angular velocity at the <em>start</em> of the step puts the body
+    at <code>|ω| = 8.04</code> — nearly twice the maximum §8 derived — while conserving
+    <code>L</code> beautifully. Its kinetic energy, which a torque-free body also holds exactly,
+    drifts by <strong>97%</strong>. The momentum was right and the body was doing the wrong thing
+    with it.
+  </p>
+
+  <p>
+    The fix is one extra rotation matrix and one extra orientation advance: take a half step first,
+    read the angular velocity <em>there</em>, and use that for the whole step. Energy drift at 60 Hz
+    goes from 9.714e−01 to 1.198e−04 — a factor of <strong>8,100</strong> — and
+    <code>|ω|</code> lands on 4.0525 … 4.4879, <em>inside</em> §8's derived bound of 4.0524 … 4.4880.
+  </p>
+
+  <p>
+    This works here and would not work on <code>angular_velocity</code>, and the difference is worth
+    seeing: <code>L</code> is <em>fixed</em> across the whole step, so the only thing the half step is
+    estimating is where the body will be pointing — and that is a question a half step answers well.
+    Midpoint methods are second order for exactly this reason, and this is one arriving in a place
+    where its precondition happens to hold exactly.
+  </p>
+
+  <h2 id="racket">10. The tennis racket theorem</h2>
+
+  <p>
+    Now the book from §2.2, with numbers.
+  </p>
+
+  <p>
+    Torque-free Euler's equations in principal axes, with moments <code>A, B, C</code>:
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{aligned}
+    A\,\dot\omega_x &= (B - C)\,\omega_y\omega_z \\
+    B\,\dot\omega_y &= (C - A)\,\omega_z\omega_x \\
+    C\,\dot\omega_z &= (A - B)\,\omega_x\omega_y
+    \end{aligned}
+    \]
+  </div>
+
+  <p>
+    Spin almost exactly about <code>y</code>: <code>ω_y = Ω</code>, with tiny <code>ω_x</code> and
+    <code>ω_z</code>. To first order the third equation's right-hand side is a product of two tiny
+    things and drops out, leaving
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{aligned}
+    \dot\omega_x &= \frac{B-C}{A}\,\Omega\,\omega_z, \qquad
+    \dot\omega_z = \frac{A-B}{C}\,\Omega\,\omega_x \\[4pt]
+    \Longrightarrow\quad \ddot\omega_x &= \frac{(B-C)(A-B)}{A\,C}\,\Omega^2\,\omega_x
+    \end{aligned}
+    \]
+  </div>
+
+  <p>
+    That is <code>ẍ = k x</code>, and everything turns on the <em>sign</em> of <code>k</code>.
+    Negative gives <code>sin</code> and <code>cos</code> — a bounded wobble, stable. Positive gives
+    <code>sinh</code> and <code>cosh</code> — exponential growth.
+  </p>
+
+  <p>
+    Order the moments <code>I₁ &lt; I₂ &lt; I₃</code> and check all three cases. Spin about the
+    <strong>largest</strong>: the two differences have opposite signs, <code>k &lt; 0</code>, stable.
+    Spin about the <strong>smallest</strong>: same, stable. Spin about the
+    <strong>middle</strong> one: <em>both</em> differences are negative, their product is positive,
+    <code>k &gt; 0</code>, and the perturbation grows like
+  </p>
+
+  <div class="eq">
+    \[
+    \sigma = \Omega\,\sqrt{\frac{(I_3 - I_2)(I_2 - I_1)}{I_1 I_3}}
+    \]
+  </div>
+
+  <p>
+    So it is not that the middle axis is <em>somewhat</em> worse. Two of the three are stable and one
+    is <strong>exponentially unstable</strong>, and which is which is decided by nothing more than
+    the ordering of three numbers.
+  </p>
+
+  <h3>10.1 The numbers</h3>
+
+  <p>
+    Our box has <code>Ix = 1.083333</code>, <code>Iy = 0.833333</code>, <code>Iz = 0.416667</code>,
+    so <code>y</code> is the intermediate axis. At <code>Ω = 10</code> rad/s:
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{aligned}
+    \sigma &= 10\sqrt{\frac{(1.083333 - 0.833333)(0.833333 - 0.416667)}{0.416667 \times 1.083333}} \\[4pt]
+           &= 10\sqrt{0.230769} \;=\; 4.8038\ \text{s}^{-1}
+    \end{aligned}
+    \]
+  </div>
+
+  <p>
+    Spin about each axis in turn with a 1e−3 rad/s nudge on the other two, and run for twenty
+    seconds:
+  </p>
+
+<pre><code class="lang-text">  H.1  spin at 10 rad/s about each axis in turn, with a
+       1e-3 rad/s nudge on the other two. 20 seconds,
+       omega measured in BODY axes.
+
+      axis   nudge        grew to      verdict
+      x      1.0e-03         0.0015     stable
+      y      1.0e-03        10.9863     UNSTABLE
+      z      1.0e-03         0.0017     stable
+
+  H.2  the predicted rates, from Euler's equations:
+       about x (largest) : oscillates at 6.9282 rad/s
+       about y (middle)  : GROWS at e^(4.8038 t)
+       about z (smallest): oscillates at 5.5470 rad/s</code></pre>
+
+  <p>
+    The two stable axes keep their perturbation at about 1e−3 for twenty seconds. The middle one
+    takes it from 1e−3 to <strong>11 rad/s</strong> — larger than the spin itself, which is what a
+    complete reorientation looks like in these coordinates.
+  </p>
+
+  <p>
+    And the rate is not just qualitatively right:
+  </p>
+
+<pre><code class="lang-text">  H.3  fitted over the first decade of growth, at four
+       step rates — the prediction is a continuous-time
+       one, so the columns should converge toward it
+
+      rate      measured   predicted    ratio
+       120 Hz     4.9058     4.8038   1.02122
+       480 Hz     4.8310     4.8038   1.00564
+      1920 Hz     4.8128     4.8038   1.00186
+       7680 Hz    4.8084     4.8038   1.00096</code></pre>
+
+  <p>
+    Four step rates, each a factor of four finer, and the measured growth rate walks in on the
+    predicted one: 2.1% out, then 0.56%, then 0.19%, then 0.096%. Each refinement roughly quarters
+    the error, which is the signature of a second-order convergence and is what the midpoint pairing
+    of §9.5 buys.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The first version of this measurement read 3.8498 against a predicted 4.8038</strong>
+      and did not converge — a 20% miss that looked like a failed prediction and was a failed
+      <em>frame</em>. Euler's equations are body-frame equations; the engine stores <code>ω</code> in
+      world space; and for a body spinning about its own <code>y</code> axis, the two perturbation
+      components are being carried around that axis at 10 rad/s. So the world-space
+      <code>ω.x</code> oscillates at 10 Hz while its envelope grows, and sampling it at a threshold
+      crossing samples the oscillation. Everything in §10 measures <code>Rᵀ ω</code>.
+    </p>
+  </div>
+
+  <h3>10.2 The flip, and the control that makes it mean something</h3>
+
+  <p>
+    The growth saturates — the body cannot spin faster than <code>|L|</code> allows — and what
+    happens instead is that it turns over:
+  </p>
+
+<pre><code class="lang-text">  H.4  omega_y reverses sign at t = 2.606, 5.271, 7.877,
+       10.414 s
+       interval 2.6651 s, and it repeats forever with
+       no torque of any kind.
+
+  H.5  CONTROL term OFF, 40 s: worst perpendicular
+       |omega| = 1.0000e-04 — it started at 1.0000e-04
+       and never moved. No flip, ever.</code></pre>
+
+  <p>
+    Every 2.67 seconds, forever, with nothing acting on the body. That is the Dzhanibekov effect,
+    named after the cosmonaut who noticed a wing-nut doing it in orbit in 1985 and reportedly
+    assumed something was wrong with the spacecraft.
+  </p>
+
+  <p>
+    H.5 is the control, and it is what makes the rest of the section an argument rather than an
+    anecdote. Turn the gyroscopic term off and the perturbation does not merely flip less — it
+    <em>does not move at all</em>, at the sixth significant figure, over forty seconds. There is
+    nothing left to couple the three components, so the flip is not a numerical artefact or an
+    emergent surprise. It is a direct consequence of the one term most engines drop.
+  </p>
+
+  @@FIG_RACKET@@
+
+  <h2 id="implementation">11. The implementation</h2>
+
+  <p>
+    Everything above is now four files. Taken in dependency order.
+  </p>
+
+  <h3>11.1 <code>mat3.hpp</code>: arithmetic, an outer product and a skew</h3>
+
+  <p>
+    Addition, subtraction, negation, scalar multiply, the compound assignments — and then
+    <code>outer</code>, <code>skew</code>, <code>trace</code>, <code>diagonal</code> and
+    <code>asymmetry</code>. The block carries a comment explaining why it arrives eighty lessons
+    late, because a reader who finds arithmetic operators in a file that has managed without them
+    since Module 2 deserves to know what changed.
+  </p>
+
+  <p>
+    <code>diagonal(vec3)</code> is numerically identical to <code>scale(x, y, z)</code> and is a
+    separate name on purpose: a diagonal inertia tensor is not a scale, it is a body whose principal
+    axes happen to be the coordinate axes, and code that reads <code>diagonal(moments)</code> says
+    which of the two it meant.
+  </p>
+
+  <h3>11.2 <code>inertia.hpp</code>: what a shape weighs, distributed</h3>
+
+  <p>
+    A new header and a new translation unit, and the split from <code>rigid_body</code> is the
+    dependency direction the module has been building toward since 8.1:
+    <code>inertia.cpp</code> knows about <strong>shapes</strong> and nothing about bodies;
+    <code>rigid_body.cpp</code> knows about bodies and asks this file what a shape weighs. Nothing
+    points back up the chain.
+  </p>
+
+  <p>
+    It holds the atom (<code>inertia_of_point</code>), a brute-force sum over a cloud
+    (<code>inertia_of_points</code>), the six closed forms, the two directions of the parallel-axis
+    theorem, the basis change, a guarded inverse, the assembly builder, and
+    <code>inspect_inertia</code>.
+  </p>
+
+  <p>
+    <code>inverse_inertia</code> is worth a paragraph. <code>mat3::inverse</code> already returns
+    zeros on an <em>exact</em> zero determinant, which covers the all-zeros tensor of an immovable
+    body. It does not cover the case that actually bites: a tensor that is merely <em>nearly</em>
+    singular — a very thin rod, a very flat plate — where the determinant is a small number rather
+    than zero and the inverse comes back as 10³⁰ with no complaint, and one step later the body is
+    spinning at a speed with no name. So the test is <em>relative</em>: the determinant has units of
+    inertia cubed, so it is compared against the largest diagonal entry cubed.
+  </p>
+
+  <h3>11.3 <code>rigid_body</code>: five new fields, and one that is redundant</h3>
+
+  <p>
+    <code>orientation</code>, <code>angular_velocity</code>, <code>torque</code>,
+    <code>inv_inertia_local</code>, <code>angular_damping</code> and a <code>gyroscopic_mode</code>.
+    All of them mirror something on the linear side except the tensor, which mirrors
+    <code>inv_mass</code> nine floats wide — including the argument for storing the
+    <em>inverse</em>, which survives intact: a zero tensor is representable, exact, needs no
+    sentinel, and passes through the sandwich unchanged, so a wall absorbs every torque in the scene
+    with no branch anywhere.
+  </p>
+
+  <p>
+    And then a sixth field that is redundant, and is there because §12 measured it:
+    <code>inertia_local</code>, the forward tensor, stored beside its own inverse. Thirty-six bytes
+    of duplication, with an invariant that nothing can enforce — which is exactly the cost of caching
+    anything, and is paid because the alternative was a 3×3 inverse per body per step in two separate
+    places. <code>set_inertia</code> is the only supported way to write either.
+  </p>
+
+  <h3>11.4 The step</h3>
+
+  <p>
+    The angular half is structurally the mirror of the linear one — a resistance, an accumulator, a
+    step — with three differences that are the whole of this lesson:
+  </p>
+
+  <ul>
+    <li><strong>The resistance is a tensor in body axes</strong>, so it is carried into world space
+        by the sandwich before it can act on a world-space torque.</li>
+    <li><strong>There is a term with no linear counterpart</strong>, and four things the body can do
+        about it.</li>
+    <li><strong>The orientation update is not an addition.</strong></li>
+  </ul>
+
+  <p>
+    The orientation update is <em>semi-implicit always</em>, whatever <code>rule_</code> says, and
+    the inconsistency is deliberate rather than an oversight. <code>rule_</code> chooses how a
+    position update is paired with a velocity update; an orientation update is not a position update,
+    and velocity Verlet's second half would need the tensor rebuilt at the new orientation and a
+    second renormalisation, to correct by less than the renormalisation's own error. §7 measured both
+    sides of that.
+  </p>
+
+  <p>
+    Kinematic bodies <em>turn</em> as well as travel, which is one line and is what a rotating
+    platform, a swinging door and a fan blade all are. Fixed bodies are skipped entirely, and both
+    accumulators are still cleared so that a system pushing on the floor does not leak a growing
+    vector.
+  </p>
+
+  <h3>11.5 The report, and an instrument that measures somebody else</h3>
+
+  <p>
+    <code>step_report</code> gains <code>angular_momentum</code>, <code>max_spin</code> and
+    <code>max_unit_error</code>.
+  </p>
+
+  <p>
+    The angular momentum is about the <strong>world origin</strong> and has two terms, the second of
+    which people forget: <code>I ω</code> is the body's spin about its own centre, and
+    <code>r × (m v)</code> is the angular momentum its linear motion carries about the origin. A body
+    sailing past in a straight line without rotating at all has the second and not the first — which
+    is how a planet's orbit conserves one.
+  </p>
+
+  <p>
+    <code>max_unit_error</code> is the interesting one, because it is deliberately <em>not</em> a
+    measurement of the integrator. It reads <code>| |q| − 1 |</code> as the step <strong>finds</strong>
+    each body, before touching anything — and since <code>step</code> renormalises on the way out,
+    anything it finds was written by somebody else. An animation blend, a network packet, a
+    hand-authored <code>quat{0.7f, {0.7f, 0, 0}}</code>: all of them leave a body slightly off the
+    unit sphere, all of them render as a subtle shear that is very hard to see and impossible to
+    grep for, and all of them show up here as a number that is not 1e−7.
+  </p>

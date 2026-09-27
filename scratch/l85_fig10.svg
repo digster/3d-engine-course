@@ -1,0 +1,289 @@
+<svg viewBox="0 0 900 424" role="img" aria-labelledby="l85f10-t l85f10-d">
+  <title id="l85f10-t">GJK's resolution floor: the certificate fails before the answer does, and the contact margin scales with the shapes.</title>
+  <desc id="l85f10-d">Left, a table of two turned two-metre cubes walked from one metre apart to one micrometre, giving the reported distance, the certificate slack and the status; below three ten-thousandths of a metre the status becomes intersecting. Right, a log-log plot of the measured contact margin against cube side over four decades, a straight line whose ratio to tolerance times side is 2.11 throughout.</desc>
+  <defs>
+    <marker id="e-i-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l85f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Two different things give out, at two different gaps.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+2
+0
+"
+ 
+y
+=
+"
+5
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+3
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+8
+2
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="32" y="70" class="xs muted" text-anchor="start">two turned 2 m cubes, walked together</text>
+<text x="38" y="98" class="xs muted" text-anchor="start">gap (m)</text>
+<text x="230" y="98" class="xs muted" text-anchor="end">reported</text>
+<text x="304" y="98" class="xs muted" text-anchor="end">slack</text>
+<text x="408" y="98" class="xs muted" text-anchor="end">status</text>
+<line x1="38" y1="106.0" x2="414" y2="106.0" class="grid" stroke-width="1.0"/>
+<text x="38" y="123.0" class="xs" text-anchor="start">1e+00</text>
+<text x="230" y="123.0" class="xs mono" text-anchor="end">1.000000e+00</text>
+<text x="304" y="123.0" class="xs mono" text-anchor="end">9.7e-08</text>
+<text x="408" y="123.0" class="xs mono" text-anchor="end">separated</text>
+<text x="38" y="140.0" class="xs" text-anchor="start">1e-01</text>
+<text x="230" y="140.0" class="xs mono" text-anchor="end">1.000003e-01</text>
+<text x="304" y="140.0" class="xs mono" text-anchor="end">8.6e-07</text>
+<text x="408" y="140.0" class="xs mono" text-anchor="end">separated</text>
+<text x="38" y="157.0" class="xs" text-anchor="start">1e-02</text>
+<text x="230" y="157.0" class="xs mono" text-anchor="end">1.000050e-02</text>
+<text x="304" y="157.0" class="xs mono" text-anchor="end">2.9e-07</text>
+<text x="408" y="157.0" class="xs mono" text-anchor="end">separated</text>
+<text x="38" y="174.0" class="xs" text-anchor="start">3e-03</text>
+<text x="230" y="174.0" class="xs mono" text-anchor="end">3.000084e-03</text>
+<text x="304" y="174.0" class="xs mono" text-anchor="end">8.3e-06</text>
+<text x="408" y="174.0" class="xs mono" text-anchor="end">separated</text>
+<text x="38" y="191.0" class="xs" text-anchor="start">1e-03</text>
+<text x="230" y="191.0" class="xs mono" text-anchor="end">1.000388e-03</text>
+<text x="304" y="191.0" class="xs mono" text-anchor="end">6.2e-05</text>
+<text x="408" y="191.0" class="xs mono" text-anchor="end">separated</text>
+<text x="38" y="208.0" class="xs" text-anchor="start">3e-04</text>
+<text x="230" y="208.0" class="xs mono" text-anchor="end">—</text>
+<text x="304" y="208.0" class="xs mono" text-anchor="end">—</text>
+<text x="408" y="208.0" class="xs mono t-hi" text-anchor="end">intersecting</text>
+<text x="38" y="225.0" class="xs" text-anchor="start">1e-04</text>
+<text x="230" y="225.0" class="xs mono" text-anchor="end">—</text>
+<text x="304" y="225.0" class="xs mono" text-anchor="end">—</text>
+<text x="408" y="225.0" class="xs mono t-hi" text-anchor="end">intersecting</text>
+<text x="38" y="242.0" class="xs" text-anchor="start">1e-05</text>
+<text x="230" y="242.0" class="xs mono" text-anchor="end">—</text>
+<text x="304" y="242.0" class="xs mono" text-anchor="end">—</text>
+<text x="408" y="242.0" class="xs mono t-hi" text-anchor="end">intersecting</text>
+<text x="38" y="259.0" class="xs" text-anchor="start">1e-06</text>
+<text x="230" y="259.0" class="xs mono" text-anchor="end">—</text>
+<text x="304" y="259.0" class="xs mono" text-anchor="end">—</text>
+<text x="408" y="259.0" class="xs mono t-hi" text-anchor="end">intersecting</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+7
+0
+"
+ 
+y
+=
+"
+5
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+3
+0
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+8
+2
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="482" y="70" class="xs muted" text-anchor="start">and the margin is RELATIVE</text>
+<line x1="522" y1="290.0" x2="738" y2="290.0" class="grid" stroke-width="1.0"/>
+<text x="514" y="294.0" class="xs mono muted" text-anchor="end">1e-5</text>
+<line x1="522" y1="251.6" x2="738" y2="251.6" class="grid" stroke-width="1.0"/>
+<text x="514" y="255.6" class="xs mono muted" text-anchor="end">1e-4</text>
+<line x1="522" y1="213.2" x2="738" y2="213.2" class="grid" stroke-width="1.0"/>
+<text x="514" y="217.2" class="xs mono muted" text-anchor="end">1e-3</text>
+<line x1="522" y1="174.8" x2="738" y2="174.8" class="grid" stroke-width="1.0"/>
+<text x="514" y="178.8" class="xs mono muted" text-anchor="end">1e-2</text>
+<line x1="522" y1="136.39999999999998" x2="738" y2="136.39999999999998" class="grid" stroke-width="1.0"/>
+<text x="514" y="140.39999999999998" class="xs mono muted" text-anchor="end">1e-1</text>
+<line x1="522" y1="98.0" x2="738" y2="98.0" class="grid" stroke-width="1.0"/>
+<text x="514" y="102.0" class="xs mono muted" text-anchor="end">1e0</text>
+<text x="522.0" y="306" class="xs mono muted" text-anchor="middle">0.1</text>
+<text x="576.0" y="306" class="xs mono muted" text-anchor="middle">1</text>
+<text x="630.0" y="306" class="xs mono muted" text-anchor="middle">10</text>
+<text x="684.0" y="306" class="xs mono muted" text-anchor="middle">100</text>
+<text x="738.0" y="306" class="xs mono muted" text-anchor="middle">1000</text>
+<path d="M 522.00,277.54 L 576.00,239.13 L 630.00,200.73 L 684.00,162.35 L 738.00,123.95" fill="none" stroke="#e05c5c" stroke-width="2.4"/>
+<circle cx="522.0" cy="277.5" r="3.0" fill="#e05c5c"/>
+<circle cx="576.0" cy="239.1" r="3.0" fill="#e05c5c"/>
+<circle cx="630.0" cy="200.7" r="3.0" fill="#e05c5c"/>
+<circle cx="684.0" cy="162.3" r="3.0" fill="#e05c5c"/>
+<circle cx="738.0" cy="123.9" r="3.0" fill="#e05c5c"/>
+<text x="620.0" y="322" class="xs muted" text-anchor="middle">cube side (m)</text>
+<text x="484" y="90" class="xs muted" text-anchor="start">margin (m)</text>
+<text x="756" y="90" class="xs t-hi" text-anchor="end">margin / (tol × side) = 2.110…2.112</text>
+<text x="20" y="366" class="xs" text-anchor="start">THE PROOF goes first, at about 4.77e-03 m for these shapes: the termination threshold falls as the gap SQUARED while its</text>
+<text x="20" y="384" class="xs" text-anchor="start">rounding error falls only as the gap, so below ε·|w|/tol the test is noise against noise. The ANSWER is still right; the certificate is gone.</text>
+<text x="20" y="402" class="xs" text-anchor="start">THE ANSWER goes second, at tol × |w| — a contact margin, and a deliberate one. 8.4 §11 found the same wall measured from the WORLD ORIGIN.</text>
+</svg>

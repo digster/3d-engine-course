@@ -1,0 +1,462 @@
+  <h2 id="horizon">7. The horizon, and the set that must be connected</h2>
+
+  <p>
+    Adding a vertex to a convex polytope is a classical operation with a classical name —
+    <em>beneath and beyond</em>, the incremental convex hull step — and it is two sentences long.
+    Delete every face the new point is beyond. Stitch the resulting hole shut with triangles from
+    its rim to the new point.
+  </p>
+
+  <p>
+    The deleted faces form a connected cap, like the part of a sphere you can see from outside it,
+    and the rim of that cap is a single closed loop of edges: the <strong>horizon</strong>. The
+    obvious way to find it is to store which face lies across each edge and walk the boundary. The
+    cheaper way, and the one <code>epa.cpp</code> uses, needs no adjacency at all:
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Every edge interior to the deleted cap belongs to two deleted faces and appears
+      twice, once in each direction. Every edge on the rim appears once.</strong> So push each
+      deleted face's three edges onto a list, and whenever an edge's reverse is already there,
+      remove both. What survives is the horizon, already in winding order, and the new triangles
+      inherit their orientation from it — which is why no normal ever has to be tested or flipped
+      after the seed.
+    </p>
+  </div>
+
+  @@FIG_HORIZON@@
+
+  <p>
+    That identity is exact, and the argument that the visible set is connected is a theorem about
+    convex polytopes and exterior points. Both of those sentences are true in exact arithmetic.
+    Neither survived contact with two cubes meeting face to face.
+  </p>
+
+  <h3>7.1 The failure, traced</h3>
+
+  <p>
+    The fixture is as ordinary as it gets: two 1 m cubes, axis-aligned, overlapping along
+    <code>x</code> by a tenth of a millimetre. EPA reported <code>stalled</code> with a depth of
+    <code>5.774e−05</code> against a true <code>1e−04</code> — <strong>42% low</strong>, and
+    <code>1e−04 / √3</code> exactly, which is the signature of stopping on a face whose normal is
+    <code>(1, 1, 1)/√3</code>.
+  </p>
+
+  <p>
+    Instrumenting the expansion showed why on the third pass:
+  </p>
+
+  <pre><code class="lang-text">  it2: V=7 F=10 closest d=5.774461e-05 n=(+0.5774 -0.5774 +0.5774) h=1.154758e+00
+    expand: TORN (9 edges, 3 visible of 10 faces)
+      f01     v=(2 0 3) n=(+0.57735 -0.57735 -0.57735) d=+5.775690e-05 dot=+5.775690e-05
+      f03 VIS v=(3 0 5) n=(+0.57735 -0.57735 +0.57735) d=+5.774461e-05 dot=+1.154758e+00
+      f06 VIS v=(0 2 6) n=(+0.57735 -0.57735 -0.57735) d=+5.774461e-05 dot=+5.775690e-05
+      f08 VIS v=(4 5 6) n=(+0.57735 +0.57735 +0.57735) d=+5.774461e-05 dot=+5.775690e-05
+      f09     v=(5 0 6) n=(+0.57735 +0.57735 +0.57735) d=+5.775690e-05 dot=+5.775690e-05</code></pre>
+
+  <p>
+    Three faces classified visible, nine horizon edges, and <em>nothing cancelled</em> — which
+    means the three share no edges at all. The visible set came back in three disconnected pieces,
+    and stitching a fan across three separate loops produces a surface that is not a polytope, after
+    which every answer is silently wrong.
+  </p>
+
+  <p>
+    Now read the numbers in the dump. One face, <code>f03</code>, is genuinely visible:
+    <code>dot(n, w)</code> is 1.1548 against a plane offset of 0.0000577, four orders of magnitude
+    beyond it. The other four all have <code>dot(n, w) = 5.775690e−05</code>, and their own plane
+    offsets are <code>5.774461e−05</code> or <code>5.775690e−05</code>.
+    <strong>The new vertex lies exactly on those four planes</strong> — it is a corner of the
+    difference box and they are octahedron faces through it — so <code>dot(n, w)</code> and
+    <code>d</code> are the same number computed two different ways, and the last few bits decide
+    which side of <code>&gt;</code> each face falls on. Two landed above, two below, scattered
+    around the polytope.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is not a rounding problem in the usual sense; the arithmetic is fine.</strong>
+      It is a classification problem: a comparison whose two sides are mathematically equal has no
+      correct answer in floating point, and the code asked it anyway. The exact-arithmetic answer
+      here is that the four coplanar faces are <em>not</em> visible — <code>dot(n, w) = d</code>
+      fails <code>&gt;</code> — so the visible set is the single face <code>f03</code> and the
+      horizon is its three edges.
+    </p>
+  </div>
+
+  <h3>7.2 The fix is to ask a question with an answer</h3>
+
+  <p>
+    So do not ask “which faces are beyond the point”. Ask “which faces are beyond the point
+    <em>and reachable from a face we are certain about</em>”. The closest face is certainly
+    visible, because the caller only reached the expansion by finding <code>dot(n, w)</code> well
+    beyond its <code>d</code>. Flood fill from there, crossing only to faces that are also
+    candidates and that share an edge:
+  </p>
+
+  <pre><code class="lang-cpp">    int visible[k_epa_max_faces];
+    int visible_count = 0;
+    if (flood_fill)
+    {
+        bool taken[k_epa_max_faces];
+        for (int i = 0; i &lt; cand_count; ++i) { taken[i] = false; }
+
+        int queue[k_epa_max_faces];
+        int head = 0;
+        int tail = 0;
+        queue[tail++] = seed_slot;
+        taken[seed_slot] = true;
+        while (head &lt; tail)
+        {
+            const int slot = queue[head++];
+            visible[visible_count++] = cand[slot];
+            for (int j = 0; j &lt; cand_count; ++j)
+            {
+                if (taken[j]) { continue; }
+                if (share_edge(p.faces[cand[slot]], p.faces[cand[j]]))
+                {
+                    taken[j] = true;
+                    queue[tail++] = j;
+                }
+            }
+        }
+    }</code></pre>
+
+  <p>
+    In exact arithmetic this changes nothing, because the visible set was already connected. In
+    float it projects a scattered classification back onto the answer exact arithmetic would have
+    given. The candidate set is small — typically two to six faces — so the quadratic adjacency
+    test costs nothing worth measuring.
+  </p>
+
+  <p>
+    On the fixture above the depth goes from <code>5.774e−05</code> to <code>1.0002e−04</code>,
+    proven, with the normal <code>(+1, 0, 0)</code>.
+  </p>
+
+  <h3>7.3 How often, and on what</h3>
+
+  <p>
+    One fixture is an anecdote. <code>epa_config::flood_fill_visible</code> exists so that §F can
+    run both formulations over populations and report the difference — a debug knob in a shipped
+    config, justified by the fact that the lesson has to be able to demonstrate the failure:
+  </p>
+
+  @@FIG_TEAR@@
+
+  <p>
+    Four per cent of crates on a floor, worst case 61.7% low. The same crates at free orientations:
+    five in fifty thousand. Two convex hulls built from points on a sphere: never, not once.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is the third lesson running with the same moral, and it has now been true often
+      enough to be a rule.</strong> 8.4 §F found that the SAT's degeneracy needs a shared up
+      axis, which uniform random orientations essentially never produce. 8.5 §C found that the
+      textbook simplex solver fails on slivers, which uniform random triangles essentially never
+      produce — but which GJK's own convergence produces constantly. And here: the tear needs the
+      new support point to be <em>exactly</em> coplanar with existing faces, which requires the
+      axis alignment, shared axes and face-on-face contacts that a real scene is made of and that a
+      random fixture destroys. <strong>Measure the population you actually have.</strong>
+    </p>
+  </div>
+
+  <h3>7.4 And check the surface afterwards</h3>
+
+  <p>
+    The flood fill makes the tear rare. It does not make it impossible, so the loop check stays —
+    and it is one line of counting, because on a single closed rim every vertex starts exactly one
+    edge and ends exactly one edge.
+  </p>
+
+  <p>
+    Better, there is a check on the <em>result</em> that costs one comparison and is computable
+    from the returned struct alone. A closed triangulated surface of genus zero satisfies Euler's
+    formula <code>V − E + F = 2</code>, and every face here is a triangle, so <code>3F = 2E</code>
+    and the whole thing collapses to:
+  </p>
+
+  <p class="eq-plain">
+    F = 2V − 4
+  </p>
+
+  <p>
+    <code>epa_result::manifold()</code> is that line. §F runs it at every exit over 200,000
+    queries across two populations — ordinary crates, and 1000:1 aspect-ratio plates whose faces
+    have normals made of rounding error — and it holds every time, with the worst polytope reaching
+    32 vertices and 60 faces against capacities of 64 and 128.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Euler's formula also sizes the arrays, which is why they are not guesses.</strong>
+      <code>F = 2V − 4</code> means 64 vertices can never need more than 124 live faces. The number
+      <em>created</em> over a whole query is a different quantity — each pass deletes
+      <code>k</code> faces and stitches <code>k + 2</code>, so a long query creates far more than it
+      ever holds — which is why dead faces are compacted out rather than flagged. Leaving them in
+      would turn the face capacity from a bound on the polytope into a bound on the total work, and
+      produce <code>capacity</code> failures on exactly the deep overlaps that matter most.
+    </p>
+  </div>
+
+  <h2 id="implementation">8. Implementation</h2>
+
+  <p>
+    Two new files. <code>engine/include/engine/phys/epa.hpp</code> is the interface;
+    <code>engine/src/phys/epa.cpp</code> is the polytope, the seed and the loop. And one thing
+    worth noticing before either: <strong><code>gjk.hpp</code> needed no change at all.</strong>
+    <code>cso_support</code>, <code>simplex</code> and <code>gjk_result::terminal</code> were
+    already public and were already the interface EPA is written against, because 8.5 designed
+    them for this moment and said so in its own doc comments. The handoff being free is what
+    designing it a lesson early bought.
+  </p>
+
+  <h3>8.1 The answer type</h3>
+
+  <p>
+    <code>epa_result</code> carries the same shape of answer <code>gjk_result</code> did — a
+    number, a direction, two witness points, and enough instrumentation to build a histogram from:
+  </p>
+
+  <pre><code class="lang-cpp">struct epa_result
+{
+    epa_status status = epa_status::degenerate;
+
+    /// Metres, never negative. **The minimum translation distance.**
+    float depth = 0.0f;
+
+    /// Unit, **pointing from `a` toward `b`** — `collide.hpp`'s convention,
+    /// conventions.html §9e, unchanged since 8.4. Translating `b` by
+    /// `+normal * depth` puts the two shapes exactly in contact.
+    vec3 normal{};
+
+    /// The contact point on `a`, in world space.
+    vec3 point_a{};
+    vec3 point_b{};
+
+    float lower = 0.0f;
+    float upper = 0.0f;
+    [[nodiscard]] float slack() const { return upper - lower; }
+
+    int iterations = 0;
+    int support_calls = 0;
+    int seed_vertices = 0;
+    int vertices = 0;
+    int surface_vertices = 0;
+    int faces = 0;
+
+    [[nodiscard]] bool manifold() const { return faces == 2 * surface_vertices - 4; }
+};</code></pre>
+
+  <p>
+    <code>lower</code> and <code>upper</code> are the bracket at exit, not decoration: they are
+    what lets a caller know how much of the answer is proven, and §11 uses them to show that the
+    error never exceeds the slack. <code>seed_vertices</code> is what made §5's table possible.
+    And <code>surface_vertices</code> is separate from <code>vertices</code> because an expansion
+    can swallow a vertex whose whole fan was deleted — it stays in the array and leaves the hull —
+    and Euler's formula counts the hull's.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The tolerance is relative to the SIZE OF THE SHAPES, not to the depth</strong>, and
+      that is forced rather than chosen. 8.5's tolerance was relative to <code>|v|</code>, the
+      answer itself, which works because a distance you care about is never zero. A penetration
+      depth at a resting contact is a few microns or exactly zero, and a test relative to
+      <em>that</em> would never terminate on the commonest contact in the engine. So the threshold
+      is <code>tolerance × scale</code>, where <code>scale</code> is the largest difference-set
+      vertex seen.
+    </p>
+  </div>
+
+  <h3>8.2 The polytope</h3>
+
+  <p>
+    A face is three vertex indices plus its cached plane:
+  </p>
+
+  <pre><code class="lang-cpp">struct face
+{
+    int v[3];      ///&lt; Indices into `polytope::vert`. Wound CCW from outside.
+    vec3 n;        ///&lt; Unit outward normal. Zero for a degenerate sliver.
+    float d;       ///&lt; Plane offset: `dot(n, vert[v[0]].w)`.
+    bool alive;
+};</code></pre>
+
+  <p>
+    <strong>The plane is stored rather than recomputed, and that is correctness rather than
+    speed.</strong> The closest face is chosen by comparing <code>d</code>; the visibility test
+    compares <code>dot(n, w)</code> against the same <code>d</code>. If those used independently
+    recomputed planes they could disagree by a few ulps, and a face could be simultaneously “the
+    closest” and “not visible from the point we are expanding toward” — which is a loop that cannot
+    terminate and cannot be debugged, because each half of it is correct.
+  </p>
+
+  <p>
+    <code>add_face</code> keeps degenerate triangles rather than dropping them, with a zero normal
+    and an infinite offset:
+  </p>
+
+  <pre><code class="lang-cpp">    // Relative degeneracy test: `|cross|` has the units of an AREA, so compare
+    // its square against `scale⁴` rather than against a constant in metres.
+    if (n2 &lt;= k_flat_rel2 * p.scale2 * p.scale2)
+    {
+        f.n = vec3{};
+        f.d = 3.4028235e38f;   // FLT_MAX: never closest, never visible.
+    }</code></pre>
+
+  <p>
+    A sliver whose normal is pure rounding error has a direction that means nothing, but it is
+    still part of the surface, and dropping it would leave a hole for the horizon walk to fall
+    through. Stored this way it is invisible to both the closest-face search (nothing is nearer
+    than infinity) and the visibility test (<code>dot(0, w) = 0</code> is never greater than
+    infinity), so it is carried inertly until some later expansion removes it.
+  </p>
+
+  <h3>8.3 The loop</h3>
+
+  <p>
+    Twenty lines, and it reads like §4's four-step sketch:
+  </p>
+
+  <pre><code class="lang-cpp">    for (int it = 0; it &lt; cfg.max_iterations; ++it)
+    {
+        r.iterations = it + 1;
+
+        const int index = closest_face(p);
+        if (index &lt; 0) { status = epa_status::stalled; break; }
+
+        const face f = p.faces[index];
+
+        if (f.d + tol * scale &lt; lower) { status = epa_status::stalled; break; }
+
+        lower = f.d;
+        best_normal = f.n;
+        best_tri[0] = p.vert[f.v[0]];
+        best_tri[1] = p.vert[f.v[1]];
+        best_tri[2] = p.vert[f.v[2]];
+
+        const gjk_vertex w = cso_support(a, b, delta, f.n);
+        r.support_calls += 2;
+
+        const float h = dot(w.w, f.n);
+        if (h &lt; upper) { upper = h; }
+
+        if (h - f.d &lt;= tol * scale) { status = epa_status::proven; break; }
+
+        /* …duplicate check, then… */
+        if (!expand(p, w, index, cfg.flood_fill_visible)) { /* …stalled or capacity… */ }
+    }</code></pre>
+
+  <p>
+    The best answer is snapshot into <code>lower</code>, <code>best_normal</code> and
+    <code>best_tri</code> rather than being read back off the polytope at the end. 8.5's
+    monotonicity block restored a 160-byte simplex when it fired; a polytope is seven kilobytes, so
+    the <em>answer</em> is copied instead of the state. Same discipline, a hundredth of the copy.
+  </p>
+
+  <p>
+    The duplicate check deserves its own note, because it is 8.5's bug in a new costume. The
+    threshold is <code>k_duplicate_rel2 = 1e-12f</code>, at float's own resolution, and
+    <strong>not</strong> the user's tolerance:
+  </p>
+
+  <pre><code class="lang-cpp">/// 8.5's `k_duplicate_rel2` exactly, and for its reason: this test exists to
+/// catch a support function returning a point already present, which on a
+/// POLYTOPE is how the expansion finishes exactly — the vertex set is finite, so
+/// once the boundary face has been reached there is nothing new to find. Setting
+/// it to the user's tolerance instead is the bug 8.5 measured at 2.4% slack on
+/// curved shapes, where a support point moves continuously and a genuine small
+/// step reads as a repeat.
+constexpr float k_duplicate_rel2 = 1e-12f;</code></pre>
+
+  <p>
+    And note what that branch reports: <code>proven</code>, not <code>stalled</code>. On a polytope
+    a repeated vertex means the boundary face has been reached and there is nothing beyond it, so
+    the bound is tight even though the tolerance test did not fire. It is how the expansion finishes
+    <em>exactly</em> rather than how it fails.
+  </p>
+
+  <h3>8.4 The question that was being asked too early</h3>
+
+  <p>
+    One more decision, and it is this lesson's fourth bug — the one that took two attempts.
+  </p>
+
+  <p>
+    §4's lower-bound argument needs the origin inside the polytope. GJK does not promise that: it
+    reports <code>intersecting</code> when the origin is within <em>its</em> contact margin of the
+    simplex, so a touching pair arrives here with the origin a few microns outside. The natural
+    response is to check the seed's face offsets up front and report <code>touching</code> if any
+    is negative.
+  </p>
+
+  <p>
+    That version reported a depth of <strong>zero for spheres seventy centimetres inside a
+    crate</strong>, 19 times in 20,000. The cause is that GJK can terminate on a
+    <em>segment through the origin</em> on a pair that overlaps deeply — the origin lying on a
+    chord of the difference set says nothing about how far inside it is — and the seed then puts
+    the origin on an <em>edge</em> of the polytope, where the incident faces' offsets are zero give
+    or take a few ulps.
+  </p>
+
+  <p>
+    The second version scaled the threshold by <code>cfg.tolerance</code>. That made the failure
+    come <em>back</em> when the tolerance was tightened, because the margin that put the origin
+    outside was set by GJK's tolerance, not EPA's — a constant that gets worse as you ask for more
+    accuracy is a constant in the wrong place.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>There is no threshold that is right, because the question is being asked too
+      early.</strong> So it is not asked. The expansion runs either way — beneath-and-beyond does
+      not care where the origin is — and whether the polytope ever got the origin inside is read
+      off <code>lower</code> at the end, where it is a measurement rather than a guess:
+      <code>if (lower &lt;= 0.0f) { status = epa_status::touching; }</code>. Error against the
+      exact reference then tracked the tolerance properly across four decades, with zero results
+      outside their own bracket.
+    </p>
+  </div>
+
+  <h3>8.5 Reading the answer off the winning face</h3>
+
+  <p>
+    The nearest boundary point is the origin projected onto the winning face's plane,
+    <code>n * d</code>. Its barycentric weights on that triangle are also the weights of the
+    contact points on the two original surfaces — the same combination applied to three different
+    vertex sets, which is 8.5's witness trick used a second time and the reason
+    <code>gjk_vertex</code> carries <code>pa</code> and <code>pb</code> into a file that never
+    looks at a shape.
+  </p>
+
+  <p>
+    The weights are clamped to non-negative and renormalised. In exact arithmetic the projection
+    lands inside the globally closest face — if it did not, some edge or neighbouring face would be
+    nearer — so a negative weight is rounding at the rim, of order the tolerance, and clamping is
+    the repair that keeps the contact point on the shapes rather than slightly off them.
+  </p>
+
+  <h3>8.6 And the façade 8.5 left open</h3>
+
+  <p>
+    <code>collide(const convex&amp;, const convex&amp;)</code> loses its placeholder:
+  </p>
+
+  <pre><code class="lang-cpp">    // NOTE WHAT IS NOT PAID TWICE. EPA starts from `g.terminal`, so the search
+    // GJK already did is reused rather than repeated — which is the entire
+    // reason `gjk_result` is 180 bytes rather than 32, and the reason these two
+    // algorithms are usually described as one.
+    const epa_result e = epa_penetration(a, b, g.terminal);
+    out.axis = (length_squared(e.normal) &gt; 0.0f) ? e.normal : g.direction;
+    out.depth = e.depth;
+    out.axes_tested = g.iterations + e.iterations;
+    return out;</code></pre>
+
+  <p>
+    <code>separation</code> does not change shape. A caller written against 8.4's box test can be
+    handed the general one and will not notice, except that the number on the overlapping side has
+    stopped being zero.
+  </p>

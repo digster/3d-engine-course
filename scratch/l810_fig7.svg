@@ -1,0 +1,65 @@
+<svg viewBox="0 0 980 368" role="img" aria-labelledby="f7-t f7-d">
+  <title id="f7-t">Sleeping: the test has to run after the solve, and the decision has to be per island</title>
+  <desc id="f7-d">Left: the three stages of a step, with gravity adding 0.1635 m/s to every dynamic body before the solver looks — so a sleep test placed before the solve finds nothing quiet, measured at 0 of 100 against 96 of 100. Right: the saving, 43 times on the solve, and the control showing that a body slept individually hangs in the air when its support is removed.</desc>
+  <defs>
+    <marker id="e-i-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-blue-f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="36" class="sm" text-anchor="start">A resting body is never quiet BEFORE the solve</text>
+<rect x="40" y="74" width="250" height="40" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="165" y="98" class="xs mono" text-anchor="middle">integrate_velocities</text>
+<text x="302" y="98" class="xs muted" text-anchor="start">+ g·h = 0.1635 m/s</text>
+<line x1="165.00" y1="114.00" x2="165.00" y2="132.00" stroke="#5082e6" stroke-width="1.3" marker-end="url(#e-blue-f7)"/>
+<rect x="40" y="136" width="250" height="40" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="165" y="160" class="xs mono" text-anchor="middle">contact solve</text>
+<text x="302" y="160" class="xs muted" text-anchor="start">removes it again</text>
+<line x1="165.00" y1="176.00" x2="165.00" y2="194.00" stroke="#5082e6" stroke-width="1.3" marker-end="url(#e-blue-f7)"/>
+<rect x="40" y="198" width="250" height="40" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="165" y="222" class="xs mono" text-anchor="middle">integrate_positions</text>
+<line x1="24.00" y1="94.00" x2="38.00" y2="94.00" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-red-f7)"/>
+<text x="18" y="98" class="sm" text-anchor="end">✗</text>
+<line x1="24.00" y1="218.00" x2="38.00" y2="218.00" stroke="#5ac878" stroke-width="1.8" marker-end="url(#e-green-f7)"/>
+<text x="18" y="222" class="sm" text-anchor="end">✓</text>
+<text x="26" y="268" class="xs" text-anchor="start">Read before: 0 of 100 crates quiet, fastest 0.1836 m/s.</text>
+<text x="26" y="286" class="xs" text-anchor="start">Read after:  96 of 100 crates quiet, fastest 0.0629 m/s.</text>
+<text x="26" y="310" class="xs muted" text-anchor="start">g·h is 0.1635 m/s, which is 3.3× the default threshold. A test in the</text>
+<text x="26" y="326" class="xs muted" text-anchor="start">wrong place never fires, at any setting, and looks exactly like a</text>
+<text x="26" y="342" class="xs muted" text-anchor="start">threshold that is merely too tight.</text>
+<text x="530" y="32" class="xs muted" text-anchor="start">What it buys — 43× on the solve</text>
+<text x="530" y="52" class="xs muted" text-anchor="start">settled yard of 100 crates</text>
+<text x="860" y="52" class="xs muted" text-anchor="end">awake</text>
+<text x="952" y="52" class="xs muted" text-anchor="end">asleep</text>
+<line x1="530" y1="60.0" x2="958" y2="60.0" class="grid" stroke-width="1.0"/>
+<text x="530" y="77.0" class="xs" text-anchor="start">solve</text>
+<text x="860" y="77.0" class="xs mono" text-anchor="end">130.8 µs</text>
+<text x="952" y="77.0" class="xs mono" text-anchor="end">3.0 µs</text>
+<text x="530" y="94.0" class="xs" text-anchor="start">manifolds solved</text>
+<text x="860" y="94.0" class="xs mono" text-anchor="end">100</text>
+<text x="952" y="94.0" class="xs mono" text-anchor="end">0</text>
+<text x="530" y="111.0" class="xs" text-anchor="start">narrow phase (unchanged)</text>
+<text x="860" y="111.0" class="xs mono" text-anchor="end">51.5 µs</text>
+<text x="952" y="111.0" class="xs mono" text-anchor="end">51.5 µs</text>
+<text x="530" y="128.0" class="xs" text-anchor="start">…if the caller skips asleep pairs</text>
+<text x="860" y="128.0" class="xs mono" text-anchor="end">—</text>
+<text x="952" y="128.0" class="xs mono" text-anchor="end">7.1 µs</text>
+<text x="530" y="178" class="xs muted" text-anchor="start">Why sleeping is decided per ISLAND (control)</text>
+<text x="530" y="198" class="xs muted" text-anchor="start">crate thrown at a sleeping tower</text>
+<text x="860" y="198" class="xs muted" text-anchor="end">per island</text>
+<text x="952" y="198" class="xs muted" text-anchor="end">per body</text>
+<line x1="530" y1="206.0" x2="958" y2="206.0" class="grid" stroke-width="1.0"/>
+<text x="530" y="223.0" class="xs" text-anchor="start">bottom crate moved, m</text>
+<text x="860" y="223.0" class="xs mono" text-anchor="end">70.6</text>
+<text x="952" y="223.0" class="xs mono" text-anchor="end">63.2</text>
+<text x="530" y="240.0" class="xs" text-anchor="start">top crate fell, m</text>
+<text x="860" y="240.0" class="xs mono" text-anchor="end">0.500</text>
+<text x="952" y="240.0" class="xs mono" text-anchor="end">0.000</text>
+<text x="530" y="290" class="xs muted" text-anchor="start">A body asleep is, to everything else, an immovable body.</text>
+<text x="530" y="306" class="xs muted" text-anchor="start">Sleep one on its own and it hangs in the air when what</text>
+<text x="530" y="322" class="xs muted" text-anchor="start">it was standing on is knocked away.</text>
+</svg>

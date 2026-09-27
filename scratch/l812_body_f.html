@@ -1,0 +1,420 @@
+  <h2 id="listings">15. Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/ragdoll.hpp</code></td><td>new</td>
+          <td>Ragdoll descriptions, the built ragdoll and its report, the self-collision rule, steering,
+              the two handoffs, <code>read_pose</code> and <code>realign_model</code>.</td></tr>
+      <tr><td><code>engine/src/phys/ragdoll.cpp</code></td><td>new</td>
+          <td>Building (four passes), steering, and reading back.</td></tr>
+      <tr><td><code>engine/include/engine/phys/constraint.hpp</code></td><td>modified</td>
+          <td><code>split_swing_twist</code>, <code>swing_angle</code>, <code>joint_cone</code>,
+              <code>make_cone_twist</code>, the <code>swing</code> row role and its warm-start slot,
+              <code>solve_row_position_to</code>.</td></tr>
+      <tr><td><code>engine/src/phys/constraint.cpp</code></td><td>modified</td>
+          <td>The swing and twist rows in <code>prepare_joint</code>, and §7's fix to
+              <code>solve_joint_positions</code>.</td></tr>
+      <tr><td><code>engine/include/engine/phys/solver.hpp</code></td><td>modified</td>
+          <td><code>wake_touched_by_kinematic</code>, and <code>solver_stats::kinematic_wakes</code>.</td></tr>
+      <tr><td><code>engine/src/phys/solver.cpp</code></td><td>modified</td>
+          <td>§12's fix: one stage in front of <code>wake_islands</code>. Everything else is 8.11's.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One include.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file.</td></tr>
+      <tr><td><code>demos/ragdoll/main.cpp</code></td><td>new</td>
+          <td>The trip, the hang and the pile.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>One executable.</td></tr>
+      <tr><td><code>scratch/verify_812.cpp</code></td><td>new</td>
+          <td>Eleven measured sections, 68 checks, every one with a control; a private copy of 8.11's
+              position pass for §7.</td></tr>
+      <tr><td><code>scratch/build_verify_812.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, and refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    8.11's <code>demos/joints/main.cpp</code> and 8.10's <code>demos/stack/main.cpp</code> are not in that
+    list; both compile and run unchanged against the fixed engine, and their published listings still
+    describe them exactly. <code>rigid_body.hpp</code>, <code>shape.hpp</code> and the rest of
+    <code>phys/</code> are untouched.
+  </p>
+
+  @@LISTING:engine/include/engine/phys/ragdoll.hpp@@
+
+  @@LISTING:engine/src/phys/ragdoll.cpp@@
+
+  @@LISTING:engine/include/engine/phys/constraint.hpp@@
+
+  @@LISTING:engine/src/phys/constraint.cpp@@
+
+  @@LISTING:engine/include/engine/phys/solver.hpp@@
+
+  @@LISTING:engine/src/phys/solver.cpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/ragdoll/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_812.cpp@@
+
+  @@LISTING:scratch/build_verify_812.sh@@
+
+  <h2 id="build">16. Build &amp; run</h2>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target ragdoll -j
+./build/demos/ragdoll</code></pre>
+  </div>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug --target ragdoll
+.\build\demos\Debug\ragdoll.exe</code></pre>
+  </div>
+
+  <p>
+    And the harness, which times library code and so needs an optimised library — the script refuses
+    to run against one without a <code>CMAKE_BUILD_TYPE</code>, for the reason 7.6 measured at 18×:
+  </p>
+
+  <div class="listing shell">
+    <figcaption><span class="path">the measurements</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_812.sh
+sh scratch/build_verify_812.sh --only=ce    # sections C and E
+sh scratch/build_verify_811.sh              # 8.11's, against the fixed engine
+sh scratch/build_verify_810.sh              # and 8.10's</code></pre>
+  </div>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on the trip, in a three-quarter view that follows the character. It jogs in steel
+    blue — the clip owns every body — toward a row of dim green crates, which fell asleep in the first
+    half second. At 1.2&nbsp;s it trips: every capsule turns orange, the character pitches forward over
+    the first crate with the momentum it had, and the crate, woken by a moving kinematic limb a moment
+    before, has already been shoved on ahead. Three seconds later the capsules turn blue again and the
+    character stands up where it fell, the skeleton (thin grey, hands and feet included) blending from
+    the pose it landed in; then it jogs off and trips again. Press <kbd>Z</kbd> and <kbd>R</kbd> to hand
+    over at rest: the character stops dead in mid-stride and then topples. <kbd>A</kbd> turns
+    realignment off, and on getting up the whole body slides back to where it tripped.
+    <kbd>M</kbd> swaps in 7.7's walk; at the trip its knees snap back through the stop they were bent
+    past, and joint crosses flash red for a few frames.
+  </p>
+
+  <p>
+    Press <kbd>2</kbd>: the character hangs from one hand under a bar. The panel's worst joint gap reads
+    a few millimetres at eight sweeps; <kbd>U</kbd> switches to eight sub-steps of one sweep, and it
+    falls to thousandths. Press <kbd>3</kbd>: five ragdolls dropped on one another settle into a pile in
+    one island colour — and the panel's "islands (asleep)" may take a long time to show them asleep,
+    or never, for §13's reason.
+  </p>
+
+  <p>
+    The harness prints eleven sections and ends with <code>PASS: 68 checks, 0 failures</code> in under two
+    seconds. Every number in this lesson is in that output except the two observations that started
+    §7's and §12's hunts, which were made on the engine before the fixes and are told as such.
+  </p>
+
+  <h2 id="pitfalls">17. Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>An arm twists round on itself while it circles.</dt>
+    <dd>
+      <strong>Symptom:</strong> a limb windmilling at its shoulder ends up turned about its own axis,
+      past its twist range, by tens of degrees, though every limit looks enabled.<br>
+      <strong>Cause:</strong> the twist rows are about the bone. The twist's rate is the half-way axis
+      over <code>cos(φ/2)</code>; a row about the bone misses the swing plane's turning, and a limb
+      circling its cone twists at <code>α̇(1&nbsp;−&nbsp;cos&nbsp;φ)</code> without the row seeing it (§5).<br>
+      <strong>Fix:</strong> <code>(a₁ + b₁)/(1 + a₁·b₁)</code>. Check any row against a finite difference of
+      the angle it limits, binned by swing.
+    </dd>
+
+    <dt>A shoulder limit jitters with the arm raised forward.</dt>
+    <dd>
+      <strong>Symptom:</strong> the arm shakes between two poses near the horizontal, and only there.<br>
+      <strong>Cause:</strong> the limits are on Euler angles, whose middle angle locks at 90° — the middle
+      of a shoulder's range (§3: sensitivity 609.9 at 89.9°).<br>
+      <strong>Fix:</strong> swing and twist, measured from a cone axis tilted into the middle of the range,
+      so the one singularity is outside the cone.
+    </dd>
+
+    <dt>A ragdoll twitches, or a joint sits wide open, the moment it spawns.</dt>
+    <dd>
+      <strong>Symptom:</strong> a new ragdoll never settles; a joint gap of centimetres.<br>
+      <strong>Cause:</strong> a jointed pair is colliding — the two capsules overlap at the joint by
+      construction (§6's control: a 67.51&nbsp;mm gap). Or the description's capsules overlap an unjointed
+      neighbour at rest.<br>
+      <strong>Fix:</strong> <code>exclude_pairs</code> into the collision filter, and read
+      <code>ragdoll_report::overlapping_colliding</code>, which must be zero.
+    </dd>
+
+    <dt>A hand passes through the ragdoll's own chest.</dt>
+    <dd>
+      <strong>Symptom:</strong> after a fall a forearm lies inside the torso.<br>
+      <strong>Cause:</strong> a "within two links" exclusion rule — the forearm and torso are two links
+      apart and touch in most falls (§6).<br>
+      <strong>Fix:</strong> exclude what overlaps at rest, not what is near in the tree.
+    </dd>
+
+    <dt>The character stops dead when it trips, then crumples.</dt>
+    <dd>
+      <strong>Symptom:</strong> a running character freezes for a frame at the handoff and falls
+      straight down.<br>
+      <strong>Cause:</strong> the bodies were handed over with zero velocity — they were animated by
+      writing positions, so nothing ever gave them one (§9: 10&nbsp;mm of travel in half a second against
+      1.18&nbsp;m).<br>
+      <strong>Fix:</strong> steer kinematic bodies by velocity, so the handoff inherits the chord — which is
+      exactly the integrator's velocity.
+    </dd>
+
+    <dt>Limbs snap and spin as the ragdoll takes over.</dt>
+    <dd>
+      <strong>Symptom:</strong> at the handoff a knee or an elbow jerks and the limb keeps moving.<br>
+      <strong>Cause:</strong> the clip was outside the joints (§10's 7.7 walk: knees 48° past the stop),
+      and the correction is Baumgarte, which turns the repair into velocity that stays.<br>
+      <strong>Fix:</strong> split impulse; and run the clip against the ragdoll's joints in the asset
+      pipeline, which is twenty lines.
+    </dd>
+
+    <dt>A limit held under load drifts past its stop and stays there.</dt>
+    <dd>
+      <strong>Symptom:</strong> a lying ragdoll's knee is several degrees hyperextended and nothing
+      corrects it; with warm starting off, the stop gives way entirely.<br>
+      <strong>Cause:</strong> §7's bug: a position pass that solves a satisfied one-sided row against a
+      zero target, so the far stop cancels the near one's correction.<br>
+      <strong>Fix:</strong> a satisfied one-sided row takes its speculative target <code>−C/h</code> in the
+      position pass too. Probe it: print a loaded joint's angle for ten seconds, and a violation that
+      does not change in the fourth decimal is not being corrected.
+    </dd>
+
+    <dt>An animated character, a lift or a platform passes through a crate.</dt>
+    <dd>
+      <strong>Symptom:</strong> a kinematic body moves into a resting object and the object does not
+      respond — but it does with sleeping disabled.<br>
+      <strong>Cause:</strong> the object is asleep, and a kinematic body is not a bridge, so it never
+      joins — or wakes — the sleeping island (§12).<br>
+      <strong>Fix:</strong> <code>wake_touched_by_kinematic</code> before <code>wake_islands</code>.
+    </dd>
+
+    <dt>Getting up drags the character across the floor, or shrinks its limbs.</dt>
+    <dd>
+      <strong>Symptom:</strong> on the return to animation the body slides back towards where it tripped,
+      or an arm visibly shortens halfway through the blend.<br>
+      <strong>Cause:</strong> the clip was not realigned over the pelvis (1.302&nbsp;m of slide); or the
+      blend interpolated model-space positions rather than local transforms (208&nbsp;mm short).<br>
+      <strong>Fix:</strong> <code>realign_model</code>, then <code>transform_blend_slerp</code> joint by joint.
+    </dd>
+
+    <dt>Ragdolls lie still and never fall asleep.</dt>
+    <dd>
+      <strong>Symptom:</strong> a settled pile costs as much as a falling one.<br>
+      <strong>Cause:</strong> a thin limb turning slowly fails the 0.10&nbsp;rad/s threshold with almost no
+      energy, or a chest is crushing an arm (§13).<br>
+      <strong>Fix:</strong> angular damping on ragdoll parts, sub-steps for the crushing, and — the real fix
+      — an energy-based sleep test (exercise 3).
+    </dd>
+  </dl>
+
+  <h2 id="exercises">18. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Warm-up: a twist row and a loop, by hand.</strong> For a cone axis
+        <code>(0,&nbsp;−1,&nbsp;0)</code> and a bone swung 60° toward <code>+x</code>, write down the twist
+        row's axis and its length. Then predict the twist a limb gains going once round a circle at a
+        swing of 45° with no spin about itself, and check it by adding a row to §C's table.
+      </p>
+      <details><summary>Hint</summary>
+        <p>The axis is <code>(a₁ + b₁)/(1 + a₁·b₁)</code>; the loop's twist is the cap's solid angle,
+           <code>2π(1 − cos φ)</code>.</p>
+      </details>
+      <details><summary>Solution</summary>
+        <p>
+          <code>b₁ = (sin 60°, −cos 60°, 0) = (0.8660, −0.5, 0)</code>, so
+          <code>a₁ + b₁ = (0.8660, −1.5, 0)</code> and <code>1 + a₁·b₁ = 1.5</code>: the axis is
+          <code>(0.5774, −1, 0)</code>, of length 1.1547 = 1/cos 30°, pointing along the half-way vector
+          at 30° from the cone's axis. A circle at 45° encloses <code>2π(1 − 0.70711) = 1.8403</code> rad,
+          105.44°.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>An elliptical cone.</strong> A real shoulder swings further forward than back and further
+        out than across. Give <code>joint_cone</code> two half-angles about two perpendicular axes on the
+        parent, and derive the row for the limit
+        <code>(s_x/θ_x)² + (s_y/θ_y)² ≤ 1</code>, with <code>s</code> the swing's rotation vector resolved
+        on the two axes. Check it against a finite difference as §4 did.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The row is the gradient of the constraint with respect to the swing's rotation vector, carried
+          to the relative angular velocity through the swing's Jacobian. Near the cone's axis the
+          rotation vector's rate is simply the perpendicular part of <code>Ω</code>; exactness further
+          out is the interesting part. Jolt's <code>SwingTwistConstraintPart</code> is one answer.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Sleep on energy, not speed.</strong> §13's ragdolls settle to millijoules and most never
+        sleep, because a slowly turning thin limb fails 8.10's angular threshold. Add a sleep mode that
+        tests each body's kinetic energy per unit mass, <code>(m v² + ω·Iω)/(2m)</code>, against one
+        threshold, and rerun §K's table. Then rerun 8.10's harness and say what it costs there.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          Choose the threshold so that 8.10's resting crate sleeps exactly as before: its 0.05&nbsp;m/s
+          corresponds to <code>0.00125&nbsp;J/kg</code>. The crushed arms will still not sleep, and they
+          should not — something in them is really fighting.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Heading.</strong> <code>realign_model</code> moves the clip in the ground plane and leaves
+        its heading alone, so a character that fell sideways gets up facing the way it was running.
+        Extract a heading from the pelvis's orientation, rotate the placement about the vertical to
+        match, and handle the case the naive extraction gets wrong: a pelvis lying face down or face up,
+        whose forward axis is vertical.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          Project the pelvis-to-head direction onto the ground as well as the pelvis's forward, and use
+          whichever is longer; a production game also chooses a face-up or face-down get-up clip from
+          the sign of the pelvis's forward axis's vertical component.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: an active ragdoll.</strong> Between "the clip owns it" and "the solver
+        owns it" there is a third mode, used for characters that stumble and recover: dynamic bodies,
+        driven toward the clip's pose by motors with limited torque. Add a three-row angular motor to
+        the ball-socket (8.11's hinge motor, one row per axis, targeting the relative angular velocity
+        that closes the gap to the clip's pose in one step), and make a character that can be pushed
+        and still keeps jogging. Measure the torque it needs to hold a pose against gravity, and what
+        happens to §8's joint gaps when every joint also has a motor row.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The target velocity is the Rodrigues vector of §9 — <code>(2/h)·Δq.v/Δq.w</code> of the
+          relative rotation still to do — and the clamp is <code>τ·h</code> per row. Start with the legs
+          only: a torso held up by motorised hips is the classic first active ragdoll.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">19. Recap &amp; next</h2>
+
+  <p>
+    The engine has ragdolls. A skeleton becomes a tree of capsules — eleven parts on 7.7's 23 joints,
+    Dempster's masses, passengers riding on the parts — joined by hinges and by ball-sockets with a
+    swing cone and a twist range. A character is steered onto its clip by velocity, handed to the
+    solver with exactly its momentum, and handed back from the pose read off its bodies, realigned
+    over its pelvis, with no jump and no shortened bone.
+  </p>
+
+  <p>
+    The angles were most of the work. <strong>Swing and twist</strong> are the rotation's natural split
+    — the smallest turn that carries the bone, and the rest — and the swing is 7.4's two mirrors. The
+    swing's row is exact. The twist's row is <strong>the half-way axis over cos(φ/2)</strong>, derived
+    because the swing's own angular velocity is perpendicular to it, and a row about the bone is wrong
+    by the swing plane's turning — which, round a loop, is the loop's solid angle: Codman's paradox,
+    to three decimals. And the ownership rule made the handoffs nearly nothing: <strong>the chord a
+    steered body carries is the velocity its integrator would have produced</strong>, not an
+    approximation of it.
+  </p>
+
+  <p>
+    The ragdoll also measured the module back. 8.11's position pass <strong>never repaired a violated
+    two-ended limit</strong> under split impulse; 8.10's islands <strong>never let a kinematic body wake
+    anything</strong>. Both are fixed, and both earlier harnesses still agree with their own pages. Five
+    claims refused their sections — the overlap the handover predicted, the twist row that should have
+    walked through its stop, the sweep count that should have halved a hanging load, the deepest
+    instant as a measure of self-collision, and the ragdoll that should have gone to sleep — and each
+    refusal is in the lesson in place of the claim.
+  </p>
+
+  <p>
+    <strong>Next:</strong> <em>8.13 — A Character Controller</em>, the last lesson of the module, and
+    deliberately not a rigid body. Everything since 8.9 has been about bodies that obey Newton; a
+    player's character must obey the player — stop on a slope, step up a stair, never tunnel through a
+    wall at speed — and the lesson is why that needs a different object, built from the queries
+    Module 8 already has: GJK distances, EPA depths, and a capsule standing upright, which is what
+    8.5 said a capsule was for.
+  </p>
+
+  <h2 id="reading">20. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>E. A. Codman, <em>The Shoulder</em> (1934).</strong> Where the paradox of §5 was first
+      described — the arm raised forward, swung out and lowered, returning rotated a quarter-turn —
+      and the start of a long argument in biomechanics that the solid angle settles.
+    </li>
+    <li>
+      <strong>David A. Winter, <em>Biomechanics and Motor Control of Human Movement</em>, chapter 4,
+      Table 4.1.</strong> Dempster's segment masses, centres of mass and radii of gyration, the numbers
+      §2 and §6 use, with the definitions of each segment's end points.
+    </li>
+    <li>
+      <strong>W. T. Dempster, <em>Space Requirements of the Seated Operator</em>, WADC Technical Report
+      55-159 (1955).</strong> The cadaver study behind Winter's table.
+    </li>
+    <li>
+      <strong>Erin Catto, “Modeling and Solving Constraints” (GDC 2009).</strong> The Jacobian formulation
+      8.11 built on, with the angular rows this lesson's limits are made of.
+    </li>
+    <li>
+      <strong>The Jolt Physics source (Jorrit Rouwé), <code>SwingTwistConstraint</code> and
+      <code>SwingTwistConstraintPart</code>.</strong> A production swing–twist joint: a swing cone that
+      may be elliptical, a twist range, and the decomposition done the way §3 does it. Exercise 2's
+      reference.
+    </li>
+    <li>
+      <strong>Bullet's <code>btConeTwistConstraint</code>, and PhysX's spherical and D6 joints.</strong>
+      The same idea in the two other engines most ragdolls ship on; worth reading for how each chooses
+      the twist axis.
+    </li>
+    <li>
+      <strong>Jason Gregory, <em>Game Engine Architecture</em>, the chapters on animation and physics.</strong>
+      Where ragdolls sit in a production engine: physics-driven bodies, powered ragdolls, and the
+      blending between them.
+    </li>
+    <li>
+      <strong>Ken Shoemake, “Animating Rotation with Quaternion Curves” (SIGGRAPH 1985).</strong> Slerp,
+      which §11's return needs because it blends across arcs where nlerp is visibly off.
+    </li>
+    <li>
+      <strong>Miles Macklin et al., “Small Steps in Physics Simulation” (SCA 2019).</strong> The argument
+      §8 found the strongest version of: many small steps of one iteration against few large steps of
+      many, on exactly the chains and mass ratios a ragdoll is made of.
+    </li>
+  </ul>

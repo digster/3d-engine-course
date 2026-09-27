@@ -1,0 +1,63 @@
+<svg viewBox="0 0 760 386" role="img" aria-labelledby="f74j-t f74j-d">
+  <title id="f74j-t">The four rotation representations compared</title>
+  <desc id="f74j-d">A table comparing Euler angles, axis-angle, a three by three matrix and a quaternion across eight rows. Floats: three, four, nine, four. Readings: twenty-four, one, one, one. Singularity: yes, no axis at zero, no, no. Composes: no, no, twenty-seven multiplies, sixteen multiplies. Applies: no, trigonometry, nine multiplies, eighteen multiplies. Interpolates: off the geodesic, on it, not at all, on it. Repair: nothing, normalise the axis, Gram-Schmidt, one Taylor step. Extraction: two routes, two routes and a crossover at a hundred and twenty degrees, nothing, one route with no bad case. The quaternion column is outlined in gold and loses exactly one row, applying to a point.</desc>
+  <defs>
+    <marker id="e-i-f74j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="40" class="sm" text-anchor="middle">four ways to write down a rotation, after four lessons</text>
+<line x1="30" y1="74" x2="730" y2="74" class="grid" stroke-width="1.0"/>
+<text x="252" y="66" class="sm mono" text-anchor="middle">euler</text>
+<text x="386" y="66" class="sm mono" text-anchor="middle">axis-angle</text>
+<text x="520" y="66" class="sm mono" text-anchor="middle">mat3</text>
+<text x="654" y="66" class="sm mono t-hi" text-anchor="middle">quat</text>
+<text x="212" y="100" class="xs muted" text-anchor="end">floats</text>
+<text x="252" y="100" class="xs mono" text-anchor="middle">3</text>
+<text x="386" y="100" class="xs mono" text-anchor="middle">4</text>
+<text x="520" y="100" class="xs mono" text-anchor="middle">9</text>
+<text x="654" y="100" class="xs mono t-hi" text-anchor="middle">4</text>
+<text x="212" y="126" class="xs muted" text-anchor="end">readings</text>
+<text x="252" y="126" class="xs mono" text-anchor="middle">24</text>
+<text x="386" y="126" class="xs mono" text-anchor="middle">1</text>
+<text x="520" y="126" class="xs mono" text-anchor="middle">1</text>
+<text x="654" y="126" class="xs mono t-hi" text-anchor="middle">1</text>
+<text x="212" y="152" class="xs muted" text-anchor="end">singularity</text>
+<text x="252" y="152" class="xs mono" text-anchor="middle">yes</text>
+<text x="386" y="152" class="xs mono" text-anchor="middle">no axis at 0</text>
+<text x="520" y="152" class="xs mono" text-anchor="middle">no</text>
+<text x="654" y="152" class="xs mono t-hi" text-anchor="middle">no</text>
+<text x="212" y="178" class="xs muted" text-anchor="end">composes</text>
+<text x="252" y="178" class="xs mono" text-anchor="middle">no</text>
+<text x="386" y="178" class="xs mono" text-anchor="middle">no</text>
+<text x="520" y="178" class="xs mono" text-anchor="middle">27 mul</text>
+<text x="654" y="178" class="xs mono t-hi" text-anchor="middle">16 mul</text>
+<text x="212" y="204" class="xs muted" text-anchor="end">applies</text>
+<text x="252" y="204" class="xs mono" text-anchor="middle">no</text>
+<text x="386" y="204" class="xs mono" text-anchor="middle">trig</text>
+<text x="520" y="204" class="xs mono" text-anchor="middle">9 mul</text>
+<text x="654" y="204" class="xs mono t-hi" text-anchor="middle">18 mul</text>
+<text x="212" y="230" class="xs muted" text-anchor="end">interpolates</text>
+<text x="252" y="230" class="xs mono" text-anchor="middle">off it</text>
+<text x="386" y="230" class="xs mono" text-anchor="middle">on it</text>
+<text x="520" y="230" class="xs mono" text-anchor="middle">no</text>
+<text x="654" y="230" class="xs mono t-hi" text-anchor="middle">on it</text>
+<text x="212" y="256" class="xs muted" text-anchor="end">repair</text>
+<text x="252" y="256" class="xs mono" text-anchor="middle">—</text>
+<text x="386" y="256" class="xs mono" text-anchor="middle">normalise axis</text>
+<text x="520" y="256" class="xs mono" text-anchor="middle">Gram-Schmidt</text>
+<text x="654" y="256" class="xs mono t-hi" text-anchor="middle">one Taylor step</text>
+<text x="212" y="282" class="xs muted" text-anchor="end">extraction</text>
+<text x="252" y="282" class="xs mono" text-anchor="middle">2 routes</text>
+<text x="386" y="282" class="xs mono" text-anchor="middle">2 routes + 120°</text>
+<text x="520" y="282" class="xs mono" text-anchor="middle">—</text>
+<text x="654" y="282" class="xs mono t-hi" text-anchor="middle">1 route, no case</text>
+<line x1="30" y1="292" x2="730" y2="292" class="grid" stroke-width="1.0"/>
+<rect x="592" y="80" width="124" height="212" rx="3" fill="none" stroke="#f8d678" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="380.0" y="324" class="sm t-hi" text-anchor="middle">It loses exactly one row, and that row has a workaround that costs 4.6 ns.</text>
+<text x="380.0" y="348" class="xs muted" text-anchor="middle">Every other representation in this table was built in the three lessons before it, and every one of them</text>
+<text x="380.0" y="366" class="xs muted" text-anchor="middle">is still in the engine: Euler angles are an interface, axis-angle is a reading, a matrix is what the</text>
+<text x="380.0" y="384" class="xs muted" text-anchor="middle">renderer multiplies by. The quaternion is what the engine will STORE, from Lesson 7.5.</text>
+</svg>

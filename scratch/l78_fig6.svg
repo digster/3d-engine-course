@@ -1,0 +1,82 @@
+<svg viewBox="0 0 900 440" role="img" aria-labelledby="l78f6-t l78f6-d">
+  <title id="l78f6-t">Four distance-attenuation curves in decibels against a log distance axis</title>
+  <desc id="l78f6-d">The inverse law falls 6.02 dB per doubling, the mistaken inverse-square law falls 12.04 dB, the linear law holds up and then collapses, and our inverse_ranged curve follows the inverse law close in and reaches silence at 50 m. The bare inverse law is marked at -33.98 dB where it is cut off.</desc>
+  <defs>
+    <marker id="e-i-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-amber-l78f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="62" y="56" width="430" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">gain in decibels against distance, log distance axis</text>
+<line x1="123.42857142857142" y1="56" x2="123.42857142857142" y2="306" class="grid" stroke-width="1.0"/>
+<text x="123.42857142857142" y="322" class="xs mono" text-anchor="middle">1</text>
+<line x1="184.85714285714283" y1="56" x2="184.85714285714283" y2="306" class="grid" stroke-width="1.0"/>
+<text x="184.85714285714283" y="322" class="xs mono" text-anchor="middle">2</text>
+<line x1="246.28571428571428" y1="56" x2="246.28571428571428" y2="306" class="grid" stroke-width="1.0"/>
+<text x="246.28571428571428" y="322" class="xs mono" text-anchor="middle">4</text>
+<line x1="307.71428571428567" y1="56" x2="307.71428571428567" y2="306" class="grid" stroke-width="1.0"/>
+<text x="307.71428571428567" y="322" class="xs mono" text-anchor="middle">8</text>
+<line x1="369.14285714285717" y1="56" x2="369.14285714285717" y2="306" class="grid" stroke-width="1.0"/>
+<text x="369.14285714285717" y="322" class="xs mono" text-anchor="middle">16</text>
+<line x1="430.57142857142856" y1="56" x2="430.57142857142856" y2="306" class="grid" stroke-width="1.0"/>
+<text x="430.57142857142856" y="322" class="xs mono" text-anchor="middle">32</text>
+<line x1="492.0" y1="56" x2="492.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="492.0" y="322" class="xs mono" text-anchor="middle">64</text>
+<line x1="62" y1="76.83333333333333" x2="492" y2="76.83333333333333" class="grid" stroke-width="1.0"/>
+<text x="54" y="80.83333333333333" class="xs muted" text-anchor="end">0</text>
+<line x1="62" y1="118.5" x2="492" y2="118.5" class="grid" stroke-width="1.0"/>
+<text x="54" y="122.5" class="xs muted" text-anchor="end">-12</text>
+<line x1="62" y1="160.16666666666669" x2="492" y2="160.16666666666669" class="grid" stroke-width="1.0"/>
+<text x="54" y="164.16666666666669" class="xs muted" text-anchor="end">-24</text>
+<line x1="62" y1="201.83333333333334" x2="492" y2="201.83333333333334" class="grid" stroke-width="1.0"/>
+<text x="54" y="205.83333333333334" class="xs muted" text-anchor="end">-36</text>
+<line x1="62" y1="243.5" x2="492" y2="243.5" class="grid" stroke-width="1.0"/>
+<text x="54" y="247.5" class="xs muted" text-anchor="end">-48</text>
+<line x1="62" y1="285.16666666666663" x2="492" y2="285.16666666666663" class="grid" stroke-width="1.0"/>
+<text x="54" y="289.16666666666663" class="xs muted" text-anchor="end">-60</text>
+<text x="277.0" y="342" class="xs muted" text-anchor="middle">distance from the listener, metres</text>
+<text x="16" y="52" class="xs muted" text-anchor="middle">dB</text>
+<path d="M 62.00,76.83 L 123.43,76.83 L 184.86,97.74 L 246.29,118.64 L 307.71,139.55 L 369.14,160.45 L 430.57,181.41 L 468.33,194.22 L 470.12,194.82 L 486.28,194.82" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<path d="M 62.00,76.83 L 123.43,76.83 L 184.86,77.45 L 246.29,78.74 L 307.71,81.48 L 369.14,87.85 L 430.57,107.04 L 468.33,194.22 L 470.12,306.00 L 486.28,306.00" fill="none" stroke="#5ac878" stroke-width="2.0"/>
+<path d="M 62.00,76.83 L 123.43,76.83 L 184.86,98.36 L 246.29,120.55 L 307.71,144.21 L 369.14,171.45 L 430.57,211.51 L 468.33,306.00 L 470.12,306.00 L 486.28,306.00" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<path d="M 62.00,76.83 L 123.43,76.83 L 184.86,118.64 L 246.29,160.45 L 307.71,202.31 L 369.14,244.12 L 430.57,285.17 L 468.33,306.00 L 470.12,306.00 L 486.28,306.00" fill="none" stroke="#e05c5c" stroke-width="2.0" stroke-dasharray="6 4"/>
+<line x1="470.1" y1="194.8" x2="470.1" y2="306.0" stroke="#e05c5c" stroke-width="2.0" fill="none" stroke-dasharray="3 3"/>
+<circle cx="470.1" cy="194.8" r="4" fill="#e05c5c"/>
+<line x1="343.65" y1="257.39" x2="466.50" y2="200.82" stroke="#e05c5c" stroke-width="1.2" marker-end="url(#e-red-l78f6)"/>
+<text x="335.9365137162911" y="261.3888888888889" class="xs mono" text-anchor="end">-33.98 dB, then cut to nothing</text>
+<line x1="62.0" y1="356.0" x2="82.0" y2="356.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="90" y="360" class="xs" text-anchor="start">inverse: 1/d</text>
+<line x1="62.0" y1="373.0" x2="82.0" y2="373.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="90" y="377" class="xs" text-anchor="start">linear</text>
+<line x1="62.0" y1="390.0" x2="82.0" y2="390.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="90" y="394" class="xs" text-anchor="start">inverse_ranged (ours)</text>
+<line x1="62.0" y1="407.0" x2="82.0" y2="407.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="90" y="411" class="xs" text-anchor="start">the mistake: 1/d^2</text>
+<text x="540" y="68" class="xs muted" text-anchor="start">per doubling of distance</text>
+<text x="844" y="68" class="xs muted" text-anchor="end"></text>
+<line x1="540" y1="76.0" x2="850" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="540" y="93.0" class="xs" text-anchor="start">1/d  (pressure)</text>
+<text x="844" y="93.0" class="xs mono" text-anchor="end">-6.02 dB</text>
+<text x="540" y="110.0" class="xs" text-anchor="start">1/d^2  (intensity)</text>
+<text x="844" y="110.0" class="xs mono" text-anchor="end">-12.04 dB</text>
+<text x="540" y="136.5" class="xs" text-anchor="start">Energy spreads over a sphere, so INTENSITY</text>
+<text x="540" y="152.5" class="xs muted" text-anchor="start">falls as 1/d^2. A sample is a PRESSURE, and</text>
+<text x="540" y="168.5" class="xs muted" text-anchor="start">pressure is the square root of intensity.</text>
+<text x="540" y="206.5" class="xs muted" text-anchor="start">emitter (3, 0, -4), gain 0.8</text>
+<text x="844" y="206.5" class="xs muted" text-anchor="end"></text>
+<line x1="540" y1="214.5" x2="850" y2="214.5" class="grid" stroke-width="1.0"/>
+<text x="540" y="231.5" class="xs" text-anchor="start">distance</text>
+<text x="844" y="231.5" class="xs mono" text-anchor="end">5.0000 m</text>
+<text x="540" y="248.5" class="xs" text-anchor="start">attenuation</text>
+<text x="844" y="248.5" class="xs mono" text-anchor="end">0.1837</text>
+<text x="540" y="265.5" class="xs" text-anchor="start">pan</text>
+<text x="844" y="265.5" class="xs mono" text-anchor="end">0.6000</text>
+<text x="540" y="282.5" class="xs" text-anchor="start">left gain</text>
+<text x="844" y="282.5" class="xs mono" text-anchor="end">0.0454</text>
+<text x="540" y="299.5" class="xs" text-anchor="start">right gain</text>
+<text x="844" y="299.5" class="xs mono" text-anchor="end">0.1397</text>
+</svg>

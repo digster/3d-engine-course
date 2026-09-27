@@ -1,0 +1,55 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l86f6-t l86f6-d">
+  <title id="l86f6-t">How the horizon of the deleted cap is found, and why the visible set is flood filled first.</title>
+  <desc id="l86f6-d">Left, a nine-sided polygon standing in for the polytope, with a new point w outside it. The four edges that can see w are drawn red and the two rim vertices are circled green. Right, the edge-cancellation identity written out, and the measured failure it does not survive on its own: a support point exactly coplanar with four faces scatters the visible set, and the horizon comes back in three pieces.</desc>
+  <defs>
+    <marker id="e-i-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-red-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-l86f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Adding a vertex: delete what can see it, then stitch the rim.</text>
+<text x="200" y="56" class="xs" text-anchor="middle">visible faces and the rim</text>
+<line x1="200.0" y1="114.0" x2="261.7" y2="136.5" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<line x1="261.7" y1="136.5" x2="294.5" y2="193.3" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<line x1="294.5" y1="193.3" x2="283.1" y2="258.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<line x1="283.1" y1="258.0" x2="232.8" y2="300.2" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="232.8" y1="300.2" x2="167.2" y2="300.2" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="167.2" y1="300.2" x2="116.9" y2="258.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="116.9" y1="258.0" x2="105.5" y2="193.3" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="105.5" y1="193.3" x2="138.3" y2="136.5" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="138.3" y1="136.5" x2="200.0" y2="114.0" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<line x1="200.0" y1="114.0" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="261.7" y1="136.5" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="261.7" y1="136.5" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="294.5" y1="193.3" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="294.5" y1="193.3" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="283.1" y1="258.0" x2="355.9" y2="124.9" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<circle cx="355.9" cy="124.9" r="4.2" fill="#5ac878"/>
+<text x="365.8586629917302" y="128.85402434389354" class="sm mono t-hi" text-anchor="start">w</text>
+<circle cx="200.0" cy="114.0" r="4.6" fill="none" stroke="#5ac878" stroke-width="2"/>
+<circle cx="283.1" cy="258.0" r="4.6" fill="none" stroke="#5ac878" stroke-width="2"/>
+<text x="200" y="340" class="xs muted" text-anchor="middle">the rim is where the visible run ENDS</text>
+<text x="380" y="62" class="xs t-hi" text-anchor="start">THE RIM IS FOUND BY CANCELLATION, with no adjacency stored.</text>
+<text x="380" y="82" class="xs" text-anchor="start">Every edge INTERIOR to the deleted cap belongs to two deleted faces</text>
+<text x="380" y="98" class="xs" text-anchor="start">and appears twice, once in each direction. Every edge on the rim</text>
+<text x="380" y="114" class="xs" text-anchor="start">appears once. So push each deleted face's three edges onto a list</text>
+<text x="380" y="130" class="xs" text-anchor="start">and cancel any pair that are reverses. What survives is the horizon,</text>
+<text x="380" y="146" class="xs" text-anchor="start">already in winding order.</text>
+<text x="380" y="180" class="xs t-hi" text-anchor="start">AND “THE VISIBLE SET IS CONNECTED” IS A THEOREM — IN EXACT</text>
+<text x="380" y="196" class="xs t-hi" text-anchor="start">ARITHMETIC.</text>
+<text x="380" y="216" class="xs" text-anchor="start">A support point that lands EXACTLY on several face planes leaves</text>
+<text x="380" y="232" class="xs" text-anchor="start">`dot(n, w)` and `d` as the same number computed two different ways,</text>
+<text x="380" y="248" class="xs" text-anchor="start">and the last few bits decide which side of the comparison each</text>
+<text x="380" y="264" class="xs" text-anchor="start">face falls on. Measured on two cubes face to face with 0.1 mm of</text>
+<text x="380" y="280" class="xs" text-anchor="start">overlap: three faces called visible, scattered, sharing no edge —</text>
+<text x="380" y="296" class="xs" text-anchor="start">nine horizon edges with nothing to cancel, and a surface that is</text>
+<text x="380" y="312" class="xs" text-anchor="start">no longer a polytope.</text>
+<text x="380" y="344" class="xs t-hi" text-anchor="start">So the candidates are FLOOD FILLED from the closest face, which is</text>
+<text x="380" y="360" class="xs t-hi" text-anchor="start">the one face that is certainly visible. In exact arithmetic that</text>
+<text x="380" y="376" class="xs t-hi" text-anchor="start">changes nothing; in float it undoes the scatter.</text>
+</svg>

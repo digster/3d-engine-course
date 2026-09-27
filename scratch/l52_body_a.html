@@ -1,0 +1,884 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-01-the-refactor.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.1 — The Refactor: Engine, Demos, and the Public API</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-03-logging-and-errors.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.3 — Logging, Assertions, and Errors Without Exceptions</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.2</div>
+    <h1>The Platform and Application Layer</h1>
+    <p class="deck">
+      Every demo this course has written opens with the same forty lines — initialise SDL, make a
+      window, make a renderer, make a texture, check all four — and closes with the same four,
+      backwards. None of it is what any demo is <em>about</em>. Today we ask the question those
+      lines are really hiding: <strong>who owns the loop?</strong> Your program, calling into a
+      library? Or the engine, calling into you? SDL3 has a considered answer on disk, and it is
+      not the one we have been using. We are going to build both, decide which each program
+      deserves, and finish with Lesson 1.8's Pong as its own executable — 87 lines of code, with
+      no <code>main</code> in it at all.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-02-input-state-vs-events.html">1.2 — Input: State vs Events</a>,
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed-Timestep Loop</a>,
+          <a href="01-05-framebuffer.html">1.5 — A Framebuffer of Our Own</a>,
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/platform/platform.hpp</code>,
+            <code>engine/src/platform/platform.cpp</code>,
+            <code>engine/include/engine/platform/app.hpp</code>,
+            <code>engine/src/platform/app.cpp</code>,
+            <code>engine/include/engine/platform/main.hpp</code>,
+            <code>engine/include/engine/gfx/image.hpp</code>,
+            <code>engine/src/gfx/image.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>, <code>demos/CMakeLists.txt</code>,
+            <code>demos/hello_cube/main.cpp</code>, <code>demos/pong/main.cpp</code>,
+            <code>demos/sandbox/main.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Two demos with no <code>main</code>, no <code>SDL_Init</code> and no loop; Pong is its
+            own program; <strong>48 lifecycle SDL calls across the demos become 3</strong>; and
+            the golden image is still byte-identical.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the difference between a library and a framework precisely, in terms of who calls
+          whom, and say which one a given program should be.</li>
+      <li>…implement SDL3's main-callback entry points — <code>SDL_AppInit</code>,
+          <code>SDL_AppIterate</code>, <code>SDL_AppEvent</code>, <code>SDL_AppQuit</code> — with
+          the correct signatures, and explain why they cannot live inside a static library.</li>
+      <li>…recognise the difference between a wrapper that <em>hides</em> a dependency and one
+          that <em>owns its lifetime</em>, and argue for the second without arguing for the
+          first.</li>
+      <li>…design a start-up path in which resource creation order and destruction order are
+          mirror images, and every failure path unwinds exactly what it built.</li>
+      <li>…hand a C++ object safely through a C API's <code>void*</code> and get it back, with
+          exactly one owner and exactly one teardown path.</li>
+      <li>…recognise inversion of control in a real API and predict what it does and does not
+          change about a loop you already understand.</li>
+      <li>…decide, with a reason you can defend, when <em>not</em> to adopt your own framework.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-who">Who owns the loop?</a></li>
+          <li><a href="#intuition-forty">The forty lines nobody reads</a></li>
+          <li><a href="#intuition-hide">Hiding a library, and owning one</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-ioc">Inversion of control, stated precisely</a></li>
+          <li><a href="#theory-sdl">SDL3's answer, verified</a></li>
+          <li><a href="#theory-frame">The frame survives the inversion</a></li>
+          <li><a href="#theory-order">Order, and its mirror</a></li>
+          <li><a href="#theory-void">Ownership across a C boundary</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-platform">platform — the library half</a></li>
+          <li><a href="#impl-surface">surface: a constraint made structural</a></li>
+          <li><a href="#impl-app">app — the framework half</a></li>
+          <li><a href="#impl-macro">app_runner and ENGINE_MAIN</a></li>
+          <li><a href="#impl-hello">hello_cube, rewritten</a></li>
+          <li><a href="#impl-pong">pong, extracted</a></li>
+          <li><a href="#impl-sandbox">sandbox, which keeps its loop</a></li>
+        </ol>
+      </li>
+      <li><a href="#cost">What It Cost, and What It Bought</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 5.1 ended by pointing at a file and refusing to fix it. <code>demos/sandbox/main.cpp</code>
+    was 5,721 lines, and five separate demos lived inside it as branches of a <code>switch</code>
+    on a <code>[Tab]</code> key. The lesson said, in §12, that splitting them was not a job for a
+    refactor about include paths: <em>each of those demos would be its own small executable if
+    there were an application layer to hang a loop on.</em>
+  </p>
+
+  <p>
+    That is a strange sentence when you first read it. A loop is four lines. Why would anybody
+    keep five unrelated programs welded together for want of something so small?
+  </p>
+
+  <p>
+    Here is the answer, and it is not really about the loop. Open the last program you wrote in
+    this course — <code>demos/hello_cube/main.cpp</code> as it stood at the end of Lesson 5.1 —
+    and count what it had to say before it could put one lit cube on screen:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">demos/hello_cube/main.cpp — before this lesson</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">SDL_Init(SDL_INIT_VIDEO)          SDL_CreateWindow          SDL_CreateRenderer
+SDL_CreateTexture                 SDL_SetTextureScaleMode   SDL_PollEvent
+SDL_LockTexture                   SDL_UnlockTexture         SDL_RenderClear
+SDL_RenderTexture                 SDL_RenderPresent         SDL_DestroyTexture
+SDL_DestroyRenderer               SDL_DestroyWindow         SDL_Quit (x3)</code></pre>
+  </figure>
+
+  <p>
+    <strong>Seventeen calls</strong>, out of 160 lines of code. Every one of them is correct, every
+    one of them is necessary, and not one of them is about a cube. The same seventeen appear, in
+    the same order, in <code>sandbox</code>. They appeared in every single-file demo from Lesson
+    1.5 onward. When we wrote the second one we copied the first, and when we wrote the third we
+    copied the second, and the row-by-row texture upload — the one with the comment explaining
+    that SDL's returned pitch may exceed <code>width * 4</code> and that one big
+    <code>memcpy</code> would shear the image on machines you do not own — existed verbatim in two
+    files by the end of Lesson 5.1.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode</span>
+    <p>
+      Duplicated start-up code does not fail loudly. It fails by <em>divergence</em>: one copy
+      gains a fix and the other does not. We already have a documented instance of exactly this
+      pattern in this repository — Lesson 5.1's §1 describes four verification harnesses that each
+      transcribed <code>build_scene</code> by hand, and notes that copy number four could have
+      drifted from the original with nothing in the build to say so. The presentation path is the
+      same shape of hazard, and it is worse, because a subtly wrong texture upload does not fail
+      on your machine at all.
+    </p>
+  </div>
+
+  <h3 id="problem-tell">1.1 &nbsp; The tell</h3>
+
+  <p>
+    But the real tell is not the duplication. It is what the duplication <em>prevented</em>.
+  </p>
+
+  <p>
+    Pong has been finished since Lesson 1.8. It is a complete game: serve, rally, score, an AI
+    opponent, two collision rules to compare. Its simulation lives in
+    <code>demos/common/pong.{hpp,cpp}</code>, a clean 700 lines that knows nothing about SDL. And
+    for four modules, the only way to play it has been:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the old way to play Pong</span></figcaption>
+    <pre><code class="lang-bash">./build/demos/sandbox --software     # then press [Tab] four times</code></pre>
+  </figure>
+
+  <p>
+    Why? Not because anybody thought that was right. Because <strong>a demo needs a loop to exist
+    in, and there was exactly one loop in the repository.</strong> Writing a Pong executable meant
+    writing those seventeen calls again, plus an event drain, plus a clock, plus an accumulator —
+    about eighty lines of program that is not Pong — and so it was cheaper to add a branch to a
+    file that already had all of it. Every demo after that made the same calculation. That is how
+    a 5,700-line <code>main.cpp</code> gets built: not by one bad decision, but by eighty small
+    correct ones.
+  </p>
+
+  <p>
+    So the missing thing is not a loop. It is <em>somewhere for a program to be</em>. And the
+    moment you start designing that, you run straight into a question the course has been quietly
+    answering the same way since Lesson 0.5 without ever putting it to a vote.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-who">2.1 &nbsp; Who owns the loop?</h3>
+
+  <p>
+    Think about two ways a person can be given a job.
+  </p>
+
+  <p>
+    In the first, you are handed a toolbox and a task. You decide what to do and when; you reach
+    into the box for a hammer when you want a hammer. The box does not know you exist. If you
+    stop working, nothing happens — the box just sits there.
+  </p>
+
+  <p>
+    In the second, you are on a production line. The line moves. Something arrives in front of
+    you, you do your bit, and it moves on. You do not decide when the next thing comes; you decide
+    what to do with it when it does. If you stop working, the line notices.
+  </p>
+
+  <p>
+    Both are real jobs and both get things built. The difference is not competence or freedom —
+    it is <strong>who has the clock</strong>. And that difference has a name in software: a
+    <em>library</em> is a toolbox, and a <em>framework</em> is a production line. The one-line
+    version, which is worth memorising because it survives every argument about the terms:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The distinction</span>
+    <p>
+      <strong>You call a library. A framework calls you.</strong> Everything else — how big it is,
+      how many files, whether it is "opinionated" — is decoration on top of that one fact.
+    </p>
+  </div>
+
+  <p>
+    Everything this course has built is a library. Look at any demo: <code>main()</code> is yours,
+    <code>while (running)</code> is yours, and inside it you call <code>collect_triangles</code>
+    and <code>draw_triangles</code> and <code>clk.tick()</code>. The engine has never once called
+    you. It does not know your program exists.
+  </p>
+
+  <p>
+    The alternative is that you write no loop at all. You write a handful of functions with agreed
+    names — <em>here is how to start; here is one frame; here is one event; here is how to
+    stop</em> — and something else runs them in the right order for the life of the program. That
+    is the production line. Figure 1 puts the two side by side.
+  </p>
+
+  @@FIG_FORK@@
+
+  <p>
+    Notice what Figure 1 does <em>not</em> show: any difference in the phases. Both columns contain
+    the same six boxes, in the same order, doing the same work. Nothing about drawing a frame
+    changes. The only thing that moves is the dashed outline — which box the word
+    <code>while</code> is written inside.
+  </p>
+
+  <p>
+    You might reasonably ask why anybody would give up control of their own loop for that. On a
+    desktop, the honest answer is "convenience, and not much else". But there is a second answer
+    that is not about convenience at all, and it is the one that decides the question:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Where <code>while (true)</code> is illegal</span>
+    <p>
+      In a web browser, JavaScript and WebAssembly run on a single thread that also draws the page
+      and handles input. A loop that never returns does not just make your program unresponsive —
+      it freezes the <em>tab</em>. The browser owns the clock and hands out frames through
+      <code>requestAnimationFrame</code>; a program that will not give the thread back cannot run
+      at all. iOS and Android are the same shape of problem for a different reason: the OS owns
+      the application lifecycle, needs to suspend you when a call comes in, and expects a
+      <em>delegate</em> it can call.
+    </p>
+    <p>
+      So on those platforms the framework arrangement is not a nicety. It is the only arrangement
+      that exists. This is exactly why SDL3 grew the callback entry points, and it is why an
+      engine that intends to reach a browser should have a callback-shaped spine even while it
+      only ever runs on desktops.
+    </p>
+  </div>
+
+  <h3 id="intuition-forty">2.2 &nbsp; The forty lines nobody reads</h3>
+
+  <p>
+    Set the loop aside for a moment and look at the other half of what a program has to say. Here
+    is the shape of every demo's start-up, with the error handling folded away:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the shape, in every demo since Lesson 1.5</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">SDL_Init(SDL_INIT_VIDEO);
+SDL_Window*   window   = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE);
+SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+SDL_Texture*  screen   = SDL_CreateTexture(renderer, ARGB8888, STREAMING, w, h);
+// … the program …
+SDL_DestroyTexture(screen);
+SDL_DestroyRenderer(renderer);
+SDL_DestroyWindow(window);
+SDL_Quit();</code></pre>
+  </figure>
+
+  <p>
+    Read the two halves against each other. They are a <em>mirror</em>: the last thing created is
+    the first thing destroyed, and the reason is a chain of dependencies. The texture belongs to
+    the renderer, so it must not outlive it. The renderer belongs to the window. The window
+    belongs to the library. Reverse any two of those lines and you get undefined behaviour — which
+    on your machine will very likely appear to work, because the memory it touches has not been
+    handed to anyone else yet.
+  </p>
+
+  <p>
+    That is the first thing worth noticing. The second is what happens between the halves. Each
+    creation can fail, and each failure has to unwind <em>exactly what has been built so far</em>
+    and no more. Written out honestly, with four resources, you get four different teardown
+    sequences — and the pre-5.2 <code>sandbox</code> had precisely that, five exit paths from
+    <code>main</code> each unwinding a different amount, and one of them (the <code>--shot</code>
+    path) unwinding correctly by luck because it happened to run before anything was built.
+  </p>
+
+  <p>
+    A mirror with a dependency chain and a set of partial unwind paths is not "boilerplate". It is
+    a small, exacting, well-understood problem with one right answer, being solved from scratch in
+    every file. That is precisely the sort of thing a library should own — and Figure 3 will show
+    the ladder in full.
+  </p>
+
+  <h3 id="intuition-hide">2.3 &nbsp; Hiding a library, and owning one</h3>
+
+  <p>
+    So we are going to write something called a platform layer. Before we write a line of it, we
+    have to decide what it is <em>for</em>, because the phrase "platform layer" gets used for two
+    completely different things and picking the wrong one costs years.
+  </p>
+
+  <p>
+    The first meaning is a layer that <strong>hides</strong> a dependency. You invent your own
+    vocabulary — <code>engine::window</code>, <code>engine::key</code>, <code>engine::event</code>
+    — and translate at the boundary. The code above the layer never names an SDL type. The prize
+    is portability: swap SDL for GLFW, or for a hand-rolled Win32 backend, and nothing above the
+    layer changes.
+  </p>
+
+  <p>
+    The second meaning is a layer that <strong>owns a lifetime</strong>. It does not invent a
+    vocabulary. It hands you the <code>SDL_Window*</code> quite happily. What it owns is the
+    order things are created in, the order they are destroyed in, and the fact that all of it
+    happens exactly once.
+  </p>
+
+  <p>
+    Lesson 5.1 already made this decision once, and got it right, and said so out loud in
+    <code>engine/CMakeLists.txt</code>:
+  </p>
+
+  <div class="callout note">
+    <span class="label">From Lesson 5.1</span>
+    <p>
+      <code>target_link_libraries(engine PUBLIC SDL3::SDL3)</code> — <em>"PUBLIC because SDL is in
+      our public headers: <code>framebuffer.hpp</code> says <code>Uint32</code>,
+      <code>gpu_device.hpp</code> takes an <code>SDL_Window*</code>, and <code>input.hpp</code>
+      reads <code>SDL_Event</code>. … It is also an admission. A renderer whose public API names
+      another library's types has adopted that library's vocabulary permanently."</em>
+    </p>
+  </div>
+
+  <p>
+    5.1 flagged that as residue and left the argument for today. Here is the argument, and the
+    conclusion is that it is not residue at all.
+  </p>
+
+  <p>
+    <strong>A wrapper that hides a library you have no intention of replacing is cost with no
+    benefit.</strong> Count what the hiding option actually buys us. We chose SDL3 in Lesson 0.3
+    for reasons that have not changed: it is the cross-platform layer, it is where
+    <code>SDL_GPU</code> lives, and Module 4 built the entire GPU renderer on it. There is no
+    world in which this engine drops SDL and keeps <code>gpu_device</code>. So the swap-ability we
+    would be paying for is a benefit we will never collect.
+  </p>
+
+  <p>
+    And it is not cheap. A hiding layer means inventing an event type, a key enum with 240-odd
+    values, a window-flags bitfield, a translation function for each, documentation for all of it,
+    and — the part people forget — a permanent tax on every new SDL feature, which must be
+    surfaced through your vocabulary before anyone above the line can use it. Every one of those
+    is a place for a bug that SDL does not have.
+  </p>
+
+  <p>
+    So we take the second meaning, deliberately, and we say why in the header rather than leaving
+    a reader to wonder whether we simply did not think of it. <code>platform::window()</code>
+    returns an <code>SDL_Window*</code>. <code>platform::handle()</code> takes an
+    <code>SDL_Event</code>. What the class owns is the ladder in Figure 3 and nothing else.
+  </p>
+
+  <div class="callout note">
+    <span class="label">When the other answer is right</span>
+    <p>
+      Engines that <em>do</em> hide their platform layer generally have a concrete reason: a
+      console SDK under NDA that cannot appear in shared headers, a second backend that already
+      exists, or a public API that ships to customers who must not be forced to install your
+      dependency. If any of those is true for you, hide it. The rule is not "never abstract" — it
+      is <strong>never abstract for a benefit you cannot name</strong>. We can name ours, and it
+      is empty.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-ioc">3.1 &nbsp; Inversion of control, stated precisely</h3>
+
+  <p>
+    The production-line picture is the intuition. Here is the precise version, because "inversion
+    of control" is a phrase that gets used loosely and the loose version is not useful.
+  </p>
+
+  <p>
+    Take any program as a set of <em>things that must happen</em> — start up, handle an event,
+    advance the simulation, draw, shut down — plus a <em>schedule</em> saying when each happens.
+    In the library arrangement, your code contains both: the operations <em>and</em> the schedule
+    that sequences them. In the framework arrangement, your code contains only the operations. The
+    schedule lives somewhere else and refers to your operations by name.
+  </p>
+
+  <p>
+    That is the whole of it. Inversion of control is <strong>separating a program's operations
+    from its schedule, and giving the schedule to somebody else</strong>. Nothing is added and
+    nothing is removed; a boundary is drawn through the middle of what used to be one thing.
+  </p>
+
+  <p>
+    Two consequences follow immediately, and both matter today.
+  </p>
+
+  <p>
+    <strong>First: your operations can no longer share local variables.</strong> When one function
+    did all of it, state that spanned phases could live on <code>main</code>'s stack — which is
+    exactly how <code>sandbox</code> came to declare <strong>109 locals</strong> before its loop
+    even starts. Split the phases into separate
+    functions and anything crossing a phase boundary needs a home that outlives a call. That home
+    is what an object is <em>for</em>, and it is why <code>engine::app</code> is a class you derive
+    from rather than four free functions you register. Those locals become members, and the
+    lifetime question — "how long does this live?" — becomes visible instead of implicit.
+  </p>
+
+  <p>
+    <strong>Second: control returns.</strong> Under a library, your loop keeps the thread; under a
+    framework, you hand it back at the end of every frame. That is what makes the arrangement work
+    in a browser, and it is also a discipline: a function that must return cannot contain a
+    modal loop. If you have ever written a "quick" blocking dialog in the middle of a render, you
+    have met the version of this that goes wrong.
+  </p>
+
+  <h3 id="theory-sdl">3.2 &nbsp; SDL3's answer, verified</h3>
+
+  <p>
+    SDL3 ships both arrangements and says so plainly. Here is the header itself — this is
+    <code>SDL3/SDL_main.h</code>, not a paraphrase:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">build/_deps/sdl3-src/include/SDL3/SDL_main.h — SDL 3.4.12</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">/*
+ * - Using a standard "main" function: this works like it always has for
+ *   the past 50+ years in C programming, and your app is in control.
+ * - Using the callback functions: this might clean up some code,
+ *   avoid some #ifdef blocks in your program for some platforms, be more
+ *   resource-friendly to the system, and possibly be the primary way to
+ *   access some future platforms (but none require this at the moment).
+ *
+ * This is up to the app; both approaches are considered valid and supported
+ * ways to write SDL apps.
+ */</code></pre>
+  </figure>
+
+  <p>
+    <em>Both approaches are considered valid and supported.</em> That sentence is the licence for
+    the design we are about to build, and it is worth taking seriously: SDL is not deprecating
+    <code>main</code>, and neither are we.
+  </p>
+
+  <p>
+    The callback path is switched on by defining one macro before including the header, and
+    consists of exactly four functions you implement. These are the signatures, copied from the
+    header rather than remembered:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_main.h — under <code>#ifdef SDL_MAIN_USE_CALLBACKS</code></span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">extern SDLMAIN_DECLSPEC SDL_AppResult SDLCALL SDL_AppInit(void **appstate, int argc, char *argv[]);
+extern SDLMAIN_DECLSPEC SDL_AppResult SDLCALL SDL_AppIterate(void *appstate);
+extern SDLMAIN_DECLSPEC SDL_AppResult SDLCALL SDL_AppEvent(void *appstate, SDL_Event *event);
+extern SDLMAIN_DECLSPEC void          SDLCALL SDL_AppQuit(void *appstate, SDL_AppResult result);</code></pre>
+  </figure>
+
+  <p>
+    And the return type, from <code>SDL3/SDL_init.h</code>, is a three-valued enum:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_init.h</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">typedef enum SDL_AppResult
+{
+    SDL_APP_CONTINUE,   /**&lt; Value that requests that the app continue from the main callbacks. */
+    SDL_APP_SUCCESS,    /**&lt; Value that requests termination with success from the main callbacks. */
+    SDL_APP_FAILURE     /**&lt; Value that requests termination with error from the main callbacks. */
+} SDL_AppResult;</code></pre>
+  </figure>
+
+  <p>
+    Four functions and three return values. Read them once more and notice how much design is
+    packed into that <code>void** appstate</code> in the first one and the <code>void*</code> in
+    the other three: SDL is a C library, it will not know what your program's state <em>is</em>,
+    and it is offering to carry an opaque pointer to it from the beginning of the program to the
+    end. §3.5 is about getting a C++ object safely through that hole.
+  </p>
+
+  <p>
+    Now the mechanism, because it explains a rule we will have to obey. What does defining
+    <code>SDL_MAIN_USE_CALLBACKS</code> actually <em>do</em>? Follow the includes.
+    <code>SDL_main.h</code> ends by including <code>SDL_main_impl.h</code>, and that header emits
+    this:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_main_impl.h — under <code>#ifdef SDL_MAIN_USE_CALLBACKS</code></span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">/* this define makes the normal SDL_main entry point stuff work...we just provide SDL_main() instead of the app. */
+#define SDL_MAIN_CALLBACK_STANDARD 1
+
+int SDL_main(int argc, char **argv)
+{
+    return SDL_EnterAppMainCallbacks(argc, argv, SDL_AppInit, SDL_AppIterate, SDL_AppEvent, SDL_AppQuit);
+}</code></pre>
+  </figure>
+
+  <p>
+    Look carefully at what that is. It is not a declaration; it is a <strong>function
+    definition</strong>, in a header, and it is not <code>inline</code>. Then, a few lines later,
+    <code>SDL_main_impl.h</code> emits the platform's real entry point — <code>main</code> on
+    Unix, <code>WinMain</code> on Windows — which calls <code>SDL_main</code>. Two facts fall out
+    of that immediately, and both will bite somebody:
+  </p>
+
+  <ul>
+    <li><strong>The header may be included in exactly one translation unit per program.</strong>
+        Two inclusions are two definitions of <code>SDL_main</code> and of <code>main</code>, and
+        the linker will say <code>duplicate symbol _main</code>. This is the One Definition Rule,
+        not an SDL quirk.</li>
+    <li><strong>The file that includes it must not define <code>main</code>.</strong>
+        <code>SDL_main.h</code> ends with <code>#define main SDL_main</code>, so a
+        <code>main()</code> written below the include is quietly renamed and collides with SDL's
+        own. The header says it in capitals: the app <em>"SHOULD NOT ALSO SUPPLY"</em> one.</li>
+  </ul>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — why the entry point cannot live in the library</span>
+    <p>
+      This is worth pausing on, because it is a genuinely instructive constraint rather than an
+      annoyance. We are building a static library, and it is tempting to put those four callbacks
+      inside it so no program has to write them. You cannot, and the reason is not about linkers
+      being fussy.
+    </p>
+    <p>
+      An entry point is not a library's property. If <code>libengine.a</code> defined
+      <code>main</code>, then <em>every</em> program linking the engine would have that
+      <code>main</code> imposed on it, with no way to opt out — and <code>sandbox</code>, three
+      files away, deliberately wants its own. A library's job is to be usable by programs it did
+      not anticipate; claiming the entry point is the one act that makes that impossible.
+    </p>
+    <p>
+      So the four callbacks are written by a macro, in the program's own <code>.cpp</code>, and
+      the header carrying that macro is the one file in <code>engine/include/</code> that is
+      <em>not</em> in the umbrella header — because an umbrella whose promise is "include
+      everything, it is harmless" must not be a way to acquire a <code>main</code> by accident.
+    </p>
+  </div>
+
+  <h3 id="theory-frame">3.3 &nbsp; The frame survives the inversion</h3>
+
+  <p>
+    Now the question that should be worrying you. Lesson 1.4 derived a loop with a specific shape,
+    and Lesson 1.2 established a contract about the order of two calls inside it:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{drain} \;\rightarrow\; \text{tick} \;\rightarrow\; \text{update} \;\rightarrow\; N \times \text{step} \;\rightarrow\; \text{render}(\alpha) \]</span>
+    <span class="eq-plain">drain events -&gt; tick clock -&gt; update input -&gt; N fixed steps -&gt; render(alpha)</span>
+  </div>
+
+  <p>
+    Lesson 1.2 was emphatic that the drain must come <em>before</em> <code>input::update()</code>,
+    because SDL's internal keyboard state is only refreshed by pumping the queue, and sampling it
+    early reads a frame-stale snapshot. In our loop that ordering was ours to enforce — the drain
+    was five lines above the update, in code we wrote.
+  </p>
+
+  <p>
+    Under callbacks there <em>is</em> no drain. Events arrive one at a time in
+    <code>SDL_AppEvent</code>, from a function SDL calls whenever it feels like it. So: does the
+    contract still hold?
+  </p>
+
+  <p>
+    It does, and we can do better than trusting the doc comment. SDL's implementation is in the
+    source tree we already fetched:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">build/_deps/sdl3-src/src/main/SDL_main_callbacks.c</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">SDL_AppResult SDL_IterateMainCallbacks(bool pump_events)
+{
+    if (pump_events) {
+        SDL_PumpEvents();
+    }
+    SDL_DispatchMainCallbackEvents();
+
+    SDL_AppResult rc = (SDL_AppResult)SDL_GetAtomicInt(&amp;apprc);
+    if (rc == SDL_APP_CONTINUE) {
+        rc = SDL_main_iteration_callback(SDL_main_appstate);
+        /* … */
+    }
+    return rc;
+}</code></pre>
+  </figure>
+
+  <p>
+    Pump, then dispatch every queued event to <code>SDL_AppEvent</code>, then call
+    <code>SDL_AppIterate</code>. The drain still happens, in the right place, before the frame. It
+    is just that SDL performs it instead of us. Figure 2 lays one frame out on a timeline.
+  </p>
+
+  @@FIG_FRAME@@
+
+  <div class="callout ok">
+    <span class="label">The point</span>
+    <p>
+      <strong>The contract survived the inversion; its enforcer changed.</strong> That is the
+      single most useful thing to take from this section. Inverting control does not alter what
+      must be true about a frame — it moves the responsibility for making it true. And when a
+      guarantee moves out of your code, the right response is not to assume it holds: it is to go
+      and read the three lines that now provide it, which is what we just did.
+    </p>
+  </div>
+
+  <p>
+    One consequence is worth stating because it looks like a rule and is not. Under callbacks,
+    <code>SDL_AppEvent</code> is called <em>per event</em> and <code>SDL_AppIterate</code>
+    <em>per frame</em>. So anything that must be answered once per frame — the input snapshot, the
+    clock tick, the accumulator — belongs in iterate. Anything that is genuinely about a single
+    event — a file drop, a text input character, a discrete key press with its
+    <code>repeat</code> flag — belongs in the event callback. That split is the same one Lesson
+    1.2 drew between <em>levels</em> and <em>edges</em>, arriving from a different direction.
+  </p>
+
+  <h3 id="theory-frame-worked">3.3.1 &nbsp; A worked example: how many steps is <em>N</em>?</h3>
+
+  <p>
+    The one thing about this loop that reliably surprises people is that <em>N</em> is not 1. Under
+    a library loop that is easy to overlook, because the <code>while</code> is right there in front
+    of you. Under callbacks, <code>on_fixed_step</code> is a function somebody else calls, and the
+    temptation to assume it runs once per frame is much stronger. So let us push real numbers
+    through the accumulator and watch.
+  </p>
+
+  <p>
+    At 60 Hz the fixed step is
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ h = \frac{1}{60} = 0.01666667\ \text{s} \]</span>
+    <span class="eq-plain">h = 1/60 = 0.01666667 seconds</span>
+  </div>
+
+  <p>
+    Now feed it five frames from a machine running at very close to — but not exactly — 60 frames
+    per second, which is the normal case, not a pathological one. Each frame adds its real
+    elapsed time to the accumulator, then takes whole steps of <em>h</em> out for as long as a
+    whole step remains. What is left over is <em>α</em>, expressed as a fraction of a step:
+  </p>
+
+  <p class="mono">
+    frame 1:&nbsp; acc = 0.000000 + 0.0161 = 0.016100 &nbsp;&#8594;&nbsp; 0.016100 &lt; h<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>0 steps</strong>, &nbsp; α = 0.016100 / 0.01666667 = 0.9660<br>
+    frame 2:&nbsp; acc = 0.016100 + 0.0172 = 0.033300 &nbsp;&#8594;&nbsp; one step leaves 0.016633<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>1 step</strong>, &nbsp;&nbsp; α = 0.016633 / 0.01666667 = 0.9980<br>
+    frame 3:&nbsp; acc = 0.016633 + 0.0170 = 0.033633 &nbsp;&#8594;&nbsp; two steps leave 0.000300<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>2 steps</strong>, &nbsp; α = 0.000300 / 0.01666667 = 0.0180<br>
+    frame 4:&nbsp; acc = 0.000300 + 0.0165 = 0.016800 &nbsp;&#8594;&nbsp; one step leaves 0.000133<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>1 step</strong>, &nbsp;&nbsp; α = 0.000133 / 0.01666667 = 0.0080<br>
+    frame 5:&nbsp; acc = 0.000133 + 0.0333 = 0.033433 &nbsp;&#8594;&nbsp; two steps leave 0.000100<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>2 steps</strong>, &nbsp; α = 0.000100 / 0.01666667 = 0.0060
+  </p>
+
+  <p>
+    Five frames, all within 1.6 milliseconds of each other in length, and the step counts are
+    <strong>0, 1, 2, 1, 2</strong>. Nothing went wrong; that <em>is</em> the accumulator working.
+    Frame 1 drew a picture with no simulation behind it at all, and frame 3 advanced the world
+    twice before drawing once.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The bug this predicts</span>
+    <p>
+      Put a <code>[Space]</code>-was-pressed check inside <code>on_fixed_step</code> and act on it,
+      and on a frame with 2 steps the player fires twice from one keypress. Put a
+      <code>++frame_counter</code> in there and your "frame" counter is now a step counter that
+      sometimes stalls. Both are real bugs, both are invisible at a locked 60 fps on your machine,
+      and both have exactly this table as their cause.
+    </p>
+    <p>
+      The rule that falls out: <strong>edges belong to the frame, levels belong to the step.</strong>
+      "Is W held?" is safe in a step — input is frame-coherent, so every step in a frame sees the
+      same answer. "Did Space go down?" is not, and belongs in <code>on_event</code> or in
+      <code>on_frame</code>. Lesson 1.2 drew this line for a different reason; here is the same
+      line arriving as a consequence of the accumulator.
+    </p>
+  </div>
+
+  <p>
+    Those numbers are not hand-computed. They come from running the engine's own
+    <code>engine::fixed_step</code> — the arithmetic in a lesson should be produced by the code
+    the lesson is about, or it is one transcription error away from teaching something false.
+  </p>
+
+  <h3 id="theory-order">3.4 &nbsp; Order, and its mirror</h3>
+
+  <p>
+    Back to §2.2's ladder, now with the third surface added. Figure 3 draws the whole thing.
+  </p>
+
+  @@FIG_LIFECYCLE@@
+
+  <p>
+    Two things in that figure are worth drawing out.
+  </p>
+
+  <p>
+    <strong>The two arrows are the same ladder read in opposite directions.</strong> That is the
+    invariant a lifetime-owning layer exists to hold, and in C++ it is not something you have to
+    remember — it is what destructors already do. Members are destroyed in reverse declaration
+    order; locals in reverse construction order. Our <code>stop()</code> writes the reverse order
+    explicitly anyway, because the three handles are raw <code>SDL_*</code> pointers rather than
+    RAII members, and because a reader should be able to see the mirror rather than infer it.
+  </p>
+
+  <p>
+    <strong>The three dashed markers are the interesting part.</strong> Each surface is a point at
+    which you stop climbing:
+  </p>
+
+  <ul>
+    <li><code>surface::headless</code> — stop before the window, and <em>before video</em>. There
+        is no display to talk to, which is the entire point: this is what makes a build server a
+        valid place to run the engine.</li>
+    <li><code>surface::gpu</code> — stop after the window. The window is claimed by nobody, ready
+        for <code>gpu_device::create</code>.</li>
+    <li><code>surface::renderer</code> — the whole ladder, which is Module 1's presentation path.</li>
+  </ul>
+
+  <p>
+    That middle one encodes a constraint we have been carrying since Lesson 4.2 as a comment and a
+    hope: <strong>a window is claimed by an SDL_GPU device or driven by an SDL_Renderer, and there
+    is no order of operations in which it is both.</strong> Until today that rule lived in
+    <code>main()</code> as an <code>if</code> with a paragraph above it. Now it is the difference
+    between two enum values, chosen before anything exists — which is the only time it
+    <em>can</em> be chosen, because by the time you could regret the answer the window already
+    belongs to somebody.
+  </p>
+
+  <h3 id="theory-void">3.5 &nbsp; Ownership across a C boundary</h3>
+
+  <p>
+    One piece of theory left, and it is the fiddliest thing in the lesson.
+  </p>
+
+  <p>
+    <code>SDL_AppInit</code> gives you a <code>void** appstate</code>. Whatever pointer you store
+    there is handed back to <code>SDL_AppIterate</code>, <code>SDL_AppEvent</code> and
+    <code>SDL_AppQuit</code> for the rest of the program. That is a perfectly sensible C design:
+    SDL cannot know your type, so it carries an opaque pointer and stays out of the way.
+  </p>
+
+  <p>
+    But we have a C++ object with a destructor, and C++'s entire answer to lifetime is "an owner
+    whose destructor runs". A <code>void*</code> has no destructor. So there is a gap, and the
+    question is how to cross it without a leak and without a double free. Figure 5 is the shape of
+    the answer.
+  </p>
+
+  @@FIG_OWNERSHIP@@
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>unique_ptr::release()</code> and <code>reset()</code></span>
+    <p>
+      <code>std::unique_ptr&lt;T&gt;</code> is the course's default owner: it holds a pointer, and
+      when it dies it deletes what it holds. Two members exist specifically for handing ownership
+      to and from code that does not speak <code>unique_ptr</code>:
+    </p>
+    <ul>
+      <li><code>release()</code> returns the raw pointer <strong>and forgets it</strong>. The
+          <code>unique_ptr</code> is now empty and will delete nothing. You have taken ownership
+          back, and you are on the hook.</li>
+      <li>The constructor <code>unique_ptr&lt;T&gt;(raw)</code> does the reverse: it
+          <em>adopts</em> a raw pointer, and will delete it at end of scope.</li>
+    </ul>
+    <p>
+      Together they are the sanctioned way to pass an object through an API that only understands
+      raw pointers. The pointer is genuinely unowned in between, and the discipline is to make
+      that interval as short and as branch-free as you can manage.
+    </p>
+  </div>
+
+  <p>
+    Now the part that looks wrong and is not. Our <code>init</code> publishes the pointer to SDL
+    <strong>before</strong> anything that can fail:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/platform/app.cpp — the shape of it</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">app* const self = instance.release();
+*appstate = self;                       // SDL owns it from here
+
+const app_config cfg = self-&gt;configure(argc, argv);
+if (!self-&gt;sys().start(cfg)) { return SDL_APP_FAILURE; }
+if (!self-&gt;on_start())       { return SDL_APP_FAILURE; }
+return SDL_APP_CONTINUE;</code></pre>
+  </figure>
+
+  <p>
+    The instinct is to publish only on success — build everything, and hand the pointer over once
+    you know it worked. Follow that through. If <code>start()</code> fails, the
+    <code>unique_ptr</code> destroys the instance here, and <code>*appstate</code> stays null. SDL
+    then calls <code>SDL_AppQuit(nullptr, SDL_APP_FAILURE)</code> — the header is explicit that
+    quit runs <em>"in all cases, even if SDL_AppInit requests termination at startup"</em> — and
+    our quit function receives a null pointer with <strong>no way to distinguish "never built" from
+    "already cleaned up"</strong>. Two cleanup paths, and a null that means two different things.
+  </p>
+
+  <p>
+    Publishing first collapses that: there is one owner, one teardown path, and one function that
+    deletes. The window in which the raw pointer is unowned contains no branches at all — three
+    statements, none of which can fail, and the last of them hands it to SDL. That is the trade,
+    and it is worth being able to make it deliberately rather than by instinct.
+  </p>
+
+  <p>
+    §4 builds all of this. But there is one design rule to state before we write code, because it
+    is the thing that keeps offering two arrangements from becoming two engines — and Figure 5 is
+    the whole of it.
+  </p>

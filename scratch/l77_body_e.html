@@ -1,0 +1,473 @@
+  <h2 id="listings">11. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/anim/clip.hpp</code></td><td>new</td>
+          <td>The format and the API: <code>keyframe</code>, <code>joint_track</code>,
+              <code>clip</code>, the cursor, sampling, wrapping, cross-fading, validation and
+              reduction.</td></tr>
+      <tr><td><code>engine/src/anim/clip.cpp</code></td><td>new</td>
+          <td>Two bracket searches that must agree, one templated evaluation path, and the greedy
+              fit-and-split.</td></tr>
+      <tr><td><code>engine/include/engine/math/transform.hpp</code></td><td>modified</td>
+          <td><code>transform_blend</code> and <code>transform_blend_slerp</code> — three fields,
+              three rules, and the scale decision argued out in the comment above them.</td></tr>
+      <tr><td><code>engine/include/engine/math/quat.hpp</code></td><td>modified</td>
+          <td>A doc-comment correction: <code>quat_nlerp</code>'s error table was in sphere degrees
+              and the sentence under it was thinking in rotation degrees. Both now written out and
+              labelled.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One line. The umbrella lint would have stopped the configure without it.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>src/anim/clip.cpp</code>, and a note that the list's alphabetical order and its
+              dependency order agree here by luck.</td></tr>
+      <tr><td><code>demos/rig/main.cpp</code></td><td>modified</td>
+          <td>A clip mode: two baked clips, a cross-fade, a cursor readout, and a one-key switch
+              between blending poses and blending matrices.</td></tr>
+      <tr><td><code>scratch/verify_77.cpp</code></td><td>new</td>
+          <td>Nine sections, 39 checks, twelve controls — including a cursor array jammed at 9999, a
+              lerp written without <code>nearest</code>, and a reduction fitted against the wrong
+              curve.</td></tr>
+      <tr><td><code>scratch/build_verify_77.sh</code></td><td>new</td>
+          <td>7.6's script, which refuses to measure against a library with no build type.</td></tr>
+      <tr><td><code>scratch/golden_77.cpp</code></td><td>new</td>
+          <td>The reference render, because <code>math/transform.hpp</code> and
+              <code>math/quat.hpp</code> are both inside <code>demo_scene.cpp</code>'s include
+              closure.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/anim/clip.hpp@@
+
+  @@LISTING:engine/src/anim/clip.cpp@@
+
+  @@LISTING:engine/include/engine/math/transform.hpp@@
+
+  @@LISTING:engine/include/engine/math/quat.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/rig/main.cpp@@
+
+  @@LISTING:scratch/verify_77.cpp@@
+
+  @@LISTING:scratch/build_verify_77.sh@@
+
+  @@LISTING:scratch/golden_77.cpp@@
+
+  <h2 id="run">12. Build &amp; run</h2>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+
+  <p>
+    The configure step prints the umbrella lint's tally, and it moved by one:
+  </p>
+
+  <pre>-- engine: umbrella lists 85 of 86 public headers (1 documented exception)</pre>
+
+  <p>
+    Then the demo. Everything Lesson 7.6 put in it still works; <kbd>P</kbd> is the new half.
+  </p>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/rig
+
+# start in clip mode
+./build/demos/rig --clip --time 0.6
+
+# the cross-fade, headless and deterministic
+./build/demos/rig --clip --fade 0.5 --shot scratch/x.ppm
+./build/demos/rig --clip --fade 0.5 --matrix-blend --shot scratch/x.ppm</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> Press <kbd>P</kbd> and the sliders are replaced by a curl
+    that swings through a full cycle every two seconds. The panel's third line is the one to watch
+    while it plays:
+  </p>
+
+  <pre>CLIP MODE [P]  playing [Space]
+t  0.500 / 2.00 s   phase 0.250
+cursor  curl j5   2   twist j5   3
+fade 0.500  curl -&gt; twist   ([Up]/[Down])
+blend space   poses [M]
+chain length  5.0000  (bind 5.000)
+worst local arc  28.46 deg, 0 flips
+curl  60 keys, 1200 B, 5 of 18 channels
+twist 56 keys, 1120 B, 4 of 18 channels
+loop seam 3.415e-06 deg</pre>
+
+  <p>
+    <strong>Watch the cursor line.</strong> It sits still for several frames and then steps by one,
+    over and over. That is §4 happening in front of you — and the interval is longer than you might
+    expect, because these clips were <em>reduced</em>: 60 surviving keys over five channels is twelve
+    per channel, so eleven intervals across two seconds, averaging <strong>0.18 s</strong> against a
+    frame of 0.017 s. About ten frames of &ldquo;the answer is the same as last time&rdquo;, then one
+    step. That is the whole argument for the cursor, visible.
+  </p>
+
+  <p>
+    The two channel counts are §3 in miniature: the curl animates five of the six joints and the
+    twist animates four, and <strong>neither clip has a single position or scale channel</strong> —
+    5 and 4 of a possible 18. The baker wrote all eighteen; <code>reduce</code> deleted thirteen and
+    fourteen of them respectively, exactly.
+  </p>
+
+  <p>
+    Then the experiment the lesson exists for. Hold <kbd>Up</kbd> to fade from the curl into the
+    twist and watch <code>chain length</code>: it stays at <strong>5.0000</strong> the entire way
+    across. Now press <kbd>M</kbd> and do it again with identical inputs and identical weights:
+  </p>
+
+  <pre>rig: clip t 0.500 s, fade 0.500, blend poses
+rig: chain 5.00000 of 5.000, worst arc 28.46 deg
+
+rig: clip t 0.500 s, fade 0.500, blend MATRICES
+rig: chain 4.65020 of 5.000, worst arc 28.46 deg</pre>
+
+  <p>
+    The limb loses <strong>0.3498 units of five</strong>, and the tip is visibly thinner than the
+    root. Toggle <kbd>M</kbd> back and forth a few times with the fade parked at 0.5; the difference
+    is much easier to recognise later if you have watched it appear.
+  </p>
+
+  <p>
+    The keys, in the order that makes the point:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Key</th><th>What it does</th><th>What to look for</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>P</kbd></td><td>clip mode on/off</td>
+          <td>the pose now comes from data; nothing downstream of <code>build_pose</code>
+              changed</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>play / pause</td>
+          <td>paused, the cursor line stops moving and the pose is stable — a clip is a
+              function</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>scrub the playhead</td>
+          <td>scrub backwards and the cursor jumps; §4.1's search fallback is what makes that
+              cheap</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>cross-fade curl ↔ twist</td>
+          <td><code>chain length</code> pinned at 5.0000, and <code>worst local arc</code>
+              telling you whether nlerp is the right rule</td></tr>
+      <tr><td><kbd>M</kbd></td><td>blend matrices instead of poses</td>
+          <td>the limb shortens and tapers; the number drops to 4.6502</td></tr>
+      <tr><td><kbd>T</kbd> <kbd>N</kbd> <kbd>W</kbd> <kbd>B</kbd></td><td>Lesson 7.6's modes</td>
+          <td>unchanged — twist, no-inverse-binds, the weight view, the bind ghost</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    And the harness, which needs a <em>Release</em> engine because Lesson 7.6 found out the hard way
+    that <code>-O2</code> on a harness's command line does not reach the library it links:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_77.sh</code></pre>
+
+  <pre>verify_77: build-rel/engine/libengine.a (Release)
+verify_77 - Lesson 7.7, Sampling and Blending
+   rig: 23 joints, depth 9, residual 0.000e+00
+…
+39 / 39 checks passed</pre>
+
+  <p>
+    And the golden, because two files this lesson touched are inside
+    <code>demo_scene.cpp</code>'s include closure:
+  </p>
+
+  <pre>closure: 70 files reachable from demo_scene.cpp + the software render path
+  IN CLOSURE  &lt;-- golden must RUN  engine/include/engine/math/transform.hpp
+  IN CLOSURE  &lt;-- golden must RUN  engine/include/engine/math/quat.hpp
+  outside                         engine/include/engine/anim/clip.hpp
+  outside                         engine/src/anim/clip.cpp
+  outside                         demos/rig/main.cpp
+VERDICT: golden must be run as a real instrument
+
+golden_77: rc=0  ours=1382416 bytes  reference=1382416 bytes
+golden_77: identical=YES</pre>
+
+  <p>
+    Both edits were additive — two new <code>inline</code> functions and a doc comment — and the
+    picture is unchanged: hash <code>E917C06C</code>, the eleventh consecutive byte-identical run and
+    the twenty-sixth lesson not to move a pixel.
+  </p>
+
+  <h2 id="pitfalls">13. Common pitfalls &amp; debugging</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>The character does a full-body spin for exactly one keyframe interval, in the middle of
+            a clip that is otherwise fine.</td>
+        <td>An interpolation without <code>nearest</code>, across a pair of keys the exporter wrote
+            as <code>q</code> and <code>−q′</code>. The long way round is 359°.</td>
+        <td>One four-component dot product; negate the second if it is negative.
+            <code>quat_nlerp</code> and <code>quat_slerp</code> both do it already, so suspect any
+            blend you wrote yourself — especially one in a shader. §8.</td>
+      </tr>
+      <tr>
+        <td>A visible tick once per loop, at the same point every cycle, on an animation that looks
+            correct at every instant.</td>
+        <td>The last key is one frame short of the stated duration — <code>frames</code> samples
+            instead of <code>frames + 1</code>.</td>
+        <td><code>validate</code> and read <code>loop_gap_radians</code>: the fixture reports 5.8215°
+            for a one-frame gap and 0.0000° when closed. §6.1.</td>
+      </tr>
+      <tr>
+        <td>The character snaps back to the origin every time a looping clip wraps.</td>
+        <td>Root motion in the clip, applied to the pose rather than to the world transform.</td>
+        <td>Not fixed in this lesson, and named in §10. <code>clip_report::root_travel</code> is how
+            you confirm the diagnosis — 1.2000 units on the fixture.</td>
+      </tr>
+      <tr>
+        <td>The animation freezes for a fraction of a second when something scrubs or slows down,
+            then resumes perfectly.</td>
+        <td>A negative playback time reaching the sampler, clamped to the first key.</td>
+        <td><code>wrap_time</code>, not <code>std::fmod</code> — the sign of the dividend is the
+            whole bug. §6.2.</td>
+      </tr>
+      <tr>
+        <td>A cross-fade looks almost right, but the hands and feet swim and the character seems
+            slightly small during the transition.</td>
+        <td>The blend happened on composed matrices rather than on local poses; the error is
+            <code>cos(Δ/2)</code> with the <em>accumulated</em> angle, so it is worst at the
+            extremities.</td>
+        <td>Blend the poses, then compose. If you only have matrices, that is the bug — get the
+            poses. §7.2.</td>
+      </tr>
+      <tr>
+        <td>An upper-body clip plays and the legs collapse to the origin.</td>
+        <td>The pose vector was not filled for the joints the clip has no tracks for.</td>
+        <td><code>sample</code> writes <em>every</em> joint and falls back to
+            <code>local_bind</code>, so this is a symptom of a hand-rolled sampler. §2.</td>
+      </tr>
+      <tr>
+        <td>Reduction says it met a half-degree tolerance and playback is visibly worse than that.</td>
+        <td>The fit used a different interpolation rule than the sampler — the classic case is
+            slerp-fitted, nlerp-played.</td>
+        <td>Fit with the sampler's own function. The harness measures a 4.5× budget overrun on a
+            constant-rate turn. §9.3.</td>
+      </tr>
+      <tr>
+        <td>Every joint is animated by its neighbour after an import.</td>
+        <td>The skeleton was reordered to satisfy <code>joints[i].parent &lt; i</code> and the tracks
+            were not reordered in the same pass.</td>
+        <td>One permutation, applied to both arrays.
+            <code>clip_report::beyond_skeleton</code> catches the case where the clip is
+            <em>longer</em> than the skeleton; nothing catches a permutation, which is why it has to
+            be one pass. §10.</td>
+      </tr>
+      <tr>
+        <td>Sampling gets measurably slower the longer the program has been running.</td>
+        <td>A playback clock that accumulates without bound; <code>std::fmod</code>'s cost grows with
+            the quotient.</td>
+        <td>Wrap the playhead every step. Measured at up to 3.7× in §9.4's box.</td>
+      </tr>
+      <tr>
+        <td>A clip's memory does not go down as much as the key count does.</td>
+        <td>Three <code>std::vector</code> headers per joint are a fixed 72 bytes, whether the
+            channels hold ten keys or none.</td>
+        <td>Expected, and measured: <code>hdr/keys</code> climbs from 0.04× to 1.46× as the
+            tolerance loosens. The real fix is a flat arena, which is Module 9. §9.2.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 id="exercises">14. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Add <code>STEP</code> interpolation.</strong> A discrete channel — a visibility flag,
+        a texture index, a hand-pose enum — must hold its value until the next key rather than slide
+        toward it. Add an <code>interpolation</code> field to <code>joint_track</code> and honour it
+        in <code>eval</code>.
+      </p>
+      <p>
+        <em>Hint:</em> the change inside <code>eval</code> is one line — return
+        <code>keys[cursor].value</code>. The interesting part is <code>reduce</code>: what does
+        fit-and-split mean when the reconstruction is a staircase? <em>Sketch:</em> a step channel's
+        interior key fits only if its value <em>equals</em> the span's left endpoint, so the greedy
+        pass collapses runs of identical values and nothing else — which is exactly right, and is
+        run-length encoding arriving from a different direction.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Find the arc where nlerp stops being free, for your own budget.</strong> §5.2 shows
+        0.0169° at 24° of arc and Lesson 7.5 reports 73.50° for a half-degree budget. Write a loop
+        that, for a given budget, finds the arc at which nlerp's worst lag reaches it, and tabulate
+        budgets of 0.1°, 0.5° and 2°.
+      </p>
+      <p>
+        <em>Hint:</em> nlerp's angle from <code>a</code> at parameter <code>t</code> on a sphere arc
+        <code>Ω</code> is <code>atan2(t sin Ω, (1−t) + t cos Ω)</code>; the lag peaks near
+        <code>t ≈ 0.23</code> and <code>0.77</code>. <em>What to notice:</em> the relationship is not
+        linear and not quite a square root — and every number you produce is in sphere degrees unless
+        you double it. Say which in your own comment; §5.2's box is what happens when you do not.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Make the loop seam a warning the demo shows.</strong> Bake the <code>rig</code>
+        demo's clips with <code>f &lt; frames</code> instead of <code>f &lt;= frames</code>, and make
+        the panel print <code>loop seam</code> in a different colour when it exceeds a degree.
+      </p>
+      <p>
+        <em>Hint:</em> <code>ImGui::TextColored</code>. <em>What to notice:</em> watch the tube while
+        the clip loops with the broken bake. The tick is genuinely hard to see and trivially easy to
+        measure, which is the argument for measuring it.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Additive blending (engine challenge).</strong> An additive layer applies the
+        <em>difference</em> between an animation and a reference pose on top of whatever is playing —
+        an aim offset, a flinch, a limp. Implement
+        <code>blend_additive(base, reference, additive, w, out)</code>.
+      </p>
+      <p>
+        <em>Sketch:</em> the rotation delta in the joint's own frame is
+        <code>D = conj(R) · A</code>, and a fraction of it is <code>quat_pow_unit(nearest(identity,
+        D), w)</code> — the function Lesson 7.5 wrote for slerp, meaning exactly "a fraction of this
+        rotation". Then <code>out = B · D^w</code>. Position is
+        <code>B + w·(A − R)</code>. <em>The test to write first:</em> when <code>base</code> equals
+        <code>reference</code> and <code>w = 1</code>, the result must equal <code>additive</code>
+        exactly — <code>R · conj(R) · A = A</code>. That identity is free and it catches every side
+        you could have multiplied on. <em>What to think about:</em> scale has no good additive rule
+        here — a componentwise difference makes "grow 10%" mean +0.1 rather than ×1.1 — and the ratio
+        that fixes it runs into §5.3's zero. Decide, and write down why.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Load a real clip from glTF (engine challenge, a lesson's worth of work).</strong>
+        §10 scoped this out; here is the shape of it. glTF stores animations as channels, each with a
+        <em>sampler</em> (an input accessor of times and an output accessor of values) and a
+        <em>target</em> (a node index and one of <code>translation</code>, <code>rotation</code>,
+        <code>scale</code>).
+      </p>
+      <p>
+        <em>The four things that will bite, in order:</em> (1) the importer must build the skeleton
+        from <code>skins.joints</code> and <strong>topologically sort it</strong> to satisfy
+        <code>joints[i].parent &lt; i</code>, then apply the <em>same permutation</em> to the tracks
+        — do both in one pass or every joint is animated by its neighbour; (2) a channel targets a
+        <em>node</em>, and nodes that are not joints are legal and must be dropped; (3) the duration
+        is not in the file — it is the maximum input time across all samplers, and §6.1 is about why
+        that is not quite the right answer; (4) rotations arrive in <code>xyzw</code> order and this
+        engine stores <code>wxyz</code>, which a blind <code>memcpy</code> turns into a 180° error
+        about a diagonal axis. <em>The test:</em> <code>validate</code> the imported clip, and expect
+        <code>sign_flips</code> to be non-zero — real exporters produce them, and finding that it is
+        <em>not</em> zero is evidence your importer read the file rather than your own bake.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">15. Recap &amp; next</h2>
+
+  <p>
+    The engine can play recorded motion. Concretely, it gained:
+  </p>
+
+  <ul>
+    <li><strong>A clip format</strong> — independent per-channel tracks with their own absolute key
+        times, where an empty channel means the bind value <em>exactly</em> and costs nothing.</li>
+    <li><strong>A sampler</strong> that finds the bracketing interval with a remembered cursor,
+        falls back to a binary search on any jump, and is immune to a corrupt cursor.</li>
+    <li><strong>Three interpolation rules</strong>, one per field, each with a measurement, a failure
+        mode or a specification behind it — including the scale decision Lesson 7.5 left open.</li>
+    <li><strong>Correct looping</strong>, with the duration authored rather than derived, the seam
+        measured, and root motion separated from it.</li>
+    <li><strong>Cross-fading in pose space</strong>, which preserves every bone length exactly, and a
+        report that tells you whether nlerp is the right rule for the blend you are doing.</li>
+    <li><strong>Load-time canonicalisation and keyframe reduction</strong>, which together take a
+        one-second walk from 37,076 bytes to 3,716.</li>
+  </ul>
+
+  <p>
+    And three things worth carrying forward that are not code.
+  </p>
+
+  <p>
+    <strong>The seam held where it was drawn, and did not pretend to cover more.</strong> Lesson
+    7.6's prediction — that a clip sampler would replace <code>build_pose</code> and nothing else in
+    the demo would change — was exactly right for the sampler, because everything downstream takes a
+    span of <code>transform</code>. It was not right for <kbd>M</kbd>, the matrix-blend path, and it
+    could not have been: that is a different operation on a different type, and a span cannot hide a
+    change of what is being averaged. An abstraction that holds is one that is honest about its
+    edges.
+  </p>
+
+  <p>
+    <strong>A benchmark with two variables in it has none.</strong> §4.1's first table varied the
+    wrap period by changing the step size and confidently reported 43% for the wrong cause. §9.4's
+    first timing had <em>two</em> confounds, and fixing the first one left the number still
+    backwards. Both were found by noticing a result that contradicted a simpler fact — a longer
+    track cannot be faster to search — rather than by suspecting the instrument.
+  </p>
+
+  <p>
+    <strong>A lossy transformation must be fitted with its consumer's exact reconstruction.</strong>
+    §9.3 is about quaternions, and the rule is not. Whatever you throw data away against, the thing
+    that reads it back is the thing you owe the tolerance to.
+  </p>
+
+  <p>
+    <strong>Next: Lesson 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound.</strong> Module 7 closes
+    with the sense this engine has never addressed. SDL3's audio model is a stream you push into and
+    a callback that pulls, with resampling and format conversion handled at the boundary; on top of
+    it goes a small mixer, and on top of that, spatialization — attenuation with distance and panning
+    with direction, which is the first time this course will use a listener's transform for something
+    other than drawing. Two of this lesson's ideas come along unchanged: a sound is an asset and its
+    playhead is not, and an attenuation curve is another lossy reconstruction that has to agree with
+    what plays it back.
+  </p>
+
+  <h2 id="reading">16. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>glTF 2.0 Specification</strong>, §3.11 <em>Animations</em> and Appendix C
+        <em>Animation Sampler Interpolation Modes</em> — the three interpolation modes with their
+        formulas, the requirement that key times be strictly increasing with
+        <code>time[0] ≥ 0</code>, and the slerp formula written with the sign of the dot product
+        folded in, which is §8's <code>nearest</code> expressed as a multiplier.</li>
+    <li><strong>Jason Gregory, <em>Game Engine Architecture</em>, 3rd ed.</strong>, Chapter 12
+        (Animation Systems) — the best book-length treatment of clips, blend trees, additive layers
+        and root motion, and the source most of this vocabulary comes from.</li>
+    <li><strong>Ken Shoemake, "Animating Rotation with Quaternion Curves", SIGGRAPH 1985</strong> —
+        the paper slerp comes from, and still the clearest statement of why a rotation channel is not
+        three scalar channels.</li>
+    <li><strong>Riot Games Technology Blog, "Compressing Skeletal Animation Data"</strong> and
+        <strong>Nicholas Frechette's <em>Animation Compression</em> series</strong> (the ACL author's
+        blog) — what §9.2 looks like taken seriously: error metrics defined on the <em>skin</em>
+        rather than on the joint, variable bit rates per channel, and the quantisation §10
+        names.</li>
+    <li><strong>Real-Time Rendering, 4th ed.</strong>, §4.3 (Quaternions) — the reference table for
+        everything Module 7 derived, including the schedule difference between slerp and nlerp.</li>
+    <li><strong><code>docs/math-toolbox.html</code></strong> — the cumulative appendix, now carrying
+        the keyframe bracket, the normalised segment parameter, and the arithmetic-minus-geometric
+        mean gap that settled the scale question.</li>
+  </ul>

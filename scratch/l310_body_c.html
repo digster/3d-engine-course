@@ -1,0 +1,559 @@
+
+  <!-- ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>
+    Every file created or changed this lesson, in full. Two new files in <code>core/</code>, the
+    approximate encode and its enum in <code>colour</code>, one field and two call sites in the
+    rasterizer, the demo's instrumentation and budget panel, and one line of CMake.
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/core/profile.hpp</code></td><td><em>new</em></td>
+          <td><code>zone</code>, <code>profiler</code>, <code>scope_timer</code>; the calibration
+              the instrument performs on itself</td></tr>
+      <tr><td><code>src/core/profile.cpp</code></td><td><em>new</em></td>
+          <td>Tick conversion, the ring, and the median by <code>nth_element</code></td></tr>
+      <tr><td><code>src/gfx/colour.hpp</code></td><td>modified</td>
+          <td><code>linear_to_srgb_fast</code>, <code>linear_to_srgb_u8_fast</code>,
+              <code>encode_mode</code>; <code>to_encoded</code> takes a mode</td></tr>
+      <tr><td><code>src/gfx/colour.cpp</code></td><td>modified</td>
+          <td>The fitted coefficients, the toe kept exact, the NaN guard repeated deliberately</td></tr>
+      <tr><td><code>src/gfx/raster.hpp</code></td><td>modified</td>
+          <td><code>fill_style::encode</code>, defaulting to <code>exact</code></td></tr>
+      <tr><td><code>src/gfx/raster.cpp</code></td><td>modified</td>
+          <td>Three encode call sites take the mode; <code>pixel_from</code> gains a parameter</td></tr>
+      <tr><td><code>src/main.cpp</code></td><td>modified</td>
+          <td>Six zones, <code>sort_back_to_front</code> extracted, the budget panel,
+              <kbd>3</kbd> and <kbd>4</kbd>, the encode pixel count</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption><span class="fignum">Table 3.</span> This lesson's file manifest.</figcaption>
+  </figure>
+
+  @@LISTING:src/core/profile.hpp@@
+  @@LISTING:src/core/profile.cpp@@
+  @@LISTING:src/gfx/colour.hpp@@
+  @@LISTING:src/gfx/colour.cpp@@
+  @@LISTING:src/gfx/raster.hpp@@
+  @@LISTING:src/gfx/raster.cpp@@
+  @@LISTING:src/main.cpp@@
+  @@LISTING:CMakeLists.txt@@
+
+  <!-- ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>Same three commands as every lesson since 0.4.</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span> <span class="tag">shell</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build -j
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span> <span class="tag">shell</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build --config Release -j
+.\build\Release\engine.exe</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Measure a Release build, always</span>
+    <p>
+      Every number on this page is from <code>-O2</code>. A debug build is not slower by a
+      constant factor — it is slower by a factor that <em>varies per function</em>, because what
+      inlining removes differs everywhere. Lesson 1.5 measured this directly: <code>put_pixel</code>
+      versus a row pointer was 5.1× at <code>-O0</code> and 14.8× at <code>-O2</code>. Profiling a
+      debug build does not give you a scaled version of the truth; it gives you a ranking of a
+      different program. Add <code>-DCMAKE_BUILD_TYPE=Release</code> on single-config generators.
+    </p>
+  </div>
+
+  <h3><span class="num">6.1</span>Expected result</h3>
+
+  <p>
+    The window opens on the Module 3 scene. The first line on stdout is now the profiler
+    calibrating itself:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">stdout</span> <span class="tag">output</span></figcaption>
+    <pre><code>profiler: counter resolves to 41.67 ns, a scope_timer costs 25.79 ns
+          -&gt; instrument nothing shorter than 4.17 us</code></pre>
+  </figure>
+
+  <p>
+    Your three numbers will differ, and the first one is worth noting down — it is the only
+    property of your machine that decides what the rest of this lesson is allowed to measure.
+  </p>
+
+  <p>
+    The budget panel is on by default over the render. Six coloured segments in one bar, seven rows
+    of numbers beneath it, and two lines at the bottom giving the fill's unit cost and the encode
+    in force. Things to do with it, in order:
+  </p>
+
+  <ul>
+    <li><strong>Read the stacked bar.</strong> One segment is essentially the whole thing. That is
+        <code>fill</code>.</li>
+    <li><strong>Compare <code>engine</code> against <code>wall</code>.</strong> With vsync on the
+        wall clock reads about 16,667 µs no matter what the renderer does. This is why a frame-rate
+        counter cannot tell you whether you made anything faster, and why the budget exists.</li>
+    <li><strong>Press <kbd>4</kbd>.</strong> Watch <code>fill</code> drop by about a third and
+        <code>engine</code> with it. Watch the picture not change. Watch the pixel count on the
+        bottom-right line, which is the only evidence that anything happened.</li>
+    <li><strong>Press <kbd>G</kbd> to cycle the shading evaluation.</strong> Per-pixel against
+        Gouraud, in microseconds, on the same geometry — Lesson 3.8's argument, now with a
+        budget around it.</li>
+    <li><strong>Press <kbd>S</kbd> to switch to nearest filtering.</strong> A smaller change than
+        you expect: about 1.26× on the fetch, which is a small share of a lit fragment.</li>
+    <li><strong>Press <kbd>T</kbd> to subdivide the floor.</strong> Same pixels, more triangles —
+        §3.3's right-hand panel, live. <code>collect</code> climbs; <code>fill</code> barely
+        moves.</li>
+    <li><strong>Press <kbd>3</kbd>.</strong> The panel disappears and <code>overlay</code> drops,
+        because a profiler HUD is not free and this one charges itself honestly.</li>
+  </ul>
+
+  <p>
+    Then run the harness, which is where every number in this lesson comes from:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the harness</span> <span class="tag">shell</span></figcaption>
+    <pre><code>c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_310.cpp src/core/profile.cpp \
+    src/gfx/{mesh,obj,clip,raster,texture,framebuffer,depth_buffer,colour}.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_310
+./scratch/verify_310</code></pre>
+  </figure>
+
+  <p>
+    It takes a couple of minutes — it is doing real work rather than pretending to — and ends with
+    <code>ALL CHECKS PASS (0 failures)</code>.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Every zone reports 0.00, or absurdly round numbers</span>
+    <p><strong>Symptom.</strong> Timings come out as 0, or as suspiciously exact multiples of some
+       constant.</p>
+    <p><strong>Cause.</strong> The interval is below the clock's resolution (§2.2). The multiples
+       are the tick itself showing through — if everything is a multiple of 41.67 ns, you have
+       found your timer's granularity the hard way.</p>
+    <p><strong>Fix.</strong> Print <code>1e9 / SDL_GetPerformanceFrequency()</code> and compare.
+       Then either merge zones until each is above 100× that, or move the question to a
+       differential benchmark (§3.5). Do <em>not</em> reach for a finer clock; there usually is
+       not one, and if there were, §2.3 is waiting.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The zones sum to more than the frame</span>
+    <p><strong>Symptom.</strong> <code>other_ns()</code> is pinned at zero and
+       <code>zones_overlapped()</code> is true.</p>
+    <p><strong>Cause.</strong> Two <code>scope_timer</code>s were alive at once — usually a zone
+       wrapping a function that itself opens a zone.</p>
+    <p><strong>Fix.</strong> Zones are a <em>partition</em>, not a call tree. Either split the
+       outer one so it excludes the inner, or delete the inner. A nesting profiler is a real and
+       useful thing, but it needs a stack and a different display, and pretending a flat one
+       supports nesting produces a budget that double-counts.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A "huge speedup" that vanishes in the real program</span>
+    <p><strong>Symptom.</strong> The microbenchmark says 40×. The frame does not move.</p>
+    <p><strong>Cause.</strong> Usually one of three. The compiler deleted the work because nothing
+       consumed the result. The function is faster in a tight loop than in situ (§4.10 — 2.27×
+       here, with a control to prove it). Or Amdahl: the phase was 2% of the frame and you never
+       checked (§3.4).</p>
+    <p><strong>Fix.</strong> Accumulate into something <code>volatile</code>; measure inside the
+       real loop with a differential ladder; and compute the ceiling <em>before</em> starting the
+       work.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Numbers that change every run by 2×</span>
+    <p><strong>Symptom.</strong> The same build gives wildly different answers minute to
+       minute.</p>
+    <p><strong>Cause.</strong> Thermal or power state, most likely. A laptop on battery, a hot
+       chip that has clocked down, a background build, or the OS moving your thread between a
+       performance core and an efficiency one — the last is very easy to hit on Apple silicon and
+       big.LITTLE ARM.</p>
+    <p><strong>Fix.</strong> Take the <em>minimum</em> over several batches (§2.4), which rejects
+       one-sided noise by construction; plug in; close things; and never compare two numbers taken
+       hours apart. Best of all, measure both variants in the <em>same run</em>, back to back —
+       which is exactly what §4.7's candidate loop does.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The optimisation is correct and the picture is wrong</span>
+    <p><strong>Symptom.</strong> An approximate encode ships and gradients grow faint bands, or
+       white is 254 instead of 255.</p>
+    <p><strong>Cause.</strong> The fit was judged on its worst <em>rounded</em> error. That column
+       saturates: anything under half a code reports "1" (§4.7).</p>
+    <p><strong>Fix.</strong> Measure the error <em>before</em> rounding, and constrain the fit to
+       be exact at 0 and 1. Then run the round trip — decode all 256 stored values, re-encode
+       them, and require all 256 back — because that is the test Lesson 3.9's bit-identical 1:1
+       blit rests on, and an encode that breaks it breaks a previous lesson.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Optimising the thing you were already thinking about</span>
+    <p><strong>Symptom.</strong> A week on the perspective divide. No change.</p>
+    <p><strong>Cause.</strong> Attention is not a measurement. The divide had a whole lesson
+       written about it, so it feels expensive; it costs −0.018 ns/px, which is nothing (§4.6).
+       The encode is a one-line call nobody has thought about since Lesson 2.4, and it is the
+       largest item in the loop.</p>
+    <p><strong>Fix.</strong> Predict, then measure, then act — in that order, and write the
+       prediction down where you cannot revise it afterwards.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A frame-rate counter that refuses to move</span>
+    <p><strong>Symptom.</strong> You halve the fill's cost and the fps display reads 60 before and
+       60 after.</p>
+    <p><strong>Cause.</strong> Vsync. The frame ends when the display is ready, not when you are,
+       so with headroom to spare the wall clock is pinned to the refresh interval.</p>
+    <p><strong>Fix.</strong> Measure engine time, not wall time — which is why
+       <code>end_frame()</code> is called before <code>SDL_RenderPresent</code> (§4.3) and why the
+       HUD prints both. <kbd>V</kbd> disables vsync if you want to watch the wall clock move
+       too.</p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <h3>8.1 &nbsp;Find your own floor</h3>
+  <p>
+    Print your machine's <code>SDL_GetPerformanceFrequency()</code>, compute the tick in
+    nanoseconds, and time a single <code>to_encoded</code> call one thousand times, recording the
+    distribution of answers rather than their average. How many distinct values appear? Predict
+    that number before you run it.
+  </p>
+  <details><summary>Hint</summary>
+    <p>If the tick is <em>r</em> and the work is <em>w</em> &lt; <em>r</em>, the only possible
+       answers are 0 and <em>r</em> — and the proportion that come back as <em>r</em> is
+       <em>w</em>/<em>r</em>. That gives you a way to measure <em>w</em> out of a timer that cannot
+       resolve it, which is a genuinely useful trick.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>Two distinct values on this machine, in a ratio near 9.3/41.667 ≈ 0.22. If you see many
+       distinct values your counter is finer than ours (some x86 machines report 1 GHz); if you see
+       one, the work is far below the tick and you need a bigger batch. Note what you have just
+       built: a statistical measurement out of a quantised instrument, which is the same idea as
+       dithering.</p>
+  </details>
+
+  <h3>8.2 &nbsp;Instrument the inner loop, and watch it lie</h3>
+  <p>
+    Put a <code>scope_timer</code> around the fragment body inside <code>fill_triangle</code>.
+    Record what the zone reports and what the whole fill now costs. Then compute what fraction of
+    the reported fragment time is the timer itself.
+  </p>
+  <details><summary>Hint</summary>
+    <p>You need three numbers: the fill's cost before, the fill's cost after, and what the zone
+       claims. They will not be consistent, and the inconsistency is the answer.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>The fill roughly doubles (§2.3 measures 1.86× on an equivalent loop) while the zone reports
+       <em>less</em> than the fill took, because the closing clock read cannot be inside the
+       interval it closes. So the instrument makes the program slower <em>and</em> under-reports.
+       Now revert it, and note that you cannot recover the answer you wanted from any of the three
+       numbers — the experiment was unsound in principle, not merely noisy.</p>
+  </details>
+
+  <h3>8.3 &nbsp;Predict a resolution, then check</h3>
+  <p>
+    Using only the two unit costs from §3.3 — 45.47 ns per covered pixel and 23.0 ns per
+    triangle — predict the fill and collect times for the capstone scene at 2560×1440. Then run it
+    and compare. State your prediction's error as a percentage before looking.
+  </p>
+  <details><summary>Hint</summary>
+    <p>Covered pixels scale with total pixels for a fixed camera, so scale 475,218 by the ratio of
+       resolutions. Triangle count does not change at all — which is the whole point of having two
+       separate unit costs.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>You should land within about 10%. Where the model breaks down is instructive: at very high
+       resolutions the framebuffer stops fitting in cache and the per-pixel cost creeps up, so a
+       constant ns/px is itself an approximation with a domain. Finding where it fails is worth
+       more than the prediction succeeding.</p>
+  </details>
+
+  <h3>8.4 &nbsp;Make the ladder finer</h3>
+  <p>
+    §4.6's ladder jumps from "coverage + depth" straight to "+ sRGB encode", which bundles the
+    linear-space blend with the encode. Split it: add a rung that interpolates in linear light but
+    writes with <code>blend_space::encoded</code>. How much of the 6.09 ns is the
+    <code>pow</code>, and how much is the three table lookups that decode the corners?
+  </p>
+  <details><summary>Hint</summary>
+    <p>The corner decode happens <em>once per triangle</em>, not once per pixel — so predict its
+       per-pixel cost before measuring, and be ready for the delta to be indistinguishable from
+       zero. A rung whose delta is zero is a real result.</p>
+  </details>
+
+  <h3>8.5 &nbsp;Fit your own approximation (engine challenge)</h3>
+  <p>
+    Open <code>scratch/fit_srgb.py</code> and change the basis. Drop the <code>x</code> term to
+    three coefficients; or use <span class="mono">√x, ⁴√x</span> only; or add
+    <span class="mono">¹⁶√x</span>. For each, report cost in nanoseconds <em>and</em> error in
+    un-rounded codes, and plot the trade-off. Where is the knee?
+  </p>
+  <details><summary>Hint</summary>
+    <p>Each extra term is one more <code>sqrt</code> in the chain — a latency cost, since they are
+       dependent — plus one multiply-add. Removing the <code>x</code> term costs nothing at all in
+       time, because that multiply-add runs in parallel with the square roots.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>Two square roots get you to roughly 0.1 codes, which is still under half and still ships at
+       8 bits; four gets you under 0.005 for no measurable extra time on this machine. The knee is
+       sharp and it is not where the timing suggests, because the chain is latency-bound rather
+       than throughput-bound. Then ask the question this lesson would ask: at what output bit depth
+       does the two-term version stop being good enough? That is the criterion, not the code
+       count.</p>
+  </details>
+
+  <h3>8.6 &nbsp;Budget something that is not the renderer (engine challenge)</h3>
+  <p>
+    Add a <code>zone::simulate</code> and wrap the fixed-timestep loop from Lesson 1.4 in it. Then
+    run Pong. What fraction of that frame is simulation, and what happens to the shape of the
+    budget when the frame rate drops far enough that the accumulator runs several steps?
+  </p>
+  <details><summary>Hint</summary>
+    <p>A zone that opens and closes several times in one frame accumulates, which is what
+       <code>add</code> is for. Watch the <em>relationship</em> between the number of steps and the
+       zone's total; if it is not proportional you have found something.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>It is a rounding error at 60 Hz, and it grows discontinuously when the step count goes from
+       1 to 2 — which is exactly the spiral-of-death mechanism Lesson 1.4 derived, now visible as a
+       bar rather than an argument. Hold <kbd>Y</kbd> to throttle the frame and watch it happen.</p>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <p>
+    <strong>Module 3 is complete.</strong> The engine renders a textured, lit, z-buffered,
+    back-face-culled, near-plane-clipped, perspective-correct 3-D scene loaded from a file, every
+    pixel of it computed by code in this repository — and as of today it can tell you what that
+    costs and why.
+  </p>
+
+  <p>This lesson added:</p>
+
+  <ul>
+    <li>a <code>profiler</code> that <strong>calibrates itself</strong>, so the shortest
+        instrumentable interval is a measured property of your machine rather than a guess;</li>
+    <li>six disjoint zones covering the frame, an <strong>unmeasured remainder</strong> displayed
+        beside them, and an overlap check so a budget cannot silently double-count;</li>
+    <li>medians over a bounded history, and the argument for why a kernel benchmark wants the
+        minimum instead;</li>
+    <li>a differential ladder that gets sub-nanosecond resolution out of a 41.667 ns clock, by
+        subtraction rather than by instrumentation;</li>
+    <li><code>linear_to_srgb_fast</code> — a fitted four-term approximation, exact at black and
+        white, wrong by 0.0115 of a code — and <code>encode_mode</code> to select it;</li>
+    <li>a measured 1.30× on the fill and 1.29× on the frame, checked against Amdahl's law, at a
+        cost of 0.56% of pixels moving by one code out of 255.</li>
+  </ul>
+
+  <p>
+    The three numbers to carry forward are not the microseconds. They are
+    <strong>45.47 ns per covered pixel</strong>, <strong>23.0 ns per triangle</strong>, and
+    <strong>pixels per triangle</strong> — the axis that decides which of the first two you should
+    be looking at. Everything else on this page is a fact about one machine on one afternoon.
+  </p>
+
+  <p>
+    Two findings are worth remembering precisely because they were <em>wrong first</em>. The
+    two-triangle floor costs eight times what the two-thousand-triangle torus does, which no amount
+    of reading the code would have told you. And the argument for rejecting the fastest encode
+    candidate — that its table would be evicted by the framebuffer — was measured and found false,
+    so the reason in the engine's comments is the one the data actually supports. Getting a
+    prediction wrong in public is not a failure of the method; it <em>is</em> the method.
+  </p>
+
+  <h3><span class="num">9.1</span>What Module 3 built, in one list</h3>
+
+  <p>
+    Ten lessons ago the engine could draw a wireframe. It can now do all of this, and none of it
+    is a library call:
+  </p>
+
+  <ul>
+    <li><strong>3.1</strong> a z-buffer, and the painter's algorithm shown failing on a cycle no
+        sort can order;</li>
+    <li><strong>3.2</strong> perspective-correct interpolation, derived from 1/w being affine in
+        screen space;</li>
+    <li><strong>3.3</strong> near-plane clipping in clip space, before the one
+        information-destroying step in the pipeline;</li>
+    <li><strong>3.4</strong> back-face culling from the sign of a number the rasterizer already
+        had;</li>
+    <li><strong>3.5</strong> an OBJ loader, with the index problem solved the way every real engine
+        solves it;</li>
+    <li><strong>3.6</strong> Lambert's law as a footprint, and the inverse-transpose normal
+        matrix;</li>
+    <li><strong>3.7</strong> specular highlights, and the first view-dependent term in the
+        course;</li>
+    <li><strong>3.8</strong> flat, Gouraud and per-pixel shading as two independent axes rather
+        than one enum;</li>
+    <li><strong>3.9</strong> textures, samplers and bilinear filtering, with a 1:1 blit that is
+        bit-identical;</li>
+    <li><strong>3.10</strong> and the measurement of all of it.</li>
+  </ul>
+
+  <h3><span class="num">9.2</span>Next: Module 4</h3>
+
+  <p>
+    Module 3 spent ten lessons accumulating one particular kind of debt, and named it every time.
+    <code>raster.hpp</code> includes <code>light.hpp</code> and <code>texture.hpp</code>. The
+    <code>shading</code> enum has a combination it cannot name — "textured and lit" is
+    <code>lit</code> plus a binding. <code>fill_style</code> is two structs wearing one name:
+    pipeline state and uniforms. A material rides on a triangle in a way no GPU would permit. And
+    now a fifth: <code>encode_mode</code> is a per-fragment branch on a value that is constant for
+    an entire draw, which is a compile-time shader variant wearing a runtime disguise.
+  </p>
+
+  <p>
+    Five pressures, all pointing at the same answer: <strong>a fragment stage the caller
+    programs</strong>. That is a shader, and Module 4 is where you get one — along with a device, a
+    swapchain, command buffers, render passes and pipeline objects, every one of which will turn
+    out to be the thing you already built, given a name and moved onto hardware that runs thousands
+    of them at once.
+  </p>
+
+  <p>
+    You will not have to take any of it on faith. You know what a fragment costs, because you
+    measured it.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Gene Amdahl, "Validity of the single processor approach to achieving large scale
+        computing capabilities" (AFIPS, 1967)</strong> — two pages, and the original argument is
+        about parallelism rather than optimisation. Worth reading for how general the form
+        is.</li>
+    <li><strong>Ulrich Drepper, "What Every Programmer Should Know About Memory" (2007)</strong> —
+        long, and still the best single account of why §4.10's table has a cliff in it. Skim parts
+        2 and 3 and come back to the rest when Module 9 builds allocators.</li>
+    <li><strong>Denis Bakhvalov, <em>Performance Analysis and Tuning on Modern CPUs</em></strong> —
+        free, current, and the right next step for sampling profilers and hardware counters, which
+        this lesson deliberately did not use.</li>
+    <li><strong>Fabian Giesen, "A trip through the Graphics Pipeline"</strong> — the standard
+        reference for what real hardware does with the work we have been doing by hand, and the
+        best preparation for Module 4 there is.</li>
+    <li><strong>Chandler Carruth, "Efficiency with Algorithms, Performance with Data
+        Structures" (CppCon 2014)</strong> — where the <code>volatile</code>-sink trick in
+        <code>verify_310.cpp</code> comes from, and a good corrective to microbenchmark
+        optimism.</li>
+    <li><strong>Brendan Gregg, <em>Systems Performance</em>, ch. 2</strong> — on why the mean is
+        the wrong summary for latency, at far more length than §2.4 had room for.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §18 "Pipeline Optimization"</strong> — locating
+        bottlenecks in a GPU pipeline, which is the same method applied to hardware you cannot put
+        a <code>scope_timer</code> inside.</li>
+  </ul>
+
+<script>
+// ---------------------------------------------------------------------------
+// The Amdahl explorer (§3.4). Page-specific, so it lives OUTSIDE the
+// SHARED-SCRIPT markers where the stamper cannot reach it. No framework, no
+// build step, no dependency on course.js.
+// ---------------------------------------------------------------------------
+(function () {
+  var pIn = document.getElementById('w310p');
+  var sIn = document.getElementById('w310s');
+  if (!pIn || !sIn) { return; }
+
+  var pOut = document.getElementById('w310po');
+  var sOut = document.getElementById('w310so');
+  var bars = document.getElementById('w310bars');
+  var read = document.getElementById('w310r');
+
+  // The speed slider is LOGARITHMIC. A linear one would spend four fifths of its
+  // travel between 50x and 64x, where the curve is flat and nothing happens; the
+  // interesting region is 1x to 4x, which is also the only region real
+  // optimisations live in.
+  function sliderToS(v) { return Math.pow(64, v / 600); }
+  function sToSlider(s) { return Math.round(600 * Math.log(s) / Math.log(64)); }
+
+  function bar(label, segments) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:.5rem;margin:.35rem 0;' +
+                        'font-family:var(--font-mono);font-size:.78rem;';
+    var lab = document.createElement('span');
+    lab.textContent = label;
+    lab.style.cssText = 'width:4.2rem;text-align:right;color:var(--ink-soft);flex:none;';
+    row.appendChild(lab);
+
+    var track = document.createElement('span');
+    track.style.cssText = 'flex:1;display:flex;height:15px;border:1px solid var(--rule);' +
+                          'border-radius:2px;overflow:hidden;';
+    segments.forEach(function (seg) {
+      var d = document.createElement('span');
+      d.style.cssText = 'width:' + (seg.frac * 100) + '%;background:' + seg.colour + ';';
+      d.title = seg.title;
+      track.appendChild(d);
+    });
+    row.appendChild(track);
+    return row;
+  }
+
+  function update() {
+    var p = parseFloat(pIn.value) / 100;
+    var s = sliderToS(parseFloat(sIn.value));
+
+    pOut.textContent = (p * 100).toFixed(p * 100 < 10 ? 1 : 0);
+    sOut.textContent = s.toFixed(2);
+
+    var after = (1 - p) + p / s;      // the frame, as a fraction of what it was
+    var speedup = 1 / after;
+    var ceiling = 1 / (1 - p);
+
+    bars.textContent = '';
+    bars.appendChild(bar('before', [
+      { frac: p,     colour: '#eb786e', title: 'the phase' },
+      { frac: 1 - p, colour: '#6e7080', title: 'everything else' }
+    ]));
+    // Drawn on the SAME scale as `before`, which is the whole point: the "after"
+    // bar is shorter, and the grey part of it is exactly as long as it was.
+    bars.appendChild(bar('after', [
+      { frac: p / s,          colour: '#eb786e', title: 'the phase, sped up' },
+      { frac: 1 - p,          colour: '#6e7080', title: 'everything else, unchanged' },
+      { frac: p - p / s,      colour: 'transparent', title: 'time saved' }
+    ]));
+
+    read.textContent =
+      'frame speedup ' + speedup.toFixed(2) + 'x' +
+      '   ·   ceiling at s = infinity: ' + ceiling.toFixed(1) + 'x' +
+      '   ·   you have captured ' + (100 * (speedup - 1) / (ceiling - 1 || 1)).toFixed(0) +
+      '% of what this phase can ever give you';
+  }
+
+  pIn.addEventListener('input', update);
+  sIn.addEventListener('input', update);
+
+  Array.prototype.forEach.call(document.querySelectorAll('#w310 button'), function (b) {
+    b.addEventListener('click', function () {
+      pIn.value = String(Math.round(parseFloat(b.dataset.p)));
+      sIn.value = String(sToSlider(parseFloat(b.dataset.s)));
+      update();
+    });
+  });
+
+  update();
+})();
+</script>

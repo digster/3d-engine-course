@@ -1,0 +1,434 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-02-forces-and-bodies.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.2 — Forces, Gravity, and Linear Rigid Bodies</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-04-collision-primitives.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.3</div>
+    <h1>Angular Dynamics: Torque and the Inertia Tensor</h1>
+    <p class="deck">
+      Eighty-five lessons in, nothing in this engine can <em>tumble</em>. 8.2 gave a body a mass,
+      which answers one question — how hard is it to push? — and this lesson answers the other one,
+      which turns out to need nine numbers rather than one. Spin a book about its three axes and you
+      get three different resistances; spin it about an axis <em>between</em> two of them and the
+      angular momentum does not point along the spin axis at all. A thing that eats a vector and
+      hands back one pointing somewhere else is a matrix, and this one is the
+      <strong>inertia tensor</strong>. We derive it in four lines from
+      <code>r × (ω × r)</code> and a triple product — and then discover that the expression the
+      derivation produces <strong>returns exactly zero for a plank</strong>, because
+      <code>|r|² − x²</code> is a sum of three squares with one subtracted straight off again and a
+      <code>float</code> at 10⁶ cannot hold a 10⁻⁶. The cross-product-matrix form is the same
+      algebra and never forms the sum. Then the parallel-axis theorem, checked by a test that
+      <em>only passes if the theorem is exactly true</em>; the basis change <code>R I Rᵀ</code>, and
+      the plausible wrong one that has the same trace, the same determinant, the same symmetry and
+      the same principal moments; and the integration of an orientation, which is not an addition —
+      <code>q += ω·h</code> is not merely inaccurate, it is <strong>not a rotation</strong>, and the
+      update that replaces it inflates a unit quaternion by <strong>0.35% every step</strong> and
+      still turns <strong>0.23% short</strong> after you renormalise. Then the payoff, which is one
+      of the loveliest results in classical mechanics and is sitting in the engine as soon as the
+      tensor is. A torque-free body <strong>conserves L and does not conserve ω</strong>: our 1 kg
+      box swings its angular speed over <strong>10.85%</strong> with nothing acting on it, between
+      two bounds we derive by hand and then measure to four digits. Spin it about its middle axis
+      and it <strong>flips end over end, forever</strong>, at a rate Euler's equations predict —
+      4.8038 s⁻¹ against a measured 4.8084. And the term that makes all of it happen is the one
+      almost every engine drops, because integrating it explicitly gains <strong>162% of a body's
+      angular momentum in a minute</strong> and diverges by <strong>3.3 × 10¹¹</strong> at 30 Hz.
+      There are four answers to that, the last of which is the interesting one: the term is not
+      physics at all, it is the price of choosing <code>ω</code> as the state variable, and storing
+      the momentum instead makes it vanish from the equations. That gets the drift to
+      <strong>8.0 × 10⁻⁴</strong> — and produces the one table in this course where a
+      <em>smaller</em> step size is a worse answer.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="03-04-back-face-culling.html">3.4 — Back-Face Culling and the Cross Product</a>,
+          <a href="07-04-quaternions.html">7.4 — Quaternions, Derived</a>,
+          <a href="08-01-integrators.html">8.1 — Integrators: Why One Explodes</a>,
+          <a href="08-02-forces-and-bodies.html">8.2 — Forces, Gravity, and Linear Rigid Bodies</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/mat3.hpp</code>,
+            <code>engine/include/engine/phys/integrate.hpp</code>,
+            <code>engine/src/phys/integrate.cpp</code>,
+            <code>engine/include/engine/phys/inertia.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/inertia.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/rigid_body.hpp</code>,
+            <code>engine/src/phys/rigid_body.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/spin/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_83.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_83.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>turn</strong>. A <code>rigid_body</code> gains an orientation, an
+            angular velocity, a torque accumulator and an inverse inertia tensor;
+            <code>add_force_at</code> is the first function in the course that can make something
+            tumble; and <code>engine/phys/inertia.hpp</code> knows what six shapes weigh, how to
+            carry a tensor to a new point, and how to carry it into a new basis. <code>mat3</code>
+            grows the arithmetic an outer product needs — eighty lessons late, and for a reason: it
+            is the first time in this engine that a matrix has been a <em>quantity</em> rather than
+            a transformation. <strong>Nine measured sections, sixteen of them controls</strong>,
+            including one that runs the whole torque-free tumble on a <em>sphere</em>, whose
+            isotropic tensor makes the interesting term identically zero — so a wobbling sphere
+            means the instrument is broken rather than the physics being interesting. The
+            <code>spin</code> demo draws a box flipping end over end with nothing touching it, and a
+            key that turns the flip off.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the inertia tensor from <code>L = Σ m r × v</code> in four lines, and say which
+          step turns a cross product into a matrix.</li>
+      <li>…explain why resistance to turning needs nine numbers when resistance to pushing needs
+          one, and name the shape for which it needs only one.</li>
+      <li>…write the parallel-axis theorem, say why it only works from the centre of mass, and
+          describe a test that passes only if it is exactly true.</li>
+      <li>…say why a tensor transforms with <code>R I Rᵀ</code> where a vector transforms with
+          <code>R</code>, and name four properties that fail to distinguish it from the reversed
+          sandwich.</li>
+      <li>…explain why an orientation cannot be integrated by addition, derive the quaternion
+          derivative <code>q̇ = ½ ω q</code>, and predict both errors of the update that follows
+          from it.</li>
+      <li>…state what a torque-free rigid body conserves and what it does not, and derive the range
+          its angular speed is confined to.</li>
+      <li>…recognise the gyroscopic term, say why an explicit integrator cannot be trusted with it,
+          and name the change of state variable that removes it.</li>
+      <li>…predict whether a body spun about a given principal axis is stable, and compute the rate
+          at which it is not.</li>
+      <li>…read a per-body budget in which the diagnostic costs more than the physics, and say what
+          to do about it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine in which nothing can tumble</a></li>
+      <li><a href="#intuition">Building intuition: the skater, the book and the wrench</a></li>
+      <li><a href="#torque">Torque is r × F, and it is about a point</a></li>
+      <li><a href="#tensor">The inertia tensor, derived — and the form that loses it</a></li>
+      <li><a href="#parallel">Moving a tensor: the parallel-axis theorem</a></li>
+      <li><a href="#basis">Carrying a tensor: R I Rᵀ</a></li>
+      <li><a href="#orientation">Integrating an orientation is not an addition</a></li>
+      <li><a href="#momentum">Angular momentum, and what is actually conserved</a></li>
+      <li><a href="#gyroscopic">The term with no linear counterpart</a></li>
+      <li><a href="#racket">The tennis racket theorem</a></li>
+      <li><a href="#implementation">The implementation</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine in which nothing can tumble</h2>
+
+  <p>
+    Lesson 8.2 ended with a body that has a mass, a force accumulator and a position, and a
+    <code>body_world</code> that advances all of them. Drop a crate and it falls correctly. Push it
+    with a thruster and it accelerates by <code>F/m</code>. Throw it and it traces the parabola
+    Newton says it should.
+  </p>
+
+  <p>
+    And whatever you do to it, it arrives facing exactly the way it left.
+  </p>
+
+  <p>
+    That is not a missing feature in the sense that anti-aliasing was a missing feature. It is a
+    <em>category</em> of behaviour that the engine currently cannot express at all, and the gap
+    shows up immediately in three places a player would notice:
+  </p>
+
+  <ul>
+    <li>
+      <strong>Nothing can be pushed off-centre.</strong> <code>add_force</code> takes a vector and
+      nothing else, so every force in the engine acts at the body's centre of mass by construction.
+      A crate shoved at a corner slides away squarely. An explosion beside a barrel launches it
+      without spinning it. There is no way to say <em>where</em> a push happened, which means there
+      is no way for a push to do anything but translate.
+    </li>
+    <li>
+      <strong>Nothing has an orientation the physics knows about.</strong> Module 7's
+      <code>transform</code> carries a <code>quat</code>, and an animation or a gameplay script can
+      set it. But <code>body_world::step</code> has never heard of it, so a body's facing is
+      something imposed from outside rather than something the simulation computes — which means the
+      moment physics and gameplay both want to control it, one of them silently loses.
+    </li>
+    <li>
+      <strong>Nothing can resist being turned.</strong> Which is the deep one, and the reason this
+      lesson is long. Resistance to being <em>pushed</em> is a single number, and we have had it
+      since 8.2. Resistance to being <em>turned</em> is not a single number, not even three, and the
+      object it actually is has consequences that reach as far as Lesson 8.11's ragdolls.
+    </li>
+  </ul>
+
+  <p>
+    Everything else in Module 8 needs this. A contact between two boxes happens at a
+    <em>point on a surface</em>, and the whole difference between a box that slides and a box that
+    topples is whether that point is inside or outside the base — which is a torque question.
+    Lesson 8.9's collision response computes an impulse at a contact point, and applying it without
+    the rotational half gives you objects that bounce off each other without ever starting to spin.
+    Lesson 8.11's joints are constraints on relative <em>angular</em> velocity. None of that can be
+    written until a body can turn.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The linear half above is untouched by everything in this lesson</strong>, and that is
+      a fact about physics rather than about how carefully the edit was made. Linear momentum and
+      angular momentum do not mix: the centre of mass of a body moves exactly as <code>F = ma</code>
+      says however wildly the body is spinning. A thrown hammer's centre traces a clean parabola
+      while the hammer tumbles around it. Every number 8.2 measured is still the number it measured.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: the skater, the book and the wrench</h2>
+
+  <p>
+    Before any formalism, three things you have watched happen, each of which is a different piece
+    of what we are about to build.
+  </p>
+
+  <h3>2.1 The skater: where the mass is, not how much there is</h3>
+
+  <p>
+    A figure skater spins with their arms out, pulls them in, and speeds up. Dramatically — a factor
+    of two or three is routine.
+  </p>
+
+  <p>
+    Nothing about their mass changed. They did not become lighter, and they are not pushing against
+    anything: the ice is nearly frictionless and there is nothing for them to push against anyway.
+    What changed is <em>where the mass is</em>. Arms out, a good fraction of their body is a metre
+    from the spin axis; arms in, it is 15 centimetres.
+  </p>
+
+  <p>
+    So resistance to turning depends on the <em>distribution</em> of mass, not just the total —
+    which already tells you it cannot be one number stored next to <code>inv_mass</code>. And it
+    gives you the shape of the dependence: further out is harder. How much harder is the first
+    thing we will derive, and the answer is that it goes as the <em>square</em> of the distance,
+    which is why the skater's effect is so much larger than people expect.
+  </p>
+
+  <h3>2.2 The book: three different answers, and one that is unstable</h3>
+
+  <p>
+    Find a book — a hardback, or this laptop, or a TV remote. Something rectangular with three
+    clearly different dimensions. Now toss it in the air with a spin about each of its three axes in
+    turn, and catch it.
+  </p>
+
+  <ul>
+    <li>Spun about its <strong>longest</strong> axis (the one through the spine, end to end), it
+        spins cleanly and comes back the way it went up.</li>
+    <li>Spun about the axis <strong>perpendicular to the cover</strong>, same — clean, stable,
+        boring.</li>
+    <li>Spun about the <strong>third</strong> axis — the one across the cover, through the middle —
+        it <em>flips over</em>. Every time. You cannot stop it doing this by throwing more
+        carefully.</li>
+  </ul>
+
+  <p>
+    That is not a trick and you are not doing it wrong. It is a real and completely deterministic
+    consequence of a rigid body having three different resistances to turning, and it is the single
+    best evidence that resistance-to-turning is not one number. If it were, all three throws would
+    look the same. Section 10 derives the flip, predicts its rate from the three numbers, and
+    measures the prediction; the <code>spin</code> demo puts it on screen with a key that turns it
+    off.
+  </p>
+
+  <h3>2.3 The wrench: the same force, three different amounts of turning</h3>
+
+  <p>
+    Undo a tight bolt with a short spanner and you cannot. Put a length of pipe over the handle and
+    you can. Your arm did not get stronger; the force is the same. What changed is
+    <em>where</em> you applied it.
+  </p>
+
+  <p>
+    And there is a second half people notice less: push the spanner <em>along its own length</em>,
+    straight at the bolt, and nothing turns at all, however hard you push. Push
+    <em>perpendicular</em> to it and you get everything the force has to give. Push at 30° and you
+    get some fraction in between.
+  </p>
+
+  <p>
+    Distance from the axis, and the component of the force perpendicular to the lever arm. Two
+    vectors, and a quantity that vanishes when they are parallel, is proportional to both magnitudes,
+    and is maximal when they are at right angles. If that pattern sounds familiar it should: Lesson
+    3.4 built exactly that object out of the cross product, for a completely different reason. It is
+    the same object, and it is called <strong>torque</strong>.
+  </p>
+
+  <h2 id="torque">3. Torque is r × F, and it is about a point</h2>
+
+  <p>
+    Take a force <code>F</code> applied at a point that sits at <code>r</code> from some reference
+    point. The turning effect about that reference point is
+  </p>
+
+  <div class="eq">
+    \[
+    \boldsymbol{\tau} = \mathbf{r} \times \mathbf{F}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — torque equals the lever arm crossed with the force. Its magnitude is
+    <code>|r| |F| sin θ</code>, which is "distance times the perpendicular part of the force", and
+    its direction is the axis you are being turned about, by the right-hand rule.
+  </p>
+
+  <p>
+    Every property of the wrench is already in that one line. Push along the lever arm and
+    <code>r</code> and <code>F</code> are parallel, so <code>sin θ = 0</code> and the torque is
+    <em>exactly</em> zero — not small, zero, because the cross product of parallel vectors is the
+    zero vector by construction. Double the length of the spanner and you double <code>|r|</code>.
+    Push perpendicular and <code>sin θ = 1</code>.
+  </p>
+
+  <h3>3.1 A worked example, with real numbers</h3>
+
+  <p>
+    A one-kilogram box, half a metre across in <code>x</code> and <code>z</code> and two metres tall,
+    sitting at the origin. Push the top face horizontally: <code>F = (10, 0, 0)</code> newtons,
+    applied at <code>(0, 1, 0)</code> — one metre above the centre of mass.
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{r} \times \mathbf{F} =
+    \begin{pmatrix} 0 \\ 1 \\ 0 \end{pmatrix} \times
+    \begin{pmatrix} 10 \\ 0 \\ 0 \end{pmatrix} =
+    \begin{pmatrix} 1\cdot 0 - 0\cdot 0 \\ 0\cdot 10 - 0\cdot 0 \\ 0\cdot 0 - 1\cdot 10 \end{pmatrix} =
+    \begin{pmatrix} 0 \\ 0 \\ -10 \end{pmatrix}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    Ten newton-metres about <strong>−z</strong>. Check the sign against
+    <a href="../conventions.html">the Conventions page</a> rather than against intuition: this course
+    is right-handed, so a positive rotation about <code>+z</code> carries <code>+x</code> toward
+    <code>+y</code>. A rotation about <code>−z</code> therefore carries <code>+y</code> toward
+    <code>+x</code> — which is the top of the box moving in the direction we pushed it. The box tips
+    over toward <code>+x</code>. That is what should happen, and the sign says so.
+  </p>
+
+  <p>
+    The engine agrees, and the harness checks that <code>add_force_at</code> produces the cross
+    product rather than something that merely resembles it:
+  </p>
+
+<pre><code class="lang-text">A  TORQUE IS r x F, AND THE SIGN OUR CONVENTION FIXES
+------------------------------------------------------------------
+  a 1 kg box, pushed at (0, 1, 0) with F = (10, 0, 0) N
+
+    force    10.0000   0.0000   0.0000  N
+    torque    0.0000   0.0000 -10.0000  N.m
+
+  A.1  r x F by hand:    0.0000   0.0000 -10.0000
+       identical to add_force_at: yes
+
+  A.3  a force AT a corner but AIMED at the centre:
+       |torque| = 0.0000e+00 N.m  (parallel r and F)
+
+  A.4  a COUPLE: +5 N at +y, -5 N at -y
+       net force  0.0000e+00 N   (exactly zero)
+       net torque -10.0000 N.m about z
+
+  A.5  CONTROL force at the centre: torque == 0 exactly
+       yes   force still  10.00 N</code></pre>
+
+  @@FIG_TORQUE@@
+
+  <h3>3.2 The point it is about, and why we choose the centre of mass</h3>
+
+  <p>
+    A torque is not a property of a force. It is a property of a force <em>and</em> a point, and the
+    same force has a different torque about every point in space. "The torque on this box" is not a
+    thing; "the torque on this box about its centre of mass" is.
+  </p>
+
+  <p>
+    So which point? The engine could pick any. It picks the centre of mass, and the reason is worth
+    dwelling on because it is what makes the rest of the module tractable.
+  </p>
+
+  <p>
+    About the centre of mass — and <em>only</em> about the centre of mass — the translational and
+    rotational halves of the motion decouple completely. <code>F = ma</code> governs where the
+    centre goes, <code>τ = ...</code> governs how the body turns about it, and neither equation
+    contains a term from the other. Choose any other reference point and they become coupled: a
+    force through the centre of mass would produce a torque about your chosen point, so pushing a
+    crate squarely in the middle would set it spinning, and the two halves of <code>step()</code>
+    would have to be solved together.
+  </p>
+
+  <p>
+    There is a lovely piece of evidence for this that needs no algebra. Throw a hammer. Its centre
+    of mass traces a clean parabola while the hammer tumbles wildly around it — the tumbling does
+    not perturb the parabola at all, and the parabola does not steady the tumbling. That
+    independence <em>is</em> the decoupling, and it is exactly why the code in
+    <code>body_world::step</code> can advance the linear half and the angular half one after the
+    other without either knowing about the other.
+  </p>
+
+  <h3>3.3 What falls out for free</h3>
+
+  <p>
+    Two consequences arrive with no extra code, and both matter.
+  </p>
+
+  <p>
+    <strong>A force through the centre of mass produces no torque.</strong> Its lever arm is the
+    zero vector, and every term of the cross product has a factor of it, so the result is exactly
+    zero in floating point too — the harness checks the bit pattern, not a tolerance. This is why
+    <strong>gravity does not make things tumble</strong>: it acts at the centre of mass, so a
+    uniform body falls without turning, which is why 8.2's whole module worked without ever
+    mentioning rotation.
+  </p>
+
+  <p>
+    <strong>Two equal and opposite forces at different points produce torque and no force at all.</strong>
+    That arrangement is called a <em>couple</em>, and it is the physical thing a "pure torque" models:
+    a reaction wheel, an electric motor mounted on the body, a character twisting to right
+    themselves in mid-air. The harness's A.4 applies +5 N at <code>+y</code> and −5 N at
+    <code>−y</code> and reports a net force of exactly zero and a net torque of −10 N·m. That is why
+    <code>add_torque</code> exists as an entry point beside <code>add_force_at</code> rather than
+    being a special case of it.
+  </p>
+
+  <p>
+    And so the API writes itself. <code>add_force_at</code> takes a force and a world-space point,
+    adds the force to one accumulator and <code>r × F</code> to the other, and the two special cases
+    above are not special-cased anywhere — they fall out of the arithmetic.
+  </p>

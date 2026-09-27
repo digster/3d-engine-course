@@ -1,0 +1,749 @@
+  <h2 id="implement">9. Implementation: quads, a pipeline, one draw call</h2>
+
+  <p>
+    Everything above is arithmetic. What reaches the GPU is twenty bytes per vertex and one draw
+    call, and three decisions in that are worth reading.
+  </p>
+
+  <h3>9.1 The colour is four bytes, not a word</h3>
+
+  <p>
+    Everywhere else in this engine a colour is a packed <code>Uint32</code> in <strong>ARGB</strong>
+    order — <code>pack_argb</code>, since Lesson 1.6. A vertex attribute is not a word.
+    <code>SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM</code> hands the shader the four bytes <em>in
+    memory order</em>, so a packed ARGB word arrives on a little-endian machine as (B, G, R, A) and
+    the text comes out blue.
+  </p>
+
+  <p>
+    This is not hypothetical. Lesson 6.15 shipped exactly this bug in a BRDF lookup table, and it
+    survived review because green occupies bits 8–15 in both layouts, so half the data read
+    correctly and the result was merely <em>dim</em>. So <code>overlay_vertex</code> names its four
+    colour bytes:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">engine/include/engine/gfx/overlay.hpp — the vertex</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">struct overlay_vertex
+{
+    float x = 0.0f, y = 0.0f;   ///&lt; pixel space, origin top-left, +y down
+    float u = 0.0f, v = 0.0f;   ///&lt; normalized atlas coordinates
+    Uint8 r = 255, g = 255, b = 255, a = 255;   ///&lt; sRGB-encoded, STRAIGHT alpha
+
+    void set_colour(Uint32 argb)
+    {
+        r = red_of(argb); g = green_of(argb); b = blue_of(argb); a = alpha_of(argb);
+    }
+};
+
+static_assert(sizeof(overlay_vertex) == 20, "the GPU reads this layout by offset");
+</code></pre>
+</figure>
+
+  <p>
+    Naming the bytes makes the endianness question <em>disappear</em> rather than making it
+    catchable, which is a strictly better outcome than a test. <code>set_colour</code> is the one
+    place the ARGB convention is unpacked, and there is nothing left to get wrong.
+  </p>
+
+  <h3>9.2 The atlas is one channel, and never <code>_SRGB</code></h3>
+
+  <p>
+    <code>gpu_texture</code> gained a new entry point rather than a flag on the old one:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">engine/include/engine/gfx/gpu_texture.hpp — the new call</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] bool create_coverage(const gpu_device&amp; dev, SDL_GPUCommandBuffer* cb,
+                                   const std::uint8_t* texels, int width, int height,
+                                   const char* name = nullptr, bool mips = false);
+</code></pre>
+</figure>
+
+  <p>
+    Every argument <code>create_sampled</code> makes is about colour: four channels because a
+    picture has three plus alpha, and an <code>srgb</code> flag because a colour is stored through a
+    transfer function. A glyph atlas is neither. It is one byte of coverage per texel, linear by
+    construction, and there is no flag combination on the four-channel path that expresses that —
+    <code>create_sampled(..., srgb=false)</code> would store the right numbers in four times the
+    memory and leave the next reader unable to tell whether the choice was considered.
+  </p>
+
+  <p>
+    The 4× is real (16,384 bytes against 65,536 for our atlas) but it is the smaller half of the
+    argument. The larger half is that <strong>a distinct entry point with "coverage" in its name is
+    the documentation</strong>, and §7.3 is what happens when it is missing.
+  </p>
+
+  <h3>9.3 One pipeline, blending on, depth off</h3>
+
+  <p>
+    The pipeline is <code>blend(false)</code> — straight alpha — and nothing else. Straight rather
+    than premultiplied because there is nothing in a coverage atlas to have been multiplied: the
+    shader produces <code>(tint, coverage × vertex_alpha)</code> and the ROP does the rest.
+  </p>
+
+  <p>
+    No depth state at all, and it is worth stating the absence rather than leaving it as one. The
+    overlay is drawn last, into a target with no depth attachment, in declaration order — and
+    declaration order <em>is</em> the sort. That is the correct answer for a HUD and it is why
+    <code>overlay_batch</code> has no sort key: Lesson 6.11's <code>order_draws</code> sorts
+    transparent geometry back to front because depth decides what is in front of what; here the
+    programmer decides, and a sort would be second-guessing them.
+  </p>
+
+  <p>
+    Culling stays at the course default (counter-clockwise front, back faces culled) rather than
+    being disabled, which turns the winding in <code>push_quad</code> into something the hardware
+    checks: get it backwards and the overlay is invisible on the GPU while remaining perfect on the
+    CPU, which is precisely a divergence §11's comparison exists to catch.
+  </p>
+
+  <h3>9.4 The flip lives in one line</h3>
+
+  <p>
+    Pixel space has +y down; SDL_GPU's clip space has +y up. That conversion happens exactly once,
+    in the vertex shader:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">shaders/overlay.vert.hlsl — the whole vertex stage</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">output.position = float4(input.position.x * inv_half_viewport.x - 1.0f,
+                         1.0f - input.position.y * inv_half_viewport.y,
+                         0.0f,   // z: the overlay has no depth and no test
+                         1.0f);  // w: 1, so there is no perspective divide
+</code></pre>
+</figure>
+
+  <p>
+    No projection matrix. An orthographic matrix would do the same job in four dot products and
+    would invite somebody to put a camera in it; an overlay has no camera, it has a viewport. And
+    <code>inv_half_viewport</code> is 2/width and 2/height, computed on the CPU once per frame
+    rather than divided per vertex — which is the entire reason this is a shader instead of
+    arithmetic baked into the vertices, since a window resize then pushes eight bytes rather than
+    rewriting every quad.
+  </p>
+
+  <h2 id="graph">10. The overlay as a frame-graph pass</h2>
+
+  <p>
+    Lesson 6.17 built a frame graph and ended by predicting that this lesson would be its API's
+    first user from outside. It named the thing that had never been exercised: <code>keep</code>
+    against an <em>imported</em> resource. Here is that prediction cashed.
+  </p>
+
+  <p>
+    The overlay reads nothing and writes the swapchain, which the resolve has just written. In the
+    graph's vocabulary that is one line:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">scratch/verify_618.cpp — §I, the declaration</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">const int p_overlay = fg.add_pass("overlay", &amp;exec_overlay, &amp;od);
+const fg_texture back2 = fg.keep(p_overlay, back1);
+</code></pre>
+</figure>
+
+  <p>
+    <code>keep</code> means <em>"my output depends on what was already in this target"</em>, which
+    for an alpha blend is simply true — the destination is an operand of <code>over</code>. That is
+    a statement about arithmetic, and a pass author can answer it without knowing what a load op is.
+  </p>
+
+  @@FIG_PASS@@
+
+  <p>
+    From that one word the graph derives four things, and the harness reads them back rather than
+    trusting them:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>pass</th><th>resource</th><th>load op</th><th>store op</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>resolve (stand-in)</td><td>backbuffer</td><td>CLEAR</td><td><strong>STORE</strong></td></tr>
+      <tr><td>overlay</td><td>backbuffer</td><td><strong>LOAD</strong></td><td>STORE</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Note which row the interesting deduction is on. The overlay said <code>keep</code>, and the
+    consequence landed on the <em>resolve</em> — a different pass, in a different file, which must
+    now <code>STORE</code> because somebody downstream reads the version it produced. That is
+    exactly the class of fact humans get wrong across a file boundary, and it is the strongest
+    argument for the whole apparatus.
+  </p>
+
+  <h3>10.1 What had never been run</h3>
+
+  <p>
+    6.17's own header says that version 0 of an <em>import</em> is a real value, not undefined —
+    "whatever is in the texture when the frame begins" — so <code>keep</code> on it should be legal
+    where <code>keep</code> on version 0 of a transient is an error the compiler catches. That
+    branch had never executed. The harness exercises it directly, with an overlay and no resolve in
+    front of it:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">scratch/verify_618.cpp — §I, the untested branch</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">frame_graph solo;
+const fg_texture b0 = solo.import("backbuffer", r.back.colour, back_desc);
+const int p = solo.add_pass("overlay only", &amp;exec_overlay, &amp;od);
+const fg_texture b1 = solo.keep(p, b0);
+check(solo.compile(r.gpu),
+      "and it compiles — an import's version 0 is a real value, not undefined");
+</code></pre>
+</figure>
+
+  <p>
+    It works, and it derives <code>LOAD</code>, and the pass survives culling because writing an
+    import is what makes a pass a root. Four checks, all green, on code that had been written and
+    never run. That is the value of a lesson using the previous lesson's API in earnest rather than
+    in its own test.
+  </p>
+
+  <h3>10.2 And the honest half: what it does not catch</h3>
+
+  <p>
+    Declare the overlay with <code>discard_write</code> instead — "I write every texel and read
+    none", which for a blend is a lie — and the graph compiles it happily and derives
+    <code>DONT_CARE</code>, which would erase the entire frame under the text. The harness asserts
+    that too, as a <em>pass</em>:
+  </p>
+
+  <p class="eq-plain">
+    <code>check(wrong.compile(r.gpu), "discard_write also compiles — this is NOT caught");</code>
+  </p>
+
+  <p>
+    So the graph does not verify dataflow claims; it <em>relocates</em> them. A load op buried in a
+    struct three files away becomes a sentence about arithmetic at the call site, which a pass
+    author can answer correctly without understanding render passes. It cannot check that the answer
+    is true. Saying so is the point — a tool oversold is a tool that gets trusted in the one case it
+    does not cover.
+  </p>
+
+  <h2 id="instrument">11. The instrument, and proving it can fail</h2>
+
+  <p>
+    The characterization shot is a null instrument for this lesson, and we know that
+    <em>structurally</em> rather than hopefully: <code>write_reference_shot</code> renders through
+    <code>soft_renderer.cpp</code> and <code>raster.cpp</code>, neither of which includes
+    <code>font.hpp</code>, <code>overlay.hpp</code> or <code>gpu_overlay.hpp</code>, and
+    <code>demo_scene.cpp</code> draws no text. It is run anyway — byte-identical for the
+    twenty-seventh lesson, hash <code>E917C06C</code> — and what that proves is that this lesson
+    broke nothing else, which is a different and smaller claim.
+  </p>
+
+  <p>
+    The real test had to be built, and the shape to copy is 6.17's: <strong>render the same thing
+    two ways, and include a control that proves the comparison can report a difference.</strong>
+    Here the two ways are the two renderers, which is available only because <code>overlay.hpp</code>
+    knows nothing about SDL_GPU.
+  </p>
+
+  <p>
+    One batch — a panel and two lines of text, 28 quads — composited by <code>composite_overlay</code>
+    into a <code>framebuffer</code>, and recorded by <code>gpu_overlay</code> into an
+    <code>_SRGB</code> render target, then read back:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>channel difference</th><th>pixels</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0</td><td>16,316</td></tr>
+      <tr><td>1</td><td>68</td></tr>
+      <tr><td>2 or more</td><td>0</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Every pixel agrees to within one sRGB code</strong>, with a mean absolute difference of
+    0.0042 codes over all channels.
+  </p>
+
+  <p>
+    Note what is <em>not</em> claimed. Lesson 6.17 demanded bit-equality and got it, because both
+    sides of that comparison were the same shader. Here they are not: the CPU decodes bytes to
+    float, lerps, and re-encodes with <code>engine::linear_to_srgb</code>; the GPU's ROP does it in
+    fixed-function hardware whose intermediate precision is not specified anywhere. One code is the
+    honest claim, and the instrument reports the <em>distribution</em> rather than a yes/no —
+    because a comparison that can only say "same" or "different" cannot tell a rounding difference
+    from a bug.
+  </p>
+
+  <p>
+    And the control. The same comparison, against a CPU render composited in the deliberately wrong
+    blend space, reports <strong>934 differing pixels, worst difference 53 codes</strong>. The
+    instrument can fail, so the 68 means something. That control exists because one lesson ago we
+    found a golden that printed <code>identical=YES</code> when both of its file reads failed, and
+    because this very lesson shipped a draft with a check that passed on infinity (§5.1). Twice in
+    one module is a pattern, not an accident.
+  </p>
+
+  <h3>11.1 The demo that finally speaks</h3>
+
+  <p>
+    <code>hello_cube</code> — two hundred lines, no GPU device, the smallest program in the
+    repository — gets a HUD in about twenty lines, and it is the acceptance test for this lesson's
+    public API in the same way the original was for Lesson 5.1's:
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">demos/hello_cube/main.cpp — the overlay</span><span class="lang">C++</span></figcaption>
+<pre><code class="lang-cpp">overlay_.begin(fb().width(), fb().height());
+
+char line[64];
+std::snprintf(line, sizeof(line), "%d triangles", static_cast&lt;int&gt;(triangles_.size()));
+
+engine::text_layout_options layout{};
+layout.tabular_digits = true;   // the count changes every frame
+const engine::text_metrics m = engine::measure_text(font_, line, layout);
+
+constexpr float pad = 4.0f;
+const float w = m.width + 2.0f * pad;
+const float h = font_.line_height() + 2.0f * pad;
+overlay_.rect(font_, x, y, x + w, y + h, engine::pack_argb(10, 12, 18, 200));
+(void)overlay_.text_top_left(font_, line, {x + pad, y + pad},
+                             engine::pack_argb(235, 240, 250), layout);
+
+engine::composite_overlay(fb(), font_, overlay_, engine::overlay_blend::linear);
+</code></pre>
+</figure>
+
+  <p>
+    Measure, then size the box, then draw the text. Sizing the panel from the string rather than
+    from a guess is what stops a longer label overflowing it, and <code>measure_text</code> is
+    literally <code>layout_text</code> into a discarded buffer — one implementation called twice —
+    so the two cannot disagree about how wide the string is. A <code>measure</code> that walked the
+    string with its own copy of the advance arithmetic would be a second source of truth whose
+    failure mode is a panel four pixels too narrow: visible, trivial, and unattributable.
+  </p>
+
+  <p>
+    One more thing in that snippet earns its line. The font load in <code>on_start</code> is
+    <strong>allowed to fail</strong> — a missing font means no HUD, not no cube. That is the whole
+    argument for Lesson 5.3's return-value error handling, meeting the case it was written for: an
+    asset that is decoration.
+  </p>
+
+  <h3>11.2 What a frame of text costs</h3>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>quantity</th><th>measured</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>heap allocations, 200 steady-state rebuilds</td><td><strong>0</strong></td></tr>
+      <tr><td>batch build, 28 quads</td><td>13.2 µs</td></tr>
+      <tr><td>submission</td><td>2,240 vertex bytes + 336 index bytes, <strong>one draw call</strong></td></tr>
+      <tr><td>atlas</td><td>16,384 bytes (R8); 65,536 as RGBA8</td></tr>
+      <tr><td>baking the atlas</td><td>1.31 ms, once, at load</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Zero allocations is the claim worth defending, and it was measured by replacing the global
+    <code>operator new</code> — 6.17's instrument, reused. It is true only because
+    <code>overlay_batch::begin</code> calls <code>clear()</code> rather than reassigning, so the
+    vectors keep the capacity they reached, and because <code>text()</code> lays out into a scratch
+    vector the batch owns. The measurement runs four warm-up frames first, deliberately: counting
+    the first frame would measure the containers growing, which is 6.17's pooled-bytes mistake — a
+    measurement that only works once — arriving in a new place.
+  </p>
+
+  <h2 id="limits">12. The ninety-percent picture</h2>
+
+  <p>
+    What this lesson built is a <strong>Latin debug-text system</strong>, and the distance between
+    that and "text" is enormous. Naming the gap:
+  </p>
+
+  <ul>
+    <li>
+      <strong>No shaping.</strong> One codepoint becomes one glyph, in logical order. That is wrong
+      for Arabic, where a letter's shape depends on its position in the word; wrong for Devanagari,
+      which reorders and forms conjuncts; wrong for any font with ligatures; and wrong for combining
+      marks. The library is HarfBuzz, it is larger than this engine's renderer, and it is the right
+      answer the moment you need it.
+    </li>
+    <li>
+      <strong>No bidi.</strong> Mixed right-to-left and left-to-right runs need the Unicode
+      bidirectional algorithm (UAX #9) applied <em>before</em> layout can begin.
+    </li>
+    <li>
+      <strong>No line breaking</strong> beyond an explicit <code>\n</code>. Real wrapping needs
+      UAX #14 break opportunities; breaking at spaces is wrong in most of the world.
+    </li>
+    <li>
+      <strong>No subpixel antialiasing.</strong> We produce one coverage value per texel;
+      ClearType-style rendering produces three, one per LCD subpixel, and is dependent on the
+      display's stripe orientation.
+    </li>
+    <li>
+      <strong>No signed distance fields.</strong> An atlas baked at one size is crisp at that size
+      and soft elsewhere. SDF text (Green, 2007) stores distance rather than coverage, so a bilinear
+      tap plus a threshold reconstructs a sharp edge at any scale — and it is the right answer for
+      text that scales, rotates, or needs an outline or a drop shadow. It is not free: corners round
+      off, which multi-channel SDF fixes at 3× the memory, and the threshold has to move with the
+      scale to keep the weight constant.
+    </li>
+    <li>
+      <strong>One font, one size, one style per atlas.</strong> No fallback chain, so a codepoint
+      this atlas does not carry is counted as <code>missing</code> rather than silently skipped.
+    </li>
+  </ul>
+
+  <p>
+    Two smaller ones worth knowing. <code>stb_truetype</code> reads a useful <em>subset</em> of
+    GPOS pair positioning — enough for the 186 pairs in our font, not enough to be called an
+    OpenType layout engine. And our glyphs are rasterized <strong>unhinted</strong>: hinting is a
+    bytecode VM that moves outline points onto the pixel grid at small sizes, and skipping it costs
+    real crispness below about 12 px. Both are reasonable places to stop for an engine whose text is
+    a HUD; neither is a place to stop for a word processor.
+  </p>
+
+  <h2 id="listings">13. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The font itself
+    (<code>assets/fonts/Karla-Regular.ttf</code>, 16,848 bytes, SIL Open Font License 1.1) is binary
+    and is not listed; its provenance and licence are in <code>assets/fonts/OFL.txt</code>.
+  </p>
+
+@@LISTING:engine/include/engine/gfx/font.hpp@@
+@@LISTING:engine/src/gfx/font.cpp@@
+@@LISTING:engine/include/engine/gfx/overlay.hpp@@
+@@LISTING:engine/src/gfx/overlay.cpp@@
+@@LISTING:engine/include/engine/gfx/gpu_overlay.hpp@@
+@@LISTING:engine/src/gfx/gpu_overlay.cpp@@
+@@LISTING:shaders/overlay.vert.hlsl@@
+@@LISTING:shaders/overlay.frag.hlsl@@
+@@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+@@LISTING:engine/src/gfx/gpu_texture.cpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:CMakeLists.txt@@
+@@LISTING:demos/hello_cube/main.cpp@@
+@@LISTING:scratch/verify_618.cpp@@
+
+  <h2 id="run">14. Build &amp; run</h2>
+
+  <p>
+    The font is a new asset, so a configure step is needed before the first build to pick it up.
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Linux / macOS</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+cmake --build build -j8
+
+# the software overlay, in the smallest program in the repository
+./build/demos/hello_cube                        # a window, a cube, a triangle count
+./build/demos/hello_cube --no-hud               # the same cube, without it
+./build/demos/hello_cube --shot cube.ppm        # one frame, headless
+
+# every number in this lesson
+sh scratch/build_verify_618.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_618.sh    # for §K's timings
+</code></pre>
+</figure>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Windows (MSVC, from a Developer Command Prompt)</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+cmake --build build --config Debug
+
+.\build\demos\Debug\hello_cube.exe
+.\build\demos\Debug\hello_cube.exe --shot cube.ppm
+</code></pre>
+</figure>
+
+  <p>
+    <strong>Expected result.</strong> <code>hello_cube</code> shows the amber cube it has shown
+    since Lesson 5.1, with a small dark panel in the top-left corner reading
+    <code>12 triangles</code> in crisp, antialiased type. The panel is only just visible against the
+    background — it is <code>(10, 12, 18)</code> at 78% coverage over <code>(12, 14, 20)</code>, and
+    the compositing arithmetic above predicts exactly the <code>(10, 12, 18)</code> that comes out.
+    Rotate the window and nothing about the text changes: it is laid out in pixels and it does not
+    scale.
+  </p>
+
+  <p>
+    <code>verify_618</code> prints twelve sections and finishes with <code>0 failures</code> out of
+    98 checks. §I and §J need a GPU device; on a machine without one they are skipped and the other
+    ten still run, because everything they test is CPU arithmetic.
+  </p>
+
+  <h2 id="pitfalls">15. Common pitfalls &amp; debugging</h2>
+
+  <h3>The text is a solid block of colour</h3>
+  <p>
+    <strong>Symptom:</strong> every glyph is a filled rectangle in the right place and the right
+    size. <strong>Cause:</strong> the shader is reading the wrong channel of the atlas, or the atlas
+    is bound but the sampler is not, and the fetch returns 1. <strong>Fix:</strong> an
+    <code>R8_UNORM</code> texture read through <code>Texture2D&lt;float4&gt;</code> gives you
+    <code>(r, 0, 0, 1)</code> — the alpha is <em>one</em>, not the coverage. Declare it as
+    <code>Texture2D&lt;float&gt;</code> and use <code>.r</code>, as the listing does.
+  </p>
+
+  <h3>The text is upside down</h3>
+  <p>
+    <strong>Symptom:</strong> correct on the software renderer, mirrored vertically on the GPU, or
+    vice versa. <strong>Cause:</strong> the pixel-space-to-clip-space flip has been applied twice or
+    zero times. <strong>Fix:</strong> there is exactly one <code>1.0f -</code> in the vertex shader
+    and no flip anywhere else. If you added one in the layout so that a quad's <code>y0</code> is
+    below its <code>y1</code>, remove it: the layout works in pixel space, +y down, and says so.
+  </p>
+
+  <h3>Every glyph has a faint border of the letter beside it</h3>
+  <p>
+    <strong>Symptom:</strong> ghosting, worse on tall letters. <strong>Cause:</strong> insufficient
+    atlas padding for the filtering in use. <strong>Fix:</strong> §5.2. One texel covers bilinear at
+    level 0; a chain <em>L</em> levels deep needs 2<sup><em>L</em></sup>.
+  </p>
+
+  <h3>The text is blurry and moving the quad by half a pixel does not fix it</h3>
+  <p>
+    <strong>Symptom:</strong> soft, slightly doubled glyphs. <strong>Cause:</strong> the quad is not
+    on the pixel grid, or the viewport the batch was laid out for is not the viewport it was drawn
+    into. <strong>Fix:</strong> check <code>snap_to_pixel</code> first, then check that
+    <code>overlay_batch::begin</code> was given the same size as the render target.
+    <code>gpu_overlay::record</code> reads the viewport <em>from the batch</em> rather than from the
+    device precisely so that a mismatch is impossible — but a batch built for last frame's size and
+    drawn this frame will still stretch.
+  </p>
+
+  <h3>Light text looks thin, or dark text looks fat</h3>
+  <p>
+    <strong>Symptom:</strong> the weight is wrong and the font is not. <strong>Cause:</strong> §7.
+    <strong>Fix:</strong> run the diagnostic. Render the same string white-on-black and
+    black-on-white and compare the ink. If one is thin and the other fat, the blend space is wrong —
+    look at the colour target's format. If <em>both</em> are thin, the atlas is being decoded — look
+    at the texture's format.
+  </p>
+
+  <h3>The frame-time readout jitters horizontally</h3>
+  <p>
+    <strong>Symptom:</strong> a right-aligned number whose characters shuffle every frame.
+    <strong>Cause:</strong> proportional digit advances. <strong>Fix:</strong>
+    <code>text_layout_options::tabular_digits</code>, §3.3.
+  </p>
+
+  <h3>A string with a <code>j</code> or an <code>f</code> is clipped on the left</h3>
+  <p>
+    <strong>Symptom:</strong> one letter has a sliver missing. <strong>Cause:</strong> a background
+    or a scissor rectangle sized from <code>text_metrics::width</code>, which is the
+    <em>advance</em> width. <strong>Fix:</strong> use <code>ink_x0</code>/<code>ink_x1</code> when
+    you need the extent of the pixels — they differ, and §3 says by how much.
+  </p>
+
+  <h3>Kerning does nothing</h3>
+  <p>
+    <strong>Symptom:</strong> <code>AV</code> looks loose, and <code>font_atlas::kerning</code> is
+    empty. <strong>Cause:</strong> the font has no legacy <code>kern</code> table and your reader
+    only knows about that one. <strong>Fix:</strong> §3.2 — use a
+    <code>stb_truetype</code> at 1.19 or later, which reads GPOS. Check
+    <code>font_atlas::kerning.size()</code> after a bake; zero on a modern font is the signal.
+  </p>
+
+  <h3>The overlay erases the frame under it</h3>
+  <p>
+    <strong>Symptom:</strong> the 3D scene disappears and only the HUD is left, on a black field.
+    <strong>Cause:</strong> the pass declared <code>discard_write</code> (or set
+    <code>SDL_GPU_LOADOP_DONT_CARE</code> by hand) on a target it actually blends into.
+    <strong>Fix:</strong> §10.2 — an alpha blend reads its destination, so the verb is
+    <code>keep</code>.
+  </p>
+
+  <h2 id="exercises">16. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Bake at a second size and look at the atlas.</strong> Change
+        <code>font_bake_options::pixel_height</code> to 32 and print <code>width</code>,
+        <code>height</code>, <code>used_height</code> and the shelf efficiency. Predict the atlas
+        side before you run it.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> glyph area scales with the square of the size, so 7,145 texels becomes roughly
+        28,600 — which needs a 256-square atlas, since 128 × 128 is 16,384. Shelf efficiency should
+        barely move, because the heights still cluster. If it moves a lot, look at which glyph is
+        setting the first shelf's height.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Make the wrong blend space visible.</strong> Change
+        <code>hello_cube</code>'s <code>composite_overlay</code> call to
+        <code>overlay_blend::encoded</code> and take two shots — one with light text on the dark
+        background, one with the colours swapped. Look at them side by side at 4× zoom.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the effect is much easier to see on the light background, where the text gets
+        <em>heavier</em>, because the eye is better at noticing ink appear than disappear. That is
+        itself worth knowing: the version of this bug that ships is usually the light-on-dark one.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Add a scissor rectangle.</strong> Give <code>overlay_batch</code> a clip rectangle
+        that quads are cropped against, in pixel space, with the texture coordinates adjusted to
+        match. Make it work on both renderers and extend §J's comparison to cover it.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> cropping a quad means moving a vertex <em>and</em> its uv by the same
+        fraction. The arithmetic is a lerp of the uv by <code>(new_x - x0) / (x1 - x0)</code>. The
+        GPU alternative is <code>SDL_SetGPUScissor</code>, which is free but is per-<em>draw</em> —
+        so using it splits the one draw call into one per clip region, and that trade is the whole
+        reason ImGui does it in the vertex data instead. Measure both.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Word wrapping.</strong> Add a <code>max_width</code> to
+        <code>text_layout_options</code> and break lines at spaces when the pen would exceed it.
+        Then find a string your implementation breaks wrongly.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> you will find one quickly — <code>"don't"</code> is fine but
+        <code>"e-mail"</code> and <code>"1,000"</code> and any CJK text are not, because break
+        opportunities are a property of Unicode (UAX #14) rather than of the space character. The
+        exercise is worth doing precisely to arrive at that sentence honestly.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Engine challenge: signed distance fields.</strong> Bake a second atlas holding
+        distance rather than coverage — for each texel, the signed distance to the nearest outline,
+        normalised into a byte — and add a shader path that thresholds it with
+        <code>smoothstep</code>. Draw the same string at 1×, 4× and 16× and compare against the
+        coverage atlas.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> <code>stbtt_GetCodepointSDF</code> does the bake. Three things will surprise
+        you. The threshold must move with the scale or the weight changes; corners round off, which
+        is the known limitation multi-channel SDF exists to fix; and the padding requirement is now
+        set by the distance <em>range</em> rather than by the filter, because a texel outside the
+        glyph still carries meaningful data. That last one is §5.2's argument arriving with a
+        completely different constant.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">17. Recap &amp; next</h2>
+
+  <p>
+    The engine can say something. It bakes a real outline font into one channel of coverage, packs
+    ninety-five glyphs onto six shelves deterministically, lays out UTF-8 with kerning and tabular
+    figures, and composites the result in linear light — on the CPU into a framebuffer, and on the
+    GPU in one draw call, with the two agreeing to within one sRGB code on every pixel.
+  </p>
+
+  <p>
+    What is worth carrying out of this lesson is mostly not about text.
+  </p>
+
+  <ul>
+    <li>
+      <strong>The same rounding applied to two different quantities has completely different
+      consequences.</strong> Snap a position and the error is bounded forever; round an advance and
+      it is a random walk. Before rounding anything, ask whether the value you are rounding feeds
+      back into itself.
+    </li>
+    <li>
+      <strong>A measurement whose denominator does not depend on the thing under test measures
+      something else.</strong> "What fraction of the atlas is glyphs" is a fact about the font.
+      Shelf efficiency is a fact about the packer. This is the sixth member of a family running
+      since 6.14 — can this measurement produce a non-null result; has it converged; can this axis
+      show the effect; can this comparison report a difference; is the reason I am building this
+      true here; and now: <em>does my denominator move when the code does?</em>
+    </li>
+    <li>
+      <strong>A check whose degenerate case is a pass is not a check.</strong>
+      <code>inf &gt; 80.0</code> is true. This is the second time in three lessons that a
+      degenerate input has produced a green tick, and both times only an implausible printed number
+      gave it away.
+    </li>
+    <li>
+      <strong>Two bugs in two different files can be the same function.</strong> An
+      <code>_SRGB</code> coverage atlas and an sRGB-space blend agree to four significant figures on
+      a dark background. When two independent explanations predict the same measurement, the useful
+      move is to find the measurement that separates them — here, simply inverting the contrast.
+    </li>
+    <li>
+      <strong>A new type's job can be to make a bug impossible rather than catchable.</strong>
+      Naming four colour bytes <code>r, g, b, a</code> removes the endianness question that cost
+      6.15 a debugging session, and there is no test to write because there is nothing left to get
+      wrong.
+    </li>
+  </ul>
+
+  <p>
+    <strong>Next</strong> is Module 7, and the ground shifts. Module 6 has been about <em>light</em>
+    for eighteen lessons; Module 7 is about <em>motion</em>. It opens with rotations done properly —
+    Euler angles and their pathologies, axis-angle, and then quaternions built up from a full
+    understanding of complex-number rotation in 2D rather than dropped in as four mysterious numbers
+    — then skeletal animation, and SDL3's audio-stream model with 3D spatialization. The engine gets
+    its first moving parts that are not a spinning cube.
+  </p>
+
+  <h2 id="reading">18. Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Sean Barrett, <em>stb_truetype.h</em></strong> — the source is the documentation, and
+      it is genuinely readable. The rasterizer (v2, antialiasing by exact area) is worth reading
+      end to end; so is the comment block explaining why <code>ScaleForPixelHeight</code> and
+      <code>ScaleForMappingEmToPixels</code> both exist.
+    </li>
+    <li>
+      <strong>Microsoft, <em>OpenType specification</em></strong> — in particular the
+      <code>cmap</code>, <code>hhea</code>, <code>hmtx</code> and <code>GPOS</code> chapters. Read
+      <code>cmap</code> format 4 once and the case for not hand-rolling this will make itself.
+    </li>
+    <li>
+      <strong>Thomas Porter and Tom Duff, "Compositing Digital Images" (SIGGRAPH 1984)</strong> —
+      four pages, and the source of the <code>over</code> operator, the associativity argument for
+      premultiplied alpha, and the vocabulary everyone still uses.
+    </li>
+    <li>
+      <strong>Chris Green, "Improved Alpha-Tested Magnification for Vector Textures and Special
+      Effects" (SIGGRAPH 2007 courses)</strong> — the signed-distance-field paper, from Valve. Six
+      pages, and exercise 5 is an implementation of it.
+    </li>
+    <li>
+      <strong>Viktor Chlumský, <em>msdfgen</em></strong> — multi-channel SDF, which is the answer to
+      the corner-rounding limitation Green's method has. The README explains the failure it fixes
+      better than any paper.
+    </li>
+    <li>
+      <strong>FreeType, <em>Text Rendering Technology</em></strong> — especially the documents on
+      hinting and on stem darkening, which is where §7.4's argument comes from and where the
+      trade-offs are argued by people who have had to ship both answers.
+    </li>
+    <li>
+      <strong>Behdad Esfahbod, <em>HarfBuzz</em> documentation</strong> — the "What is text shaping"
+      introduction is the clearest short statement of everything §12 says we do not do.
+    </li>
+    <li>
+      <strong>Nicolas Rougier, "Higher Quality 2D Text Rendering" (Journal of Computer Graphics
+      Techniques, 2013)</strong> — subpixel positioning, gamma correction and hinting for OpenGL
+      text, with measurements. The closest thing in the literature to this lesson's §4 and §7.
+    </li>
+    <li>
+      <strong>Dear ImGui, <code>imgui_draw.cpp</code></strong> — a production immediate-mode
+      renderer whose vertex format, atlas and white-pixel trick are all one file away. Reading it
+      after this lesson is a good way to check your understanding: nearly every decision in it is
+      one you have now made yourself.
+    </li>
+  </ul>

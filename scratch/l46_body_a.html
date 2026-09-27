@@ -1,0 +1,538 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-05-vertex-buffers.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.5 — Vertex Buffers and Layouts</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-07-textures-and-depth.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.7 — Textures, Samplers, and Depth</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.6</div>
+    <h1>Uniform Data and the Matrix Upload</h1>
+    <p class="deck">
+      The camera in Lesson 4.5's vertex shader was a pile of <code>static const</code> floats,
+      frozen at compile time because there was no way to send it anything. This lesson gives the
+      shader a third kind of input — data that is the same for every vertex of every instance —
+      and finds out, by measurement, exactly which bytes arrive where. One of the answers
+      contradicts a claim this course has carried since Lesson 2.6, and the other contradicts
+      SDL's own documentation.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-05-vertex-buffers.html">4.5 — Vertex Buffers and Layouts</a>,
+          <a href="04-03-shader-toolchain.html">4.3 — The Shader Toolchain</a>,
+          <a href="02-06-mat4.html">2.6 — Building mat4</a>,
+          <a href="02-09-view-matrix.html">2.9 — The View Matrix</a>,
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>src/gfx/gpu_uniform.hpp</code>, <code>shaders/mesh.vert.hlsl</code>,
+            <code>shaders/mesh.frag.hlsl</code>, <code>shaders/uniform_probe.vert.hlsl</code>,
+            <code>shaders/uniform_probe.frag.hlsl</code>, <code>src/main.cpp</code>,
+            <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A camera you can fly with the arrow keys, driving a scene whose geometry has not
+            moved on the device since last lesson — plus a measured answer to "which byte of my
+            struct does the shader actually read?"</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the three rates at which data changes in a frame, and say which mechanism serves
+          each.</li>
+      <li>…explain why SDL_GPU has no uniform buffer <em>object</em>, and what it has instead.</li>
+      <li>…lay out a C++ struct so that a shader reads the fields you meant, and state the one
+          rule that decides it.</li>
+      <li>…recognise the symptom of a uniform layout bug — a corrupted <em>tail</em> — and
+          distinguish it from the vertex-layout bugs of Lesson 4.5.</li>
+      <li>…upload a matrix and be certain it arrived untransposed, because you checked all
+          sixteen elements rather than trusting a comment.</li>
+      <li>…say which tool catches a wrong register space, and which three do not.</li>
+      <li>…decide when data is too big to push, with a number rather than a feeling.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-rates">Three rates, not two</a></li>
+          <li><a href="#intuition-nobuffer">The buffer that does not exist</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-why">Why alignment rules exist at all</a></li>
+          <li><a href="#theory-rule">The rule, and the one SDL's header names instead</a></li>
+          <li><a href="#theory-worked">A worked example, field by field</a></li>
+          <li><a href="#theory-matrix">The matrix, and what "column-major" was worth</a></li>
+          <li><a href="#theory-space">The register space, and who checks it</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-blocks">Two blocks, and an assertion that executes the rule</a></li>
+          <li><a href="#impl-probe">An instrument for asking the GPU what it got</a></li>
+          <li><a href="#impl-shaders">Retiring thirty lines of frozen camera</a></li>
+          <li><a href="#impl-push">Three lines, once per frame</a></li>
+          <li><a href="#impl-camera">A camera you can fly</a></li>
+          <li><a href="#impl-cost">How much is too much to push</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the camera Lesson 4.5 drew with, in full:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/mesh.vert.hlsl, Lesson 4.5</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">static const float3 k_eye        = float3(0.0f, 2.3f, 5.0f);
+static const float  k_pitch_cos  = 0.8499027f;
+static const float  k_pitch_sin  = 0.5269397f;
+static const float  k_focal_x    = 1.0805524f;   // t / aspect
+static const float  k_focal_y    = 1.9209821f;   // t = 1 / tan(fovY/2)
+static const float  k_depth_a    = -1.0030090f;  // R = f / (n - f)
+static const float  k_near       = 0.3f;</code></pre>
+  </figure>
+
+  <p>
+    Seven constants, and eleven lines of arithmetic further down that used them. The maths was
+    honest — it is Lesson 2.10's projection matrix written out term by term — but the numbers
+    were welded into the shader, and a camera welded into a shader is not a camera. It cannot
+    orbit, it cannot follow anything, it cannot even adapt to a resized window without the
+    viewport being asked to compensate.
+  </p>
+
+  <p>
+    So: send the shader a matrix instead. The obvious question is <em>through which buffer</em>,
+    and the answer is neither of the ones we have.
+  </p>
+
+  <p>
+    The vertex buffer is per-vertex. Our torus has 1,225 vertices and is drawn seven times, so
+    putting a view-projection matrix there would mean writing the same sixteen floats
+    <strong>8,575 times a frame</strong> — 548 kilobytes to say one thing. The instance buffer is
+    per-instance, which is better arithmetic and worse modelling: the camera is not a property of
+    an instance, and writing it seven times says something false about what it is.
+  </p>
+
+  <p>
+    What the camera actually is, is <strong>per-frame</strong>: one value, shared by every
+    invocation of every shader in the draw. That is a third rate of change, and it needs a third
+    mechanism.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Not yet</span>
+    <p>
+      <strong>Still no depth test.</strong> That is Lesson 4.7, and giving the camera freedom is
+      about to make its absence obvious: orbit until two tori overlap and you will see the later
+      one drawn over the nearer one. Lesson 4.5's fixed camera hid this by arranging the scene so
+      nothing overlapped. That is worth noticing as a general shape — <em>a limitation you have
+      designed around stops being visible, and starts being load-bearing.</em>
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-rates">2.1 Three rates, not two</h3>
+
+  <p>
+    Every piece of data a shader reads changes at some rate, and there are exactly three that
+    matter for a draw call.
+  </p>
+
+@@FIG_RATES@@
+
+  <p>
+    Lesson 4.5 built the first two and showed that the difference between them is one enum value
+    — <code>input_rate</code> on a buffer description. It is tempting to expect the third to be
+    more of the same: a buffer, a slot, a rate called <code>PER_DRAW</code>. It is not, and the
+    reason is that the first two are <em>fetches</em> — the hardware indexes into an array using
+    a counter it is already keeping — while the third is not an array at all. There is one value.
+    Indexing into it would be indexing into a single element with a counter that never advances.
+  </p>
+
+  <h3 id="intuition-nobuffer">2.2 The buffer that does not exist</h3>
+
+  <p>
+    If you have used OpenGL or D3D11, you know the shape of the answer you expect: create a
+    uniform buffer object, fill it, bind it to a slot, draw. Go looking for it in SDL_GPU and it
+    is not there. Here is the complete list of things a buffer can be:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="c">C</span>
+    </figcaption>
+    <pre><code class="lang-cpp">#define SDL_GPU_BUFFERUSAGE_VERTEX                  (1u &lt;&lt; 0)
+#define SDL_GPU_BUFFERUSAGE_INDEX                   (1u &lt;&lt; 1)
+#define SDL_GPU_BUFFERUSAGE_INDIRECT                (1u &lt;&lt; 2)
+#define SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ   (1u &lt;&lt; 3)
+#define SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ    (1u &lt;&lt; 4)
+#define SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE   (1u &lt;&lt; 5)</code></pre>
+  </figure>
+
+  <p>
+    <strong>There is no <code>UNIFORM</code> bit.</strong> What SDL_GPU offers instead is this:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="c">C</span>
+    </figcaption>
+    <pre><code class="lang-cpp">extern SDL_DECLSPEC void SDLCALL SDL_PushGPUVertexUniformData(
+    SDL_GPUCommandBuffer *command_buffer,
+    Uint32 slot_index,
+    const void *data,
+    Uint32 length);</code></pre>
+  </figure>
+
+  <p>
+    Read the first parameter again. Not a device, not a render pass — a <strong>command
+    buffer</strong>. You are not creating a resource and binding it; you are <em>recording bytes
+    into the command stream</em>, and every draw recorded after that point reads them.
+  </p>
+
+@@FIG_PUSH@@
+
+  <p>
+    Three consequences follow immediately, and all three are simplifications:
+  </p>
+
+  <ul>
+    <li>
+      <strong>There is no lifetime to manage.</strong> No create, no release, no move-only wrapper
+      class. Every other GPU resource in this engine needed one; this needs none, because there is
+      no object.
+    </li>
+    <li>
+      <strong>There is no synchronisation hazard.</strong> Lesson 4.5 built
+      <code>gpu_stream_buffer</code> with cycling precisely because a per-frame write can land on
+      a read the GPU has not performed yet. A push cannot: the bytes are copied into the command
+      buffer at the moment of the call, and that command buffer is not executing yet.
+    </li>
+    <li>
+      <strong>Ordering is the only rule, and it is the obvious one.</strong> A draw sees the most
+      recent push before it. Measured: push 201, draw, push 77, draw — the second draw reads 77,
+      with nothing bound, rebound or released in between.
+    </li>
+  </ul>
+
+  <p>
+    The cost of those simplifications is that the bytes are <em>copied</em>, once per call, which
+    is why this mechanism is for small data and why §4.6 measures where "small" ends.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-why">3.1 Why alignment rules exist at all</h3>
+
+  <p>
+    You are about to meet a rule about where fields may sit in a uniform block, and it will make
+    much more sense if you know what it is protecting.
+  </p>
+
+  <p>
+    A GPU reads uniform data in <strong>16-byte units</strong> — four floats at a time, matching
+    the width of the vector registers the shader cores work in. Call one such unit a
+    <em>register</em>. Fetching a <code>float4</code> that sits exactly on a register boundary is
+    one load. Fetching a <code>float4</code> that starts four bytes into a register is
+    <em>two</em> loads plus a shift to glue the halves together — for every invocation, of which
+    there are millions.
+  </p>
+
+  <p>
+    So the hardware would rather not, and the shading languages make sure it never has to, by
+    forbidding a vector from straddling a register boundary. That single sentence generates the
+    entire rule. Everything else is bookkeeping about where the boundaries fall.
+  </p>
+
+  <h3 id="theory-rule">3.2 The rule, and the one SDL's header names instead</h3>
+
+  <p>
+    Here is what SDL's header says about the data you push:
+  </p>
+
+  <blockquote>
+    <p>
+      The data being pushed must respect std140 layout conventions. In practical terms this means
+      you must ensure that vec3 and vec4 fields are 16-byte aligned.
+    </p>
+  </blockquote>
+
+  <p>
+    That is good advice and it is <em>not</em> what our toolchain does. HLSL has its own
+    constant-buffer packing rule, and it is looser:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">HLSL constant-buffer packing, in one sentence</span>
+    <p>
+      Fields are placed in declaration order and packed tightly, except that <strong>a vector may
+      not straddle a 16-byte register boundary</strong> — if it would, it starts at the next
+      boundary instead. A scalar is never moved.
+    </p>
+  </div>
+
+  <p>
+    The difference from std140 is that std140 <em>also</em> requires every <code>float3</code> and
+    <code>float4</code> to <em>start</em> on a 16-byte boundary, while HLSL is happy for a
+    <code>float3</code> to sit at byte 68, tucked in behind a scalar at 64, because 68 through 79
+    is still inside register 4.
+  </p>
+
+  <p>
+    Which one governs? Whichever one <em>the compiler used</em> — because the offsets are baked
+    into the compiled shader, and SDL simply copies your bytes to where that shader will look.
+    Compiled through <code>shadercross</code>, ours uses HLSL's rule. We know because the offsets
+    are visible in the compiled SPIR-V:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">spirv-dis build/shaders/uniform_probe.frag.spv | grep MemberDecorate</span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">OpMemberDecorate %Probe 0 Offset 0     // float4x4 m
+OpMemberDecorate %Probe 1 Offset 64    // float  scalar_a
+OpMemberDecorate %Probe 2 Offset 68    // float3 vector_b   <- std140 would say 80
+OpMemberDecorate %Probe 3 Offset 80    // float  scalar_c
+OpMemberDecorate %Probe 4 Offset 84    // float2 pair_d
+OpMemberDecorate %Probe 5 Offset 96    // float3 vector_e   <- 92 would straddle</code></pre>
+  </figure>
+
+  <p>
+    So why follow SDL's advice at all, if it describes a stricter rule than the one in force?
+    Because <strong>std140 is a superset</strong>: a layout that satisfies it automatically
+    satisfies HLSL packing, since a field on a 16-byte boundary cannot straddle one. Following
+    SDL's advice costs a few bytes of padding and makes the question of which rule applies stop
+    mattering — including if you later add a GLSL front end, where std140 <em>is</em> the rule.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The habit that makes this go away</span>
+    <p>
+      <strong>Pair every <code>float3</code> with a <code>float</code>.</strong> The two together
+      fill a register exactly, so the next field starts on a boundary, so nothing can straddle,
+      so both rules agree. Our lighting block is <code>float3 to_light; float ambient; float3
+      sky; float diffuse;</code> — thirty-two bytes, two registers, no padding to explain to
+      anyone. Most real uniform blocks can be arranged this way with a little thought, and the
+      thought is cheaper than the bug.
+    </p>
+  </div>
+
+  <h3 id="theory-worked">3.3 A worked example, field by field</h3>
+
+  <p>
+    Take the block above and walk it by hand. Registers are 16 bytes, so their boundaries are at
+    0, 16, 32, 48, 64, 80, 96.
+  </p>
+
+  <ol>
+    <li>
+      <code>float4x4 m</code> — a matrix is four <code>float4</code> columns, each 16 bytes.
+      Starts at <strong>0</strong>, occupies 0–63, ends exactly on a boundary.
+    </li>
+    <li>
+      <code>float scalar_a</code> — a scalar is never moved. <strong>64</strong>, occupying 64–67.
+    </li>
+    <li>
+      <code>float3 vector_b</code> — 12 bytes. Placing it at 68 occupies 68–79. Register 4 runs
+      64–79, so this fits entirely inside it. <strong>68</strong>.
+      <span class="muted">(std140 would have moved it to 80.)</span>
+    </li>
+    <li>
+      <code>float scalar_c</code> — the cursor is at 80. A scalar is never moved.
+      <strong>80</strong>.
+    </li>
+    <li>
+      <code>float2 pair_d</code> — 8 bytes at 84 occupies 84–91. Register 5 runs 80–95, so it
+      fits. <strong>84</strong>.
+    </li>
+    <li>
+      <code>float3 vector_e</code> — 12 bytes at 92 would occupy 92–103, and register 5 ends at
+      95. <strong>It straddles, so it moves to 96.</strong>
+    </li>
+  </ol>
+
+  <p>
+    Now write the same fields as a C++ struct with no padding and run the same walk. C++ has no
+    register concept; it aligns each <code>float</code> to 4 and packs. Every field lands in the
+    same place — until the last one, which C++ puts at <strong>92</strong>.
+  </p>
+
+@@FIG_PACKING@@
+
+  <p>
+    Four bytes, one field, and the consequence is precise: the shader reads
+    <code>vector_e</code> from bytes 96–107, which is where C++ wrote the <em>second</em>
+    component onward. Measured, having written (241, 242, 243):
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What each struct delivered</caption>
+    <thead><tr><th>the struct</th><th>e.x</th><th>e.y</th><th>e.z</th></tr></thead>
+    <tbody>
+      <tr><td>naive — no padding</td><td>242</td><td>243</td><td><strong>0</strong></td></tr>
+      <tr><td>padded to 96</td><td>241</td><td>242</td><td>243</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Shifted by exactly one float, with a zero on the end where the read ran past what was
+    written. And note which fields survived: <strong>everything before the divergence</strong>.
+    A uniform layout bug corrupts the <em>tail</em> of a block, so the first thing you look at is
+    usually fine — which is the opposite of Lesson 4.5's vertex-pitch bug, where vertex 0 was
+    always right and things got worse further in. Both are "the beginning looks fine", for
+    completely different reasons.
+  </p>
+
+  <h3 id="theory-matrix">3.4 The matrix, and what "column-major" was worth</h3>
+
+  <p>
+    Lesson 2.6 chose to store <code>mat4</code> as four columns, and said this about it:
+  </p>
+
+  <blockquote>
+    <p>
+      That layout is not only ours. It is what SDL_GPU and HLSL constant buffers expect, which is
+      why Module 4 will be able to upload one of these with a plain <code>memcpy</code> and no
+      transpose at the boundary — the single most common place for a transform to get flipped
+      exactly once.
+    </p>
+  </blockquote>
+
+  <p>
+    That was written two modules before anything could check it, and a claim nobody has checked
+    is a claim, not a fact. So: push a matrix whose element at written <em>(row, col)</em> is
+    <code>16·row + col + 1</code>, ask the shader to report <code>m[row][col]</code> for all
+    sixteen, and read the answer off the screen a pixel at a time.
+  </p>
+
+@@FIG_MATRIX@@
+
+  <p>
+    Every element landed where our storage put it. <strong>No transpose, anywhere</strong> —
+    <code>memcpy</code> is the entire conversion, and Lesson 2.6's claim survives contact.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And do not believe the intermediate</span>
+    <p>
+      Disassemble the compiled shader and you find
+      <code>OpMemberDecorate&nbsp;%Camera&nbsp;0&nbsp;RowMajor</code> &mdash; which looks
+      exactly like the transpose the table above proves is not happening.
+    </p>
+    <p>
+      It is an artefact of how DXC maps HLSL's packing onto SPIR-V's naming, not a statement
+      about your bytes. This is worth a moment's reflection beyond the immediate fact: <strong>an
+      intermediate representation is allowed to describe your data in its own vocabulary.</strong>
+      The only thing that settles a question like this is a measurement at the endpoint you
+      actually care about — which took one probe shader and about forty lines.
+    </p>
+  </div>
+
+  <h3 id="theory-space">3.5 The register space, and who checks it</h3>
+
+  <p>
+    Lesson 4.3 established that SDL fixes the register space per stage, and that it is not
+    negotiable. The uniform blocks in this lesson are the first ones the engine actually draws
+    with, so it is worth having the whole table in front of you:
+  </p>
+
+@@FIG_SPACE@@
+
+  <p>
+    Lesson 4.3 said a wrong space would be "silent". That was a reasonable inference and it turns
+    out to be <strong>half right</strong>, in an interesting way. Put the fragment shader's
+    <code>cbuffer</code> in <code>space0</code> and ask each tool in the chain what it thinks:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Which tool catches a wrong register space</caption>
+    <thead><tr><th>tool</th><th>verdict</th></tr></thead>
+    <tbody>
+      <tr><td><code>glslc</code>, HLSL → SPIR-V</td><td>accepted — it does not care</td></tr>
+      <tr><td>the JSON reflection</td><td><strong>byte-identical</strong> to the correct shader</td></tr>
+      <tr><td><code>spirv-dis | grep DescriptorSet</code></td><td>0 instead of 3 — visible</td></tr>
+      <tr><td><code>shadercross</code>, SPIR-V → MSL</td>
+          <td><strong>REFUSED</strong>: <em>"Descriptor set index for graphics uniform buffer must be 1 or 3!"</em></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    So the <strong>build</strong> catches it — on the way to Metal, and equally on the way to
+    DXIL — with an exact and correct message. That is Lesson 4.3's argument for compiling offline
+    paying off from an unexpected direction: compiling ahead of time did not just save runtime
+    cost, it moved a failure that would otherwise have been a black screen into a build error on
+    your own machine.
+  </p>
+
+  <p>
+    Two caveats, both important. The <strong>reflection cannot see it</strong> — the JSON is
+    byte-identical, which means the cross-check that saved Lesson 4.5 is no help here at all. And
+    a <strong>Vulkan build consumes the SPIR-V directly</strong>, with no translation step to
+    refuse, so there is nothing in that path to catch it.
+  </p>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify on your backend</span>
+    <p>
+      The refusal above was measured on the MSL path. The DXIL path goes through the same
+      SPIRV-Cross step and should behave identically; the SPIR-V path has no such step and
+      presumably reads the wrong descriptor set at runtime. That last sentence is a prediction,
+      not a measurement — there is no Vulkan device on the machine this lesson was written on.
+      If you have one, this is a ten-minute experiment and the answer belongs in your notes.
+    </p>
+  </div>

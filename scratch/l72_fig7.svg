@@ -1,0 +1,63 @@
+<svg viewBox="0 0 760 404" role="img" aria-labelledby="f72g-t f72g-d">
+  <title id="f72g-t">The identity end</title>
+  <desc id="f72g-d">A log plot with two curves against the size of the turn, from a hundredth of a radian down to ten to the minus eight. The amber curve, the error in the recovered axis, rises steadily by a factor of ten for every factor of ten the angle shrinks, reaching half a degree at the threshold and then jumping to 78 degrees where the routine returns a placeholder instead — those two points are drawn hollow. The blue curve, the error in the orientation those same numbers rebuild, is flat across the whole range at about five millionths of a degree.</desc>
+  <defs>
+    <marker id="e-i-f72g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f72g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f72g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f72g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f72g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="110" y="56" width="460" height="240" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="110" y1="285.09090909090907" x2="570" y2="285.09090909090907" class="grid" stroke-width="1.0"/>
+<text x="100" y="289.09090909090907" class="mono xs muted" text-anchor="end">1e-6°</text>
+<line x1="110" y1="230.54545454545453" x2="570" y2="230.54545454545453" class="grid" stroke-width="1.0"/>
+<text x="100" y="234.54545454545453" class="mono xs muted" text-anchor="end">1e-4°</text>
+<line x1="110" y1="176.0" x2="570" y2="176.0" class="grid" stroke-width="1.0"/>
+<text x="100" y="180.0" class="mono xs muted" text-anchor="end">1e-2°</text>
+<line x1="110" y1="121.45454545454547" x2="570" y2="121.45454545454547" class="grid" stroke-width="1.0"/>
+<text x="100" y="125.45454545454547" class="mono xs muted" text-anchor="end">1e0°</text>
+<line x1="110" y1="66.90909090909093" x2="570" y2="66.90909090909093" class="grid" stroke-width="1.0"/>
+<text x="100" y="70.90909090909093" class="mono xs muted" text-anchor="end">1e2°</text>
+<line x1="110.0" y1="56" x2="110.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="110.0" y="314" class="mono xs muted" text-anchor="middle">1e-2</text>
+<line x1="202.0" y1="56" x2="202.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="202.0" y="314" class="mono xs muted" text-anchor="middle">1e-3</text>
+<line x1="294.0" y1="56" x2="294.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="294.0" y="314" class="mono xs muted" text-anchor="middle">1e-4</text>
+<line x1="386.0" y1="56" x2="386.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="386.0" y="314" class="mono xs muted" text-anchor="middle">1e-5</text>
+<line x1="478.0" y1="56" x2="478.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="478.0" y="314" class="mono xs muted" text-anchor="middle">1e-6</text>
+<line x1="570.0" y1="56" x2="570.0" y2="296" class="grid" stroke-width="1.0"/>
+<text x="570.0" y="314" class="mono xs muted" text-anchor="middle">1e-8</text>
+<rect x="432.0" y="56" width="138.0" height="240" rx="0" fill="#8f918a" stroke="#8f918a" stroke-width="0.0" fill-opacity="0.1"/>
+<line x1="432.0" y1="42.0" x2="432.0" y2="296.0" stroke="#60ded0" stroke-width="1.6" fill="none" stroke-dasharray="5 4"/>
+<text x="432.0" y="36" class="xs" text-anchor="middle">k_axis_angle_identity_angle = 1e-5</text>
+<path d="M 110.00,211.48 L 202.00,183.75 L 294.00,156.59 L 386.00,129.31" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<circle cx="110.0" cy="211.5" r="3.8" fill="#f0961e"/>
+<circle cx="202.0" cy="183.7" r="3.8" fill="#f0961e"/>
+<circle cx="294.0" cy="156.6" r="3.8" fill="#f0961e"/>
+<circle cx="386.0" cy="129.3" r="3.8" fill="#f0961e"/>
+<circle cx="478.0" cy="69.8" r="3.8" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<circle cx="570.0" cy="69.8" r="3.8" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<path d="M 110.00,265.60 L 202.00,265.62 L 294.00,265.62 L 386.00,265.62 L 478.00,234.31 L 570.00,265.62" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<circle cx="110.0" cy="265.6" r="3.8" fill="#5082e6"/>
+<circle cx="202.0" cy="265.6" r="3.8" fill="#5082e6"/>
+<circle cx="294.0" cy="265.6" r="3.8" fill="#5082e6"/>
+<circle cx="386.0" cy="265.6" r="3.8" fill="#5082e6"/>
+<circle cx="478.0" cy="234.3" r="3.8" fill="#5082e6"/>
+<circle cx="570.0" cy="265.6" r="3.8" fill="#5082e6"/>
+<text x="340.0" y="334" class="xs muted" text-anchor="middle">θ — the size of the turn, in radians</text>
+<rect x="584" y="60" width="146" height="136" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<line x1="592.0" y1="78.0" x2="610.0" y2="78.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="616" y="82" class="xs" text-anchor="start">axis error</text>
+<line x1="592.0" y1="100.0" x2="610.0" y2="100.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="616" y="104" class="xs" text-anchor="start">orientation</text>
+<text x="592" y="130" class="xs muted" text-anchor="start">hollow amber:</text>
+<text x="592" y="146" class="xs muted" text-anchor="start">the placeholder</text>
+<text x="592" y="162" class="xs muted" text-anchor="start">axis, not a</text>
+<text x="592" y="178" class="xs muted" text-anchor="start">measurement</text>
+<text x="380.0" y="358" class="xs muted" text-anchor="middle">the amber line climbs a decade per decade and ends 78° wrong; the blue one is flat at five millionths of a degree</text>
+<text x="380.0" y="384" class="xs muted" text-anchor="middle">same runs, same matrices. the axis is destroyed and the orientation it names is not.</text>
+</svg>

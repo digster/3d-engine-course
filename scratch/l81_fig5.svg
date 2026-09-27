@@ -1,0 +1,90 @@
+<svg viewBox="0 0 900 448" role="img" aria-labelledby="l81f5-t l81f5-d">
+  <title id="l81f5-t">Energy against time on a log axis for three integrators on a spring</title>
+  <desc id="l81f5-d">Explicit Euler's energy climbs as a straight line on a log axis, reaching 1e17 times its starting value after a minute, and the drawn line is the closed form predicted by the determinant. The other two sit flat on 1.</desc>
+  <defs>
+    <marker id="e-i-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l81f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="62" y="56" width="430" height="260" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">C.1  energy, as a multiple of the energy it started with</text>
+<line x1="62.0" y1="56" x2="62.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="332" class="xs mono" text-anchor="middle">0</text>
+<line x1="133.66666666666666" y1="56" x2="133.66666666666666" y2="316" class="grid" stroke-width="1.0"/>
+<text x="133.66666666666666" y="332" class="xs mono" text-anchor="middle">10</text>
+<line x1="205.33333333333331" y1="56" x2="205.33333333333331" y2="316" class="grid" stroke-width="1.0"/>
+<text x="205.33333333333331" y="332" class="xs mono" text-anchor="middle">20</text>
+<line x1="277.0" y1="56" x2="277.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="277.0" y="332" class="xs mono" text-anchor="middle">30</text>
+<line x1="348.66666666666663" y1="56" x2="348.66666666666663" y2="316" class="grid" stroke-width="1.0"/>
+<text x="348.66666666666663" y="332" class="xs mono" text-anchor="middle">40</text>
+<line x1="420.33333333333337" y1="56" x2="420.33333333333337" y2="316" class="grid" stroke-width="1.0"/>
+<text x="420.33333333333337" y="332" class="xs mono" text-anchor="middle">50</text>
+<line x1="492.0" y1="56" x2="492.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="492.0" y="332" class="xs mono" text-anchor="middle">60</text>
+<line x1="62" y1="316.0" x2="492" y2="316.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="320.0" class="xs muted" text-anchor="end">1e-1</text>
+<line x1="62" y1="274.94736842105266" x2="492" y2="274.94736842105266" class="grid" stroke-width="1.0"/>
+<text x="54" y="278.94736842105266" class="xs muted" text-anchor="end">1e2</text>
+<line x1="62" y1="233.89473684210526" x2="492" y2="233.89473684210526" class="grid" stroke-width="1.0"/>
+<text x="54" y="237.89473684210526" class="xs muted" text-anchor="end">1e5</text>
+<line x1="62" y1="192.84210526315792" x2="492" y2="192.84210526315792" class="grid" stroke-width="1.0"/>
+<text x="54" y="196.84210526315792" class="xs muted" text-anchor="end">1e8</text>
+<line x1="62" y1="151.78947368421055" x2="492" y2="151.78947368421055" class="grid" stroke-width="1.0"/>
+<text x="54" y="155.78947368421055" class="xs muted" text-anchor="end">1e11</text>
+<line x1="62" y1="110.73684210526315" x2="492" y2="110.73684210526315" class="grid" stroke-width="1.0"/>
+<text x="54" y="114.73684210526315" class="xs muted" text-anchor="end">1e14</text>
+<line x1="62" y1="69.68421052631581" x2="492" y2="69.68421052631581" class="grid" stroke-width="1.0"/>
+<text x="54" y="73.68421052631581" class="xs muted" text-anchor="end">1e17</text>
+<text x="277.0" y="352" class="xs muted" text-anchor="middle">simulated seconds</text>
+<path d="M 62.00,302.32 L 63.79,301.34 L 65.58,300.37 L 67.38,299.40 L 69.17,298.43 L 70.96,297.45 L 72.75,296.48 L 74.54,295.51 L 76.33,294.54 L 78.12,293.57 L 79.92,292.59 L 81.71,291.62 L 83.50,290.65 L 85.29,289.68 L 87.08,288.70 L 88.88,287.73 L 90.67,286.76 L 92.46,285.79 L 94.25,284.82 L 96.04,283.84 L 97.83,282.87 L 99.62,281.90 L 101.42,280.93 L 103.21,279.95 L 105.00,278.98 L 106.79,278.01 L 108.58,277.04 L 110.38,276.06 L 112.17,275.09 L 113.96,274.12 L 115.75,273.15 L 117.54,272.18 L 119.33,271.20 L 121.12,270.23 L 122.92,269.26 L 124.71,268.29 L 126.50,267.31 L 128.29,266.34 L 130.08,265.37 L 131.88,264.40 L 133.67,263.43 L 135.46,262.45 L 137.25,261.48 L 139.04,260.51 L 140.83,259.54 L 142.62,258.56 L 144.42,257.59 L 146.21,256.62 L 148.00,255.65 L 149.79,254.68 L 151.58,253.70 L 153.38,252.73 L 155.17,251.76 L 156.96,250.79 L 158.75,249.81 L 160.54,248.84 L 162.33,247.87 L 164.12,246.90 L 165.92,245.92 L 167.71,244.95 L 169.50,243.98 L 171.29,243.01 L 173.08,242.04 L 174.88,241.06 L 176.67,240.09 L 178.46,239.12 L 180.25,238.15 L 182.04,237.17 L 183.83,236.20 L 185.62,235.23 L 187.42,234.26 L 189.21,233.29 L 191.00,232.31 L 192.79,231.34 L 194.58,230.37 L 196.38,229.40 L 198.17,228.42 L 199.96,227.45 L 201.75,226.48 L 203.54,225.51 L 205.33,224.54 L 207.12,223.56 L 208.92,222.59 L 210.71,221.62 L 212.50,220.65 L 214.29,219.67 L 216.08,218.70 L 217.88,217.73 L 219.67,216.76 L 221.46,215.78 L 223.25,214.81 L 225.04,213.84 L 226.83,212.87 L 228.62,211.90 L 230.42,210.92 L 232.21,209.95 L 234.00,208.98 L 235.79,208.01 L 237.58,207.03 L 239.38,206.06 L 241.17,205.09 L 242.96,204.12 L 244.75,203.15 L 246.54,202.17 L 248.33,201.20 L 250.12,200.23 L 251.92,199.26 L 253.71,198.28 L 255.50,197.31 L 257.29,196.34 L 259.08,195.37 L 260.88,194.39 L 262.67,193.42 L 264.46,192.45 L 266.25,191.48 L 268.04,190.51 L 269.83,189.53 L 271.62,188.56 L 273.42,187.59 L 275.21,186.62 L 277.00,185.64 L 278.79,184.67 L 280.58,183.70 L 282.38,182.73 L 284.17,181.76 L 285.96,180.78 L 287.75,179.81 L 289.54,178.84 L 291.33,177.87 L 293.12,176.89 L 294.92,175.92 L 296.71,174.95 L 298.50,173.98 L 300.29,173.01 L 302.08,172.03 L 303.88,171.06 L 305.67,170.09 L 307.46,169.12 L 309.25,168.14 L 311.04,167.17 L 312.83,166.20 L 314.62,165.23 L 316.42,164.25 L 318.21,163.28 L 320.00,162.31 L 321.79,161.34 L 323.58,160.37 L 325.38,159.39 L 327.17,158.42 L 328.96,157.45 L 330.75,156.48 L 332.54,155.50 L 334.33,154.53 L 336.12,153.56 L 337.92,152.59 L 339.71,151.62 L 341.50,150.64 L 343.29,149.67 L 345.08,148.70 L 346.88,147.73 L 348.67,146.75 L 350.46,145.78 L 352.25,144.81 L 354.04,143.84 L 355.83,142.87 L 357.62,141.89 L 359.42,140.92 L 361.21,139.95 L 363.00,138.98 L 364.79,138.00 L 366.58,137.03 L 368.38,136.06 L 370.17,135.09 L 371.96,134.11 L 373.75,133.14 L 375.54,132.17 L 377.33,131.20 L 379.12,130.23 L 380.92,129.25 L 382.71,128.28 L 384.50,127.31 L 386.29,126.34 L 388.08,125.36 L 389.88,124.39 L 391.67,123.42 L 393.46,122.45 L 395.25,121.48 L 397.04,120.50 L 398.83,119.53 L 400.62,118.56 L 402.42,117.59 L 404.21,116.61 L 406.00,115.64 L 407.79,114.67 L 409.58,113.70 L 411.38,112.73 L 413.17,111.75 L 414.96,110.78 L 416.75,109.81 L 418.54,108.84 L 420.33,107.86 L 422.12,106.89 L 423.92,105.92 L 425.71,104.95 L 427.50,103.97 L 429.29,103.00 L 431.08,102.03 L 432.88,101.06 L 434.67,100.09 L 436.46,99.11 L 438.25,98.14 L 440.04,97.17 L 441.83,96.20 L 443.62,95.22 L 445.42,94.25 L 447.21,93.28 L 449.00,92.31 L 450.79,91.34 L 452.58,90.36 L 454.38,89.39 L 456.17,88.42 L 457.96,87.45 L 459.75,86.47 L 461.54,85.50 L 463.33,84.53 L 465.12,83.56 L 466.92,82.59 L 468.71,81.61 L 470.50,80.64 L 472.29,79.67 L 474.08,78.70 L 475.88,77.72 L 477.67,76.75 L 479.46,75.78 L 481.25,74.81 L 483.04,73.83 L 484.83,72.86 L 486.62,71.89 L 488.42,70.92 L 490.21,69.95 L 492.00,68.97" fill="none" stroke="#eb6060" stroke-width="2.0"/>
+<circle cx="69.2" cy="298.4" r="3.2" fill="#eb6060"/>
+<circle cx="69.2" cy="302.3" r="3.2" fill="#78dca0"/>
+<circle cx="69.2" cy="302.3" r="3.2" fill="#aa96ff"/>
+<circle cx="97.8" cy="282.9" r="3.2" fill="#eb6060"/>
+<circle cx="97.8" cy="302.3" r="3.2" fill="#78dca0"/>
+<circle cx="97.8" cy="302.3" r="3.2" fill="#aa96ff"/>
+<circle cx="133.7" cy="263.4" r="3.2" fill="#eb6060"/>
+<circle cx="133.7" cy="302.3" r="3.2" fill="#78dca0"/>
+<circle cx="133.7" cy="302.3" r="3.2" fill="#aa96ff"/>
+<circle cx="277.0" cy="185.6" r="3.2" fill="#eb6060"/>
+<circle cx="277.0" cy="302.4" r="3.2" fill="#78dca0"/>
+<circle cx="277.0" cy="302.3" r="3.2" fill="#aa96ff"/>
+<circle cx="492.0" cy="69.0" r="3.2" fill="#eb6060"/>
+<circle cx="492.0" cy="302.4" r="3.2" fill="#78dca0"/>
+<circle cx="492.0" cy="302.3" r="3.2" fill="#aa96ff"/>
+<path d="M 69.17,302.32 L 97.83,302.32 L 133.67,302.33 L 277.00,302.37 L 492.00,302.42" fill="none" stroke="#78dca0" stroke-width="3.2"/>
+<path d="M 69.17,302.32 L 97.83,302.32 L 133.67,302.32 L 277.00,302.32 L 492.00,302.32" fill="none" stroke="#aa96ff" stroke-width="1.8" stroke-dasharray="5 4"/>
+<line x1="62.0" y1="302.3" x2="492.0" y2="302.3" stroke="#969eaf" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<line x1="62.0" y1="366.0" x2="82.0" y2="366.0" stroke="#eb6060" stroke-width="2.4" fill="none"/>
+<text x="90" y="370" class="xs" text-anchor="start">explicit Euler</text>
+<line x1="62.0" y1="383.0" x2="82.0" y2="383.0" stroke="#78dca0" stroke-width="2.4" fill="none"/>
+<text x="90" y="387" class="xs" text-anchor="start">semi-implicit Euler</text>
+<line x1="62.0" y1="400.0" x2="82.0" y2="400.0" stroke="#aa96ff" stroke-width="2.4" fill="none"/>
+<text x="90" y="404" class="xs" text-anchor="start">velocity Verlet — dashed, on top of green</text>
+<text x="62" y="421" class="xs mono" text-anchor="start">red line = (1 + h²ω²)ᴺ  ·  red dots = the measured run</text>
+<text x="560" y="68" class="xs muted" text-anchor="start">a 1 m spring, after one minute</text>
+<text x="872" y="68" class="xs muted" text-anchor="end"></text>
+<line x1="560" y1="76.0" x2="878" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="93.0" class="xs" text-anchor="start">explicit Euler</text>
+<text x="872" y="93.0" class="xs mono" text-anchor="end">3.3571e+08 m</text>
+<text x="560" y="110.0" class="xs" text-anchor="start">semi-implicit</text>
+<text x="872" y="110.0" class="xs mono" text-anchor="end">9.9117e-01 m</text>
+<text x="560" y="127.0" class="xs" text-anchor="start">velocity Verlet</text>
+<text x="872" y="127.0" class="xs mono" text-anchor="end">9.9996e-01 m</text>
+<text x="560" y="157.5" class="xs muted" text-anchor="start">One centimetre of overlap between a box and</text>
+<text x="560" y="173.5" class="xs muted" text-anchor="start">the floor is a spring. Under explicit Euler</text>
+<text x="560" y="189.5" class="xs muted" text-anchor="start">that centimetre becomes 3,357 km in a</text>
+<text x="560" y="205.5" class="xs muted" text-anchor="start">minute — and the first ten seconds look</text>
+<text x="560" y="221.5" class="xs t-hi" text-anchor="start">completely normal, which is the trap.</text>
+<text x="560" y="261.5" class="xs muted" text-anchor="start">the determinant IS the blow-up</text>
+<text x="872" y="261.5" class="xs muted" text-anchor="end"></text>
+<line x1="560" y1="269.5" x2="878" y2="269.5" class="grid" stroke-width="1.0"/>
+<text x="560" y="286.5" class="xs" text-anchor="start">energy after 60 s</text>
+<text x="872" y="286.5" class="xs mono" text-anchor="end">1.1270e+17</text>
+<text x="560" y="303.5" class="xs" text-anchor="start">(1 + h²ω²)³⁶⁰⁰</text>
+<text x="872" y="303.5" class="xs mono" text-anchor="end">1.1270e+17</text>
+</svg>

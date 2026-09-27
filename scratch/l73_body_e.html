@@ -1,0 +1,538 @@
+  <h2 id="listings">13. Complete code listings</h2>
+
+  <p>
+    Every file this lesson creates or changes, in full. The manifest first:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>engine/include/engine/math/complex.hpp</code></td>
+        <td>new</td>
+        <td>The representation. The product, the conjugate, the cheap renormalise, the mirror and
+            rotor functions, the <code>mat2</code> bridge, and both blends. Header-only, and the
+            template Lesson 7.4's <code>quat.hpp</code> is written against.</td>
+      </tr>
+      <tr>
+        <td><code>engine/include/engine/engine.hpp</code></td>
+        <td>modified</td>
+        <td>One new public header listed. The configure-time lint from 5.12 refused to configure
+            until it was — its fourth catch in three lessons.</td>
+      </tr>
+      <tr>
+        <td><code>demos/plane/main.cpp</code></td>
+        <td>new</td>
+        <td>Four modes: the product as a spiral similarity, the powers and their drift, the
+            two-mirror construction, and slerp against nlerp. The smallest demo in the
+            repository.</td>
+      </tr>
+      <tr>
+        <td><code>demos/CMakeLists.txt</code></td>
+        <td>modified</td>
+        <td>One target, linking <code>engine::engine</code> and nothing else — no assets, no
+            shaders, no <code>demo_common</code>.</td>
+      </tr>
+      <tr>
+        <td><code>scratch/verify_73.cpp</code></td>
+        <td>new</td>
+        <td>Forty-three checks, twelve of them controls. Every number on this page.</td>
+      </tr>
+      <tr>
+        <td><code>scratch/build_verify_73.sh</code></td>
+        <td>new</td>
+        <td>Compiles and runs the harness. Links nothing, and that is half the argument.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>No golden render this lesson, and the reason is structural rather than an omission.</strong>
+    Lessons 5.1 onward keep a reference image of the demo scene and compare it byte for byte after
+    every change. This lesson touched one new header, one line of the umbrella header, one new
+    demo and one build file, and none of those is reachable from <code>demo_scene.cpp</code>. That
+    was <em>computed</em> rather than asserted — a transitive include-closure walk from
+    <code>demo_scene.cpp</code> plus the software render path, 66 files, none of them ours — for
+    the reason Lesson 7.2 gives: <code>grep</code> finds paths in prose, and this codebase is full
+    of prose that mentions paths.
+  </p>
+
+  @@LISTING:engine/include/engine/math/complex.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:demos/plane/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_73.cpp@@
+
+  @@LISTING:scratch/build_verify_73.sh@@
+
+  <h2 id="run">14. Build &amp; run</h2>
+
+  <p>
+    Nothing new is needed in the toolchain: one header and one demo target.
+  </p>
+
+  <h3>14.1 The engine and the demo</h3>
+
+<pre><code>cmake -S . -B build
+cmake --build build --target plane</code></pre>
+
+  <p>
+    On Windows with MSVC the generator is multi-config, so name one:
+  </p>
+
+<pre><code>cmake -S . -B build
+cmake --build build --target plane --config Debug</code></pre>
+
+  <p>
+    Then run it. The binary lands in <code>build/demos/</code> on Linux and macOS and
+    <code>build\demos\Debug\</code> on MSVC:
+  </p>
+
+<pre><code>./build/demos/plane                                  # Linux, macOS
+build\demos\Debug\plane.exe                          # Windows</code></pre>
+
+  <h3>14.2 What you should see</h3>
+
+  <p>
+    A dark window, 960×540, with a faint square grid, two axis lines and a dashed unit circle. The
+    demo starts in mode <kbd>1</kbd>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Key</th><th>What it does</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><kbd>1</kbd></td>
+          <td><strong>Product.</strong> Two triangles sharing the origin: <code>0, 1, w</code> in
+              outline and <code>0, z, zw</code> as its image. Two arcs marked, and they are the
+              same angle. §4.</td></tr>
+      <tr><td><kbd>2</kbd></td>
+          <td><strong>Powers.</strong> 96 successive multiplications by one step, closing into a
+              ring. <kbd>R</kbd> magnifies the drift ×1000 so it opens into a spiral; <kbd>N</kbd>
+              renormalises it closed again. §11.</td></tr>
+      <tr><td><kbd>3</kbd></td>
+          <td><strong>Mirrors.</strong> Two mirror lines, a probe reflected in each, and the gold
+              rotor at half the turn. <strong>Start here.</strong> §7.</td></tr>
+      <tr><td><kbd>4</kbd></td>
+          <td><strong>Blend.</strong> Slerp and nlerp on the same arc, tick-marked at equal
+              <code>t</code>. §10.</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>the first angle (in mode 3, the first mirror)</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>the second angle</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>animate <code>t</code> in mode 4</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>quit</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The readout is printed rather than drawn, and it needs asking for, because a demo's own log
+    category is not one of the engine's five:
+  </p>
+
+<pre><code>./build/demos/plane --log info --mode 3 --angle 20 --angle2 50</code></pre>
+
+<pre><code>[3] mirrors +20.00 and +50.00 deg (30.00 apart)
+    rotor +30.00 deg -&gt; rotation +60.00 deg</code></pre>
+
+  <p>
+    <strong>The one thing to do before moving on.</strong> Put the demo in mode <kbd>3</kbd>, hold
+    <kbd>↑</kbd>, and watch two arrows: the gold one and the teal one. The gold rotor moves at
+    exactly half the rate of the teal answer, for as long as you hold the key. That is
+    <code>cos(θ/2)</code>, and you are looking at it.
+  </p>
+
+  <h3>14.3 Headless captures, for the figures</h3>
+
+  <p>
+    Every render in this lesson came from the same binary with <code>--shot</code>, which draws
+    one frame to a <code>.ppm</code> and exits. No window is opened, so it works over ssh and in
+    CI:
+  </p>
+
+<pre><code>./build/demos/plane --mode 3 --angle 20 --angle2 50 \
+    --shot scratch/l73_mirrors.ppm
+
+./build/demos/plane --mode 4 --angle -70 --angle2 75 --t 0.24 \
+    --shot scratch/l73_blend.ppm</code></pre>
+
+  <h3>14.4 The harness</h3>
+
+<pre><code>sh scratch/build_verify_73.sh</code></pre>
+
+  <p>
+    It should end with <code>43/43 checks passed</code>. Note the build line inside it: there is no
+    <code>-l</code> on it at all, because everything <code>math/complex.hpp</code> adds is
+    <code>inline</code> in a header. The entire representation is two floats and a multiplication
+    rule, and the absence of a library on that command line says so more plainly than a paragraph
+    could.
+  </p>
+
+  <p>
+    It takes about a second and a half at <code>-O2</code>, nearly all of it in §G's accuracy
+    sweep, which walks 16.7 million products to find out where the recurrence stops being usable.
+    That is deliberate: the recurrence's error is the question, and a short walk cannot answer it.
+    To rebuild at a different optimisation level — which changes §D's and §G's answers rather than
+    just the wait — set <code>ENGINE_CFLAGS</code>:
+  </p>
+
+<pre><code>ENGINE_CFLAGS=-O0 sh scratch/build_verify_73.sh</code></pre>
+
+  <p>
+    Expect the timing rows to be four to ten times slower and their <em>ratios</em> to change too,
+    because at <code>-O0</code> you are measuring the compiler's inlining rather than the
+    arithmetic. The correctness checks are unaffected.
+  </p>
+
+  <h2 id="pitfalls">15. Common pitfalls &amp; debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Everything turns the wrong way on screen</span>
+    <p><strong>Symptom.</strong> A positive angle produces a clockwise rotation in the window,
+      and every arc in your debug drawing sweeps backwards.</p>
+    <p><strong>Cause.</strong> Framebuffer <code>y</code> points <em>down</em>. The maths in this
+      lesson is in a <code>y</code>-up plane, so drawing it without flipping shows you its mirror
+      image. <code>mat2</code>'s <code>rotation</code> carries this warning and has since Lesson
+      2.5; it applies identically here, because §5 proved they are the same object.</p>
+    <p><strong>Fix.</strong> Flip once, in the view mapping, and never again — see
+      <code>view::py</code> in the demo. Flipping at each call site is how you end up with two
+      places that disagree.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A headless run opens a window and hangs</span>
+    <p><strong>Symptom.</strong> <code>plane --mode 4 --t 0.5 --shot out.ppm</code> never
+      terminates, writes no file, and — if you look — is running in the wrong mode.</p>
+    <p><strong>Cause.</strong> <code>SDL_clamp</code> is a <em>macro</em>:
+      <code>(((x) &lt; (a)) ? (a) : (((x) &gt; (b)) ? (b) : (x)))</code>. It expands its first
+      argument up to three times. Written as <code>SDL_clamp(SDL_atof(argv[++i]), 0.0f, 1.0f)</code>
+      it advances <code>i</code> three times, swallowing <code>--shot</code> and its path — so
+      <code>shot_path_</code> stays null, the app opens a real window, and nothing ever quits it.
+      This is not hypothetical; it is what the first build of this demo did.</p>
+    <p><strong>Fix.</strong> <strong>Never put a side effect inside a C macro's argument.</strong>
+      One named local per argument: <code>const float wanted = ...; t_ = std::clamp(wanted, ...)</code>.
+      Prefer <code>std::clamp</code>, which is a function and evaluates once — and note that the
+      gimbal demo used it and never had this bug.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your renormalise passes its test and breaks your game</span>
+    <p><strong>Symptom.</strong> Objects occasionally snap to face backwards. The unit test on
+      <code>renormalised_fast</code> is green and has been for weeks.</p>
+    <p><strong>Cause.</strong> The test checks <code>|z|</code>. At <code>|z| = 2</code> the factor
+      <code>(3 − 4)/2</code> is <code>−0.5</code>, which gives a result of modulus exactly 1
+      pointing 180° the wrong way (§9.1). The test is measuring the one property that survives the
+      failure.</p>
+    <p><strong>Fix.</strong> Check the <em>rotation</em>, with <code>angle_between</code>, not the
+      modulus. And keep <code>renormalised_fast</code> for what it is for: inputs already close to
+      unit length. If you cannot bound the drift, call <code>normalised</code> and pay for the
+      <code>sqrt</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A percentage comes out negative</span>
+    <p><strong>Symptom.</strong> "Excess turning: −98.25%" — a path shorter than the shortest
+      path.</p>
+    <p><strong>Cause.</strong> Radians on one side of the subtraction and degrees on the other.
+      <code>angle_between</code> returns radians; the span you are comparing against has probably
+      been through <code>deg()</code> for printing.</p>
+    <p><strong>Fix.</strong> Convert once, at the boundary, and assert the impossible cases. A
+      quantity that cannot physically be negative deserves a check saying so —
+      <code>verify_73</code>'s <code>F.8</code> is four characters of code and it is the check that
+      would have caught this immediately rather than after the figure was drawn.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Reading a matrix into a complex number silently loses everything</span>
+    <p><strong>Symptom.</strong> <code>complex_from_mat2(m)</code> returns the identity for a
+      matrix that is visibly doing something.</p>
+    <p><strong>Cause.</strong> It reads the first column, which is the image of <code>1</code> and
+      therefore is the number — <em>if</em> the matrix is a rotation-and-scale. A shear or a
+      reflection is not, and the second column, which is where all its information lives, is
+      discarded (§5.3).</p>
+    <p><strong>Fix.</strong> Only round-trip matrices you know are rotations. If you cannot know,
+      check first: for a rotation-and-scale, <code>m.c1</code> must equal
+      <code>perpendicular(m.c0)</code>. That is Exercise 7.3.2.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your rotor turns things half as far as it should</span>
+    <p><strong>Symptom.</strong> A construction built from mirrors rotates by <code>φ</code>
+      instead of <code>2φ</code>, and the error is a consistent factor of two in the angle rather
+      than noise.</p>
+    <p><strong>Cause.</strong> The rotor was applied once. <strong>A rotor is not a rotation; it
+      is a square root of one</strong> (§7.2), and multiplying by it once does half the job.</p>
+    <p><strong>Fix.</strong> Use <code>apply_rotor</code>, which exists precisely so that the name
+      carries the warning. If you see this in your own quaternion code in two lessons' time, it is
+      this bug with an extra dimension: <code>q v</code> instead of <code>q v q̄</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label"><code>--log info</code> prints nothing from your demo</span>
+    <p><strong>Symptom.</strong> The engine's own lines appear; yours do not, and the format string
+      is obviously correct.</p>
+    <p><strong>Cause.</strong> <code>configure_logging</code> applies <code>*</code> to the
+      engine's five categories only — deliberately, as <code>log.hpp</code> says. A demo that
+      defines its own category beyond <code>log_category_count</code> is outside that set, and SDL
+      defaults an unknown category to <code>ERROR</code>. Your <code>INFO</code> lines are
+      formatted and dropped.</p>
+    <p><strong>Fix.</strong> One line in <code>on_start</code>:
+      <code>SDL_SetLogPriority(log_plane, SDL_LOG_PRIORITY_INFO)</code>. Worth knowing that
+      <code>demos/collector</code> has the same gap and has never noticed, because its one
+      <code>INFO</code> line reports a shutdown nobody reads.</p>
+  </div>
+
+  <h2 id="exercises">16. Exercises</h2>
+
+  <div class="exercise">
+    <h3>16.1 — The long way round <span class="tag">guided</span></h3>
+    <p>
+      <code>complex_slerp</code> always takes the shorter arc, because
+      <code>angle_from_complex</code> returns a value in <code>(&minus;&pi;, &pi;]</code>.
+      Sometimes that is exactly wrong: a turntable told to spin from 10&deg; to 350&deg; should go
+      the long way, not snap back 20&deg;.
+    </p>
+    <p>
+      Write <code>complex_slerp_long(a, b, t)</code> that takes the other arc. Verify that its path
+      length is <code>360&deg; &minus; &Omega;</code>, using <code>angle_between</code> as the
+      instrument &mdash; the same instrument <code>verify_73</code> &sect;F.7 uses for the same
+      measurement.
+    </p>
+    <details>
+      <summary>Hint, and then the answer</summary>
+      <p>
+        The difference rotation is <code>conjugate(a) * b</code>. You want its argument
+        <em>plus</em> a full turn if it is negative, or <em>minus</em> a full turn if it is
+        positive &mdash; the complementary arc, signed the other way.
+      </p>
+<pre><code class="lang-cpp">[[nodiscard]] inline complex complex_slerp_long(complex a, complex b, float t)
+{
+    const float d = angle_from_complex(conjugate(a) * b);
+    const float two_pi = 2.0f * std::numbers::pi_v&lt;float&gt;;
+    const float other = (d &gt;= 0.0f) ? d - two_pi : d + two_pi;
+    return a * complex_from_angle(other * t);
+}</code></pre>
+      <p>
+        One trap worth meeting: at <code>&Omega;</code> exactly <code>&pi;</code> the two arcs are
+        the same length and the choice is genuinely arbitrary. Your function will pick one; say
+        which in a comment, because the caller cannot.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>16.2 — <code>is_rotation</code>, for the plane <span class="tag">guided</span></h3>
+    <p>
+      &sect;5.3 showed <code>complex_from_mat2</code> silently eating a shear. Write the predicate
+      that would have caught it:
+    </p>
+<pre><code class="lang-cpp">[[nodiscard]] bool is_plane_rotation(const mat2&amp; m, float tolerance);</code></pre>
+    <p>
+      It should return true exactly when <code>m</code> is of the form
+      <code>[[a, &minus;b], [b, a]]</code> with <code>a&sup2; + b&sup2; = 1</code>. Test it against
+      <code>rotation(&theta;)</code> over a sweep of <code>&theta;</code> (all true), against
+      <code>shear(0.7, 0)</code> and <code>scale(2, 2)</code> (both false), and against a rotation
+      that has been composed a million times &mdash; which should still be true at a sensible
+      tolerance, and &sect;9's measured drift of <code>2.42e&minus;05</code> is how you choose one.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Two conditions, and they are independent. <code>m.c1 == perpendicular(m.c0)</code> says it
+        is in the family at all; <code>length_squared(m.c0) == 1</code> says the scale is 1. Test
+        both, and notice that the first is the one <code>complex_from_mat2</code> needs and the
+        second is the one <code>normalised</code> would fix.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>16.3 &mdash; Where does nlerp become visible? <span class="tag">medium</span></h3>
+    <p>
+      &sect;10.4 gives the worst gap between the two blends at seven arcs. Turn that into the
+      number you would actually put in a design document: <strong>for a tolerance of
+      <code>&epsilon;</code> degrees, what is the largest arc you may blend with nlerp?</strong>
+    </p>
+    <p>
+      Compute it for <code>&epsilon;</code> = 0.1&deg;, 1&deg; and 5&deg;, by bisection on the arc.
+      Then sanity-check against the table: your 1&deg; answer should land between 30&deg; and
+      60&deg;, and your 5&deg; answer between 90&deg; and 120&deg;.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The worst gap is monotonic in <code>&Omega;</code>, which is what makes bisection valid
+        &mdash; say so in a comment, because a bisection on a non-monotonic function returns a
+        confident wrong answer. Each evaluation is a sweep over <code>t</code>; twenty thousand
+        steps is plenty, and the maximum sits near <code>t = 0.24</code> and <code>t = 0.76</code>,
+        so you can start there and refine.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>16.4 &mdash; Spiral similarity, and a 2-D transform
+        <span class="tag">engine challenge</span></h3>
+    <p>
+      A complex number represents a rotation and a scale. Add a translation and you have every
+      orientation-preserving similarity of the plane, which is exactly what a sprite or a 2-D UI
+      element needs:
+    </p>
+<pre><code class="lang-cpp">struct transform2 { complex rotation_scale{}; vec2 translation{}; };</code></pre>
+    <p>
+      Implement composition (<code>a</code> then <code>b</code>), application to a point, and
+      inversion. Then write down how many multiplies each costs and compare against doing the same
+      job with a <code>mat3</code> in homogeneous coordinates, which is what Lesson 2.7 would have
+      reached for.
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Composition is
+        <code>{b.rotation_scale * a.rotation_scale, b.rotation_scale * a.translation + b.translation}</code>
+        &mdash; the same shape as a 3-D transform's compose, with a complex number where the
+        <code>mat3</code> goes. Inversion is <code>{inverse(r), -(inverse(r) * t)}</code>.
+      </p>
+      <p>
+        The count: composition is 4 + 4 + 2 = ten multiplies against a <code>mat3</code> product's
+        twenty-seven, or fifteen if you exploit the known bottom row. But the interesting part is
+        not the count. It is noticing that <code>transform2</code> and Lesson 5.7's
+        <code>transform</code> have the <em>same three fields and the same compose rule</em>, one
+        dimension apart &mdash; which is a fairly loud hint about what Lesson 7.4 is going to do to
+        <code>transform::rotation</code>.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>16.5 &mdash; Should <code>debug_lines::sphere</code> use the recurrence?
+        <span class="tag">engine challenge</span></h3>
+    <p>
+      <code>engine/src/gfx/debug_lines.cpp</code> draws its spheres with a <code>cos</code> and a
+      <code>sin</code> per endpoint &mdash; three great circles of <code>segments</code> points
+      each. &sect;11 shows the recurrence would replace two transcendentals with one multiply, at
+      an accuracy cost of <code>1.4e&minus;05</code> degrees at 48 segments.
+    </p>
+    <p>
+      Make the change, measure it <em>in situ</em> with the profiler from Lesson 5.4, and then
+      decide. Report the fraction of a frame that <code>debug_lines::sphere</code> occupies in a
+      scene drawing a hundred spheres, before and after.
+    </p>
+    <details>
+      <summary>What the answer is likely to be, and why the exercise is still worth doing</summary>
+      <p>
+        Almost certainly no. &sect;11 measured 1.21&times; on a serial chain, the function is
+        called with <code>segments = 48</code> so there are 144 points per sphere, and a hundred
+        spheres is 14,400 points &mdash; about 5&nbsp;&micro;s of trigonometry against a
+        16,667&nbsp;&micro;s budget. Even a perfect speed-up saves 0.03% of a frame while making
+        the code harder to read and introducing an accumulating error where there was none.
+      </p>
+      <p>
+        Do it anyway, because the <em>habit</em> is the deliverable. An optimisation that is real
+        in a microbenchmark and irrelevant in the program is the most common kind there is, and
+        the only way to tell the two apart is to measure in the program. Lesson 7.2 wrote,
+        measured and <em>reverted</em> a hand-hoisted <code>sin</code>/<code>cos</code> for exactly
+        this reason.
+      </p>
+    </details>
+  </div>
+
+  <h2 id="recap">17. Recap &amp; next</h2>
+
+  <p>
+    The engine gained one header, and the header is small enough to read in a sitting. What it
+    bought:
+  </p>
+
+  <ul>
+    <li><strong>A rotation that composes by multiplication</strong> — 4 multiplies, 2 adds,
+        <strong>1.88× cheaper than a <code>mat2</code></strong>, no trigonometry, and closed
+        under the operation so there is no renormalisation step in the hot path at all.</li>
+    <li><strong>Half the storage, 6.15× less drift,</strong> and a renormalise that is four
+        arithmetic operations with no square root.</li>
+    <li><strong>An interpolation</strong> — the fourth of 7.2 §10's requirements, and the one a
+        matrix cannot meet. <code>complex_slerp</code> is three lines, and they are the three
+        lines Lesson 7.5's quaternion slerp will be.</li>
+    <li><strong>An honest cost:</strong> applying a rotation to a point is a wash, 1.05×. This
+        representation is cheaper to keep and to combine, and not one instruction cheaper to
+        use.</li>
+  </ul>
+
+  <p>
+    And it bought four ideas that are worth more than the header, because they are the ones that
+    survive the trip to four dimensions intact:
+  </p>
+
+  <ul>
+    <li><strong><code>i² = −1</code> is a measurement</strong>, not a definition. Everything else —
+        the product, the angle-addition formulas, Euler's formula — is a consequence of one
+        quarter turn done twice.</li>
+    <li><strong>Complex numbers <em>are</em> the rotation-and-scale matrices</strong>, with the
+        duplicate <code>cos θ</code> and <code>sin θ</code> deleted. Nothing new was invented; a
+        redundancy was removed.</li>
+    <li><strong>Two mirrors <code>φ</code> apart make a rotation of <code>2φ</code></strong>, so
+        the object rotations are <em>built out of</em> carries half the angle — and two such
+        objects generate every rotation, exactly. That is <code>cos(θ/2)</code> and the double
+        cover, both of them, three lessons before anyone says the word quaternion.</li>
+    <li><strong>A blend can take the right path on the wrong schedule.</strong> Nlerp wastes
+        <strong>0.00%</strong> of its turning and varies its speed by <code>sec²(Ω/2)</code>,
+        derived and then measured at seven arcs — which turns "slerp or nlerp?" into a threshold
+        on the arc.</li>
+  </ul>
+
+  <p>
+    <strong>Next: Lesson 7.4 — Quaternions, Derived.</strong> §12 proved that three dimensions
+    cannot carry a number system of this kind: assume one, ask where <code>ij</code> lands, and
+    the algebra demands a real number whose square is <code>−1</code>. A fourth component is
+    forced. Lesson 7.4 works out what it has to be, discovers that commutativity is the price, and
+    then checks the four predictions §12.2 left on the table — four components, no commuting, a
+    half-angle, and a double cover. Every one of them is already on this page, in a space where
+    you can draw it.
+  </p>
+
+  <p>
+    The engine still stores <code>transform::rotation</code> as a <code>mat3</code>. It will not
+    for much longer.
+  </p>
+
+  <h2 id="reading">18. Further reading</h2>
+
+  <ul>
+    <li><strong>Tristan Needham, <em>Visual Complex Analysis</em>, chapter 1.</strong> The book
+        this lesson is in debt to. Chapter 1 derives the product as a spiral similarity, does
+        Euler's formula three separate ways — including the differential-equation argument of §6
+        — and treats the whole subject as geometry that happens to have algebra attached. If one
+        reference from this page is worth owning, it is this one.</li>
+    <li><strong>Hamilton's own account of the bridge</strong>, in his 1865 letter to his son
+        Archibald, reprinted widely and easy to find. It is two pages, it is disarmingly frank
+        about the thirteen years, and reading it immediately after §12.1 is the difference between
+        knowing the proof and understanding what it cost to find.</li>
+    <li><strong>3Blue1Brown, <em>"What is Euler's formula actually saying?"</em></strong> The
+        velocity argument of §6, animated. If §6 felt like it went past too quickly, this is the
+        same three lines at a slower pace.</li>
+    <li><strong>Marc ten Bosch, <em>"Let's remove Quaternions from every 3D Engine"</em>.</strong>
+        An argument that rotors — §7's object, generalised — are the right primitive and that
+        quaternions are a historical accident that obscures them. Read it <em>after</em> Lesson
+        7.4 rather than instead of it, and notice that its central construction is this lesson's
+        §7 in three dimensions.</li>
+    <li><strong>Ken Shoemake, <em>"Animating Rotation with Quaternion Curves"</em>, SIGGRAPH
+        1985.</strong> The paper that introduced slerp to graphics. §10.1's
+        <code>a(a⁻¹b)^t</code> is its equation, and §10.3's speed analysis is the argument for
+        why the paper bothered.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th edition, §4.3.</strong> The standard engineering
+        treatment of quaternions, including the nlerp-versus-slerp decision §10.4 turns into a
+        threshold. Worth having open beside Lesson 7.4.</li>
+    <li><strong>John Stillwell, <em>Naturally Speaking: Mathematics and Its History</em>,
+        chapter 20.</strong> Why the list of real division algebras stops at 1, 2, 4 and 8 — the
+        general theorem behind §12.1's three lines, and the reason there is no useful
+        three-dimensional answer for anyone to find.</li>
+  </ul>

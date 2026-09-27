@@ -1,0 +1,149 @@
+<svg viewBox="0 0 640 328" role="img" aria-labelledby="f413-t f413-d">
+  <title id="f413-t">Divergence in a warp, and the measured cost of it</title>
+  <desc id="f413-d">The top shows one warp of 32 lanes running an if-else. Both the A row and the B row execute across all 32 lanes, with the lanes that do not take that side drawn pale to mean masked off. Beneath, a chart of measured cost against coherence: the penalty is 1.00 times when runs are 1024 pixels long, 1.03 at 64, and steps up to 1.93 at 8 pixels and below. A dashed line marks the warp width of 32, exactly where the step happens.</desc>
+  <defs>
+    <marker id="e-i-f413" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f413" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f413" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="16" y="24" class="sm muted">one warp of 32 lanes, executing <tspan class="mono">if (c) A(); else B();</tspan></text>
+  <text x="88.0" y="57.0" class="xs mono" text-anchor="end">lanes</text>
+  <rect x="96.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="109.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="123.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="136.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="150.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="163.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="177.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="190.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="204.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="217.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="231.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="244.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="258.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="271.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="285.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="298.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="312.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="325.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="339.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="352.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="366.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="379.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="393.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="406.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="420.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="433.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="447.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="460.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="474.0" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="487.5" y="46.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="501.0" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="514.5" y="46.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <text x="88.0" y="83.0" class="xs mono" text-anchor="end">A()</text>
+  <rect x="96.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="109.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="123.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="136.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="150.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="163.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="177.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="190.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="204.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="217.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="231.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="244.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="258.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="271.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="285.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="298.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="312.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="325.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="339.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="352.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="366.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="379.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="393.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="406.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="420.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="433.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="447.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="460.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="474.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="487.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.16"/>
+  <rect x="501.0" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <rect x="514.5" y="72.0" width="12.0" height="15" fill="#78b4eb" opacity="0.9"/>
+  <text x="536.0" y="83.0" class="xs muted">all 32 run, 17 kept</text>
+  <text x="88.0" y="109.0" class="xs mono" text-anchor="end">B()</text>
+  <rect x="96.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="109.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="123.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="136.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="150.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="163.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="177.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="190.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="204.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="217.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="231.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="244.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="258.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="271.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="285.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="298.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="312.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="325.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="339.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="352.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="366.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="379.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="393.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="406.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="420.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="433.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="447.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="460.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="474.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="487.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.9"/>
+  <rect x="501.0" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <rect x="514.5" y="98.0" width="12.0" height="15" fill="#eb786e" opacity="0.16"/>
+  <text x="536.0" y="109.0" class="xs muted">all 32 run, 15 kept</text>
+  <text x="16" y="140.0" class="sm">Both rows execute. The pale lanes are <tspan class="mono">masked</tspan> &#8212; computed, then discarded &#8212; so the warp pays for A AND B.</text>
+  <text x="16" y="164.0" class="sm muted">measured cost against a warp that never diverges</text>
+  <rect x="90.0" y="176.0" width="380.0" height="110.0" class="fill-soft grid" stroke-width="1"/>
+  <line x1="90.0" y1="286.0" x2="470.0" y2="286.0" class="grid" stroke-width="0.8"/>
+  <text x="84.0" y="289.0" class="xs mono muted" text-anchor="end">1.00&#215;</text>
+  <line x1="90.0" y1="261.0" x2="470.0" y2="261.0" class="grid" stroke-width="0.8"/>
+  <text x="84.0" y="264.0" class="xs mono muted" text-anchor="end">1.25&#215;</text>
+  <line x1="90.0" y1="236.0" x2="470.0" y2="236.0" class="grid" stroke-width="0.8"/>
+  <text x="84.0" y="239.0" class="xs mono muted" text-anchor="end">1.50&#215;</text>
+  <line x1="90.0" y1="211.0" x2="470.0" y2="211.0" class="grid" stroke-width="0.8"/>
+  <text x="84.0" y="214.0" class="xs mono muted" text-anchor="end">1.75&#215;</text>
+  <line x1="90.0" y1="186.0" x2="470.0" y2="186.0" class="grid" stroke-width="0.8"/>
+  <text x="84.0" y="189.0" class="xs mono muted" text-anchor="end">2.00&#215;</text>
+  <text x="470.0" y="301.0" class="xs mono muted" text-anchor="middle">1024</text>
+  <text x="318.0" y="301.0" class="xs mono muted" text-anchor="middle">64</text>
+  <text x="242.0" y="301.0" class="xs mono muted" text-anchor="middle">16</text>
+  <text x="204.0" y="301.0" class="xs mono muted" text-anchor="middle">8</text>
+  <text x="166.0" y="301.0" class="xs mono muted" text-anchor="middle">4</text>
+  <text x="128.0" y="301.0" class="xs mono muted" text-anchor="middle">2</text>
+  <text x="90.0" y="301.0" class="xs mono muted" text-anchor="middle">1</text>
+  <text x="280.0" y="318.0" class="xs muted" text-anchor="middle">coherence: pixels in a row taking the same side</text>
+  <polyline points="470.0,286.0 318.0,283.0 242.0,234.0 204.0,193.0 166.0,193.0 128.0,193.0 90.0,193.0" fill="none" stroke="var(--dia-hi)" stroke-width="2.4"/>
+  <circle cx="470.0" cy="286.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="318.0" cy="283.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="242.0" cy="234.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="204.0" cy="193.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="166.0" cy="193.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="128.0" cy="193.0" r="3" fill="var(--dia-hi)"/>
+  <circle cx="90.0" cy="193.0" r="3" fill="var(--dia-hi)"/>
+  <line x1="280.0" y1="176.0" x2="280.0" y2="286.0" class="ink" stroke-width="1.4" stroke-dasharray="3 3"/>
+  <text x="286.0" y="190.0" class="xs mono">the warp width, 32</text>
+  <text x="484.0" y="202.0" class="xs">Above 32, most warps</text>
+  <text x="484.0" y="216.0" class="xs">are uniform: 1.00&#215;.</text>
+  <text x="484.0" y="238.0" class="xs">Below it, every warp</text>
+  <text x="484.0" y="252.0" class="xs">is mixed: 1.93&#215;.</text>
+</svg>

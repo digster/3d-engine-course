@@ -1,0 +1,325 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-08-broadphase.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.8 — Broadphase: A Uniform Grid</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-10-sequential-impulses.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.9</div>
+    <h1>Impulse Response: Restitution and Friction</h1>
+    <p class="deck">
+      Five lessons of collision detection have built a machine that <em>answers questions</em>. 8.4
+      asks whether two boxes overlap; 8.5, how far apart two convex shapes are; 8.6, how deep they
+      are inside each other and which way is out; 8.7, at which four points; 8.8, which pairs are
+      worth asking about at all. Run the whole of it on a crate falling onto a floor and the crate
+      falls through the floor, because nothing in <code>engine::phys</code> has ever written a
+      velocity. This lesson writes velocities. The obvious way — a spring proportional to the
+      overlap — is four lines long, and §1 gives it every chance and measures what it costs:
+      <strong>164 tuned settings</strong>, and the best of them lands the crate perfectly at
+      <strong>108 mm</strong> of penetration, or keeps it at 12.6 mm while it bounces
+      <strong>367 mm forever</strong>, and not both. A penalty contact is not broken; it is
+      <em>tuned</em>, and the tuning belongs to the scene rather than to the material — the same
+      spring under a 200 kg crate lets it <strong>962 mm</strong> into a half-metre floor. The
+      impulse formulation has no stiffness to be stable about, because it does not model a contact
+      as a thing that lasts: a collision is an <em>event</em>, and the question is what single
+      change in velocity leaves the surfaces moving the way a contact requires. That is one linear
+      equation per contact in one scalar unknown, and the constant in it — the <strong>effective
+      mass</strong> — is the whole of the lesson's arithmetic. We derive it, then rearrange it into
+      a form that <em>proves</em> the division is safe, and check the two forms against each other
+      over 200,000 random contacts. Restitution rides on the same equation as a change of target
+      velocity, and brings the strangest bug in Module 8 with it: because gravity is applied before
+      the solver looks, the approach speed is already too large by <code>g·h</code>, so a ball
+      settles into a hop that <em>never dies</em> — 2.2 cm at e = 0.8, 58 cm at e = 0.95 —
+      and §5 predicts the exact speed it converges to in closed form and measures it at
+      <strong>1.000×</strong>. Friction is a tangential impulse clipped to Coulomb's cone, and the
+      square that every second engine uses instead of the disc is measured here at
+      <strong>42.7%</strong> direction-dependence, in a basis chosen from the floor's normal.
+      Along the way: a slope test that disagrees with <code>atan(μ)</code> by four degrees and turns
+      out to be measuring the <em>fixture</em>; a sphere that stops sliding at exactly
+      <strong>5/7</strong> of the speed it landed with, whatever μ is, with the 0.06% it misses by
+      predicted from the manifold's own contact-point convention; a solve order that, at one pass,
+      has <em>no friction at all</em>; and an honest ending — one pass over four contact points does
+      not hold a crate up. It sinks <strong>275 mm</strong> in fifteen seconds. That is Lesson
+      8.10's reason to exist, arriving early enough to be measured rather than promised.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="08-01-integrators.html">8.1 — Integrators: Why One Explodes</a>,
+          <a href="08-02-forces-and-bodies.html">8.2 — Forces, Gravity, and Linear Rigid Bodies</a>,
+          <a href="08-03-angular-dynamics.html">8.3 — Angular Dynamics and the Inertia Tensor</a>,
+          <a href="08-07-contact-manifolds.html">8.7 — Contact Manifolds and Persistence</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/solver.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/solver.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/impulse/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_89.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_89.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>resolve a contact</strong>. A crate lands on a floor and stays
+            on it; a ball bounces to <code>e²ⁿ·h₀</code> and stops; a slab holds a slope up to
+            <code>atan(μ)</code> and slides past it; a sphere that lands sliding rolls away at
+            <strong>5/7</strong> of the speed it arrived with. The whole of prepare-and-solve costs
+            <strong>139 ns</strong> per manifold, so 8.8's 983-candidate frame gains 0.137 ms and
+            collision detection plus one solver pass fits in <strong>0.65 ms</strong> of a 16.67 ms
+            budget. Eleven measured sections, <strong>82 checks</strong>, every one with a control —
+            including one that found a four-degree error in 8.6's EPA that five lessons had not
+            seen, and one that convicted this lesson's own fixture rather than its solver.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why contact response is arithmetic in <em>velocity</em> rather than in force, and
+          derive the frame rate a penalty spring would demand from the penetration you will
+          tolerate.</li>
+      <li>…state the three demands a contact makes on the relative velocity at a point, and
+          recognise that each is one linear equation in one scalar unknown.</li>
+      <li>…derive the effective mass of a contact along a direction, rearrange it into the form that
+          proves it is never zero, and predict what an off-centre contact will weigh.</li>
+      <li>…compute a normal impulse by hand, including restitution, and check it against the
+          one-dimensional closed form.</li>
+      <li>…recognise the permanent-bounce artifact, predict the speed it converges to, and fix it
+          exactly rather than with a threshold.</li>
+      <li>…implement Coulomb friction as a clipped tangential impulse, and say precisely what the
+          box approximation costs and in which directions.</li>
+      <li>…predict the angle at which a block on a slope lets go, and tell sliding from tipping when
+          a measurement disagrees with the formula.</li>
+      <li>…explain why the order of the normal and friction solves is not a preference, and what the
+          wrong order does on the frame of first contact.</li>
+      <li>…say where in a simulation step the contact solve must go, and what solving one step late
+          costs in millimetres.</li>
+      <li>…measure how far one pass of impulses falls short of a converged solve, and state the two
+          different jobs that 8.10 has to do about it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: the spring you cannot afford</a></li>
+      <li><a href="#event">Building intuition: a collision is an event, not an interval</a></li>
+      <li><a href="#demands">Three demands on one velocity</a></li>
+      <li><a href="#mass">The effective mass</a></li>
+      <li><a href="#impulse">The normal impulse, by hand</a></li>
+      <li><a href="#restitution">Restitution, and the gravity already in the velocity</a></li>
+      <li><a href="#friction">Friction: the cone and the square</a></li>
+      <li><a href="#slope">The slope, and what μ actually means</a></li>
+      <li><a href="#rolling">Sliding becomes rolling</a></li>
+      <li><a href="#order">The order of the two solves</a></li>
+      <li><a href="#implementation">Writing it</a></li>
+      <li><a href="#leftover">What one pass leaves behind</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: the spring you cannot afford</h2>
+
+  <p>
+    Here is the state of the engine at the end of Lesson 8.8. Drop a crate on a floor. The
+    broadphase reports the pair; GJK says they are touching; EPA says how deep and which way out;
+    the manifold gives four contact points with ids that survive across frames. Every one of those
+    stages runs, correctly, at 60 Hz. And the crate goes straight through the floor, because not one
+    line of <code>engine::phys</code> has ever assigned to a velocity. The whole subsystem could
+    have been marked <code>const</code>.
+  </p>
+
+  <p>
+    So: something has to push. The response that occurs to everybody first — and it is a good
+    instinct, because it reuses everything Lesson 8.2 built — is a <strong>spring</strong>. You know
+    the overlap; push the bodies apart with a force proportional to it; hand that force to
+    <code>add_force_at</code> and let <code>F = ma</code> do the rest. It is called a
+    <em>penalty method</em>, it is four lines long, and the honest thing to do is to try it properly
+    before rejecting it.
+  </p>
+
+  <h3>The stiffness is not a free parameter</h3>
+
+  <p>
+    Start with the easiest possible question: a crate of mass <em>m</em> resting on the floor, not
+    moving. For it to rest, the spring must exactly carry its weight, so at a penetration
+    <em>x</em>,
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ k\,x = m g \qquad\Longrightarrow\qquad k = \frac{mg}{x} \]</span>
+    <span class="eq-plain">k * x = m * g, so k = m * g / x</span>
+  </div>
+
+  <p>
+    Choose how far you are willing to let things sink and the stiffness is decided for you. Now ask
+    what that stiffness <em>does</em> to the simulation. A spring of stiffness <em>k</em> acting on a
+    mass <em>m</em> oscillates at
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \omega = \sqrt{\frac{k}{m}} = \sqrt{\frac{mg/x}{m}} = \sqrt{\frac{g}{x}} \]</span>
+    <span class="eq-plain">omega = sqrt(k/m) = sqrt(g/x)</span>
+  </div>
+
+  <p>
+    <strong>The mass cancels.</strong> Read that again, because it is the whole argument: the rate
+    at which a penalty contact oscillates does not depend on what is resting on it. You cannot buy
+    stability by making the crate heavier, or by making it lighter. The penetration you are willing
+    to see decides the rate, for every body in the scene, and Lesson 8.1's stability limit for
+    semi-implicit Euler —&nbsp;<code>h·ω &lt; 2</code>, derived there from a determinant and
+    returned by <code>max_stable_step</code> —&nbsp;turns that rate into a minimum frame rate for the
+    entire simulation.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> A 20 kg crate, <code>g = 9.81</code>.<br>
+    Allow 1&nbsp;mm of sink: <code>k = 20 × 9.81 / 0.001 = 196,200 N/m</code>.<br>
+    Then <code>ω = √(9.81 / 0.001) = √9810 = 99.05 rad/s</code>.<br>
+    8.1's limit: <code>h &lt; 2/ω = 0.02019 s</code>, which is <strong>49.5 Hz</strong>.<br>
+    Turn it round: at 60 Hz, <code>ω &lt; 2/h = 120 rad/s</code>, so
+    <code>x &gt; g/ω² = 9.81/14400 = 0.681 mm</code>.<br>
+    <em>At 60 Hz, the finest a stable penalty spring can hold anything is 0.68 mm.</em>
+  </p>
+
+  <p>
+    And “stable” is not “right”. 8.1 §6 measured an orbit at <code>h·ω = 1.95</code> that was
+    perfectly bounded and swung by a factor of forty. Sitting at the edge of the stability limit
+    buys you a contact that does not explode and does visibly throb.
+  </p>
+
+  @@FIG_PENALTY@@
+
+  <h3>And the static number was the optimistic one</h3>
+
+  <p>
+    Everything above was about a crate that is <em>already at rest</em>. A crate that is
+    <em>arriving</em> is a different question, and the spring has no say in it at all. All of the
+    impact's kinetic energy has to go into the spring before the crate stops, so
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \tfrac12 m v^2 = \tfrac12 k x^2 \qquad\Longrightarrow\qquad x = v\sqrt{\frac{m}{k}} \]</span>
+    <span class="eq-plain">half m v squared = half k x squared, so x = v * sqrt(m/k)</span>
+  </div>
+
+  <p>
+    There is no <em>g</em> in that and the mass does <em>not</em> cancel. The dynamic penetration is
+    set by the impact speed and the weight, and the spring you tuned to hold a resting crate at 1 mm
+    has no opinion about it.
+  </p>
+
+  <p class="worked">
+    <strong>Worked.</strong> Our crate falls 20 cm onto the floor, so it arrives at
+    <code>v = √(2 × 9.81 × 0.2) = 1.981 m/s</code>.<br>
+    With <code>k = 196,200</code>: <code>x = 1.981 × √(20/196200) = 1.981 × 0.010096 =
+    20.0 mm</code>.<br>
+    <strong>Twenty times the millimetre it was tuned for</strong>, before any discretisation. The
+    harness measures 44.1 mm, because a 60 Hz step overshoots the turning point.<br>
+    To get 1 mm out of <em>that</em> impact you would need
+    <code>k = m v²/x² = 20 × 3.924 / 10⁻⁶ = 7.85 × 10⁷ N/m</code>, which oscillates at
+    <code>ω = 1981 rad/s</code> and demands at least <strong>990 Hz</strong>.
+  </p>
+
+  <h3>Giving it its best shot</h3>
+
+  <p>
+    That is the argument as it is usually made, and it is not quite fair, because we have not turned
+    the other knob. An undamped spring gives back every joule it took, so a penalty contact with no
+    damping <em>is</em> a contact with <code>e = 1</code>: the crate returns to its drop height and
+    keeps doing so. Damping is what turns a bounce into a landing. And a softer spring is calmer and
+    sinks further, so there are two knobs and they trade against each other.
+  </p>
+
+  <p>
+    So §A of the harness sweeps both: four stiffnesses, forty-one dampings each, three seconds of
+    simulation apiece, <strong>164 settings</strong>, and reports the best result for each
+    stiffness. The right-hand table of Figure&nbsp;1 is what came back, and the section was drafted
+    expecting to show that no setting works. <em>It does not show that.</em>
+  </p>
+
+  <pre><code class="lang-text">     static sink      k (N/m)  best zeta      max depth     late swing
+        50.00 mm       3924.0       0.40     108.600 mm      0.0000 mm
+        10.00 mm      19620.0       0.20      50.092 mm      0.0000 mm
+         1.00 mm     196200.0       0.35      18.910 mm    275.4744 mm
+         0.10 mm    1962000.1       0.30      12.550 mm    366.7545 mm
+
+  impulse solver, nothing tuned                        12.553 mm      0.0000 mm</code></pre>
+
+  <p>
+    Read the two middle columns together, because the shape of the result is the result. The soft
+    springs settle the crate <em>perfectly</em> —&nbsp;zero residual bounce&nbsp;— at 109 mm and 50 mm
+    of penetration. The crate is one metre tall, so the first of those has swallowed eleven per cent
+    of it. The stiff springs keep the penetration respectable and cannot be made to settle at all:
+    275 mm and 367 mm of residual bounce, forever. At 60 Hz you may have a crate that sits still or
+    a crate that sits on the surface, and not both.
+  </p>
+
+  <p>
+    The impulse solver's row has no knobs in it. It lands the crate at 12.55 mm with zero residual
+    bounce — better than <em>every</em> one of the 164 settings on both axes at once.
+  </p>
+
+  <h3>The part that actually kills it</h3>
+
+  <p>
+    And then the measurement that settles the argument, which is not about any of the numbers above.
+    Take the best setting found — the one tuned on a 20 kg crate dropped from 1.2 m — and apply it,
+    unchanged, to scenes it was not tuned on:
+  </p>
+
+  <pre><code class="lang-text">  scene                        penalty depth penalty swing impulse depth
+  20 kg from 1.2 m (tuned)         108.60 mm      0.000 mm     12.554 mm
+  200 kg from 1.2 m                962.13 mm    152.444 mm     12.554 mm
+  2 kg from 1.2 m                   20.43 mm    314.988 mm     12.554 mm
+  20 kg from 5 m                   369.54 mm      0.289 mm     46.627 mm</code></pre>
+
+  <p>
+    The 200 kg crate goes <strong>962 mm</strong> into a floor half a metre thick: it is through, and
+    out the other side. The 2 kg crate does not sink but bounces 315 mm forever. The same crate
+    dropped from 5 m instead of 1.2 m goes 370 mm in. Meanwhile the impulse column does not move at
+    all except where the physics says it should — the 5 m drop arrives faster, so it travels further
+    in the step before anything notices, which is a statement about the <em>time step</em> rather
+    than about the solver, and §10 comes back to it.
+  </p>
+
+  <p>
+    <strong>That is the case against penalty contacts, and it is not “they are unstable”.</strong>
+    They are tunable, and the tuning is a property of the <em>scene</em> — of the masses in it and
+    the speeds they arrive at — rather than of the materials in contact. A physics engine is
+    supposed to take a designer's scene and simulate it; one whose contacts must be re-tuned every
+    time somebody changes a crate's weight is not an engine, it is a rehearsal.
+  </p>
+
+  <p class="aside">
+    Penalty methods are not a historical curiosity, and this section is not a hit piece. Soft-body
+    and cloth solvers use them constantly, because a cloth <em>is</em> a mesh of springs and the
+    stiffness is the material rather than a tuning constant. Position-based dynamics —&nbsp;the
+    family behind most cloth in shipping games&nbsp;— can be read as a penalty method moved into
+    position space to dodge exactly the stability limit above. What they are bad at is
+    <em>rigid</em> contact, where the “spring” has no physical stiffness to be and the correct
+    answer is infinity.
+  </p>

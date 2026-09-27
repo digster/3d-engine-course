@@ -1,0 +1,38 @@
+<svg viewBox="0 0 720 320" role="img" aria-labelledby="f69e-t f69e-d">
+  <title id="f69e-t">Per-cascade bias</title>
+  <desc id="f69e-d">A four-row table of world_per_texel, depth range and the resulting device-space bias for each cascade. The texel size spans a factor of 7.3 but cascades 1, 2 and 3 all need the same bias, because the sphere radius cancels between the texel size and the depth range.</desc>
+  <defs>
+    <marker id="e-i-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f69e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">The same formula, four cascades, and what cancels</text>
+<text x="110" y="62" class="xs" text-anchor="middle">cascade</text>
+<text x="242" y="62" class="xs" text-anchor="middle">world_per_texel</text>
+<text x="374" y="62" class="xs" text-anchor="middle">depth_range</text>
+<text x="506" y="62" class="xs" text-anchor="middle">bias (device)</text>
+<line x1="54" y1="72" x2="558.8" y2="72" class="grid" stroke-width="1.0"/>
+<text x="110" y="102" class="xs" text-anchor="middle">0</text>
+<text x="242" y="102" class="xs" text-anchor="middle">0.01945 m</text>
+<text x="374" y="102" class="xs" text-anchor="middle"> 31.931 m</text>
+<text x="506" y="102" class="xs t-bad" text-anchor="middle">1.292e-03</text>
+<text x="110" y="136" class="xs" text-anchor="middle">1</text>
+<text x="242" y="136" class="xs" text-anchor="middle">0.03835 m</text>
+<text x="374" y="136" class="xs" text-anchor="middle"> 40.060 m</text>
+<text x="506" y="136" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+<text x="110" y="170" class="xs" text-anchor="middle">2</text>
+<text x="242" y="170" class="xs" text-anchor="middle">0.06695 m</text>
+<text x="374" y="170" class="xs" text-anchor="middle"> 69.924 m</text>
+<text x="506" y="170" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+<text x="110" y="204" class="xs" text-anchor="middle">3</text>
+<text x="242" y="204" class="xs" text-anchor="middle">0.14165 m</text>
+<text x="374" y="204" class="xs" text-anchor="middle">147.952 m</text>
+<text x="506" y="204" class="xs t-ok" text-anchor="middle">2.031e-03</text>
+<line x1="54" y1="216" x2="558.8" y2="216" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="236" class="xs" text-anchor="middle">world_per_texel spans 7.3x — and three of the four biases are the same number</text>
+<text x="360.0" y="258" class="xs" text-anchor="middle">because bias = reach·wpt/range, wpt = 2r/res and range ≈ 2r, so the radius cancels:</text>
+<text x="360.0" y="280" class="xs" text-anchor="middle">bias ≈ reach·tanθ/resolution = 2.0716e-03</text>
+<text x="360.0" y="302" class="xs" text-anchor="middle">cascade 0 is the exception at 64%: its range is set by the CASTERS, not its own sphere, so nothing cancels</text>
+</svg>

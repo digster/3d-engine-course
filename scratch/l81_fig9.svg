@@ -1,0 +1,100 @@
+<svg viewBox="0 0 900 410" role="img" aria-labelledby="l81f9-t l81f9-d">
+  <title id="l81f9-t">Per-step damping at four step rates, and the drag step that reverses</title>
+  <desc id="l81f9-d">The same line v times equals 0.99 retains 74 percent of the velocity per second at 30 Hz and 24 percent at 144 Hz, while pow of the per-second factor gives the same answer at every rate. Beside it, explicit drag reverses the velocity once h times k passes 1.</desc>
+  <defs>
+    <marker id="e-i-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l81f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="62" y="66" width="360" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="50" class="xs muted" text-anchor="start">G.1  `v *= 0.99f` once per step, for one second</text>
+<line x1="62.0" y1="66" x2="62.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="332" class="xs mono" text-anchor="middle">0.00</text>
+<line x1="152.0" y1="66" x2="152.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="152.0" y="332" class="xs mono" text-anchor="middle">0.25</text>
+<line x1="242.0" y1="66" x2="242.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="242.0" y="332" class="xs mono" text-anchor="middle">0.50</text>
+<line x1="332.0" y1="66" x2="332.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="332.0" y="332" class="xs mono" text-anchor="middle">0.75</text>
+<line x1="422.0" y1="66" x2="422.0" y2="316" class="grid" stroke-width="1.0"/>
+<text x="422.0" y="332" class="xs mono" text-anchor="middle">1.00</text>
+<line x1="62" y1="316.0" x2="422" y2="316.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="320.0" class="xs muted" text-anchor="end">0.00</text>
+<line x1="62" y1="253.5" x2="422" y2="253.5" class="grid" stroke-width="1.0"/>
+<text x="54" y="257.5" class="xs muted" text-anchor="end">0.25</text>
+<line x1="62" y1="191.0" x2="422" y2="191.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="195.0" class="xs muted" text-anchor="end">0.50</text>
+<line x1="62" y1="128.5" x2="422" y2="128.5" class="grid" stroke-width="1.0"/>
+<text x="54" y="132.5" class="xs muted" text-anchor="end">0.75</text>
+<line x1="62" y1="66.0" x2="422" y2="66.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="70.0" class="xs muted" text-anchor="end">1.00</text>
+<text x="242.0" y="352" class="xs muted" text-anchor="middle">seconds</text>
+<path d="M 62.00,66.00 L 74.00,68.50 L 86.00,70.97 L 98.00,73.43 L 110.00,75.85 L 122.00,78.25 L 134.00,80.63 L 146.00,82.98 L 158.00,85.31 L 170.00,87.62 L 182.00,89.90 L 194.00,92.17 L 206.00,94.40 L 218.00,96.62 L 230.00,98.81 L 242.00,100.99 L 254.00,103.14 L 266.00,105.26 L 278.00,107.37 L 290.00,109.46 L 302.00,111.52 L 314.00,113.57 L 326.00,115.59 L 338.00,117.60 L 350.00,119.58 L 362.00,121.54 L 374.00,123.49 L 386.00,125.41 L 398.00,127.32 L 410.00,129.21 L 422.00,131.07" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<text x="430.0" y="135.075" class="xs mono" text-anchor="start">30 Hz</text>
+<path d="M 62.00,66.00 L 68.00,68.50 L 74.00,70.97 L 80.00,73.43 L 86.00,75.85 L 92.00,78.25 L 98.00,80.63 L 104.00,82.98 L 110.00,85.31 L 116.00,87.62 L 122.00,89.90 L 128.00,92.17 L 134.00,94.40 L 140.00,96.62 L 146.00,98.81 L 152.00,100.99 L 158.00,103.14 L 164.00,105.26 L 170.00,107.37 L 176.00,109.46 L 182.00,111.52 L 188.00,113.57 L 194.00,115.59 L 200.00,117.60 L 206.00,119.58 L 212.00,121.54 L 218.00,123.49 L 224.00,125.41 L 230.00,127.32 L 236.00,129.21 L 242.00,131.07 L 248.00,132.92 L 254.00,134.75 L 260.00,136.57 L 266.00,138.36 L 272.00,140.14 L 278.00,141.90 L 284.00,143.64 L 290.00,145.36 L 296.00,147.07 L 302.00,148.76 L 308.00,150.43 L 314.00,152.09 L 320.00,153.72 L 326.00,155.35 L 332.00,156.95 L 338.00,158.54 L 344.00,160.12 L 350.00,161.68 L 356.00,163.22 L 362.00,164.75 L 368.00,166.26 L 374.00,167.76 L 380.00,169.24 L 386.00,170.71 L 392.00,172.16 L 398.00,173.60 L 404.00,175.02 L 410.00,176.43 L 416.00,177.83 L 422.00,179.21" fill="none" stroke="#78dca0" stroke-width="2.0"/>
+<text x="430.0" y="183.21075" class="xs mono" text-anchor="start">60 Hz</text>
+<path d="M 62.00,66.00 L 65.00,68.50 L 68.00,70.97 L 71.00,73.43 L 74.00,75.85 L 77.00,78.25 L 80.00,80.63 L 83.00,82.98 L 86.00,85.31 L 89.00,87.62 L 92.00,89.90 L 95.00,92.17 L 98.00,94.40 L 101.00,96.62 L 104.00,98.81 L 107.00,100.99 L 110.00,103.14 L 113.00,105.26 L 116.00,107.37 L 119.00,109.46 L 122.00,111.52 L 125.00,113.57 L 128.00,115.59 L 131.00,117.60 L 134.00,119.58 L 137.00,121.54 L 140.00,123.49 L 143.00,125.41 L 146.00,127.32 L 149.00,129.21 L 152.00,131.07 L 155.00,132.92 L 158.00,134.75 L 161.00,136.57 L 164.00,138.36 L 167.00,140.14 L 170.00,141.90 L 173.00,143.64 L 176.00,145.36 L 179.00,147.07 L 182.00,148.76 L 185.00,150.43 L 188.00,152.09 L 191.00,153.72 L 194.00,155.35 L 197.00,156.95 L 200.00,158.54 L 203.00,160.12 L 206.00,161.68 L 209.00,163.22 L 212.00,164.75 L 215.00,166.26 L 218.00,167.76 L 221.00,169.24 L 224.00,170.71 L 227.00,172.16 L 230.00,173.60 L 233.00,175.02 L 236.00,176.43 L 239.00,177.83 L 242.00,179.21 L 245.00,180.58 L 248.00,181.93 L 251.00,183.27 L 254.00,184.60 L 257.00,185.91 L 260.00,187.22 L 263.00,188.50 L 266.00,189.78 L 269.00,191.04 L 272.00,192.29 L 275.00,193.53 L 278.00,194.75 L 281.00,195.96 L 284.00,197.16 L 287.00,198.35 L 290.00,199.53 L 293.00,200.69 L 296.00,201.85 L 299.00,202.99 L 302.00,204.12 L 305.00,205.24 L 308.00,206.35 L 311.00,207.44 L 314.00,208.53 L 317.00,209.60 L 320.00,210.67 L 323.00,211.72 L 326.00,212.76 L 329.00,213.79 L 332.00,214.82 L 335.00,215.83 L 338.00,216.83 L 341.00,217.82 L 344.00,218.80 L 347.00,219.78 L 350.00,220.74 L 353.00,221.69 L 356.00,222.63 L 359.00,223.57 L 362.00,224.49 L 365.00,225.41 L 368.00,226.31 L 371.00,227.21 L 374.00,228.10 L 377.00,228.98 L 380.00,229.85 L 383.00,230.71 L 386.00,231.56 L 389.00,232.41 L 392.00,233.24 L 395.00,234.07 L 398.00,234.89 L 401.00,235.70 L 404.00,236.50 L 407.00,237.30 L 410.00,238.08 L 413.00,238.86 L 416.00,239.64 L 419.00,240.40 L 422.00,241.15" fill="none" stroke="#aa96ff" stroke-width="2.0"/>
+<text x="430.0" y="245.15474999999998" class="xs mono" text-anchor="start">120 Hz</text>
+<path d="M 62.00,66.00 L 64.50,68.50 L 67.00,70.97 L 69.50,73.43 L 72.00,75.85 L 74.50,78.25 L 77.00,80.63 L 79.50,82.98 L 82.00,85.31 L 84.50,87.62 L 87.00,89.90 L 89.50,92.17 L 92.00,94.40 L 94.50,96.62 L 97.00,98.81 L 99.50,100.99 L 102.00,103.14 L 104.50,105.26 L 107.00,107.37 L 109.50,109.46 L 112.00,111.52 L 114.50,113.57 L 117.00,115.59 L 119.50,117.60 L 122.00,119.58 L 124.50,121.54 L 127.00,123.49 L 129.50,125.41 L 132.00,127.32 L 134.50,129.21 L 137.00,131.07 L 139.50,132.92 L 142.00,134.75 L 144.50,136.57 L 147.00,138.36 L 149.50,140.14 L 152.00,141.90 L 154.50,143.64 L 157.00,145.36 L 159.50,147.07 L 162.00,148.76 L 164.50,150.43 L 167.00,152.09 L 169.50,153.72 L 172.00,155.35 L 174.50,156.95 L 177.00,158.54 L 179.50,160.12 L 182.00,161.68 L 184.50,163.22 L 187.00,164.75 L 189.50,166.26 L 192.00,167.76 L 194.50,169.24 L 197.00,170.71 L 199.50,172.16 L 202.00,173.60 L 204.50,175.02 L 207.00,176.43 L 209.50,177.83 L 212.00,179.21 L 214.50,180.58 L 217.00,181.93 L 219.50,183.27 L 222.00,184.60 L 224.50,185.91 L 227.00,187.22 L 229.50,188.50 L 232.00,189.78 L 234.50,191.04 L 237.00,192.29 L 239.50,193.53 L 242.00,194.75 L 244.50,195.96 L 247.00,197.16 L 249.50,198.35 L 252.00,199.53 L 254.50,200.69 L 257.00,201.85 L 259.50,202.99 L 262.00,204.12 L 264.50,205.24 L 267.00,206.35 L 269.50,207.44 L 272.00,208.53 L 274.50,209.60 L 277.00,210.67 L 279.50,211.72 L 282.00,212.76 L 284.50,213.79 L 287.00,214.82 L 289.50,215.83 L 292.00,216.83 L 294.50,217.82 L 297.00,218.80 L 299.50,219.78 L 302.00,220.74 L 304.50,221.69 L 307.00,222.63 L 309.50,223.57 L 312.00,224.49 L 314.50,225.41 L 317.00,226.31 L 319.50,227.21 L 322.00,228.10 L 324.50,228.98 L 327.00,229.85 L 329.50,230.71 L 332.00,231.56 L 334.50,232.41 L 337.00,233.24 L 339.50,234.07 L 342.00,234.89 L 344.50,235.70 L 347.00,236.50 L 349.50,237.30 L 352.00,238.08 L 354.50,238.86 L 357.00,239.64 L 359.50,240.40 L 362.00,241.15 L 364.50,241.90 L 367.00,242.64 L 369.50,243.38 L 372.00,244.10 L 374.50,244.82 L 377.00,245.53 L 379.50,246.24 L 382.00,246.94 L 384.50,247.63 L 387.00,248.31 L 389.50,248.99 L 392.00,249.66 L 394.50,250.32 L 397.00,250.98 L 399.50,251.63 L 402.00,252.27 L 404.50,252.91 L 407.00,253.54 L 409.50,254.17 L 412.00,254.78 L 414.50,255.40 L 417.00,256.00 L 419.50,256.60 L 422.00,257.20" fill="none" stroke="#eb6060" stroke-width="2.0"/>
+<text x="430.0" y="261.19575" class="xs mono" text-anchor="start">144 Hz</text>
+<line x1="62.0" y1="179.2" x2="422.0" y2="179.2" stroke="#969eaf" stroke-width="1.6" fill="none" stroke-dasharray="4 3"/>
+<text x="422" y="32" class="xs mono" text-anchor="end">pow(r, h) gives 0.547157 at EVERY rate — the dashed line</text>
+<text x="512" y="68" class="xs muted" text-anchor="start">k</text>
+<text x="616" y="68" class="xs muted" text-anchor="end">h·k</text>
+<text x="690" y="68" class="xs muted" text-anchor="end">1 − h·k</text>
+<text x="772" y="68" class="xs muted" text-anchor="end">exp(−h·k)</text>
+<text x="868" y="68" class="xs muted" text-anchor="end"></text>
+<line x1="512" y1="76.0" x2="874" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="512" y="93.0" class="xs" text-anchor="start">6</text>
+<text x="616" y="93.0" class="xs mono" text-anchor="end">0.1000</text>
+<text x="690" y="93.0" class="xs mono" text-anchor="end">+0.90000</text>
+<text x="772" y="93.0" class="xs mono" text-anchor="end">0.904837</text>
+<text x="868" y="93.0" class="xs mono" text-anchor="end">ok</text>
+<text x="512" y="110.0" class="xs" text-anchor="start">30</text>
+<text x="616" y="110.0" class="xs mono" text-anchor="end">0.5000</text>
+<text x="690" y="110.0" class="xs mono" text-anchor="end">+0.50000</text>
+<text x="772" y="110.0" class="xs mono" text-anchor="end">0.606531</text>
+<text x="868" y="110.0" class="xs mono" text-anchor="end">ok</text>
+<text x="512" y="127.0" class="xs" text-anchor="start">60</text>
+<text x="616" y="127.0" class="xs mono" text-anchor="end">1.0000</text>
+<text x="690" y="127.0" class="xs mono" text-anchor="end">+0.00000</text>
+<text x="772" y="127.0" class="xs mono" text-anchor="end">0.367879</text>
+<text x="868" y="127.0" class="xs mono" text-anchor="end">STOPS DEAD</text>
+<text x="512" y="144.0" class="xs" text-anchor="start">90</text>
+<text x="616" y="144.0" class="xs mono" text-anchor="end">1.5000</text>
+<text x="690" y="144.0" class="xs mono" text-anchor="end">-0.50000</text>
+<text x="772" y="144.0" class="xs mono" text-anchor="end">0.223130</text>
+<text x="868" y="144.0" class="xs mono" text-anchor="end">REVERSES</text>
+<text x="512" y="161.0" class="xs" text-anchor="start">150</text>
+<text x="616" y="161.0" class="xs mono" text-anchor="end">2.5000</text>
+<text x="690" y="161.0" class="xs mono" text-anchor="end">-1.50000</text>
+<text x="772" y="161.0" class="xs mono" text-anchor="end">0.082085</text>
+<text x="868" y="161.0" class="xs mono" text-anchor="end">DIVERGES</text>
+<text x="512" y="191.5" class="xs muted" text-anchor="start">Drag is not a position force, so</text>
+<text x="512" y="207.5" class="xs muted" text-anchor="start">semi-implicit Euler does not help:</text>
+<text x="512" y="223.5" class="xs muted" text-anchor="start">velocity is updated from velocity, and</text>
+<text x="512" y="239.5" class="xs muted" text-anchor="start">the step is plain explicit Euler.</text>
+<text x="512" y="275.5" class="xs muted" text-anchor="start">k = 90, h·k = 1.5</text>
+<text x="740" y="275.5" class="xs muted" text-anchor="end">explicit v</text>
+<text x="840" y="275.5" class="xs muted" text-anchor="end">exact</text>
+<line x1="512" y1="283.5" x2="846" y2="283.5" class="grid" stroke-width="1.0"/>
+<text x="512" y="300.5" class="xs" text-anchor="start">1</text>
+<text x="740" y="300.5" class="xs mono" text-anchor="end">-0.500000</text>
+<text x="840" y="300.5" class="xs mono" text-anchor="end">0.223130</text>
+<text x="512" y="317.5" class="xs" text-anchor="start">2</text>
+<text x="740" y="317.5" class="xs mono" text-anchor="end">+0.250000</text>
+<text x="840" y="317.5" class="xs mono" text-anchor="end">0.049787</text>
+<text x="512" y="334.5" class="xs" text-anchor="start">3</text>
+<text x="740" y="334.5" class="xs mono" text-anchor="end">-0.125000</text>
+<text x="840" y="334.5" class="xs mono" text-anchor="end">0.011109</text>
+<text x="512" y="351.5" class="xs" text-anchor="start">4</text>
+<text x="740" y="351.5" class="xs mono" text-anchor="end">+0.062500</text>
+<text x="840" y="351.5" class="xs mono" text-anchor="end">0.002479</text>
+<text x="512" y="368.5" class="xs" text-anchor="start">5</text>
+<text x="740" y="368.5" class="xs mono" text-anchor="end">-0.031250</text>
+<text x="840" y="368.5" class="xs mono" text-anchor="end">0.000553</text>
+<text x="512" y="388.5" class="xs t-bad" text-anchor="start">A drag force that makes the sign flip every step.</text>
+</svg>

@@ -1,0 +1,55 @@
+<svg viewBox="0 0 720 322" role="img" aria-labelledby="l54f2-t l54f2-d">
+  <title id="l54f2-t">Three failure modes against three designs</title>
+  <desc id="l54f2-d">A 3x3 table. Rows: dangling, aliasing, relocation. Columns: raw pointer, bare index, index plus generation. The raw pointer is undefined in all three; the bare index detects dangling and survives relocation but makes aliasing silently wrong; index plus generation detects or survives all three.</desc>
+  <defs>
+    <marker id="e-i-l54f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l54f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l54f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l54f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l54f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Three ways a reference goes wrong, and what each design survives.</text>
+<text x="241" y="60" class="xs t-hi" text-anchor="middle">RAW POINTER</text>
+<text x="423" y="60" class="xs t-hi" text-anchor="middle">BARE INDEX</text>
+<text x="605" y="60" class="xs t-hi" text-anchor="middle">INDEX + GENERATION</text>
+<line x1="24" y1="70" x2="696" y2="70" class="grid" stroke-width="1.0"/>
+<text x="24" y="118" class="sm" text-anchor="start">DANGLING</text>
+<text x="24" y="134" class="xs muted" text-anchor="start">the object was freed</text>
+<rect x="155" y="106" width="172" height="24" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="241" y="122" class="xs t-bad" text-anchor="middle">undefined</text>
+<text x="241" y="144" class="xs muted" text-anchor="middle">reads freed memory</text>
+<rect x="337" y="106" width="172" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="423" y="122" class="xs t-ok" text-anchor="middle">detected</text>
+<text x="423" y="144" class="xs muted" text-anchor="middle">the index is out of range</text>
+<rect x="519" y="106" width="172" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="605" y="122" class="xs t-ok" text-anchor="middle">detected</text>
+<text x="605" y="144" class="xs muted" text-anchor="middle">the generation differs</text>
+<line x1="24" y1="154" x2="696" y2="154" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="176" class="sm" text-anchor="start">ALIASING</text>
+<text x="24" y="192" class="xs muted" text-anchor="start">the slot was refilled</text>
+<rect x="155" y="164" width="172" height="24" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="241" y="180" class="xs t-bad" text-anchor="middle">undefined</text>
+<text x="241" y="202" class="xs muted" text-anchor="middle">reads the new object</text>
+<rect x="337" y="164" width="172" height="24" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="423" y="180" class="xs t-bad" text-anchor="middle">WORSE</text>
+<text x="423" y="202" class="xs muted" text-anchor="middle">silently valid</text>
+<rect x="519" y="164" width="172" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="605" y="180" class="xs t-ok" text-anchor="middle">detected</text>
+<text x="605" y="202" class="xs muted" text-anchor="middle">the generation differs</text>
+<line x1="24" y1="212" x2="696" y2="212" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="234" class="sm" text-anchor="start">RELOCATION</text>
+<text x="24" y="250" class="xs muted" text-anchor="start">the storage moved</text>
+<rect x="155" y="222" width="172" height="24" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="241" y="238" class="xs t-bad" text-anchor="middle">undefined</text>
+<text x="241" y="260" class="xs muted" text-anchor="middle">the address is stale</text>
+<rect x="337" y="222" width="172" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="423" y="238" class="xs t-ok" text-anchor="middle">survives</text>
+<text x="423" y="260" class="xs muted" text-anchor="middle">an index does not move</text>
+<rect x="519" y="222" width="172" height="24" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="605" y="238" class="xs t-ok" text-anchor="middle">survives</text>
+<text x="605" y="260" class="xs muted" text-anchor="middle">an index does not move</text>
+<line x1="24" y1="268" x2="696" y2="268" class="grid" stroke-width="1.2"/>
+<text x="24" y="288" class="xs t-bad" text-anchor="start">READ THE MIDDLE CELL.</text>
+<text x="150" y="288" class="xs" text-anchor="start">An index alone fixes relocation and makes aliasing WORSE — a stale</text>
+<text x="24" y="306" class="xs" text-anchor="start">index is in range, points at a live object, and is wrong. The generation is what closes it.</text>
+</svg>

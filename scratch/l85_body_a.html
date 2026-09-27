@@ -1,0 +1,294 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-04-collision-primitives.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-06-epa.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.6 — EPA: Penetration Depth</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.5</div>
+    <h1>GJK: Convex Distance from a Support Function</h1>
+    <p class="deck">
+      8.4's Separating Axis Theorem answered <em>are these two touching?</em> and was honest, in
+      its own doc comment, about the question it could not answer. Two unit cubes whose centres
+      are (2,&nbsp;2,&nbsp;2) apart are <strong>√3 ≈ 1.732 m</strong> apart, corner to corner —
+      and every one of the SAT's fifteen candidate axes reports <strong>1.0</strong>, because
+      every one of them is a coordinate axis and the gap along an axis is the offset's
+      <em>component</em> rather than its <em>length</em>. The SAT is not wrong. It is 42.3% low,
+      and on random box pairs it is more than 10% low <strong>5.7% of the time</strong>. A lower
+      bound answers a yes/no question and nothing else; a character controller wants to know how
+      far it can step, and a continuous test wants the distance so it can bound the time of
+      impact. Worse, the SAT's fifteen candidates were a fact <em>about boxes</em>. Hand it a
+      cylinder and there is no list to write down. This lesson replaces it with an algorithm that
+      has no list at all. The move is 8.4 §3.2's, finally cashed: two shapes become one set, the
+      <strong>Minkowski difference</strong> <code>A ⊖ B</code>, and a question about a pair becomes
+      a question about a point — <em>does that set contain the origin?</em> You cannot build the
+      set, and you never need to, because its support function is two calls to theirs. Then GJK
+      searches it with a simplex of at most four points, and the search is honest in a way few
+      algorithms are: it maintains an <strong>upper bound</strong> (a real vector between two real
+      surface points) and a <strong>lower bound</strong> (a supporting plane with the origin
+      outside it), and when they meet the distance is not believed but <em>proven</em> — which is
+      what lets this lesson's harness verify GJK without a second GJK. Then the things nobody
+      warns you about, all of them measured. The textbook simplex solver, the one every
+      implementation copies, <strong>returns a point that is not on the triangle</strong> when the
+      triangle is a sliver — 1,048 failures in 200,000, worst case <strong>14.5% wrong</strong> —
+      and a sliver is not an edge case in GJK, it is the last two iterations of every query, so we
+      compute four candidates instead of deciding between seven regions. <code>|v|</code> is
+      monotone by construction, which makes a two-line check both a terminator and a corruption
+      detector: it caught a search converging cleanly to 0.0233827 m and then jumping to
+      <strong>0.0674522</strong>. GJK terminates <em>exactly</em> on polytopes and only
+      <em>converges</em> on curved shapes — box, hull and sphere are flat against tolerance while a
+      capsule costs one more pass per decade. Two boxes standing on the same floor produce a
+      difference set in which <strong>every vertex has y exactly zero</strong>, so the search is
+      confined to a plane and can never build a tetrahedron: 0 of 100,000, against 77,326 once one
+      box is tilted a single degree — which is a problem for 8.6, and named here. There is a
+      resolution floor, and two separate things give out at two different gaps. And 8.4 §11's
+      precision wall is fixed rather than merely repeated: taking every support point relative to
+      its own shape's centre makes the error <strong>96,270× smaller</strong> a thousand
+      kilometres from the origin.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-03-barycentric.html">2.3 — Barycentric Coordinates from Signed Areas</a>,
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor: Engine and Demos</a>,
+          <a href="06-17-frame-graph.html">6.17 — A Lightweight Frame Graph</a>,
+          <a href="08-04-collision-primitives.html">8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/shape.hpp</code>,
+            <code>engine/src/phys/shape.cpp</code>,
+            <code>engine/include/engine/phys/convex.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/gjk.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/gjk.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/collide.hpp</code>,
+            <code>engine/src/phys/collide.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/gjk/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_85.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_85.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can measure the <strong>distance between any two convex shapes</strong> —
+            box, sphere, capsule, arbitrary point set, in any combination — and hand back the two
+            surface points that realise it. <code>convex.hpp</code> reduces a shape to one
+            function pointer, so <code>gjk.cpp</code> never learns what a box is;
+            <code>shape.hpp</code> gains a capsule and a hull to prove it. <strong>Nine measured
+            sections, thirty-three checks</strong>, every separated pair certified by
+            re-deriving its own two bounds in double from the shape data alone. The
+            <code>gjk</code> demo draws the Minkowski difference beside the world and steps the
+            search one iteration at a time, and its third preset shows the simplex trapped in a
+            plane by nothing more exotic than two crates on a floor.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say precisely what the SAT's <code>depth</code> is a bound on, and construct a
+          configuration where it is 42% low.</li>
+      <li>…state the two equivalences the Minkowski difference buys, and derive the support
+          identity <code>support<sub>A⊖B</sub>(d) = support<sub>A</sub>(d) −
+          support<sub>B</sub>(−d)</code> in one line.</li>
+      <li>…explain why a support function determines a convex set completely, and write one for a
+          box, a sphere, a capsule and a point cloud.</li>
+      <li>…run GJK by hand on a small difference set, and say what the upper and lower bounds are
+          at every step and why each is valid.</li>
+      <li>…find the closest point of a simplex to the origin, recover the witness points from the
+          barycentric weights, and say why the textbook shortcut fails on slivers.</li>
+      <li>…name the invariant that makes GJK's termination a theorem rather than a heuristic, and
+          use it to catch a broken simplex solver.</li>
+      <li>…predict whether a given shape pair will terminate exactly or converge asymptotically,
+          from the shape alone.</li>
+      <li>…derive where GJK's resolution floor and its contact margin sit, in metres, from the
+          tolerance and the size of the shapes.</li>
+      <li>…design an interface that keeps a collision query's arithmetic away from world-sized
+          numbers, and measure what that buys.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a lower bound is not a distance</a></li>
+      <li><a href="#intuition">Building intuition: two sets become one set</a></li>
+      <li><a href="#minkowski">The Minkowski difference, and the two equivalences</a></li>
+      <li><a href="#support">The support function <em>is</em> the shape</a></li>
+      <li><a href="#identity">The identity that makes the difference computable</a></li>
+      <li><a href="#algorithm">The algorithm, in four lines — and worked</a></li>
+      <li><a href="#simplex">The simplex solver: compute, don't decide</a></li>
+      <li><a href="#implementation">Implementation</a></li>
+      <li><a href="#flat">What 8.6 will actually be handed</a></li>
+      <li><a href="#converge">Polytopes terminate, curves converge</a></li>
+      <li><a href="#floor">The resolution floor, and the margin it implies</a></li>
+      <li><a href="#origin">Where the origin is</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a lower bound is not a distance</h2>
+
+  <p>
+    Make two unit cubes. Put the first at the origin and the second at
+    <code>(2,&nbsp;2,&nbsp;2)</code>, axis aligned, no rotation at all. Ask 8.4's
+    <code>collide</code> how far apart they are.
+  </p>
+
+  <pre><code class="lang-cpp">const shape cube = box_shape(vec3{0.5f, 0.5f, 0.5f});
+const obb A = world_obb(cube, vec3{0.0f, 0.0f, 0.0f}, quat::identity());
+const obb B = world_obb(cube, vec3{2.0f, 2.0f, 2.0f}, quat::identity());
+
+const separation s = collide(A, B);
+// s.depth == -1.0f       "they are 1 metre apart"</code></pre>
+
+  <p>
+    They are not 1 metre apart. The nearest point of the first cube is its
+    <code>(+,&nbsp;+,&nbsp;+)</code> corner at <code>(0.5,&nbsp;0.5,&nbsp;0.5)</code>; the nearest
+    point of the second is its <code>(−,&nbsp;−,&nbsp;−)</code> corner at
+    <code>(1.5,&nbsp;1.5,&nbsp;1.5)</code>; and the distance between those two points is
+  </p>
+
+  <p class="eq-plain">
+    |(1, 1, 1)| = √(1² + 1² + 1²) = √3 = 1.7320508…
+  </p>
+
+  <p>
+    So the answer is out by 42.3%, and the interesting part is that <strong>nothing is
+    broken</strong>. Run the SAT's whole candidate list rather than stopping at the first axis that
+    separates, and the best of all fifteen is still exactly 1.0. That is not a bug in the
+    implementation; it is what the algorithm measures.
+  </p>
+
+  @@FIG_LOWERBOUND@@
+
+  <p>
+    Here is why. A separating axis test projects both boxes onto a direction and looks for a gap
+    between the two intervals. The gap it finds is the <em>component</em> of the offset along that
+    direction, minus the two projected radii. For these cubes the offset is
+    <code>(2,&nbsp;2,&nbsp;2)</code>, its component along <code>x</code> is 2, the two radii are
+    0.5 each, and 2 − 1 = 1. Perfectly correct — and it is a component, while the distance is a
+    length, and a component is never longer than the length it came from.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The gap on an axis is a lower bound on the distance, always, and it is tight only
+      when that axis happens to point along the true separation.</strong> For two convex
+      polytopes the direction between the closest points is a face normal when the contact is
+      vertex-to-face, and an edge cross product when it is edge-to-edge — both of which
+      <em>are</em> in the SAT's list. But when the closest features are two <strong>vertices</strong>,
+      the direction is whatever line joins those two corners, and no finite list built from faces
+      and edges contains it. That is the case above, and it is not rare.
+    </p>
+  </div>
+
+  <p>
+    The measurement is §A.2 of this lesson's harness. Over 200,000 random oriented box pairs,
+    124,216 of them apart, comparing the best of all fifteen SAT axes against the true distance:
+  </p>
+
+  <pre><code class="lang-text">  A.2  200000 random OBB pairs, 124216 of them apart
+       SAT best-of-15 / true distance:
+         mean  0.9817    worst  0.6901
+         more than  1% low: 35671  (28.7%)
+         more than 10% low: 7031  (5.7%)</code></pre>
+
+  <p>
+    The mean is reassuring and the tail is not. Nearly three in ten separated pairs are reported
+    more than 1% too close together, one in eighteen more than 10%, and the worst case in the run
+    was 31% low. If all you want is a boolean, none of this matters — a proof of separation is a
+    proof of separation however loose the number beside it. The moment you want the number, it
+    does.
+  </p>
+
+  <h3>1.1 And the axis list was a fact about boxes</h3>
+
+  <p>
+    There is a second, larger problem, and 8.4's own doc comments keep bumping into it. The
+    fifteen candidates were derived from a specific fact: <em>a box has three distinct face
+    normals and three distinct edge directions</em>. Every step of that derivation consulted the
+    shape.
+  </p>
+
+  <p>
+    Hand the same theorem a cylinder and there is no list to write down, because the rim has
+    infinitely many face normals. Hand it an artist's twenty-vertex convex collider and the list
+    is twenty face normals from each shape plus several hundred edge pairs — no longer a test but
+    a survey, and one whose cost grows as the product of the two vertex counts. The Separating
+    Axis Theorem is still <em>true</em> for those shapes. It has simply stopped being an
+    algorithm.
+  </p>
+
+  <p>
+    So this lesson does not improve the SAT. It replaces it with something that never asks what
+    shape it is holding, and — this is the part worth sitting with — that turns out to be
+    <em>more</em> accurate rather than less, because knowing less about the shape means having
+    nothing to enumerate and therefore nothing to be wrong about.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: two sets become one set</h2>
+
+  <p>
+    Put the boxes away for a moment and think about two people walking around a field. Person A
+    wanders inside one fenced area, person B inside another. You want to know whether the two
+    areas overlap.
+  </p>
+
+  <p>
+    Here is a strange way to find out. Instead of watching both people, watch the
+    <strong>arrow</strong> from B to A: its tail on B, its head on A. As they wander, that arrow
+    changes length and direction; collect every arrow that is possible, and translate all of them
+    so their tails sit at one point. What you get is a cloud of arrowheads, and that cloud is a
+    new region — one region, not two.
+  </p>
+
+  <p>
+    Now ask a question about that cloud. <strong>When does it contain the point where all the
+    tails are?</strong> That happens exactly when some arrow has zero length — when A and B can be
+    standing on the same spot, which is exactly when their two areas overlap. And when the cloud
+    does <em>not</em> contain that point, the shortest arrow from the tail-point into the cloud is
+    the shortest distance between the two areas, because it <em>is</em> one of the arrows, and
+    every arrow runs from a point of B to a point of A.
+  </p>
+
+  <p>
+    Two regions have become one region, and a question about a pair has become a question about a
+    point. That is the whole trick, and the rest of this lesson is arithmetic.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Hold on to why this is progress rather than bookkeeping.</strong> "Do these two sets
+      intersect?" is a question about a relationship, and relationships are awkward to search:
+      there is no obvious thing to move, no obvious direction to move it in. "Does this one set
+      contain this one point?" is a question about a <em>location</em>, and a location is
+      something you can walk toward. The 8.4 approach searched a space of <em>directions</em> and
+      had to enumerate it; this one searches a space of <em>points</em> and can descend through
+      it.
+    </p>
+  </div>

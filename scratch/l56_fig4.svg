@@ -1,0 +1,87 @@
+<svg viewBox="0 0 720 350" role="img" aria-labelledby="l56f4-t l56f4-d">
+  <title id="l56f4-t">Cost of each layout relative to a flat array, versus scene size</title>
+  <desc id="l56f4-d">A line chart with scene size on the x axis from 4 to 100,000 and cost relative to a flat array on the y axis. All layouts sit near 1x until 1,000 objects; beyond that the shuffled tree rises to 6.5x, shuffled pointers to 2.4x, and SoA stays below 1x.</desc>
+  <defs>
+    <marker id="e-i-l56f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l56f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l56f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l56f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l56f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Cost relative to the flat array, against scene size. 1.00x means the layout made no difference.</text>
+<rect x="92" y="52" width="470" height="210" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="2 4"/>
+<line x1="92" y1="232.0" x2="562" y2="232.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="236.0" class="xs muted" text-anchor="end">1x</text>
+<line x1="92" y1="202.0" x2="562" y2="202.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="206.0" class="xs muted" text-anchor="end">2x</text>
+<line x1="92" y1="172.0" x2="562" y2="172.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="176.0" class="xs muted" text-anchor="end">3x</text>
+<line x1="92" y1="142.0" x2="562" y2="142.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="146.0" class="xs muted" text-anchor="end">4x</text>
+<line x1="92" y1="112.0" x2="562" y2="112.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="116.0" class="xs muted" text-anchor="end">5x</text>
+<line x1="92" y1="82.0" x2="562" y2="82.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="86.0" class="xs muted" text-anchor="end">6x</text>
+<line x1="92" y1="52.0" x2="562" y2="52.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="56.0" class="xs muted" text-anchor="end">7x</text>
+<line x1="92" y1="232.0" x2="562" y2="232.0" class="ink" stroke-width="1.4"/>
+<text x="92.0" y="278" class="xs muted" text-anchor="middle">4</text>
+<text x="209.5" y="278" class="xs muted" text-anchor="middle">100</text>
+<text x="327.0" y="278" class="xs muted" text-anchor="middle">1,000</text>
+<text x="444.5" y="278" class="xs muted" text-anchor="middle">10,000</text>
+<text x="562.0" y="278" class="xs muted" text-anchor="middle">100,000</text>
+<text x="327.0" y="294" class="xs muted" text-anchor="middle">objects in the scene</text>
+<circle cx="92.0" cy="230.2" r="2.6" fill="#e05c5c"/>
+<circle cx="209.5" cy="230.8" r="2.6" fill="#e05c5c"/>
+<circle cx="327.0" cy="231.1" r="2.6" fill="#e05c5c"/>
+<circle cx="444.5" cy="116.2" r="2.6" fill="#e05c5c"/>
+<circle cx="562.0" cy="67.9" r="2.6" fill="#e05c5c"/>
+<polyline points="92.0,230.2 209.5,230.8 327.0,231.1 444.5,116.2 562.0,67.9" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<circle cx="92.0" cy="232.3" r="2.6" fill="#f0961e"/>
+<circle cx="209.5" cy="232.0" r="2.6" fill="#f0961e"/>
+<circle cx="327.0" cy="228.1" r="2.6" fill="#f0961e"/>
+<circle cx="444.5" cy="224.8" r="2.6" fill="#f0961e"/>
+<circle cx="562.0" cy="190.6" r="2.6" fill="#f0961e"/>
+<polyline points="92.0,232.3 209.5,232.0 327.0,228.1 444.5,224.8 562.0,190.6" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<circle cx="92.0" cy="232.0" r="2.6" fill="#5082e6"/>
+<circle cx="209.5" cy="231.7" r="2.6" fill="#5082e6"/>
+<circle cx="327.0" cy="232.0" r="2.6" fill="#5082e6"/>
+<circle cx="444.5" cy="231.7" r="2.6" fill="#5082e6"/>
+<circle cx="562.0" cy="202.6" r="2.6" fill="#5082e6"/>
+<polyline points="92.0,232.0 209.5,231.7 327.0,232.0 444.5,231.7 562.0,202.6" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="92.0" cy="230.2" r="2.6" fill="#9b7ede"/>
+<circle cx="209.5" cy="230.8" r="2.6" fill="#9b7ede"/>
+<circle cx="327.0" cy="230.8" r="2.6" fill="#9b7ede"/>
+<circle cx="444.5" cy="223.6" r="2.6" fill="#9b7ede"/>
+<circle cx="562.0" cy="211.6" r="2.6" fill="#9b7ede"/>
+<polyline points="92.0,230.2 209.5,230.8 327.0,230.8 444.5,223.6 562.0,211.6" fill="none" stroke="#9b7ede" stroke-width="1.6"/>
+<circle cx="92.0" cy="215.5" r="2.6" fill="#8f918a"/>
+<circle cx="209.5" cy="215.5" r="2.6" fill="#8f918a"/>
+<circle cx="327.0" cy="215.5" r="2.6" fill="#8f918a"/>
+<circle cx="444.5" cy="214.9" r="2.6" fill="#8f918a"/>
+<circle cx="562.0" cy="211.0" r="2.6" fill="#8f918a"/>
+<polyline points="92.0,215.5 209.5,215.5 327.0,215.5 444.5,214.9 562.0,211.0" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<circle cx="92.0" cy="232.0" r="2.6" fill="#5ac878"/>
+<circle cx="209.5" cy="241.6" r="2.6" fill="#5ac878"/>
+<circle cx="327.0" cy="242.8" r="2.6" fill="#5ac878"/>
+<circle cx="444.5" cy="242.2" r="2.6" fill="#5ac878"/>
+<circle cx="562.0" cy="241.6" r="2.6" fill="#5ac878"/>
+<polyline points="92.0,232.0 209.5,241.6 327.0,242.8 444.5,242.2 562.0,241.6" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<line x1="565.0" y1="67.9" x2="567.0" y2="67.9" stroke="#e05c5c" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="71.9" class="xs mono" style="fill:#e05c5c" text-anchor="start">tree_shuffled</text>
+<line x1="565.0" y1="190.6" x2="567.0" y2="190.6" stroke="#f0961e" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="194.6" class="xs mono" style="fill:#f0961e" text-anchor="start">ptr_shuffled</text>
+<line x1="565.0" y1="202.6" x2="567.0" y2="203.6" stroke="#5082e6" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="207.6" class="xs mono" style="fill:#5082e6" text-anchor="start">ptr_ordered</text>
+<line x1="565.0" y1="211.0" x2="567.0" y2="216.6" stroke="#8f918a" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="220.6" class="xs mono" style="fill:#8f918a" text-anchor="start">virtual</text>
+<line x1="565.0" y1="211.6" x2="567.0" y2="229.6" stroke="#9b7ede" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="233.6" class="xs mono" style="fill:#9b7ede" text-anchor="start">tree_fresh</text>
+<line x1="565.0" y1="241.6" x2="567.0" y2="242.6" stroke="#5ac878" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="571" y="246.6" class="xs mono" style="fill:#5ac878" text-anchor="start">soa</text>
+<line x1="24" y1="288" x2="696" y2="288" class="grid" stroke-width="1.2"/>
+<text x="24" y="306" class="xs t-ok" text-anchor="start">READ THE LEFT HALF FIRST.</text>
+<text x="178" y="306" class="xs" text-anchor="start">Up to a thousand objects every layout is within 13% of every other, except</text>
+<text x="24" y="322" class="xs" text-anchor="start">the virtual call. THE KNEE IS BETWEEN 1,000 AND 10,000 — which is where 96 bytes an object stops fitting in L2.</text>
+<text x="24" y="340" class="xs t-hi" text-anchor="start">Our scene is FOUR objects. On this data, nothing in this lesson justifies changing it.</text>
+</svg>

@@ -1,0 +1,46 @@
+<svg viewBox="0 0 760 348" role="img" aria-labelledby="f75e-t f75e-d">
+  <title id="f75e-t">One missing comparison</title>
+  <desc id="f75e-d">Two nearly identical keyframes stored with opposite signs, the 359-degree journey that results, and the measured cost of omitting the shortest-arc comparison.</desc>
+  <defs>
+    <marker id="e-i-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-mag-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d676e2"/></marker></defs>
+<defs><marker id="e-blue-f75e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7ebcf8"/></marker></defs>
+<text x="380.0" y="24" class="sm" text-anchor="middle">two keyframes one degree apart, signed the other way</text>
+<text x="380.0" y="40" class="xs muted" text-anchor="middle">an exporter has no reason to make the signs consistent, and half of them are not</text>
+<circle cx="200.0" cy="196.0" r="108.0" fill="none" class="grid" stroke-width="1.1"/>
+<circle cx="188.71" cy="88.59" r="4.5" fill="#7ebcf8"/>
+<circle cx="215.03" cy="89.05" r="4.5" fill="#7ebcf8"/>
+<text x="176.71092596709343" y="78.59163530022649" class="xs mono t-hi" text-anchor="middle">k₀</text>
+<text x="229.03069490368705" y="79.0510485759104" class="xs mono t-hi" text-anchor="middle">k₁</text>
+<path d="M 213.23,101.88 L 219.12,102.90 L 224.93,104.29 L 230.65,106.04 L 236.24,108.14 L 241.69,110.59 L 246.98,113.38 L 252.08,116.50 L 256.98,119.93 L 261.64,123.66 L 266.07,127.68 L 270.23,131.97 L 274.12,136.51 L 277.71,141.29 L 281.00,146.28 L 283.96,151.47 L 286.60,156.84 L 288.89,162.36 L 290.83,168.01 L 292.41,173.78 L 293.62,179.63 L 294.46,185.55 L 294.93,191.51 L 295.03,197.49 L 294.75,203.46 L 294.09,209.40 L 293.06,215.29 L 291.67,221.10 L 289.91,226.81 L 287.79,232.40 L 285.33,237.85 L 282.53,243.13 L 279.40,248.23 L 275.96,253.11 L 272.22,257.78 L 268.20,262.19 L 263.90,266.35 L 259.35,270.23 L 254.57,273.81 L 249.57,277.09 L 244.37,280.04 L 239.00,282.67 L 233.48,284.95 L 227.82,286.88 L 222.05,288.45 L 216.20,289.65 L 210.28,290.48 L 204.32,290.94 L 198.34,291.03 L 192.37,290.73 L 186.43,290.07 L 180.54,289.03 L 174.73,287.62 L 169.03,285.85 L 163.44,283.73 L 158.00,281.25 L 152.72,278.44 L 147.63,275.31 L 142.75,271.86 L 138.09,268.11 L 133.68,264.08 L 129.53,259.77 L 125.66,255.22 L 122.09,250.43 L 118.82,245.42 L 115.87,240.22 L 113.26,234.85 L 110.99,229.32 L 109.07,223.65 L 107.51,217.88 L 106.32,212.03 L 105.50,206.11 L 105.05,200.15 L 104.98,194.17 L 105.28,188.20 L 105.96,182.26 L 107.01,176.38 L 108.43,170.57 L 110.21,164.86 L 112.34,159.28 L 114.82,153.84 L 117.64,148.57 L 120.79,143.49 L 124.24,138.61 L 128.00,133.96 L 132.04,129.56 L 136.35,125.42 L 140.92,121.56 L 145.71,117.99 L 150.73,114.73 L 155.93,111.79 L 161.31,109.19 L 166.85,106.93 L 172.51,105.02 L 178.28,103.47 L 184.14,102.29 L 190.07,101.48" fill="none" stroke="#d676e2" stroke-width="2.2"/>
+<line x1="188.7" y1="88.6" x2="215.0" y2="89.1" stroke="#7ebcf8" stroke-width="2.4" fill="none"/>
+<text x="200.0" y="200.0" class="sm mono t-bad" text-anchor="middle">359°</text>
+<text x="200.0" y="216.0" class="xs muted" text-anchor="middle">the long way</text>
+<text x="200.0" y="338.0" class="xs muted" text-anchor="middle">drawn at 14° so the two points are distinguishable; the real gap is 1°</text>
+<rect x="376.0" y="62" width="356.0" height="166.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="388.0" y="84.0" class="xs muted" text-anchor="start">separation, angle_between</text>
+<text x="720.0" y="84.0" class="xs mono t-ok" text-anchor="end">1.0000°</text>
+<line x1="384.0" y1="94.0" x2="724.0" y2="94.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="110.0" class="xs muted" text-anchor="start">quat_slerp travels</text>
+<text x="720.0" y="110.0" class="xs mono t-ok" text-anchor="end">1.0000°</text>
+<line x1="384.0" y1="120.0" x2="724.0" y2="120.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="136.0" class="xs muted" text-anchor="start">CONTROL: the same, without nearest</text>
+<text x="720.0" y="136.0" class="xs mono t-bad" text-anchor="end">359.0000°</text>
+<line x1="384.0" y1="146.0" x2="724.0" y2="146.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="162.0" class="xs muted" text-anchor="start">pairs needing the flip, of 20,000</text>
+<text x="720.0" y="162.0" class="xs mono mono" text-anchor="end">9923 (49.6%)</text>
+<line x1="384.0" y1="172.0" x2="724.0" y2="172.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="188.0" class="xs muted" text-anchor="start">longest journey with nearest</text>
+<text x="720.0" y="188.0" class="xs mono t-ok" text-anchor="end">179.9938°</text>
+<line x1="384.0" y1="198.0" x2="724.0" y2="198.0" class="grid" stroke-width="1.0"/>
+<text x="388.0" y="214.0" class="xs muted" text-anchor="start">CONTROL: longest without it</text>
+<text x="720.0" y="214.0" class="xs mono t-bad" text-anchor="end">352.6042°</text>
+<text x="376.0" y="254.0" class="xs t-hi" text-anchor="start">nlerp’s version of the same failure is worse:</text>
+<text x="376.0" y="269.0" class="xs muted" text-anchor="start">the raw chord passes within 0.00436 of the ORIGIN,</text>
+<text x="376.0" y="282.0" class="xs muted" text-anchor="start">where there is no direction left to normalise.</text>
+</svg>

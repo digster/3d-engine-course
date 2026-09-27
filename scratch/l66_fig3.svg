@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 404" role="img" aria-labelledby="l66f3-t l66f3-d">
+  <title id="l66f3-t">The four convention comparisons between glTF and this course</title>
+  <desc id="l66f3-d">A four-row table. Handedness, triangle winding and texture coordinate origin all agree between glTF and this course, marked AGREES in green. The fourth row, asset facing, differs — glTF says an asset's front faces plus Z and our camera looks down minus Z — and is marked DIFFERS in amber, with the note that it is an authoring fact rather than a coordinate change.</desc>
+  <defs>
+    <marker id="e-i-l66f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l66f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l66f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l66f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l66f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="404" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">Four conventions. Three agree; one is not a conversion.</text>
+<text x="250" y="62" class="xs" text-anchor="middle">glTF says</text>
+<text x="410" y="62" class="xs" text-anchor="middle">this course says</text>
+<line x1="24" y1="70" x2="696" y2="70" class="grid" stroke-width="1.0"/>
+<rect x="24" y="78" width="672" height="60" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.07"/>
+<text x="30" y="96" class="sm" text-anchor="start">handedness</text>
+<text x="250" y="96" class="xs" text-anchor="middle">right-handed, +Y up</text>
+<text x="410" y="96" class="xs" text-anchor="middle">right-handed, Y-up, −Z fwd</text>
+<rect x="500" y="84" width="72" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.36"/>
+<text x="536" y="97" class="xs" text-anchor="middle">AGREES</text>
+<text x="360.0" y="122" class="xs" text-anchor="middle">no axis swap, no negated z</text>
+<rect x="24" y="146" width="672" height="60" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.07"/>
+<text x="30" y="164" class="sm" text-anchor="start">triangle winding</text>
+<text x="250" y="164" class="xs" text-anchor="middle">counter-clockwise = front</text>
+<text x="410" y="164" class="xs" text-anchor="middle">counter-clockwise = front</text>
+<rect x="500" y="152" width="72" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.36"/>
+<text x="536" y="165" class="xs" text-anchor="middle">AGREES</text>
+<text x="360.0" y="190" class="xs" text-anchor="middle">no index reversal</text>
+<rect x="24" y="214" width="672" height="60" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.07"/>
+<text x="30" y="232" class="sm" text-anchor="start">texture origin</text>
+<text x="250" y="232" class="xs" text-anchor="middle">(0,0) is the UPPER left</text>
+<text x="410" y="232" class="xs" text-anchor="middle">(0,0) is the upper left</text>
+<rect x="500" y="220" width="72" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.36"/>
+<text x="536" y="233" class="xs" text-anchor="middle">AGREES</text>
+<text x="360.0" y="258" class="xs" text-anchor="middle">and OBJ's is the LOWER left</text>
+<rect x="24" y="282" width="672" height="60" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.07"/>
+<text x="30" y="300" class="sm" text-anchor="start">asset facing</text>
+<text x="250" y="300" class="xs" text-anchor="middle">front faces +Z</text>
+<text x="410" y="300" class="xs" text-anchor="middle">camera looks down −Z</text>
+<rect x="500" y="288" width="72" height="20" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.36"/>
+<text x="536" y="301" class="xs" text-anchor="middle">DIFFERS</text>
+<text x="360.0" y="326" class="xs" text-anchor="middle">an authoring fact, not a coordinate change</text>
+<rect x="24" y="354" width="672" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="376" class="sm" text-anchor="middle">The loader contains ZERO conversion code — and that is Module 2 having argued rather than guessed.</text>
+</svg>

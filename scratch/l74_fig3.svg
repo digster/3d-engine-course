@@ -1,0 +1,51 @@
+<svg viewBox="0 0 760 420" role="img" aria-labelledby="f74c-t f74c-d">
+  <title id="f74c-t">Two mirror planes generate a rotation of twice their angle</title>
+  <desc id="f74c-d">On the left, two mirror planes drawn as quadrilaterals meeting along a teal axis arrow labelled n0 cross n1, with their normals drawn as magenta and gold arrows thirty degrees apart. A pale probe vector is reflected once to a grey vector and twice to a teal vector, sixty degrees from where it started. On the right, the algebra in five steps: reflection in the plane perpendicular to n is n v n, doing it twice gives n1 n0 times v times n0 n1, the right factor is the conjugate of the left, so the composite is q v conjugate q with q equal to n1 n0, and working q out gives minus cosine phi minus sine phi times the unit axis, which negated and with theta equal to two phi is cosine of theta over two plus sine of theta over two times the axis.</desc>
+  <defs>
+    <marker id="e-i-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-gold-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d678"/></marker></defs>
+<defs><marker id="e-teal-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<defs><marker id="e-mag-f74c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d676e2"/></marker></defs>
+<text x="250" y="44" class="sm" text-anchor="middle">two mirrors, 30° apart</text>
+<text x="250" y="60" class="xs muted" text-anchor="middle">both planes contain the axis</text>
+<path d="M 174.55,122.50 L 369.11,172.64 L 325.45,309.50 L 130.89,259.36 Z" fill="none" stroke="#7884a8" stroke-width="1.2"/>
+<line x1="250.00" y1="216.00" x2="250.00" y2="176.65" stroke="#d676e2" stroke-width="1.7" marker-end="url(#e-mag-f74c)"/>
+<text x="250.0" y="168.93647368072465" class="xs mono" text-anchor="middle">n₀</text>
+<path d="M 187.58,148.04 L 356.08,147.10 L 312.42,283.96 L 143.92,284.90 Z" fill="none" stroke="#7ebcf8" stroke-width="1.2"/>
+<line x1="250.00" y1="216.00" x2="206.86" y2="170.80" stroke="#f8d678" stroke-width="1.7" marker-end="url(#e-gold-f74c)"/>
+<text x="198.39947216203103" y="161.94304222973867" class="xs mono" text-anchor="middle">n₁</text>
+<line x1="257.76" y1="191.67" x2="226.23" y2="290.51" stroke="#60ded0" stroke-width="2.0" marker-end="url(#e-teal-f74c)"/>
+<text x="196.2885474493903" y="300.59170826075507" class="xs mono" text-anchor="middle">n₀ × n₁</text>
+<path d="M 250.00,216.00 L 348.13,262.16" fill="none" stroke="#e2e6ee" stroke-width="2.0"/>
+<text x="360.3983322630228" y="267.9290251964276" class="xs mono" text-anchor="middle">v</text>
+<path d="M 250.00,216.00 L 348.13,220.42" fill="none" stroke="#7884a8" stroke-width="2.0"/>
+<text x="360.3983322630228" y="220.97580522004506" class="xs mono" text-anchor="middle">v′</text>
+<path d="M 250.00,216.00 L 338.69,210.54" fill="none" stroke="#60ded0" stroke-width="2.0"/>
+<text x="349.7817969268904" y="209.85387243412686" class="xs mono" text-anchor="middle">v″</text>
+<line x1="470" y1="62" x2="470" y2="352" class="grid" stroke-width="1.0"/>
+<text x="496" y="84" class="xs mono" text-anchor="start">reflect in the plane ⊥ n:</text>
+<text x="496" y="102" class="xs mono t-hi" text-anchor="start">    v ↦ n v n</text>
+<text x="496" y="120" class="xs mono" text-anchor="start"></text>
+<text x="496" y="138" class="xs mono" text-anchor="start">do it twice, in n₀ then n₁:</text>
+<text x="496" y="156" class="xs mono" text-anchor="start">    v ↦ n₁ (n₀ v n₀) n₁</text>
+<text x="496" y="174" class="xs mono" text-anchor="start">        = (n₁n₀) v (n₀n₁)</text>
+<text x="496" y="192" class="xs mono" text-anchor="start"></text>
+<text x="496" y="210" class="xs mono" text-anchor="start">and n₀n₁ = conj(n₁n₀), so</text>
+<text x="496" y="228" class="xs mono t-hi" text-anchor="start">    v ↦ q v conj(q),  q = n₁n₀</text>
+<text x="496" y="246" class="xs mono" text-anchor="start"></text>
+<text x="496" y="264" class="xs mono" text-anchor="start">q = −(n₁·n₀) + n₁×n₀</text>
+<text x="496" y="282" class="xs mono" text-anchor="start">  = −( cos φ + sin φ · n̂ )</text>
+<text x="496" y="300" class="xs mono" text-anchor="start"></text>
+<text x="496" y="318" class="xs mono" text-anchor="start">negate — legal, §8 — and θ = 2φ:</text>
+<text x="496" y="336" class="xs mono t-hi" text-anchor="start">    q = cos(θ/2) + sin(θ/2) n̂</text>
+<text x="250" y="330" class="sm t-hi" text-anchor="middle">30° of mirror → 60° of turn</text>
+<text x="250" y="348" class="xs mono muted" text-anchor="middle">rotor = (−0.866025, 0, 0, −0.5)</text>
+<text x="250" y="364" class="xs mono muted" text-anchor="middle">|w| = cos 30° exactly (§C.3)</text>
+<text x="380.0" y="396" class="xs muted" text-anchor="middle">The sandwich was not chosen. It fell out of composing two reflections — and so did the half-angle, and so did the sign</text>
+<text x="380.0" y="412" class="xs muted" text-anchor="middle">nobody could pin down, which is the double cover arriving before anyone had named it.</text>
+</svg>

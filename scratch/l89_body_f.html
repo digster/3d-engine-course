@@ -1,0 +1,466 @@
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <p>
+    Eight files. Two are new engine files, three are one-line registrations, and three are the demo
+    and the harness. Nothing else in the engine changed this lesson —
+    <code>manifold.hpp</code>'s <code>normal_impulse</code> and <code>tangent_impulse</code> fields
+    have been waiting since 8.7 and needed no widening, which is the second time an 8.7 prediction
+    has held exactly.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/solver.hpp</code></td><td>new</td>
+          <td>Materials, the friction models, the effective mass, the prepared constraint, and the
+              closed forms the lesson checks against.</td></tr>
+      <tr><td><code>engine/src/phys/solver.cpp</code></td><td>new</td>
+          <td>One loop over one array. The normal solve, the Coulomb clip, and the warm start.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One include. Added in the same edit as the header, for the fourth lesson running.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file, and the note on why the dependency runs downward only.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>impulse</code> target.</td></tr>
+      <tr><td><code>demos/impulse/main.cpp</code></td><td>new</td>
+          <td>Four scenes, the impulse arrows, and the friction clip drawn as itself.</td></tr>
+      <tr><td><code>scratch/verify_89.cpp</code></td><td>new</td>
+          <td>Eleven measured sections, 82 checks, every one with a control.</td></tr>
+      <tr><td><code>scratch/build_verify_89.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, and refuses an unoptimised <code>libengine.a</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/phys/solver.hpp@@
+
+@@LISTING:engine/src/phys/solver.cpp@@
+
+@@LISTING:engine/include/engine/engine.hpp@@
+
+@@LISTING:engine/CMakeLists.txt@@
+
+@@LISTING:demos/CMakeLists.txt@@
+
+@@LISTING:demos/impulse/main.cpp@@
+
+@@LISTING:scratch/verify_89.cpp@@
+
+@@LISTING:scratch/build_verify_89.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <p>
+    Nothing new is needed in the toolchain. The solver is two files in the existing library target
+    and the demo is one more executable.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target impulse
+./build/demos/impulse</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target impulse --config Debug
+.\build\demos\Debug\impulse.exe</code></pre>
+  </figure>
+
+  <p>
+    And the harness, which is where every number in this lesson came from. It refuses to run against
+    a library with no optimisation flag, for 7.6's reason — an unoptimised
+    <code>libengine.a</code> measured skinning 18.1× too slow, and §13 here would be measuring a
+    debug build:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the harness</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_89.sh          # all eleven sections
+sh scratch/build_verify_89.sh D F      # just restitution and friction</code></pre>
+  </figure>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on the <strong>bounce</strong> scene: a ball falls, lands, and bounces to a
+    sequence of peaks that sit on the faint horizontal ghost lines — those lines are
+    <code>e²ⁿ·h₀</code>, drawn from the first measured peak, so the ball landing on them is the
+    closed form being confirmed in front of you. It comes to rest.
+  </p>
+
+  <p>
+    Now press <strong>[B]</strong>. The ghost lines stay where they are and the ball starts landing
+    <em>above</em> them, and instead of coming to rest it settles into a small permanent hop. Hold
+    <strong>[E]</strong> to raise <em>e</em> toward 0.95 and the permanent hop grows to something
+    you cannot miss. The panel prints the predicted hop height beside it.
+  </p>
+
+  <p>
+    Press <strong>[2]</strong> for the slope. The slab sits on a 20° ramp; the panel shows the slope
+    angle and <code>atan(μ)</code> side by side. Hold <strong>[Down]</strong> to lower <em>μ</em>
+    below 0.36 and the slab lets go — near enough the same angle the panel predicts. Then press
+    <strong>[O]</strong> to swap the solve order, and it slides as though the ramp were ice, because
+    the cone it is clipping against has radius zero.
+  </p>
+
+  <p>
+    Press <strong>[3]</strong> for the roll. The ball's spoke lets you see the spin start from
+    nothing and build; the panel's <code>slip</code> line falls to zero and <code>v/v0</code>
+    settles at 0.7139 against the 0.7143 printed under it. Change <em>μ</em> and watch the time
+    change while the end speed does not.
+  </p>
+
+  <p>
+    Press <strong>[4]</strong> for the creep, and this is the one to sit with. The crate lands and
+    turns red — red means penetrating by more than a millimetre — and then it keeps going down,
+    slowly, for as long as you watch. Hold <strong>[Right]</strong> to raise the pass count and it
+    stops at the depth it arrived with.
+  </p>
+
+  <p>
+    In the bottom-right corner throughout is the friction clip itself, in units of
+    <code>μ·j_n</code>: the admissible set, with this frame's tangential impulse plotted in it. When
+    the impulse reaches the boundary it turns red and the contact is sliding. Press
+    <strong>[F]</strong> and the square appears around the disc — the extra area in its corners is
+    §7's 43%.
+  </p>
+
+  <p>
+    The harness prints eleven sections and ends with <code>82 checks, 0 failures</code>.
+  </p>
+
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>Everything sticks to everything, or contacts pull instead of push.</dt>
+    <dd>
+      <strong>Symptom:</strong> objects glue themselves to surfaces, or fly <em>into</em> the floor
+      on contact.<br>
+      <strong>Cause:</strong> a sign. Either the impulse is applied the same way to both bodies
+      instead of oppositely, or <code>u</code> was computed as a-minus-b where the normal points
+      a-toward-b. Both give a solver that removes the wrong sign of velocity.<br>
+      <strong>Fix:</strong> assert the convention once, in a test: put a body above a floor moving
+      down, and check <code>dot(contact_velocity(floor, body, p), normal) &lt; 0</code>. Then check
+      that momentum is conserved — if it is <em>not</em>, the two bodies are getting the same sign.
+    </dd>
+
+    <dt>A stack of boxes slowly launches itself into the air.</dt>
+    <dd>
+      <strong>Symptom:</strong> things creep upward over seconds, gaining energy from nowhere.<br>
+      <strong>Cause:</strong> clamping the impulse <em>increment</em> to be non-negative instead of
+      the accumulated total. Every iteration then adds a push and none can take one back, so the
+      accumulator ratchets.<br>
+      <strong>Fix:</strong> the three lines in §11 — clamp <code>normal_impulse + delta</code>, then
+      recover <code>delta</code> from the difference. Invisible at one pass, fatal at sixteen.
+    </dd>
+
+    <dt>A ball bounces forever at a constant small height.</dt>
+    <dd>
+      <strong>Symptom:</strong> the bounce decays nicely and then stops decaying, hopping a
+      centimetre or two indefinitely.<br>
+      <strong>Cause:</strong> §6. Restitution is being applied to a velocity that already contains
+      this step's <code>g·h</code>.<br>
+      <strong>Fix:</strong> set <code>solver_config::restitution_bias</code> to
+      <code>gravity * h</code>. Confirm with the closed form: the hop you are seeing should be
+      <code>(e·g·h/(1−e))²/2g</code>, and if it is, that is the bug and not a coincidence.
+    </dd>
+
+    <dt>Friction does nothing at all, but <code>μ</code> is set.</dt>
+    <dd>
+      <strong>Symptom:</strong> everything slides on everything as though <code>μ</code> were zero,
+      and the friction impulse in the debug panel is always the zero vector.<br>
+      <strong>Cause:</strong> §10. The friction solve is running before the normal solve, so
+      Coulomb's limit is <code>μ × 0</code>.<br>
+      <strong>Fix:</strong> normal impulses for every point, then friction for every point.
+      <em>It will not reproduce on a flat floor</em>, so write the test on a slope.
+    </dd>
+
+    <dt>Friction is direction-dependent, and the direction makes no sense.</dt>
+    <dd>
+      <strong>Symptom:</strong> a puck slides further north than north-east on the same floor; the
+      preferred directions change when the floor is re-oriented.<br>
+      <strong>Cause:</strong> the box clip. The admissible set is a square in a basis that came out
+      of the surface normal.<br>
+      <strong>Fix:</strong> <code>friction_model::cone</code>, for 6.8%.
+    </dd>
+
+    <dt>Everything sinks a few millimetres a second, forever.</dt>
+    <dd>
+      <strong>Symptom:</strong> bodies at rest slowly descend into whatever they are resting on.<br>
+      <strong>Cause:</strong> §12 — one pass over a multi-point manifold is not a converged solve.
+      Check the residual before assuming anything else: if <code>solve_report::max_residual</code>
+      is millimetres per second rather than 10⁻⁶, the solver has not finished.<br>
+      <strong>Fix:</strong> 8.10. In the meantime, iterate.
+    </dd>
+
+    <dt>Bodies sink at exactly 16 cm a second.</dt>
+    <dd>
+      <strong>Symptom:</strong> a much faster and more regular sink than the one above, and it does
+      not improve when you iterate.<br>
+      <strong>Cause:</strong> the solve is running after the position update. Each step, the
+      position advances at the velocity the solver then cancels, so the body loses
+      <code>g·h²</code> = 2.7 mm per step whatever the solver does.<br>
+      <strong>Fix:</strong> velocities, then contacts, then positions. The regularity is the
+      diagnostic — divide the sink rate by <code>h</code> and see whether you get <code>g·h</code>.
+    </dd>
+
+    <dt>Warm starting makes everything worse.</dt>
+    <dd>
+      <strong>Symptom:</strong> turning on warm starting launches bodies off surfaces.<br>
+      <strong>Cause:</strong> the inherited impulses are being applied inside the iteration loop, so
+      they are applied once per iteration. §11's callout — it cost this lesson an afternoon and
+      presented as <em>friction</em> failing.<br>
+      <strong>Fix:</strong> <code>warm_start_contacts</code> once per step, outside the loop.
+    </dd>
+
+    <dt>Two spheres bounce off each other at a slight angle.</dt>
+    <dd>
+      <strong>Symptom:</strong> a perfectly head-on collision between two balls produces sideways
+      motion and spin.<br>
+      <strong>Cause:</strong> not the solver. §5's aside — EPA's normal for a sphere-sphere pair is
+      4.26° off, because <code>epa_config::max_iterations</code> was tuned on boxes and a sphere has
+      no flat face to terminate on.<br>
+      <strong>Fix:</strong> raise <code>max_iterations</code> to 64 for curved pairs and measure
+      what it costs, or accept it; 8.7's reference-face snapping already hides it whenever one shape
+      is a box.
+    </dd>
+  </dl>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Warm-up: predict the permanent hop.</strong> Run
+        <code>./build/demos/impulse --scene 1 --e 0.9 --no-bias</code>. Before you look at the
+        panel, compute the height the ball will settle into hopping at, from
+        <code>e·g·h/(1−e)</code> with <code>h = 1/60</code>. Then check.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          <code>g·h = 0.1635 m/s</code>. The terminal speed is a velocity; the height is
+          <code>v²/2g</code>.
+        </p>
+      </details>
+      <details><summary>Solution</summary>
+        <p>
+          <code>v∞ = 0.9 × 0.1635 / 0.1 = 1.4715 m/s</code>, so the hop is
+          <code>1.4715²/(2 × 9.81) = 0.1104 m</code> — eleven centimetres, forever. Turn the bias
+          back on with <strong>[B]</strong> and it decays to nothing.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Break the clamp on purpose.</strong> In <code>solve_one_normal</code>, replace the
+        three-line accumulator clamp with <code>delta = std::max(0.0f, delta)</code> — clamping the
+        increment rather than the total. Verify it changes nothing at one pass, then run the demo's
+        creep scene with sixteen passes and watch what happens. Explain why the bug is invisible
+        in the configuration this lesson ships.
+      </p>
+      <details><summary>Hint</summary>
+        <p>What is the accumulator's value at the start of the first iteration?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          At one pass the accumulator starts at zero, so <code>total = max(0, 0 + delta)</code> and
+          <code>delta = max(0, delta)</code> are the same expression. From the second iteration on
+          they diverge: the correct version lets a point give back impulse that a later point's
+          solve made unnecessary, and the broken one cannot, so the total only ever grows. The crate
+          gains a small upward velocity every step and lifts off. This is the bug worth having seen
+          once — it is silent in every single-iteration test you could write.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Measure the box model's anisotropy yourself, on a different quantity.</strong> §7
+        measured sliding <em>distance</em>. Write a fixture that measures the sliding
+        <em>direction</em> instead: give a crate a tangential velocity at 22.5° to
+        <code>tangent[0]</code> and record the angle of the friction impulse that comes back. Under
+        the cone it must be exactly opposite the velocity; under the box it will not be. How far
+        off does it get, and at what angle is the error largest?
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The box clips each component independently, so it pulls the impulse toward whichever
+          diagonal is nearest. The error in direction is zero on the axes <em>and</em> on the
+          diagonals — look between them.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          The worst direction error is near 22.5° from an axis, and for a fully sliding contact it
+          reaches about 8°. That is friction pointing eight degrees away from directly opposing the
+          motion, which means the box model does not merely apply the wrong <em>amount</em> of
+          friction — it curves a sliding object's path. Worth knowing before you use it for a
+          driving game.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: a speculative contact.</strong> §12 established that the frozen
+        penetration is one step of approach travel, because the narrow phase reports nothing until
+        the shapes actually overlap. Use the two hooks that already exist —
+        <code>broadphase_config::margin</code> from 8.8 and <code>manifold_config::keep_slop</code>
+        from 8.7 — to see the contact one frame early, and give the solver a target velocity that
+        closes the remaining gap in exactly one step rather than zero
+        (<code>u* = −separation/h</code> when the point is separated). Measure the resting
+        penetration before and after.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          A separated point has a <em>negative</em> depth. The target velocity for it is “approach
+          at exactly the rate that closes the gap this step, and no faster” — which is a cap, not a
+          push, so it must not be allowed to make a point approach faster than it already is.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          This is the technique Box2D calls a <em>speculative contact</em> and it is genuinely the
+          right answer to §12's third problem — better than a position correction, because it never
+          adds energy. The resting penetration should fall to near zero for bodies arriving below
+          some speed, and the failure mode to watch for is a body that arrives faster than
+          <code>margin/h</code> and tunnels anyway. 8.10 revisits it with the position correction
+          beside it so the two can be compared.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Open: is the minimum really the right combine rule?</strong> §8 measured five
+        published surface pairs and found <code>min</code> beating <code>sqrt(a·b)</code> 100% of the
+        time under ±30% perturbation. Find more pairs whose three coefficients are all published —
+        the constraint is that you need <em>a on a</em>, <em>b on b</em> and <em>a on b</em> from a
+        source that measured all three the same way — and see whether the result survives. Then
+        argue the other side: construct a scene where the minimum's insensitivity to the grippier
+        material is a usability problem a designer would actually hit.
+      </p>
+      <details><summary>Solution sketch</summary>
+        <p>
+          The measurement is thin — five pairs — and the honest answer is that it is weak evidence
+          strongly held. Metals on metals are where more data lives, and they are also where the
+          minimum does <em>worst</em> (copper on steel: the minimum says 0.74 where the real number
+          is 0.53, because two dissimilar metals are less adhesive than either is with itself). A
+          defensible position is that the minimum is right whenever one surface is lubricious and
+          wrong whenever both are clean metals, and that the geometric mean is a compromise that is
+          never very right and never very wrong. If you can make that case with data, change the
+          default back — and write down what it cost, because that is what this section is for.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">18. Recap &amp; next</h2>
+
+  <p>
+    The engine can resolve a contact. That is the first thing <code>engine::phys</code> has ever
+    done that changes the world rather than describing it, and it took one equation: the relative
+    velocity at a point, the effective mass along a direction, and a division.
+  </p>
+
+  <p>
+    What the engine gained:
+  </p>
+
+  <ul>
+    <li>A crate dropped on a floor <strong>lands on it</strong> and stays there, at 60 Hz, with no
+        stiffness to tune and no per-scene constants.</li>
+    <li><strong>Restitution</strong> that reproduces <code>e²ⁿ·h₀</code> to a millimetre, with the
+        gravity contamination removed exactly rather than masked by a threshold.</li>
+    <li><strong>Coulomb friction</strong> with an isotropic cone clip, holding a slab on a slope to
+        within half a degree of <code>atan(μ)</code>, and turning a sliding sphere into a rolling
+        one at exactly <code>5/7</code> of the speed it landed with.</li>
+    <li>A <strong>prepared-constraint</strong> shape that hoists the per-body work out of the inner
+        loop, at <strong>139 ns</strong> per manifold — so collision detection and one solver pass
+        together are <strong>0.65 ms</strong> of a 16.67 ms frame.</li>
+    <li>And the impulse fields <code>carry_impulses</code> has been matching across frames since
+        8.7 finally have numbers in them.</li>
+  </ul>
+
+  <p>
+    And what it did <em>not</em> gain, stated plainly because §12 measured it: <strong>one pass over
+    a four-point manifold does not hold a crate up.</strong> It sinks 275 mm in fifteen seconds.
+    Sixteen passes stop the sinking and leave the crate 7.2 mm inside the floor — the depth it
+    arrived with, which no velocity solve can repair. Two different problems, needing two different
+    pieces of machinery.
+  </p>
+
+  <p>
+    <strong>Lesson 8.10</strong> builds both. Sequential impulses turn the single pass into an
+    iteration that converges; warm starting — whose plumbing is already here and already measured —
+    is what makes a handful of iterations enough rather than hundreds, by starting each contact from
+    the impulse that held it last frame. Then a position correction for the frozen overlap, and
+    islands and sleeping so that the crates that have settled stop costing anything at all. That is
+    the lesson where a <em>stack</em> becomes possible, and it will redeem the promise Lesson 1.8
+    made in Module 1: “one impact per step for now — Module 8 iterates until the budget is spent.”
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Erin Catto, “Iterative Dynamics with Temporal Coherence” (GDC 2005)</strong> and the
+      later <em>Soft Constraints</em> and <em>Understanding Constraints</em> talks. The clearest
+      published account of the sequential-impulse solver this lesson is the first half of, by the
+      author of Box2D. Read the 2005 paper for the impulse formulation and the 2014 talk for why
+      the accumulated impulse is the thing you clamp.
+    </li>
+    <li>
+      <strong>Chris Hecker, “Physics, Part 3: Collision Response” (<em>Game Developer</em>, 1997).</strong>
+      The derivation in §4 and §5 in its original game-development form, done in 2D and by hand.
+      Thirty years old and still the clearest first exposure to the effective mass.
+    </li>
+    <li>
+      <strong>Brian Mirtich, <em>Impulse-based Dynamic Simulation of Rigid Body Systems</em>
+      (PhD thesis, Berkeley, 1996).</strong> Where the impulse formulation is worked out properly,
+      including the friction cases this lesson simplifies — in particular what happens when a
+      contact transitions between sticking and sliding <em>during</em> the impulse.
+    </li>
+    <li>
+      <strong>W. J. Stronge, <em>Impact Mechanics</em> (Cambridge, 2nd ed.).</strong> For the
+      honest version of restitution: why <em>e</em> is not a material constant, how it depends on
+      impact speed, and the three different definitions of it that the literature uses
+      interchangeably and should not.
+    </li>
+    <li>
+      <strong>David Baraff, “Fast Contact Force Computation for Nonpenetrating Rigid Bodies”
+      (SIGGRAPH 1994)</strong> and the Pixar <em>Physically Based Modeling</em> course notes. The
+      other tradition — solving all contacts simultaneously as a linear complementarity problem
+      rather than iterating. Worth reading to know what the iteration in 8.10 is an approximation
+      <em>of</em>.
+    </li>
+    <li>
+      <strong>Glenn Fiedler, “Collision Response and Coulomb Friction” (Gaffer on Games).</strong>
+      The friction cone with pictures, from the same series that gave this course its fixed-timestep
+      loop in Lesson 1.4.
+    </li>
+    <li>
+      <strong>Coulomb, <em>Théorie des machines simples</em> (1785).</strong> The friction model in
+      §7 is unchanged since this, which is worth a moment's reflection given how much else in this
+      course was invented after 1990.
+    </li>
+  </ul>

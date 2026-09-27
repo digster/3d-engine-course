@@ -1,0 +1,450 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-03-microfacet-theory.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.3 — Microfacet Theory</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-05-material-system.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.5 — A Material System</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.4</div>
+    <h1>Cook–Torrance PBR, Derived</h1>
+    <p class="deck">
+      Lesson 6.2 measured <strong>1.1386</strong> — a white surface with a white highlight
+      reflecting more light than arrives — and Lesson 6.3 deliberately left it standing, because
+      normalising the distribution does not touch it. The two lobes were <em>independent</em>, so
+      the same photon was counted once as having bounced off the surface and once as having gone
+      into it. <strong>Fresnel is the coupling</strong>, and that one sentence closes the door.
+      Along the way we derive the <code>4(n·l)(n·v)</code> denominator instead of quoting it,
+      measure exactly how good Schlick's approximation is not, watch the metallic workflow arrive
+      as a <em>consequence</em> rather than a checkbox, and break the reference render on purpose
+      for the first time in fifteen lessons.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-02-what-a-brdf-is.html">6.2 — Radiometry-Lite: What a BRDF Is</a>,
+          <a href="06-03-microfacet-theory.html">6.3 — Microfacet Theory</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/microfacet.hpp</code>,
+            <code>engine/include/engine/gfx/light.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>demos/common/demo_scene.cpp</code>,
+            <code>demos/sandbox/main.cpp</code>,
+            <code>scratch/verify_64.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine's first physically-based BRDF, live in both renderers, with the CPU and
+            GPU agreeing to <strong>2.4 × 10⁻⁷</strong>. 29 checks green — and the reference
+            render <strong>moves</strong>, for the first time since Lesson 5.1.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what Fresnel reflectance <em>is</em>, why it rises to 1 at grazing incidence for
+          every material without exception, and why that makes it the term that couples the two
+          lobes.</li>
+      <li>…derive the <code>4(n·l)(n·v)</code> denominator from a change of variables, and say
+          what each of its four factors is doing.</li>
+      <li>…state how far Schlick's approximation is from the exact Fresnel equations, in both
+          absolute and relative terms, and defend using it anyway on the right grounds.</li>
+      <li>…convert between an index of refraction and an F0, and use the round trip as a
+          <em>diagnostic</em> on a material somebody authored by eye.</li>
+      <li>…explain the metallic workflow as a consequence of where the colour can live, rather
+          than as a pipeline convention.</li>
+      <li>…measure a BRDF's hemispherical reflectance and say whether it conserves energy — and
+          know which of the standard couplings does not.</li>
+      <li>…re-baseline a characterization test honestly: what to record, what to compare, and why
+          the moment a golden breaks is the cheapest moment to improve it.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem, Which Is a Photon Counted Twice</a></li>
+      <li><a href="#intuition">Building Intuition: the Window at Night</a></li>
+      <li><a href="#third">The Missing Third</a></li>
+      <li><a href="#denominator">The Denominator, Derived</a>
+        <ol>
+          <li><a href="#den-double">The doubling</a></li>
+          <li><a href="#den-jacobian">From facets to directions</a></li>
+          <li><a href="#den-assemble">Putting the BRDF together</a></li>
+        </ol>
+      </li>
+      <li><a href="#fresnel">Fresnel, From the Physics</a>
+        <ol>
+          <li><a href="#fres-shape">The shape, before any formula</a></li>
+          <li><a href="#fres-f0">F0, and where 0.04 comes from</a></li>
+          <li><a href="#fres-schlick">Schlick, fitted and measured</a></li>
+        </ol>
+      </li>
+      <li><a href="#metal">Metals, and Where the Colour Lives</a></li>
+      <li><a href="#coupling">The Coupling, and Where It Fails</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#reauthor">Re-authoring the Materials, and Breaking the Golden</a></li>
+      <li><a href="#notdone">What This Lesson Does Not Do</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem, Which Is a Photon Counted Twice</h2>
+
+  <p>
+    Two lessons ago we gave the shading equation units, and the units immediately produced a
+    number nobody wanted:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The door, still open</span>
+    <p><strong>A white surface with a white highlight reflects 1.1386 of the light that hits
+       it.</strong> Not 1.1386 units of something — 1.1386 <em>of what arrived</em>. The surface
+       is emitting light it was never given.</p>
+  </div>
+
+  <p>
+    Lesson 6.3 spent five hours on that surface and did not fix this. That was on purpose, and the
+    reason is worth restating because it is the hinge the whole of today swings on. 6.3 replaced
+    <code>shininess</code> with a <em>statistical claim</em> — a distribution of microfacet normals
+    that integrates to one — and proved the claim by integrating it. It was a large improvement and
+    it moved this number not at all.
+  </p>
+
+  <p>
+    Here is why. Normalising <code>D</code> makes the <em>specular lobe</em> well-behaved: the
+    facets' projected areas add up to the area of the flat surface they stand on, no more. But the
+    shading equation still reads
+  </p>
+
+  <div class="eq">
+    \[ f_r \;=\; \underbrace{\frac{\text{albedo}}{\pi}}_{\text{diffuse}} \;+\;
+       \underbrace{\frac{D\,G}{4(n\!\cdot\!l)(n\!\cdot\!v)}}_{\text{specular}} \]
+  </div>
+  <p class="eq-plain">
+    In prose: the BRDF is the diffuse lobe plus the specular lobe, <strong>added</strong>.
+  </p>
+
+  <p>
+    Look at that plus sign and ask what it claims. It says: whatever fraction of the light the
+    surface mirrors, it <em>also</em> scatters the full albedo's worth. A white surface scatters
+    all of the light back diffusely, <em>and</em> mirrors some of it on top. Both terms drew on the
+    same photon and neither told the other.
+  </p>
+
+  <p>
+    So this is not a constant that is slightly wrong. <strong>It is a missing conversation between
+    two terms</strong>, and no amount of tuning either one separately can fix it — which is exactly
+    why 6.3 could not, and said so, and left the number where you could see it.
+  </p>
+
+  @@FIG_DOOR@@
+
+  <p>
+    The fix is a physical fact so ordinary you have looked at it every day of your life, and it is
+    the subject of the next section.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition: the Window at Night</h2>
+
+  <p>
+    Stand at a window in a lit room after dark and you see two things at once: the street outside,
+    and your own reflection. The glass is doing both jobs with the same photons — some bounce off
+    the surface toward your eye, and the rest go through. <strong>Every photon does one or the
+    other. None does both.</strong>
+  </p>
+
+  <p>
+    Now walk sideways until you are looking along the glass at a shallow angle, and watch what
+    happens: <em>your reflection gets stronger and the street gets dimmer.</em> Keep going and the
+    window becomes a mirror. This is not a property of that particular window. Look along a
+    tabletop, a sheet of paper, a puddle, a painted wall — at a shallow enough angle, everything is
+    a mirror.
+  </p>
+
+  <div class="callout">
+    <span class="label">The whole of Fresnel, in two sentences</span>
+    <p>The fraction of light that reflects off an interface depends on the <strong>angle</strong>
+       you meet it at. It is small when you look straight down at the surface, and it rises to
+       <strong>exactly 1</strong> as you approach grazing — for every material, without
+       exception.</p>
+  </div>
+
+  <p>
+    Call that fraction <code>F</code>. Two things follow immediately, and the second is the one the
+    engine needs.
+  </p>
+
+  <p>
+    First, <code>F</code> is what the <em>specular</em> lobe should be scaled by, because the
+    specular lobe <em>is</em> the light that bounced off the interface. Our specular has been
+    scaled by <code>specular::colour</code> instead — a number somebody typed.
+  </p>
+
+  <p>
+    Second, and this is the sentence to carry out of the lesson:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The coupling</span>
+    <p><strong>F is what bounces off, so 1 − F is what goes in.</strong> And only what goes in can
+       scatter around under the surface and come back out as diffuse light. The two lobes stop
+       being independent the moment you write that down.</p>
+  </div>
+
+  <p>
+    That is the whole mechanism. The diffuse term is not "the albedo"; it is "the albedo, of the
+    light that got past the front door". A surface with a strong mirror reflection has less light
+    left to scatter, automatically, with nobody tuning anything.
+  </p>
+
+  <p>
+    It is worth pausing on how much of the trouble this removes without being asked. Consider the
+    surface that produced 1.1386. Under the coupled model, the specular takes about 4% and the
+    diffuse gets 96% — and the total lands just under 1 because that is what "each photon does one
+    thing" means arithmetically. We will measure it in §7 rather than assert it, but the shape of
+    the answer is already fixed by the physics.
+  </p>
+
+  <!-- =================================================================
+       3 — THE MISSING THIRD
+       ================================================================= -->
+  <h2 id="third"><span class="num">3</span>The Missing Third</h2>
+
+  <p>
+    Lesson 6.3 built two thirds of a microfacet BRDF and named the third:
+  </p>
+
+  <ul>
+    <li><strong>D</strong>, the normal distribution function — <em>what fraction of the
+        microfacets face the right way to send this light at my eye?</em></li>
+    <li><strong>G</strong>, the geometry term — <em>and of those, what fraction can actually see
+        both the light and the eye, rather than hiding behind their neighbours?</em></li>
+    <li><strong>F</strong>, Fresnel — <em>and of the light that reaches one, what fraction bounces
+        off rather than going in?</em></li>
+  </ul>
+
+  <p>
+    Three questions, asked in order, each narrowing the last. That is genuinely all a microfacet
+    specular BRDF is, and it is worth noticing that the three are <em>independent</em> questions
+    about independent things: <code>D</code> is about the surface's shape, <code>G</code> is about
+    the surface's shape <em>seen from somewhere</em>, and <code>F</code> is about the material's
+    optical properties and not about its shape at all. That is why they multiply.
+  </p>
+
+  <p>
+    So the numerator is <code>D · G · F</code>. What is the denominator, and where on earth does
+    <code>4(n·l)(n·v)</code> come from?
+  </p>
+
+  <p>
+    This is, by some distance, the most quoted and least explained line in real-time graphics.
+    Lesson 6.3 deferred it explicitly and promised it here. It is not hard — it is two elementary
+    steps and a trigonometric identity you already know — and having done it once you will never
+    have to take it on faith again.
+  </p>
+
+  <!-- =================================================================
+       4 — THE DENOMINATOR
+       ================================================================= -->
+  <h2 id="denominator"><span class="num">4</span>The Denominator, Derived</h2>
+
+  <p>
+    The problem to solve is a <em>units</em> problem, and stating it that way makes the solution
+    almost inevitable.
+  </p>
+
+  <p>
+    <code>D</code> is a density over <strong>microfacet normals</strong>. It answers "how much of
+    the surface is tilted <em>this</em> way", per steradian of <em>facet-normal</em> direction. But
+    a BRDF is a density over <strong>light directions</strong> — it answers "how much light goes
+    <em>that</em> way", per steradian of <em>outgoing</em> direction. Those are two different
+    spaces, and converting a density from one to the other requires knowing how much the map
+    between them stretches. That stretch factor is a <strong>Jacobian</strong>, and it is where the
+    4 comes from.
+  </p>
+
+  <h3 id="den-double"><span class="num">4.1</span>The doubling</h3>
+
+  <p>
+    Hold the eye direction <code>v</code> fixed. Every microfacet normal <code>h</code> reflects
+    <code>v</code> into some light direction <code>l</code>; as <code>h</code> sweeps around,
+    <code>l</code> sweeps around too, and we want to know how fast.
+  </p>
+
+  <p>
+    Put spherical coordinates on <code>v</code> itself — that is the trick, and it is the only
+    trick. Let <code>θ_h</code> be the angle between <code>v</code>
+    and the facet normal <code>h</code>. Reflecting <code>v</code> about <code>h</code> turns it
+    through <code>θ_h</code> to reach <code>h</code>, and another
+    <code>θ_h</code> to get to the far side:
+  </p>
+
+  <div class="eq">
+    \[ \theta_{\text{out}} \;=\; 2\,\theta_h \]
+  </div>
+  <p class="eq-plain">
+    In prose: tilt the mirror by an angle, and the reflected ray turns by twice that angle.
+  </p>
+
+  <p>
+    This is the same fact that makes a mirror on a galvanometer double its own deflection, and it
+    is exact — no approximation anywhere. The azimuth is unchanged: <code>φ_out = φ_h</code>,
+    because the reflection happens in the plane containing <code>v</code> and <code>h</code>.
+  </p>
+
+  @@FIG_JACOBIAN@@
+
+  <h3 id="den-jacobian"><span class="num">4.2</span>From facets to directions</h3>
+
+  <p>
+    Now write down the two solid angles. A patch of directions near <code>h</code>, in spherical
+    coordinates about <code>v</code>, has solid angle
+  </p>
+
+  <div class="eq">
+    \[ d\omega_h \;=\; \sin\theta_h \; d\theta_h \, d\phi_h \]
+  </div>
+
+  <p>
+    and the patch of outgoing directions it maps to has
+  </p>
+
+  <div class="eq">
+    \[ d\omega_{\text{out}} \;=\; \sin\theta_{\text{out}} \; d\theta_{\text{out}} \, d\phi_{\text{out}}
+       \;=\; \sin(2\theta_h) \cdot 2\,d\theta_h \, d\phi_h \]
+  </div>
+  <p class="eq-plain">
+    In prose: substituting <code>θ_out = 2 θ_h</code>
+    brings down a factor of 2 from <code>dθ_out = 2 dθ_h</code>,
+    and turns the sine into <code>sin 2θ_h</code>.
+  </p>
+
+  <p>
+    Divide, and watch the double-angle identity do all the remaining work:
+  </p>
+
+  <div class="eq">
+    \[ \frac{d\omega_{\text{out}}}{d\omega_h}
+       \;=\; \frac{2\sin(2\theta_h)}{\sin\theta_h}
+       \;=\; \frac{2 \cdot 2\sin\theta_h\cos\theta_h}{\sin\theta_h}
+       \;=\; 4\cos\theta_h
+       \;=\; 4\,(v\!\cdot\!h) \]
+  </div>
+
+  <p>
+    <strong>There is the 4, and there is the cosine, and they came from the same place.</strong>
+    One factor of two is the <code>dθ_out = 2 dθ_h</code>;
+    the other is the 2 inside <code>sin 2θ = 2 sin θ cos θ</code>,
+    which hands over the <code>cos θ_h = v·h</code> as change.
+  </p>
+
+  <div class="callout">
+    <span class="label">Worked example, at θ<sub>h</sub> = 18°</span>
+    <p>The reflected ray comes off at <strong>36°</strong>, exactly twice. The stretch factor is
+       <code>4 cos 18° = 3.804226</code>, and computing it the other way,
+       <code>2 sin 36° / sin 18° = 3.804226</code> — the same to every
+       digit a <code>double</code> has. Going the other direction, a patch of light directions maps
+       to a patch of facet normals <code>1 / 3.804226 = 0.262866</code> as
+       large.</p>
+  </div>
+
+  <p>
+    <code>verify_64</code> §B does not check this by re-deriving it a second way — that would only
+    check the algebra. It measures it: build a tiny parallelogram of light directions on the
+    sphere, push its three corners through <code>h = normalize(l + v)</code>, and compare the
+    areas. Over sixteen configurations of light and eye the worst relative error is
+    <strong>1.42 × 10⁻³</strong>, and that residue is the finite difference, not the formula.
+  </p>
+
+  <h3 id="den-assemble"><span class="num">4.3</span>Putting the BRDF together</h3>
+
+  <p>
+    Now we can walk a beam of light through the surface and read the BRDF off the other end. Take a
+    patch of macroscopic surface of area <code>dA</code>, lit from
+    direction <code>l</code>.
+  </p>
+
+  <ol>
+    <li><strong>Which facets can help?</strong> Only those whose normal is <code>h</code>, the
+        halfway vector. Their total area is <code>D(h) dω_h dA</code>
+        — that is what <code>D</code> means.</li>
+    <li><strong>How much light do they catch?</strong> A facet presents its area to the light
+        foreshortened by its own tilt, so the projected area is
+        <code>l·h</code> times the above. And only a fraction
+        <code>G</code> of them are unshadowed. So the flux they intercept is
+        <code>L_i dω_l · G D(h) (l·h) dω_h dA</code>.</li>
+    <li><strong>How much of that leaves?</strong> A fraction <code>F</code>
+        — the rest goes in.</li>
+    <li><strong>Where does it go?</strong> Into <code>dω_out = 4(v·h) dω_h</code>,
+        by §4.2.</li>
+    <li><strong>What radiance is that?</strong> Radiance is flux per unit solid angle per unit
+        <em>projected</em> area, so divide by <code>dω_out</code>
+        and by <code>dA (n·v)</code>.</li>
+  </ol>
+
+  <p>
+    Assemble, and cancel:
+  </p>
+
+  <div class="eq">
+    \[ L_o \;=\;
+       \frac{F \, G \, D(h)\,(l\!\cdot\!h)\,d\omega_h \; L_i \, d\omega_l}
+            {4(v\!\cdot\!h)\,d\omega_h \cdot (n\!\cdot\!v)}
+       \;=\; \frac{F\,G\,D\;L_i\,d\omega_l}{4\,(n\!\cdot\!v)} \]
+  </div>
+
+  <p>
+    The <code>dω_h</code> cancels, and so does the
+    <code>l·h</code> against the <code>v·h</code>
+    — <strong>because <code>h</code> bisects <code>l</code> and <code>v</code>, so those two dot
+    products are the same number.</strong> That cancellation is precisely why the finished formula
+    carries no <code>v·h</code> and looks like it fell out of the
+    sky.
+  </p>
+
+  <p>
+    One step left. A BRDF is defined per unit <em>irradiance</em>, and irradiance already carries
+    its own cosine (Lesson 6.2 §2.3), so divide by <code>L_i (n·l) dω_l</code>:
+  </p>
+
+  <div class="eq">
+    \[ \boxed{\;f_{\text{spec}} \;=\; \frac{D \, G \, F}{4\,(n\!\cdot\!l)(n\!\cdot\!v)}\;} \]
+  </div>
+
+  @@FIG_DENOMINATOR@@
+
+  <p>
+    Every factor now has a reason, and none of them is a convention: the <strong>4</strong> is the
+    Jacobian, the vanished <strong>(v·h)</strong> cancelled against the facets' projected area, the
+    <strong>(n·v)</strong> is radiance's definition, and the <strong>(n·l)</strong> is the BRDF's.
+    That is the line you were going to have to take on trust, and now you do not.
+  </p>

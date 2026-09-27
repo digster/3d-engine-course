@@ -1,0 +1,52 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l43f4-t l43f4-d">
+  <title id="l43f4-t">The reflection file supplies exactly what the create-info demands</title>
+  <desc id="l43f4-d">On the left, the four integer keys in shadercross's JSON reflection output; on the right, the four fields of SDL_GPUShaderCreateInfo, joined one to one by arrows. Below, four trials on a fragment shader that really has one sampler and one uniform buffer: correct counts, counts that are too low, too high, and absurdly high at 99 each. All four were accepted by SDL_CreateGPUShader. Nothing validates these numbers at creation, which is why they must be read from the reflection file rather than remembered.</desc>
+  <defs>
+    <marker id="e-i-l43f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l43f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l43f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">four numbers, and where they have to come from</text>
+<text x="30.0" y="64.0" class="xs muted">textured.frag.json &#8212; written by shadercross</text>
+<text x="392.0" y="64.0" class="xs muted">SDL_GPUShaderCreateInfo</text>
+<rect x="30.0" y="72.0" width="296.0" height="148.0" rx="5" fill="#f0961e" opacity="0.10" stroke="#f0961e" stroke-width="1.4"/>
+<rect x="392.0" y="72.0" width="300.0" height="148.0" rx="5" class="fill-soft ink-soft" stroke-width="1.4"/>
+<text x="44.0" y="94.0" class="xs mono">"samplers"</text>
+<line x1="334.0" y1="90.0" x2="384.0" y2="90.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l43f4)"/>
+<text x="406.0" y="94.0" class="xs mono">num_samplers</text>
+<text x="44.0" y="128.0" class="xs mono">"storage_textures"</text>
+<line x1="334.0" y1="124.0" x2="384.0" y2="124.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l43f4)"/>
+<text x="406.0" y="128.0" class="xs mono">num_storage_textures</text>
+<text x="44.0" y="162.0" class="xs mono">"storage_buffers"</text>
+<line x1="334.0" y1="158.0" x2="384.0" y2="158.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l43f4)"/>
+<text x="406.0" y="162.0" class="xs mono">num_storage_buffers</text>
+<text x="44.0" y="196.0" class="xs mono">"uniform_buffers"</text>
+<line x1="334.0" y1="192.0" x2="384.0" y2="192.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l43f4)"/>
+<text x="406.0" y="196.0" class="xs mono">num_uniform_buffers</text>
+<text x="30.0" y="256.0" class="sm">and what SDL does when they are wrong</text>
+<text x="30.0" y="274.0" class="xs muted">measured on textured.frag, which really has 1 sampler and 1 uniform buffer</text>
+<rect x="30.0" y="287.0" width="14" height="14" rx="3" fill="#5ac878" opacity="0.8"/>
+<text x="54.0" y="300.0" class="xs">correct</text>
+<text x="140.0" y="300.0" class="xs mono muted">smp 1, uni 1</text>
+<text x="290.0" y="300.0" class="xs mono">&#8594;</text>
+<text x="320.0" y="300.0" class="xs mono">created</text>
+<rect x="30.0" y="315.0" width="14" height="14" rx="3" fill="#eb786e" opacity="0.8"/>
+<text x="54.0" y="328.0" class="xs">too low</text>
+<text x="140.0" y="328.0" class="xs mono muted">smp 0, uni 0</text>
+<text x="290.0" y="328.0" class="xs mono">&#8594;</text>
+<text x="320.0" y="328.0" class="xs mono t-hi">created</text>
+<rect x="30.0" y="343.0" width="14" height="14" rx="3" fill="#eb786e" opacity="0.8"/>
+<text x="54.0" y="356.0" class="xs">too high</text>
+<text x="140.0" y="356.0" class="xs mono muted">smp 4, uni 4</text>
+<text x="290.0" y="356.0" class="xs mono">&#8594;</text>
+<text x="320.0" y="356.0" class="xs mono t-hi">created</text>
+<rect x="30.0" y="371.0" width="14" height="14" rx="3" fill="#eb786e" opacity="0.8"/>
+<text x="54.0" y="384.0" class="xs">absurd</text>
+<text x="140.0" y="384.0" class="xs mono muted">smp 99, uni 99</text>
+<text x="290.0" y="384.0" class="xs mono">&#8594;</text>
+<text x="320.0" y="384.0" class="xs mono t-hi">created</text>
+<text x="30.0" y="402.0" class="xs"><tspan class="t-hi">Every one was accepted</tspan>, including 99 of each. Nothing checks these but you &#8212; so read them out of the file.</text>
+</svg>

@@ -1,0 +1,59 @@
+<svg viewBox="0 0 720 430" role="img" aria-labelledby="l62f1-t l62f1-d">
+  <title id="l62f1-t">Flux, irradiance and radiance</title>
+  <desc id="l62f1-d">Three panels. A lamp emitting flux in all directions; the same light landing on a patch as irradiance, watts per square metre; and radiance, the part arriving from one direction through one steradian. A pixel measures radiance.</desc>
+  <defs>
+    <marker id="e-i-l62f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l62f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l62f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l62f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l62f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Three quantities, each the one before it divided by something. Only the third can be stored in a pixel.</text>
+<rect x="24" y="42" width="218" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="133.0" y="60" class="xs t-hi" text-anchor="middle">1. FLUX</text>
+<line x1="40" y1="230" x2="226" y2="230" class="grid" stroke-width="1.0"/>
+<text x="133.0" y="248" class="sm mono" text-anchor="middle">Φ</text>
+<text x="133.0" y="262" class="xs muted" text-anchor="middle">watts</text>
+<rect x="260" y="42" width="218" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="369.0" y="60" class="xs t-hi" text-anchor="middle">2. IRRADIANCE</text>
+<line x1="276" y1="230" x2="462" y2="230" class="grid" stroke-width="1.0"/>
+<text x="369.0" y="248" class="sm mono" text-anchor="middle">E = dΦ / dA</text>
+<text x="369.0" y="262" class="xs muted" text-anchor="middle">W / m²</text>
+<rect x="496" y="42" width="218" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="605.0" y="60" class="xs t-hi" text-anchor="middle">3. RADIANCE</text>
+<line x1="512" y1="230" x2="698" y2="230" class="grid" stroke-width="1.0"/>
+<text x="605.0" y="248" class="sm mono" text-anchor="middle">L = d²Φ / (dA⊥ dω)</text>
+<text x="605.0" y="262" class="xs muted" text-anchor="middle">W / (m² sr)</text>
+<circle cx="133.0" cy="129.0" r="10" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<line x1="146.0" y1="129.0" x2="181.0" y2="129.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="144.2583302491977" y1="135.5" x2="174.56921938165306" y2="153.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="139.5" y1="140.2583302491977" x2="157.0" y2="170.56921938165306" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="133.0" y1="142.0" x2="133.0" y2="177.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="126.5" y1="140.2583302491977" x2="109.0" y2="170.56921938165306" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="121.7416697508023" y1="135.5" x2="91.43078061834694" y2="153.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="120.0" y1="129.0" x2="85.0" y2="129.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="121.74166975080229" y1="122.5" x2="91.43078061834694" y2="105.00000000000001" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="126.5" y1="117.7416697508023" x2="108.99999999999997" y2="87.43078061834696" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="133.0" y1="116.0" x2="133.0" y2="81.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="139.5" y1="117.7416697508023" x2="157.0" y2="87.43078061834694" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="144.25833024919768" y1="122.5" x2="174.56921938165306" y2="104.99999999999997" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<text x="133.0" y="206" class="xs muted" text-anchor="middle">everything the lamp emits, in every</text>
+<text x="133.0" y="219" class="xs muted" text-anchor="middle">direction, added up. One number.</text>
+<line x1="315.0" y1="184" x2="423.0" y2="184" class="ink" stroke-width="2.0"/>
+<text x="431.0" y="188" class="xs mono muted" text-anchor="start">dA</text>
+<line x1="297.8927631072748" y1="125.25724924274652" x2="327.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="340.23381298465034" y1="118.9419193132431" x2="351.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="385.7661870153497" y1="118.9419193132431" x2="375.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<line x1="428.1072368927252" y1="125.25724924274652" x2="399.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f1)"/>
+<text x="369.0" y="206" class="xs muted" text-anchor="middle">everything ARRIVING per square metre</text>
+<text x="369.0" y="219" class="xs muted" text-anchor="middle">— from every direction at once</text>
+<line x1="551.0" y1="184" x2="659.0" y2="184" class="ink" stroke-width="2.0"/>
+<text x="543.0" y="188" class="xs mono muted" text-anchor="end">dA⊥</text>
+<path d="M 605.0 184.0 L 625.7 94.4 L 657.8 108.6 Z" fill="#5082e6" fill-opacity="0.22" stroke="#5082e6" stroke-width="1.3"/>
+<text x="651.0" y="80" class="xs mono t-hi" text-anchor="middle">dω</text>
+<text x="605.0" y="206" class="xs muted" text-anchor="middle">what arrives from ONE direction,</text>
+<text x="605.0" y="219" class="xs muted" text-anchor="middle">through one steradian of sky</text>
+<rect x="24" y="296" width="672" height="58" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="318" class="sm t-hi" text-anchor="middle">A PIXEL IS A TINY CONE FROM THE EYE, so a pixel measures RADIANCE.</text>
+<text x="360.0" y="336" class="xs muted" text-anchor="middle">That is why one number per pixel is enough: radiance does not change along a ray, so the renderer need not ask how far away anything is.</text>
+</svg>

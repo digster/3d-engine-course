@@ -1,0 +1,425 @@
+  <h2 id="order">4. The yardstick that cannot see the bug</h2>
+
+  <p>
+    Order of accuracy is the number every numerical-methods course teaches first, and it is easy to
+    measure: run to a fixed simulated time, halve the step, and see what the error does. Halving means
+    first order. Quartering means second. Section A of <code>verify_81.cpp</code> does it on our
+    spring, running exactly one full period — which makes the reference free of approximation, because
+    after one period the exact answer is the state we started in.
+  </p>
+
+  <pre>A.1  the textbook yardstick: halve h, see what the error
+     after ONE PERIOD does. Exact answer is the state we
+     started in, so the reference is not approximated.
+
+   h          explicit    semi-impl     verlet
+  1/60       3.880e-01  2.883e-03  2.871e-03
+  1/120      1.786e-01  7.184e-04  7.178e-04
+  1/240      8.571e-02  1.796e-04  1.795e-04
+  1/480      4.198e-02  4.498e-05  4.499e-05
+  1/960      2.077e-02  1.176e-05  1.168e-05
+  1/1920     1.033e-02  3.015e-06  1.061e-06
+
+A.2  measured slopes (1/60 -> 1/240, above the floor)
+   explicit    slope 1.089
+   semi-impl   slope 2.002
+   verlet      slope 2.000</pre>
+
+  <p>
+    Explicit Euler halves when the step halves, so it is first order, as advertised. Velocity Verlet
+    quarters, so it is second order, as advertised. And semi-implicit Euler <strong>also
+    quarters</strong>, which is not what any textbook will tell you, because semi-implicit Euler is a
+    first-order method.
+  </p>
+
+  <p>
+    That is worth stopping on rather than waving away, and the explanation is the whole lesson in
+    advance. Semi-implicit Euler's error on this problem has two parts: an <em>amplitude</em> error
+    (is the orbit the right size?) and a <em>phase</em> error (has it gone round at the right rate?).
+    Section 5 will show that the amplitude error is <strong>exactly zero</strong> — not small,
+    zero — which leaves only the phase error, and the phase error turns out to be
+    <code>O(h²)</code>. So what you are reading in that column is not a promotion. It is a fact about
+    the harmonic oscillator, and it is a fact caused by the very property this lesson is about.
+    Measure the same method on a problem with no such structure and it is first order again.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The last row is the instrument, not the result.</strong> At <code>h = 1/1920</code> one
+      period is 1,920 float additions on numbers of size 1, and float cannot resolve below about
+      <code>1e-6</code> after that much accumulation. Verlet's <code>1.061e-06</code> is not four
+      times better than the row above it; it is noise. The harness says so rather than letting the
+      column be read, and it is the same discipline as Lesson 7.8's <code>−160 dB</code> harmonics:
+      <em>a number at the noise floor is a fact about the meter.</em>
+    </p>
+  </div>
+
+  <h3 id="other-question">4.1 …and now the other question</h3>
+
+  <p>
+    Look again at what A.1 asked. It held the <em>simulated time</em> fixed at one period and shrank
+    the step. That is the mathematician's question — behaviour as <code>h → 0</code> — and it is the
+    right question if you are choosing a step size for a one-off calculation.
+  </p>
+
+  <p>
+    It is not the question a game asks. A game fixes <code>h</code> at <code>1/60</code> and never
+    changes it, then runs for an hour. Section A.3 asks that question instead: same step, growing
+    time.
+  </p>
+
+  <pre>A.3  *** AND NOW THE OTHER QUESTION. Fix h at 1/60 -
+     which is what a game does - and vary t instead.
+
+   t (s)      explicit    semi-impl     verlet
+      1      3.880e-01  2.883e-03  2.871e-03
+      2      9.261e-01  5.766e-03  5.741e-03
+      5      4.143e+00  1.442e-02  1.435e-02
+     10      2.539e+01  2.884e-02  2.870e-02
+     20      6.941e+02  5.773e-02  5.740e-02
+     40      4.830e+05  1.156e-01  1.148e-01</pre>
+
+  <p>
+    Read the middle column down: 2.883, 5.766, 14.42, 28.84, 57.73, 115.6 (in units of
+    <code>1e-3</code>). Those are in exact proportion to <code>t</code> — double the time, double the
+    error. It <em>adds</em>. Read the left column down: the error is multiplied by roughly 1.9 every
+    second, and by second 40 it is five hundred thousand times the amplitude of a spring that is
+    supposed to be oscillating between −1 and +1 metres.
+  </p>
+
+  @@FIG_ORDER@@
+
+  <p>
+    Figure 2 puts the two questions side by side, and the point is the one written under the
+    right-hand panel: <strong>nothing measured on the left can see what is happening on the
+    right.</strong> Order of accuracy is a statement about the limit as the step goes to zero at a
+    fixed time. Stability is a statement about the limit as time goes to infinity at a fixed step.
+    They are different questions, both of them legitimate, and the second one is the one that decides
+    whether your game works after the player has been in the level for five minutes.
+  </p>
+
+  <p>
+    So we need a different instrument. And the useful thing about the harmonic oscillator is that it
+    hands us one.
+  </p>
+
+  <h2 id="phase">5. Phase space, and the one number</h2>
+
+  <p>
+    Stop plotting position against time. Plot <strong>position against velocity</strong> instead —
+    every state of the system is one point in that plane, and the simulation is a point moving around
+    it. This is called phase space, and it is the single most useful change of viewpoint in this
+    lesson.
+  </p>
+
+  <p>
+    Why it helps: for a spring, <em>the exact trajectory in phase space is a circle</em>. With
+    <code>x = A cos(ωt)</code> and <code>v = −Aω sin(ωt)</code>, plotting <code>x</code> horizontally
+    and <code>v/ω</code> vertically gives
+    <code>x² + (v/ω)² = A²</code> — a circle of radius <code>A</code>, traversed once per period,
+    forever. There is nothing to interpret. A correct integrator produces points on that circle. An
+    incorrect one produces points that are not on it, and you can see which way they are wrong at a
+    glance.
+  </p>
+
+  @@FIG_PHASE@@
+
+  <p>
+    Figure 3 takes one point on the circle and applies one step of each rule, with a deliberately
+    coarse <code>hω = 0.7</code> so the step is a visible arc rather than a dot. Look first at the
+    grey dotted horizontal line: <strong>both endpoints are at the same height.</strong> That is not a
+    coincidence and it is not an artefact of the drawing — both rules ran the identical velocity
+    update, <code>v ← v − hω²x</code>, from the identical starting state. The <em>only</em> difference
+    between them is which <code>x</code> the position line was told to move at, and it moves them
+    apart horizontally and in no other way.
+  </p>
+
+  <p>
+    The red dot is outside the circle. Run the step again from there and it will be further outside,
+    and again, and again. The green dot is not on the circle either — and that is the honest surprise
+    of this figure, worth stating plainly before §6 makes it the main event: semi-implicit Euler does
+    <em>not</em> put you back on the exact orbit. It puts you on the dashed green ellipse, which is a
+    slightly sheared, slightly rotated cousin of the circle — and it keeps you there forever.
+  </p>
+
+  <h3 id="matrix">5.1 One step is a matrix</h3>
+
+  <p>
+    Here is the move that turns all of this from pictures into a number. For a linear force —
+    <code>a = −ω²x</code>, which is the whole point of choosing this test — every integrator step is a
+    <strong>linear transformation of the state</strong>. Write the state as a column of two numbers
+    and the step is a matrix acting on it, exactly as in Lesson 2.5.
+  </p>
+
+  <p>
+    Explicit Euler, written out with the two lines in the order the code has them:
+  </p>
+
+  <div class="eq">
+    \[
+    x_{n+1} = x_n + h\,v_n, \qquad v_{n+1} = v_n - h\omega^{2}x_n
+    \qquad\Longrightarrow\qquad
+    \begin{bmatrix} x_{n+1} \\ v_{n+1} \end{bmatrix}
+    =
+    \begin{bmatrix} 1 & h \\ -h\omega^{2} & 1 \end{bmatrix}
+    \begin{bmatrix} x_n \\ v_n \end{bmatrix}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In plain text: the new state is <code>[[1, h], [−hω², 1]]</code> times the old one. The top row
+    says "new position is old position plus h times old velocity"; the bottom row says "new velocity
+    is old velocity minus h·ω² times old <em>position</em>".
+  </p>
+
+  <p>
+    Semi-implicit Euler differs in one place. Its position line uses <code>v<sub>n+1</sub></code>, so
+    substitute:
+  </p>
+
+  <div class="eq">
+    \[
+    x_{n+1} = x_n + h\,v_{n+1} = x_n + h\left(v_n - h\omega^{2}x_n\right)
+    = \left(1 - h^{2}\omega^{2}\right)x_n + h\,v_n
+    \]
+  </div>
+
+  <div class="eq">
+    \[
+    \begin{bmatrix} x_{n+1} \\ v_{n+1} \end{bmatrix}
+    =
+    \begin{bmatrix} 1 - h^{2}\omega^{2} & h \\ -h\omega^{2} & 1 \end{bmatrix}
+    \begin{bmatrix} x_n \\ v_n \end{bmatrix}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In plain text: the same matrix except that the top-left entry is <code>1 − h²ω²</code> instead of
+    <code>1</code>. That single entry is the whole difference between the two methods, and it appeared
+    because the position line was allowed to see the velocity line's answer.
+  </p>
+
+  <h3 id="determinant">5.2 The determinant, and what it does to energy</h3>
+
+  <p>
+    A 2×2 matrix's determinant is the factor by which it scales <em>area</em>. Lesson 2.5 introduced a
+    matrix as "where the basis vectors land"; take the unit square those basis vectors span, push it
+    through the matrix, and the parallelogram that comes out has area equal to the determinant. The
+    inset in figure 3 is literally that experiment, run on a small square of states.
+  </p>
+
+  <p>
+    Compute both, and it takes one line each:
+  </p>
+
+  <div class="eq">
+    \[
+    \det\begin{bmatrix} 1 & h \\ -h\omega^{2} & 1 \end{bmatrix}
+    = 1\cdot 1 - h\cdot(-h\omega^{2}) = 1 + h^{2}\omega^{2}
+    \]
+  </div>
+
+  <div class="eq">
+    \[
+    \det\begin{bmatrix} 1 - h^{2}\omega^{2} & h \\ -h\omega^{2} & 1 \end{bmatrix}
+    = (1 - h^{2}\omega^{2}) - h\cdot(-h\omega^{2}) = 1 - h^{2}\omega^{2} + h^{2}\omega^{2} = 1
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In plain text: explicit Euler's determinant is <code>1 + h²ω²</code>, which is greater than 1 for
+    any non-zero <code>h</code> and any non-zero <code>ω</code>. Semi-implicit Euler's is
+    <strong>exactly 1</strong> — the two <code>h²ω²</code> terms cancel, algebraically, with no
+    approximation anywhere.
+  </p>
+
+  <p>
+    That cancellation is the whole lesson, so stare at it for a second. The <code>−h²ω²</code> in the
+    top-left came from the position line using the new velocity. The <code>+h²ω²</code> came from the
+    off-diagonal product. They are the same quantity because they have the same origin: the velocity
+    update's effect, counted once in each place. Explicit Euler only gets one of them and so has a
+    surplus.
+  </p>
+
+  @@FIG_MATRICES@@
+
+  <p>
+    Figure 4 lines all of this up, including a third method we are <em>not</em> implementing.
+  </p>
+
+  <h3 id="backward">5.3 Backward Euler, the mirror image</h3>
+
+  <p>
+    The obvious next idea, once you know explicit Euler grows, is to use the <em>new</em> state on
+    both lines: <code>v<sub>n+1</sub> = v<sub>n</sub> − hω²x<sub>n+1</sub></code> and
+    <code>x<sub>n+1</sub> = x<sub>n</sub> + h·v<sub>n+1</sub></code>. That is backward (implicit)
+    Euler. It is an <em>implicit</em> equation — the unknown appears on both sides — and for this
+    linear force it can be solved in closed form. Substituting and collecting gives
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{bmatrix} x_{n+1} \\ v_{n+1} \end{bmatrix}
+    = \frac{1}{1 + h^{2}\omega^{2}}
+    \begin{bmatrix} 1 & h \\ -h\omega^{2} & 1 \end{bmatrix}
+    \begin{bmatrix} x_n \\ v_n \end{bmatrix},
+    \qquad
+    \det = \frac{1 + h^{2}\omega^{2}}{\left(1 + h^{2}\omega^{2}\right)^{2}}
+    = \frac{1}{1 + h^{2}\omega^{2}}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In plain text: backward Euler's matrix is <em>explicit Euler's matrix divided by</em>
+    <code>(1 + h²ω²)</code>, and its determinant is the exact reciprocal of explicit Euler's. Where
+    one inflates, the other deflates, by precisely the same factor.
+  </p>
+
+  <p>
+    This is why backward Euler is described as unconditionally stable and why almost nothing in real
+    time uses it. It cannot blow up, because it is losing energy on every step — a released pendulum
+    grinds to a halt, a stack of boxes slowly sinks into the floor, and a ragdoll goes limp. And you
+    pay for that damping: for anything other than a linear force there is no closed form, so each step
+    becomes a root find. Costly <em>and</em> lossy. Where implicit methods do appear in games — cloth,
+    hair — it is because that damping is exactly what is wanted. <code>integrate.hpp</code> therefore
+    has no <code>implicit_euler</code>, and its <code>enum</code> says why in a comment rather than
+    leaving the omission to look like an oversight.
+  </p>
+
+  <h3 id="measured">5.4 Measured, not asserted</h3>
+
+  <p>
+    A determinant that is never evaluated is a claim you are being asked to believe. Section B of the
+    harness takes three states forming a small parallelogram in the <code>(x, v)</code> plane, steps
+    all three with the same rule, and computes the area that comes out.
+  </p>
+
+  <pre>B.1  step a small parallelogram; compare the area out
+     against the area in. h = 1/60, w = 2pi.
+
+   rule         measured      predicted      diff
+   explicit    1.010966377   1.010966182   +1.96e-07
+   semi-impl   1.000000096   1.000000000   +9.55e-08
+   verlet      1.000000035   1.000000000   +3.50e-08
+
+B.2  the explicit surplus, as a formula. 1 + h^2 w^2:
+     h^2 w^2 = 0.010966229, so one step INFLATES phase
+     space by 1.0966229%. Every step. At every h.</pre>
+
+  <div class="callout">
+    <p>
+      <strong>The parallelogram is half a metre across, not infinitesimal, and that is deliberate.</strong>
+      The update is a matrix — it is <em>exactly</em> linear — so the parallelogram's size cancels out
+      of the ratio algebraically, and any size gives the same answer. The first version of this
+      section used <code>ε = 1e-3</code> on the reasonable-sounding grounds that a derivative wants a
+      small step, and threw away three digits of precision to cancellation between nearly equal
+      floats: it reported the control at <code>0.999974</code> instead of <code>1.000000</code>.
+      <em>When the thing you are probing is genuinely linear, a small probe buys nothing and costs
+      precision.</em>
+    </p>
+  </div>
+
+  <p>
+    Now connect the determinant to something you care about. The area enclosed by a phase-space orbit
+    of a spring is <code>π·A·(Aω) = πωA²</code>, and the energy per unit mass is
+    <code>E = ½ω²A²</code> — so the enclosed area is <code>2πE/ω</code>, which is to say
+    <strong>area is energy</strong>, up to a constant that never changes. A step that multiplies area
+    by <code>1 + h²ω²</code> multiplies energy by <code>1 + h²ω²</code>. After <code>N</code> steps it
+    has multiplied energy by <code>(1 + h²ω²)ᴺ</code>, and that is not an estimate; it is what the
+    matrix does.
+  </p>
+
+  <p>
+    At <code>h = 1/60</code> and <code>ω = 2π</code>, <code>h²ω² = 0.010966229</code>. Over one second
+    — 60 steps — that is <code>1.010966229⁶⁰ = 1.924</code>. Over one minute, 3,600 steps:
+  </p>
+
+  <div class="eq">
+    \[
+    \left(1.010966229\right)^{3600} = 1.1270\times 10^{17}
+    \]
+  </div>
+
+  <pre>C.1  mechanical energy, as a multiple of the energy it
+     started with.
+
+   t (s)      explicit      semi-impl      verlet
+      1       1.9240e+00    9.9970e-01    1.0000e+00
+      5       2.6363e+01    9.9849e-01    1.0000e+00
+     10       6.9501e+02    9.9699e-01    1.0000e+00
+     30       3.3571e+08    9.9104e-01    9.9998e-01
+     60       1.1270e+17    9.8243e-01    9.9992e-01
+
+C.3  predicted from the determinant alone. Energy is an
+     area, so after N steps it is (1+h^2w^2)^N:
+     (1+0.010966229)^3600 = 1.1270e+17
+     measured above. The determinant is not a
+     description of the blow-up; it IS the blow-up.</pre>
+
+  @@FIG_ENERGY@@
+
+  <p>
+    In figure 5 the red <em>line</em> is the closed form and the red <em>dots</em> are the
+    measurement. They coincide to every digit the harness prints, across seventeen orders of magnitude,
+    which is the strongest evidence this lesson can offer that the determinant is not a metaphor for
+    the problem but a complete description of it.
+  </p>
+
+  <p>
+    Translated out of energy and into metres: a spring released from 1 m is at
+    <strong>3.36 × 10⁸ m</strong> after one minute. If that spring were the one-centimetre overlap
+    between a box and the floor — which is exactly what a penalty-force contact is — the box would be
+    3,357 km away. And the first ten seconds of that run look completely normal, which is the trap:
+    at <code>t = 1</code> the energy is 1.92× and at <code>t = 5</code> it is 26×, numbers a
+    playtester describes as "the physics feels a bit bouncy".
+  </p>
+
+  <h3 id="smaller-h">5.5 And a smaller step does not fix it</h3>
+
+  <p>
+    The instinct at this point is to reach for <code>h</code>. It does not work, and the reason is
+    visible in B.2: the determinant is <code>1 + h²ω²</code>, which <em>approaches</em> 1 as
+    <code>h</code> shrinks but never reaches it. Every step still adds energy; you have only made the
+    steps smaller and bought more of them.
+  </p>
+
+  <p>
+    Quantify it. Growth over a fixed simulated time <code>T</code> is
+    <code>(1 + h²ω²)<sup>T/h</sup></code>, and for small <code>h</code> the exponent times the log is
+    about <code>(T/h)·h²ω² = T·h·ω²</code>. The growth per second is proportional to
+    <code>h</code> — linear, not exponential — so halving the step halves the exponent, and the time
+    to double the energy is proportional to <code>1/h</code>:
+  </p>
+
+  <pre>D.1  simulated seconds until the energy has doubled.
+
+   rate (Hz)      h        t_double (s)   predicted
+        30   0.0333333        0.567        0.538
+        60   0.0166667        1.067        1.059
+       120   0.0083333        2.117        2.110
+       240   0.0041667        4.217        4.215
+      1000   0.0010000       17.559       17.558
+      4000   0.0002500       70.230       70.231
+
+D.2  read backwards: what rate would hold the energy to
+     within 1% over a ten-minute level?
+     h = 4.201e-07 s, i.e. 2380529 steps per second.</pre>
+
+  <p>
+    Ten times the step rate buys ten times the delay. And read backwards — which is how an engineer
+    would actually use it — holding the error to one per cent over a ten-minute level needs
+    <strong>2.4 million steps per second</strong>. For <em>one</em> spring, at 1 Hz, which is the
+    gentlest restoring force anything in a game would ever have. The answer is not a smaller step. The
+    answer is a different rule, and it costs nothing.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why the 30 Hz row misses by 5% and the others do not.</strong> Nothing is wrong with the
+      prediction; the measurement is quantised. The energy does not climb smoothly — it also wobbles
+      once per oscillation, by <code>hω</code> in relative terms, which is 21% at 30 Hz. So the moment
+      the run crosses 2× is caught at whatever phase of that wobble it happens to be in. By 120 Hz the
+      wobble is 5% and the rows agree to three digits. The next section is where that wobble comes
+      from, and it turns out to be the most interesting quantity in the lesson.
+    </p>
+  </div>

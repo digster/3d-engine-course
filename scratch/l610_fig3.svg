@@ -1,0 +1,43 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="f610d-t f610d-d">
+  <title id="f610d-t">Level selection</title>
+  <desc id="f610d-d">A logarithmic footprint axis from 1 to 64 texels with the mip level marked above each power of two. Lesson 3.9's measured 62.46 texels per pixel lands at level 5.965, between levels 5 and 6.</desc>
+  <defs>
+    <marker id="e-i-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f610d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Which level: log2 of the footprint</text>
+<line x1="100" y1="170" x2="620" y2="170" class="grid" stroke-width="1.0"/>
+<line x1="100.0" y1="165" x2="100.0" y2="175" class="grid" stroke-width="1.0"/>
+<text x="100.0" y="192" class="xs" text-anchor="middle">1</text>
+<text x="100.0" y="152" class="xs" text-anchor="middle">L0</text>
+<line x1="186.66666666666669" y1="165" x2="186.66666666666669" y2="175" class="grid" stroke-width="1.0"/>
+<text x="186.66666666666669" y="192" class="xs" text-anchor="middle">2</text>
+<text x="186.66666666666669" y="152" class="xs" text-anchor="middle">L1</text>
+<line x1="273.33333333333337" y1="165" x2="273.33333333333337" y2="175" class="grid" stroke-width="1.0"/>
+<text x="273.33333333333337" y="192" class="xs" text-anchor="middle">4</text>
+<text x="273.33333333333337" y="152" class="xs" text-anchor="middle">L2</text>
+<line x1="360.0" y1="165" x2="360.0" y2="175" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="192" class="xs" text-anchor="middle">8</text>
+<text x="360.0" y="152" class="xs" text-anchor="middle">L3</text>
+<line x1="446.6666666666667" y1="165" x2="446.6666666666667" y2="175" class="grid" stroke-width="1.0"/>
+<text x="446.6666666666667" y="192" class="xs" text-anchor="middle">16</text>
+<text x="446.6666666666667" y="152" class="xs" text-anchor="middle">L4</text>
+<line x1="533.3333333333333" y1="165" x2="533.3333333333333" y2="175" class="grid" stroke-width="1.0"/>
+<text x="533.3333333333333" y="192" class="xs" text-anchor="middle">32</text>
+<text x="533.3333333333333" y="152" class="xs" text-anchor="middle">L5</text>
+<line x1="620.0" y1="165" x2="620.0" y2="175" class="grid" stroke-width="1.0"/>
+<text x="620.0" y="192" class="xs" text-anchor="middle">64</text>
+<text x="620.0" y="152" class="xs" text-anchor="middle">L6</text>
+<text x="360.0" y="216" class="xs" text-anchor="middle">footprint, in texels</text>
+<text x="66" y="152" class="xs" text-anchor="end">level</text>
+<line x1="617.0" y1="136.0" x2="521.0" y2="110.0" stroke="#e05c5c" stroke-width="1.4" fill="none"/>
+<circle cx="617.0" cy="136" r="3.5" fill="#e05c5c" stroke="none"/>
+<text x="516.9545909013069" y="106" class="xs" text-anchor="end">Lesson 3.9: 62.46 texels</text>
+<text x="516.9545909013069" y="122" class="xs" text-anchor="end">= level 5.965</text>
+<text x="360.0" y="262" class="xs" text-anchor="middle">a level halves the texture, so level L has texels 2^L wide:</text>
+<text x="360.0" y="284" class="xs" text-anchor="middle">2^L = footprint   =&gt;   L = log2(footprint)</text>
+<text x="360.0" y="310" class="xs" text-anchor="middle">the level is CONTINUOUS, and the fraction is what trilinear blends</text>
+</svg>

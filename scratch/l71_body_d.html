@@ -1,0 +1,416 @@
+  <h2 id="interp">7. Interpolation: the real indictment</h2>
+
+  <p>
+    Everything so far has been about one orientation at a time. The argument that actually settles
+    the question — the one that sends Lesson 7.4 to quaternions rather than leaving us with three
+    tidy floats — is about <em>two</em>.
+  </p>
+
+  <p>
+    Blending is what an engine does constantly. An animation system blends between keyframes
+    (Lesson 7.7). A camera eases toward a target. A turret swings to face a thing. All of those are
+    "give me the orientation a fraction <em>t</em> of the way from A to B", and if orientations are
+    stored as three angles then the obvious implementation is to lerp the three angles.
+  </p>
+
+  <h3>7.1 Measuring a path</h3>
+
+  <p>
+    To say what is wrong with it we need a number, so first: what does "the right answer" even mean
+    here? It means the <strong>geodesic</strong> — the shortest route through the space of
+    rotations, which is a steady turn about one fixed axis. Any other route performs more turning
+    than it had to. So:
+  </p>
+
+  <ul>
+    <li><strong>Path length</strong>: sample the interpolation finely, measure the angle between
+        each consecutive pair of orientations, and add them up. That is how much turning actually
+        happened.</li>
+    <li><strong>Geodesic distance</strong>: the angle between the two endpoints. That is how much
+        turning was strictly required.</li>
+    <li><strong>Excess</strong>: the ratio, minus one. Detour, as a percentage.</li>
+    <li><strong>Speed variation</strong>: the largest per-step turn divided by the smallest. A
+        geodesic at constant rate has ratio 1; anything else speeds up and slows down, which is what
+        "the animation surges" looks like from inside.</li>
+  </ul>
+
+  @@FIG_PATH@@
+
+  <p>
+    Figure 7's left panel traces where the nose goes, for a pair of orientations chosen with nothing
+    near lock. The amber curve is the Euler lerp; the dashed blue is the geodesic. They start and
+    end in the same place and the amber one bulges away. The numbers:
+    <strong>204.29° of turning performed for a 179.05° journey — 25.24° of detour, 14.1% excess, and
+    the rate varies by a factor of 1.56 along the way.</strong> That last one is the part a player
+    sees, because a blend that is 56% faster in the middle than at the ends reads as a lurch.
+  </p>
+
+  <h3>7.2 A surprise, and why the first version of this measurement said nothing</h3>
+
+  <p>
+    The first draft of this check swept the yaw alone at pitch 88° — right up against the
+    singularity, where surely the damage would be worst — and reported an excess of exactly
+    <strong>0.00%</strong>. That is not an instrument failure. It is a fact worth knowing:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Every single-knob Euler path is already a geodesic</span>
+    <p>
+      Turning one knob and leaving the other two alone is, by construction, a steady rotation about
+      one fixed axis — which is exactly what a geodesic is. It does not matter which knob, or how
+      close to lock you are. So if you go looking for the interpolation pathology with one angle
+      moving, you will not find it, and you may conclude it is not there. It takes <em>at least
+      two</em> angles changing before the path can leave the geodesic at all.
+    </p>
+  </div>
+
+  <p>
+    Figure 7's right panel is the check rewritten to say something. It runs the <em>same three angle
+    deltas</em> four times, sliding the pitch band away from the singularity and changing nothing
+    else:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>pitch band</th><th>turning performed</th><th>required</th><th>excess</th><th>speed varies by</th></tr></thead>
+      <tbody>
+        <tr><td><strong>87° → 30° (near lock)</strong></td><td>282.89°</td><td>91.40°</td><td><strong>+209.5%</strong></td><td>1.14×</td></tr>
+        <tr><td>47° → −10°</td><td>243.57°</td><td>149.87°</td><td>+62.5%</td><td>1.37×</td></tr>
+        <tr><td>20° → −37°</td><td>203.47°</td><td>166.09°</td><td>+22.5%</td><td>1.60×</td></tr>
+        <tr><td>0° → −57°</td><td>169.70°</td><td>133.98°</td><td>+26.7%</td><td>1.81×</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Run near the singularity, the same move costs <strong>three times as much turning as it
+    needs</strong>. Away from it, a quarter more — which is still wrong, and is the honest headline:
+    <em>an Euler lerp is never the geodesic unless it only moves one knob</em>. The bottom two rows
+    are not monotone with each other, and that is real rather than noise: the endpoints differ
+    between bands, so the geodesic distance differs too, and the excess is a ratio. The claim the
+    table supports is "near lock is catastrophically worse", not "excess falls smoothly with pitch".
+  </p>
+
+  <h3>7.3 The other bug, which is not about rotation at all</h3>
+
+  <p>
+    There is a second failure in angle interpolation that has nothing to do with gimbal lock,
+    geodesics or three dimensions. Blend a yaw from 170° to −170°:
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §E.4</strong></p>
+<pre><code>  yaw 170° -> -170°: raw lerp turns 340.0°,
+                     shortest-delta lerp turns 20.0°   (the journey is 20.0°)</code></pre>
+    <p>
+      Those two headings are 20° apart, across the back. A lerp of the raw floats performs
+      <strong>340° in the other direction</strong> — a full spin, backwards, for a twenty-degree
+      turn. Nothing is wrong with the rotation maths; the bug is that <em>an angle is a position on
+      a circle and a <code>float</code> is a position on a line</em>, and code that forgets loses
+      the wrap.
+    </p>
+  </div>
+
+  <p>
+    <code>shortest_angle_delta</code> fixes it in one line, and the engine gets it because any code
+    that blends a heading needs it — the character controller in Lesson 8.13 will, and so will every
+    camera that eases toward a target. The implementation is <code>std::remainder</code> rather than
+    <code>std::fmod</code>, and that choice <em>is</em> the function: <code>fmod</code> truncates
+    toward zero and keeps the sign of its left operand, landing in (−2π, 2π); <code>remainder</code>
+    rounds to <em>nearest</em> and lands in [−π, π], which is the interval we want. Getting it from
+    <code>fmod</code> takes a conditional fixup that people write wrong.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And note what the fix does not fix</span>
+    <p>
+      Wrapping gets you the short way round <em>each angle</em>. It does nothing at all about §7.1
+      and §7.2 — the corrected lerp still leaves the geodesic by 14% on a generic pair, because the
+      problem there is not the wrap, it is that a straight line in angle-space is a curve in
+      rotation-space. It is worth being clear that these are two separate bugs with two separate
+      fixes, and only one of them has a fix at this level. The other one is Lesson 7.5.
+    </p>
+  </div>
+
+  <h2 id="metric">8. The instrument, and the formula that cannot measure</h2>
+
+  <p>
+    Every number in §7 came out of one function: the angle between two rotations. It is worth a
+    section of its own, because deriving it is pretty and shipping the derivation would have been
+    wrong.
+  </p>
+
+  <p>
+    Any rotation is a turn of some angle θ about some axis. Choose a basis whose first vector
+    <em>is</em> that axis, and in that basis the matrix is block-diagonal: a 1 in the corner for the
+    axis, which does not move, and a 2×2 rotation for the plane it turns. Its trace is therefore
+    <code>1 + 2cos θ</code>. Trace is unchanged by a change of basis, so that holds in <em>every</em>
+    basis — including the one we are actually in, where we have no idea what the axis is. With
+    <code>R = AᵀB</code> (undo A, then do B) the formula falls straight out:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \theta \;=\; \arccos\!\Big(\frac{\operatorname{tr}(A^{\mathsf T}B) - 1}{2}\Big) \]</span>
+    <span class="eq-plain">theta = acos((trace(A^T B) - 1) / 2)</span>
+  </div>
+
+  <p>
+    It is correct, it is in every reference, and <strong>it cannot measure a small angle.</strong>
+    Near θ = 0 the trace is <code>3 − θ²</code>, so a turn of 0.004 radians moves the trace by 1.6e-5
+    — about an eighth of a <code>float</code>'s resolution at 3.0. The information is destroyed
+    before <code>acos</code> is called, and <code>acos</code> then amplifies whatever is left,
+    because its slope at 1 is infinite.
+  </p>
+
+  @@FIG_METRIC@@
+
+  <p>
+    Figure 8 measures both forms against turns of known size. The red curve is the textbook one, and
+    at a true angle of 0.004° it has a <strong>relative error of 1.00</strong> — it returns exactly
+    zero. That is not a rounding concern. A path measurement takes 2,048 steps across 120°, which is
+    0.059° each, so the formula the whole of §7 depends on would have been measuring nothing at all.
+  </p>
+
+  <p>
+    The fix is to take the sine as well. The antisymmetric part of a rotation is
+    <code>R − Rᵀ = 2 sin(θ) [n]<sub>×</sub></code>, whose three distinct entries form a vector of
+    length <code>2|sin θ|</code> — and crucially those entries are computed as
+    <em>differences of matrix entries</em>, so they stay proportional to θ instead of hiding inside
+    a 3. Feed both to <code>atan2</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \theta \;=\; \operatorname{atan2}\!\Big(\tfrac{1}{2}\big\|R - R^{\mathsf T}\big\|,\;\; \tfrac{1}{2}\big(\operatorname{tr} R - 1\big)\Big) \]</span>
+    <span class="eq-plain">theta = atan2( |R - R^T| / 2 , (trace(R) - 1) / 2 )</span>
+  </div>
+
+  <p>
+    Each half is accurate at one end and <code>atan2</code> takes whichever is carrying the
+    information. The blue curve in Figure 8 stays at or barely above <code>float</code> resolution
+    across five decades. And because <code>atan2</code>'s first argument is a magnitude, the result
+    lands in [0, π] — which is what "the <em>shortest</em> rotation carrying A onto B" means, and
+    why no sign is returned.
+  </p>
+
+  <p>
+    Both spellings are in <code>euler.hpp</code>. The textbook one is kept, is called by nothing,
+    and exists so that <code>verify_71</code> §F can compare against the real thing rather than
+    against a copy of it. §F.2 also sums 2,048 small steps along a path of known total length and
+    gets 120.0003°, which rules out a systematic bias that a per-step accuracy check would miss.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The pattern, met three times in one lesson</span>
+    <p>
+      <code>√(1 − sin²p)</code> in §5.5, <code>sqrt(1 - sin_pitch²)</code> in the extraction, and
+      <code>acos((tr − 1)/2)</code> here. All three are algebraically perfect. All three
+      <strong>subtract two nearly-equal numbers close to 1.0</strong> and destroy the small quantity
+      they exist to report. And all three are fixed the same way: get the small quantity from
+      something that <em>is</em> small — a <code>hypot</code> of two entries that are themselves
+      proportional to it, or the antisymmetric part whose entries are proportional to θ — rather
+      than by subtracting it out of a big one. When a formula's job is to report something near
+      zero, look at what it computes just before it returns, and ask whether that thing is ever
+      small.
+    </p>
+  </div>
+
+  <h2 id="impl">9. Implementation</h2>
+
+  <h3>9.1 The type, and what it does not have</h3>
+
+  <p>
+    Start with the three numbers.
+  </p>
+
+<pre><code class="lang-cpp">struct euler_angles
+{
+    float yaw   = 0.0f;   ///&lt; about world +Y — left and right
+    float pitch = 0.0f;   ///&lt; about the yawed +X — nose up and down
+    float roll  = 0.0f;   ///&lt; about the yawed-and-pitched +Z — banking
+};</code></pre>
+
+  <p>
+    The names are aviation's, not <code>x</code>/<code>y</code>/<code>z</code>, and that is worth a
+    sentence. <code>euler_angles{0.5f, 0.2f, 0.0f}</code> read as x, y, z tells you nothing about
+    which axis each number turns about — you would have to remember the convention. Read as yaw,
+    pitch, roll it tells you, and it tells you in a vocabulary the designer typing the numbers
+    already speaks.
+  </p>
+
+  <p>
+    There is no <code>order</code> field, and no template parameter for the convention. That is a
+    deliberate refusal. A library that supports all twenty-four conventions is a library in which
+    every caller must state one, which means every caller can state the wrong one, which is the
+    problem we are trying to remove. One convention, fixed on the Conventions page, is the whole
+    value proposition. If you ever genuinely need to read somebody else's, write a named function
+    that says whose it is — <code>rotation_from_aerospace_zyx</code> — so the conversion is visible
+    at the call site rather than hidden in an enum.
+  </p>
+
+  <h3>9.2 Forwards</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline mat3 rotation_from_euler(euler_angles e)
+{
+    return rotation_y(e.yaw) * rotation_x(e.pitch) * rotation_z(e.roll);
+}</code></pre>
+
+  <p>
+    One line, and §4.4's callout has already argued why it is not nine. Worth adding: this function
+    is the only place in the engine that knows the convention. Change this line and the extraction
+    below breaks its round-trip test immediately, which is the right coupling — a convention stated
+    in two places is a convention that can disagree with itself.
+  </p>
+
+  <h3>9.3 Backwards, and returning your own confidence</h3>
+
+  <p>
+    The extraction could return three floats. It returns a small struct instead:
+  </p>
+
+<pre><code class="lang-cpp">struct euler_extraction
+{
+    euler_angles angles{};
+    float cos_pitch = 1.0f;   // the conditioning of the split: 1 clean, 0 locked
+    bool  degenerate = false; // yaw and roll were not separable
+};</code></pre>
+
+  <p>
+    <code>cos_pitch</code> is computed inside the routine anyway, and every implementation of this
+    you will find elsewhere throws it away. It is the entire difference between "here are your three
+    angles" and "here are your three angles, and here is how much the last two of them mean". Lesson
+    6.18 learned this in a smaller key — a texture packer that computed its own occupancy and
+    discarded it, leaving no way to judge the result from outside — and the rule that came out of it
+    generalises: <strong>if a routine computes a quantity a caller would need in order to judge it,
+    return it.</strong>
+  </p>
+
+  <p>
+    The body is §6.1 and §6.2 in code. Two details are load-bearing and both are about the number
+    being small:
+  </p>
+
+<pre><code class="lang-cpp">const float sin_pitch = std::clamp(-r.at(1, 2), -1.0f, 1.0f);
+out.cos_pitch = std::hypot(r.at(0, 2), r.at(2, 2));
+out.degenerate = out.cos_pitch &lt; k_euler_lock_epsilon;
+out.angles.pitch = std::atan2(sin_pitch, out.cos_pitch);</code></pre>
+
+  <p>
+    The <code>clamp</code> is there because a matrix that has been through a few hundred
+    compositions is only a rotation to about 1e-6, and <code>asin(1.0000001)</code> is NaN — a value
+    that then propagates through the frame and turns into a vanished object three systems away. One
+    instruction removes the entire failure mode.
+  </p>
+
+  <p>
+    The <code>hypot</code> is §6.3, and the <code>atan2</code> on the last line is the same argument
+    a third time: <code>asin</code> has infinite slope at ±1, so it loses precision precisely where
+    the pitch is interesting. With an accurate cosine already in hand, <code>atan2</code> is free and
+    better behaved, and it returns the same branch — <code>atan2</code> of a non-negative second
+    argument lands in [−π/2, +π/2], which is <code>asin</code>'s range exactly, so §6.4's canonical
+    strip is unchanged.
+  </p>
+
+  <h3>9.4 The Jacobian</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline mat3 euler_rate_jacobian(euler_angles e)
+{
+    const mat3 after_yaw = rotation_y(e.yaw);
+    const mat3 after_pitch = after_yaw * rotation_x(e.pitch);
+    return mat3{vec3{0.0f, 1.0f, 0.0f}, after_yaw.c0, after_pitch.c2};
+}</code></pre>
+
+  <p>
+    Three columns, three axes, and the code says so: the yaw's axis is the world's, the pitch's is
+    the first column of the yaw frame, the roll's is the third column of the yaw-and-pitch frame.
+    Reading <code>.c0</code> and <code>.c2</code> off frames rather than multiplying by basis vectors
+    is not a micro-optimisation — it is the doc comment made executable, because
+    <a href="02-05-matrices.html">Lesson 2.5</a> established that a matrix's columns are where the
+    basis vectors land.
+  </p>
+
+  <p>
+    Nothing else was needed to make gimbal lock measurable. <code>determinant</code> was already
+    there.
+  </p>
+
+  <h3>9.5 The demo, and the one thing the public API could not do</h3>
+
+  <p>
+    <code>demos/gimbal/main.cpp</code> follows Lesson 5.12's rules: nothing includes an engine
+    internal, and where the public API falls short, the demo does the work in the open with a comment
+    saying so. There is exactly one such place.
+  </p>
+
+  <p>
+    <code>debug_lines</code> (Lesson 5.11) can draw a line, a ray, a box, a sphere and a wire mesh.
+    It cannot draw a <strong>circle in an arbitrary plane</strong>, which is what a gimbal ring is.
+    <code>sphere()</code> comes close — it is three great circles — but its circles are axis-aligned
+    in world space, and the entire point of a gimbal ring is that its plane has been carried by every
+    rotation outside it. So the demo has a fifteen-line <code>ring()</code> helper built from
+    <code>line()</code> calls, and the finding is recorded rather than quietly absorbed: an
+    <code>ellipse(centre, u, v, colour)</code> taking two in-plane vectors would cover rings, orbits,
+    cones and the field-of-view arcs a camera gizmo wants. Filed for Lesson 9.7, where the editor's
+    gizmos need exactly this.
+  </p>
+
+  <p>
+    Two decisions inside the demo are worth naming because both were bugs first.
+  </p>
+
+  <p>
+    <strong>The weak-axis arrow is not red.</strong> The first draft drew it in red, where it was
+    indistinguishable from the pitch ring it crosses — and worse, red <em>means</em> the x axis
+    course-wide (<a href="../conventions.html#colour">Conventions §10</a>), so a red arrow that is
+    not an x axis is a convention violation as well as a legibility bug. It is magenta, which the
+    engine's debug palette uses nowhere else.
+  </p>
+
+  <p>
+    <strong>The arrow is drawn at its true length, not normalised.</strong> It shows the rotation
+    the weakest knob combination actually produces, so it shrinks as you approach lock and vanishes
+    at it. A normalised arrow would still be pointing confidently somewhere at the exact moment the
+    claim is that it points nowhere.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">And one crash, for the record</span>
+    <p>
+      The first headless <code>--shot</code> run of this demo exited with signal 11 <em>after</em>
+      writing a correct PPM. A <code>--shot</code> run has no window, so ImGui has no context, and
+      <code>ImGui::Begin</code> on no context is a segfault rather than a no-op. <code>debug_ui</code>'s
+      own entry points are all safe when it never started — Lesson 5.11 made them so deliberately —
+      but a panel built by hand <em>between</em> those calls is not covered by that. The guard is
+      <code>if (ui_.running())</code>, and the reason it is worth a paragraph is the shape of the
+      failure: the program produced its output correctly and then crashed, so every artifact on disk
+      was right and the exit status was the only thing that said otherwise.
+    </p>
+  </div>
+
+  <h3>9.6 A lint that fired for real</h3>
+
+  <p>
+    Lesson 5.12 added a configure-time check to <code>engine/CMakeLists.txt</code>: glob every
+    public header, read the <code>#include</code> lines out of <code>engine/engine.hpp</code>, and
+    abort the configure if the umbrella is missing one. It was proved to work by deleting an include
+    and watching CMake stop.
+  </p>
+
+  <p>
+    This lesson is the first time it fired on a header somebody had actually just written:
+  </p>
+
+<pre class="shell"><code>CMake Error at engine/CMakeLists.txt:276 (message):
+  engine/include/engine/engine.hpp is missing public header(s):
+
+      engine/math/euler.hpp
+
+  It claims to list every public header (Lesson 5.12).  Add them, or add an
+  exception here with the reason written down.</code></pre>
+
+  <p>
+    That is the evidence 5.12 could not produce for itself. <code>engine.hpp</code> had gone seven
+    lessons accumulating fourteen unlisted headers because nothing ever failed; the first lesson
+    after the check exists, it could not go one. The general form is worth keeping: a rule you
+    maintain by remembering is a rule you will stop maintaining, on a schedule set by how often you
+    happen to re-read the file.
+  </p>

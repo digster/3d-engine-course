@@ -1,0 +1,174 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l85f11-t l85f11-d">
+  <title id="l85f11-t">The same two boxes walked from 100 m to 1000 km from the origin: the naive formulation's error tracks ulp(position), the relative one's does not move.</title>
+  <desc id="l85f11-d">A log-log chart of error in the reported distance against distance from the world origin. A dashed grey line shows one ulp of the position; a red line for the naive world-space formulation runs parallel to it, reaching 1.03e-2 m at 1000 km; a green line for the relative formulation stays flat near 1e-8 m throughout.</desc>
+  <defs>
+    <marker id="e-i-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l85f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">One pair of boxes, one fixed gap, walked away from the world origin.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+6
+0
+"
+ 
+y
+=
+"
+5
+4
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+5
+0
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+5
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<line x1="116" y1="262.0" x2="532" y2="262.0" class="grid" stroke-width="1.0"/>
+<text x="108" y="266.0" class="xs mono muted" text-anchor="end">1e-9</text>
+<line x1="116" y1="241.0" x2="532" y2="241.0" class="grid" stroke-width="1.0"/>
+<line x1="116" y1="220.0" x2="532" y2="220.0" class="grid" stroke-width="1.0"/>
+<text x="108" y="224.0" class="xs mono muted" text-anchor="end">1e-7</text>
+<line x1="116" y1="199.0" x2="532" y2="199.0" class="grid" stroke-width="1.0"/>
+<line x1="116" y1="178.0" x2="532" y2="178.0" class="grid" stroke-width="1.0"/>
+<text x="108" y="182.0" class="xs mono muted" text-anchor="end">1e-5</text>
+<line x1="116" y1="157.0" x2="532" y2="157.0" class="grid" stroke-width="1.0"/>
+<line x1="116" y1="136.0" x2="532" y2="136.0" class="grid" stroke-width="1.0"/>
+<text x="108" y="140.0" class="xs mono muted" text-anchor="end">1e-3</text>
+<line x1="116" y1="115.0" x2="532" y2="115.0" class="grid" stroke-width="1.0"/>
+<line x1="116" y1="94.0" x2="532" y2="94.0" class="grid" stroke-width="1.0"/>
+<text x="108" y="98.0" class="xs mono muted" text-anchor="end">1e-1</text>
+<text x="116.0" y="278" class="xs mono muted" text-anchor="middle">1e2</text>
+<text x="220.0" y="278" class="xs mono muted" text-anchor="middle">1e3</text>
+<text x="324.0" y="278" class="xs mono muted" text-anchor="middle">1e4</text>
+<text x="428.0" y="278" class="xs mono muted" text-anchor="middle">1e5</text>
+<text x="532.0" y="278" class="xs mono muted" text-anchor="middle">1e6</text>
+<path d="M 116.00,186.79 L 220.00,161.50 L 324.00,142.54 L 428.00,123.57 L 532.00,98.29" fill="none" stroke="#8f918a" stroke-width="1.6" stroke-dasharray="5 4"/>
+<circle cx="116.0" cy="186.8" r="2.8" fill="#8f918a"/>
+<circle cx="220.0" cy="161.5" r="2.8" fill="#8f918a"/>
+<circle cx="324.0" cy="142.5" r="2.8" fill="#8f918a"/>
+<circle cx="428.0" cy="123.6" r="2.8" fill="#8f918a"/>
+<circle cx="532.0" cy="98.3" r="2.8" fill="#8f918a"/>
+<path d="M 116.00,202.73 L 220.00,177.71 L 324.00,158.17 L 428.00,139.88 L 532.00,114.73" fill="none" stroke="#e05c5c" stroke-width="2.4"/>
+<circle cx="116.0" cy="202.7" r="2.8" fill="#e05c5c"/>
+<circle cx="220.0" cy="177.7" r="2.8" fill="#e05c5c"/>
+<circle cx="324.0" cy="158.2" r="2.8" fill="#e05c5c"/>
+<circle cx="428.0" cy="139.9" r="2.8" fill="#e05c5c"/>
+<circle cx="532.0" cy="114.7" r="2.8" fill="#e05c5c"/>
+<path d="M 116.00,226.21 L 220.00,226.16 L 324.00,242.77 L 428.00,228.50 L 532.00,252.38" fill="none" stroke="#5ac878" stroke-width="2.4"/>
+<circle cx="116.0" cy="226.2" r="2.8" fill="#5ac878"/>
+<circle cx="220.0" cy="226.2" r="2.8" fill="#5ac878"/>
+<circle cx="324.0" cy="242.8" r="2.8" fill="#5ac878"/>
+<circle cx="428.0" cy="228.5" r="2.8" fill="#5ac878"/>
+<circle cx="532.0" cy="252.4" r="2.8" fill="#5ac878"/>
+<text x="310.0" y="296" class="xs muted" text-anchor="middle">distance from the world origin (m)</text>
+<text x="70" y="76" class="xs muted" text-anchor="start">error in the reported distance (m)</text>
+<line x1="586.0" y1="90.0" x2="606.0" y2="90.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="614" y="94" class="xs" text-anchor="start">ulp(position)</text>
+<line x1="586.0" y1="107.0" x2="606.0" y2="107.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="614" y="111" class="xs" text-anchor="start">naive: WORLD support points</text>
+<line x1="586.0" y1="124.0" x2="606.0" y2="124.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="614" y="128" class="xs" text-anchor="start">relative: support from each</text>
+<text x="614" y="145" class="xs muted" text-anchor="start">shape's own centre, one delta</text>
+<text x="586" y="198" class="xs muted" text-anchor="start"></text>
+<text x="820" y="198" class="xs muted" text-anchor="end"></text>
+<line x1="586" y1="206.0" x2="826" y2="206.0" class="grid" stroke-width="1.0"/>
+<text x="586" y="222.0" class="xs" text-anchor="start">worst, relative</text>
+<text x="820" y="222.0" class="xs mono" text-anchor="end">1.07e-07 m</text>
+<text x="586" y="238.0" class="xs" text-anchor="start">worst, naive</text>
+<text x="820" y="238.0" class="xs mono" text-anchor="end">1.03e-02 m</text>
+<text x="586" y="254.0" class="xs" text-anchor="start">factor</text>
+<text x="820" y="254.0" class="xs mono" text-anchor="end">96,270×</text>
+<text x="20" y="330" class="xs" text-anchor="start">A box's support point is `centre + axes·s`, three additions. In WORLD space each rounds to half an ulp of the POSITION, and there are two</text>
+<text x="20" y="346" class="xs" text-anchor="start">support points per iteration. Taken RELATIVE they round to half an ulp of the SHAPE, and the one world-sized subtraction</text>
+<text x="20" y="362" class="xs" text-anchor="start">`b.origin − a.origin` is EXACT whenever the two are within a factor of two of each other — Sterbenz's lemma, and two things about to</text>
+<text x="20" y="378" class="xs" text-anchor="start">collide always are. The red line tracks ulp; the green one tracks nothing at all.</text>
+</svg>

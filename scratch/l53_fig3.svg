@@ -1,0 +1,54 @@
+<svg viewBox="0 0 720 352" role="img" aria-labelledby="l53f3-t l53f3-d">
+  <title id="l53f3-t">Where the default filtering comes from</title>
+  <desc id="l53f3-d">SDL's category list split into SDL's own categories and the five the engine adds above SDL_LOG_CATEGORY_CUSTOM, with a red band showing that everything SDL does not know defaults to error.</desc>
+  <defs>
+    <marker id="e-i-l53f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">SDL's own defaults do the filtering for us</text>
+<text x="20" y="38" class="xs muted" text-anchor="start">src/SDL_log.c, and the documented value of the SDL_LOGGING hint:  app=info, assert=warn, test=verbose, *=error</text>
+<rect x="20" y="62" width="300" height="26" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="170" y="79" class="xs mono t-inv" text-anchor="middle">SDL_LOG_CATEGORY_APPLICATION</text>
+<text x="332" y="79" class="xs" text-anchor="start">info  — a demo's SDL_Log prints</text>
+<text x="20" y="112" class="xs muted" text-anchor="start">SDL's own categories</text>
+<rect x="20" y="122" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="55" y="135" class="xs mono muted" text-anchor="middle">ERROR</text>
+<rect x="96" y="122" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="131" y="135" class="xs mono muted" text-anchor="middle">ASSERT</text>
+<rect x="172" y="122" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="207" y="135" class="xs mono muted" text-anchor="middle">SYSTEM</text>
+<rect x="248" y="122" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="283" y="135" class="xs mono muted" text-anchor="middle">AUDIO</text>
+<rect x="20" y="146" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="55" y="159" class="xs mono muted" text-anchor="middle">VIDEO</text>
+<rect x="96" y="146" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="131" y="159" class="xs mono muted" text-anchor="middle">RENDER</text>
+<rect x="172" y="146" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="207" y="159" class="xs mono muted" text-anchor="middle">INPUT</text>
+<rect x="248" y="146" width="70" height="18" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="283" y="159" class="xs mono muted" text-anchor="middle">GPU</text>
+<line x1="336" y1="112" x2="336" y2="176" class="grid" stroke-width="1"/>
+<text x="348" y="112" class="xs muted" text-anchor="start">SDL_LOG_CATEGORY_CUSTOM — and everything above it</text>
+<rect x="348" y="122" width="70" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="383" y="135" class="xs mono t-inv" text-anchor="middle">core</text>
+<rect x="424" y="122" width="70" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="459" y="135" class="xs mono t-inv" text-anchor="middle">platform</text>
+<rect x="500" y="122" width="70" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="535" y="135" class="xs mono t-inv" text-anchor="middle">gfx</text>
+<rect x="348" y="146" width="70" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="383" y="159" class="xs mono t-inv" text-anchor="middle">gpu</text>
+<rect x="424" y="146" width="70" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="459" y="159" class="xs mono t-inv" text-anchor="middle">asset</text>
+<rect x="20" y="188" width="678" height="26" rx="3" fill="#e05c5c"/>
+<text x="359" y="205" class="xs mono t-inv" text-anchor="middle">every category SDL does not know about  →  error</text>
+<line x1="20" y1="232" x2="700" y2="232" class="grid" stroke-width="1"/>
+<text x="20" y="252" class="xs t-hi" text-anchor="start">So moving the engine's messages off APPLICATION and onto our own categories</text>
+<text x="20" y="266" class="xs muted" text-anchor="start">makes the engine quiet by default. No configuration, no filter code, no wrapper.</text>
+<text x="20" y="280" class="xs muted" text-anchor="start"></text>
+<text x="20" y="294" class="xs" text-anchor="start">That is the strongest argument for using SDL's logger rather than wrapping it:</text>
+<text x="20" y="308" class="xs muted" text-anchor="start">a wrapper would have had to REIMPLEMENT this, and would have got a different answer.</text>
+<text x="20" y="322" class="xs muted" text-anchor="start">The engine's own diagnostics are one flag away: `--log platform=info`.</text>
+<text x="20" y="336" class="xs muted" text-anchor="start">That flag works on every program, because platform::start reads it.</text>
+</svg>

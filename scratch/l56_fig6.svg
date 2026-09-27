@@ -1,0 +1,52 @@
+<svg viewBox="0 0 720 300" role="img" aria-labelledby="l56f6-t l56f6-d">
+  <title id="l56f6-t">The measured cost of a virtual call, monomorphic versus polymorphic</title>
+  <desc id="l56f6-d">Two rows of five ratios: a monomorphic virtual call and a polymorphic one, at scene sizes from 4 to 100,000. They agree within 4% everywhere and are roughly constant at 1.5 to 1.7 times the cost of a direct call.</desc>
+  <defs>
+    <marker id="e-i-l56f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l56f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l56f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l56f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l56f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The cost of `virtual` — and the thing it is NOT.</text>
+<text x="24" y="56" class="xs" text-anchor="start">one implementation</text>
+<text x="24" y="70" class="xs muted" text-anchor="start">(perfectly predictable)</text>
+<text x="24" y="106" class="xs" text-anchor="start">two implementations</text>
+<text x="24" y="120" class="xs muted" text-anchor="start">(interleaved, unpredictable)</text>
+<text x="250" y="38" class="xs muted" text-anchor="middle">4</text>
+<rect x="214" y="47" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="250" y="62" class="xs mono" text-anchor="middle">1.55x</text>
+<rect x="214" y="97" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="250" y="112" class="xs mono" text-anchor="middle">1.49x</text>
+<text x="338" y="38" class="xs muted" text-anchor="middle">100</text>
+<rect x="302" y="47" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="338" y="62" class="xs mono" text-anchor="middle">1.55x</text>
+<rect x="302" y="97" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="338" y="112" class="xs mono" text-anchor="middle">1.56x</text>
+<text x="426" y="38" class="xs muted" text-anchor="middle">1,000</text>
+<rect x="390" y="47" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="426" y="62" class="xs mono" text-anchor="middle">1.55x</text>
+<rect x="390" y="97" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="426" y="112" class="xs mono" text-anchor="middle">1.53x</text>
+<text x="514" y="38" class="xs muted" text-anchor="middle">10,000</text>
+<rect x="478" y="47" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="514" y="62" class="xs mono" text-anchor="middle">1.57x</text>
+<rect x="478" y="97" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="514" y="112" class="xs mono" text-anchor="middle">1.57x</text>
+<text x="602" y="38" class="xs muted" text-anchor="middle">100,000</text>
+<rect x="566" y="47" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="602" y="62" class="xs mono" text-anchor="middle">1.70x</text>
+<rect x="566" y="97" width="72" height="20" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="602" y="112" class="xs mono" text-anchor="middle">1.68x</text>
+<line x1="24" y1="140" x2="696" y2="140" class="grid" stroke-width="1.2"/>
+<text x="24" y="160" class="xs t-bad" text-anchor="start">THEY ARE THE SAME.</text>
+<text x="150" y="160" class="xs" text-anchor="start">Within 4% at every size. Whatever `virtual` costs here, it is not branch misprediction —</text>
+<text x="24" y="176" class="xs" text-anchor="start">the CPU predicts an unpredictable indirect call about as well as a trivial one, because it is not the prediction that hurts.</text>
+<text x="24" y="206" class="xs t-hi" text-anchor="start">AND IT IS FLAT ACROSS N.</text>
+<text x="178" y="206" class="xs" text-anchor="start">1.55x at four objects, in L1, where there is no memory effect to have. So it is not</text>
+<text x="24" y="222" class="xs" text-anchor="start">the vtable load either. What is left is INLINING: the compiler cannot see through the call, so it cannot fuse,</text>
+<text x="24" y="238" class="xs" text-anchor="start">reorder or vectorise the sixteen stores of a matrix build across iterations.</text>
+<line x1="24" y1="254" x2="696" y2="254" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="272" class="xs muted" text-anchor="start">This is the number that most surprised the author, and it took removing a confound to get: an earlier version read only five</text>
+<text x="24" y="288" class="xs muted" text-anchor="start">of the sixteen matrix entries, which let every INLINED arm skip work the virtual one had to do. It read 3.4x. It was wrong.</text>
+</svg>

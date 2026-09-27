@@ -1,0 +1,66 @@
+<svg viewBox="0 0 720 500" role="img" aria-labelledby="l62f6-t l62f6-d">
+  <title id="l62f6-t">Energy conservation, measured</title>
+  <desc id="l62f6-d">Two bar charts. The raw Blinn-Phong lobe exceeds unit reflectance below shininess 12. On the engine's one-over-pi scale a white diffuse plus a white specular exceeds 1 at every shininess, from 1.0385 to 1.7333.</desc>
+  <defs>
+    <marker id="e-i-l62f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l62f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l62f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l62f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l62f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Energy conservation is a number you can compute, and this engine fails it in two different places.</text>
+<text x="20" y="50" class="xs muted" text-anchor="start">The cosˢ lobe with NO constant at all:</text>
+<line x1="250.0" y1="58" x2="250.0" y2="209" class="hi" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="254.0" y="50" class="xs t-hi" text-anchor="start">1.0 = all the light there is</text>
+<rect x="118" y="66" width="351.78000000000003" height="13" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="77" class="xs mono muted" text-anchor="end">shininess 1</text>
+<text x="510.98" y="77" class="xs mono t-bad" text-anchor="end">2.6650</text>
+<rect x="118" y="87" width="304.10159999999996" height="13" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="98" class="xs mono muted" text-anchor="end">shininess 2</text>
+<text x="510.98" y="98" class="xs mono t-bad" text-anchor="end">2.3038</text>
+<rect x="118" y="108" width="237.7584" height="13" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="119" class="xs mono muted" text-anchor="end">shininess 4</text>
+<text x="510.98" y="119" class="xs mono t-bad" text-anchor="end">1.8012</text>
+<rect x="118" y="129" width="164.35320000000002" height="13" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="140" class="xs mono muted" text-anchor="end">shininess 8</text>
+<text x="510.98" y="140" class="xs mono t-bad" text-anchor="end">1.2451</text>
+<rect x="118" y="150" width="125.39999999999999" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="161" class="xs mono muted" text-anchor="end">shininess 12</text>
+<text x="510.98" y="161" class="xs mono muted" text-anchor="end">0.9500</text>
+<rect x="118" y="171" width="101.3892" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="182" class="xs mono muted" text-anchor="end">shininess 16</text>
+<text x="510.98" y="182" class="xs mono muted" text-anchor="end">0.7681</text>
+<rect x="118" y="192" width="57.4728" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110" y="203" class="xs mono muted" text-anchor="end">shininess 32</text>
+<text x="510.98" y="203" class="xs mono muted" text-anchor="end">0.4354</text>
+<text x="118" y="229" class="xs t-bad" text-anchor="start">a “rough plastic” brighter than the lamp that lit it</text>
+<text x="20" y="257" class="xs muted" text-anchor="start">On the engine’s 1/π scale — white albedo PLUS a white highlight:</text>
+<line x1="328.0" y1="265" x2="328.0" y2="374" class="hi" stroke-width="1.6" stroke-dasharray="4 3"/>
+<rect x="118" y="273" width="210.0" height="13" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<rect x="328.0" y="273" width="153.993" height="13" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.65"/>
+<text x="110" y="284" class="xs mono muted" text-anchor="end">shininess 2</text>
+<text x="523.193" y="284" class="xs mono t-bad" text-anchor="end">1.7333</text>
+<rect x="118" y="294" width="210.0" height="13" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<rect x="328.0" y="294" width="120.393" height="13" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.65"/>
+<text x="110" y="305" class="xs mono muted" text-anchor="end">shininess 4</text>
+<text x="523.193" y="305" class="xs mono t-bad" text-anchor="end">1.5733</text>
+<rect x="118" y="315" width="210.0" height="13" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<rect x="328.0" y="315" width="83.223" height="13" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.65"/>
+<text x="110" y="326" class="xs mono muted" text-anchor="end">shininess 8</text>
+<text x="523.193" y="326" class="xs mono t-bad" text-anchor="end">1.3963</text>
+<rect x="118" y="336" width="210.0" height="13" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<rect x="328.0" y="336" width="29.106" height="13" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.65"/>
+<text x="110" y="347" class="xs mono muted" text-anchor="end">shininess 32</text>
+<text x="523.193" y="347" class="xs mono t-bad" text-anchor="end">1.1386</text>
+<rect x="118" y="357" width="210.0" height="13" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<rect x="328.0" y="357" width="8.084999999999999" height="13" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.65"/>
+<text x="110" y="368" class="xs mono muted" text-anchor="end">shininess 128</text>
+<text x="523.193" y="368" class="xs mono t-bad" text-anchor="end">1.0385</text>
+<rect x="118" y="390" width="28" height="9" rx="2" fill="#5082e6" fill-opacity="0.5" stroke="#5082e6" stroke-width="1"/>
+<text x="152" y="398" class="xs" text-anchor="start">diffuse</text>
+<rect x="226" y="390" width="28" height="9" rx="2" fill="#9b7ede" fill-opacity="0.65" stroke="#9b7ede" stroke-width="1"/>
+<text x="260" y="398" class="xs" text-anchor="start">specular</text>
+<rect x="24" y="418" width="672" height="62" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="440" class="sm t-hi" text-anchor="middle">The 1/π fixes the runaway and leaves the real defect standing: the two lobes are ADDED, with no coupling.</text>
+<text x="360.0" y="460" class="xs muted" text-anchor="middle">Lesson 6.4 fixes it with a mechanism rather than a constant — Fresnel decides what fraction bounces, and only the rest is left to scatter.</text>
+</svg>

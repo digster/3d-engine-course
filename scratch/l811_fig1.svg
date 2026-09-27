@@ -1,0 +1,80 @@
+<svg viewBox="0 0 980 366" role="img" aria-labelledby="f1-t f1-d">
+  <title id="f1-t">A Jacobian row, and the table of constraints built from it</title>
+  <desc id="f1-d">Left: a row of twelve numbers in four blocks, dotted with the two bodies' velocities to give dC/dt; the impulse Jᵀλ and the effective mass 1/(J M⁻¹ Jᵀ); and a worked example at a crate's corner giving 2.5 kg. Right: a table of the eight constraints in the lesson with their linear halves, angular halves and bounds.</desc>
+  <defs>
+    <marker id="e-i-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-purple-f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<text x="26" y="34" class="sm" text-anchor="start">A row is twelve numbers in four blocks</text>
+<rect x="26" y="56" width="92" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="72.0" y="77" class="xs mono" text-anchor="middle">linear_a</text>
+<text x="72.0" y="106" class="xs mono" text-anchor="middle">· v_a</text>
+<rect x="126" y="56" width="92" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="172.0" y="77" class="xs mono" text-anchor="middle">angular_a</text>
+<text x="172.0" y="106" class="xs mono" text-anchor="middle">· ω_a</text>
+<rect x="226" y="56" width="92" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="272.0" y="77" class="xs mono" text-anchor="middle">linear_b</text>
+<text x="272.0" y="106" class="xs mono" text-anchor="middle">· v_b</text>
+<rect x="326" y="56" width="92" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="372.0" y="77" class="xs mono" text-anchor="middle">angular_b</text>
+<text x="372.0" y="106" class="xs mono" text-anchor="middle">· ω_b</text>
+<text x="428" y="77" class="xs mono" text-anchor="start">= dC/dt</text>
+<text x="26" y="128" class="xs" text-anchor="start">Four dot products give the rate at which C changes.</text>
+<text x="26" y="156" class="xs" text-anchor="start">The impulse is Jᵀλ: a constraint does no work on any motion it allows,</text>
+<text x="26" y="172" class="xs" text-anchor="start">and only multiples of Jᵀ do no work on every V with J·V = 0. So a whole</text>
+<text x="26" y="188" class="xs" text-anchor="start">constraint answers with ONE number, λ, along a direction the row names.</text>
+<text x="26" y="220" class="xs" text-anchor="start">Applying Jᵀλ changes J·V by (J M⁻¹ Jᵀ)·λ — a 1×1 matrix, which is 8.9's</text>
+<text x="26" y="236" class="xs" text-anchor="start">effective mass seen from above: m_eff = 1 / (J M⁻¹ Jᵀ).</text>
+<text x="26" y="270" class="xs" text-anchor="start">Worked: a contact at a corner of a 10 kg, 0.5 m crate on a floor</text>
+<text x="38" y="288" class="xs mono" text-anchor="start">n = (0, 1, 0),  r_b = (0.25, −0.25, 0.25),  r_b × n = (−0.25, 0, 0.25)</text>
+<text x="38" y="304" class="xs mono" text-anchor="start">J M⁻¹ Jᵀ = 1/m + (r_b×n)·I⁻¹(r_b×n) = 0.1 + 0.125 / 0.4167 = 0.4</text>
+<text x="38" y="320" class="xs muted" text-anchor="start">m_eff = 2.5 kg — a quarter of the crate, because 3/4 of a push</text>
+<text x="38" y="336" class="xs muted" text-anchor="start">at a corner goes into turning it.</text>
+<text x="488" y="26" class="xs muted" text-anchor="start">Every constraint in this lesson, as one row</text>
+<text x="488" y="46" class="xs muted" text-anchor="start">constraint</text>
+<text x="684" y="46" class="xs muted" text-anchor="end">linear halves</text>
+<text x="812" y="46" class="xs muted" text-anchor="end">angular halves</text>
+<text x="890" y="46" class="xs muted" text-anchor="end">bounds on λ</text>
+<line x1="488" y1="54.0" x2="896" y2="54.0" class="grid" stroke-width="1.0"/>
+<text x="488" y="71.0" class="xs" text-anchor="start">contact normal</text>
+<text x="684" y="71.0" class="xs mono" text-anchor="end">−n,  n</text>
+<text x="812" y="71.0" class="xs mono" text-anchor="end">−r_a×n,  r_b×n</text>
+<text x="890" y="71.0" class="xs mono" text-anchor="end">[0, ∞)</text>
+<text x="488" y="88.0" class="xs" text-anchor="start">friction</text>
+<text x="684" y="88.0" class="xs mono" text-anchor="end">−t,  t</text>
+<text x="812" y="88.0" class="xs mono" text-anchor="end">−r_a×t,  r_b×t</text>
+<text x="890" y="88.0" class="xs mono" text-anchor="end">±μ·λ_n</text>
+<text x="488" y="105.0" class="xs" text-anchor="start">rod</text>
+<text x="684" y="105.0" class="xs mono" text-anchor="end">−u,  u</text>
+<text x="812" y="105.0" class="xs mono" text-anchor="end">−r_a×u,  r_b×u</text>
+<text x="890" y="105.0" class="xs mono" text-anchor="end">(−∞, ∞)</text>
+<text x="488" y="122.0" class="xs" text-anchor="start">rope</text>
+<text x="684" y="122.0" class="xs mono" text-anchor="end">u,  −u</text>
+<text x="812" y="122.0" class="xs mono" text-anchor="end">r_a×u,  −r_b×u</text>
+<text x="890" y="122.0" class="xs mono" text-anchor="end">[0, ∞)</text>
+<text x="488" y="139.0" class="xs" text-anchor="start">socket, per axis</text>
+<text x="684" y="139.0" class="xs mono" text-anchor="end">−e_k,  e_k</text>
+<text x="812" y="139.0" class="xs mono" text-anchor="end">−r_a×e_k,  r_b×e_k</text>
+<text x="890" y="139.0" class="xs mono" text-anchor="end">(−∞, ∞)</text>
+<text x="488" y="156.0" class="xs" text-anchor="start">hinge alignment</text>
+<text x="684" y="156.0" class="xs mono" text-anchor="end">0,  0</text>
+<text x="812" y="156.0" class="xs mono" text-anchor="end">−p_i,  p_i</text>
+<text x="890" y="156.0" class="xs mono" text-anchor="end">(−∞, ∞)</text>
+<text x="488" y="173.0" class="xs" text-anchor="start">hinge limit</text>
+<text x="684" y="173.0" class="xs mono" text-anchor="end">0,  0</text>
+<text x="812" y="173.0" class="xs mono" text-anchor="end">±a,  ∓a</text>
+<text x="890" y="173.0" class="xs mono" text-anchor="end">[0, ∞)</text>
+<text x="488" y="190.0" class="xs" text-anchor="start">motor</text>
+<text x="684" y="190.0" class="xs mono" text-anchor="end">0,  0</text>
+<text x="812" y="190.0" class="xs mono" text-anchor="end">−a,  a</text>
+<text x="890" y="190.0" class="xs mono" text-anchor="end">[−τh, τh]</text>
+<text x="488" y="224.5" class="xs muted" text-anchor="start">The top four are ONE shape — a point row, `point_row` in the code — differing</text>
+<text x="488" y="239.5" class="xs muted" text-anchor="start">only in their direction and their bounds. A rope is a contact turned inside</text>
+<text x="488" y="254.5" class="xs muted" text-anchor="start">out: the same row with the direction reversed. And friction is a motor whose</text>
+<text x="488" y="269.5" class="xs muted" text-anchor="start">target speed is zero.</text>
+</svg>

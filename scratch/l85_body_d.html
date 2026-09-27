@@ -1,0 +1,317 @@
+
+  <h2 id="implementation">8. Implementation</h2>
+
+  <p>
+    Three new files and a handful of edits. The order matters: the interface first, because it is
+    the piece that decides what the algorithm is allowed to know.
+  </p>
+
+  <h3>8.1 <code>convex.hpp</code>: a shape, reduced to one question</h3>
+
+  <p>
+    GJK needs to ask two shapes for support points and nothing else. The C++ question is how to
+    hand it two <em>different</em> shape types without teaching it what they are. Four answers were
+    available and three of them are wrong for this engine:
+  </p>
+
+  <ul>
+    <li><strong>A virtual base class.</strong> Ruled out by 5.2: no RTTI and no virtual dispatch in
+        the engine core.</li>
+    <li><strong>A template.</strong> GJK would live in a header and be instantiated once per
+        <em>pair</em> of shape types — ten instantiations for four shapes, growing as the square,
+        and a hundred-line algorithm recompiled into every translation unit that touches physics.</li>
+    <li><strong>A <code>switch</code> on <code>shape_kind</code>, like 8.4's.</strong> Workable,
+        and it means every new shape edits the algorithm. A hull is not a <code>shape_kind</code>
+        (§8.2 explains why), so this one cannot reach it at all.</li>
+    <li><strong>A function pointer plus a context pointer.</strong> Which is what 6.17's frame
+        graph chose, and chose with a number.</li>
+  </ul>
+
+  <pre><code class="lang-cpp">struct convex
+{
+    using support_fn = vec3 (*)(const void* data, vec3 d);
+
+    support_fn support = nullptr;
+    const void* data = nullptr;
+    vec3 origin{};
+
+    [[nodiscard]] vec3 world_support(vec3 d) const { return origin + support(data, d); }
+};</code></pre>
+
+  <p>
+    Twenty-four bytes, no allocation, no vtable, and one indirect call per support query. §I.3
+    prices it: <strong>1.908 ns direct against 1.906 ns through the pointer</strong>, with both
+    arms producing bit-identical floats. It is a tie, and the reason is structural rather than
+    lucky — within one query the target never changes, so the branch predictor learns it on the
+    first call and is right for the rest.
+  </p>
+
+  <p>
+    The adapters use a C++ feature worth naming the first time it appears: a
+    <strong>captureless lambda converts to a plain function pointer</strong>. A lambda with no
+    captures has no state, so the language lets it decay to
+    <code>vec3(*)(const void*, vec3)</code>, and the leading <code>+</code> forces that conversion:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline convex as_convex(const obb&amp; box)
+{
+    return convex{
+        +[](const void* data, vec3 d) { return support_local(*static_cast&lt;const obb*&gt;(data), d); },
+        &amp;box,
+        box.centre,
+    };
+}</code></pre>
+
+  <p>
+    That is how a modern C++ codebase writes a C-style thunk without writing one. And because
+    <code>convex</code> holds a pointer it does not own, it is a <strong>view</strong>, with the
+    same contract <code>std::span</code> has: it must not outlive what it views. The failure mode
+    is a temporary, and it is worth turning into a compile error rather than a Tuesday afternoon:
+  </p>
+
+  <pre><code class="lang-cpp">convex as_convex(obb&amp;&amp;) = delete;
+convex as_convex(engine::sphere&amp;&amp;) = delete;
+convex as_convex(capsule&amp;&amp;) = delete;
+convex as_convex(hull&amp;&amp;) = delete;</code></pre>
+
+  <p>
+    An rvalue argument prefers the <code>&amp;&amp;</code> overload, which is deleted, so
+    <code>as_convex(world_obb(s, p, q))</code> does not compile. An lvalue cannot bind to
+    <code>&amp;&amp;</code> at all, so the ordinary case is untouched. Four deleted functions, no
+    runtime cost, and a class of dangling-pointer bug that now names its own line number.
+  </p>
+
+  <h3>8.2 <code>support_local</code>, and why the centre is kept out of it</h3>
+
+  <p>
+    Notice that <code>convex::support</code> returns a point <em>relative to <code>origin</code></em>
+    rather than a world point. That split is numerical, and it is 8.4 §11's finding turned into an
+    interface. §12 measures what it buys; the short version is that a box's support point is
+    <code>centre + axes·s</code> — three additions — and doing them in world space rounds each one
+    to half an ulp of the <em>position</em>. GJK does two of those per iteration and then subtracts
+    them, so it would pay the cancellation once per step rather than once per query.
+  </p>
+
+  <p>
+    So <code>shape.cpp</code> grows a <code>support_local</code> for each primitive that never
+    forms the centre at all, and the old <code>support</code> becomes a one-line wrapper:
+  </p>
+
+  <pre><code class="lang-cpp">vec3 support_local(const obb&amp; box, vec3 d)
+{
+    const float sx = (dot(box.axes.c0, d) &gt;= 0.0f) ? box.half_extents.x : -box.half_extents.x;
+    const float sy = (dot(box.axes.c1, d) &gt;= 0.0f) ? box.half_extents.y : -box.half_extents.y;
+    const float sz = (dot(box.axes.c2, d) &gt;= 0.0f) ? box.half_extents.z : -box.half_extents.z;
+    return box.axes.c0 * sx + box.axes.c1 * sy + box.axes.c2 * sz;
+}
+
+vec3 support(const obb&amp; box, vec3 d)
+{
+    return box.centre + support_local(box, d);
+}</code></pre>
+
+  <p>
+    And <code>gjk.cpp</code> forms the one large subtraction exactly once, outside the loop:
+  </p>
+
+  <pre><code class="lang-cpp">const vec3 delta = b.origin - a.origin;</code></pre>
+
+  <h3>8.3 Two new shapes, to prove the point</h3>
+
+  <p>
+    An interface that claims to work on any convex shape should be handed a shape the previous
+    lesson could not test. <code>shape.hpp</code> gains two.
+  </p>
+
+  <p>
+    A <strong>capsule</strong> joins <code>shape_kind</code>, because it is fixed-size data — a
+    radius and a half-height — and because 8.3 already shipped <code>inertia_capsule</code>, so it
+    arrives able to simulate as well as collide. The half-height is half the <em>segment</em>, not
+    half the capsule, for the same reason <code>half_extents</code> are halves: it is what appears
+    in the support function.
+  </p>
+
+  <p>
+    A <strong>hull</strong> does not join <code>shape_kind</code>, and the reason is worth stating
+    because it is a physical-design decision rather than an oversight:
+  </p>
+
+  <pre><code class="lang-cpp">struct hull
+{
+    vec3 centre{};                       ///&lt; World space.
+    mat3 axes = mat3::identity();        ///&lt; Columns are the unit body axes in world space.
+    std::span&lt;const vec3&gt; points{};      ///&lt; Body axes, relative to `centre`.
+};</code></pre>
+
+  <p>
+    A <code>shape</code> is a 24-byte value that Module 9 will write to a save file, and a pointer
+    is not a value. A hull's geometry is an <em>asset</em>: loaded once, shared by every instance,
+    outliving any particular placement, exactly like a mesh. There is a second reason and it is
+    sharper — <code>inertia_of(shape)</code> would have to answer for a hull, and it cannot: the
+    tensor of a point set needs faces, a point set has none, and a function that returns a
+    plausible wrong answer is worse than one that does not exist. §14 says so out loud.
+  </p>
+
+  <p>
+    Its support function is a brute-force scan, and that is a decision rather than a placeholder:
+  </p>
+
+  <pre><code class="lang-cpp">vec3 support_local(const hull&amp; h, vec3 d)
+{
+    if (h.points.empty()) { return vec3{}; }
+
+    const vec3 dl = transpose(h.axes) * d;
+
+    const vec3* best = &amp;h.points[0];
+    float best_dot = dot(*best, dl);
+    for (const vec3&amp; p : h.points)
+    {
+        const float v = dot(p, dl);
+        if (v &gt; best_dot) { best_dot = v; best = &amp;p; }
+    }
+    return h.axes * *best;
+}</code></pre>
+
+  <p>
+    One change of basis, not one per vertex: <code>dot(axes·p, d) == dot(p, axesᵀ·d)</code> because
+    the axes are orthonormal and a rotation's inverse is its transpose — 2.5's identity, doing real
+    work. So the loop is <code>n</code> dot products rather than <code>n</code> matrix-vector
+    products, and the single winner is carried back out.
+  </p>
+
+  <h3>8.4 The loop, and the four ways it can stop</h3>
+
+  <p>
+    With all of that in place the search itself is short. The exits are the interesting part, and
+    there are four:
+  </p>
+
+  <ol>
+    <li><strong>The bounds met</strong> — the answer is proven to the tolerance. The normal
+        finish.</li>
+    <li><strong>The origin is enclosed</strong> — <code>reduce_simplex</code> reports containment
+        and no lower bound contradicts it. The shapes overlap, and 8.6 takes over from the
+        terminal simplex.</li>
+    <li><strong>No progress</strong> — either the support function returned a vertex the simplex
+        already has, or <code>|v|</code> failed to decrease. On a polytope the first is how the
+        search finishes <em>exactly</em>; on a curved shape both mean float has run out.</li>
+    <li><strong>The iteration cap</strong> — measured at zero firings in 200,000 capsule pairs
+        even at tolerance 1e−7, and still the only reason this function returns at all on a curved
+        shape.</li>
+  </ol>
+
+  <p>
+    The duplicate test in (3) deserves one note, because its threshold is <em>not</em> the user's
+    tolerance and the first draft made it so:
+  </p>
+
+  <pre><code class="lang-cpp">constexpr float k_duplicate_rel2 = 1e-12f;</code></pre>
+
+  <p>
+    A polytope's support function returns the <em>same vertex</em> when there is nothing better, so
+    an exact-repeat test is all that is needed. A capsule's moves continuously with the direction,
+    so two consecutive iterations produce points a fraction of a millimetre apart — "duplicates" by
+    a 1e−4 relative measure — and the loop exited before the bounds had converged. Measured:
+    capsule gaps reported with a certificate slack of <strong>2.4% where the tolerance promised
+    0.01%</strong>, on results that were not flagged as stalled and therefore looked trustworthy.
+    The threshold belongs at float's own resolution, where an exact repeat still trips it and a
+    genuine small step does not.
+  </p>
+
+  <h3>8.5 The façade</h3>
+
+  <p>
+    <code>collide.hpp</code> gains one overload, because a caller wants one function:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] separation collide(const convex&amp; a, const convex&amp; b);</code></pre>
+
+  <p>
+    It returns the same <code>separation</code> as every other test in that file, so a caller can
+    swap the specialised test for the general one without touching anything downstream. Three
+    fields are filled differently and the header states the contract: <code>axis_index</code> is
+    <code>−3</code> so <code>source_of</code> reports <code>witness</code>;
+    <code>axes_tested</code> is the GJK iteration count rather than a candidate count — same
+    meaning, different unit; and <code>depth</code> is <strong>exact when negative and a
+    placeholder when not</strong>. A gap is the true distance. An overlap reports <code>+0</code>,
+    because GJK cannot measure penetration: the origin is inside <code>A ⊖ B</code> and depth is a
+    distance to its <em>boundary</em>, which the search never looks at.
+  </p>
+
+  <p>
+    That is the honest state of the engine after this lesson, and naming it is the point. The
+    general test answers the question the specialised one could not — how far apart, exactly — and
+    cannot yet answer the one it could.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>One small thing the compiler could not have caught.</strong> The first draft gave GJK
+      <code>axis_index = −2</code>, which read naturally next to <code>−1</code> for radial. But
+      <code>collide.cpp</code> already had <code>constexpr int k_no_axis = −2</code>, and
+      <code>source_of</code> mapped it to <code>none</code> by <em>falling off the end</em> of the
+      function rather than through a named case. A sentinel only reachable by fallthrough is a
+      sentinel waiting to be reused by mistake. GJK is <code>−3</code>, and both values are named
+      cases now.
+    </p>
+  </div>
+
+  @@FIG_DEMO@@
+
+  <h2 id="flat">9. What 8.6 will actually be handed</h2>
+
+  <p>
+    Every description of the Expanding Polytope Algorithm — 8.6's subject — begins the same way:
+    <em>start from the tetrahedron GJK terminated with</em>. Before writing a lesson on that
+    premise it seemed worth checking that GJK produces one.
+  </p>
+
+  <p>
+    §C.4 takes the arrangement 8.4 §F already identified as the commonest thing a game ever
+    produces: two objects standing on the same floor, so their up axes are parallel whatever their
+    yaw. A hundred thousand such pairs, unit cubes, centres within 1.2 m of each other, so most of
+    them overlap.
+  </p>
+
+  @@FIG_FLAT@@
+
+  <p>
+    <strong>Not one tetrahedron. Zero, out of a hundred thousand</strong> — including all 65,633
+    pairs overlapping by more than 10 cm. Tilt one box by a single degree and 77,326 appear.
+  </p>
+
+  <p>
+    The cause is not subtle once you look for it. Both boxes have the same up axis, so their
+    <code>y</code> half-extents multiply the same world direction, and <code>support_local</code>
+    chooses the same sign on that axis for both — the tie-break is <code>&gt;= 0</code>, so a zero
+    component picks <code>+</code> deterministically for either box. Every vertex of the difference
+    set therefore comes out with
+  </p>
+
+  <p class="eq-plain">
+    w.y = pa.y − pb.y − delta.y = (+h) − (+h) − 0 = 0
+  </p>
+
+  <p>
+    exactly. All 100,000 simplices lay entirely in the plane <code>y = 0</code>, and a search
+    confined to a plane cannot build a tetrahedron. The difference set is perfectly
+    three-dimensional; it is the <em>search</em> that never leaves its equator, because every
+    direction it asks about is itself in that plane. Preset 3 of the demo shows it happening, one
+    keystroke at a time.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is 8.4 §F's finding from the other side.</strong> There, a shared axis made one
+      of the nine candidate cross products degenerate and the folklore about guarding it turned out
+      to be about a different formulation. Here, the same shared axis collapses the entire search
+      by a dimension. A shared axis is not a coincidence in a game — it is what "standing on the
+      floor" <em>means</em> — and every algorithm in this module has to survive it.
+    </p>
+  </div>
+
+  <p>
+    So 8.6 will have to build its own starting polytope rather than inherit one. That is what real
+    EPA implementations do, and it is usually presented as defensive programming for a rare case.
+    It is not rare. It is the default.
+  </p>

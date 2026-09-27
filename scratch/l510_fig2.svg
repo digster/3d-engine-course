@@ -1,0 +1,48 @@
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="l510f2-t l510f2-d">
+  <title id="l510f2-t">One binding rule covering buttons, key axes and analog axes</title>
+  <desc id="l510f2-d">Three actions: jump bound to one key, steer bound to two keys with opposite scales so they cancel, and look_x bound to a scaled mouse delta. All three use the same rule: sum the bindings' signed contributions.</desc>
+  <defs>
+    <marker id="e-i-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l510f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Every binding contributes a SIGNED value. An action's value is the sum. That is the whole rule.</text>
+<rect x="50" y="56" width="110" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="105" y="71" class="xs mono" text-anchor="middle">jump</text>
+<rect x="190" y="56" width="96" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="238" y="71" class="xs mono" text-anchor="middle">Space +1</text>
+<line x1="298" y1="67" x2="320" y2="67" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+<rect x="324" y="56" width="108" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="378" y="71" class="xs mono" text-anchor="middle">0 or 1</text>
+<text x="444" y="71" class="xs muted" text-anchor="start">ask held() / pressed()</text>
+<text x="50" y="94" class="xs muted" text-anchor="start">a button</text>
+<rect x="50" y="120" width="110" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="105" y="135" class="xs mono" text-anchor="middle">steer</text>
+<rect x="190" y="120" width="96" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="238" y="135" class="xs mono" text-anchor="middle">A -1</text>
+<rect x="296" y="120" width="96" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="344" y="135" class="xs mono" text-anchor="middle">D +1</text>
+<line x1="404" y1="131" x2="426" y2="131" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+<rect x="430" y="120" width="108" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="484" y="135" class="xs mono" text-anchor="middle">-1, 0 or +1</text>
+<text x="550" y="135" class="xs muted" text-anchor="start">ask value()</text>
+<text x="50" y="158" class="xs muted" text-anchor="start">an axis from two keys — and holding BOTH gives exactly 0</text>
+<rect x="50" y="184" width="110" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="105" y="199" class="xs mono" text-anchor="middle">look_x</text>
+<rect x="190" y="184" width="96" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="238" y="199" class="xs mono" text-anchor="middle">mouse dx x 0.5</text>
+<line x1="298" y1="195" x2="320" y2="195" class="hi" stroke-width="1.2" marker-end="url(#e-h-l510f2)"/>
+<rect x="324" y="184" width="108" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="378" y="199" class="xs mono" text-anchor="middle">unbounded</text>
+<text x="444" y="199" class="xs muted" text-anchor="start">ask value()</text>
+<text x="50" y="222" class="xs muted" text-anchor="start">an axis from a continuous source</text>
+<line x1="24" y1="254" x2="696" y2="254" class="grid" stroke-width="1.2"/>
+<text x="24" y="276" class="xs t-hi" text-anchor="start">THERE IS NO “BUTTON MODE” AND “AXIS MODE” TO CHOOSE BETWEEN,</text>
+<text x="24" y="292" class="xs muted" text-anchor="start">because the second is what the first already is once you allow a scale. A design with two kinds would have needed</text>
+<text x="24" y="306" class="xs muted" text-anchor="start">a rule for “what does A and D held together mean”. This one does not: -1 + 1 = 0, and nothing anywhere says so.</text>
+<rect x="60" y="326" width="600" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="360" y="341" class="xs mono" text-anchor="middle">held(a)  =  |value(a)| &gt;= 0.5</text>
+<text x="24" y="370" class="xs muted" text-anchor="start">The threshold is what makes an analog source have to be PUSHED rather than brushed. A key contributes 1, so it clears it easily.</text>
+</svg>

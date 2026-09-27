@@ -1,0 +1,792 @@
+  <!-- =================================================================
+       5 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">5</span>Implementation</h2>
+
+  <p>
+    Four filters and a chain that orders them. We build the CPU version first, as this module has
+    every lesson since 6.1 — not because the CPU version ships, but because it is the one you can
+    step through in a debugger and the one the harness can compare the shaders against.
+  </p>
+
+  <h3 id="i-knee">5.1 The knee, on its own</h3>
+
+  <p>
+    It gets its own function for the same reason <code>apply_tonemap</code> did in 6.12 and
+    <code>is_top_left</code> did in 2.4: a shape you can tabulate, plot and test in isolation is a
+    shape whose bugs have nowhere to hide.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/bloom.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">float bright_pass_weight(float luma, float threshold, float knee)
+{
+    if (!(luma &gt; 0.0f)) { return 0.0f; }
+
+    if (knee &lt;= 0.0f) { return (luma &gt; threshold) ? luma - threshold : 0.0f; }
+
+    if (luma &lt;= threshold - knee) { return 0.0f; }
+    if (luma &gt;= threshold + knee) { return luma - threshold; }
+
+    const float t = luma - threshold + knee;
+    return t * t / (4.0f * knee);
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>!(luma &gt; 0.0f)</code> rather than <code>luma &lt;= 0.0f</code>, because that spelling
+    also rejects a NaN. A NaN arriving from a shading term would otherwise propagate through every
+    level of the pyramid and out into the composite, turning a single bad fragment into a
+    screen-sized hole.
+  </p>
+
+  <p>
+    And the hard cut is reachable on purpose — <code>knee = 0</code> selects it. The same argument
+    <code>tonemap::clamp</code> made last lesson: a failure you can select is worth more than one
+    you have to describe, and §3.6's flicker is much more convincing when you can turn it on.
+  </p>
+
+  <h3 id="i-select">5.2 The bright pass: select on luminance, scale the colour</h3>
+
+  <p>
+    The weight function returns a <em>scalar</em>, and what to do with it is a real decision.
+  </p>
+
+  <p>
+    The obvious thing is to apply the threshold per channel — subtract <code>T</code> from red,
+    green and blue independently. Do that and a bright saturated orange has the same constant taken
+    off each channel, which moves it toward white: the filter would be desaturating the very thing
+    it is selecting. A fire would bloom pale.
+  </p>
+
+  <p>
+    So: compute the luminance, pass <em>that</em> through the knee, and scale the colour by the
+    ratio. Scaling by a scalar is a move along the ray from black, so the hue and saturation come
+    through untouched.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/bloom.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">            const float lum = luminance(c);
+            const float kept = bright_pass_weight(lum, s.threshold, s.knee);
+            const float scale = (lum &gt; 0.0f) ? kept / lum : 0.0f;
+
+            out[x] = {c.r * scale, c.g * scale, c.b * scale};</code></pre>
+  </figure>
+
+  <p>
+    The order of the four operations inside that loop is load-bearing and it is worth naming, since
+    the shader has to match it exactly:
+  </p>
+
+  <div class="eq-plain">average the 2×2 block  →  × exposure  →  clamp  →  threshold on luminance  →  scale</div>
+
+  <p>
+    Averaging <em>first</em> is half the firefly story (§5.5), the exposure is §3.7, and the clamp
+    has to come before the threshold or it would be clamping a value the threshold has already
+    reduced.
+  </p>
+
+  <h3 id="i-sample">5.3 The half-texel shift, which is the easiest thing here to get wrong</h3>
+
+  <p>
+    Every filter in this file is defined by where its taps land relative to texel <em>centres</em>,
+    so <code>sample_bilinear</code> works in texel coordinates where <code>(0.5, 0.5)</code> is the
+    centre of texel (0, 0) — Lesson 3.9's convention, and it matters more here than anywhere it has
+    appeared yet.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/bloom.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">    const float fx = x - 0.5f;
+    const float fy = y - 0.5f;
+
+    const int x0 = static_cast&lt;int&gt;(std::floor(fx));
+    const int y0 = static_cast&lt;int&gt;(std::floor(fy));</code></pre>
+  </figure>
+
+  <p>
+    Omit those two subtractions and every filter is offset by half a texel. One level of that is
+    invisible; six levels of it compound into a bloom that drifts diagonally away from the thing
+    that produced it, which looks like a coordinate-system bug three files away.
+  </p>
+
+  <p>
+    The addressing itself is two mappings that are inverses of each other, and the pyramid only
+    stays aligned because they are:
+  </p>
+
+  <div class="eq-plain">down:  source position = 2·dst + 1
+up:    source position = (dst + 0.5) × 0.5</div>
+
+  <h3 id="i-chain">5.4 The chain</h3>
+
+  <p>
+    Figure 2 is the shape; this is the nine lines that produce it.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/bloom.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">    bright_pass(src, py.level(0), s, exposure);
+    for (int i = 1; i &lt; n; ++i)
+    {
+        downsample(py.level(i - 1), py.level(i));
+    }
+
+    for (int i = n - 1; i &gt; 0; --i)
+    {
+        upsample_add(py.level(i), py.level(i - 1), s.radius);
+    }</code></pre>
+  </figure>
+
+  <p>
+    Nine lines. Note that the upsample loop <em>mutates</em> levels 0 to n−2, so after this call the
+    pyramid is no longer a mip chain of the bright pass — level <code>i</code> holds the sum of
+    levels <code>i</code> through <code>n−1</code>. That is exactly what makes level 0 the answer,
+    and it is why the chain cannot be run a second time without a fresh bright pass.
+  </p>
+
+  <p>
+    It also means the gain is not 1. Every level is added at full weight, so for a uniform field
+    level 0 comes out at exactly <code>levels × bright</code> — which is analytically checkable and
+    therefore checked:
+  </p>
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> A uniform field of 3.0, threshold 1.0, hard cut. Every
+      downsample of a constant is that constant; the tent sums to 1, so every upsample adds it
+      again. Level 0 must be <code>levels × (3 − 1)</code>.
+    </p>
+    <div class="eq-plain">2 levels →  4.0000   (predicted  4.0)
+4 levels →  8.0000   (predicted  8.0)
+6 levels → 12.0000   (predicted 12.0)</div>
+    <p>
+      Which is why <code>bloom_settings::intensity</code> defaults to <strong>0.04</strong> and is
+      documented as a tuned scalar rather than a percentage. Saying so is cheaper than leaving a
+      reader to discover that 0.04 is not four percent.
+    </p>
+  </div>
+
+  <h3 id="i-fireflies">5.5 Fireflies, and the trade the one-tap downsample forces</h3>
+
+  <p>
+    A specular highlight can be smaller than a pixel. When it is, it lands in one texel at an
+    enormous value, and that texel is then averaged, blurred and spread across a large area — so a
+    single sub-pixel sample, which appears and vanishes as the camera moves by a pixel, produces a
+    large, blinking glow. These are called <em>fireflies</em>, and the measurement is worse than the
+    description.
+  </p>
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> Drop one pixel of 6.12's polished metal (55,917) into an
+      otherwise ordinary 256×256 field sitting just over the threshold, and measure the finished
+      bloom's total energy with and without it.
+    </p>
+    <div class="eq-plain">without the firefly:  49,152
+with the firefly:    132,074
+
+one pixel in 65,536 — 0.00153% of the frame — contributes 62.8% of the bloom</div>
+    <p>
+      Nearly two thirds of the glow in the frame is produced by a single sample, and it blinks.
+    </p>
+  </div>
+
+  <p>
+    The fix is a ceiling on the bright pass, and it is unusually cheap precisely <em>because</em>
+    the firefly is so far out of family — a clamp sixty times above every legitimate value in the
+    frame still catches it. At <code>clamp_max = 100</code>: <strong>99.3%</strong> of the firefly's
+    contribution removed, and the honest bloom left within <strong>1.19%</strong> of where it was.
+  </p>
+
+  <p>
+    It is also a lie, and worth saying so: energy is being discarded. But there is a second,
+    sharper thing hiding here, and the harness found it.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>The clamp runs after the 2×2 average, and not by choice.</strong> §3.5's one-tap
+      downsample means the averaging happens inside the texture fetch — so by the time the shader
+      sees a number, the four source texels no longer exist separately. Clamping the
+      <em>texels</em> would leave the honest bloom within <strong>0.30%</strong> instead of 1.19%, a
+      factor of four better.
+    </p>
+    <p>
+      That gap is the price of the free box filter, and it is the real reason shipping engines use
+      Karis's 13-tap downsample. Not because it is a wider kernel —
+      <strong>because it is the only shape that can see what it is averaging.</strong> Exercise 3
+      builds it.
+    </p>
+  </div>
+
+  <h3 id="i-gpu">5.6 The GPU side, and what did <em>not</em> have to be built</h3>
+
+  <p>
+    Three fragment shaders, and <strong>no new vertex shader</strong>. That is the clearest evidence
+    that 6.12 drew its abstraction in the right place: every post pass wants the same three corners
+    from <code>fullscreen.vert.hlsl</code>, and only the question asked of each pixel differs.
+  </p>
+
+  <p>
+    The downsample is the whole argument of §3.5 as one line of HLSL:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">shaders/bloom_down.frag.hlsl</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-hlsl">    const float2 src_texel = floor(position.xy) * 2.0f + 1.0f;
+    return float4(src_colour.Sample(src_sampler, src_texel * texel_size).rgb, 1.0f);</code></pre>
+  </figure>
+
+  <p>
+    The upsample needs one thing the engine did not have: <strong>additive blending</strong>. Lesson
+    6.11 built <code>pipeline_desc::blend()</code> for the <code>over</code> operator; this is the
+    other classic one, and it is six fields to say "add".
+  </p>
+
+  <p>Three things are worth noticing about how much simpler <code>src + dst</code> is than <code>over</code>:</p>
+
+  <ul>
+    <li><strong>Alpha is not in the expression.</strong> <code>ONE, ONE</code> on both colour and
+        alpha, so 6.11's entire premultiplied-versus-straight distinction evaporates — a source
+        that adds light does not also subtract any.</li>
+    <li><strong>It is order-independent.</strong> Addition commutes, so additive geometry needs no
+        back-to-front sort. That is why <code>order_draws</code> exists for <code>over</code> and
+        not for this, and it is why particle systems reach for additive so often.</li>
+    <li><strong>On a float target it does not clip.</strong> The same add into an 8-bit UNORM target
+        saturates at 1 and stops being associative in practice. The upsample chain depends on that,
+        which makes it a dependency worth stating rather than assuming.</li>
+  </ul>
+
+  <p>
+    Using the hardware's blend rather than reading the destination in the shader is not a
+    micro-optimisation — it is the only legal option. A fragment shader that sampled the texture it
+    was writing would be performing a read-after-write with no defined ordering, which is why every
+    graphics API forbids binding a texture as both input and output of a pass.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>And one load op is load-bearing.</strong> The upsample blends <code>src + dst</code>,
+      so the destination's existing contents are an <em>operand</em>. Its pass therefore begins with
+      <code>SDL_GPU_LOADOP_LOAD</code>, not <code>DONT_CARE</code> — discard them and the additive
+      blend has nothing to add to, which silently turns the pyramid from a sum over every level into
+      just the widest one. The symptom is a bloom that is far too soft and far too dim, and it looks
+      like a tuning problem rather than a load op.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — THE STACK
+       ================================================================= -->
+  <h2 id="stack"><span class="num">6</span>The stack: who owns what</h2>
+
+  <p>
+    Lesson 6.12 shipped a header that said, in its own words:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>Deliberately not a "post-processing stack".</strong> It is one pass with one input,
+      and Lesson 6.13 is where the question "how do several of these compose, and who owns the
+      intermediate targets?" gets asked properly.
+    </p>
+  </blockquote>
+
+  <p>That is a promise on record in a public header, and this is where it comes due.</p>
+
+  <h3 id="s-passes">6.1 Eleven render passes, and why it cannot be fewer</h3>
+
+  <p>
+    A render pass writes one set of colour targets. The pyramid has six levels at six different
+    sizes, so the bloom is one bright pass, five downsamples and five upsamples:
+    <strong>2n − 1</strong> passes for n levels. There is no way to write two differently-sized
+    targets from one pass, and no way to read a texture in the same pass that writes it.
+  </p>
+
+  <p>
+    At eleven, the bloom issues more render passes than the entire rest of this engine's frame —
+    each one a begin/end pair, a pipeline bind, a sampler bind and a uniform push, for a draw of
+    three vertices. That number is the thing to carry into Lesson 6.17, and it is why frame graphs
+    exist.
+  </p>
+
+  <h3 id="s-own">6.2 The ownership rule, in one sentence each</h3>
+
+  <p>
+    Two types, and the split between them is the whole answer:
+  </p>
+
+  <ul>
+    <li><strong><code>gpu_bloom</code> owns the pyramid</strong>, because a pass that knows its own
+        intermediates is the only thing that can know their lifetimes. Nothing outside it needs
+        level 3; nothing outside it knows how many levels there are; every intermediate's life
+        begins and ends inside one <code>render</code> call.</li>
+    <li><strong><code>gpu_post_stack</code> owns what crosses <em>between</em> stages</strong> — the
+        float scene target that the scene pass writes and both later stages read, and the exposure
+        that the bright pass and the resolve must agree about.</li>
+  </ul>
+
+  <p>
+    The pyramid is allocated once and reused every frame, which is not an optimisation but the
+    reason the type is a class: six textures created and destroyed per frame at 60 Hz is 360 driver
+    calls a second, each a potential stall, and that cost does not appear in a profile as a single
+    hot line.
+  </p>
+
+  <h3 id="s-nobloom">6.3 "No bloom" has to be spelled as a 1×1 black texture</h3>
+
+  <p>
+    A small thing that teaches a real API constraint. SDL_GPU offers no way to <em>unbind</em> a
+    sampler, and a pipeline whose fragment shader declares <code>t1</code> must have something bound
+    there on every draw. So "bloom is off" cannot be expressed by omission. The options are:
+  </p>
+
+  <ul>
+    <li>a second tonemap pipeline compiled without the bloom fetch — doubling this pass's pipeline
+        count to save one texel of bandwidth;</li>
+    <li>a branch in the shader — a divergent fetch across a whole wavefront (Lesson 4.1) to save a
+        multiply on some fragments;</li>
+    <li>a 1×1 black texture and an intensity of zero.</li>
+  </ul>
+
+  <p>One texel wins, and <code>gpu_post_stack</code> keeps one.</p>
+
+  <h3 id="s-cannot">6.4 What this type cannot do, stated plainly</h3>
+
+  <p>
+    You cannot insert a stage without editing it. There is no list, no registry, no
+    <code>add_stage</code>, and no way for a stage to declare what it reads and writes so that
+    something else can compute the lifetimes.
+  </p>
+
+  <p>
+    With two stages, that is the right shape. A registry with two entries is an architecture
+    pretending to be a feature — the mistake Lesson 6.5 spent a section arguing against when it
+    declined to give <code>material</code> fields nothing read, and the one 6.12 declined to make
+    with a single stage.
+  </p>
+
+  <p>
+    It stops being the right shape somewhere around four or five stages, when intermediates start
+    outliving the stage that produced them and two stages want same-sized targets at different
+    times. At that point you need something that takes a declared read/write set per stage and
+    computes the allocation. That is a frame graph, and it is Lesson 6.17 — which is now carrying a
+    concrete number to justify itself rather than a feeling.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The pipeline count, again.</strong> 6.11 made it nine (three surface styles × three
+      blend styles). 6.12 added a resolve against a second colour format: ten. This lesson adds
+      three more — bright, downsample, and the additive upsample — for <strong>thirteen</strong>,
+      and two of those three differ from each other in nothing but their fragment shader.
+    </p>
+    <p>
+      That is the point at which enumerating by hand stops being obviously right. A pipeline
+      <em>cache</em> — build the state, hash it, create on a miss — costs a hash function and a map,
+      and stops the count being anybody's problem. We still enumerate, because thirteen is
+      countable and because <code>create_ms()</code> can then tell you what each one cost. Note
+      where the pressure is coming from, though: it is not the number of effects, it is that every
+      effect multiplies against every existing axis.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">7</span>Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>status</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/bloom.hpp</code></td><td>new</td>
+          <td>settings, the pyramid, and the four filters</td></tr>
+      <tr><td><code>engine/src/gfx/bloom.cpp</code></td><td>new</td>
+          <td>the knee, bilinear sampling, and the chain</td></tr>
+      <tr><td><code>shaders/bloom_bright.frag.hlsl</code></td><td>new</td>
+          <td>exposure, clamp, soft knee, and the halving</td></tr>
+      <tr><td><code>shaders/bloom_down.frag.hlsl</code></td><td>new</td>
+          <td>one bilinear tap per texel</td></tr>
+      <tr><td><code>shaders/bloom_up.frag.hlsl</code></td><td>new</td>
+          <td>the 1-2-1 tent, added by the hardware</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_post.hpp</code></td><td>modified</td>
+          <td><code>gpu_bloom</code>, <code>gpu_post_stack</code>, and the resolve's second input</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_post.cpp</code></td><td>modified</td>
+          <td>three pipelines and eleven render passes</td></tr>
+      <tr><td><code>engine/include/engine/gfx/hdr.hpp</code></td><td>modified</td>
+          <td><code>resolve</code> composites the bloom before the curve</td></tr>
+      <tr><td><code>engine/src/gfx/hdr.cpp</code></td><td>modified</td>
+          <td>the composite, and the last upsample</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_pipeline.hpp</code></td><td>modified</td>
+          <td><code>blend_add</code> — the other classic operator</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_pipeline.cpp</code></td><td>modified</td>
+          <td>six fields to say "add"</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td>the bloom's two blocks, and <code>bloom_intensity</code></td></tr>
+      <tr><td><code>shaders/tonemap.frag.hlsl</code></td><td>modified</td>
+          <td>a second texture, composited before the curve</td></tr>
+      <tr><td><code>cmake/Shaders.cmake</code></td><td>modified</td>
+          <td>records the shader output FILES, not just the targets</td></tr>
+      <tr><td><code>cmake/EngineHelpers.cmake</code></td><td>modified</td>
+          <td>the shader copy stops being a <code>POST_BUILD</code> command</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code></td><td>modified</td>
+          <td><code>bloom.cpp</code> and the three new shaders</td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>--bloom</code> and its four knobs</td></tr>
+      <tr><td><code>scratch/verify_613.cpp</code></td><td>new</td>
+          <td>39 checks across ten sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/bloom.hpp@@
+  @@LISTING:engine/src/gfx/bloom.cpp@@
+  @@LISTING:shaders/bloom_bright.frag.hlsl@@
+  @@LISTING:shaders/bloom_down.frag.hlsl@@
+  @@LISTING:shaders/bloom_up.frag.hlsl@@
+  @@LISTING:engine/include/engine/gfx/gpu_post.hpp@@
+  @@LISTING:engine/src/gfx/gpu_post.cpp@@
+  @@LISTING:shaders/tonemap.frag.hlsl@@
+  @@LISTING:scratch/verify_613.cpp@@
+
+  <!-- =================================================================
+       8 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">8</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell">cmake -S . -B build
+cmake --build build -j8
+sh scratch/build_verify_613.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell">cmake -S . -B build
+cmake --build build --config Debug -j8
+:: the harness is a single translation unit; build it the same way as 6.12's,
+:: substituting 613 for 612 throughout</code></pre>
+  </figure>
+
+  <h3>What the harness should say</h3>
+
+  <div class="eq-plain">39 checks, 0 failures</div>
+
+  <p>and, in §J, the row that is the point of the whole exercise:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_613 §J</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-shell">  a uniform field, through the whole stack:
+    ambient  intensity    GPU   CPU   derived
+        3.0       0.05    251   251       251
+        3.0       0.20    253   253       253
+        6.0       0.05    255   255       255
+        0.5       0.20    206   206       206</code></pre>
+  </figure>
+
+  <p>
+    Three columns, not two. The GPU's eleven-pass chain, the CPU's four loops, and a derivation on
+    paper that says level 0 of a uniform field is exactly <code>levels × bright</code>. Two
+    implementations agreeing could both be wrong the same way; three, one of which never ran any
+    code, cannot.
+  </p>
+
+  <p>
+    The last row is the one that proves the threshold works: a field at 0.5 is below it, so the
+    bright pass keeps nothing and the bloom is <em>exactly</em> zero — the same code as no bloom at
+    all. A bloom that tints a dark scene is a threshold applied in the wrong space.
+  </p>
+
+  <h3>What to look at</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">the demo</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-shell"># a polished material, so there is something above the threshold to find
+./build/demos/gltf_view --tonemap aces --polish 0.10
+./build/demos/gltf_view --tonemap aces --polish 0.10 --bloom
+
+# and the knobs
+./build/demos/gltf_view --tonemap aces --polish 0.10 --bloom --bloom-intensity 0.15
+./build/demos/gltf_view --tonemap aces --polish 0.10 --bloom --bloom-levels 2
+./build/demos/gltf_view --tonemap aces --polish 0.10 --bloom --bloom-clamp 0</code></pre>
+  </figure>
+
+  <p>
+    <strong>Expected result.</strong> The demo reports what it found, and the two numbers to put
+    beside each other are these:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">gltf_view --polish 0.10 --bloom</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-shell">  hdr           : max channel 1921.7646 (10.9 stops), max luminance 1866.6569
+  over the lid  : 69 of 129600 pixels (0.05%) have a channel above 1
+  bloom         : 6 levels from 240x135, 43048 texels (0.49 MB as floats),
+                  threshold 1.00 knee 0.50 intensity 0.040 clamp 100
+  bloom energy  : 2311.5 in level 0</code></pre>
+  </figure>
+
+  <p>
+    <strong>Sixty-nine pixels</strong> were above the lid. Difference the two screenshots and
+    <strong>64,015 pixels</strong> — 49% of the frame — have changed by at least one code, 3,999 of
+    them by sixteen or more.
+  </p>
+
+  <p class="lede">
+    Sixty-nine pixels of information became sixty-four thousand pixels of picture. That is the
+    change of variable, in the engine's own demo.
+  </p>
+
+  <p>
+    Then turn the clamp off with <code>--bloom-clamp 0</code> and watch the glow around the sharpest
+    highlight jump in brightness as the model turns. That is the firefly of §5.5, live.
+  </p>
+
+  <!-- =================================================================
+       9 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">9</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>The bloom is far too soft and far too dim, and no intensity fixes it</h3>
+    <p><strong>Symptom.</strong> A vague wash instead of a glow. Raising <code>intensity</code>
+       brightens the whole frame without sharpening the glow.</p>
+    <p><strong>Cause.</strong> The upsample pass began with <code>DONT_CARE</code> instead of
+       <code>LOAD</code>. Additive blending makes the destination an operand, so discarding it
+       leaves each level holding only the level above — the sum over levels collapses to the widest
+       one alone.</p>
+    <p><strong>Fix.</strong> <code>ci.load_op = SDL_GPU_LOADOP_LOAD</code> on the upsample passes
+       only. Confirm it by checking the gain: a uniform field should give
+       <code>levels × bright</code> at level 0, and a broken chain gives <code>2 × bright</code>
+       regardless of level count.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The glow drifts diagonally away from what produced it</h3>
+    <p><strong>Symptom.</strong> The bloom is offset down and to the right, and the offset grows
+       with the level count.</p>
+    <p><strong>Cause.</strong> A missing half-texel shift, or a downsample and upsample whose
+       mappings are not inverses. Each level contributes half a texel of error and they accumulate
+       in the same direction.</p>
+    <p><strong>Fix.</strong> The two mappings must be <code>2·dst + 1</code> going down and
+       <code>(dst + 0.5) × 0.5</code> coming back up. Test with a single bright pixel in a black
+       buffer: the glow's centre of mass must land on the pixel that produced it.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Every glow has a flat white core</h3>
+    <p><strong>Symptom.</strong> The bloom looks like a sticker rather than light, and the core
+       grows with the source's brightness.</p>
+    <p><strong>Cause.</strong> The composite happened after the tonemap curve (§3.8). The curve's
+       output is already in [0, 1], so the addition lands above 1 and the encode clips it.</p>
+    <p><strong>Fix.</strong> Composite in linear light, before the curve. Measured: 324 clipped
+       pixels the wrong way around against 32 the right way.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The bloom turns itself off indoors</h3>
+    <p><strong>Symptom.</strong> A dim scene viewed at a high exposure looks bright on screen and
+       blooms nothing; the same geometry under a bright sun blooms everywhere.</p>
+    <p><strong>Cause.</strong> The threshold is being applied to scene-referred values instead of
+       exposure-corrected ones (§3.7).</p>
+    <p><strong>Fix.</strong> Multiply by the exposure in the bright pass, and pass the
+       <em>same</em> number to the resolve. <code>gpu_post_stack::resolve_into</code> hands both the
+       same struct field precisely so they cannot drift.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The bloom is subtly blocky at every scale</h3>
+    <p><strong>Symptom.</strong> Soft square edges in the glow, especially while the camera moves.</p>
+    <p><strong>Cause.</strong> The pyramid sampler is <code>filter::nearest</code>. §3.5's identity
+       requires bilinear filtering — the hardware is computing the box average, and a nearest tap
+       turns every downsample into a point decimation.</p>
+    <p><strong>Fix.</strong> Linear, clamp-to-edge. This is a good example of a bug that does not
+       announce itself: five more levels of blurring follow, so the result still <em>looks</em>
+       blurry. It just aliases.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>You edit a shader, rebuild, and the program behaves exactly as before</h3>
+    <p><strong>Symptom.</strong> The build succeeds, the new HLSL is genuinely compiled and sitting
+       in <code>build/shaders/</code>, and the running program uses the old one. Nothing reports
+       anything.</p>
+    <p><strong>Cause.</strong> This one cost real time while writing this lesson, and it is a
+       general CMake trap rather than a graphics one. The copy that puts compiled shaders beside
+       each executable was an <code>add_custom_command(TARGET x POST_BUILD ...)</code>, and a
+       <code>POST_BUILD</code> command runs only when <em>its target</em> is rebuilt. Change only a
+       shader and no executable has any reason to relink — so the copy never fires, and every
+       program keeps the shader it was last linked beside.</p>
+    <p><strong>Fix.</strong> Make the copy a command whose <code>OUTPUT</code> is a stamp file and
+       whose <code>DEPENDS</code> are the compiled shader <em>files</em>, wrapped in a target the
+       executable depends on. Now a changed shader makes the stamp stale, which makes the copy run,
+       which happens <em>before</em> the executable is considered built rather than after. The
+       diagnosis that found it: the deployed <code>.msl</code> was a different size from the
+       canonical one — so when a GPU result disagrees with everything else, check that the binary
+       on disk is the one you think you compiled.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">10</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>10.1 — Find the knee you actually want <span class="tag">guided</span></h3>
+    <p>
+      Run the demo at <code>--bloom-threshold</code> values of 0.5, 1.0 and 2.0 with
+      <code>knee</code> at 0 and at 0.5 (add a <code>--bloom-knee</code> flag; it is four lines
+      beside the others). Predict, before running, which combination will flicker most as the model
+      turns, and why.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The flicker comes from pixels crossing the threshold, so it is worst where the image has
+        the most area at luminances near <code>T</code>. A low threshold puts <code>T</code> in the
+        middle of a large smooth gradient; a high one puts it out among the isolated highlights.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>10.2 — Measure the tail yourself <span class="tag">guided</span></h3>
+    <p>
+      Re-run §E's measurement with 3, 4 and 8 levels and record the log-log slope at r = 16 each
+      time. At what level count does the inverse-square tail appear, and where does the cliff move?
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        The tail needs at least three levels to be a power law at all — two Gaussians do not make a
+        geometric series. The cliff sits at roughly 2<sup>n</sup> half-resolution texels, so each
+        extra level moves it out by an octave for a cost of a quarter of the previous level.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>10.3 — Karis's 13-tap downsample <span class="tag">engine challenge</span></h3>
+    <p>
+      Replace <code>bloom_down.frag.hlsl</code> with the 13-tap kernel from <em>Next Generation
+      Post Processing in Call of Duty: Advanced Warfare</em>: four 2×2 groups plus a centre group,
+      each group averaged and then the five group averages combined with weights (0.125, 0.125,
+      0.125, 0.125, 0.5). Then add the <em>partial Karis average</em> — weight each group by
+      <code>1 / (1 + luma)</code> before combining — and remove <code>clamp_max</code> entirely.
+    </p>
+    <p>
+      Measure the firefly test from §G with each version. You should be able to get below the
+      0.30% that §G says a per-texel clamp would achieve, because a weighted average discards less
+      than a truncation does. Mirror it in <code>engine::downsample</code> and confirm §J still
+      agrees to the code.
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>10.4 — Make the kernel resolution-independent <span class="tag">guided</span></h3>
+    <p>
+      The bloom's radius is currently fixed in <em>pixels</em>, so the same scene blooms half as far
+      across the frame at 4K as at 1080p. Scale <code>levels</code> (or <code>radius</code>) with
+      the frame height so the glow covers a constant <em>fraction</em> of the image, and say which
+      of the two you chose and why.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        <code>levels</code> moves the reach in octaves, so it is the coarse control and it changes
+        cost; <code>radius</code> is continuous but widening it too far makes the pyramid's own
+        block structure visible as soft square edges. Doubling the resolution wants exactly one more
+        level, which is a hint about which knob the geometry prefers.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>10.5 — Lens dirt <span class="tag">engine challenge</span></h3>
+    <p>
+      Real lens scatter is not isotropic: it picks up the texture of whatever is on and in the
+      glass. Multiply the bloom by a screen-space "dirt" texture during the composite in
+      <code>tonemap.frag.hlsl</code>, so that a bright light reveals smears and specks. One texture
+      binding, one multiply.
+    </p>
+    <p>
+      Then answer the design question the result raises: the dirt is fixed in <em>screen</em> space
+      while the bloom moves with the scene, so the smears do not move with the camera. Is that
+      correct (the dirt really is on the lens) or wrong (it reads as a post-process rather than as
+      optics)? Both answers are defensible; say which you chose and what would change your mind.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       11 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">11</span>Recap &amp; next</h2>
+
+  <p>The engine can now do something it could not do an hour ago, and it is worth stating precisely.</p>
+
+  <p>
+    Lesson 6.12 gave it a buffer that can <em>hold</em> a value fifteen stops above white. This
+    lesson gives it a way to <em>show</em> one — not by finding a cleverer curve, which we proved
+    cannot work, but by changing what carries the information. A value the display cannot put in a
+    pixel's intensity goes into the area of the glow around it, and over three decades that
+    conversion is linear to within 8.6%.
+  </p>
+
+  <p>Along the way, four things worth keeping:</p>
+
+  <ul>
+    <li><strong>The pyramid is not a cheap approximation.</strong> It is a sum of Gaussians whose
+        widths double, whose envelope is an inverse-square tail, and over one octave it decays
+        sixty-seven times more gently than the single Gaussian it supposedly approximates. Cheaper
+        <em>and</em> closer to the physics.</li>
+    <li><strong>Both of the bloom's filters were derived rather than chosen.</strong> One bilinear
+        tap is a 2×2 box average; a box convolved with a box is the 1-2-1 tent. Neither was picked
+        for looking right.</li>
+    <li><strong>Every threshold needs a knee, and the knee has exactly one form.</strong> Three
+        continuity conditions, three coefficients, one quadratic — and matching the <em>slope</em>
+        is what stops the flicker, not matching the value.</li>
+    <li><strong>Ownership follows lifetime.</strong> A pass that knows its own intermediates owns
+        them; the stack owns only what crosses between stages. That answer is correct at two stages
+        and will stop being correct at five.</li>
+  </ul>
+
+  <p>
+    And one number to carry forward: <strong>eleven render passes</strong>, for one effect, in an
+    engine whose entire scene is a handful. Lesson 6.17's frame graph now has a concrete problem to
+    solve rather than a feeling.
+  </p>
+
+  <p>
+    <strong>Next</strong> is Lesson 6.14, antialiasing — which is the same question this lesson
+    asked, rotated ninety degrees. Here we had more <em>range</em> than the display could carry and
+    spent area to fix it. There we have more <em>detail</em> than the sample grid can carry, and the
+    pixel grid is once again the thing that cannot be enlarged. The bloom's edges, incidentally, are
+    about to become the smoothest thing in the frame.
+  </p>
+
+  <!-- =================================================================
+       12 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">12</span>Further reading</h2>
+
+  <ul>
+    <li><strong>Jorge Jimenez, <em>Next Generation Post Processing in Call of Duty: Advanced
+        Warfare</em></strong> (SIGGRAPH 2014 Courses). The source of the progressive
+        downsample/upsample bloom used here, and of the 13-tap kernel in Exercise 10.3. The single
+        most useful reference for this lesson.</li>
+    <li><strong>Brian Karis, <em>Tone mapping</em> and the Unreal Engine bloom notes</strong>. The
+        partial-Karis-average firefly fix, and the argument for dropping the threshold entirely in
+        favour of convolution bloom.</li>
+    <li><strong>Vos &amp; van den Berg, <em>Report on disability glare</em></strong> (CIE 135/1,
+        1999). Where the <code>1/θ²</code> glare PSF comes from. Worth skimming to see how much
+        wider real glare is than anything a renderer does.</li>
+    <li><strong>Spencer, Shirley, Zimmerman &amp; Greenberg, <em>Physically-Based Glare Effects for
+        Digital Images</em></strong> (SIGGRAPH 1995). The paper that brought the measured PSF into
+        rendering, including the ciliary corona and lenticular halo we do not model.</li>
+    <li><strong>Krzysztof Narkowicz, <em>ACES Filmic Tone Mapping Curve</em></strong> (2015). The
+        five constants §1 solved for the saturation point of.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th ed., §12.3 (Lens Flare and Bloom) and
+        §5.4.2</strong>. The standard textbook treatment, and good on the optics we skip.</li>
+    <li><strong>Burley, <em>Filtering in a Production Renderer</em></strong> — for the general
+        principle behind §3.4: knowing which filter you are <em>already</em> applying before
+        choosing another.</li>
+  </ul>

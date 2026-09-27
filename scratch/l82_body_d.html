@@ -1,0 +1,328 @@
+  <h2 id="implementation">10. The implementation</h2>
+
+  <p>
+    Everything above is one header and one source file. They are short, and the interesting content
+    is in the decisions rather than the arithmetic, so this section walks the four that are not
+    obvious from reading the code.
+  </p>
+
+  <h3>10.1 A body <em>has</em> a motion; it is not one</h3>
+
+<pre><code class="lang-cpp">struct rigid_body
+{
+    motion state{};          // 8.1's position + velocity, in WORLD space
+    vec3 force{};            // newtons, cleared by step()
+    float inv_mass = 1.0f;   // 1/kg; 0 means immovable
+    float damping = 0.0f;    // 1/s, velocity-space, MASS-INDEPENDENT
+    float gravity_scale = 1.0f;
+    body_kind kind = body_kind::dynamic;
+};</code></pre>
+
+  <p>
+    8.1's header promised this in as many words, and it is composition doing a real job rather than
+    an aesthetic preference. Every function in <code>integrate.hpp</code> — all three rules, both drag
+    helpers, all four diagnostics — takes a <code>motion&amp;</code>, and none of them has to learn
+    what a body is. That is what lets §5's harness step a bare <code>motion</code> beside a
+    <code>rigid_body</code> and compare the two bit for bit, which would have been impossible if mass
+    had been added by widening the struct.
+  </p>
+
+  <p>
+    <code>gravity_scale</code> is the one field with no physics in it, and it is here because every
+    engine ships it: a balloon rises, a boss's hammer falls harder than it should because that is what
+    makes it feel heavy, a projectile arcs on a curve an artist chose. It multiplies the world
+    gravity and nothing else, which is what distinguishes it from the mistake of editing the mass to
+    get the same visual result — editing the mass also changes how the body responds to every
+    <em>other</em> force, and to every contact from 8.9 onward.
+  </p>
+
+  <h3>10.2 The order of operations inside <code>step</code></h3>
+
+<pre><code class="lang-cpp">const vec3 acceleration = (b.inv_mass &gt; 0.0f)
+                        ? (b.force * b.inv_mass + gravity_ * b.gravity_scale)
+                        : vec3{};
+
+integrate(b.state, acceleration, h, rule_);
+if (b.damping &gt; 0.0f) { apply_drag(b.state, b.damping, h); }
+
+b.force = vec3{};</code></pre>
+
+  <p>
+    Four things in four lines, each settled by a section above. The accumulator is divided by the
+    mass <em>once</em> (§3). Gravity is added afterwards, as the acceleration it already is, which is
+    15% cheaper and exact by construction (§5). The body is advanced by 8.1's rule, unchanged and
+    unlitigated — 8.1 settled that semi-implicit Euler is the default and why, and this lesson does
+    not reopen it. And the force is cleared <em>last</em>, so a tool between two steps can still see
+    what produced the state it is looking at.
+  </p>
+
+  <p>
+    The damping is applied <strong>after</strong> the integration rather than folded into the
+    acceleration, and that is 8.1 §8 rather than a preference: <code>a = −kv</code> is not a force
+    derived from a potential, so feeding it through a symplectic rule gets you plain explicit Euler's
+    stability limit on it — <code>h &lt; 2/k</code> — which your simulation will find for you the
+    first time somebody raises the coefficient. <code>apply_drag</code> solves it exactly instead.
+  </p>
+
+  <p>
+    The <code>inv_mass &gt; 0</code> guard is not about the multiply. It is about
+    <code>gravity_scale</code>: a body with <code>kind == dynamic</code> and <code>inv_mass == 0</code>
+    is a legal and useful thing — immovable, but participating in everything — and without the guard
+    gravity would be added to its acceleration and it would fall.
+  </p>
+
+  <h3>10.3 The three kinds, and what each one skips</h3>
+
+  <p>
+    A <code>fixed</code> body is skipped <em>entirely</em>, not integrated with a zero acceleration.
+    It does not pay the loads, and 8.6's broadphase will rely on these never moving in order to keep a
+    structure it never rebuilds. §11 measures the difference at <strong>0.23×</strong> — a table of
+    fixed bodies costs a quarter of what the same table of dynamic ones costs, and in a real level
+    most bodies are fixed.
+  </p>
+
+  <p>
+    A <code>kinematic</code> body gets exactly one line of the integrator:
+  </p>
+
+<pre><code class="lang-cpp">b.state.position += b.state.velocity * h;</code></pre>
+
+  <p>
+    …written out rather than routed through <code>integrate</code>, so that it is obvious the velocity
+    is not being changed. No gravity, no forces, no damping. It travels at whatever gameplay set, and
+    it has a velocity — which is the thing that distinguishes it from teleporting the body every
+    frame, and which 8.9 will need in order to carry a crate standing on it.
+  </p>
+
+  <p>
+    Both still have their force accumulators cleared, so that a system pushing on the floor does not
+    leak a vector that grows without bound for the lifetime of the level.
+  </p>
+
+  <h3>10.4 The table is <code>pool&lt;rigid_body&gt;</code>, and that is the whole storage design</h3>
+
+  <p>
+    <code>body_world</code> is a <code>pool&lt;rigid_body&gt;</code> and about eight lines of policy.
+    Lesson 5.4 built generational handles precisely so that subsystems would not each invent their
+    own storage, and a body table is the textbook case: bodies are created and destroyed constantly,
+    everything else in the engine wants to refer to them, and the solver in 8.10 wants them in a flat
+    array it can walk without chasing a pointer.
+  </p>
+
+  <p>
+    What that buys, stated rather than assumed. Bodies live in a <strong>dense</strong> array with no
+    holes, so <code>bodies()</code> is a contiguous span and <code>step</code> is a linear walk with
+    perfect prefetching. A removal swaps the last body into the gap and bumps the slot's generation,
+    so a stale <code>body_id</code> fails its lookup loudly instead of silently naming whichever body
+    moved in. And the whole table serialises as 32-bit integers, which Module 9's scene format needs.
+  </p>
+
+  <p>
+    The one thing a caller must not do is depend on the <em>order</em> of that span — a removal
+    reorders it. That is not a defect to work around; it is what keeps the walk contiguous, and 5.4
+    §6 measured what the alternative costs.
+  </p>
+
+  <h3>10.5 What the report carries, and why those fields</h3>
+
+  <p>
+    <code>step</code> returns a <code>step_report</code>, and every field in it is something a later
+    lesson needs, computed while the walk is already touching every body:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Field</th><th>What it is for</th></tr></thead>
+    <tbody>
+      <tr><td><code>bodies</code>, <code>dynamic</code>, <code>kinematic</code>, <code>fixed</code></td>
+          <td>A count per kind, which is the first thing you want when a scene is slow.</td></tr>
+      <tr><td><code>max_speed</code></td>
+          <td>The fastest body at the end of the step.</td></tr>
+      <tr><td><code>max_travel</code></td>
+          <td><strong>The tunnelling number.</strong> A body that moves further in one step than the
+              thickness of the wall it is heading for passes through it without any test ever seeing
+              an overlap, because every test from 8.4 on is asked about a <em>position</em> and never
+              about the segment between two of them. At 60 Hz a bullet at 400 m/s covers 6.67 m per
+              step. Nothing here fixes it; reporting it is how you find out that you need to.</td></tr>
+      <tr><td><code>momentum</code></td>
+          <td><strong>The conservation law this module will be judged by.</strong> Gravity and
+              thrusters change it — they are external forces, which is what an external force
+              <em>is</em> — but a collision between two bodies must not, to the last bit the
+              arithmetic allows. 8.9 checks its impulse response against this field, so the
+              instrument predates the thing it measures by seven lessons.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Immovable bodies are excluded from the momentum sum, because theirs is either zero or infinite and
+    neither belongs in a total that is about to be compared across a collision.
+  </p>
+
+  <h2 id="budget">11. The budget</h2>
+
+  <p>
+    Four thousand and ninety-six bodies, stepped two thousand times, with the two arms of each
+    comparison run <strong>alternately, one rep each</strong> so that both see the same thermal state
+    within microseconds of each other. That machinery is Lesson 5.6's <code>bench_compare</code>, and
+    it is the only reason the numbers below are worth quoting.
+  </p>
+
+  <p>
+    The first version of this section did not use it. It timed the four loops one after another, and
+    reported the force route at <strong>2.625, 1.758, 1.476 and 1.459 ns/body</strong> on four
+    consecutive runs of the same binary. The machine was still settling, and whichever arm ran first
+    always lost — which would have produced a confident, reproducible, completely fabricated finding
+    about whichever design happened to be listed second.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Arrangement</th><th>median ns/body</th><th>min ns/body</th></tr></thead>
+    <tbody>
+      <tr><td>weight through the accumulator</td><td>2.136</td><td>1.923</td></tr>
+      <tr><td>gravity added after the divide</td><td>1.780</td><td>1.617</td></tr>
+      <tr><td>a <code>sqrt</code> per body for <code>max_speed</code></td><td>1.404</td><td>1.282</td></tr>
+      <tr><td>compare squared, one <code>sqrt</code> at the end</td><td>1.333</td><td>1.200</td></tr>
+      <tr><td>with <code>max_speed</code> and <code>momentum</code></td><td>1.495</td><td>1.414</td></tr>
+      <tr><td>no report at all</td><td>1.139</td><td>1.099</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>11.1 The optimisation that paid</h3>
+
+  <p>
+    <strong>b/a across three runs: 0.845, 0.848, 0.847.</strong> Adding gravity after the division
+    rather than as a weight before it is 15% of the whole per-body update, and the ratio repeats to
+    the third decimal place across separate runs of the binary — which is what makes it a finding
+    rather than a fluctuation.
+  </p>
+
+  <p>
+    Fifteen per cent for removing one <code>divss</code> is a larger number than it sounds, and the
+    comparison that makes it vivid is 8.1's: a complete semi-implicit Euler step — two vector
+    multiply-adds, six loads, six stores — measured <strong>0.963 ns</strong>. The divide that existed
+    only to undo the storage decision cost about a third of that again.
+  </p>
+
+  <h3>11.2 The optimisation that did not</h3>
+
+  <p>
+    <code>max_speed</code> needs a <code>length()</code> per body, which is a square root, and the
+    reflex fix is to compare <code>length_squared</code> and take one root at the end. Measured:
+    <strong>1.036, 0.968, 0.969.</strong> Once slower, twice marginally faster, and the spread between
+    runs is larger than the effect. It is a tie.
+  </p>
+
+  <p>
+    This is worth reporting precisely because it is the <em>more</em> famous optimisation of the two.
+    <code>sqrtss</code> is a single pipelined instruction on every target this engine builds for, and
+    it is not on the loop's critical path — the next iteration's loads have already started. A
+    <code>divss</code> is neither. So the engine keeps the <code>sqrt</code>, because when a
+    measurement is a wash the version that reads as what it means wins by default, and
+    <code>length(v)</code> reads as a speed where <code>length_squared(v)</code> reads as a puzzle.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Two optimisations, one obvious and one not, and the obvious one was the tie.</strong>
+      That is the whole argument for measuring rather than reasoning about instruction counts — and
+      note that both were measured with a control (<code>answers agree yes</code>), because an arm
+      that is faster because it did less has not won anything.
+    </p>
+  </div>
+
+  <h3>11.3 What the real thing costs</h3>
+
+<pre><code class="lang-text">  body_world::step      2.706 ns/body
+  …with damping 0.4     4.222 ns/body      +56%
+  …all bodies fixed     0.712 ns/body      0.23x
+  8.1's bare step       0.963 ns/body</code></pre>
+
+  <p>
+    Two things stand out. <strong>One <code>expf</code> costs more than the whole rest of the
+    update</strong> — damping adds 1.5 ns per body to a 2.7 ns step — which is not an argument
+    against damping but is an argument for the branch that skips it when <code>k</code> is zero, and
+    for knowing that turning it on for every body in a scene is a real decision rather than a free
+    toggle.
+  </p>
+
+  <p>
+    And a table of <code>fixed</code> bodies costs <strong>0.23×</strong> what the same table of
+    dynamic ones does, which matters more than it looks: in a real level most bodies are the level.
+  </p>
+
+  <p>
+    For scale, 4,096 dynamic bodies at 2.706 ns is 11 µs, against a 16,667 µs frame at 60 Hz —
+    <strong>0.066%</strong>. Linear rigid-body integration is not where a physics engine's time goes,
+    and it is worth establishing that now so that when 8.6's broadphase and 8.10's solver arrive,
+    nobody optimises the wrong loop.
+  </p>
+
+  <h3>11.4 The demo</h3>
+
+  <p>
+    Figure 10's two screenshots are <code>demos/bodies</code> under two of its three resistance modes,
+    and they are the reason the demo exists. Three bodies of 0.1, 1 and 10 kg are launched on
+    identical trajectories. Under <strong>damping</strong> the three trails lie exactly on top of one
+    another; under a <strong>drag force</strong> they separate completely, the light one stopping
+    almost dead while the heavy one carries nearly as far as it would through vacuum.
+  </p>
+
+  <p>
+    One drawing decision in there is worth naming, because it is the same problem the figures have.
+    Three curves drawn solid on top of one another are indistinguishable from <em>one</em> curve — so
+    the picture that proves the point would look exactly like a picture of a bug that lost two
+    bodies. Each body therefore draws one dash in three: a single line cycling amber, green, blue is
+    three trajectories in exact agreement, and three separate dashed lines are three trajectories
+    that parted company. The figures use the same convention, with the same phases.
+  </p>
+
+  <p>
+    The right-hand panel is §9 as something you can watch. Four bodies are dropped from the <em>same
+    world point</em> in four different parent frames — and starting them at the same world point
+    rather than the same local one is the whole experiment, because a body at local
+    <code>(0, 10)</code> under a parent scaled by 2 starts at world <code>(0, 20)</code>, and a panel
+    that gave them all the same local position would be comparing four different drops. Only the green
+    one is falling. The red one, under a uniform scale of 2, drops twice as far in the same time. The
+    amber one goes sideways. The purple one, on a spinning parent, curves away entirely.
+  </p>
+
+  <h2 id="notyet">12. What this does not do</h2>
+
+  <p>
+    Stated as a list rather than implied by omission, because the gaps are the next eleven lessons.
+  </p>
+
+  <ul>
+    <li><strong>No rotation.</strong> A <code>rigid_body</code> here is a point with a mass: it
+        translates and it does not spin, <code>add_force</code> has no application point, and there
+        is no torque and no inertia tensor. That is Lesson 8.3, and it needs 7.4's quaternions. The
+        linear half is genuinely separable — momentum and angular momentum do not mix — so nothing
+        in this file will have to be rewritten for it.</li>
+    <li><strong><code>force</code> does not contain the body's weight.</strong> §5's trade, named
+        here so it is not a surprise: a debug overlay drawing force arrows draws every push on a body
+        <em>except</em> the one that is always there. Draw it as
+        <code>mass_of(b) * world.gravity()</code>.</li>
+    <li><strong>No collision, of any kind.</strong> The demo's ground line is drawn and then ignored,
+        and the bodies fall through it. Shapes arrive in 8.4, the broadphase in 8.6, manifolds in
+        8.7, and response in 8.9.</li>
+    <li><strong>No continuous collision detection.</strong> <code>step_report::max_travel</code>
+        measures the number that decides whether a body will tunnel, and nothing acts on it. 1.8's
+        swept test is the shape of the answer; 8.13 is where it stops being optional.</li>
+    <li><strong>No sleeping and no islands.</strong> Every body is stepped every step, even one that
+        has been motionless for a minute. 8.10.</li>
+    <li><strong>No constraints and no joints.</strong> 8.10 and 8.11 — and note that this lesson has
+        already made the argument for why they will be solved with impulses rather than with springs:
+        §7, and before that 8.1 §6's measurement that a 60 Hz step admits a spring of about 3.8 Hz
+        while a contact is hundreds.</li>
+    <li><strong>No angular or non-linear drag.</strong> Real aerodynamic drag goes as <code>v²</code>,
+        not <code>v</code>; the linear model is the one whose terminal speed has a closed form, which
+        is what made §6 measurable. Exercise 8.2.4 is the quadratic version.</li>
+    <li><strong>Nothing threaded.</strong> The walk is embarrassingly parallel and there is exactly
+        one place it will stop being so, which is the moment bodies start affecting each other.
+        Module 9's job system.</li>
+  </ul>

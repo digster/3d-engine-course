@@ -1,0 +1,36 @@
+<svg viewBox="0 0 760 300" role="img" aria-labelledby="f75h-t f75h-d">
+  <title id="f75h-t">The cost of an interpolation</title>
+  <desc id="f75h-d">Nanoseconds per call for the three interpolations this course has written, and the arc below which nlerp is indistinguishable from slerp.</desc>
+  <defs>
+    <marker id="e-i-f75h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="24" class="sm" text-anchor="middle">what an interpolation costs, and the arc below which the cheap one is free</text>
+<text x="211.0" y="46" class="sm" text-anchor="middle">nanoseconds per call</text>
+<text x="211.0" y="62" class="xs muted" text-anchor="middle">best of three, -O2, inputs varied per repetition</text>
+<rect x="46.0" y="76" width="330.0" height="132" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="54.0" y="96.0" width="22.29084" height="14.96" rx="2" fill="#eca856" stroke="#eca856" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="54.0" y="89.0" class="xs muted" text-anchor="start">quat_nlerp</text>
+<text x="80.29084" y="107.96000000000001" class="xs mono" text-anchor="start">4.763 ns</text>
+<rect x="54.0" y="140.0" width="76.22784" height="14.96" rx="2" fill="#7ebcf8" stroke="#7ebcf8" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="54.0" y="133.0" class="xs muted" text-anchor="start">quat_slerp</text>
+<text x="134.22784000000001" y="151.96" class="xs mono" text-anchor="start">16.288 ns</text>
+<rect x="54.0" y="184.0" width="214.11936000000003" height="14.96" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="54.0" y="177.0" class="xs muted" text-anchor="start">7.2's mat3 slerp</text>
+<text x="272.11936000000003" y="195.96" class="xs mono" text-anchor="start">45.752 ns</text>
+<text x="570.0" y="46" class="sm" text-anchor="middle">and the number to design with</text>
+<rect x="420.0" y="64" width="300.0" height="74" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="570.0" y="92" class="mono t-hi" text-anchor="middle">73.50°</text>
+<text x="570.0" y="112" class="xs muted" text-anchor="middle">the arc below which nlerp stays</text>
+<text x="570.0" y="126" class="xs muted" text-anchor="middle">within half a degree of slerp</text>
+<text x="420.0" y="160" class="xs muted" text-anchor="start">A 30 Hz clip's adjacent keyframes are far below that,</text>
+<text x="420.0" y="174" class="xs muted" text-anchor="start">which is why a great deal of shipped animation code</text>
+<text x="420.0" y="188" class="xs muted" text-anchor="start">uses nlerp and is right to. A blend between two poses</text>
+<text x="420.0" y="202" class="xs muted" text-anchor="start">chosen by gameplay is not, and 8.15° of lag through</text>
+<text x="420.0" y="216" class="xs muted" text-anchor="start">the middle of a turn is visible.</text>
+<text x="211.0" y="240" class="xs muted" text-anchor="middle">slerp is 3.42× nlerp; 7.2's matrix route is 2.81× slerp</text>
+<text x="211.0" y="256" class="xs t-ok" text-anchor="middle">the representation is cheaper than the one it replaced, at the same job</text>
+</svg>

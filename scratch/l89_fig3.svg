@@ -1,0 +1,50 @@
+<svg viewBox="0 0 980 400" role="img" aria-labelledby="f89c-t f89c-d">
+  <title id="f89c-t">The effective mass of a contact</title>
+  <desc id="f89c-d">The same ten-kilogram plank pushed upward in two places. Pushed at its centre of mass the contact sees the full ten kilograms. Pushed 1.9 metres out, part of the impulse turns the plank instead of lifting it, and the contact sees 2.702 kilograms — 3.7 times lighter. The angular terms of the effective mass are exactly this effect, and they vanish when the lever arm is parallel to the normal.</desc>
+  <defs>
+    <marker id="e-i-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-blue-f89c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="60" y="40" class="sm" text-anchor="start">The same 10 kg plank, pushed in two places</text>
+<rect x="70" y="136" width="240.0" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="190.0" cy="150" r="3.5" fill="#5082e6"/>
+<text x="190.0" y="126" class="xs muted" text-anchor="middle">centre of mass</text>
+<line x1="190.00" y1="228.00" x2="190.00" y2="170.00" stroke="#5ac878" stroke-width="2.2" marker-end="url(#e-green-f89c)"/>
+<circle cx="190.0" cy="164" r="4" fill="#5ac878"/>
+<text x="190.0" y="246" class="xs" text-anchor="middle">pushed at the centre</text>
+<text x="190.0" y="280" class="sm" text-anchor="middle">effective mass 10.000 kg</text>
+<rect x="370" y="136" width="240.0" height="28" rx="3" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="490.0" cy="150" r="3.5" fill="#5082e6"/>
+<text x="490.0" y="126" class="xs muted" text-anchor="middle">centre of mass</text>
+<line x1="604.00" y1="228.00" x2="604.00" y2="170.00" stroke="#5ac878" stroke-width="2.2" marker-end="url(#e-green-f89c)"/>
+<circle cx="604.0" cy="164" r="4" fill="#5ac878"/>
+<text x="604.0" y="246" class="xs" text-anchor="middle">pushed 1.9 m out</text>
+<line x1="490.0" y1="194.0" x2="604.0" y2="194.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="547.0" y="190" class="xs muted" text-anchor="middle">r</text>
+<path d="M 450.0 110 A 46 46 0 0 1 516.0 98" fill="none" stroke="#f0961e" stroke-width="1.6" marker-end="url(#e-blue-f89c)"/>
+<text x="484.0" y="88" class="xs muted" text-anchor="middle">and it turns</text>
+<text x="490.0" y="280" class="sm" text-anchor="middle">effective mass 2.702 kg</text>
+<text x="490" y="310" class="xs" text-anchor="middle">3.7× lighter</text>
+<text x="640" y="60" class="xs" text-anchor="start">A contact does not feel the body's mass. It feels</text>
+<text x="640" y="76" class="xs" text-anchor="start">how hard the body is to move ALONG THE CONTACT</text>
+<text x="640" y="92" class="xs" text-anchor="start">NORMAL, at that point — and an off-centre push</text>
+<text x="640" y="108" class="xs" text-anchor="start">partly turns the body instead of moving it, so less</text>
+<text x="640" y="124" class="xs" text-anchor="start">of the impulse arrives where the contact is.</text>
+<text x="640" y="156" class="xs muted" text-anchor="start">That is the whole content of the angular terms in k.</text>
+<text x="640" y="172" class="xs muted" text-anchor="start">Set r × n to zero and they vanish exactly: a contact</text>
+<text x="640" y="188" class="xs muted" text-anchor="start">straight through both centres of mass has k = 1/m_a</text>
+<text x="640" y="204" class="xs muted" text-anchor="start">+ 1/m_b, whose reciprocal is the reduced mass of</text>
+<text x="640" y="220" class="xs muted" text-anchor="start">elementary mechanics — measured at 2.100000 kg for 3</text>
+<text x="640" y="236" class="xs muted" text-anchor="start">kg against 7 kg.</text>
+<text x="640" y="268" class="xs muted" text-anchor="start">Written as w·(I⁻¹w) with w = r × n the angular terms</text>
+<text x="640" y="284" class="xs muted" text-anchor="start">are manifestly non-negative, which PROVES k ≥ 1/m_a</text>
+<text x="640" y="300" class="xs muted" text-anchor="start">+ 1/m_b and therefore that the division is always</text>
+<text x="640" y="316" class="xs muted" text-anchor="start">safe. Measured over 200,000 random contacts, the gap</text>
+<text x="640" y="332" class="xs muted" text-anchor="start">never once went negative.</text>
+<text x="60" y="378" class="xs muted" text-anchor="start">§4 and harness §B. Both masses are measured, not computed for the figure; the two algebraic forms of k agree to 5.0e-07 relative.</text>
+</svg>

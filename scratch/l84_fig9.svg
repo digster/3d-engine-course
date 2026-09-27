@@ -1,0 +1,71 @@
+<svg viewBox="0 0 900 348" role="img" aria-labelledby="l84f9-t l84f9-d">
+  <title id="l84f9-t">Where the precision floor is</title>
+  <desc id="l84f9-d">The error in a reported gap tracks the spacing of floats at the boxes' distance from the origin, and crosses the gap being measured at ten kilometres.</desc>
+  <defs>
+    <marker id="e-i-l84f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="348" class="fill-bg" stroke="none"/>
+<text x="450.0" y="46" class="sm" text-anchor="middle">the same two boxes, further from the origin</text>
+<text x="450.0" y="62" class="xs muted" text-anchor="middle">a 1 mm gap, reported in float</text>
+<rect x="96" y="96" width="470" height="210" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="96.0" y1="96" x2="96.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="96.0" y="322" class="xs mono muted" text-anchor="middle">1e0</text>
+<line x1="190.0" y1="96" x2="190.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="190.0" y="322" class="xs mono muted" text-anchor="middle">1e1</text>
+<line x1="284.0" y1="96" x2="284.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="284.0" y="322" class="xs mono muted" text-anchor="middle">1e2</text>
+<line x1="378.0" y1="96" x2="378.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="378.0" y="322" class="xs mono muted" text-anchor="middle">1e3</text>
+<line x1="472.0" y1="96" x2="472.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="472.0" y="322" class="xs mono muted" text-anchor="middle">1e4</text>
+<line x1="566.0" y1="96" x2="566.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="566.0" y="322" class="xs mono muted" text-anchor="middle">1e5</text>
+<line x1="96" y1="306.0" x2="566" y2="306.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="310.0" class="xs mono muted" text-anchor="end">1e-9</text>
+<line x1="96" y1="276.0" x2="566" y2="276.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="280.0" class="xs mono muted" text-anchor="end">1e-8</text>
+<line x1="96" y1="246.0" x2="566" y2="246.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="250.0" class="xs mono muted" text-anchor="end">1e-7</text>
+<line x1="96" y1="216.0" x2="566" y2="216.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="220.0" class="xs mono muted" text-anchor="end">1e-6</text>
+<line x1="96" y1="186.0" x2="566" y2="186.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="190.0" class="xs mono muted" text-anchor="end">1e-5</text>
+<line x1="96" y1="156.0" x2="566" y2="156.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="160.0" class="xs mono muted" text-anchor="end">1e-4</text>
+<line x1="96" y1="126.0" x2="566" y2="126.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="130.0" class="xs mono muted" text-anchor="end">1e-3</text>
+<line x1="96" y1="96.0" x2="566" y2="96.0" class="grid" stroke-width="1.0"/>
+<text x="88" y="100.0" class="xs mono muted" text-anchor="end">1e-2</text>
+<text x="331.0" y="340" class="xs muted" text-anchor="middle">distance from the origin, metres</text>
+<line x1="96.0" y1="126.0" x2="566.0" y2="126.0" stroke="#5ac878" stroke-width="1.6" fill="none" stroke-dasharray="6 5"/>
+<path d="M96.0,243.7 L190.0,216.6 L284.0,189.5 L378.0,162.4 L472.0,126.3 L566.0,99.2" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<circle cx="96.0" cy="243.7" r="3" fill="#8f918a" stroke="none"/>
+<circle cx="190.0" cy="216.6" r="3" fill="#8f918a" stroke="none"/>
+<circle cx="284.0" cy="189.5" r="3" fill="#8f918a" stroke="none"/>
+<circle cx="378.0" cy="162.4" r="3" fill="#8f918a" stroke="none"/>
+<circle cx="472.0" cy="126.3" r="3" fill="#8f918a" stroke="none"/>
+<circle cx="566.0" cy="99.2" r="3" fill="#8f918a" stroke="none"/>
+<path d="M96.0,250.2 L190.0,227.8 L284.0,223.8 L378.0,174.9 L472.0,174.9 L566.0,126.0" fill="none" stroke="#e05c5c" stroke-width="2.2"/>
+<circle cx="96.0" cy="250.2" r="3" fill="#e05c5c" stroke="none"/>
+<circle cx="190.0" cy="227.8" r="3" fill="#e05c5c" stroke="none"/>
+<circle cx="284.0" cy="223.8" r="3" fill="#e05c5c" stroke="none"/>
+<circle cx="378.0" cy="174.9" r="3" fill="#e05c5c" stroke="none"/>
+<circle cx="472.0" cy="174.9" r="3" fill="#e05c5c" stroke="none"/>
+<circle cx="566.0" cy="126.0" r="3" fill="#e05c5c" stroke="none"/>
+<line x1="600.0" y1="110.0" x2="620.0" y2="110.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="628" y="114" class="xs" text-anchor="start">error in the reported gap</text>
+<line x1="600.0" y1="127.0" x2="620.0" y2="127.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="628" y="131" class="xs" text-anchor="start">ulp(d) — the spacing of floats there</text>
+<line x1="600.0" y1="144.0" x2="620.0" y2="144.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="628" y="148" class="xs" text-anchor="start">the quantity being measured</text>
+<text x="600" y="188" class="xs muted" text-anchor="start">The two meet at 10 km, and</text>
+<text x="600" y="202" class="xs muted" text-anchor="start">that is the whole story: the</text>
+<text x="600" y="216" class="xs muted" text-anchor="start">subtraction b.centre − a.centre</text>
+<text x="600" y="230" class="xs muted" text-anchor="start">is performed on numbers of the</text>
+<text x="600" y="244" class="xs muted" text-anchor="start">size of the WORLD to produce</text>
+<text x="600" y="258" class="xs muted" text-anchor="start">one of the size of a CRATE.</text>
+</svg>

@@ -1,0 +1,56 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l51f1-t l51f1-d">
+  <title id="l51f1-t">One directory, then a wall</title>
+  <desc id="l51f1-d">Before: src/ as one directory every file could reach. After: demos/ above a gate of public headers, engine/src private below it.</desc>
+  <defs>
+    <marker id="e-i-l51f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l51f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l51f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="20" y="20" class="sm">Before: one executable, so every file could see every other file</text>
+<text x="384" y="20" class="sm">After: a library, and <tspan class="t-hi">an outside</tspan></text>
+<rect x="20" y="34" width="330" height="180" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="30" y="50" class="xs mono muted">src/</text>
+<rect x="34" y="62" width="120" height="26" fill="#f0961e" fill-opacity="0.22" stroke="#f0961e" stroke-width="1" rx="2"/>
+<text x="94.0" y="79.0" class="xs mono" text-anchor="middle">main.cpp</text>
+<rect x="34" y="100" width="84" height="22" fill="#5082e6" fill-opacity="0.22" stroke="#5082e6" stroke-width="1" rx="2"/>
+<text x="76.0" y="115.0" class="xs mono" text-anchor="middle">core/</text>
+<rect x="128" y="100" width="84" height="22" fill="#5082e6" fill-opacity="0.22" stroke="#5082e6" stroke-width="1" rx="2"/>
+<text x="170.0" y="115.0" class="xs mono" text-anchor="middle">gfx/</text>
+<rect x="222" y="100" width="84" height="22" fill="#5082e6" fill-opacity="0.22" stroke="#5082e6" stroke-width="1" rx="2"/>
+<text x="264.0" y="115.0" class="xs mono" text-anchor="middle">math/</text>
+<rect x="34" y="134" width="110" height="22" fill="#5ac878" fill-opacity="0.22" stroke="#5ac878" stroke-width="1" rx="2"/>
+<text x="89.0" y="149.0" class="xs mono" text-anchor="middle">game/pong</text>
+<text x="34" y="176" class="xs muted">#include &quot;gfx/raster.hpp&quot;</text>
+<text x="34" y="192" class="xs muted">&#8230;from anywhere, to anything.</text>
+<text x="34" y="208" class="xs t-bad">main.cpp: 7,789 lines</text>
+<line x1="366" y1="30" x2="366" y2="248" class="hi" stroke-width="2" stroke-dasharray="5 4"/>
+<rect x="384" y="34" width="286" height="70" rx="4" fill="#5ac878" fill-opacity="0.10" stroke="#5ac878" stroke-width="1"/>
+<text x="394" y="50" class="xs mono muted">demos/</text>
+<rect x="386" y="58" width="90" height="22" fill="#5ac878" fill-opacity="0.26" stroke="#5ac878" stroke-width="1" rx="2"/>
+<text x="431" y="73" class="xs mono" text-anchor="middle">sandbox</text>
+<rect x="482" y="58" width="90" height="22" fill="#5ac878" fill-opacity="0.26" stroke="#5ac878" stroke-width="1" rx="2"/>
+<text x="527" y="73" class="xs mono" text-anchor="middle">hello_cube</text>
+<rect x="578" y="58" width="90" height="22" fill="#5ac878" fill-opacity="0.26" stroke="#5ac878" stroke-width="1" rx="2"/>
+<text x="623" y="73" class="xs mono" text-anchor="middle">demo_common</text>
+<text x="394" y="122" class="xs muted">may include only what is below the gate</text>
+<rect x="384" y="130" width="286" height="46" rx="4" fill="#5acdd7" fill-opacity="0.20" stroke="#5acdd7" stroke-width="1.4"/>
+<text x="527.0" y="148" class="xs mono" text-anchor="middle">engine/include/engine/ &#8212; PUBLIC</text>
+<text x="527.0" y="166" class="xs muted" text-anchor="middle">37 headers; nothing else resolves</text>
+<rect x="384" y="188" width="286" height="46" rx="4" fill="#5082e6" fill-opacity="0.14" stroke="#5082e6" stroke-width="1"/>
+<text x="527.0" y="206" class="xs mono" text-anchor="middle">engine/src/ &#8212; PRIVATE</text>
+<text x="527.0" y="224" class="xs muted" text-anchor="middle">24 sources + stb, reachable only from inside</text>
+<line x1="678" y1="106" x2="678" y2="126" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l51f1)"/>
+<line x1="678" y1="178" x2="678" y2="185" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l51f1)"/>
+<path d="M700 106 L700 184" fill="none" stroke="#eb786e" stroke-width="1.4" stroke-dasharray="3 3"/>
+<line x1="692" y1="136" x2="708" y2="152" stroke="#eb786e" stroke-width="2"/>
+<line x1="708" y1="136" x2="692" y2="152" stroke="#eb786e" stroke-width="2"/>
+<text x="384" y="252" class="xs t-ok">main.cpp: 5,721 lines &#8212; 27% of it was never the demo&#8217;s</text>
+<rect x="20" y="272" width="680" height="74" rx="4" class="fill-soft grid" stroke-width="1"/>
+<text x="32" y="294" class="xs mono">demos/probe.cpp:1:10: fatal error: &#x27;gfx/raster.hpp&#x27; file not found</text>
+<text x="32" y="312" class="xs mono muted">#include &quot;gfx/raster.hpp&quot;   // the spelling every file used until today</text>
+<text x="32" y="336" class="xs t-hi">That message is the boundary. Not a review comment, not a convention &#8212; a compiler.</text>
+<text x="20" y="370" class="xs muted">Measured: 37/37 public headers also compile ALONE, and a demo reaching for stb_image.h is refused too.</text>
+</svg>

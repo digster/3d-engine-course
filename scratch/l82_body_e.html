@@ -1,0 +1,440 @@
+  <h2 id="listings">13. Complete code listings</h2>
+
+  <!-- WRAPPED IN .tbl-scroll, which 8.1's manifest is not and did not need to be.
+       The longest path here is engine/include/engine/phys/rigid_body.hpp, two
+       characters longer than 8.1's, and a path inside <code> cannot wrap — so at
+       390 px the table forced the whole PAGE to scroll horizontally, which
+       check-page.js reports as pageScrollsX and which is the one layout failure
+       that is invisible at desktop width. -->
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/rigid_body.hpp</code></td><td>new</td>
+          <td>Mass, forces, the three kinds, the frame diagnostics and the body table.</td></tr>
+      <tr><td><code>engine/src/phys/rigid_body.cpp</code></td><td>new</td>
+          <td>The walk, and the two arrangements of gravity §5 chose between.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One line in the table of contents — and the first time in eight lessons the lint
+              did not have to find it.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>A second source in <code>phys/</code>, and the dependency direction the rest of the
+              module inherits.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>A new target with no assets and no shaders.</td></tr>
+      <tr><td><code>demos/bodies/main.cpp</code></td><td>new</td>
+          <td>Three masses, three resistance models, and four parent frames that disagree.</td></tr>
+      <tr><td><code>scratch/verify_82.cpp</code></td><td>new</td>
+          <td>Nine sections, thirteen controls, every number in this lesson.</td></tr>
+      <tr><td><code>scratch/build_verify_82.sh</code></td><td>new</td>
+          <td>Compiles the harness, and refuses an unoptimised <code>libengine.a</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/phys/rigid_body.hpp@@
+  @@LISTING:engine/src/phys/rigid_body.cpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:demos/bodies/main.cpp@@
+  @@LISTING:scratch/verify_82.cpp@@
+  @@LISTING:scratch/build_verify_82.sh@@
+
+  <h2 id="build">14. Build &amp; run</h2>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+
+  <p>
+    The configure step prints the umbrella lint's tally, and it moved by one:
+  </p>
+
+  <pre>-- engine: umbrella lists 90 of 91 public headers (1 documented exception)</pre>
+
+  <p>
+    …and for the first time in eight lessons it printed that <em>without</em> having refused first.
+    The line in <code>engine.hpp</code> went in during the same edit as the header it names, by
+    somebody who had just read 8.1's paragraph about missing it. That is worth recording precisely
+    because it is not evidence the habit has taken: seven of the previous eight lessons missed this
+    file, and the streak broke on the lesson immediately after the one that wrote a paragraph about
+    breaking it.
+  </p>
+
+  <p>
+    Then the demo. No assets, no shaders, nothing loaded from disk — everything on screen it computes.
+  </p>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/bodies
+
+# headless and deterministic: 2.9 simulated seconds, then a screenshot
+./build/demos/bodies --mode 2 --t 2.9 --shot scratch/bodies.ppm
+
+# start in a particular resistance mode (0 none, 1 damping, 2 drag)
+./build/demos/bodies --mode 1 --rate 240</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> On startup, mode <em>none</em>: a single arc rising from the
+    bottom-left, crossing the orange ground line and continuing down through it, drawn as a dashed
+    line whose colour cycles amber → green → blue. That cycling <em>is</em> three bodies of 0.1, 1 and
+    10 kg in exact agreement; there is no fourth body and none has been lost. On the right, four
+    shorter tracks fanning apart from a common point at the top, looping every 1.5 s.
+  </p>
+
+  <p>
+    Now press <kbd>M</kbd>. The picture barely changes: mode <em>damping</em> shortens the arc and
+    the three colours still cycle along one line, because <code>damping</code> has no mass in it.
+    Press <kbd>M</kbd> again and the three separate violently — the amber 0.1 kg body barely clears
+    the launch point before dropping almost vertically, the blue 10 kg one carries nearly to the arc
+    it had in vacuum. <strong>Two of the three pictures are identical and the third is the physics</strong>,
+    which is §6 in two keypresses.
+  </p>
+
+  <p>
+    Then drive it. <kbd>1</kbd>, <kbd>2</kbd> and <kbd>3</kbd> hide individual masses, which is the
+    fastest way to satisfy yourself that the coincident line really is three. <kbd>Up</kbd> and
+    <kbd>Down</kbd> change the simulation rate — and note what does <em>not</em> happen, which is that
+    the trajectories do not move, because everything here is either exact or an impulse.
+    <kbd>F</kbd> freezes the frame panel so you can read the ImGui table's <code>gain</code> and
+    <code>tilt</code> columns against figure 8.
+  </p>
+
+  <p>
+    Then the harness, which is where every number in this page came from:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_82.sh</code></pre>
+
+  <p>
+    The script refuses to run against a build tree with an empty <code>CMAKE_BUILD_TYPE</code>, which
+    the repository's default <code>cmake -S . -B build</code> produces. Lesson 7.6 measured what
+    ignoring that costs at 18.1× on skinning, and here it would be worse than wrong: §11's findings
+    are ratios between two arrangements of the same loop, and an unoptimised
+    <code>libengine.a</code> makes every arrangement equally slow, which reads as “no difference” and
+    is the exact opposite of the answer.
+  </p>
+
+  <h2 id="pitfalls">15. Common pitfalls &amp; debugging</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Symptom: an object drifts away forever after being pushed once.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> the force accumulator is never cleared. A force is an input to a step, not a
+        property of a body, and a thruster fired for one frame keeps firing for the rest of the level.
+      </p>
+      <p>
+        <em>Fix:</em> clear it in <code>step</code>, after the integration. <em>Diagnosis:</em> a
+        body's <code>force</code> should be zero every time you look at it from outside
+        <code>step</code>. If it is growing, count how many systems <code>+=</code> to it per frame
+        and compare against the number of times it is zeroed — the answer is usually zero.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a debug overlay says a resting crate has no forces on it.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> §5. This engine adds gravity as an acceleration, after the division, so
+        <code>rigid_body::force</code> genuinely does not contain the weight. The overlay is correct
+        and is showing you something true that is not what you asked.
+      </p>
+      <p>
+        <em>Fix:</em> draw the weight separately as <code>mass_of(b) * world.gravity()</code>. It is
+        worth knowing which side of this trade your engine is on before you spend an hour looking for
+        a missing <code>add_force</code>.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: the jump height changed when you got a new monitor.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> §7. Something that should be an impulse was written as a force applied for one
+        step, so the velocity it produces is <code>F·h/m</code> and the height goes as
+        <code>h²</code>.
+      </p>
+      <p>
+        <em>Fix:</em> <code>add_impulse</code>. <em>Diagnosis:</em> run the same input at two rates
+        and compare. A ratio near 4 between 30 and 60 Hz is this bug and nothing else, because
+        nothing else in a fixed-step simulation scales as the square of the step.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a heavy object and a light one fall identically, and that is wrong for your
+        game.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> it is <em>right</em> for gravity, and you want air. You have reached for
+        <code>damping</code>, which has no mass in it.
+      </p>
+      <p>
+        <em>Fix:</em> a drag <em>force</em>, through the accumulator:
+        <code>add_force(b, b.state.velocity * -b_coeff)</code>. <em>Diagnosis:</em> compare the two
+        terminal speeds. If a 0.1 kg body and a 100 kg body settle at the same speed, you are damping.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a body under a particular scene node falls at the wrong rate — and only
+        under that node.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> §9. Something is integrating in a parent's local space, and the parent is
+        scaled.
+      </p>
+      <p>
+        <em>Fix:</em> integrate in world space and convert at the boundary with
+        <code>place_in_parent</code>. <em>Diagnosis:</em> <code>inspect_frame(parent_world, gravity)</code>
+        and read <code>gain</code>. A gain of 2 is a parent scaled by 2; a nonzero
+        <code>out_of_square</code> is shear, and a <code>uniform</code> of false with a gain of 1 is
+        §9.2's trap — a frame that is broken along an axis this particular vector does not touch.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: the whole game feels floaty, or like a toy, and no amount of tuning fixes
+        it.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> §8. One unit is not one metre.
+      </p>
+      <p>
+        <em>Fix:</em> measure it rather than tune it. Put a body at a known height, time the fall, and
+        compare against <code>free_fall_time(d, 9.81)</code>. The ratio is <code>1/√s</code>, so
+        square it and you have the scale error. <em>Then</em> decide whether to rescale the art or
+        rescale <code>g</code> — and if you rescale <code>g</code>, write down every absolute length
+        in the project that has to move with it, because the solver tolerances will not.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a “very heavy” floor sinks slowly out of the level.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> §4.5. Gravity does not care what anything weighs; a million kilograms falls
+        exactly as fast as ten grams.
+      </p>
+      <p>
+        <em>Fix:</em> <code>make_fixed</code>, or <code>inv_mass = 0</code>. <em>Diagnosis:</em> if
+        raising a mass made a problem <em>smaller</em> rather than removing it, you have the wrong
+        tool — mass resists pushes, and gravity is not a push in this sense.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a fast object passes through a wall.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> nothing in this lesson, and nothing in the next five either. It is tunnelling,
+        and it will remain possible until 8.13.
+      </p>
+      <p>
+        <em>Fix:</em> not yet. <em>Diagnosis:</em> <code>step_report::max_travel</code> against the
+        thinnest wall in the level. A bullet at 400 m/s covers 6.67 m per step at 60 Hz, and the
+        number being larger than the wall is the whole explanation.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a replay diverges, or two machines in a lockstep session disagree.</strong>
+      </p>
+      <p>
+        <em>Cause:</em> could be many things, and two of them are in this lesson. §3.4: the order in
+        which systems call <code>add_force</code> changes the sum's last bits, and can drop a small
+        force entirely. §5.4: a round trip through the mass can differ by an ulp between two bodies
+        that should be identical.
+      </p>
+      <p>
+        <em>Fix:</em> for the first, a fixed system order — which our design has, because the
+        accumulator is a field rather than a list. For the second, gravity as an acceleration, which
+        is what the engine now does. <em>Diagnosis:</em> hash the whole body table after each step and
+        bisect on the first step at which two runs differ.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="exercises">16. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>8.2.1 — Draw the weight.</strong> §12 names the cost of the acceleration route: a
+        force overlay no longer shows the one force that is always present. Add a
+        <code>weight_of(const rigid_body&amp;, vec3 gravity)</code> helper and use it in
+        <code>demos/bodies</code>' ImGui panel to show total force <em>including</em> weight. Then
+        answer the design question it raises: should <code>step_report</code> carry the total weight
+        it applied, so the tool does not have to recompute it?
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the helper is one line. The interesting half is that a report field costs every
+        caller and a helper costs only the one that asks — and §11 measured what a report field costs
+        at 27% of the step.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>8.2.2 — Find the mass that breaks it.</strong> §5.3 found that 16% of masses fail the
+        round trip and that the first one is 1.000145 kg. Write a short program that, for a given
+        mass, prints <code>(g/w)·w</code> against <code>g</code> in hex float
+        (<code>%a</code>), and use it to find the <em>largest</em> mass under 10 kg that fails. Then
+        answer: is the set of failing masses dense, or does it have structure?
+      </p>
+      <p class="hint">
+        <em>Hint:</em> print the failures in a narrow band and look at their spacing in ulps of the
+        mass rather than in kilograms. The reciprocal is a monotone map, so the structure you are
+        looking for is about where <code>1/m</code> lands relative to the boundaries between
+        exponents.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>8.2.3 — A kinematic platform, and the crate it does not carry.</strong> Add a
+        <code>kinematic</code> body to <code>demos/bodies</code> that oscillates horizontally, and a
+        <code>dynamic</code> one resting on it — resting in the sense of being placed at the right
+        height, since nothing collides yet. Watch the crate fail to be carried. Then write down
+        precisely what information 8.9 will need in order to carry it, and check that
+        <code>rigid_body</code> already stores it.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the answer is the platform's velocity, which is exactly why a kinematic body
+        has one and why teleporting it every frame instead is the bug this exercise is about. The
+        relative velocity at a contact point is the quantity 8.9 solves against.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>8.2.4 — Quadratic drag.</strong> Real aerodynamic drag goes as <code>v²</code>:
+        <code>F = −½ρC<sub>d</sub>A|v|v</code>. Implement it as a force in the demo and measure the
+        terminal speed against the closed form <code>√(2mg / ρC<sub>d</sub>A)</code>. Then find out
+        what it costs you: the linear model's exact solution made <code>apply_drag</code> possible, and
+        the quadratic one has no such step. At what <code>h</code> does an explicit quadratic drag
+        step become unstable, and how does that limit compare to §6's?
+      </p>
+      <p class="hint">
+        <em>Hint:</em> linearise about the current speed — the effective coefficient is
+        <code>2·(½ρC<sub>d</sub>A|v|)/m</code>, which grows with speed, so the stability limit
+        <em>tightens as the body speeds up</em>. That is a different and nastier shape of bug than
+        8.1's, because the simulation is stable until it is fast.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>8.2.5 — An engine challenge: make the frame rule enforceable.</strong>
+        <code>inspect_frame</code> can tell you a frame is unsafe and nothing calls it. Design — and
+        then build — a debug-only check that catches a body being integrated in a non-inertial frame.
+        You will find there is no place to put it, because <code>body_world</code> deliberately has no
+        idea a hierarchy exists. Resolve that, and defend your resolution.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> there are at least three defensible answers and they are not equivalent. A
+        validation pass over the scene that runs on load and reports every node whose world matrix is
+        non-inertial <em>and</em> has a body under it; an assertion inside
+        <code>place_in_parent</code>, which is the one function that sees both spaces; or an
+        ECS-side rule that a body component may not be attached below a scaled node. Ask of each: does
+        it catch the spinning case? (§9.4 says nothing can.)
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">17. Recap &amp; next</h2>
+
+  <p>
+    The engine has bodies. A <code>rigid_body</code> is 8.1's <code>motion</code> plus a mass, a force
+    accumulator and two knobs, and <code>body_world</code> is 5.4's pool plus a walk. In one lesson
+    this engine has gone from “a thing that can advance a state” to “a thing that can be told what is
+    pushing on what”, and every one of the remaining eleven lessons in this module adds forces or
+    impulses to that same accumulator.
+  </p>
+
+  <p>
+    What the lesson actually turned on, in four sentences. <strong>Forces add</strong>, which is why
+    an accumulator and not a setter, and which is the reason four independent systems need no
+    interface between them. <strong>The reciprocal is the quantity the arithmetic wants</strong> — not
+    because of the divide, but because immovable is the common case, it is an exact zero, and 8.9's
+    effective mass is literally a sum of inverse masses. <strong>An impulse has no <code>h</code> in
+    it</strong>, which is a 23× difference in a jump and the reason every contact from 8.9 onward is
+    an impulse. And <strong>the units and the frame are physics, not bookkeeping</strong>: a world at
+    the wrong scale runs its clock at <code>√s</code>, and a body integrated under a scaled parent
+    falls at the wrong rate with nothing anywhere reporting an error.
+  </p>
+
+  <p>
+    Two measurements were worth the harness on their own. A sweep of a million masses found that
+    <strong>16% of them</strong> fail a round trip that seven hand-picked ones all passed — the
+    clearest case yet of test data chosen by a person agreeing with the code by construction. And of
+    two candidate optimisations, the famous one (avoid a <code>sqrt</code>) was a tie at 1.036, 0.968,
+    0.969, while the one nobody talks about (do not compute a mass in order to cancel it) was worth
+    15% of the whole update.
+  </p>
+
+  <p>
+    <strong>Next: Lesson 8.3 — Angular Dynamics: Torque and the Inertia Tensor.</strong> Everything
+    here has been the <em>linear</em> half, and it has been separable because momentum and angular
+    momentum do not mix. 8.3 takes the other half, and the first thing it changes is the signature of
+    <code>add_force</code>: a force applied <em>at a point</em> produces a torque
+    <code>r × F</code>, whose sign is fixed by this course's right-handed convention rather than by
+    taste. Then the quantity that plays the role mass played here — the <strong>inertia tensor</strong>,
+    which is a 3×3 matrix rather than a scalar because a body resists being spun differently about
+    different axes, and which therefore has to be carried into world space by a basis change
+    <code>R I Rᵀ</code> every step. <code>mat3</code> will gain the three operators an outer product
+    needs. And the pleasing part: <code>inv_mass = 0</code> has an exact analogue — a
+    <em>zero inverse inertia tensor</em> is precisely what an immovable body wants, for exactly the
+    reasons §4 gave, which is the second time this lesson's storage decision will pay for itself.
+  </p>
+
+  <h2 id="reading">18. Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Erin Catto, <em>Box2D</em> source and documentation.</strong> The reference for
+      everything in this lesson. <code>b2Body</code> stores <code>m_invMass</code> beside
+      <code>m_mass</code>, integrates gravity as an acceleration in the velocity update, and separates
+      static, kinematic and dynamic exactly as §4.4 does. The manual's “Units” section is the source
+      for the 0.1–10 m guidance in §8.4.
+    </li>
+    <li>
+      <strong>Glenn Fiedler, “Integration Basics” and “Fix Your Timestep”</strong> (gafferongames.com).
+      The companion to 8.1, and the second of the two is what <code>engine::fixed_step</code> is.
+      Fiedler's force-accumulator shape is the one every engine converges on.
+    </li>
+    <li>
+      <strong>Ian Millington, <em>Game Physics Engine Development</em>, 2nd ed., chapters 3–6.</strong>
+      The clearest book-length treatment of the linear half specifically, and the only one that spends
+      a full chapter on the difference between a force and an impulse before introducing contacts.
+      Chapter 3 is where the <code>inverseMass</code> argument is made at length.
+    </li>
+    <li>
+      <strong>David Baraff, “Physically Based Modeling: Rigid Body Simulation”</strong> (SIGGRAPH
+      course notes). Part I is the linear case, written by the person whose notation most of the field
+      still uses. Worth reading now for the derivation and again after 8.3 for the angular half.
+    </li>
+    <li>
+      <strong>Christer Ericson, <em>Real-Time Collision Detection</em>, chapter 11 (“Numerical
+      Robustness”).</strong> Not about forces, but it is the right place to follow up §3.4 and §5.3 —
+      the section on catastrophic cancellation explains exactly why the smallest of four forces
+      vanished into a partial sum of a million.
+    </li>
+    <li>
+      <strong>The Apollo 15 hammer–feather drop</strong> (NASA, 1971, <code>AFJ</code> archive). Ninety
+      seconds of film, and the only direct demonstration of §2's point without an air pump. Worth
+      watching once if you have not.
+    </li>
+    <li>
+      <strong>On miniatures and overcranking:</strong> the <code>√s</code> law in §8.1 is standard
+      practice in visual effects and is usually stated as “shoot at √(1/scale) times speed”. Any
+      practical VFX reference covering miniature photography derives it the same way; the physics is
+      one line and the craft around it is a century old.
+    </li>
+  </ul>

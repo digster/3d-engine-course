@@ -1,0 +1,388 @@
+  <h2 id="mass">4. The effective mass</h2>
+
+  <p>
+    We want the number <code>k_d</code> from the end of the last section: apply an impulse
+    <code>J = j·d</code> at the contact, and <code>u·d</code> changes by <code>j·k_d</code>. Let us
+    just do it.
+  </p>
+
+  <p>
+    By Newton's third law the impulse acts on <em>b</em> as <code>+J</code> and on <em>a</em> as
+    <code>−J</code> — one impulse, two bodies, opposite signs. Each body's velocities change by the
+    two formulas from §2:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[
+      \begin{aligned}
+        \Delta \mathbf{v}_b &= +j\,\frac{\mathbf{d}}{m_b}, &\qquad
+        \Delta \boldsymbol{\omega}_b &= +j\,\mathbf{I}_b^{-1}(\mathbf{r}_b \times \mathbf{d}) \\
+        \Delta \mathbf{v}_a &= -j\,\frac{\mathbf{d}}{m_a}, &\qquad
+        \Delta \boldsymbol{\omega}_a &= -j\,\mathbf{I}_a^{-1}(\mathbf{r}_a \times \mathbf{d})
+      \end{aligned}
+    \]</span>
+    <span class="eq-plain">
+      b gains j*d/m_b of velocity and j * inv_I_b * (r_b cross d) of angular velocity;
+      a loses the same with its own mass and tensor
+    </span>
+  </div>
+
+  <p>
+    Substitute into the definition of <strong>u</strong> and take the component along
+    <strong>d</strong>. The <code>j</code> factors out of every term, leaving
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[
+      k_{\mathbf{d}} = \frac{1}{m_a} + \frac{1}{m_b}
+        + \mathbf{d}\cdot\Big[\big(\mathbf{I}_a^{-1}(\mathbf{r}_a\times\mathbf{d})\big)\times\mathbf{r}_a\Big]
+        + \mathbf{d}\cdot\Big[\big(\mathbf{I}_b^{-1}(\mathbf{r}_b\times\mathbf{d})\big)\times\mathbf{r}_b\Big]
+    \]</span>
+    <span class="eq-plain">
+      k = 1/m_a + 1/m_b + dot(d, cross(inv_I_a * cross(r_a, d), r_a))
+      + dot(d, cross(inv_I_b * cross(r_b, d), r_b))
+    </span>
+  </div>
+
+  <p>
+    That is correct and it is not the form to implement. Look at one angular term and apply the
+    scalar triple product identity <code>a·(b × c) = b·(c × a)</code>, with
+    <code>w = I⁻¹(r × d)</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{d}\cdot(\mathbf{w}\times\mathbf{r}) \;=\; \mathbf{w}\cdot(\mathbf{r}\times\mathbf{d}) \;=\; \big(\mathbf{I}^{-1}(\mathbf{r}\times\mathbf{d})\big)\cdot(\mathbf{r}\times\mathbf{d}) \]</span>
+    <span class="eq-plain">dot(d, cross(w, r)) = dot(w, cross(r, d)) = dot(inv_I * (r cross d), (r cross d))</span>
+  </div>
+
+  <p>
+    Write <code>w = r × d</code> and the effective mass becomes
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[
+      k = \frac{1}{m_a} + \frac{1}{m_b}
+        + \mathbf{w}_a\cdot\big(\mathbf{I}_a^{-1}\mathbf{w}_a\big)
+        + \mathbf{w}_b\cdot\big(\mathbf{I}_b^{-1}\mathbf{w}_b\big)
+    \]</span>
+    <span class="eq-plain">k = 1/m_a + 1/m_b + dot(w_a, inv_I_a * w_a) + dot(w_b, inv_I_b * w_b)</span>
+  </div>
+
+  <p>
+    <strong>Why the rearrangement is worth doing.</strong> Not to save a cross product — it saves
+    one, which is nothing. It is worth doing because the two angular terms are now each of the form
+    <code>w·(M w)</code> with <em>M</em> an inverse inertia tensor, and an inertia tensor is
+    <em>positive semi-definite</em> — it is a sum of terms <code>m(|r|²𝟙 − r⊗r)</code>, and 8.3 built
+    it that way. A positive semi-definite matrix has <code>w·(Mw) ≥ 0</code> for every
+    <strong>w</strong>, by definition. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ k \;\ge\; \frac{1}{m_a} + \frac{1}{m_b} \;\ge\; 0 \]</span>
+    <span class="eq-plain">k is never smaller than the sum of the two inverse masses, and never negative</span>
+  </div>
+
+  <p>
+    which means the division by <code>k</code> is <em>safe</em>, always, with one exception we can
+    name exactly: <code>k</code> is zero precisely when both inverse masses are zero, which is two
+    immovable bodies overlapping. That is a level-design bug and the right response is to apply no
+    impulse, which falls out of returning zero rather than an infinity, with no branch. The same
+    reciprocal-mass storage 8.2 §3 argued for, doing its job again.
+  </p>
+
+  <p class="worked">
+    <strong>Measured.</strong> The harness evaluates both algebraic forms on 200,000 random
+    contacts between freely oriented boxes of 0.2 to 400 kg, in two independently written code
+    paths. Worst relative disagreement: <strong>5.016 × 10⁻⁷</strong>. Worst value of
+    <code>k − (1/m_a + 1/m_b)</code> over the same 200,000: <strong>exactly +0.000 × 10⁰</strong> —
+    it never once went negative, which a sign error in either cross product would have caused, and
+    which the agreement between the two forms could <em>not</em> have caught, because both forms
+    would have had it.
+  </p>
+
+  <h3>What it means</h3>
+
+  <p>
+    <code>1/k</code> has units of mass and behaves like one, so the code calls it the
+    <strong>effective mass</strong>: the mass the contact <em>appears</em> to have when pushed along
+    <strong>d</strong>. It is not the body's mass, and the difference is the entire content of the
+    angular terms.
+  </p>
+
+  @@FIG_MASS@@
+
+  <p>
+    Two limits make it concrete, and both are measured as controls.
+  </p>
+
+  <p>
+    <strong>A contact straight through both centres of mass.</strong> Then <code>r</code> is
+    parallel to <code>d</code>, so <code>r × d = 0</code>, so both angular terms vanish
+    <em>exactly</em> and <code>k = 1/m_a + 1/m_b</code>. Its reciprocal is
+    <code>m_a·m_b/(m_a + m_b)</code> — the <strong>reduced mass</strong> of elementary mechanics,
+    which is the whole of what a one-dimensional collision needs. For 3 kg against 7 kg the harness
+    measures <strong>2.100000 kg</strong> against an analytic 2.1.
+  </p>
+
+  <p>
+    <strong>An off-centre contact is lighter.</strong> Push a 10 kg plank in the middle and the
+    contact sees 10 kg. Push it 1.9 m out and part of the impulse turns the plank instead of
+    lifting it, so less of it arrives where the contact is: the harness measures
+    <strong>2.702 kg</strong>, <strong>3.70× lighter</strong>. If you ever find an implementation
+    reporting the same effective mass at the centre and at the end, the angular terms are
+    silently zero — which is a common bug and one that leaves momentum perfectly conserved, so it
+    hides from the obvious test.
+  </p>
+
+  <h2 id="impulse">5. The normal impulse, by hand</h2>
+
+  <p>
+    Now the solve, which is two lines. We want the relative normal velocity after the impulse to
+    equal some target <code>u*</code>. It is currently <code>u_n = u·n</code>, and applying
+    <code>j</code> along <strong>n</strong> changes it by <code>j·k_n</code>. So
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ u_n + j\,k_n = u^{*} \qquad\Longrightarrow\qquad j = \frac{u^{*} - u_n}{k_n} = (u^{*} - u_n)\,m_{\text{eff}} \]</span>
+    <span class="eq-plain">j = (target - current normal velocity) / k, which is (target - u_n) times the effective mass</span>
+  </div>
+
+  <p>
+    and then clamp the total to be non-negative, because a contact may only push. That is the whole
+    normal solve. For a resting contact <code>u* = 0</code>; for a bouncing one
+    <code>u* = −e·(approach)</code>, which is the next section.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, all the way through, with a case that has a closed form.</strong>
+    A 3 kg sphere travelling at +4 m/s strikes a 7 kg sphere travelling at −1 m/s, head on along
+    <em>x</em>, perfectly elastically (<code>e = 1</code>). The contact is through both centres, so
+    there are no angular terms.<br><br>
+    <code>k = 1/3 + 1/7 = 0.333333 + 0.142857 = 0.476190</code>, so
+    <code>m_eff = 1/k = 2.100000 kg</code>.<br>
+    <code>u_n = v_b − v_a = (−1) − (+4) = −5 m/s</code> (negative: approaching, correct).<br>
+    Target: <code>u* = −e·u_n = −1 × (−5) = +5 m/s</code>.<br>
+    <code>j = (5 − (−5)) × 2.1 = 10 × 2.1 = 21.0 N·s</code>.<br><br>
+    Apply it: <code>v_a → 4 − 21/3 = 4 − 7 = −3 m/s</code>,
+    <code>v_b → −1 + 21/7 = −1 + 3 = +2 m/s</code>.<br>
+    Check against the textbook elastic formula
+    <code>v₁′ = ((m₁−m₂)v₁ + 2m₂v₂)/(m₁+m₂) = ((−4)(4) + 14(−1))/10 = −3.0</code>. ✓<br>
+    Check the separation speed: <code>2 − (−3) = 5 m/s</code>, which is <code>e</code> times the
+    approach speed of 5. ✓<br>
+    Check kinetic energy: before <code>½(3·16 + 7·1) = 27.5 J</code>; after
+    <code>½(3·9 + 7·4) = ½(27 + 28) = 27.5 J</code>. ✓
+  </p>
+
+  <p>
+    The harness runs exactly that fixture at five restitutions and compares against the closed form,
+    worst disagreement <strong>2.384 × 10⁻⁷ m/s</strong>:
+  </p>
+
+  <pre><code class="lang-text">      e     v1 (sim)   v1 (exact)     v2 (sim)   v2 (exact)
+   0.00     0.500000     0.500000     0.500000     0.500000
+   0.25    -0.375000    -0.375000     0.875000     0.875000
+   0.50    -1.250000    -1.250000     1.250000     1.250000
+   0.80    -2.300000    -2.300000     1.700000     1.700000
+   1.00    -3.000000    -3.000000     2.000000     2.000000</code></pre>
+
+  <h3>Two conservation checks, and only one of them means anything</h3>
+
+  <p>
+    It is traditional to report that a contact solver conserves momentum. Ours does, to
+    <strong>3.81 × 10⁻⁷</strong> relative. <em>That number is worthless as evidence</em>, and it is
+    worth being explicit about why, because a reader who takes it as reassurance has been misled by
+    a tautology.
+  </p>
+
+  <p>
+    Momentum is conserved because <code>apply_impulse_pair</code> adds the same
+    <strong>J</strong> to one body and subtracts it from the other. The total change in
+    <code>mv</code> is <code>J − J</code>, which is zero in exact arithmetic and zero to the last
+    bit in floating point, because it is <em>literally the same value</em> used twice. It would come
+    out at 10⁻⁷ if every number in the impulse were wrong.
+  </p>
+
+  <p>
+    <strong>Energy is the check.</strong> Nothing in the solver enforces it: there is no energy term
+    anywhere in the code. So “an elastic collision conserved kinetic energy to
+    <strong>1.21 × 10⁻⁷</strong>” is a real constraint on the effective mass, the lever arms and the
+    target velocity all at once. The harness's control makes the distinction stark — halve the
+    effective mass on purpose, which is the single most plausible mistake in this file (forget one
+    body's inverse mass) and see what each instrument says:
+  </p>
+
+  <pre><code class="lang-text">  CONTROL, effective mass halved on purpose:
+    momentum relative change 1.91e-07   &lt;- still perfect
+    energy   relative change 9.55e-01   &lt;- caught</code></pre>
+
+  <p class="aside">
+    <strong>A detector problem, found while building that fixture.</strong> The obvious way to write
+    the test above is to run two real spheres through <code>collide_manifold</code> and let the
+    whole 8.5–8.7 chain produce the contact. It does not work, and the reason is not in this
+    lesson's code: the manifold normal for two spheres comes back
+    <strong>4.2602° off</strong> the line of centres, and the error is <em>constant</em> across four
+    decades of overlap, so it is not convergence noise. It is
+    <code>epa_config::max_iterations</code> — 8.6 set it to 32 on the evidence of a worst case of 21
+    expansions over 200,000 pairs <em>of boxes</em>, and a sphere has no flat face for EPA to
+    terminate on. At 64 iterations the error drops to 1.06°. 8.7 hides it whenever one shape is a
+    box, because the manifold takes the <em>reference face's</em> normal rather than EPA's — which
+    is why a ball on a floor is bit-exact and two balls are four degrees out. <strong>This lesson
+    does not change <code>epa.hpp</code></strong>: it is 8.6's knob, the fix is one number, and
+    changing it needs 8.6's own 200,000-pair measurement rerun to say what it costs. What §5 does
+    instead is take the detector out of the loop, which is exactly why
+    <code>build_manifold</code> takes the normal and depth as arguments.
+  </p>
+
+  <h2 id="restitution">6. Restitution, and the gravity already in the velocity</h2>
+
+  <p>
+    Restitution needed no new equation — only a target. So this section is not about the arithmetic.
+    It is about <em>which velocity</em> you apply it to, which turns out to be the most surprising
+    thing in Module 8.
+  </p>
+
+  <p>
+    Here is the artifact. Drop a ball with <code>e = 0.8</code> and let it bounce for thirty
+    seconds. The closed form is immediate: each bounce keeps <code>e</code> of the speed, energy
+    goes as speed squared, height goes as energy, so the <em>n</em>-th peak is
+    <code>e²ⁿ·h₀</code> and the ball is at rest in finite time with infinitely many bounces
+    (Zeno's ball, and a nice thing to notice). What actually happens:
+  </p>
+
+  @@FIG_RESTITUTION@@
+
+  <p>
+    The uncorrected run climbs <em>away</em> from its own prediction and flattens out. By the tenth
+    bounce it is at <strong>3.918×</strong> the closed form, and it never comes down: over thirty
+    seconds its last bounce still rebounds at 0.654 m/s. The ball hops, forever, about
+    <strong>2.2 centimetres</strong> high.
+  </p>
+
+  <h3>Where it comes from</h3>
+
+  <p>
+    Look at the order of operations in a semi-implicit Euler step — 8.1's settled default, and the
+    order <code>body_world::step</code> has used since 8.2:
+  </p>
+
+  <pre><code class="lang-text">  velocity += acceleration * h;     &lt;- gravity applied HERE
+  ... contacts solved ...           &lt;- the solver looks HERE
+  position += velocity * h;</code></pre>
+
+  <p>
+    By the time the solver reads the relative velocity, this step's gravity is already in it. A ball
+    that truly arrived at the floor with speed <code>v</code> presents to the solver as arriving
+    with <code>v + g·h</code>, and at 60 Hz that is an extra <strong>16.35 cm/s</strong>.
+    Restitution faithfully returns <code>e</code> times a speed that is too big.
+  </p>
+
+  <p>
+    That would be a rounding-scale nuisance if the error shrank with the bounce. It does not: the
+    error is <em>additive</em> and the bounce is <em>multiplicative</em>, so as the ball slows down
+    the extra <code>g·h</code> becomes a larger and larger fraction of what it has. The bounce has a
+    fixed point — a speed at which the energy gained per bounce exactly balances the energy lost:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v = e\,(v + g h) \qquad\Longrightarrow\qquad v_{\infty} = \frac{e\,g h}{1 - e} \]</span>
+    <span class="eq-plain">v = e*(v + g*h) solves to v = e*g*h/(1 - e)</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked, and then measured.</strong> At 60 Hz, <code>g·h = 9.81/60 = 0.1635 m/s</code>.
+    <br>
+    <code>e = 0.50</code>: <code>v∞ = 0.5 × 0.1635 / 0.5 = 0.1635 m/s</code> → a hop of
+    <code>v²/2g = 1.36 mm</code>.<br>
+    <code>e = 0.80</code>: <code>v∞ = 0.8 × 0.1635 / 0.2 = 0.6540 m/s</code> → <strong>21.8 mm</strong>.<br>
+    <code>e = 0.95</code>: <code>v∞ = 0.95 × 0.1635 / 0.05 = 3.1065 m/s</code> →
+    <strong>492 mm</strong>. Half a metre, forever.<br><br>
+    Measured terminal rebound speeds, taken directly from the step on which the velocity flipped so
+    that no peak has to be interpolated:
+  </p>
+
+  <pre><code class="lang-text">       e      v predicted       v measured     hop height      ratio
+    0.50        0.1635 m/s        0.1635 m/s        1.36 mm      1.000
+    0.80        0.6540 m/s        0.6540 m/s       21.80 mm      1.000
+    0.95        3.1065 m/s        3.3759 m/s      580.87 mm      1.087</code></pre>
+
+  <p>
+    Exact at the first two. The 0.95 row is 8.7% high because thirty seconds was not long enough for
+    it to converge — the approach to the fixed point is geometric with ratio <code>e</code>, and
+    0.95 is slow.
+  </p>
+
+  <h3>Fixing it exactly</h3>
+
+  <p>
+    The cure is to apply restitution to the velocity the contact <em>arrived</em> with rather than
+    the one it has when the solver looks. <code>solver_config::restitution_bias</code> is where the
+    caller declares the velocity this step's external acceleration added — pass
+    <code>gravity * h</code> — and the arrival speed is the observed approach minus that bias.
+  </p>
+
+  <p>
+    There is a trap in implementing it, and the harness has a control for exactly that trap. The
+    first thing one writes is “subtract <code>g·h</code> from the approach speed”. That is wrong
+    whenever <em>both</em> bodies are dynamic: gravity gave both of them the same velocity, so the
+    <em>relative</em> velocity it produced is exactly zero and there is nothing to correct. The
+    right expression is the difference of the two bodies' biases:
+  </p>
+
+  <pre><code class="lang-cpp">const float bias_n = dot(step_bias_of(b, cfg.restitution_bias)
+                             - step_bias_of(a, cfg.restitution_bias),
+                         batch.normal);</code></pre>
+
+  <p>
+    with <code>step_bias_of</code> returning zero for anything that is not dynamic and scaling by
+    the body's own <code>gravity_scale</code>. The control: two dynamic balls meeting in free fall,
+    separation speed <strong>3.066632748 m/s</strong> with the correction and
+    <strong>3.066632748 m/s</strong> without — identical, as they must be. The naive version would
+    have been out by the full 16 cm/s.
+  </p>
+
+  <h3>And the threshold, which is the same fix made approximately</h3>
+
+  <p>
+    Every physics engine ships a <strong>restitution threshold</strong>: below some approach speed,
+    usually 1 m/s, restitution is switched off. The reason given is always the same — without it, a
+    resting body with any <code>e &gt; 0</code> buzzes on the floor forever, because gravity gives
+    it a few millimetres per second of approach each step and the solver dutifully gives some back.
+  </p>
+
+  <p>
+    Which should sound familiar, because it is the <em>same artifact</em>. A resting body's approach
+    speed <em>is</em> this step's <code>g·h</code>. Subtracting the bias makes the arrival speed
+    exactly zero, and zero is below any threshold. So the harness measures them against each other:
+  </p>
+
+  <pre><code class="lang-text">       e    threshold       bias      peak |vy|           buzz
+    0.60      0.00 m/s        off     0.23976 m/s      6.9259 mm
+    0.60      1.00 m/s        off     0.00000 m/s      0.0000 mm
+    0.60      0.00 m/s         on     0.00000 m/s      0.0000 mm
+    0.60      1.00 m/s         on     0.00000 m/s      0.0000 mm</code></pre>
+
+  <p>
+    <strong>The bias alone does the threshold's whole job, with no magic number in it.</strong> The
+    threshold is the approximate version of the same correction, and it was invented first.
+  </p>
+
+  <p>
+    That is not an argument for deleting it, and the harness says why. The bias cancels the
+    acceleration the <em>caller declared</em>. Anything else pressing the two bodies together in the
+    same step — a thruster, a spring, a conveyor, another crate in a stack — produces an approach
+    speed the solver has no way to know about. Put a 300 N downward thruster on the same crate,
+    leave the bias set to <code>g·h</code>, and the buzz comes back at 9.9 mm with the threshold off
+    and vanishes with it on. <strong>Keep both:</strong> the bias because it is exact where it
+    applies, the threshold because it covers everywhere else — and a stack of crates is
+    everywhere else.
+  </p>
+
+  <p class="aside">
+    <strong>While we are being honest about <em>e</em>:</strong> it is not a constant of a material,
+    which every table of coefficients quietly omits. A real coefficient of restitution falls as the
+    impact speed rises, because more of the energy goes into permanently deforming the thing — a
+    steel ball is nearly elastic at 0.1 m/s and visibly not at 10. Games use one number per material
+    because the error is invisible next to the error in everything else. This is the ninety-per-cent
+    picture; the missing ten per cent is speed-dependent restitution, and Stronge's
+    <em>Impact Mechanics</em> is where to go for it.
+  </p>

@@ -1,0 +1,377 @@
+
+  <!-- =================================================================
+       8 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Every file this lesson creates or modifies.</caption>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/core/actions.hpp</code></td><td>new</td>
+          <td><code>action_id</code>, <code>binding</code>, the <code>input_snapshot</code>
+              concept, and <code>action_map</code> including the templated
+              <code>update</code></td></tr>
+      <tr><td><code>engine/src/core/actions.cpp</code></td><td>new</td>
+          <td>declaring, finding, binding, and the queries</td></tr>
+      <tr><td><code>engine/include/engine/platform/app.hpp</code></td><td>modified</td>
+          <td>the <code>on_input()</code> hook</td></tr>
+      <tr><td><code>engine/src/platform/app.cpp</code></td><td>modified</td>
+          <td>…and where in the frame it is called</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>one source file</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td>
+          <td>no scancodes in the gameplay code; a camera on axes; a runtime rebind</td></tr>
+      <tr><td><code>scratch/verify_510.cpp</code></td><td>new</td>
+          <td>62 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The engine's public header count goes from 53 to <strong>54</strong>, and this is the first
+    lesson since 5.5 to add a <em>source</em> file — which is why <code>engine/CMakeLists.txt</code>
+    changes at all. The reason it has one is in the file's own header comment: the mapping logic
+    is real per-frame work, and a header-only version would put that loop into every translation
+    unit that asks a question about input.
+  </p>
+
+  @@LISTING:engine/include/engine/core/actions.hpp@@
+  @@LISTING:engine/src/core/actions.cpp@@
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+  @@LISTING:scratch/verify_510.cpp@@
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">9</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">macOS / Linux</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+./build/demos/ecs_swarm                            # a window
+./build/demos/ecs_swarm --shot swarm.ppm           # one frame, no window, no display
+
+sh scratch/build_verify_510.sh                              # correctness, -O0
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_510.sh # …and optimised</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (PowerShell, MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo
+
+.\build\demos\RelWithDebInfo\ecs_swarm.exe</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> Exactly the picture Lesson 5.9 left — a golden torus,
+    ninety-six orbiting planets, thirty-two white moons, twenty-four invisible waypoints — because
+    this lesson changed how input arrives and nothing about what is drawn. The HUD gains one line,
+    and it is worth looking at:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the new HUD line</span></figcaption>
+    <pre><code class="lang-bash">actions 13   bindings 19   spawn on [Space]/[LMB]   yaw +0  zoom +0</code></pre>
+  </figure>
+
+  <p>
+    <strong>That line reads the binding table rather than a hard-coded string</strong>, so it
+    cannot go stale. Press <kbd>K</kbd> and it becomes <code>spawn on [Enter]</code>, because the
+    binding really changed. It is a small thing and it is the first dividend an action layer pays:
+    the program can now <em>describe its own controls</em>, which a switch statement could never do.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What each control demonstrates.</caption>
+    <thead><tr><th>control</th><th>action</th><th>what it demonstrates</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Space</kbd> <em>or</em> left mouse</td><td><code>spawn_sparks</code></td>
+          <td><strong>Two bindings, two devices, one action.</strong> Hold Space, then also press
+              the mouse, then release Space: sparks spawn once, not twice, because the edge came
+              from the action's level. This is §4, live.</td></tr>
+      <tr><td><kbd>K</kbd></td><td><code>rebind_spawn</code></td>
+          <td>Rebinds spawning to <kbd>Enter</kbd> while the program runs. The HUD follows.</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td><code>camera_yaw</code></td>
+          <td>An axis from two keys. <strong>Hold both and the camera stops</strong>, because
+              −1 + 1 = 0 and nothing says so.</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td><code>camera_pitch</code></td>
+          <td>The same, on the other axis, clamped by the caller rather than the map.</td></tr>
+      <tr><td><kbd>[</kbd> <kbd>]</kbd> <em>or</em> the wheel</td><td><code>camera_zoom</code></td>
+          <td>A digital pair and a continuous source feeding <em>the same</em> action.</td></tr>
+      <tr><td><kbd>F</kbd> <kbd>C</kbd> <kbd>H</kbd> <kbd>M</kbd> <kbd>O</kbd> <kbd>X</kbd>
+              <kbd>R</kbd></td><td>the 5.8/5.9 demonstrations</td>
+          <td>Unchanged behaviour, entirely rewritten plumbing — none of them names a key any
+              more.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The verification harness prints its own arithmetic, and two lines are worth checking by hand:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">selected output — <code>sh scratch/build_verify_510.sh</code></span></figcaption>
+    <pre><code class="lang-bash">=== C. Edges come from the action's level ===
+  [PASS] pressing the MOUSE while the key is still held gives NO second edge (1)
+  [PASS] releasing the key while the mouse is still down gives NO falling edge (0)
+  [PASS] ONE rising and ONE falling edge for the whole sequence
+
+=== D. The edge that survives the step ===
+  [PASS] a TWO-step frame jumps 1 time
+  [PASS] …but the QUEUED press survives, so a frame that ran no steps does not swallow the input
+  [PASS] six presses with no step queued 4, capped at 4
+
+62 checks, 0 failures</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The player jumps twice, but only sometimes</span>
+    <p><strong>Symptom.</strong> One press, two jumps — on some machines, on some frames, and
+       never while you are watching.</p>
+    <p><strong>Cause.</strong> Two possibilities, and they need different fixes.
+       <em>Either</em> the edge was read inside <code>on_fixed_step</code> on a two-step frame,
+       <em>or</em> the action has two bindings and the edges were derived from the bindings
+       instead of the level.</p>
+    <p><strong>Fix.</strong> For the first, <code>consume_pressed()</code>. For the second,
+       derive from the level. To tell them apart: unbind everything but one key. If it stops, it
+       was the second; if it persists, it was the first.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An input is occasionally ignored entirely</span>
+    <p><strong>Symptom.</strong> A press does nothing, roughly once in a hundred, more often when
+       the machine is busy.</p>
+    <p><strong>Cause.</strong> A zero-step frame. The accumulator had not built up a full step's
+       worth of time, so <code>on_fixed_step</code> did not run, and a frame-scoped edge came and
+       went with nothing listening.</p>
+    <p><strong>Fix.</strong> <code>consume_pressed()</code>, which queues it until a step happens.
+       This one is genuinely hard to reproduce deliberately, which is why the harness simulates the
+       frame structure directly rather than hoping to catch it.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Every step of the frame reacts to input one frame late</span>
+    <p><strong>Symptom.</strong> The game feels slightly mushy. Nothing is broken; everything is
+       16 ms behind.</p>
+    <p><strong>Cause.</strong> <code>action_map::update()</code> is being called in
+       <code>on_frame</code>, which runs <em>after</em> the steps.</p>
+    <p><strong>Fix.</strong> <code>on_input()</code>. It exists for exactly this, and the symptom
+       is worth knowing because it is the kind that gets attributed to the display, the driver, or
+       the mouse.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A key held while alt-tabbing is still held on return</span>
+    <p><strong>Symptom.</strong> Come back to the window and the character is walking.</p>
+    <p><strong>Cause.</strong> The level was true when focus was lost, and nothing said otherwise
+       while the window was in the background.</p>
+    <p><strong>Fix.</strong> <code>reset()</code> on <code>SDL_EVENT_WINDOW_FOCUS_LOST</code>. It
+       clears levels, edges and the queue, so the next update sees a fresh rising edge if the key
+       really is still down. Note that it also forgets the mouse origin, deliberately — otherwise
+       the first frame back delivers the entire distance the cursor travelled while you were away.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An axis reads a huge value on the first frame</span>
+    <p><strong>Symptom.</strong> The camera snaps somewhere absurd exactly once, at start-up or
+       after a scene change.</p>
+    <p><strong>Cause.</strong> A mouse delta computed against a previous position that was never
+       set, so the first frame's "delta" is the cursor's absolute position.</p>
+    <p><strong>Fix.</strong> The map tracks whether it has a previous sample and reports zero
+       until it does. §F of the harness asserts exactly this, and also that
+       <code>reset()</code> puts it back into that state.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An action silently does nothing after editing a config file</span>
+    <p><strong>Symptom.</strong> A control stops working, with no error anywhere.</p>
+    <p><strong>Cause.</strong> A typo in an action name. If lookup <em>declared</em> on miss, the
+       typo would create a brand-new action with no bindings and no code reading it — a perfectly
+       functioning thing that does nothing.</p>
+    <p><strong>Fix.</strong> <code>find()</code> returns an invalid id and does not declare;
+       <code>declare()</code> is the only thing that creates. Check the return. The harness asserts
+       that <code>find</code> of an unknown name leaves the action count unchanged.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>11.1 — Save and load the bindings.</strong> Write the binding table to a text
+         file and read it back, so a player's rebinds survive a restart. Actions by
+         <em>name</em>, not by id — the ids are assignment order and will change the moment
+         somebody adds a <code>declare</code> call.</p>
+      <details><summary>Hint</summary>
+         <p>One line per binding: action name, source, code, scale. Loading is
+            <code>declare(name)</code> — which is idempotent, so it does the right thing whether
+            or not the program declared it first — then the matching <code>bind_*</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The interesting part is not the parsing, it is what to do when a file names an action
+            the program does not have. Declaring it is wrong (it will never be read); refusing to
+            load the file is wrong (one stale line should not lose every rebind). Skip the line and
+            log it — the same shape Lesson 5.3's log/error rules produce everywhere else.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.2 — Add the gamepad.</strong> §7 lists the five steps and marks the SDL3
+         signature as needing verification against the headers. Do all five. Then unplug the
+         controller while an action bound to it is held, and make sure the release edge fires.</p>
+      <details><summary>Hint</summary>
+         <p>The first four are mechanical. The fifth is the exercise: a disconnected device stops
+            answering, and "stops answering" must become "contributes zero" rather than "keeps
+            its last value". Where does that belong — in the binding, or in whatever owns the
+            <code>SDL_Gamepad*</code>?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>In the snapshot, not in the map. A disconnected pad's <code>key_down</code> equivalent
+            returns false, the sum drops to zero, the level goes false, and the release edge falls
+            out of §4's existing machinery with no new code at all. <strong>If you found yourself
+            adding a special case to <code>action_map</code>, the abstraction boundary is in the
+            wrong place</strong> — and noticing that is worth more than the feature.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.3 — Record and replay.</strong> Record the action values of every frame to a
+         buffer, then play them back through a snapshot type that reads from the buffer instead of
+         from a device. Check that the demo reproduces itself exactly.</p>
+      <details><summary>Hint</summary>
+         <p>You do not need to record inputs at all — record the <em>action values</em>, and make
+            the playback source a type satisfying <code>input_snapshot</code> whose six functions
+            are backed by the recording. This is §1's third problem, solved.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It will not reproduce exactly, and finding out why is the exercise. The simulation is
+            deterministic (Lesson 1.4 verified that) but the number of steps per frame is not — it
+            depends on wall-clock time. A replay has to record and replay the <em>step count</em>
+            as well as the input, or drive the loop at a fixed step count. That is why replay
+            systems and fixed timesteps are always discussed together.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.4 — Conflict detection.</strong> Add
+         <code>action_map::conflicts(SDL_Scancode)</code>, returning every action already bound to
+         a key, so a settings screen can warn before a rebind silently shadows something. Then
+         decide: should <code>bind_key</code> refuse a conflict?</p>
+      <details><summary>Solution sketch</summary>
+         <p>It should not. Two actions on one key is often deliberate — "accept" and "shoot" in
+            different contexts, a modifier-free chord — and a binding layer that refuses it forces
+            the caller to work around it. Report the conflict and let the caller decide, which is
+            the same shape as Lesson 5.5's asset store reporting a load failure instead of
+            substituting a default. <strong>The flat binding list this exercise walks is the
+            reason §8's table is flat rather than per-action.</strong></p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.5 — Put the map in a component.</strong> §2.2 claims a two-player game holds
+         two maps and a per-entity game puts one in a component. Prove it: add a
+         <code>player_input</code> component holding an <code>action_map</code>, give two entities
+         one each with different bindings, and drive them from a single
+         <code>view&lt;player_input, placement&gt;</code>.</p>
+      <details><summary>Hint</summary>
+         <p><code>action_map</code> holds vectors, so it is movable but not trivially copyable —
+            which is fine, because Lesson 5.8's <code>pool&lt;T&gt;</code> requires only movability.
+            Worth checking that claim rather than assuming it.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It works, and the interesting discovery is where <code>update()</code> goes: once per
+            map, per frame, in <code>on_input</code> — which is a <code>view&lt;player_input&gt;</code>
+            walk, and therefore a system like any other. Lesson 5.7's rule 1 (components stay small)
+            argues against it at scale, since an <code>action_map</code> is several vectors; the
+            honest alternative is a component holding an <em>index</em> into a small array of maps.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now be told what the player meant. What it gained:
+  </p>
+
+  <ul>
+    <li><strong>Actions, bindings and values</strong> — one name in the middle, and the four
+        things §1 could not do all become possible. No gameplay code in the demo names a key.</li>
+    <li><strong>One mechanism for buttons and axes.</strong> Every binding contributes a signed
+        value; an action's value is the sum. Holding both halves of an axis gives exactly zero,
+        and no rule anywhere says so.</li>
+    <li><strong>Edges derived from the action's level.</strong> The bug this avoids is invisible
+        with one binding per action and fires as "sometimes it jumps twice" the moment somebody
+        binds a second device.</li>
+    <li><strong>A second kind of edge for the fixed step.</strong> <code>consume_pressed()</code>
+        fires exactly once per press however many times the step runs — including zero — which is
+        Lesson 1.4's trap closed rather than documented.</li>
+    <li><strong>The hook that was missing.</strong> <code>on_input()</code>: once per frame,
+        after input, before the simulation. Nothing else in the frame is that.</li>
+    <li><strong>A concept instead of an interface.</strong> <code>input_snapshot</code> makes the
+        mapping logic testable without a base class, without a virtual call, and without one
+        character changing in Lesson 1.2's header.</li>
+  </ul>
+
+  <p>
+    And what it did not gain, said plainly: <strong>a gamepad</strong>. §7 gives the reason —
+    it could not be run here, and untested device code is a liability — along with the five steps
+    and the one that is actually hard. What <em>is</em> demonstrated is the property the gamepad
+    claim rests on: one action, several bindings, more than one device.
+  </p>
+
+  <p>
+    The reference shot from Lesson 5.1 is byte-identical for the <strong>tenth</strong> lesson.
+  </p>
+
+  <p>
+    <strong>Next: 5.11 — Dear ImGui and the Debug Draw System.</strong> The tooling pair, and both
+    halves have an argument to make. ImGui is the first third-party UI in the course, so it owes
+    the “why we don't hand-roll this” justification the course demands of every dependency — and
+    a decision about which of the engine's two surfaces gets the backend first. Debug draw is not
+    a new file: <code>engine/gfx/debug_draw.hpp</code> has existed since Module 3, so the lesson
+    has to say what is wrong with it rather than quietly replacing it. Its first client is
+    obvious and immediately useful — draw a line from every entity to its parent, and Lesson 5.9's
+    hierarchy becomes something you can look at, which is also how you would debug an orphan or a
+    cycle.
+  </p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Unity's Input System package</strong> — the same three-layer shape (actions,
+        bindings, control schemes) at production scale, with the composite bindings this lesson's
+        signed-sum rule replaces. Their “1D Axis” composite is exactly §3's two keys with
+        opposite scales, given a name and a UI.</li>
+    <li><strong>Unreal's Enhanced Input</strong> — the other production answer, and interestingly
+        different: modifiers and triggers are first-class objects in the binding chain rather than
+        a scale. Worth reading against §3 to see what a richer mechanism buys and costs.</li>
+    <li><strong>SDL3 <code>SDL_gamepad.h</code></strong> — the header to read before attempting
+        Exercise 11.2, and the authority for the signatures §7 declines to guess at.</li>
+    <li><strong>Glenn Fiedler, “Fix Your Timestep!”</strong> — the source of the accumulator this
+        lesson's queue exists to survive. Re-read the variable-step-count section with §5.2 in
+        mind; the input problem is a consequence of the loop and is rarely mentioned alongside it.</li>
+    <li><strong>Lesson 1.2</strong> for the level-versus-edge distinction this builds on,
+        <strong>1.4</strong> for the accumulator, and <strong>5.2</strong> for the application
+        layer that gained a hook.</li>
+  </ul>

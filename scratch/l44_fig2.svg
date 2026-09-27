@@ -1,0 +1,63 @@
+<svg viewBox="0 0 720 496" role="img" aria-labelledby="l44f2-t l44f2-d">
+  <title id="l44f2-t">The pipeline create-info, field by field, and what it checks</title>
+  <desc id="l44f2-d">A table of the nine top-level fields of SDL_GPUGraphicsPipelineCreateInfo with what each decides and the value this course gives it, followed by four creation trials. Only one of the four wrong descriptions is refused — the one with no vertex layout at all, where the driver reports that the vertex function has input attributes but no vertex descriptor was set. A mismatched colour target format and an attribute the shader never declared are both accepted.</desc>
+  <defs>
+    <marker id="e-i-l44f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l44f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l44f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">SDL_GPUGraphicsPipelineCreateInfo &#8212; nine fields, and what each decides</text>
+<rect x="30.0" y="66.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="82.0" class="xs mono">vertex_shader</text>
+<text x="232.0" y="82.0" class="xs">the program</text>
+<text x="482.0" y="82.0" class="xs mono muted">ours</text>
+<rect x="30.0" y="96.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="112.0" class="xs mono">fragment_shader</text>
+<text x="232.0" y="112.0" class="xs">the program</text>
+<text x="482.0" y="112.0" class="xs mono muted">ours</text>
+<rect x="30.0" y="126.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="142.0" class="xs mono">vertex_input_state</text>
+<text x="232.0" y="142.0" class="xs">how to read the buffer</text>
+<text x="482.0" y="142.0" class="xs mono muted">ours</text>
+<rect x="30.0" y="156.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="172.0" class="xs mono">primitive_type</text>
+<text x="232.0" y="172.0" class="xs">what three vertices MEAN</text>
+<text x="482.0" y="172.0" class="xs mono muted">list</text>
+<rect x="30.0" y="186.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="202.0" class="xs mono">rasterizer_state</text>
+<text x="232.0" y="202.0" class="xs">cull, winding, fill</text>
+<text x="482.0" y="202.0" class="xs mono muted">CCW / back</text>
+<rect x="30.0" y="216.0" width="190.0" height="24" rx="3" fill="#7a7a72" opacity="0.1" stroke="#7a7a72" stroke-width="1.2"/>
+<text x="38.0" y="232.0" class="xs mono">multisample_state</text>
+<text x="232.0" y="232.0" class="xs">samples per pixel</text>
+<text x="482.0" y="232.0" class="xs mono muted">1</text>
+<rect x="30.0" y="246.0" width="190.0" height="24" rx="3" fill="#7a7a72" opacity="0.1" stroke="#7a7a72" stroke-width="1.2"/>
+<text x="38.0" y="262.0" class="xs mono">depth_stencil_state</text>
+<text x="232.0" y="262.0" class="xs">Lesson 3.1, as a struct</text>
+<text x="482.0" y="262.0" class="xs mono muted">off until 4.7</text>
+<rect x="30.0" y="276.0" width="190.0" height="24" rx="3" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.2"/>
+<text x="38.0" y="292.0" class="xs mono">target_info</text>
+<text x="232.0" y="292.0" class="xs">the format, which must MATCH</text>
+<text x="482.0" y="292.0" class="xs mono muted">swapchain's</text>
+<rect x="30.0" y="306.0" width="190.0" height="24" rx="3" fill="#7a7a72" opacity="0.1" stroke="#7a7a72" stroke-width="1.2"/>
+<text x="38.0" y="322.0" class="xs mono">props</text>
+<text x="232.0" y="322.0" class="xs">extensions</text>
+<text x="482.0" y="322.0" class="xs mono muted">0</text>
+<text x="30.0" y="356.0" class="xs">Nine at the top; <tspan class="t-hi">fifty-three</tspan> once the nested state structs are expanded &#8212; the object Lesson 4.1 predicted from <tspan class="mono">fill_style</tspan>.</text>
+<text x="30.0" y="386.0" class="sm">and what it refuses</text>
+<rect x="30.0" y="399.0" width="12" height="12" rx="3" fill="#5ac878" opacity="0.85"/>
+<text x="52.0" y="410.0" class="xs">correct</text>
+<text x="430.0" y="410.0" class="xs mono t-hi">created</text>
+<rect x="30.0" y="423.0" width="12" height="12" rx="3" fill="#eb786e" opacity="0.85"/>
+<text x="52.0" y="434.0" class="xs">a colour format the target does not have</text>
+<text x="430.0" y="434.0" class="xs mono t-hi">created</text>
+<rect x="30.0" y="447.0" width="12" height="12" rx="3" fill="#eb786e" opacity="0.85"/>
+<text x="52.0" y="458.0" class="xs">an attribute the shader never declared</text>
+<text x="430.0" y="458.0" class="xs mono t-hi">created</text>
+<rect x="30.0" y="471.0" width="12" height="12" rx="3" fill="#5ac878" opacity="0.85"/>
+<text x="52.0" y="482.0" class="xs">no vertex layout, but the shader wants one</text>
+<text x="430.0" y="482.0" class="xs mono">REFUSED</text>
+</svg>

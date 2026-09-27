@@ -1,0 +1,60 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l52f1-t l52f1-d">
+  <title id="l52f1-t">Library versus framework</title>
+  <desc id="l52f1-d">Two panels showing the same six frame phases. On the left the loop lives in your main(); on the right it lives inside SDL, which calls your four callbacks.</desc>
+  <defs>
+    <marker id="e-i-l52f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l52f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l52f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l52f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The same six phases. The only difference is who says `while`.</text>
+<text x="20" y="46" class="sm" text-anchor="start">LIBRARY — your program calls the engine</text>
+<rect x="20" y="58" width="320" height="300" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="20" y="58" width="320" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="180.0" y="73" class="xs mono t-inv" text-anchor="middle">main() { while (running) { … } }</text>
+<text x="180.0" y="94" class="xs muted" text-anchor="middle">your code</text>
+<rect x="46" y="106" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="124" class="xs" text-anchor="middle">drain events</text>
+<rect x="46" y="144" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="162" class="xs" text-anchor="middle">tick clock + input</text>
+<line x1="180.0" y1="134" x2="180.0" y2="142" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="46" y="182" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="200" class="xs" text-anchor="middle">N x fixed step</text>
+<line x1="180.0" y1="172" x2="180.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="46" y="220" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="238" class="xs" text-anchor="middle">render</text>
+<line x1="180.0" y1="210" x2="180.0" y2="218" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="46" y="258" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="276" class="xs" text-anchor="middle">blit + overlay</text>
+<line x1="180.0" y1="248" x2="180.0" y2="256" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="46" y="296" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="180.0" y="314" class="xs" text-anchor="middle">present</text>
+<line x1="180.0" y1="286" x2="180.0" y2="294" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<text x="180.0" y="350" class="xs t-hi" text-anchor="middle">the `while` is in THIS box</text>
+<text x="380" y="46" class="sm" text-anchor="start">FRAMEWORK — the engine calls your program</text>
+<rect x="380" y="58" width="320" height="300" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="4 3"/>
+<rect x="380" y="58" width="320" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="540.0" y="73" class="xs mono t-inv" text-anchor="middle">SDL_EnterAppMainCallbacks(…)</text>
+<text x="540.0" y="94" class="xs muted" text-anchor="middle">SDL3, inside the library</text>
+<rect x="406" y="106" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="124" class="xs" text-anchor="middle">drain events</text>
+<rect x="406" y="144" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="162" class="xs" text-anchor="middle">tick clock + input</text>
+<line x1="540.0" y1="134" x2="540.0" y2="142" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="406" y="182" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="200" class="xs" text-anchor="middle">N x fixed step</text>
+<line x1="540.0" y1="172" x2="540.0" y2="180" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="406" y="220" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="238" class="xs" text-anchor="middle">render</text>
+<line x1="540.0" y1="210" x2="540.0" y2="218" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="406" y="258" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="276" class="xs" text-anchor="middle">blit + overlay</text>
+<line x1="540.0" y1="248" x2="540.0" y2="256" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<rect x="406" y="296" width="268" height="28" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="540.0" y="314" class="xs" text-anchor="middle">present</text>
+<line x1="540.0" y1="286" x2="540.0" y2="294" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f1)"/>
+<text x="540.0" y="350" class="xs t-hi" text-anchor="middle">the `while` is in SDL's box</text>
+<line x1="360" y1="58" x2="360" y2="358" class="grid" stroke-width="1"/>
+<text x="20" y="380" class="xs" text-anchor="start">Both are correct SDL3. The right-hand one is the only one that also works where the OS owns the loop — the web, and mobile.</text>
+<text x="20" y="394" class="xs muted" text-anchor="start">engine::platform is the left arrangement; engine::app is the right one, and it is BUILT ON the left (Figure 5).</text>
+</svg>

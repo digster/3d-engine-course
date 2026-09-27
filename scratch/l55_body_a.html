@@ -1,0 +1,449 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-04-handles.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.4 — Handles: Generational Indices</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-06-data-oriented-design.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.6 — Data-Oriented Design</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.5</div>
+    <h1>The Asset System v1</h1>
+    <p class="deck">
+      Last lesson built a reference that can be told it is out of date. That is the
+      <em>mechanism</em>; today is the <em>policy</em>, and it answers three questions a pool does
+      not: where a mesh comes from, how asking for it twice gives you the same one, and — the
+      word this whole module has been building towards — how to <strong>unload</strong> it.
+      Along the way we refuse to reference-count, and the argument for refusing is the same
+      sentence that made handles worth having. We close the lifetime hole 5.4 deliberately left
+      open. And we free a mesh out from under a scene that is still drawing it, on a keypress, to
+      watch exactly one object disappear with a number next to it.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping</a>,
+          <a href="05-03-logging-and-errors.html">5.3 — Logging, Assertions, and Errors</a>,
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/asset/search_path.hpp</code>,
+            <code>engine/src/asset/search_path.cpp</code>,
+            <code>engine/include/engine/asset/asset_store.hpp</code>,
+            <code>engine/src/asset/asset_store.cpp</code>,
+            <code>engine/include/engine/gfx/image.hpp</code>,
+            <code>engine/src/gfx/obj.cpp</code>,
+            <code>engine/src/gfx/gpu_shader.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/common/demo_scene.{hpp,cpp}</code>,
+            <code>demos/hello_cube/main.cpp</code>, <code>demos/sandbox/main.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Assets are <strong>found by name, loaded once, and unloadable</strong>. A derived
+            asset cannot outlive its source. Freeing a mesh a live scene is using costs one
+            object and is <em>counted</em>. Golden still byte-identical — five lessons now.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…separate a <em>name</em> from a <em>path</em>, and say why an ordered search path is
+          the mechanism behind mods, localisation, test fixtures and hot reload alike.</li>
+      <li>…argue against reference counting for asset handles, from the properties a handle has
+          rather than from taste — and say where a lifetime rule <em>is</em> unavoidable.</li>
+      <li>…explain why import settings belong to an asset's identity, and what breaks when they
+          do not.</li>
+      <li>…implement a cascade that releases derived assets transitively, and say why stopping
+          after one hop is a leak.</li>
+      <li>…treat load failure as the ordinary case it is, so that a missing asset costs one
+          object and never a frame.</li>
+      <li>…measure what an acquire costs, stage by stage, and say what a cache is actually
+          worth.</li>
+      <li>…resist the pressure to make the store a singleton, with a concrete reason rather than
+          a stylistic one.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-library">The lending library</a></li>
+          <li><a href="#intuition-name">A name is not a path</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-refcount">Why not reference counting</a></li>
+          <li><a href="#theory-derived">The one place a rule is unavoidable</a></li>
+          <li><a href="#theory-identity">Import settings are identity</a></li>
+          <li><a href="#theory-failure">Failure is the ordinary case</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-path">The search path</a></li>
+          <li><a href="#impl-store">The store, and what it holds</a></li>
+          <li><a href="#impl-load">Loading, and the cache that is not a map</a></li>
+          <li><a href="#impl-key">One key space, and the bug that proved it</a></li>
+          <li><a href="#impl-cascade">The cascade</a></li>
+          <li><a href="#impl-demo">Forty lines become one</a></li>
+          <li><a href="#impl-singleton">The pressure to make it global</a></li>
+        </ol>
+      </li>
+      <li><a href="#cost">What It Cost, and What It Bought</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 5.4 ended with a pool that can say <em>no</em>. A handle resolves or it does not; a
+    freed slot bumps its generation; a stale reference is a null pointer and a counter rather
+    than undefined behaviour. That is a genuinely useful thing to own, and it answers exactly one
+    question — <em>is this reference still good?</em>
+  </p>
+
+  <p>
+    Here are three it does not answer.
+  </p>
+
+@@FIG_QUESTIONS@@
+
+  <p>
+    Take them one at a time, because each one has a receipt in the current source.
+  </p>
+
+  <p>
+    <strong>Loading.</strong> Here is what it took to put a model on screen before this lesson,
+    with the comments removed so the shape is visible:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.cpp — before</span></figcaption>
+    <pre><code class="lang-cpp">const std::string path = engine::asset_path(file_of(c));
+m.load = engine::load_obj(path.c_str(), data);
+if (apply_uv_flip) { engine::flip_uv_v(data); }
+const Uint64 t1 = SDL_GetTicksNS();
+m.load_ms = static_cast&lt;double&gt;(t1 - t0) / 1.0e6;
+m.check = engine::validate(data.view());
+lib.meshes.remove(m.geometry);
+m.geometry = lib.meshes.insert(std::move(data));</code></pre>
+  </figure>
+
+  <p>
+    Assemble a path. Open a file. Parse it. Apply an import convention. Time it. Validate it.
+    Free the previous one. Store the new one. Eight steps, in <em>demo</em> code, and only two of
+    them — <em>which</em> file, and what to do if it is missing — are a program's business. The
+    other six are the same six every program will write, slightly differently, until one of them
+    forgets the uv flip.
+  </p>
+
+  <p>
+    <strong>Finding.</strong> There is no name-to-handle map anywhere in this engine, so there is
+    no such thing as asking for an asset you might already have. Every request is a fresh load.
+    Lesson 3.5 wrote a comment about this at the time, and it is worth quoting because it was a
+    promissory note:
+  </p>
+
+  <div class="callout note">
+    <span class="label">demos/sandbox/main.cpp, Lesson 3.5</span>
+    <p>“A real load, on a keypress, every time — not a cache lookup. It costs about half a
+       millisecond for the torus and the HUD says so, which is the honest way to introduce the
+       fact that asset loading is work. <strong>Module 5 caches; today we measure.</strong>”</p>
+  </div>
+
+  <p>
+    <strong>Unloading.</strong> And this is the one that matters, because the other two are
+    conveniences and this is a capability. <em>Nothing in this engine has ever freed anything.</em>
+    Not once, in fifty-four lessons. Every mesh, texture and buffer ever created has lived until
+    the process exited, which is why Lesson 5.4's whole argument had to be made in the abstract:
+    the question "is this reference still valid?" had never once been answered <em>no</em> in a
+    running program.
+  </p>
+
+  <p>
+    There is a fourth problem, smaller and more embarrassing. The engine currently has
+    <strong>three</strong> answers to "where do files live", and none of them knows about the
+    others: <code>engine::asset_path</code> in <code>gfx/obj.cpp</code> (whose own comment calls
+    itself “a placeholder for Module 5's asset system”), <code>shader_path</code> in
+    <code>gfx/gpu_shader.cpp</code> — written by copying the first — and the demo, which
+    assembles <code>std::string</code>s around the first at three call sites. Three copies of one
+    idea is the usual sign that the idea has no name.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-library"><span class="num">2.1</span>The lending library</h3>
+
+  <p>
+    Lesson 5.4's cloakroom took your coat and gave you a numbered ticket. A lending library is
+    the same idea with three additions, and those additions are exactly this lesson.
+  </p>
+
+  <p>
+    First, <strong>you ask for a book by title, not by shelf</strong>. You do not walk in and say
+    "give me whatever is in position 4,192"; you say "<em>Dune</em>", and somebody who knows
+    where things are turns that into a shelf. That indirection is what lets the library
+    reorganise, and it is what lets your library card from last year still work.
+  </p>
+
+  <p>
+    Second, <strong>there is one copy</strong>. If two people ask for the same title on the same
+    afternoon, the library does not go and print a second one. This sounds obvious and it is the
+    thing our engine currently gets wrong: press <kbd>L</kbd> twice and it reads the same 200 KB
+    off disk twice, parses it twice, and hands you two unrelated meshes with identical contents.
+  </p>
+
+  <p>
+    Third — and this is the addition that changes the design rather than decorating it —
+    <strong>books can be withdrawn</strong>. A library that only ever acquires is a warehouse.
+    The moment withdrawal is possible, every card in every pocket becomes a question, and the
+    library needs a policy: who is allowed to withdraw, what happens to somebody holding a card
+    for a withdrawn book, and what happens to the photocopies somebody made of chapter four.
+  </p>
+
+  <p>
+    That last clause is not a joke. It is the derived-asset problem, and §3.2 is about it.
+  </p>
+
+  <h3 id="intuition-name"><span class="num">2.2</span>A name is not a path</h3>
+
+  <p>
+    Before any of that, the smallest idea in the lesson and the one everything else stands on.
+  </p>
+
+@@FIG_SEARCH_PATH@@
+
+  <p>
+    <code>"torus.obj"</code> is a <strong>name</strong>. It is stable, it is what a scene file
+    records, it is what a level designer types, and it is the key an asset store caches on.
+    <code>/Users/…/build/demos/assets/torus.obj</code> is a <strong>path</strong>: where that
+    name resolved today, on this machine, with these roots. Store the first; compute the second.
+  </p>
+
+  <p>
+    Once names and paths are different things, the resolution step becomes a place you can put a
+    policy — and the policy that earns its keep immediately is an <em>ordered list of roots</em>.
+    A single directory needs no list. What a list buys is <strong>override</strong>: put a
+    directory in front and everything in it shadows the shipped asset of the same name, without
+    moving, renaming or deleting anything.
+  </p>
+
+  <p>
+    That one property is the mechanism behind four features that look unrelated:
+  </p>
+
+  <ul>
+    <li><strong>Mods and user content.</strong> The mod folder goes in front.</li>
+    <li><strong>Localisation and platform packs.</strong> <code>assets_ja/</code> or
+        <code>assets_lowend/</code> goes in front, and every asset it does not contain falls
+        through to the base.</li>
+    <li><strong>Editing while the game runs.</strong> Your source tree goes in front of the copy
+        CMake made beside the binary — which is half of Module 9's hot reload, arriving early and
+        for free.</li>
+    <li><strong>A test standing in for a real asset.</strong> Which is exactly what
+        <code>verify_55</code> §A does: it writes a deliberately different torus into an override
+        root and proves, by file size, which one came back.</li>
+  </ul>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-refcount"><span class="num">3.1</span>Why not reference counting</h3>
+
+  <p>
+    "When may I free this?" has an obvious answer: count who is holding it, and free at zero.
+    Reference counting is correct, it is well understood, and the standard library will do it for
+    you. It is also the wrong answer <em>here</em>, and the reason is not performance. It is that
+    reference counting requires a property our handles deliberately do not have.
+  </p>
+
+@@FIG_NO_REFCOUNT@@
+
+  <p>
+    Recall what a handle <em>is</em>, from Lesson 5.4: four bytes, trivially copyable, with no
+    lifetime of its own. Every one of those words was load-bearing. It is four bytes so it fits
+    in an ECS component; trivially copyable so it can be <code>memcpy</code>'d; without a
+    lifetime so it can be written to a file and read back without pointer fixups.
+  </p>
+
+  <p>
+    Reference counting requires the opposite of all three. Copying must have a side effect, so
+    the handle needs a copy constructor. Going out of scope must have one too, so it needs a
+    destructor. And it must know <em>whose</em> count to touch, so it needs a pointer back to its
+    store — which triples its size and makes it meaningless in a saved file.
+  </p>
+
+  <p>
+    A refcounted handle is a <code>shared_ptr</code> with extra steps, and we already know what
+    <code>shared_ptr</code> costs. So the policy is <strong>explicit unload</strong>, and the
+    interesting part is <em>why that is safe to get wrong</em>:
+  </p>
+
+  <ul>
+    <li><strong>Forget to unload</strong> → a leak. A leak is found by a total, and
+        <code>asset_store::live_count()</code> at shutdown is that total.</li>
+    <li><strong>Unload too early</strong> → a lookup that returns null and a counter that goes
+        up. Lesson 5.4 built exactly this: <code>collect_stats::unresolved</code>.</li>
+  </ul>
+
+  <p>
+    Neither is a crash, and neither is undefined. That is the trade, and it is the one most
+    engines make at level granularity — load a level, play it, unload it, check that the count
+    came back to zero.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This is not "refcounting is bad"</span>
+    <p>It is "refcounting is wrong for a reference that must stay a value". Where a reference is
+       already an object with a lifetime, a count is often exactly right —
+       <code>gpu_texture</code>'s RAII wrapper is a count of one, honestly implemented. The
+       question to ask is never "should this be refcounted?" but <strong>"what does this
+       reference have to be able to do, and does a count take that away?"</strong></p>
+  </div>
+
+  <h3 id="theory-derived"><span class="num">3.2</span>The one place a rule is unavoidable</h3>
+
+  <p>
+    Explicit unload works because a handle is held by <em>somebody who can be told</em> — a
+    scene, a component, a piece of code with an owner. There is one class of asset for which
+    that is not true, and Lesson 5.4 named it as an open hole rather than pretending otherwise.
+  </p>
+
+  <p>
+    <code>with_normals</code> takes a loaded mesh and produces a <em>different</em> mesh: a
+    different vertex count, different normals, a different index buffer. It is a real asset, it
+    occupies real memory, and it must be stored somewhere. But nobody asked for it. It has no
+    name, nothing outside the system knows it exists, and it has no reason to exist except that
+    its source does.
+  </p>
+
+@@FIG_CASCADE@@
+
+  <p>
+    This shape is everywhere once you look: a texture and its mipmap chain, a shader and its
+    per-backend variants, a mesh and its GPU upload, an animation and its compressed form. The
+    general name is a <strong>derived asset</strong>, and the rule that governs it is not a
+    reference count — it is a <em>dependency edge</em>:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule</span>
+    <p><strong>A derived asset is owned by its source.</strong> Unloading a source unloads
+       everything derived from it, transitively. Nothing outside the store can hold a
+       derivation, so nothing outside the store has to be consulted.</p>
+  </div>
+
+  <p>
+    Two words in that rule do real work. <strong>Transitively</strong>, because derivations chain
+    — a mesh is imported, and the import is uploaded — and a cascade that stops after one hop
+    leaks the tail. And <strong>owned</strong> rather than counted, because the relationship is
+    one-directional and internal: there is exactly one source, it is known at the moment of
+    creation, and it never changes.
+  </p>
+
+  <p>
+    There is a corollary worth stating, because it is the check that keeps the design honest:
+    <strong>deriving from a source that is already gone must be refused</strong>. The result
+    would be an asset with no name to find it by and no source to free it with — a thing nothing
+    will ever release. Our <code>derive_mesh</code> returns a null handle in that case, which
+    turns a guaranteed leak into a null the caller is already prepared to see.
+  </p>
+
+  <h3 id="theory-identity"><span class="num">3.3</span>Import settings are identity</h3>
+
+  <p>
+    Here is a question that looks like bookkeeping and is not. Lesson 3.9 established that OBJ
+    counts texture coordinates upward from the bottom left while a texture is addressed downward
+    from the top left, and that reconciling the two belongs to the <em>import step</em>. The demo
+    has a key that toggles it, so the disagreement can be looked at.
+  </p>
+
+  <p>
+    So: is <code>torus.obj</code> imported with the flip the same asset as
+    <code>torus.obj</code> imported without it?
+  </p>
+
+  <p>
+    It is not, and the answer is not a matter of taste — the two have different vertex arrays.
+    A store that keyed on the filename alone would hand the second requester the first one's
+    geometry, silently, and the picture would be a mirror image of what was asked for. So the
+    cache key is <strong>the name <em>and</em> the settings</strong>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{key} \;=\; \text{name} \;\Vert\; \text{settings} \]</span>
+    <span class="eq-plain">key = name + import settings</span>
+  </div>
+
+  <p>
+    Every real pipeline does this. Unity writes a <code>.meta</code> file beside each asset and
+    re-imports when it changes; Unreal keys its derived-data cache on a hash of the settings.
+    Ours is one bool and a string, and the shape is the same. §4.4 has the subtlety that makes
+    it work — and the bug that found it.
+  </p>
+
+  <h3 id="theory-failure"><span class="num">3.4</span>Failure is the ordinary case</h3>
+
+  <p>
+    An asset system fails constantly, and not because it is badly written. Files are missing
+    during development, misspelled in scene data, absent from a platform pack, corrupted by a
+    partial download, or simply not shipped in a demo build. If a missing asset is an
+    <em>exception</em> — in either sense — then a shipping game is a program in which the
+    exceptional case is Tuesday.
+  </p>
+
+  <p>
+    Lesson 5.3 gave us the vocabulary and Lesson 5.4 gave us the mechanism, so 5.5 inherits an
+    answer rather than inventing one:
+  </p>
+
+  <ul>
+    <li>An acquire that fails returns a <strong>null handle and a report</strong> — the report
+        shape <code>obj_report</code> and <code>image_report</code> already converged on.</li>
+    <li>A null handle does not resolve, so <code>collect_triangles</code> <strong>skips that
+        object and counts it</strong> (5.4 §4.7). One missing asset costs one object, never a
+        frame.</li>
+    <li>The failure is logged <strong>once</strong>, at the point that knows why — which is
+        5.3's rule, and which this lesson broke on its first run and had to fix (§4.3).</li>
+  </ul>
+
+  <p>
+    Notice what is <em>not</em> in that list: no exception, no assertion, no fallback magenta
+    mesh, no "return a default cube so something draws". A default that stands in for a missing
+    asset is a decision only the game can make, and an engine that makes it has removed the
+    game's ability to notice.
+  </p>

@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l511f5-t l511f5-d">
+  <title id="l511f5-t">One event stream feeding both engine input and ImGui, arbitrated by a mask</title>
+  <desc id="l511f5-d">Every SDL event reaches both engine::input and ImGui. The capture flags feed masked_input, which wraps engine::input and satisfies the same concept, so action_map::update is unchanged.</desc>
+  <defs>
+    <marker id="e-i-l511f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l511f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l511f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l511f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l511f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Two consumers of one keyboard, and the layer at which they are separated.</text>
+<rect x="280" y="46" width="160" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="360" y="64" class="xs mono" text-anchor="middle">SDL_Event</text>
+<line x1="330" y1="74" x2="250" y2="100" class="hi" stroke-width="1.3" marker-end="url(#e-h-l511f5)"/>
+<line x1="392" y1="74" x2="470" y2="100" class="hi" stroke-width="1.3" marker-end="url(#e-h-l511f5)"/>
+<rect x="150" y="104" width="200" height="26" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="250" y="122" class="xs mono" text-anchor="middle">engine::input</text>
+<rect x="390" y="104" width="200" height="26" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="490" y="122" class="xs mono" text-anchor="middle">ImGui (via handle_event)</text>
+<text x="360" y="148" class="xs t-ok" text-anchor="middle">BOTH SEE EVERY EVENT. Nothing is routed away.</text>
+<line x1="250" y1="158" x2="250" y2="196" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l511f5)"/>
+<line x1="490" y1="158" x2="300" y2="196" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l511f5)"/>
+<text x="692" y="178" class="xs muted" text-anchor="end">wants_keyboard() / wants_mouse()</text>
+<rect x="150" y="200" width="300" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="300" y="220" class="xs mono" text-anchor="middle">masked_input&lt;input&gt;</text>
+<text x="300" y="246" class="xs muted" text-anchor="middle">a DIFFERENT TYPE that satisfies input_snapshot</text>
+<line x1="300" y1="258" x2="300" y2="288" class="hi" stroke-width="1.3" marker-end="url(#e-h-l511f5)"/>
+<rect x="150" y="292" width="300" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="300" y="310" class="xs mono" text-anchor="middle">action_map::update(Source)</text>
+<text x="300" y="334" class="xs t-ok" text-anchor="middle">unchanged, to the character, from Lesson 5.10</text>
+<rect x="470" y="196" width="220" height="96" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3" stroke-dasharray="4 3"/>
+<text x="580" y="216" class="xs t-bad" text-anchor="middle">THE TEMPTING WRONG FIX</text>
+<text x="580" y="236" class="xs muted" text-anchor="middle">hand the event to the UI and</text>
+<text x="580" y="252" class="xs muted" text-anchor="middle">stop if it takes one. Steal a</text>
+<text x="580" y="268" class="xs muted" text-anchor="middle">key-UP and `input` believes</text>
+<text x="580" y="284" class="xs muted" text-anchor="middle">the key is held. Forever.</text>
+<text x="30" y="366" class="xs t-hi" text-anchor="start">ARBITRATE ON LEVELS, NOT ON EVENTS. A level is corrected only by the event that contradicts it,</text>
+<text x="30" y="384" class="xs t-hi" text-anchor="start">so an event withheld is a level stuck.</text>
+</svg>

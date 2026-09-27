@@ -1,0 +1,428 @@
+  <h2 id="listings">10. Complete code listings</h2>
+
+  <p>
+    Eight files. The new header is the whole of the lesson's engine surface; the demo is how you see
+    it; the three under <code>scratch/</code> are where every number on this page came from.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Path</th><th></th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/math/euler.hpp</code></td><td><em>new</em></td>
+            <td>The convention, both directions of the conversion, the rate Jacobian, angle
+                wrapping, and the rotation metric everything here is measured with.</td></tr>
+        <tr><td><code>engine/include/engine/math/transform.hpp</code></td><td>modified</td>
+            <td>A doc comment that has named the wrong lesson since Module 2, and a paragraph on
+                why <code>rotation</code> is still a <code>mat3</code> after this lesson.</td></tr>
+        <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+            <td>One <code>#include</code>. Added because the build refused to configure without
+                it (§9.6).</td></tr>
+        <tr><td><code>demos/gimbal/main.cpp</code></td><td><em>new</em></td>
+            <td>The rig, the craft, the live conditioning readout, and a key that drives the
+                weakest knob combination so you can watch the response die.</td></tr>
+        <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+            <td>The <code>gimbal</code> target.</td></tr>
+        <tr><td><code>scratch/verify_71.cpp</code></td><td><em>new</em></td>
+            <td>Thirty-four checks in six sections, six of them controls.</td></tr>
+        <tr><td><code>scratch/build_verify_71.sh</code></td><td><em>new</em></td>
+            <td>Compiles and runs it. Links no library at all.</td></tr>
+        <tr><td><code>scratch/golden_71.cpp</code></td><td><em>new</em></td>
+            <td>The reference render, and the structural argument for why it cannot have
+                moved.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/euler.hpp@@
+  @@LISTING:engine/include/engine/math/transform.hpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:demos/gimbal/main.cpp@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:scratch/verify_71.cpp@@
+  @@LISTING:scratch/build_verify_71.sh@@
+  @@LISTING:scratch/golden_71.cpp@@
+
+  <h2 id="run">11. Build &amp; run</h2>
+
+  <p>
+    A new target and a new public header, so CMake has to be re-run once before the first build.
+    Watch the umbrella lint's line go past — if you add the header and forget the
+    <code>#include</code>, this is where you find out.
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Linux / macOS</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+# -- engine: umbrella lists 78 of 79 public headers (1 documented exception)
+cmake --build build -j8
+
+./build/demos/gimbal                                  # play with it
+./build/demos/gimbal --pose 0 89 20                   # start one degree from lock
+./build/demos/gimbal --no-rings                       # just the craft
+./build/demos/gimbal --shot rig.ppm --pose 0 90 20    # headless, deterministic
+
+# every number in this lesson
+sh scratch/build_verify_71.sh
+</code></pre>
+</figure>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Windows (MSVC, from a Developer Command Prompt)</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+cmake --build build --config Debug
+
+.\build\demos\Debug\gimbal.exe
+.\build\demos\Debug\gimbal.exe --shot rig.ppm --pose 0 90 20
+</code></pre>
+</figure>
+
+  <p>
+    <strong>Expected result.</strong> A 960 × 540 window with a small white aircraft at the centre
+    of three coloured hoops — green pivoting about the vertical, red about the wingtip axis, blue
+    about the nose axis — and a panel top-left with three sliders and five numbers.
+  </p>
+
+  <p>
+    <strong>The thing to actually do</strong>, in this order, because the point of the demo is in
+    the sequence rather than in any one frame:
+  </p>
+
+  <ol>
+    <li>Hold <kbd>E</kbd>. That is the joint knob: it drives yaw and roll at the same rate, which
+        §5.3 identified as the weakest combination. At pitch 0 the aircraft spins briskly, and the
+        magenta arrow is at full length.</li>
+    <li>Hold <kbd>↑</kbd> to climb toward pitch 90, watching <code>|det J|</code> fall. It is
+        <code>cos(pitch)</code> — check it against the pitch slider beside it.</li>
+    <li>Hold <kbd>E</kbd> again. The rings still turn. The readout still says the knobs are moving.
+        <strong>The aircraft stops.</strong> Press <kbd>T</kbd> first and the nose leaves a trail,
+        so the stopping is a mark on the screen rather than something you have to notice.</li>
+    <li>Press <kbd>K</kbd> to snap to exactly 90° and look at the axles. The blue one lies along
+        the green one. The magenta arrow is gone, because its length is the rotation that
+        combination produces, and that is now zero.</li>
+  </ol>
+
+  <p>
+    <code>--shot</code> writes a PPM and prints one line, identical on every run and every machine:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ ./build/demos/gimbal --shot rig.ppm --pose 0 90 20
+gimbal: pose 0.00 90.00 20.00 deg, |det J| 0.000000, sigma_min 0.000000, 3 objects, 36 triangles, 197 debug lines</code></pre>
+  </figure>
+
+  <p>
+    And the harness, which is what the rest of this page is:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ sh scratch/build_verify_71.sh
+verify_71 — Lesson 7.1, Euler angles and their pathologies
+
+== A. The convention: intrinsic Y-X-Z, active, right-handed ==
+  yaw +90 sends forward (0,0,-1) to (-1.000, +0.000, +0.000)  [expect (-1,0,0) = left]
+  [PASS] yaw +90 turns the nose left (-X)
+  ...
+     pitch      det J s_min naive s_min stable      brute      1/s_min
+     0.00°   -1.00000   1.0000000   1.0000000  0.9999998          1.0
+    45.00°   -0.70711   0.5411961   0.5411960  0.5411961          1.8
+    60.00°   -0.50000   0.3660254   0.3660254  0.3660254          2.7
+    80.00°   -0.17365   0.1232567   0.1232568  0.1232568          8.1
+    89.00°   -0.01745   0.0123406   0.0123412  0.0123412         81.0
+    89.90°   -0.00175   0.0012449   0.0012340  0.0012340        810.4
+    89.99°   -0.00017   0.0000000   0.0001235  0.0001235       8099.8
+    90.00°    0.00000   0.0000000   0.0000000  0.0000001   32353434.0
+  ...
+34/34 checks passed</code></pre>
+  </figure>
+
+  <p>
+    That last row is worth a look before you move on. At exactly 90° the brute-force sweep reports
+    <code>0.0000001</code> rather than zero and the conditioning number comes out at 32 million —
+    because <code>cos(π/2)</code> in <code>float</code> is 4.371e-08, not 0. The pose is singular;
+    the arithmetic describing it is not quite. That is the normal state of affairs and it is why
+    <code>degenerate</code> is a threshold rather than an equality test.
+  </p>
+
+  <h2 id="golden">12. The golden, and why it is blind to this lesson</h2>
+
+  <p>
+    The reference render — eight frames of the Module 2–4 software rasterizer, hashed — comes back
+    byte-identical, <code>E917C06C</code>, as it has since Lesson 5.1. That is the fifth lesson in a
+    row for which that result is a <strong>null</strong> one, and saying so is the point of this
+    section.
+  </p>
+
+  <p>
+    <code>demo::write_reference_shot</code> renders through <code>soft_renderer.cpp</code>,
+    <code>raster.cpp</code> and <code>framebuffer.cpp</code>, driven by
+    <code>demos/common/demo_scene.cpp</code>, and that translation unit includes exactly six engine
+    headers: colour, debug_draw, framebuffer, depth_buffer, raster, soft_renderer. This lesson added
+    a header with no source file that nothing in that set reaches;
+    <code>grep -rn 'math/euler' engine/</code> returns exactly one line and it is inside
+    <code>engine.hpp</code>, which nothing includes. The other two edits are a comment and a CMake
+    message. <strong>The picture cannot move</strong>, and a byte-identical result is evidence only
+    that nobody edited a file they did not mean to. It is worth ninety seconds; it is not worth
+    believing anything about.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Beware the grep that looks like evidence</span>
+    <p>
+      <code>grep -rn euler demos/common</code> <em>does</em> return two hits. Neither is this
+      lesson: they are the <strong>Euler characteristic</strong>, V − E + F, which Lesson 3.5's mesh
+      validator prints for every loaded model. Two unrelated things named after the same man, in the
+      one directory this argument is about. A structural claim made by grepping a <em>name</em>
+      rather than an include path would have called that a dependency and gone looking for a bug
+      that is not there.
+    </p>
+  </div>
+
+  <p>
+    The real instrument for this lesson is <code>verify_71</code>, and the thing that makes its
+    thirty-four green ticks mean something is that six of them are controls — checks whose job is
+    to <em>fail</em> when the thing beside them is measuring correctly. One of them did fail, on the
+    first run: §C.4's control asserted that the joint knob move produces more than 80° of rotation
+    away from lock, and it measured 65.51°. The control was right and the threshold was wrong —
+    two orthogonal 47° turns give <code>47√2 = 66.47°</code>, so 80 was never reachable. A control
+    that fails for the wrong reason is still a control doing its job; it told us we did not know
+    what number to expect, which we did not.
+  </p>
+
+  <h2 id="pitfalls">13. Common pitfalls &amp; debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is rotated wrongly, by a consistent-looking amount</span>
+    <p>
+      <strong>Symptom:</strong> a model imported from somewhere else faces a plausible but wrong
+      direction. Nudging the numbers gets it close but never right, and a value that works for one
+      asset is wrong for the next.<br>
+      <strong>Cause:</strong> you are reading somebody else's convention as yours. §3 measured the
+      cost: from 16° to 83° depending on which of the twenty-four you have been handed.<br>
+      <strong>Fix:</strong> find out which one, from the exporter's documentation, and convert
+      explicitly in a named function. Do not tune. A tuned angle is right at one pose.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The camera flips upside-down when you look straight up</span>
+    <p>
+      <strong>Symptom:</strong> a free-look camera behaves normally until the pitch passes vertical,
+      then the horizon inverts and the yaw control reverses.<br>
+      <strong>Cause:</strong> you have crossed the singularity. Beyond ±90° the extraction returns a
+      different triple naming the same rotation (§6.4), and the roll that was zero is now 180°.<br>
+      <strong>Fix:</strong> clamp the pitch to ±89° or so. This is not a workaround — it is the
+      reason §2.2 chose this axis order, and every first-person camera you have used does it.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A blend spins the long way round for no reason</span>
+    <p>
+      <strong>Symptom:</strong> a turret tracking a target 20° away performs a full revolution to
+      get there, once, near a particular heading.<br>
+      <strong>Cause:</strong> raw subtraction of two angles either side of the ±180° wrap (§7.3).
+      The floats are 340 apart; the headings are 20 apart.<br>
+      <strong>Fix:</strong> <code>shortest_angle_delta</code>. And note that this bug is
+      <em>intermittent by construction</em> — it only appears when the pair straddles the wrap, so
+      it will pass every test you write unless one of them is placed there deliberately.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your "distance between rotations" is always zero</span>
+    <p>
+      <strong>Symptom:</strong> a convergence check or a path measurement reports 0 for things that
+      are visibly moving, or reports NaN for two identical inputs.<br>
+      <strong>Cause:</strong> <code>acos((tr − 1)/2)</code>. It returns exactly zero below about
+      0.01° (§8), and unclamped it returns NaN on identical inputs, because a composed rotation's
+      trace routinely comes out at 3.0000002 and <code>acos</code> of anything above 1 is NaN. The
+      identical-inputs case is the one every caller hits first.<br>
+      <strong>Fix:</strong> the <code>atan2</code> form, which needs no clamp and works at both
+      ends.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A near-singular pose reports as exactly singular</span>
+    <p>
+      <strong>Symptom:</strong> a conditioning number comes out <code>inf</code>, or a
+      <code>degenerate</code> flag fires, at a pose that is visibly fine.<br>
+      <strong>Cause:</strong> <code>√(1 − sin²)</code> or <code>√(1 − |sin|)</code>. In
+      <code>float</code>, both reach exactly zero about 0.01° before the pose does (§5.5).<br>
+      <strong>Fix:</strong> get the cosine from somewhere it is not being subtracted out of 1 —
+      <code>hypot</code> of two matrix entries that are proportional to it, or the algebraically
+      equal <code>|cos| / √(1 + |sin|)</code>.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A headless run writes a correct file and then crashes</span>
+    <p>
+      <strong>Symptom:</strong> exit status 139 (SIGSEGV), after the expected output has already
+      appeared on disk and on stdout.<br>
+      <strong>Cause:</strong> in this demo, <code>ImGui::Begin</code> with no ImGui context, because
+      a <code>--shot</code> run has no window. Generally: teardown or per-frame work that assumes a
+      subsystem the headless path never started.<br>
+      <strong>Fix:</strong> guard on the subsystem's own predicate — here
+      <code>if (ui_.running())</code>. And check exit status in your scripts. Every artifact being
+      correct is not evidence that the program succeeded.
+    </p>
+  </div>
+
+  <h2 id="exercises">14. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Move the hole.</strong> Add <code>rotation_from_euler_xyz</code> — intrinsic
+      <code>x-y-z</code>, the same three angles in the same struct, a different order — and a
+      matching <code>euler_rate_jacobian_xyz</code>. Sweep both Jacobians' determinants over the
+      full range of all three angles and plot where each one hits zero. Then answer in one sentence
+      why this course did not choose <code>x-y-z</code>.</p>
+      <details><summary>Hint</summary>
+        <p>Follow §5.2's derivation with the columns relabelled. The middle angle of the sequence is
+        the one that appears alone.</p></details>
+      <details><summary>Solution sketch</summary>
+        <p><code>det J = ±cos(middle angle)</code> for any of the six three-distinct-axis orders —
+        the derivation is structurally identical, because the middle rotation is always the one that
+        is not conjugated by anything. For <code>x-y-z</code> the middle angle is the rotation about
+        Y, which for a camera is the one you sweep continuously. The hole would be at a heading you
+        pass through every few seconds rather than at an attitude you already forbid.</p></details>
+    </li>
+
+    <li>
+      <p><strong>Make the degenerate branch fire in a real scene.</strong> Add a key to the demo
+      that reads the pose back out with <code>euler_from_rotation</code> and writes it straight into
+      <code>pose_</code> — a round trip that should be the identity. Hold it down while sweeping the
+      pitch through 90°. Measure, with <code>angle_between_rotations</code>, how far the orientation
+      moves per round trip at 89°, 89.9° and 89.99°, and explain the shape of what you find using
+      §6.3.</p>
+      <details><summary>Hint</summary>
+        <p>Round-tripping a freshly-built matrix is nearly exact (§6.3's "clean" column). To see the
+        amplification, perturb the matrix first — or compose it through a parent transform, which
+        does the same thing for real.</p></details>
+    </li>
+
+    <li>
+      <p><strong>Find the worst pair.</strong> Search for the two orientations, each reachable with
+      |pitch| ≤ 85°, whose Euler lerp has the largest excess turning. Report the pair, the excess,
+      and the speed variation. Is the worst case near the singularity, or somewhere else?</p>
+      <details><summary>Hint</summary>
+        <p>A random search over a few hundred thousand pairs is enough and takes seconds at
+        <code>-O2</code>. Use 256 steps per path while searching and re-measure the winner at
+        2,048 — but check that the two step counts rank pairs the same way before you trust the
+        cheap one, or you have optimised the search and not the answer.</p></details>
+    </li>
+
+    <li>
+      <p><strong>Give the engine an <code>ellipse</code>.</strong> §9.5 names the one thing the
+      public API could not do. Add <code>debug_lines::ellipse(vec3 centre, vec3 u, vec3 v, Uint32
+      colour, int segments)</code>, where <code>u</code> and <code>v</code> are the in-plane
+      semi-axes, and delete the demo's private <code>ring()</code>. Then decide, and write down, how
+      many segments it should default to, and on what basis — a fixed count, a count derived from
+      the radius, or a count derived from the radius in <em>screen</em> space.</p>
+      <details><summary>Solution sketch</summary>
+        <p>The honest answer to the last part is that <code>debug_lines</code> has no camera in its
+        signature — deliberately, per Lesson 5.11 — so screen-space adaptation is not available to
+        it without changing what the class is. A fixed default with an override is the right answer
+        at this point in the course, and noticing <em>why</em> the better answer is unavailable is
+        worth more than the code.</p></details>
+    </li>
+
+    <li>
+      <p><strong>Assert what the extraction requires.</strong> <code>euler_from_rotation</code>
+      silently produces meaningless angles for a matrix with scale or shear in it, because the
+      <code>clamp</code> turns nonsense into something plausible. <code>mat4</code> has
+      <code>is_rigid</code> (Lesson 2.9) and it works on the wrong type. Write
+      <code>is_rotation(const mat3&amp;, float tolerance)</code>, decide what it should check and
+      what tolerance a matrix composed through a ten-deep hierarchy actually needs — measure it —
+      and then decide whether <code>euler_from_rotation</code> should assert on it. Argue both
+      sides; the engine core has no exceptions (Lesson 5.3) and an assertion in a header is a
+      choice you impose on every caller.</p>
+      <details><summary>Hint</summary>
+        <p>Two conditions: columns orthonormal, and determinant +1 rather than −1. The second is not
+        optional — a reflection satisfies the first and is not a rotation. For the tolerance, build
+        a hierarchy in the demo and print <code>max|RᵀR − I|</code> at the bottom of it.</p></details>
+    </li>
+  </ol>
+
+  <h2 id="recap">15. Recap &amp; next</h2>
+
+  <p>
+    The engine can now turn three human-sized numbers into an orientation and back, under a
+    convention that is written down rather than implied by whichever call site you happen to read.
+    That is a small header and it closes a real gap: Lesson 5.12's rover had a hand-rolled two-angle
+    convention inside a gameplay system, and <code>demo_scene.cpp</code> has had two more since
+    Module 2.
+  </p>
+
+  <p>
+    What the lesson is really for, though, is the other half — and it is worth stating as a list of
+    things you can now do rather than things you now know:
+  </p>
+
+  <ul>
+    <li>You can say where a parameterisation's singularity is, and choose an axis order by deciding
+        where you want it rather than by copying one.</li>
+    <li>You can compute how close you are to it — <code>|det(euler_rate_jacobian(e))|</code>, using
+        a function <code>mat3</code> has had since Lesson 2.6 — and turn that into the number that
+        actually matters to a control loop: how much knob a unit of aircraft costs.</li>
+    <li>You can measure the distance between two orientations accurately enough to sum thousands of
+        small steps, which is the instrument the next four lessons are going to lean on.</li>
+    <li>You can recognise a formula that is algebraically right and numerically useless, because
+        you have now seen the same cancellation three times in one afternoon.</li>
+  </ul>
+
+  <p>
+    And the engine stores exactly as many Euler angles as it did before this lesson: none.
+    <code>transform::rotation</code> is still a <code>mat3</code>. §7 is why. Three angles cannot be
+    composed without converting to a matrix anyway, cannot be interpolated without leaving the
+    geodesic by 14% on an ordinary pair and 209% near lock, and have a hole in them. They are an
+    interface, and an interface is exactly the right thing for them to be.
+  </p>
+
+  <p>
+    <strong>Next</strong> is Lesson 7.2, <em>Axis-Angle</em>, and it starts from the thing §8 nearly
+    computed and then deliberately did not. The metric extracts an <em>angle</em> from
+    <code>AᵀB</code> by pulling apart its symmetric and antisymmetric halves — and the vector it
+    throws away on the way, the one whose length is <code>sin θ</code>, is the <strong>axis</strong>.
+    Four numbers instead of three, no singularity, and a formula (Rodrigues') that turns the pair
+    back into a matrix. It fixes the hole. It does not fix interpolation, and 7.3 through 7.5 are
+    about why that takes complex numbers.
+  </p>
+
+  <h2 id="reading">16. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Ken Shoemake, "Euler Angle Conversion", <em>Graphics Gems IV</em> (1994).</strong>
+        The source of the twenty-four, encoded in four bits, with conversion code that handles all
+        of them uniformly. If you ever have to consume somebody else's convention, this is the
+        paper that makes it mechanical instead of a puzzle.</li>
+    <li><strong>Akenine-Möller, Haines &amp; Hoffman, <em>Real-Time Rendering</em> 4th ed., §4.2
+        ("Special Matrix Transforms and Operations") and §4.2.2 ("Euler Transforms").</strong> The
+        standard treatment, including the extraction, with the gimbal-lock discussion kept short and
+        honest.</li>
+    <li><strong>Jim Van Verth &amp; Lars Bishop, <em>Essential Mathematics for Games</em>, ch. 5.</strong>
+        The most careful book treatment of why three parameters cannot work, and the one that is
+        clearest that the failure is in the map rather than in the rotations.</li>
+    <li><strong>David Eberly, "Euler Angle Formulas" (Geometric Tools).</strong> All twelve orders,
+        forwards and backwards, with the degenerate branches written out. The document to check your
+        extraction against when you implement an order this lesson did not.</li>
+    <li><strong>NASA, <em>Apollo 11 Mission Report</em>, and Michael Collins' <em>Carrying the
+        Fire</em>.</strong> The inertial platform had three gimbals rather than four, and the crew
+        flew around a forbidden cone drawn on the instrument. Worth reading for the fact that the
+        mitigation was <em>procedural</em> — the same move §2.2 makes, at a cost nobody could
+        argue with.</li>
+    <li><strong>Scratchapixel, "Transforming Objects using Matrices".</strong> Good complementary
+        coverage of the composition order and of the row-vector convention this course does not use
+        — useful precisely because seeing the other convention written out makes ours legible as a
+        choice.</li>
+  </ul>

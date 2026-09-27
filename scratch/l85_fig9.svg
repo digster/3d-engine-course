@@ -1,0 +1,309 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l85f9-t l85f9-d">
+  <title id="l85f9-t">GJK's iteration count: a histogram over 117,417 box pairs, and how the mean moves as the tolerance tightens for four shape pairs.</title>
+  <desc id="l85f9-d">Left, a horizontal bar chart of iterations from one to ten, peaking at three, with a mean of 3.52 and a maximum of 10. Right, four lines plotted against tolerance from 1e-2 to 1e-7: box, hull and sphere are flat, while capsule climbs from 2.06 to 7.43.</desc>
+  <defs>
+    <marker id="e-i-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-l85f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">How much work a query costs, and what decides it.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+2
+0
+"
+ 
+y
+=
+"
+5
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+3
+8
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+7
+6
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="32" y="74" class="xs muted" text-anchor="start">iterations, 117,417 separated box pairs</text>
+<text x="46" y="108.0" class="xs mono muted" text-anchor="end">1</text>
+<rect x="54" y="98.0" width="64.5" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="124.49840788944879" y="108.0" class="xs mono" text-anchor="start">9,071  (7.7%)</text>
+<text x="46" y="129.0" class="xs mono muted" text-anchor="end">2</text>
+<rect x="54" y="119.0" width="133.8" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="193.81055430178995" y="129.0" class="xs mono" text-anchor="start">18,819  (16.0%)</text>
+<text x="46" y="150.0" class="xs mono muted" text-anchor="end">3</text>
+<rect x="54" y="140.0" width="230.0" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="290.0" y="150.0" class="xs mono" text-anchor="start">32,347  (27.5%)</text>
+<text x="46" y="171.0" class="xs mono muted" text-anchor="end">4</text>
+<rect x="54" y="161.0" width="184.4" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="244.35125359384176" y="171.0" class="xs mono" text-anchor="start">25,927  (22.1%)</text>
+<text x="46" y="192.0" class="xs mono muted" text-anchor="end">5</text>
+<rect x="54" y="182.0" width="168.4" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="228.38130274832287" y="192.0" class="xs mono" text-anchor="start">23,681  (20.2%)</text>
+<text x="46" y="213.0" class="xs mono muted" text-anchor="end">6</text>
+<rect x="54" y="203.0" width="43.6" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="103.57251058830803" y="213.0" class="xs mono" text-anchor="start">6,128  (5.2%)</text>
+<text x="46" y="234.0" class="xs mono muted" text-anchor="end">7</text>
+<rect x="54" y="224.0" width="9.0" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="68.99465174513865" y="234.0" class="xs mono" text-anchor="start">1,265  (1.1%)</text>
+<text x="46" y="255.0" class="xs mono muted" text-anchor="end">8</text>
+<rect x="54" y="245.0" width="1.1" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="61.123442668562774" y="255.0" class="xs mono" text-anchor="start">158  (0.1%)</text>
+<text x="46" y="276.0" class="xs mono muted" text-anchor="end">9</text>
+<rect x="54" y="266.0" width="1.0" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="60.127987139456515" y="276.0" class="xs mono" text-anchor="start">18  (0.0%)</text>
+<text x="46" y="297.0" class="xs mono muted" text-anchor="end">10</text>
+<rect x="54" y="287.0" width="1.0" height="16.0" fill="#5082e6" fill-opacity="0.80"/>
+<text x="60.02133118990942" y="297.0" class="xs mono" text-anchor="start">3  (0.0%)</text>
+<text x="210.0" y="320" class="xs muted" text-anchor="middle">mean 3.52   max 10   none above 15</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+3
+6
+"
+ 
+y
+=
+"
+5
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+3
+3
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+7
+6
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="448" y="74" class="xs muted" text-anchor="start">mean iterations as the tolerance tightens</text>
+<line x1="482" y1="292.0" x2="736" y2="292.0" class="grid" stroke-width="1.0"/>
+<text x="474" y="296.0" class="xs mono muted" text-anchor="end">0</text>
+<line x1="482" y1="244.0" x2="736" y2="244.0" class="grid" stroke-width="1.0"/>
+<text x="474" y="248.0" class="xs mono muted" text-anchor="end">2</text>
+<line x1="482" y1="196.0" x2="736" y2="196.0" class="grid" stroke-width="1.0"/>
+<text x="474" y="200.0" class="xs mono muted" text-anchor="end">4</text>
+<line x1="482" y1="148.0" x2="736" y2="148.0" class="grid" stroke-width="1.0"/>
+<text x="474" y="152.0" class="xs mono muted" text-anchor="end">6</text>
+<line x1="482" y1="100.0" x2="736" y2="100.0" class="grid" stroke-width="1.0"/>
+<text x="474" y="104.0" class="xs mono muted" text-anchor="end">8</text>
+<text x="482.0" y="308" class="xs mono muted" text-anchor="middle">1e-2</text>
+<text x="532.8" y="308" class="xs mono muted" text-anchor="middle">1e-3</text>
+<text x="583.6" y="308" class="xs mono muted" text-anchor="middle">1e-4</text>
+<text x="634.4" y="308" class="xs mono muted" text-anchor="middle">1e-5</text>
+<text x="685.2" y="308" class="xs mono muted" text-anchor="middle">1e-6</text>
+<text x="736.0" y="308" class="xs mono muted" text-anchor="middle">1e-7</text>
+<path d="M 482.00,227.68 L 532.80,225.52 L 583.60,225.28 L 634.40,225.28 L 685.20,225.28 L 736.00,224.80" fill="none" stroke="#8f918a" stroke-width="2.2"/>
+<circle cx="482.0" cy="227.7" r="2.6" fill="#8f918a"/>
+<circle cx="532.8" cy="225.5" r="2.6" fill="#8f918a"/>
+<circle cx="583.6" cy="225.3" r="2.6" fill="#8f918a"/>
+<circle cx="634.4" cy="225.3" r="2.6" fill="#8f918a"/>
+<circle cx="685.2" cy="225.3" r="2.6" fill="#8f918a"/>
+<circle cx="736.0" cy="224.8" r="2.6" fill="#8f918a"/>
+<path d="M 482.00,254.32 L 532.80,246.40 L 583.60,244.72 L 634.40,244.72 L 685.20,244.72 L 736.00,244.48" fill="none" stroke="#5082e6" stroke-width="2.2"/>
+<circle cx="482.0" cy="254.3" r="2.6" fill="#5082e6"/>
+<circle cx="532.8" cy="246.4" r="2.6" fill="#5082e6"/>
+<circle cx="583.6" cy="244.7" r="2.6" fill="#5082e6"/>
+<circle cx="634.4" cy="244.7" r="2.6" fill="#5082e6"/>
+<circle cx="685.2" cy="244.7" r="2.6" fill="#5082e6"/>
+<circle cx="736.0" cy="244.5" r="2.6" fill="#5082e6"/>
+<path d="M 482.00,268.00 L 532.80,268.00 L 583.60,268.00 L 634.40,268.00 L 685.20,268.00 L 736.00,267.52" fill="none" stroke="#5ac878" stroke-width="2.2"/>
+<circle cx="482.0" cy="268.0" r="2.6" fill="#5ac878"/>
+<circle cx="532.8" cy="268.0" r="2.6" fill="#5ac878"/>
+<circle cx="583.6" cy="268.0" r="2.6" fill="#5ac878"/>
+<circle cx="634.4" cy="268.0" r="2.6" fill="#5ac878"/>
+<circle cx="685.2" cy="268.0" r="2.6" fill="#5ac878"/>
+<circle cx="736.0" cy="267.5" r="2.6" fill="#5ac878"/>
+<path d="M 482.00,242.56 L 532.80,216.64 L 583.60,191.92 L 634.40,166.24 L 685.20,140.08 L 736.00,113.68" fill="none" stroke="#e05c5c" stroke-width="2.2"/>
+<circle cx="482.0" cy="242.6" r="2.6" fill="#e05c5c"/>
+<circle cx="532.8" cy="216.6" r="2.6" fill="#e05c5c"/>
+<circle cx="583.6" cy="191.9" r="2.6" fill="#e05c5c"/>
+<circle cx="634.4" cy="166.2" r="2.6" fill="#e05c5c"/>
+<circle cx="685.2" cy="140.1" r="2.6" fill="#e05c5c"/>
+<circle cx="736.0" cy="113.7" r="2.6" fill="#e05c5c"/>
+<text x="601.0" y="326" class="xs muted" text-anchor="middle">tolerance, tightening →</text>
+<line x1="788.0" y1="112.0" x2="808.0" y2="112.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="816" y="116" class="xs" text-anchor="start">box</text>
+<line x1="788.0" y1="129.0" x2="808.0" y2="129.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="816" y="133" class="xs" text-anchor="start">hull</text>
+<line x1="788.0" y1="146.0" x2="808.0" y2="146.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="816" y="150" class="xs" text-anchor="start">sphere</text>
+<line x1="788.0" y1="163.0" x2="808.0" y2="163.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="816" y="167" class="xs" text-anchor="start">capsule</text>
+<text x="788" y="198" class="xs muted" text-anchor="start">three flat, one not —</text>
+<text x="788" y="212" class="xs muted" text-anchor="start">and the odd one out is</text>
+<text x="788" y="226" class="xs muted" text-anchor="start">not the one you would</text>
+<text x="788" y="240" class="xs muted" text-anchor="start">guess.</text>
+<text x="20" y="352" class="xs" text-anchor="start">A box and a hull are POLYTOPES: finitely many vertices, so the simplex can only improve finitely often and the tolerance is never</text>
+<text x="20" y="368" class="xs" text-anchor="start">what stopped the search. The SPHERE is flat at ONE because a ball's closest point to an outside point lies on the line to its centre, so</text>
+<text x="20" y="384" class="xs" text-anchor="start">the very first support call lands on the answer. Only the CAPSULE converges, at about one extra pass per decade.</text>
+</svg>

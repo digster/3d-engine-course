@@ -1,0 +1,1112 @@
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Eight steps. The first three build the machinery, the next three break it on purpose and
+    measure the wreckage, and the last two are the payoff.
+  </p>
+
+  <h3 id="impl-vertex">4.1 The interleaved vertex, and the layout beside it</h3>
+
+  <p>
+    Start with the type. Three attributes, in the order the shader declares them, with no padding
+    and no cleverness:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct gpu_vertex_pnu
+{
+    float px, py, pz;   ///&lt; position, MODEL space
+    float nx, ny, nz;   ///&lt; normal, MODEL space, unit length after `interleave`
+    float u, v;         ///&lt; texture coordinate, already flipped for SDL_GPU (3.9)
+};
+
+static_assert(sizeof(gpu_vertex_pnu) == 32, "gpu_vertex_pnu is expected to be 32 bytes");</code></pre>
+  </figure>
+
+  <p>
+    Twelve plus twelve plus eight is thirty-two, which is exactly half a cache line, which is why
+    §2.2's measurement came out at one line per vertex rather than the one-or-two you would get
+    from an unaligned size. That is a happy accident of choosing three attributes a surface
+    actually needs — but the <code>static_assert</code> is not decoration. If a future field made
+    the compiler insert padding, the code would still <em>work</em>, because the pitch we declare
+    is <code>sizeof(gpu_vertex_pnu)</code> whatever that is; what would break is Figure 1, which
+    would quietly become a lie. A diagram that has stopped matching the code is worse than one
+    that never did, because it is believed.
+  </p>
+
+  <p>
+    Now the layout that describes it — and the important thing about this function is
+    <em>where it lives</em>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">pipeline_desc&amp; gpu_mesh::describe(pipeline_desc&amp; desc, Uint32 slot)
+{
+    desc.vertex_buffer(slot, static_cast&lt;Uint32&gt;(sizeof(gpu_vertex_pnu)))
+        .attribute(0, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_vertex_pnu, px)))
+        .attribute(1, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_vertex_pnu, nx)))
+        .attribute(2, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_vertex_pnu, u)));
+    return desc;
+}</code></pre>
+  </figure>
+
+  <p>
+    <strong>Not one numeric literal.</strong> <code>sizeof</code> for the pitch,
+    <code>offsetof</code> for every offset. Write <code>12</code> there and it is correct today
+    and wrong the morning somebody inserts a field above the normal — at which point every vertex
+    reads the wrong bytes, nothing reports an error, and the mesh becomes a cloud. This is the
+    single cheapest defence in the whole lesson and it costs a header.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — <code>offsetof</code>, and why it is allowed here</span>
+    <p>
+      <code>offsetof(T, member)</code>, from <code>&lt;cstddef&gt;</code>, is the byte distance
+      from the start of a struct to one of its members. It is technically only guaranteed for
+      <em>standard-layout</em> types — no virtual functions, no mixed access specifiers, no base
+      class with data — which <code>gpu_vertex_pnu</code> is, being eight floats and nothing else.
+      That is not a coincidence you should rely on quietly: <strong>a vertex type is a memory
+      layout first and a C++ type second</strong>, so it never grows a constructor, a virtual, or
+      a private section. If it ever needs one of those, it has stopped being a vertex.
+    </p>
+  </div>
+
+  <p>
+    And the conversion itself, which is the entire reason this file exists and is twenty lines
+    long:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void interleave(const mesh&amp; m, std::vector&lt;gpu_vertex_pnu&gt;&amp; out)
+{
+    out.clear();
+    out.reserve(m.vertices.size());
+
+    for (std::size_t i = 0; i &lt; m.vertices.size(); ++i)
+    {
+        out.push_back(make_vertex(m, i));
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    Three arrays walked in lockstep into one. It deserves a name and a lesson not because it is
+    difficult but because the choice it embodies — a <em>vertex's</em> data contiguous rather
+    than an <em>attribute's</em> — is the one the hardware cares about and the one the code makes
+    completely invisible. Nothing in those ten lines hints that they are the difference between
+    one cache line and five.
+  </p>
+
+  <p>
+    <code>make_vertex</code> does one thing worth calling out: it normalises the normal.
+    Lesson 3.5 established that the loader stores what the file said, so that two loads of a file
+    are diffable and the loader is never a place where data quietly differs from its source. The
+    <em>consumer</em> normalises, because the consumer is the one that needs a unit vector — and
+    a mesh carrying no normals at all stays zero rather than becoming a NaN, because
+    <code>mesh::normal_at</code> already defines zero as the meaning of "absent".
+  </p>
+
+  <h3 id="impl-mesh">4.2 A mesh on the device</h3>
+
+  <p>
+    <code>gpu_mesh</code> owns two buffers and knows which of the two draw calls applies. Creation
+    is the conversion, two allocations and two recorded uploads:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    if (mode == index_mode::indexed)
+    {
+        if (m.vertices.size() &gt; k_max_mesh_vertices)
+        {
+            SDL_Log("gpu_mesh '%s': %zu vertices exceeds the 16-bit index ceiling of %zu",
+                    (name != nullptr) ? name : "?", m.vertices.size(), k_max_mesh_vertices);
+            return false;
+        }
+        interleave(m, verts);
+    }
+    else
+    {
+        expand(m, verts);
+    }</code></pre>
+  </figure>
+
+  <p>
+    <code>k_max_mesh_vertices</code> is 65,536, and it has been sitting in
+    <code>mesh.hpp</code> since Lesson 3.5 with a comment explaining that it is not a limit we
+    invented — GPU index buffers come in exactly two widths and we chose the narrow one. This is
+    the first line in the engine that actually <em>depends</em> on it. A constant that is declared
+    with a justification and never used is a promise; this is where it is kept.
+  </p>
+
+  <p>
+    Binding is two calls, and the second carries a piece of state that is easy to put in the
+    wrong place:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    SDL_GPUBufferBinding vb{};
+    vb.buffer = vertices_.handle();
+    vb.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, slot, &amp;vb, 1);
+
+    if (mode_ == index_mode::indexed &amp;&amp; indices_.valid())
+    {
+        SDL_GPUBufferBinding ib{};
+        ib.buffer = indices_.handle();
+        ib.offset = 0;
+        SDL_BindGPUIndexBuffer(pass, &amp;ib, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+    }</code></pre>
+  </figure>
+
+  <p>
+    <strong>The element size is passed at bind time</strong> — not baked into the pipeline, not
+    carried by the buffer. One buffer of bytes can therefore be read as 16-bit or 32-bit indices
+    depending on this one argument, and passing the wrong one is not an error: it reads
+    consecutive <em>pairs</em> of your 16-bit indices as single enormous 32-bit ones, every one of
+    them out of range, and produces a mesh made of glass shards. It is the same failure family as
+    a wrong pitch, from a different direction.
+  </p>
+
+  <p>
+    And the draw, which is where the indexed and un-indexed paths finally diverge:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    if (mode_ == index_mode::indexed)
+    {
+        SDL_DrawGPUIndexedPrimitives(pass, index_count_, instances, 0, 0, 0);
+    }
+    else
+    {
+        SDL_DrawGPUPrimitives(pass, vertex_count_, instances, 0, 0);
+    }</code></pre>
+  </figure>
+
+  <p>
+    Note the arguments of the indexed call: <code>num_indices, num_instances, first_index,
+    vertex_offset, first_instance</code>. The one with no counterpart in the un-indexed version is
+    <code>vertex_offset</code>, which is added to every index before the fetch. That is how
+    several meshes share a single vertex buffer without having their indices rewritten — you
+    upload them end to end and give each draw the offset of its own block. We pass zero, and
+    Module 6's batching is where it earns its keep.
+  </p>
+
+  <h3 id="impl-check">4.3 Reading the shader's half of the contract</h3>
+
+  <p>
+    Lesson 4.3 built a scanner that pulls four integers out of the reflection JSON. The inputs
+    need a slightly bigger one, and the bound on its scan is the whole correctness argument:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_shader.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const std::size_t key = json.find("\"inputs\"");
+    if (key == std::string_view::npos) { return true; }   // no inputs is an answer
+
+    const std::size_t open = json.find('[', key);
+    if (open == std::string_view::npos) { return false; }
+
+    const std::size_t close = json.find(']', open);
+    if (close == std::string_view::npos) { return false; }
+
+    const std::string_view array = json.substr(open + 1, close - open - 1);</code></pre>
+  </figure>
+
+  <p>
+    The same file contains an <code>outputs</code> array with byte-identical key names. A scanner
+    that simply looked for <code>"location"</code> would walk straight out of one array and into
+    the other and report a vertex shader as taking nine inputs when it declares six. Find the
+    array, find its end, never read past it.
+  </p>
+
+  <p>
+    Note also the two different contracts in that snippet, which mirror Lesson 4.3's reasoning
+    exactly. A <em>missing</em> <code>inputs</code> key returns <code>true</code>, because a
+    shader with no vertex inputs is legal and common — Lesson 4.4's fragment stage is one. A
+    <em>malformed</em> array returns <code>false</code>, because half a description would let
+    <code>check_layout</code> give a clean bill of health to a contract it never actually read.
+    Absent is an answer; corrupt is an error.
+  </p>
+
+  <p>
+    With both halves in hand the check is a double loop with an eye for detail. The part that
+    earns its place is the type comparison, which has to distinguish two very different kinds of
+    disagreement:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_pipeline.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        if (ours_base != theirs_base)
+        {
+            // The bad kind. Float bits read as an integer are not a small error;
+            // 1.0f read as an int is 1065353216.
+            ++r.type_mismatch;
+            SDL_Log("  layout %s: location %u (%s) supplies %s, the shader reads %s"
+                    " — the BITS are reinterpreted, not converted",
+                    who, a.location, match-&gt;name.c_str(),
+                    shader_type_of(a.format), match-&gt;type.c_str());
+        }
+        else if (ours_n &lt; theirs_n)
+        {
+            // The legal kind — see `layout_report::widening`.
+            ++r.widening;
+            SDL_Log("  layout %s: location %u (%s) supplies %s into a %s"
+                    " — hardware fills the rest; verify_45 §F says with what",
+                    who, a.location, match-&gt;name.c_str(),
+                    shader_type_of(a.format), match-&gt;type.c_str());
+        }</code></pre>
+  </figure>
+
+  <p>
+    A <code>float3</code> supplied to a <code>float4</code> is legal and defined (§3.4), so it is
+    a note. A <code>float</code> supplied where the shader reads an <code>int</code> is a
+    reinterpretation of bits, so it is a problem. Counting both as "mismatch" would make the
+    report useless in the direction that matters: a check that cries wolf is a check that gets
+    ignored, and a check that is ignored is worse than no check at all, because it looks like
+    coverage.
+  </p>
+
+  <p>
+    Here is what it says at startup, from a real run:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">terminal — <code>./engine --gpu</code></span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">  layout 32 (correct): 6 attributes checked against the reflection, no problems
+  layout 28 (four bytes short): location 2 ends at byte 32 of a 28-byte vertex — it reads into the NEXT one
+  layout 28 (four bytes short): 1 problem(s) — see above
+  layout 36 (four bytes long): 6 attributes checked against the reflection, no problems</code></pre>
+  </figure>
+
+  <p>
+    Read the third and fourth lines together and you have the honest summary of this whole
+    feature. A pitch four bytes <em>short</em> is caught — because the uv at offset 24 then ends
+    at byte 32 of a 28-byte vertex, and that is arithmetic we can do. A pitch four bytes
+    <em>long</em> is not caught, because every attribute fits inside an over-long vertex and
+    nothing in the declaration is inconsistent. It is simply wrong, and no amount of
+    cross-checking will find it.
+  </p>
+
+  <h3 id="impl-pitch">4.4 Watching a wrong pitch</h3>
+
+  <p>
+    Descriptions of layout bugs are cheap. Here are the actual pixels, from three pipelines that
+    differ in one integer and in nothing else — same shader, same buffer, same attributes, same
+    everything:
+  </p>
+
+@@FIG_PITCH@@
+
+  <p>
+    Three things in that figure are worth naming, because they are what you use to
+    <em>recognise</em> this bug rather than merely to fix it once you already know.
+  </p>
+
+  <ol>
+    <li>
+      <strong>It is not blank.</strong> The instinct on seeing nothing is to check culling,
+      winding, viewport, near plane. A wrong pitch draws plenty; it draws a mess. Coverage
+      actually goes <em>up</em> — 3,696 pixels correct against about 5,000 wrong — because the
+      garbage geometry sprays outward.
+    </li>
+    <li>
+      <strong>It is worse further in.</strong> The shape near the start of the buffer is
+      recognisable and it degenerates as the mesh goes on, because the error is
+      <em>i</em> × (pitch error). Draw only the first few hundred vertices and the bug looks like
+      a mild wobble.
+    </li>
+    <li>
+      <strong>Too long and too short look the same.</strong> Both panels are shattered clouds of
+      about the same size. The symptom tells you <em>that</em> the pitch is wrong, not
+      <em>which way</em> — so do not try to read the direction out of the picture. Print
+      <code>sizeof</code> instead.
+    </li>
+  </ol>
+
+  <p>
+    A wrong <em>offset</em> is a different animal, and the difference is genuinely useful.
+    Point the position attribute at the normal's bytes and the mesh does not shatter — every
+    vertex is still read from its own record, just from the wrong twelve bytes of it. Since a
+    normal is a unit vector, <em>the whole mesh collapses onto a sphere of radius 1</em>:
+    3,126 pixels in a 62 × 64 box, a compact blob where a torus should be. The symptom names the
+    mistake. Wrecked and scattered means the pitch; wrong but coherent means an offset.
+  </p>
+
+  <h3 id="impl-index">4.5 Indexed against expanded, in bytes</h3>
+
+  <p>
+    <code>gpu_mesh</code> uploads either form, and the demo uploads <em>both</em>, so that
+    <kbd>7</kbd> is a comparison rather than a claim. The expanded path is nine lines:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_mesh.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void expand(const mesh&amp; m, std::vector&lt;gpu_vertex_pnu&gt;&amp; out)
+{
+    out.clear();
+    out.reserve(m.indices.size());
+
+    for (const std::uint16_t index : m.indices)
+    {
+        if (index &gt;= m.vertices.size()) { continue; }   // `validate()` reports these
+        out.push_back(make_vertex(m, index));
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    Every index becomes a vertex; the index array is then redundant and thrown away. Press
+    <kbd>7</kbd> in the running demo and <strong>the picture does not change</strong> — which the
+    harness proves rather than asserts, by rendering both into the same offscreen target through
+    the same pipeline and comparing: <strong>0 differing pixels, maximum channel delta 0</strong>.
+    What changes is the log line: 53,024 bytes against 221,184.
+  </p>
+
+  <p>
+    That "no difference at all" is worth pausing on. It is not a near-identical picture; it is the
+    same picture, because the two buffers contain the same vertices in a different arrangement and
+    the vertex shader is a pure function of one vertex. Any difference would have meant a bug in
+    <code>expand</code>. This is the sort of test worth writing precisely <em>because</em> it can
+    only ever produce zero — a nonzero result has exactly one explanation.
+  </p>
+
+  <h3 id="impl-instance">4.6 Twenty-eight bytes a frame</h3>
+
+  <p>
+    The per-instance record is where a real engine puts a matrix. We have no uniform buffers
+    until Lesson 4.6, so we put in the smallest honest thing that still animates:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct gpu_instance
+{
+    float ox, oy, oz;   ///&lt; world offset
+    float scale;        ///&lt; uniform — which is why the shader may reuse the rotation
+    float spin_c;       ///&lt; cos of the rotation about x
+    float spin_s;       ///&lt; sin of it
+    Uint8 r, g, b, a;   ///&lt; tint, four bytes, arriving as a float4
+};
+
+static_assert(sizeof(gpu_instance) == 28, "the pitch declared for slot 1 is this size");</code></pre>
+  </figure>
+
+  <p>
+    Its layout is described by the twin of <code>gpu_mesh::describe</code>, and there is exactly
+    one line that differs in kind:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    desc.instance_buffer(slot, static_cast&lt;Uint32&gt;(sizeof(gpu_instance)))
+        .attribute(3, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_instance, ox)))
+        .attribute(4, slot, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_instance, spin_c)))
+        .attribute(5, slot, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,
+                   static_cast&lt;Uint32&gt;(offsetof(gpu_instance, r)));</code></pre>
+  </figure>
+
+  <p>
+    <code>instance_buffer</code> instead of <code>vertex_buffer</code>. Inside, that is
+    <code>input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE</code> and nothing else. Note two details
+    in the attributes: location 3 is a <code>FLOAT4</code> covering <em>four struct fields</em>,
+    because <code>ox, oy, oz, scale</code> are four contiguous floats and the shader wants them as
+    one <code>float4</code> — three floats plus a lone float would be two attributes and two
+    fetches for the same bytes. And locations continue at 3 rather than restarting at 0, because
+    <strong>locations are numbered across the whole pipeline, not per buffer</strong>. A shader
+    has one input list; which slot each entry is fetched from is precisely what these calls
+    decide.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The field with one legal value</span>
+    <p>
+      <code>SDL_GPUVertexBufferDescription</code> also has an <code>instance_step_rate</code>, and
+      SDL's header says: <em>"Reserved for future use. Must be set to 0."</em>
+      <code>instance_buffer</code> sets it to zero and does not expose it. A setter for a field
+      with exactly one legal value is an invitation to a bug and buys nothing — and if SDL ever
+      un-reserves it, adding the parameter then is a two-line change, whereas removing a
+      parameter people have started passing is not.
+    </p>
+  </div>
+
+  <p>
+    Now, the buffer. This one is written every frame, which makes it a different <em>kind</em> of
+    object from the geometry — and the difference is one line:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_buffer.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // The staging buffer, created ONCE. This single line is the whole difference
+    // from `gpu_buffer::upload`, which creates and releases one per call — right
+    // for a load-time upload, an allocation per frame for this one.
+    SDL_GPUTransferBufferCreateInfo tb{};
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb.size = size;
+
+    staging_ = SDL_CreateGPUTransferBuffer(device_, &amp;tb);</code></pre>
+  </figure>
+
+  <p>
+    And a second difference, which is about correctness rather than cost. Both hops of the write
+    pass <code>cycle = true</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_buffer.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    void* mapped = SDL_MapGPUTransferBuffer(device_, staging_, true);   // hop 1
+    // …memcpy, unmap, begin a copy pass, fill in source and dest…
+    SDL_UploadToGPUBuffer(copy, &amp;source, &amp;dest, true);                   // hop 2</code></pre>
+  </figure>
+
+  <p>
+    This is the same hazard <code>gpu_present_target</code> faced in Lesson 4.2, now on the
+    geometry side. The buffer you are about to write may still be referenced by last frame's
+    command buffer, which the GPU may not have reached yet. Cycling hands you a different internal
+    buffer in exactly that case. Pass <code>false</code> and <em>nothing goes wrong</em> — until
+    the GPU falls behind, which is to say until somebody with a slower machine than yours runs it.
+    Compare with <code>gpu_buffer::upload</code>, which passes <code>false</code> deliberately,
+    because a load-time upload has no reader to race with and cycling there would allocate a
+    second copy of 39 KB of torus to guard against a hazard that does not exist.
+  </p>
+
+  <p>
+    The whole of the per-frame geometry work is then this:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        if (draw_mesh &amp;&amp; instances_ok)
+        {
+            gpu_instance placements[k_max_instances] = {};
+            place_instances(placements, instance_count, spin);
+            (void)instance_buffer.write(cb, placements,
+                                        static_cast&lt;Uint32&gt;(sizeof(gpu_instance))
+                                            * static_cast&lt;Uint32&gt;(instance_count));
+        }</code></pre>
+  </figure>
+
+  <p>
+    196 bytes at most, recorded into a copy pass that runs before the draw that reads it. The
+    torus is not touched, not read, not considered.
+  </p>
+
+  <p>
+    One more piece of the draw deserves a mention because it is easy to leave out and hard to
+    diagnose. <code>mesh.vert.hlsl</code> bakes an aspect ratio of 16 : 9 into its projection, and
+    the window is resizable, so the mesh pass restricts itself to the same letterboxed rectangle
+    the blit uses:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                    SDL_GPUViewport vp{};
+                    vp.x = static_cast&lt;float&gt;(fit.x);
+                    vp.y = static_cast&lt;float&gt;(fit.y);
+                    vp.w = static_cast&lt;float&gt;(fit.w);
+                    vp.h = static_cast&lt;float&gt;(fit.h);
+                    vp.min_depth = 0.0f;
+                    vp.max_depth = 1.0f;   // SDL_GPU's depth range (conventions §4)
+                    SDL_SetGPUViewport(draw_pass, &amp;vp);</code></pre>
+  </figure>
+
+  <p>
+    That is Lesson 2.11's viewport transform — the one you wrote by hand, that turned NDC into
+    pixels — handed to the hardware as a struct. Note that it is <strong>render-pass state, not
+    pipeline state</strong>: it survives a pipeline change, which is exactly the sort of thing
+    that makes a second draw in the same pass land mysteriously in the wrong rectangle. Our code
+    puts it back to the full target before drawing Lesson 4.4's triangle, for that reason.
+  </p>
+
+  <h3 id="impl-shrink">4.7 Making Lesson 4.4's triangle 43% smaller</h3>
+
+  <p>
+    §3.2 claimed that four bytes can replace sixteen for free. Here is the whole change, in Lesson
+    4.4's own vertex:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct gpu_vertex
+{
+    float x, y, z;              ///&lt; CLIP SPACE already: triangle.vert applies no matrix.
+    Uint8 r, g, b, a;           ///&lt; 0..255, arriving in the shader as 0..1 floats
+};</code></pre>
+  </figure>
+
+  <p>
+    …plus one enum in the layout, <code>FLOAT4</code> becoming <code>UBYTE4_NORM</code>, and the
+    three literals rewritten as bytes. <strong><code>shaders/triangle.vert.hlsl</code> was not
+    touched.</strong> It still declares <code>float4 colour : TEXCOORD1</code>; it still receives
+    a <code>float4</code>. Nothing downstream of the fetch unit is aware anything changed.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The 28-byte and 16-byte vertices compared</caption>
+    <thead><tr><th></th><th>bytes per vertex</th><th>pixels covered</th><th>pixels differing</th><th>worst channel error</th></tr></thead>
+    <tbody>
+      <tr><td><code>FLOAT4</code> colour</td><td>28</td><td>47,124</td><td>—</td><td>—</td></tr>
+      <tr><td><code>UBYTE4_NORM</code> colour</td><td><strong>16</strong></td><td>47,124</td><td>22,494</td><td><strong>1</strong> of 255</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read that last row carefully, because it is more interesting than "they are the same". Nearly
+    <em>half</em> the covered pixels changed value — and every one of them changed by a single
+    code out of 255, which no display and no eye will ever resolve. That is what a good
+    quantisation looks like: not "no difference", but "difference below the precision of the
+    thing you are storing it in". The render target is eight bits per channel; storing the input
+    at more than eight bits of precision was buying nothing.
+  </p>
+
+  <h3 id="impl-frame">4.8 The frame, counted</h3>
+
+  <p>
+    Screen capture is unavailable on the machine this lesson was written on, so — as in Lesson
+    4.4 — the frame is rebuilt offscreen and counted rather than photographed. This is the actual
+    output, downloaded from the device:
+  </p>
+
+@@FIG_SCENE@@
+
+  <p>
+    Seven tori. One vertex buffer of 39,200 bytes, one index buffer of 13,824, one instance
+    buffer of 196, and one call to <code>SDL_DrawGPUIndexedPrimitives(pass, 6912, 7, 0, 0, 0)</code>.
+    32,006 of the target's 147,456 pixels are covered, and the whole scene sits inside the frame
+    with room to spare — which the harness asserts rather than eyeballs, because "is anything
+    clipped" is a question with a numeric answer.
+  </p>
+
+  <p>
+    The grid on each surface is worth one more sentence. It is drawn from the texture
+    coordinate — the third vertex attribute — by <code>mesh.frag.hlsl</code>, and it is there
+    because nothing in this lesson samples a texture yet. Without it, a uv that arrived scrambled
+    would look exactly like a uv that arrived correctly, and an attribute you cannot see is an
+    attribute you cannot debug.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption class="visually-hidden">Every file this lesson creates or modifies</caption>
+    <thead><tr><th>path</th><th></th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td>src/gfx/gpu_mesh.hpp</td><td><span class="badge new">new</span></td>
+          <td>the interleaved vertex, the two upload modes, the layout beside the struct</td></tr>
+      <tr><td>src/gfx/gpu_mesh.cpp</td><td><span class="badge new">new</span></td>
+          <td>the conversion, the two buffers, the two draw calls</td></tr>
+      <tr><td>shaders/mesh.vert.hlsl</td><td><span class="badge new">new</span></td>
+          <td>six inputs, a frozen camera, and Lesson 2.10's projection as arithmetic</td></tr>
+      <tr><td>shaders/mesh.frag.hlsl</td><td><span class="badge new">new</span></td>
+          <td>Lesson 3.6's Lambert term, and a uv grid that proves attribute 2 arrived</td></tr>
+      <tr><td>src/gfx/gpu_buffer.hpp</td><td><span class="badge mod">modified</span></td>
+          <td>adds <code>gpu_stream_buffer</code>: a device buffer written every frame</td></tr>
+      <tr><td>src/gfx/gpu_buffer.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>its persistent staging buffer, and both halves of the cycle</td></tr>
+      <tr><td>src/gfx/gpu_pipeline.hpp</td><td><span class="badge mod">modified</span></td>
+          <td><code>instance_buffer</code>, <code>check_layout</code>, <code>size_of</code>,
+              <code>shader_type_of</code></td></tr>
+      <tr><td>src/gfx/gpu_pipeline.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>the format tables, and the only check anything performs on a layout</td></tr>
+      <tr><td>src/gfx/gpu_shader.hpp</td><td><span class="badge mod">modified</span></td>
+          <td><code>shader_input</code>, <code>shader_inputs</code>, and the accessor</td></tr>
+      <tr><td>src/gfx/gpu_shader.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>parsing the reflection's <code>inputs</code> array, bounded to that array</td></tr>
+      <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>the torus, three pitches, the instance buffer, and a 16-byte triangle vertex</td></tr>
+      <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td>
+          <td><code>gpu_mesh.cpp</code> and the two new shaders</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:src/gfx/gpu_mesh.hpp@@
+@@LISTING:src/gfx/gpu_mesh.cpp@@
+@@LISTING:shaders/mesh.vert.hlsl@@
+@@LISTING:shaders/mesh.frag.hlsl@@
+@@LISTING:src/gfx/gpu_buffer.hpp@@
+@@LISTING:src/gfx/gpu_buffer.cpp@@
+@@LISTING:src/gfx/gpu_pipeline.hpp@@
+@@LISTING:src/gfx/gpu_pipeline.cpp@@
+@@LISTING:src/gfx/gpu_shader.hpp@@
+@@LISTING:src/gfx/gpu_shader.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    Nothing new is needed beyond Lesson 4.3's shader toolchain. The two new HLSL files are added
+    to the build the same way the first four were, and <code>cmake/Shaders.cmake</code> compiles
+    them without further configuration.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Windows (Visual Studio generator)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j
+.\build\Debug\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    A 1280 × 720 window containing <strong>seven tori</strong> arranged as a ring of six around
+    one in the centre, each a different colour, each spinning about the x axis at its own rate,
+    each with a faint grid of eight cells drawn along its surface. The software rasterizer's
+    checkerboard and timing graph are still underneath, and Lesson 4.4's gradient triangle is
+    still drawn over the top on the right.
+  </p>
+
+  <p>
+    The log at startup is where this lesson's claims actually appear:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">terminal — <code>./engine --gpu</code></span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">  mesh            : torus.obj  1225 vertices, 2304 triangles
+    indexed       :   1225 vertices +   6912 indices =  53024 bytes  (1225-6912 shader invocations)
+    expanded      :   6912 vertices +      0 indices = 221184 bytes  (6912 shader invocations, no reuse possible)
+    the index buffer costs 13824 bytes and saves 181984: 4.17x
+  layout 32 (correct): 6 attributes checked against the reflection, no problems
+  layout 28 (four bytes short): location 2 ends at byte 32 of a 28-byte vertex — it reads into the NEXT one
+  layout 28 (four bytes short): 1 problem(s) — see above
+  layout 36 (four bytes long): 6 attributes checked against the reflection, no problems</code></pre>
+  </figure>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Keys the GPU probe responds to</caption>
+    <thead><tr><th>key</th><th>what it does</th><th>what to look for</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>6</kbd></td><td>draw the mesh</td><td>off gives you Lesson 4.4's picture back</td></tr>
+      <tr><td><kbd>7</kbd></td><td>indexed / expanded</td>
+          <td><strong>no visible change</strong> — the log line is the whole point</td></tr>
+      <tr><td><kbd>8</kbd></td><td>pitch 32 → 28 → 36</td><td>Figure 5, live and spinning</td></tr>
+      <tr><td><kbd>9</kbd></td><td>1 → 4 → 7 instances</td>
+          <td>one argument of one call; the geometry never moves</td></tr>
+      <tr><td><kbd>5</kbd></td><td>Lesson 4.4's triangle</td><td>now 16 bytes a vertex, and identical</td></tr>
+      <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Lessons 4.2's controls</td><td>filter, present mode, frames in flight, fence</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    To reproduce every number in this lesson, build and run the harness:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">from the repository root</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_45.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp src/gfx/gpu_buffer.cpp \
+    src/gfx/gpu_pipeline.cpp src/gfx/gpu_mesh.cpp src/gfx/gpu_present.cpp \
+    src/gfx/framebuffer.cpp src/gfx/raster.cpp src/gfx/colour.cpp \
+    src/gfx/depth_buffer.cpp src/gfx/texture.cpp src/gfx/mesh.cpp \
+    src/gfx/obj.cpp src/gfx/clip.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/verify_45
+./build/verify_45</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       7 — COMMON PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The mesh is a cloud of shards</span>
+    <p>
+      <strong>Symptom:</strong> geometry sprayed everywhere, coherent near one edge, worse the
+      further in you look.<br>
+      <strong>Cause:</strong> the pitch. Almost always a literal where a <code>sizeof</code>
+      belonged, or a struct that gained a field.<br>
+      <strong>Fix:</strong> print <code>sizeof(your_vertex)</code> and compare it with the pitch
+      you declared. Do not try to read the direction of the error out of the picture — too long
+      and too short look the same (§4.4).
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The mesh is compact but the wrong shape</span>
+    <p>
+      <strong>Symptom:</strong> a recognisable but wrong object — often a ball, often much smaller
+      than expected.<br>
+      <strong>Cause:</strong> an offset, not a pitch. Each vertex is read from its own record, just
+      from the wrong bytes of it. Reading a normal as a position gives a unit sphere; reading a uv
+      as a position gives a flat patch near the origin.<br>
+      <strong>Fix:</strong> <code>offsetof</code>, everywhere, with no exceptions.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is white, or everything is black</span>
+    <p>
+      <strong>Symptom:</strong> the shape is right and the colour is not.<br>
+      <strong>Cause:</strong> <code>UBYTE4</code> where you meant <code>UBYTE4_NORM</code> (or the
+      reverse). The first delivers 0…255 into a float; the second divides by 255 first. Six
+      characters, same four bytes.<br>
+      <strong>Fix:</strong> <code>check_layout</code> catches this one, because the reflection says
+      <code>float4</code> and <code>UBYTE4</code> presents as <code>uint4</code>. Read the log.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">"Vertex attribute input_x(n) is missing from the vertex descriptor"</span>
+    <p>
+      <strong>Symptom:</strong> pipeline creation fails with that message, or its Vulkan/D3D12
+      equivalent.<br>
+      <strong>Cause:</strong> the shader declares a location nothing supplies. This is the
+      <em>one</em> layout mistake SDL refuses (§3.3).<br>
+      <strong>Fix:</strong> it is telling you the location. Add the attribute — or delete the input
+      from the shader, if it was left behind by an edit.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A mesh made of glass shards, but the pitch is right</span>
+    <p>
+      <strong>Symptom:</strong> the shard picture, with a verified-correct layout.<br>
+      <strong>Cause:</strong> the index element size. Binding 16-bit indices as
+      <code>_32BIT</code> reads consecutive pairs as single enormous values, every one out of
+      range.<br>
+      <strong>Fix:</strong> the element size is an argument to
+      <code>SDL_BindGPUIndexBuffer</code>, not a property of the buffer. Ours is
+      <code>SDL_GPU_INDEXELEMENTSIZE_16BIT</code> because <code>mesh::indices</code> is
+      <code>std::uint16_t</code>; keep the two in one place.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The buffer is bound but nothing draws</span>
+    <p>
+      <strong>Symptom:</strong> no geometry, no error, no validation message.<br>
+      <strong>Cause:</strong> a buffer created without the usage bit it is being bound for. A
+      vertex buffer needs <code>SDL_GPU_BUFFERUSAGE_VERTEX</code>; an index buffer needs
+      <code>_INDEX</code>. It is a bitmask, and it is not advisory.<br>
+      <strong>Fix:</strong> run with <code>debug = true</code>. The validation layer is good about
+      this one, unlike almost everything else in this lesson.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The instanced draw shows one object, or seven identical ones</span>
+    <p>
+      <strong>Symptom:</strong> the instance count clearly reached the draw call, but the
+      placements did not.<br>
+      <strong>Cause:</strong> <code>input_rate</code> left at its default. Every enum in that
+      struct has its first enumerator at zero, so a zero-initialised description means
+      <code>_VERTEX</code> — the same trap Lesson 4.4 recorded for
+      <code>rasterizer_state.cull_mode</code>. At vertex rate, instance 0 reads placements 0,
+      1, 2, … as its <em>vertices</em> walk the buffer, and every instance beyond the first reads
+      past the end.<br>
+      <strong>Fix:</strong> set it explicitly. That is what <code>instance_buffer</code> exists
+      for.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Tearing or flickering in the instance data under load</span>
+    <p>
+      <strong>Symptom:</strong> placements occasionally wrong for one frame — and only on a slower
+      machine, or with the frame rate uncapped.<br>
+      <strong>Cause:</strong> <code>cycle = false</code> on a per-frame write. You overwrote data
+      the GPU had not finished reading.<br>
+      <strong>Fix:</strong> <code>true</code>, on both the map and the upload. And note that this
+      is why the bug did not appear on your machine: it needs the GPU to be behind.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>4.5.1 — Shrink the vertex.</strong> The normal is three floats and it is a unit
+        vector, so every component is in −1…+1. Change it to <code>SHORT4_NORM</code> or
+        <code>BYTE4_NORM</code> and take the vertex from 32 bytes to 24 or 20. Measure the
+        difference in the picture the way §G does — same pipeline, both buffers, compare per
+        pixel.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> <code>_NORM</code> formats come in 2- and 4-component widths only,
+        so you will store four components and ignore the fourth — or use it, since a fourth
+        component next to a normal is exactly where a tangent's handedness goes in Module 6.
+        Encode with <code>round(x * 127.0f)</code> for <code>BYTE4_NORM</code>. Expect visible
+        banding on smooth shading at 8 bits and none at 16; that difference is the exercise.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.5.2 — Make <code>check_layout</code> catch the long pitch.</strong> §3.3 admits
+        it cannot. But it has all the information: if the highest attribute end across a slot is
+        28 and the pitch is 36, eight bytes per vertex are being fetched and discarded. Report it
+        as a note (like <code>widening</code>), with the wasted byte count.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> compute <code>max(offset + size_of(format))</code> per slot and
+        compare with that slot's pitch. Be careful not to report padding as waste when it is
+        deliberate — some hardware prefers 4- or 16-byte-aligned pitches, so a note is right and
+        an error would be wrong.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.5.3 — Two buffers instead of one.</strong> Split the vertex into a
+        position-only buffer at slot 0 and a normal+uv buffer at slot 2, as §2.2's production
+        layout does. Nothing about the shader changes; only <code>describe</code> and the binding
+        do. Then measure: does the frame time change at all on your hardware?
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> it almost certainly will not, at 2,304 triangles — and that is the
+        finding, not a failure. The layout matters when you are fetch-bound, and a torus on a
+        modern GPU is not. Write down the number of triangles at which you would expect it to
+        start mattering, then check with <a href="04-01-how-gpus-work.html">4.1</a>'s bandwidth
+        figures.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.5.4 — Break it on purpose, in the running demo.</strong> Add a key that swaps
+        the position and normal <em>offsets</em> at runtime by rebuilding the pipeline. Predict the
+        picture before you press it — §4.4 tells you what to expect and why — then check.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> pipeline creation is 2.4 ms for a permutation the driver has not
+        seen (Lesson 4.4 §4.4), so build all the variants at startup rather than on the keypress.
+        The prediction is a unit sphere; the interesting part is what happens to the
+        <em>shading</em>, since the normal is now the position.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.5.5 — Many more instances.</strong> Raise <code>k_max_instances</code> to 200
+        and lay them out on a grid. Find the instance count at which the frame time starts to
+        rise, and work out whether you became vertex-bound, fill-bound, or bandwidth-bound.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> shrink the tori as you add them so that coverage stays roughly
+        constant; then a rise in frame time is not simply more pixels. If the time tracks
+        instances × 1,225 you are vertex-bound. The per-frame upload grows too — 200 instances is
+        5,600 bytes, still nothing — which is the point being demonstrated a second time.
+      </p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now put real geometry on the device and describe it correctly, which is the
+    difference between having drawn a triangle and having a renderer.
+  </p>
+
+  <ul>
+    <li>
+      <strong>A vertex layout is three numbers and one formula</strong> —
+      <code>base + i × pitch + offset</code> — evaluated by fixed-function hardware that has no
+      way to know whether the numbers are right. The failures are silent by construction, not by
+      oversight.
+    </li>
+    <li>
+      <strong>A format answers two questions.</strong> <code>UBYTE4_NORM</code> is four bytes in
+      the buffer and a <code>float4</code> in the shader; that gap made Lesson 4.4's vertex 43%
+      smaller with no visible change and no shader edit.
+    </li>
+    <li>
+      <strong>Interleaved beats separate for whole-vertex reads and loses for single-attribute
+      passes</strong> — 1 cache line against 5, and 613 against 230. Both measured on our own
+      mesh. The production answer is a hybrid, and Module 6's depth pass is where we will want it.
+    </li>
+    <li>
+      <strong>The layout is a contract in two languages, and the reflection JSON is the notary.</strong>
+      <code>check_layout</code> catches three of five common mistakes; SDL catches one; the
+      remaining ones are found by looking at the picture, which is why §4.4 catalogued what the
+      pictures look like.
+    </li>
+    <li>
+      <strong>Index buffers are 4.17× smaller on our torus</strong> and turn a fixed 6,912
+      vertex-shader invocations into a range of 1,225–6,912. The picture is identical to the
+      pixel, which the harness proves.
+    </li>
+    <li>
+      <strong>Instancing is one enum value.</strong> Same buffer type, same bind call, same
+      attributes, one different <code>input_rate</code> — and the shader cannot tell. 196 bytes a
+      frame drive seven copies of 53,024 bytes of geometry.
+    </li>
+  </ul>
+
+  <p>
+    What is still missing is the thing you will have noticed the moment the window opened: the
+    camera does not move, and it cannot, because every number in the projection is a
+    <code>static const</code> compiled into the shader. Placing an object is per-instance data and
+    we have that; placing the <em>camera</em> is per-frame data shared by every vertex of every
+    instance, and pushing it through the vertex buffer would mean writing the same sixteen floats
+    1,225 times.
+  </p>
+
+  <p>
+    <strong>Next: 4.6 — Uniform Data and the Matrix Upload.</strong> Uniform buffers and push
+    constants, what each is for, and the alignment rules that make the difference between a matrix
+    arriving and a matrix arriving <em>shuffled</em>. It is also where Lesson 2.6's column-major
+    storage choice quietly pays off, because the layout our <code>mat4</code> already uses is the
+    layout the GPU already wants — and where <code>mesh.vert.hlsl</code>'s pile of constants
+    becomes a camera you can fly.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>SDL3 — <code>SDL_gpu.h</code>, the vertex input structures.</strong>
+      <code>SDL_GPUVertexBufferDescription</code>, <code>SDL_GPUVertexAttribute</code>,
+      <code>SDL_GPUVertexElementFormat</code>. Read the enum in full once; it is forty lines and
+      it is the complete menu of what a vertex may be made of.
+    </li>
+    <li>
+      <strong>Vulkan specification, "Vertex Input Description" and "Attribute Location and
+      Component Assignment".</strong> The authoritative statement of the (0, 0, 0, 1) fill rule
+      §3.4 measured, and of the location/component model SDL_GPU exposes.
+    </li>
+    <li>
+      <strong>Tom Forsyth, "Linear-Speed Vertex Cache Optimisation" (2006).</strong> The standard
+      algorithm for reordering triangles so the post-transform cache actually hits — the thing
+      §3.5's invocation range is a range because of.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §16.4 "Triangle Meshes" and §18.4.1 "Vertex
+      Processing".</strong> Sharing, strips versus lists, and where vertex processing sits in the
+      pipeline's cost model.
+    </li>
+    <li>
+      <strong>Fabian Giesen, "A trip through the Graphics Pipeline 2011", parts 4–5.</strong> What
+      the vertex fetch unit and the post-transform cache actually are, in hardware, from someone
+      who has read the die.
+    </li>
+    <li>
+      <strong>Mike Acton, "Data-Oriented Design and C++" (CppCon 2014).</strong> The
+      interleaved-versus-separate argument in its general form, several years before you need it
+      again for the ECS in Module 5.
+    </li>
+    <li>
+      <a href="../conventions.html">Conventions</a> — §4 (clip space and NDC), §7 (winding and
+      culling), and the new §16 entry on vertex layouts.
+    </li>
+  </ul>

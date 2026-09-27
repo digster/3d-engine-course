@@ -1,0 +1,60 @@
+<svg viewBox="0 0 720 392" role="img" aria-labelledby="l66f2-t l66f2-d">
+  <title id="l66f2-t">The accessor chain and the combinatorial matrix behind it</title>
+  <desc id="l66f2-d">Three linked boxes: accessor 0 (VEC3 of FLOAT, count 8) points at bufferView 0 (offset 0, length 96 bytes), which points at buffer 0 (the external file cube.bin, 328 bytes). Below, four independent axes of variation — component type, normalized, packing and sparseness — multiplying out to forty legal encodings of the same eight positions.</desc>
+  <defs>
+    <marker id="e-i-l66f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l66f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l66f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l66f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l66f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="392" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">Why we do not hand-roll the parser</text>
+<text x="360.0" y="46" class="xs" text-anchor="middle">assets/cube.gltf, POSITION, as actually written</text>
+<rect x="24.0" y="68" width="176" height="116" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="24.0" y="68" width="176" height="116" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.3"/>
+<text x="112.0" y="90" class="sm" text-anchor="middle">accessor 0</text>
+<line x1="36.0" y1="98" x2="188.0" y2="98" class="grid" stroke-width="1.0"/>
+<text x="112.0" y="118" class="xs" text-anchor="middle">type   VEC3</text>
+<text x="112.0" y="136" class="xs" text-anchor="middle">compType FLOAT</text>
+<text x="112.0" y="154" class="xs" text-anchor="middle">count  8</text>
+<text x="112.0" y="172" class="xs" text-anchor="middle">byteOffset 0</text>
+<line x1="206.0" y1="126" x2="266.0" y2="126" class="ink" stroke-width="1.4" marker-end="url(#e-i-l66f2)"/>
+<rect x="272.0" y="68" width="176" height="116" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="272.0" y="68" width="176" height="116" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="360.0" y="90" class="sm" text-anchor="middle">bufferView 0</text>
+<line x1="284.0" y1="98" x2="436.0" y2="98" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="118" class="xs" text-anchor="middle">buffer 0</text>
+<text x="360.0" y="136" class="xs" text-anchor="middle">byteOffset 0</text>
+<text x="360.0" y="154" class="xs" text-anchor="middle">byteLength 96</text>
+<text x="360.0" y="172" class="xs" text-anchor="middle">target ARRAY</text>
+<line x1="454.0" y1="126" x2="514.0" y2="126" class="ink" stroke-width="1.4" marker-end="url(#e-i-l66f2)"/>
+<rect x="520.0" y="68" width="176" height="116" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="520.0" y="68" width="176" height="116" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="608.0" y="90" class="sm" text-anchor="middle">buffer 0</text>
+<line x1="532.0" y1="98" x2="684.0" y2="98" class="grid" stroke-width="1.0"/>
+<text x="608.0" y="118" class="xs" text-anchor="middle">uri "cube.bin"</text>
+<text x="608.0" y="136" class="xs" text-anchor="middle">byteLength 328</text>
+<text x="608.0" y="172" class="xs" text-anchor="middle">an external file</text>
+<text x="360.0" y="214" class="sm" text-anchor="middle">…and every one of those fields has options, all legal:</text>
+<text x="150" y="240" class="xs" text-anchor="end">component type</text>
+<rect x="164" y="228" width="400" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="364" y="240" class="xs" text-anchor="middle">float32 · uint8 · uint16 · int8 · int16</text>
+<text x="590" y="240" class="xs" text-anchor="start">x 5</text>
+<text x="150" y="264" class="xs" text-anchor="end">normalized</text>
+<rect x="164" y="252" width="400" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="364" y="264" class="xs" text-anchor="middle">yes · no</text>
+<text x="590" y="264" class="xs" text-anchor="start">x 2</text>
+<text x="150" y="288" class="xs" text-anchor="end">packing</text>
+<rect x="164" y="276" width="400" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="364" y="288" class="xs" text-anchor="middle">tight · interleaved at a stride</text>
+<text x="590" y="288" class="xs" text-anchor="start">x 2</text>
+<text x="150" y="312" class="xs" text-anchor="end">sparse</text>
+<rect x="164" y="300" width="400" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="364" y="312" class="xs" text-anchor="middle">dense · base array + patch list</text>
+<text x="590" y="312" class="xs" text-anchor="start">x 2</text>
+<line x1="164" y1="332" x2="620" y2="332" class="grid" stroke-width="1.0"/>
+<text x="590" y="352" class="sm" text-anchor="start">= 40</text>
+<text x="364" y="352" class="xs" text-anchor="middle">forty combinations, none of them about graphics</text>
+<text x="360.0" y="374" class="sm" text-anchor="middle">cgltf_accessor_read_float collapses all forty. That is the whole argument.</text>
+</svg>

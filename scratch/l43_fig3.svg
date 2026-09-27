@@ -1,0 +1,68 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="l43f3-t l43f3-d">
+  <title id="l43f3-t">The size of every file in the toolchain</title>
+  <desc id="l43f3-d">A grouped bar chart, four shaders by four file types. Compiled shader code is tiny: the largest SPIR-V here is 1,100 bytes and the largest MSL is 585. The reflection JSON, at roughly 230 to 310 bytes, is the same order of size as the code it describes. The HLSL bars are the longest only because this course's shaders carry more comment than code.</desc>
+  <defs>
+    <marker id="e-i-l43f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l43f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l43f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">what each file weighs, in bytes</text>
+<text x="24" y="46" class="xs muted">the .hlsl bar is mostly the comments this course writes &#8212; the code itself is smaller than its description</text>
+<text x="108.0" y="100.0" class="xs mono" text-anchor="end">triangle.vert</text>
+<rect x="118.0" y="80.0" width="457.6" height="9.0" fill="#5ac878" opacity="0.85"/>
+<text x="581.6" y="88.0" class="xs mono muted">1556</text>
+<rect x="118.0" y="91.0" width="222.4" height="9.0" fill="#5acdd7" opacity="0.85"/>
+<text x="346.4" y="99.0" class="xs mono muted">756</text>
+<rect x="118.0" y="102.0" width="145.0" height="9.0" fill="#5082e6" opacity="0.85"/>
+<text x="269.0" y="110.0" class="xs mono muted">493</text>
+<rect x="118.0" y="113.0" width="90.3" height="9.0" fill="#f0961e" opacity="0.85"/>
+<text x="214.3" y="121.0" class="xs mono muted">307</text>
+<text x="108.0" y="150.0" class="xs mono" text-anchor="end">triangle.frag</text>
+<rect x="118.0" y="130.0" width="263.2" height="9.0" fill="#5ac878" opacity="0.85"/>
+<text x="387.2" y="138.0" class="xs mono muted">895</text>
+<rect x="118.0" y="141.0" width="136.5" height="9.0" fill="#5acdd7" opacity="0.85"/>
+<text x="260.5" y="149.0" class="xs mono muted">464</text>
+<rect x="118.0" y="152.0" width="100.6" height="9.0" fill="#5082e6" opacity="0.85"/>
+<text x="224.6" y="160.0" class="xs mono muted">342</text>
+<rect x="118.0" y="163.0" width="69.7" height="9.0" fill="#f0961e" opacity="0.85"/>
+<text x="193.7" y="171.0" class="xs mono muted">237</text>
+<text x="108.0" y="200.0" class="xs mono" text-anchor="end">textured.vert</text>
+<rect x="118.0" y="180.0" width="422.1" height="9.0" fill="#5ac878" opacity="0.85"/>
+<text x="546.1" y="188.0" class="xs mono muted">1435</text>
+<rect x="118.0" y="191.0" width="323.5" height="9.0" fill="#5acdd7" opacity="0.85"/>
+<text x="447.5" y="199.0" class="xs mono muted">1100</text>
+<rect x="118.0" y="202.0" width="172.1" height="9.0" fill="#5082e6" opacity="0.85"/>
+<text x="296.1" y="210.0" class="xs mono muted">585</text>
+<rect x="118.0" y="213.0" width="87.9" height="9.0" fill="#f0961e" opacity="0.85"/>
+<text x="211.9" y="221.0" class="xs mono muted">299</text>
+<text x="108.0" y="250.0" class="xs mono" text-anchor="end">textured.frag</text>
+<rect x="118.0" y="230.0" width="413.2" height="9.0" fill="#5ac878" opacity="0.85"/>
+<text x="537.2" y="238.0" class="xs mono muted">1405</text>
+<rect x="118.0" y="241.0" width="303.5" height="9.0" fill="#5acdd7" opacity="0.85"/>
+<text x="427.5" y="249.0" class="xs mono muted">1032</text>
+<rect x="118.0" y="252.0" width="154.1" height="9.0" fill="#5082e6" opacity="0.85"/>
+<text x="278.1" y="260.0" class="xs mono muted">524</text>
+<rect x="118.0" y="263.0" width="68.5" height="9.0" fill="#f0961e" opacity="0.85"/>
+<text x="192.5" y="271.0" class="xs mono muted">233</text>
+<line x1="118.0" y1="280.0" x2="618.0" y2="280.0" class="ink-soft" stroke-width="1.2"/>
+<line x1="118.0" y1="280.0" x2="118.0" y2="284.0" class="ink-soft" stroke-width="1"/>
+<text x="118.0" y="298.0" class="xs mono muted" text-anchor="middle">0</text>
+<line x1="265.1" y1="280.0" x2="265.1" y2="284.0" class="ink-soft" stroke-width="1"/>
+<text x="265.1" y="298.0" class="xs mono muted" text-anchor="middle">500</text>
+<line x1="412.1" y1="280.0" x2="412.1" y2="284.0" class="ink-soft" stroke-width="1"/>
+<text x="412.1" y="298.0" class="xs mono muted" text-anchor="middle">1000</text>
+<line x1="559.2" y1="280.0" x2="559.2" y2="284.0" class="ink-soft" stroke-width="1"/>
+<text x="559.2" y="298.0" class="xs mono muted" text-anchor="middle">1500</text>
+<text x="118.0" y="314.0" class="xs muted">bytes</text>
+<rect x="318.0" y="305.0" width="10" height="10" fill="#5ac878" opacity="0.85"/>
+<text x="333.0" y="314.0" class="xs mono">.hlsl</text>
+<rect x="392.0" y="305.0" width="10" height="10" fill="#5acdd7" opacity="0.85"/>
+<text x="407.0" y="314.0" class="xs mono">.spv</text>
+<rect x="466.0" y="305.0" width="10" height="10" fill="#5082e6" opacity="0.85"/>
+<text x="481.0" y="314.0" class="xs mono">.msl</text>
+<rect x="540.0" y="305.0" width="10" height="10" fill="#f0961e" opacity="0.85"/>
+<text x="555.0" y="314.0" class="xs mono">.json</text>
+</svg>

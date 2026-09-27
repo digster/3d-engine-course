@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l65f2-t l65f2-d">
+  <title id="l65f2-t">The rule that decides what belongs in a material</title>
+  <desc id="l65f2-d">Anything the fragment stage reads as a value can be pushed as a uniform and belongs in the material: the tint, the texture handle, the sampler and the microsurface. Anything that decides which pipeline runs cannot be a uniform and stays out: cull mode, fill mode, the choice of BRDF and the shader itself. Two objects differing only in the first group draw back to back; two differing in the second need two pipelines and a sort between them.</desc>
+  <defs>
+    <marker id="e-i-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l65f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="400" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="28" class="lg" text-anchor="middle">The question that draws the line</text>
+<text x="360.0" y="52" class="sm" text-anchor="middle">Can this be a number in a buffer?</text>
+<rect x="46" y="78" width="300" height="214" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="46" y="78" width="300" height="214" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="196.0" y="104" class="sm" text-anchor="middle">YES  →  it is the MATERIAL</text>
+<text x="196.0" y="124" class="xs" text-anchor="middle">per-draw data, pushed as a uniform</text>
+<line x1="66" y1="136" x2="326" y2="136" class="grid" stroke-width="1.0"/>
+<text x="70" y="160" class="xs" text-anchor="start">tint</text>
+<text x="322" y="160" class="xs" text-anchor="end">the albedo, sRGB</text>
+<text x="70" y="186" class="xs" text-anchor="start">albedo_map</text>
+<text x="322" y="186" class="xs" text-anchor="end">a texture HANDLE</text>
+<text x="70" y="212" class="xs" text-anchor="start">samp</text>
+<text x="322" y="212" class="xs" text-anchor="end">how to read it</text>
+<text x="70" y="238" class="xs" text-anchor="start">surface</text>
+<text x="322" y="238" class="xs" text-anchor="end">roughness / metallic / F0</text>
+<text x="196.0" y="274" class="xs" text-anchor="middle">two of these differ → no state change</text>
+<rect x="374" y="78" width="300" height="214" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="374" y="78" width="300" height="214" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="524.0" y="104" class="sm" text-anchor="middle">NO  →  it is PIPELINE STATE</text>
+<text x="524.0" y="124" class="xs" text-anchor="middle">baked into a pipeline object</text>
+<line x1="394" y1="136" x2="654" y2="136" class="grid" stroke-width="1.0"/>
+<text x="398" y="160" class="xs" text-anchor="start">cull mode</text>
+<text x="650" y="160" class="xs" text-anchor="end">which faces to drop</text>
+<text x="398" y="186" class="xs" text-anchor="start">fill mode</text>
+<text x="650" y="186" class="xs" text-anchor="end">solid or wireframe</text>
+<text x="398" y="212" class="xs" text-anchor="start">specular_model</text>
+<text x="650" y="212" class="xs" text-anchor="end">which BRDF runs</text>
+<text x="398" y="238" class="xs" text-anchor="start">the shader</text>
+<text x="650" y="238" class="xs" text-anchor="end">the program itself</text>
+<text x="524.0" y="274" class="xs" text-anchor="middle">two of these differ → TWO PIPELINES + a sort</text>
+<rect x="46" y="312" width="628" height="62" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="336" class="xs" text-anchor="middle">Lesson 4.8 measured the right-hand side: three pipelines, and a sort</text>
+<text x="360.0" y="356" class="xs" text-anchor="middle">to keep the bind count at three instead of one per draw.</text>
+</svg>

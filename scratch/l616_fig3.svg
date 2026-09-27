@@ -1,0 +1,35 @@
+<svg viewBox="0 0 720 392" role="img" aria-labelledby="f616c-t f616c-d">
+  <title id="f616c-t">A worked frustum with round numbers</title>
+  <desc id="f616c-d">A 90-degree frustum with near 1 and far 11, drawn as a slice with minus-z to the right. Two sample points are marked: one exactly on the left plane with signed distance zero, one half a unit inside at distance 0.353553. Below, the arithmetic: the left plane is row0 plus row3 normalised, and the near plane is row2 alone, whose constant term works out to minus the near distance.</desc>
+  <defs>
+    <marker id="e-i-f616c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f616c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f616c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f616c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f616c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">A 90° frustum, near 1, far 11 — every number below is checked in verify_616 §C</text>
+<text x="96" y="50" class="xs" text-anchor="middle">x</text>
+<line x1="96" y1="214" x2="641.6" y2="214" class="grid" stroke-width="1.0" stroke-dasharray="4 3"/>
+<text x="641.6" y="230" class="xs" text-anchor="middle">−z</text>
+<line x1="96" y1="134.8" x2="96" y2="293.2" class="grid" stroke-width="1.0" stroke-dasharray="4 3"/>
+<line x1="96.0" y1="214.0" x2="606.4" y2="132.3" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<line x1="96.0" y1="214.0" x2="606.4" y2="295.7" stroke="#5082e6" stroke-width="1.6" fill="none"/>
+<circle cx="96" cy="214" r="4" fill="#e05c5c"/>
+<text x="92" y="234" class="xs" text-anchor="end">eye</text>
+<line x1="140.0" y1="207.0" x2="140.0" y2="221.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<text x="140.0" y="196.96" class="xs" text-anchor="middle">near = 1</text>
+<line x1="580.0" y1="136.6" x2="580.0" y2="291.4" stroke="#f0961e" stroke-width="1.6" fill="none"/>
+<text x="580.0" y="126.56" class="xs" text-anchor="middle">far = 11</text>
+<circle cx="316.0" cy="249.2" r="3.6" fill="#e05c5c"/>
+<circle cx="316.0" cy="245.7" r="3.6" fill="#5ac878"/>
+<text x="412.8" y="62" class="xs" text-anchor="start">(−5, 0, −5) — ON the left plane: d = 0</text>
+<line x1="408.4" y1="58.0" x2="322.0" y2="245.2" stroke="#e05c5c" stroke-width="0.8" fill="none" stroke-dasharray="3 3"/>
+<text x="412.8" y="82" class="xs" text-anchor="start">(−4.5, 0, −5) — d = 0.353553 = 0.5/√2</text>
+<line x1="408.4" y1="78.0" x2="322.0" y2="241.7" stroke="#5ac878" stroke-width="0.8" fill="none" stroke-dasharray="3 3"/>
+<line x1="60" y1="274" x2="660" y2="274" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="292" class="xs" text-anchor="middle">f = cot(45°) = 1, so row0 = (1, 0, 0, 0) and row3 = (0, 0, −1, 0)</text>
+<text x="360.0" y="314" class="xs" text-anchor="middle">left = row0 + row3 = (1, 0, −1, 0);  |n| = √2, so the unit plane is (0.707107, 0, −0.707107 | 0)</text>
+<text x="360.0" y="336" class="xs" text-anchor="middle">d(−5, 0, −5) = 0.707107·(−5) − 0.707107·(−5) + 0 = 0   ✓</text>
+<text x="360.0" y="358" class="xs" text-anchor="middle">near = row2 = (0, 0, A, B) = (0, 0, −1.1, −1.1);  |n| = 1.1, so unit = (0, 0, −1 | −1) — i.e. −near   ✓</text>
+</svg>

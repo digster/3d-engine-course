@@ -1,0 +1,79 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l510f3-t l510f3-d">
+  <title id="l510f3-t">Edges derived from an action's level rather than from its bindings</title>
+  <desc id="l510f3-d">Five frames in which a jump action bound to both a key and a mouse button is activated by one, then the other, then released in turn. The level stays true throughout, so there is exactly one press edge and one release edge.</desc>
+  <defs>
+    <marker id="e-i-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l510f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">“jump” bound to Space AND the left mouse button. Five frames.</text>
+<text x="174" y="46" class="xs muted" text-anchor="middle">idle</text>
+<text x="282" y="46" class="xs muted" text-anchor="middle">Space</text>
+<text x="282" y="58" class="xs muted" text-anchor="middle">down</text>
+<text x="390" y="46" class="xs muted" text-anchor="middle">…and</text>
+<text x="390" y="58" class="xs muted" text-anchor="middle">LMB down</text>
+<text x="498" y="46" class="xs muted" text-anchor="middle">Space</text>
+<text x="498" y="58" class="xs muted" text-anchor="middle">up</text>
+<text x="606" y="46" class="xs muted" text-anchor="middle">LMB</text>
+<text x="606" y="58" class="xs muted" text-anchor="middle">up</text>
+<text x="122" y="93" class="xs mono muted" text-anchor="end">Space</text>
+<rect x="130" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="174" y="93" class="xs mono" text-anchor="middle">up</text>
+<rect x="238" y="78" width="88" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="282" y="93" class="xs mono" text-anchor="middle">down</text>
+<rect x="346" y="78" width="88" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="390" y="93" class="xs mono" text-anchor="middle">down</text>
+<rect x="454" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="498" y="93" class="xs mono" text-anchor="middle">up</text>
+<rect x="562" y="78" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="606" y="93" class="xs mono" text-anchor="middle">up</text>
+<text x="122" y="121" class="xs mono muted" text-anchor="end">LMB</text>
+<rect x="130" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="174" y="121" class="xs mono" text-anchor="middle">up</text>
+<rect x="238" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="282" y="121" class="xs mono" text-anchor="middle">up</text>
+<rect x="346" y="106" width="88" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="390" y="121" class="xs mono" text-anchor="middle">down</text>
+<rect x="454" y="106" width="88" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="498" y="121" class="xs mono" text-anchor="middle">down</text>
+<rect x="562" y="106" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="606" y="121" class="xs mono" text-anchor="middle">up</text>
+<text x="122" y="155" class="xs mono muted" text-anchor="end">action level</text>
+<rect x="130" y="140" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="174" y="155" class="xs mono" text-anchor="middle">up</text>
+<rect x="238" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="282" y="155" class="xs mono" text-anchor="middle">down</text>
+<rect x="346" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="390" y="155" class="xs mono" text-anchor="middle">down</text>
+<rect x="454" y="140" width="88" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.42"/>
+<text x="498" y="155" class="xs mono" text-anchor="middle">down</text>
+<rect x="562" y="140" width="88" height="22" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="606" y="155" class="xs mono" text-anchor="middle">up</text>
+<text x="122" y="187" class="xs mono muted" text-anchor="end">edges</text>
+<text x="174" y="187" class="xs muted" text-anchor="middle"></text>
+<rect x="238" y="174" width="88" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.28"/>
+<text x="282" y="188" class="xs mono" text-anchor="middle">PRESSED</text>
+<text x="390" y="187" class="xs muted" text-anchor="middle">—</text>
+<text x="498" y="187" class="xs muted" text-anchor="middle">—</text>
+<rect x="562" y="174" width="88" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.28"/>
+<text x="606" y="188" class="xs mono" text-anchor="middle">RELEASED</text>
+<line x1="24" y1="210" x2="696" y2="210" class="grid" stroke-width="1.2"/>
+<text x="24" y="232" class="xs t-ok" text-anchor="start">ONE rising edge and ONE falling edge for the whole sequence, and that is the correct answer.</text>
+<text x="24" y="252" class="xs muted" text-anchor="start">Frame 3: the mouse goes down while the action is ALREADY active, so there is no second press.</text>
+<text x="24" y="266" class="xs muted" text-anchor="start">Frame 4: Space comes up but the action is STILL active through the mouse, so there is no release.</text>
+<line x1="24" y1="286" x2="696" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="24" y="306" class="xs t-bad" text-anchor="start">DERIVE EDGES FROM THE BINDINGS INSTEAD AND YOU GET TWO OF EACH —</text>
+<rect x="238" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="282" y="332" class="xs mono" text-anchor="middle">PRESSED</text>
+<rect x="346" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="390" y="332" class="xs mono" text-anchor="middle">PRESSED</text>
+<rect x="454" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="498" y="332" class="xs mono" text-anchor="middle">RELEASED</text>
+<rect x="562" y="318" width="88" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="606" y="332" class="xs mono" text-anchor="middle">RELEASED</text>
+<text x="24" y="358" class="xs muted" text-anchor="start">…and the player jumps twice for one press. The bug is invisible until an action has more than one binding, which is why</text>
+<text x="24" y="372" class="xs muted" text-anchor="start">verify_510 §C binds two and the rest of the harness would not have caught it.</text>
+<text x="24" y="394" class="xs t-hi" text-anchor="start">AN EDGE IS A CHANGE IN THE ACTION, NOT A CHANGE IN A SIGNAL.</text>
+</svg>

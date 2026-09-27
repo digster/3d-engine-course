@@ -1,0 +1,518 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-06-data-oriented-design.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.6 — Data-Oriented Design: Why Scene Trees Creak</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-08-ecs-runtime.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.8 — The ECS Runtime</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.7</div>
+    <h1>An ECS from Scratch: Storage Design</h1>
+    <p class="deck">
+      Lesson 5.6 measured what a scene layout costs and came out with three constraints an ECS
+      has to satisfy — dense and compactable, systems that declare what they touch, no virtual
+      dispatch on the hot path. It then refused to choose between the two designs that satisfy
+      all three, because <em>nothing it measured distinguishes them</em>. Both are dense. Both
+      are contiguous. Both let a system touch a subset. This lesson takes the measurement that
+      does distinguish them — and it takes it <strong>before either is built</strong>, because
+      the two designs differ in exactly two operations and both of those can be simulated in
+      three hundred lines. Then it chooses, argues the choice from the numbers, and states
+      plainly the scene at which the choice becomes the wrong one.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="05-06-data-oriented-design.html">5.6 — Data-Oriented Design</a>,
+          <a href="03-10-profiling-capstone.html">3.10 — Profiling the Rasterizer</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>scratch/ecs_probe.hpp</code>, <code>scratch/bench_57.cpp</code>,
+            <code>scratch/measure_57.py</code>, <code>scratch/verify_57.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A <strong>decided architecture</strong>, with the evidence attached: five tables,
+            a stated cost model for each design, a recommendation, and the one sentence that
+            says when to revisit it. No engine code changes — 5.8 writes the container, and it
+            will write the one this lesson chose.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…describe an archetype and a sparse set precisely enough to draw each one's memory,
+          and name the single structural difference between them.</li>
+      <li>…explain why a sparse-set lookup is a two-deep dependency chain and why that costs
+          2.4× rather than 6.5× — from Lesson 5.6's memory-level parallelism, not from
+          folklore.</li>
+      <li>…simulate a design you have not written, well enough to time it, and say what such a
+          simulation can and cannot tell you.</li>
+      <li>…state what a structural change costs in each design, and why one of the two answers
+          contains the entity's width and the other does not.</li>
+      <li>…separate a codegen effect from a memory effect in your own results, using one
+          rebuild.</li>
+      <li>…quantify the sparse set's memory overhead and say which term in it grows with the
+          number of <em>component types</em>.</li>
+      <li>…explain what a <em>group</em> is, why it makes the migration one-directional, and
+          why that asymmetry — rather than any single ratio — is what decides this.</li>
+      <li>…defend the choice this course makes, and name the scene shape at which you would
+          make the other one.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-query">What a query actually is</a></li>
+          <li><a href="#intuition-shapes">The two answers, as memory</a></li>
+          <li><a href="#intuition-redirect">The redirect, and why it is not a linked list</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-ops">Four operations, and the two that differ</a></li>
+          <li><a href="#theory-move">What a structural change costs, on paper</a></li>
+          <li><a href="#theory-memory">What the index costs, on paper</a></li>
+          <li><a href="#theory-pool">The one we already own, and why it does not decide this</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">The Experiment</a>
+        <ol>
+          <li><a href="#impl-simulate">Simulating a design you have not built</a></li>
+          <li><a href="#impl-fair-arch">Being fair to the archetype</a></li>
+          <li><a href="#impl-fair-sparse">Being fair to the sparse set: the alignment axis</a></li>
+          <li><a href="#impl-bodies">Two bodies, because one cannot answer the question</a></li>
+        </ol>
+      </li>
+      <li><a href="#results">The Results</a>
+        <ol>
+          <li><a href="#res-query">The query, and the control that says the harness works</a></li>
+          <li><a href="#res-hide">The redirect is latency, and latency hides</a></li>
+          <li><a href="#res-churn">The structural change, and the number that scales</a></li>
+          <li><a href="#res-fragment">Fragmentation, measured, and smaller than advertised</a></li>
+          <li><a href="#res-select">Selectivity, and the group that answers it</a></li>
+        </ol>
+      </li>
+      <li><a href="#decision">The Decision</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 5.6 ended by handing this lesson three constraints, each with a number attached:
+    storage must be <strong>dense and compactable</strong> (a decayed pointer tree cost 6.47× a
+    flat array at 100,000 objects); a system must <strong>declare which components it
+    touches</strong> (a loop reading 12 of 96 bytes ran 5× faster when the other 84 were stored
+    elsewhere, and a loop reading 60 of 96 gained nothing); and iteration <strong>must not be
+    virtual</strong> (a flat 1.5–1.7× at every size, including four objects sitting in L1).
+  </p>
+
+  <p>
+    Those constraints are real and they were earned. They also do not decide anything, and 5.6
+    said so on its last page. The two storage designs that every production ECS is built out of
+    <em>both</em> satisfy all three:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The two candidate ECS storage designs and the engines that
+             use each.</caption>
+    <thead><tr><th>design</th><th>the idea in one sentence</th><th>used by</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Archetype</strong></td>
+        <td>Entities with the <em>same component set</em> are stored together, so the components
+            a query wants are parallel dense arrays walked by one shared index.</td>
+        <td>Unity DOTS, Flecs, Unreal Mass</td>
+      </tr>
+      <tr>
+        <td><strong>Sparse set</strong></td>
+        <td>Each component <em>type</em> gets one dense array, plus a sparse map from entity to
+            position in it; a query walks one pool and looks the rest up.</td>
+        <td>EnTT</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Both are dense. Both are compactable — each keeps its live data packed and moves the last
+    element into any hole. Both let a system name the components it touches and fetch nothing
+    else. Neither uses a virtual call to iterate. Every number 5.6 published applies equally to
+    both, which is exactly why 5.6 was told not to let this lesson inherit them.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The trap this lesson is built to avoid</span>
+    <p>There is a third way to decide, and it is the one that would be easiest here: <strong>we
+       already own something shaped like a sparse set.</strong> Lesson 5.4's
+       <code>pool&lt;T&gt;</code> has exactly three arrays — <code>slots_</code> sparse and
+       stable, <code>items_</code> dense and packed, <code>owners_</code> the way back — which
+       is a sparse set with generations bolted on. Adopting sparse sets because that is what is
+       lying around is choosing an architecture by what is convenient, and §3.4 explains why the
+       resemblance is a <em>hint</em> and not an argument.</p>
+  </div>
+
+  <p>
+    So this lesson does what 5.6 did: it measures. The unusual part is <em>when</em>. Normally
+    you cannot compare two architectures without building both, which costs weeks and produces a
+    sunk cost that then argues for itself. Here you can, because the two designs differ in
+    exactly two operations — <strong>reading K components of every matching entity</strong>, and
+    <strong>adding or removing one component from one entity</strong> — and both of those are
+    access patterns that fit in a few hundred lines with no entity manager, no component
+    registry, no type erasure and no scheduler around them. Everything else about the two designs
+    is orthogonal to the question.
+  </p>
+
+  <p>
+    Five measurements follow, and one of them changed the recommendation from "sparse set,
+    reluctantly, because it is less code" to "sparse set, confidently, because the migration only
+    runs one way". No engine source changes this lesson; the output is a decision, and 5.8 builds
+    it.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-query"><span class="num">2.1</span>What a query actually is</h3>
+
+  <p>
+    Strip away the vocabulary and an ECS does one thing over and over: <em>for every entity that
+    has all of these components, run this code on them.</em> That is a query, and the engine's
+    existing render loop already is one — it walks four <code>scene_object</code>s and, for each,
+    reads a transform and a mesh handle. Written as a query it would say: <em>for every entity
+    with a transform and a mesh, build a model matrix and submit a draw.</em>
+  </p>
+
+  <p>
+    Two numbers describe any query and they are the two axes of everything below. <strong>K</strong>
+    is how many component types it names — one for "advance every particle's age", four for a
+    render query that wants a transform, a mesh, a material and a bounding volume. <strong>The
+    selectivity</strong> is what fraction of the world matches: a transform query matches
+    everything, a "has a rigid body and is asleep" query matches almost nothing.
+  </p>
+
+  <p>
+    The reason those two numbers matter is that they are precisely where the two designs pull
+    apart. Reaching K components is cheap for an archetype and costs a lookup per extra component
+    for a sparse set. Matching a small fraction is cheap for an archetype, which never visits a
+    non-matching entity, and awkward for a sparse set, whose dense arrays hold everything. So
+    before any measurement: <strong>we should expect the archetype to win the query</strong>, and
+    the interesting question is by how much, at what size, and what it charges for the privilege.
+  </p>
+
+  <h3 id="intuition-shapes"><span class="num">2.2</span>The two answers, as memory</h3>
+
+  <p>
+    Draw both and the difference is one column wide.
+  </p>
+
+@@FIG_SHAPES@@
+
+  <p>
+    The archetype's arrangement is a promise about <em>identity</em>: row <em>i</em> of the
+    transform column and row <em>i</em> of the material column are the same entity, and that is
+    true because the chunk was built to make it true. Every entity in the chunk has exactly the
+    same component set. An entity with a transform but no material is not in this chunk; it is in
+    another one, with its own columns. The consequence is that a query touching four components
+    is four sequential streams and one loop counter — no lookups, no branches, no possibility of
+    a miss that was not going to happen anyway.
+  </p>
+
+  <p>
+    The sparse set makes no such promise. Each component type owns one dense array holding
+    <em>every</em> instance of that type in the world, in whatever order they were inserted. To
+    find entity 17's velocity you read <code>velocity.sparse[17]</code>, which gives an index into
+    <code>velocity.data</code>. The dense array is still dense — 5.6's first constraint is
+    satisfied — but its <em>order</em> is nobody's business, and in particular it is not
+    guaranteed to be the same order as the transform pool's.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The sparse array is bigger than it looks</span>
+    <p>Note what <code>sparse</code> is indexed by: the <strong>entity id</strong>. So it has one
+       slot for every entity that exists, not for every entity that has this component. A world
+       with 100,000 entities of which 200 are lights still pays 400 KB for the light component's
+       sparse array. §3.3 puts a number on that, and it is the sparse set's real structural cost
+       — the one that is almost never quoted alongside the query ratios.</p>
+  </div>
+
+  <h3 id="intuition-redirect"><span class="num">2.3</span>The redirect, and why it is not a linked list</h3>
+
+  <p>
+    The instinct after Lesson 5.6 is alarm. <code>sparse[e]</code> and then
+    <code>data[idx]</code> is a load whose address comes out of another load — the exact shape
+    that made a linked list cost 6.47× while an array of pointers cost 2.38×. If a sparse-set
+    query is a linked list, the argument is over before it starts.
+  </p>
+
+  <p>
+    It is not, and 5.6 already contains the reason. What made the linked list catastrophic was
+    not the indirection; it was that <em>the next address was inside the current node</em>, so
+    nothing could be issued until the previous miss returned and the latencies added up in
+    series. An array of pointers, by contrast, has all its addresses available immediately, so a
+    core can have a dozen dependent loads outstanding at once and the misses <em>overlap</em>.
+    That is memory-level parallelism, and it is the whole difference between 2.4× and 6.5×.
+  </p>
+
+@@FIG_REDIRECT@@
+
+  <p>
+    A sparse-set query is the second picture, twice over. The loop reads
+    <code>xf.dense[i]</code> sequentially, so entity ids arrive by the cache line — sixteen at a
+    time — and each one starts an independent two-deep chain. Nothing in entity 17's chain has to
+    wait for entity 4's. So the cost is bounded by how many chains the core can keep in flight,
+    not by the number of entities times the memory latency.
+  </p>
+
+  <p>
+    That reframes the question usefully. <strong>The redirect is latency, not bandwidth</strong>,
+    and latency is the kind of cost a machine is good at hiding — if there is something else for
+    it to be doing. Which raises the question §4.4 exists to answer: how much work does the
+    <em>body</em> of the query do? If a system reads four components and does thirty nanoseconds
+    of arithmetic per entity, several extra loads may cost literally nothing. If it does two
+    nanoseconds, they will not.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-ops"><span class="num">3.1</span>Four operations, and the two that differ</h3>
+
+  <p>
+    An ECS runtime has to be good at four things. Writing them down first is what keeps the
+    comparison from becoming an argument about which design is nicer.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The four operations an ECS runtime performs, with each
+             design's asymptotic cost.</caption>
+    <thead><tr><th>operation</th><th>archetype</th><th>sparse set</th><th>differs?</th></tr></thead>
+    <tbody>
+      <tr><td>Create / destroy an entity</td>
+          <td>append a row / swap-and-pop</td>
+          <td>append to each pool / swap-and-pop each</td>
+          <td>no — both O(components)</td></tr>
+      <tr><td>Get one component of one entity</td>
+          <td>two lookups: which archetype, which row</td>
+          <td>one lookup: <code>sparse[e]</code></td>
+          <td>marginally, and both are O(1)</td></tr>
+      <tr><td><strong>Query K components</strong></td>
+          <td>walk K parallel arrays, one index</td>
+          <td>walk one array, K&#8722;1 redirects</td>
+          <td><strong>yes — §5.1</strong></td></tr>
+      <tr><td><strong>Add / remove a component</strong></td>
+          <td>move the entity to another archetype</td>
+          <td>push or swap-and-pop in one pool</td>
+          <td><strong>yes — §5.3</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Two rows out of four are identical in shape, which is worth noticing on its own: most of what
+    an ECS does, both designs do the same way. The entire architectural argument lives in the
+    other two rows, and they point in opposite directions — the archetype is faster at the one
+    that happens thousands of times per frame, and the sparse set is faster at the one that
+    happens when something spawns, dies, gets picked up, catches fire or goes to sleep.
+  </p>
+
+  <p>
+    Which means the answer cannot be a ratio. It has to be a <em>rate</em> comparison: how many
+    queries per frame against how many structural changes per frame, weighted by what each costs.
+    That is the shape of the decision, and §6 does the arithmetic with the measured numbers.
+  </p>
+
+  <h3 id="theory-move"><span class="num">3.2</span>What a structural change costs, on paper</h3>
+
+  <p>
+    Predict before you measure — a wrong prediction is worth more than no prediction, and this
+    one turns out to be wrong in an instructive way.
+  </p>
+
+@@FIG_MOVE@@
+
+  <p>
+    An entity gains a component. In the archetype design its component <em>set</em> just changed,
+    so by definition it no longer belongs where it is: it must move from the chunk for
+    <code>{transform, velocity, bounds}</code> to the chunk for <code>{transform, velocity,
+    bounds, material}</code>. Everything it owns travels. Then the source chunk has a hole in it,
+    which swap-and-pop fills by moving its last row down — so a <em>second</em> entity's data
+    moves too, and that entity's row index has to be patched.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Worked example — the byte count</span>
+    <p>Our probe's entity carries a <code>transform</code> (60 B), a <code>velocity</code> (16 B)
+       and a <code>bounds</code> (16 B), which is <strong>92 bytes</strong> that must travel,
+       plus a 16-byte <code>material</code> constructed at the destination.</p>
+    <p>Copy 92 B into the destination chunk. Move 92 B within the source chunk to close the hole.
+       Write two index entries. Call it <strong>≈ 200 bytes touched</strong>.</p>
+    <p>Now widen the entity to twelve components — eight more at 16 B each. The travelling
+       payload becomes 92 + 128 = <strong>220 B</strong>, and the total
+       <strong>≈ 456 bytes</strong>. So the byte model predicts the wide case costs
+       456 / 200 = <strong>2.3×</strong> the narrow one.</p>
+    <p>Measured, at 100,000 entities: 13.10 ns narrow, 58.48 ns wide. That is
+       <strong>4.5×</strong>, twice what the model says.</p>
+  </div>
+
+  <p>
+    The model is not merely imprecise, it is measuring the wrong thing, and the correction is
+    worth having because it generalises. <strong>A column is a separate allocation.</strong>
+    Eight extra components are eight more <code>std::vector</code>s, in eight unrelated places in
+    the heap, and a move has to touch each of them <em>twice</em> — once to read the entity's row
+    and once to move the chunk's last row into the hole. That is sixteen additional independent
+    memory touches, most of them missing at this working-set size. 45.4 ns for sixteen touches is
+    2.8 ns each, which is about right for a partially-overlapped access to memory on this
+    machine.
+  </p>
+
+  <p>
+    So the cost model is not "bytes moved", it is <strong>independent memory streams
+    touched</strong>, and the count of those is <em>two per column, per move</em>. Write it down,
+    because it is the sentence the decision rests on: <strong>an archetype's structural change
+    costs a fixed price per component the entity has, whether or not that component has anything
+    to do with the change.</strong>
+  </p>
+
+  <p>
+    The sparse set's version of the same operation is one paragraph shorter and that is the
+    point. Push the component onto <code>material.data</code>, push the entity id onto
+    <code>material.dense</code>, write <code>material.sparse[e]</code>. Three writes, two of them
+    to the end of arrays that are already warm because the last insert touched them, and
+    <em>nothing else in the world is read or written</em>. The entity's transform, velocity and
+    bounds are not merely left alone; they are not known about. The cost has no term for how wide
+    the entity is because the operation has no way to find out.
+  </p>
+
+  <h3 id="theory-memory"><span class="num">3.3</span>What the index costs, on paper</h3>
+
+  <p>
+    The sparse set pays for that O(1) somewhere, and the bill arrives in memory. Per component
+    type it keeps a dense array of entity ids (4 B per entity <em>that has the component</em>)
+    and a sparse array of indices (4 B per entity <em>in the world</em>, present or not). The
+    archetype keeps one entity id per row and nothing else.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Worked example — index overhead at two scales</span>
+    <p><strong>Our probe:</strong> 100,000 entities, 4 component types, all present on all
+       entities. Payload is 60 + 16 + 16 + 16 = 108 B each = 10.8 MB. Archetype adds 4 B per
+       entity for the id: 400 KB. Sparse adds 4 B per type for the dense id and 4 B per type for
+       the sparse slot: 8 × 4 × 100,000 = <strong>3.2 MB</strong>. Overhead over the archetype:
+       <strong>25%</strong>.</p>
+    <p><strong>A real game:</strong> 100,000 entities, <strong>32</strong> component types, of
+       which an average entity has 6. The archetype still adds 400 KB. The sparse set's dense
+       arrays scale with what is actually present — 6 × 4 × 100,000 = 2.4 MB — but its
+       <em>sparse</em> arrays are indexed by entity id and so are sized by the world, not by the
+       component: 32 × 4 × 100,000 = <strong>12.8 MB, of which roughly 80% is the value meaning
+       "this entity does not have this component".</strong></p>
+  </div>
+
+  <p>
+    Twelve megabytes of mostly-nothing is not a rounding error; it is three times this machine's
+    L2. This is why EnTT pages its sparse arrays — allocating them in 4,096-entry blocks and only
+    materialising a block when something in its range gets the component — which costs one more
+    indirection on every lookup to save the memory.
+  </p>
+
+  <p>
+    Whether this course needs paging is a question with a pleasant answer, and it is another
+    dividend from Lesson 5.4. A sparse array's size is set by the <em>highest entity id ever
+    issued</em>, and 5.4's <code>pool&lt;T&gt;</code> issues indices from a free list, reusing
+    the most recently freed slot first. So the id space stays compact: its high-water mark is the
+    largest number of entities that were ever simultaneously alive, not the number ever created.
+    At ten component types and a ten-thousand-entity high-water mark that is 400 KB of sparse
+    array in total, and paging would be complexity spent on nothing.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">…with one failure mode, and it is the same one 5.4 documented</span>
+    <p>High-water marks do not come back down. A level that spawns a million particles as
+       entities and then destroys them leaves a million-slot sparse array per component type for
+       the rest of the process — 4 MB each, whether or not anything is alive. 5.4 said the same
+       thing about <code>slots_</code>, and the answer is the same: <strong>things that exist in
+       millions and die in seconds should not be entities.</strong> A particle system owns its own
+       array and is <em>one</em> entity.</p>
+  </div>
+
+  <h3 id="theory-pool"><span class="num">3.4</span>The one we already own, and why it does not decide this</h3>
+
+  <p>
+    Look again at what Lesson 5.4 built, with §2.2's picture in mind:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The three arrays of engine::pool&lt;T&gt; mapped onto the
+             three arrays of a sparse set.</caption>
+    <thead><tr><th><code>engine::pool&lt;T&gt;</code></th><th>a sparse set</th><th>role</th></tr></thead>
+    <tbody>
+      <tr><td><code>slots_</code></td><td><code>sparse</code></td>
+          <td>indexed by key, one entry per key ever issued, stable</td></tr>
+      <tr><td><code>items_</code></td><td><code>data</code></td>
+          <td>the components, packed, no holes, order not guaranteed</td></tr>
+      <tr><td><code>owners_</code></td><td><code>dense</code></td>
+          <td>the way back: which key owns element <em>d</em></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That is not a resemblance, it is the same data structure. <code>pool&lt;T&gt;</code> is a
+    sparse set with a generation counter welded to each sparse slot — which is exactly what an
+    ECS wants, because an entity id has to survive the entity being destroyed and the slot being
+    reused.
+  </p>
+
+  <p>
+    And it still does not settle the question, for two reasons worth being explicit about. The
+    first is that <code>pool&lt;T&gt;</code> <strong>mints its own keys</strong>. A handle from
+    the mesh pool is meaningless to the texture pool, because both hand out slot 0 to their first
+    occupant. An ECS needs the opposite: <em>one</em> id space, minted once, with every pool
+    keyed by it. That is a real change, not a reuse — §6 says exactly what it amounts to.
+  </p>
+
+  <p>
+    The second is the one that matters more. If owning a sparse set is allowed to decide that we
+    should build a sparse-set ECS, then the architecture was chosen by an accident of what
+    Lesson 5.4 happened to need for meshes. The archetype design would not use
+    <code>pool&lt;T&gt;</code> at all, and "we would have to write more code" is a reason to
+    prefer something, not a reason to believe it is faster. <strong>The convenience is admissible
+    as a tiebreaker and inadmissible as evidence.</strong> So we measure first, and §6 is allowed
+    to reach for it only after the numbers are in.
+  </p>

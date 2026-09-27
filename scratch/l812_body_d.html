@@ -1,0 +1,392 @@
+  <h2 id="handoff">9. Handing a character to the solver</h2>
+
+  <p>
+    At the instant of handoff each body must be where the animation put it, moving the way it was
+    moving it. "Where" is composition: a pose gives each skeleton joint a model-space frame
+    (<code>anim::compose_pose</code>, 7.6), the character's placement carries it into the world, and the
+    part's constant <code>joint_from_body</code> carries it to the body. <code>part_targets</code> does
+    exactly that product for every part. "Moving the way it was moving" is the interesting half.
+  </p>
+
+  <h3>Steer, never teleport</h3>
+
+  <p>
+    The obvious approach animates by writing positions: each frame, set every body to its target. The
+    bodies then have whatever velocity they last had — zero, for a kinematic body nobody touched — and
+    at the handoff you would need to invent one, by differencing the last two poses. This engine does
+    the opposite, and the handoff falls out. While a character is animated its bodies are kinematic, and
+    each step the ragdoll sets their <strong>velocities</strong> to the ones that will carry them exactly
+    onto the next target, and lets <code>integrate_positions</code> move them. They are never written
+    to directly. That is <code>steer</code>.
+  </p>
+
+  <p>
+    For position the velocity that lands a body exactly is the <strong>chord</strong>,
+    <code>(x_target − x)/h</code>: the integrator adds <code>v·h</code> and nothing else. For
+    orientation it depends on the rule the integrator uses. The calculus answer — the angle over
+    <code>h</code>, about the axis of the rotation still to do — is exact only for
+    <code>spin_rule::exponential</code>. The engine's default is 8.3's linearised rule,
+    <code>q ← normalise(q + ½·h·ω·q)</code>, whose step is proportional to <code>(1, ½hω)</code>; so the
+    angular velocity that makes it land exactly is whatever makes <code>½hω</code> equal the remaining
+    rotation's <code>Δq.v/Δq.w</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \omega \;=\; \frac{2}{h}\,\frac{\Delta q_v}{\Delta q_w}, \qquad \Delta q \;=\; q_{\text{target}}\;q^{*}\ \ \text{(moved to}\ \Delta q_w > 0) \]</span>
+    <span class="eq-plain">omega = (2/h) * dq.v / dq.w, with dq = q_target * conj(q) on the w &gt; 0 side: the Rodrigues vector</span>
+  </div>
+
+  <p>
+    — the Rodrigues vector, which has <code>tan(θ/2)</code> where the logarithm has <code>θ/2</code>. The
+    two differ by <code>θ²/12</code> of the rotation, and the harness measures what that is worth on two
+    seconds of the jog, whose fastest limb turns 0.1054&nbsp;rad in one step: steered with the Rodrigues
+    vector every body lands within 1.57&nbsp;×&nbsp;10⁻⁷&nbsp;rad of its target; steered with the logarithm it
+    misses by 9.75&nbsp;×&nbsp;10⁻⁵, against <code>θ³/12</code> = 9.76&nbsp;×&nbsp;10⁻⁵ predicted. Positions land
+    to 5.8&nbsp;×&nbsp;10⁻¹¹&nbsp;m either way. The miss is small; the principle is not. <strong>The velocity to
+    give a body is whatever its integrator will invert</strong> — and for the linear half that is the
+    chord, which is the next paragraph.
+  </p>
+
+  <h3>The chord is not an approximation</h3>
+
+  <p>
+    A steered body's velocity at any instant is the chord of the step it just took. At the moment of
+    handoff, <code>simulate()</code> gives the body its mass back and leaves that velocity alone. Is the
+    chord the right velocity to hand over, or a first-order estimate of it? Compare it with the clip's
+    own velocity, by a fine difference of the targets: against the velocity at the <em>end</em> of the
+    step the chord is off by up to 0.2320&nbsp;m/s — half the acceleration times <code>h</code>, first
+    order — and against the velocity at the step's <em>middle</em> by 0.0045&nbsp;m/s, second order. The
+    chord is the midpoint velocity. And that is exactly what semi-implicit Euler's velocity means: it
+    moves a body by <code>x(n) = x(n−1) + h·v(n)</code>, so <code>v(n)</code> <em>is</em> the chord. The
+    solver inherits the one velocity its own integrator would have produced.
+  </p>
+
+  @@FIG_HANDOFF@@
+
+  <p>
+    The consequence is the character's momentum. Trip it at one second, mid-stride at 2.5&nbsp;m/s:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§G — tripped mid-stride, handed over two ways</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     velocities           momentum kg m/s   KE J      centre of mass forward in 0.5 s   in 1.5 s
+     the chord (steer)     204.40             301.21      1.179 m                        1.433 m
+     at rest (control)       0.00               0.00      0.010 m                        0.402 m
+     the animation's own momentum at the instant of the trip: 204.40 kg m/s = 80.0 kg x 2.555 m/s</code></pre>
+  </div>
+
+  <p>
+    The ragdoll leaves the animation with <strong>exactly</strong> its momentum — 80&nbsp;kg at
+    2.555&nbsp;m/s, the jog's 2.5 plus the swinging limbs — and pitches forward 1.18&nbsp;m in the first half
+    second. Handed over at rest, it moves 10&nbsp;mm in the same half second: it stops dead in
+    mid-stride, and only then topples, because the jog leans forward. That is the pop every first
+    ragdoll implementation has, and it is not a small effect to be smoothed; it is 204&nbsp;kg·m/s thrown
+    away.
+  </p>
+
+  <h3>What the joints make of the handed-over velocities</h3>
+
+  <p>
+    Each body's chord is exact for that body. Is the <em>set</em> of them consistent with the joints —
+    does each joint's anchor move the same on both sides? Not quite, and by an amount that has a closed
+    form. A point at lever arm <code>r</code> on a body turning at <code>ω</code> moves along a chord,
+    not a tangent, and the rigid-body formula <code>v + ω × r</code> evaluated at the end of the step
+    differs from the chord by the centripetal term <code>½h·ω×(ω×r)</code>. The two bodies of a joint
+    make different errors, so each joint starts violated by the difference:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \lvert\dot C\rvert \;\approx\; \tfrac12\,h\,\bigl\lvert\,\omega_b\times(\omega_b\times r_b) \;-\; \omega_a\times(\omega_a\times r_a)\,\bigr\rvert \]</span>
+    <span class="eq-plain">|dC/dt| at handoff = (h/2) | w_b x (w_b x r_b) - w_a x (w_a x r_a) |</span>
+  </div>
+
+  <p>
+    The harness predicts it for every joint of the jog at the trip and measures the anchor velocity
+    mismatch: 18.4 to 72.7&nbsp;mm/s for the limbs, and the worst disagreement between prediction and
+    measurement is <strong>0.43%</strong>. It is 8.11 §5's drift — a tangent is not a circle — seen from
+    the other side, and the solver's first sweep removes it. Nothing needs to be done about it; it is
+    worth knowing that the handoff's only joint error is this one, and how big it is.
+  </p>
+
+  <h2 id="disagree">10. When the animation disagrees with the joints</h2>
+
+  <p>
+    Everything so far used the jog, which was written for this lesson so that it stays inside every
+    joint. Real animation does not. An animator does not see a ragdoll's limits; a mocap clip does not
+    know them; and a clip made for one skeleton gets retargeted onto another. So what happens when the
+    pose handed over is <em>outside</em> the joints?
+  </p>
+
+  <p>
+    This course has such a clip already. 7.7's walk was built to measure clip storage — a sampler does
+    not care what a knee does — and against the ragdoll's joints it is badly wrong:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — 7.7's walk against the ragdoll's joints, worst over one cycle</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     joint         worst angular violation   at t     worst anchor gap mm
+     torso             0.00 deg               0.00       0.00
+     head              0.00 deg               0.00      14.83
+     upperarm.L        0.00 deg               0.00      20.45
+     forearm.L        32.00 deg               0.50       0.00
+     upperarm.R        0.00 deg               0.00       9.12
+     forearm.R        32.00 deg               0.00       0.00
+     thigh.L           0.00 deg               0.00       0.00
+     shin.L           47.99 deg               0.93       0.00
+     thigh.R           0.00 deg               0.00       0.00
+     shin.R           47.99 deg               0.43       0.00
+     CONTROL, the jog: worst angular violation over a cycle 1.85e-05 deg</code></pre>
+  </div>
+
+  <p>
+    Its knees bend <strong>forward</strong>, 48° past the stop: the walk rotates each shin about
+    <code>+x</code> by up to −48°, and a negative turn about <code>+x</code> sends a downward bone toward
+    <code>+z</code>, which is forward. Its forearms twist about their own axes by up to 32°, because it
+    rotates the T-posed arm about <code>x</code>, which is the arm itself — a motion an elbow's hinge
+    forbids outright. And its spine joints, which are passengers here, move the neck and shoulder
+    anchors by up to 20&nbsp;mm, because the ragdoll's joints were authored at the bind pose and the walk
+    bends the spine between them. None of this was visible in 7.7, which drew a tube and measured
+    bytes. It is visible the instant a ragdoll is built on the same skeleton: the joints refuse it.
+  </p>
+
+  <p>
+    Hand the walk over at its worst instant, with no gravity and no floor so that nothing else adds or
+    removes energy, and watch the first second. The measure is the <em>internal</em> kinetic energy —
+    relative to the centre of mass — because the walk's 1.2&nbsp;m/s of travel carries 58&nbsp;J that no
+    joint can touch and would swamp everything the joints do:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — handed over outside its joints, no gravity, no floor</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     correction        KE at handoff   KE after 1 s   violation after 0.25 s   after 1 s
+     split impulse        0.971 J          0.752 J           3.28 deg               0.01 deg
+     Baumgarte            0.971 J          1.108 J           0.76 deg               0.01 deg
+     none                 0.971 J          0.751 J          35.87 deg              24.12 deg
+     Baumgarte leaves 0.356 J more internal energy than split impulse; split impulse
+     leaves 0.0010 J more than no correction at all, having repaired 24.1 degrees more.</code></pre>
+  </div>
+
+  <p>
+    Both corrections put the knees back behind their stops and the forearms back on their hinges within
+    a second. What differs is what they leave behind, and it is 8.11 §6's dislocated limb on a whole
+    body. <strong>Split impulse repairs 24° of violation and adds 0.001&nbsp;J</strong> — it ends the second
+    with the same internal energy as no correction at all, which dissipates only through 8.11's
+    <code>ρ(ωh)²</code>. Baumgarte repairs it slightly faster and turns the repair into real velocity
+    that stays: 0.356&nbsp;J more than split impulse, in a character that was supposed to go limp. 8.11
+    measured 0.35&nbsp;J of spin in one dislocated limb; this is a body's worth of the same number. The
+    default stays split impulse, for the reason 8.11 gave: a ragdoll that settles a little quickly
+    reads as a body; one whose limbs twitch as they are handed over reads as a bug.
+  </p>
+
+  <p>
+    The better fix is upstream of the solver, and it is cheap: measure the clip against the ragdoll
+    before shipping either. The harness's table above is twenty lines of code — compose each frame,
+    place the bodies, call <code>measure_joint</code> — and it is the test an asset pipeline should run
+    on every clip a ragdoll character can be tripped out of.
+  </p>
+
+  <h2 id="return">11. Handing it back</h2>
+
+  <p>
+    Getting up is the handoff backwards, and it has three parts. First, <strong>read the pose off the
+    bodies</strong>. <code>read_pose</code> inverts <code>part_targets</code>: each part's joint goes
+    where its body says, through the inverse of <code>joint_from_body</code>; each passenger rides on its
+    parent at the local transform the clip last gave it (<code>simulate</code> kept it); and every
+    joint's local transform is then its parent's inverse times its own, which is what
+    <code>compose_pose</code> and a blend both want. Over seventy instants of the jog, placing the bodies
+    from a pose and reading it back gives the pose again to 2.37&nbsp;×&nbsp;10⁻⁷&nbsp;m and
+    3.35&nbsp;×&nbsp;10⁻⁷&nbsp;rad.
+  </p>
+
+  <p>
+    Second, <strong>put the clip where the character fell</strong>. The character tripped at one place
+    and slid on; its placement, <code>world_from_model</code>, is still where it tripped. Blend from the
+    fallen pose to the clip in that placement and the whole body travels back to the trip point over
+    the blend. <code>realign_model</code> moves the placement in the ground plane so that the clip's
+    pelvis lands over the ragdoll's — only <code>x</code> and <code>z</code>: height is the clip's
+    business, and realigning vertically onto a lying pelvis would put a standing character through the
+    floor. Heading is not realigned; that is exercise 4.
+  </p>
+
+  <p>
+    Third, <strong>blend</strong>, and the engine already has the right blend. The bodies go back to
+    kinematic with <code>animate()</code> — which also clears every joint's cached impulses, since they
+    describe what it cost to hold a pose the character is no longer in — and are steered toward a pose
+    that starts at the read-back one and blends to the clip, joint by joint in local space. The first
+    target is where the bodies already are, so nothing jumps.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — after a trip and three seconds on the floor, back to the clip over 0.5 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     return                         first-frame jump   pelvis slide   worst bone change
+     slerp blend, realigned            0.0581 m         0.000 m          0.06 mm
+     slerp blend, NOT realigned        0.0707 m         1.302 m          0.06 mm
+     snap to the clip (control)        1.6480 m         0.000 m          0.00 mm
+     model-space position blend        0.0581 m         0.000 m        208.06 mm
+     worst arc any joint blends across: 115.5 deg;  worst nlerp-against-slerp lag over the blend: 1.98 deg</code></pre>
+  </div>
+
+  <p>
+    Each row is one claim. The blended return moves no body more than 58&nbsp;mm in its first frame, which
+    is a thirtieth of the way to a pose 1.65&nbsp;m away; snapping moves one by <strong>1.648&nbsp;m</strong> in
+    a single step. Without realignment the pelvis <strong>slides 1.302&nbsp;m</strong> across the floor while
+    the character stands up — back to where it tripped. A local-space blend moves no bone's length by
+    more than <strong>0.06&nbsp;mm</strong>, the joints' own gap; blend the model-space joint positions
+    instead and a bone is <strong>208&nbsp;mm</strong> short at the middle of the blend. That last row is
+    7.7 §7 one level up, and it is why a pose blend is done on local transforms: a limb that sweeps
+    through 115° shortens along its chord if its end is interpolated in a straight line.
+  </p>
+
+  <p>
+    And the last number decides a choice 7.5 left open. 7.7 blends keys with nlerp because two
+    adjacent keys of a 30&nbsp;Hz clip are never more than a few degrees apart, and there nlerp lags slerp
+    by 0.017°. A return blends across whole poses — 115.5° at its worst joint — and there nlerp lags by
+    up to <strong>1.98°</strong>, a hundred times as much — largest a quarter of the way in from each end,
+    since the two agree exactly at the midpoint by symmetry (this section's first draft measured
+    there, and reported 0.00°). The return uses <code>transform_blend_slerp</code>.
+  </p>
+
+  <p>
+    What this does not do is get a character up <em>convincingly</em>. It blends a lying body toward a
+    standing pose, and the path in between is whatever slerp makes of it: legs pass through the floor,
+    the pelvis rises straight up. A production game blends into a <strong>get-up clip</strong> whose
+    first frame is lying down — face down or face up, chosen from the pelvis's orientation — so that
+    the blend is short and the clip does the standing. This engine has no such clip, and the lesson
+    says so rather than pretending the blend is the animation.
+  </p>
+
+  @@FIG_RETURN@@
+
+  <h2 id="fight">12. A return the physics does not fight</h2>
+
+  <p>
+    The design has one rule — every body has exactly one owner — and this section is what breaking it
+    costs. The tempting implementation of "animated, but still colliding" is to leave the bodies
+    dynamic and teleport them onto the animated pose after every step, so that props still bounce off
+    the character. It is 8.11 §1's teleport, and there it was a thought experiment. Here it is measured,
+    on a character jogging into a 5&nbsp;kg crate, three ways:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§J — jogging into a crate for two seconds, then let go</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     bodies follow the clip by        velocity lie   deepest limb in crate   crate top speed   bodies' speed when let go
+     kinematic, steered                   0.000 m/s         69.7 mm              4.78 m/s           4.82 m/s
+     dynamic, teleported                 20.626 m/s        286.8 mm              3.67 m/s          20.90 m/s
+     dynamic, teleported + chord          0.000 m/s        159.3 mm              3.59 m/s           4.82 m/s</code></pre>
+  </div>
+
+  <p>
+    The <strong>velocity lie</strong> is the largest difference, over every body and step, between a
+    body's velocity and the distance it actually moved over <code>h</code>. A steered body's is zero —
+    its velocity is its motion, by construction. A teleported body's is 20.6&nbsp;m/s: its velocity is
+    whatever the solver last left in it, gravity accumulating every step and the teleport discarding
+    the result. That lie is what every contact sees, and it is what the body carries when the ragdoll
+    is finally let go — 20.90&nbsp;m/s, where a steered body leaves at the 4.82 its limb was really moving.
+    The third row fixes the lie by writing the chord in as well, and still loses: the solve pushes a
+    dynamic limb out of the crate and the teleport puts it back, 159&nbsp;mm deep, against 69.7&nbsp;mm for the
+    steered limb — which is one step of a fast leg's arrival, 8.10 §6's depth.
+  </p>
+
+  <h3>The crate that did not move</h3>
+
+  <p>
+    That top row is the result after the second bug this lesson found. The first time it ran, the
+    steered character <em>ran through the crate</em>. The crate reached 0.09&nbsp;m/s; the narrow phase
+    reported limb–crate contacts on 48 frames; and at the end of two seconds the crate was exactly where
+    it started. With sleeping turned off, the same run launched it at 4.78&nbsp;m/s.
+  </p>
+
+  <p>
+    The crate had fallen asleep half a second after the scene began, long before the character reached
+    it — and nothing woke it. 8.10's waking rule is elegant: an island is asleep only if every body in
+    it is, and "a moving body that collides with a sleeping pile is joined to it by
+    <code>build_islands</code>, so the pile's island now contains something awake". That is true of a
+    <em>dynamic</em> body. <code>build_islands</code> unions an edge only when both ends are dynamic —
+    8.10's correct rule that a body that cannot be pushed is not a bridge — so a kinematic body never
+    joins the island it touches, and therefore never woke one either. The crate's island stayed
+    entirely asleep, its contacts were skipped, and the limb passed through. Every kinematic body in the
+    engine had this bug — a lift, a moving platform — and none had met a sleeping body until a ragdoll
+    was steered into one.
+  </p>
+
+  <p>
+    The fix is a stage in front of 8.10's: <code>wake_touched_by_kinematic</code> walks the step's
+    contacts and joints and wakes any sleeping dynamic body that touches a kinematic one
+    <strong>moving faster than the sleep thresholds</strong>. The qualifier matters: a crate resting on a
+    <em>stopped</em> lift must still be allowed to sleep, and a kinematic body never sleeps (8.10), so
+    "touches a kinematic body" alone would keep everything on every platform awake for ever.
+    <code>wake_islands</code> then wakes the rest of the island by its own rule. 8.10's harness, rerun,
+    is byte-identical to its page in every line but its timings; so is 8.11's, apart from the §10
+    table §7 of this lesson printed.
+    Neither ever put a moving kinematic body against a sleeping one.
+  </p>
+
+  <h2 id="bill">13. Settling, sleeping, and the bill</h2>
+
+  <p>
+    The handover's third limit was dissipation: <code>ρ(ωh)²</code> takes energy out of every turning
+    joint each step, so a flailing ragdoll should settle quickly, and a settled ragdoll is one island,
+    so 8.10's rule should put the whole body to sleep at once. The first half is true. The second
+    <strong>refused</strong>:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — twelve trips, eight seconds each</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     settings                         asleep   median s   KE at 8 s (mean)   awake: crushed / turning
+     split impulse (shipped)            4/12       4.42         0.01924 J           5 / 3
+     Baumgarte                          1/12       7.60         0.10303 J           2 / 9
+     + angular damping 1/s              7/12       4.12         0.02672 J           2 / 3
+     + damping, 8 sub-steps x 1         5/12       4.33         0.00112 J           1 / 6</code></pre>
+  </div>
+
+  <p>
+    Every trip settles to millijoules — 19&nbsp;mJ on average after eight seconds, in an 80&nbsp;kg body that
+    started with 301&nbsp;J. But only four of twelve fall asleep, and the harness classifies the eight that
+    do not. Five are <strong>crushed</strong>: the chest lies more than 5&nbsp;mm into an arm, §8's
+    accidental stack, which fights for ever — contact and joint pushing a 1.76&nbsp;kg forearm in opposite
+    directions every step. Three are <strong>turning</strong>: nothing is wrong except that some part —
+    a forearm, the nearly spherical head — is rotating at a few tenths of a radian per second while
+    holding a fraction of a millijoule. 8.10's thresholds are 0.05&nbsp;m/s and 0.10&nbsp;rad/s on
+    <em>every</em> body of an island, and they were tuned on crates. A thin limb turning at
+    0.3&nbsp;rad/s is invisible and costs nothing, and it keeps eleven bodies awake.
+  </p>
+
+  <p>
+    Baumgarte, which keeps energy (§10), sleeps one in twelve. Angular damping — which a real body has,
+    in its muscles and ligaments — brings seven of twelve to sleep. Adding eight sub-steps to the
+    damping leaves one ragdoll crushed instead of two, and six turning instead of three: it cures the
+    stack, and the bodies it frees go on turning. The fix that addresses the turning directly is a sleep test on
+    <em>energy</em> rather than speed — PhysX's is a mass-normalised kinetic energy — under which a
+    slowly turning forearm and a slowly turning crate are judged by what their motion is worth. That
+    changes 8.10's sleeping, which 8.10 measured and priced; it is exercise 3 here, with this table as
+    the thing to beat.
+  </p>
+
+  <h3>The bill</h3>
+
+  <p>
+    Sixteen ragdolls tripped together, sleeping off so that the work is priced rather than the saving,
+    mean of sixty steps and best of three runs:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — sixteen ragdolls, one step</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     falling:  198.5 us a step  (12.4 us a ragdoll: narrow phase 3.1, solve 8.1)
+     lying:    265.2 us a step  (16.6 us a ragdoll)
+     ragdolls per millisecond, falling: 81</code></pre>
+  </div>
+
+  <p>
+    About <strong>12&nbsp;µs a ragdoll a step</strong> falling and 17 lying (lying has more contacts), of
+    which two thirds is the solve — ten joints and a few dozen contact points, eight sweeps each.
+    Eighty falling ragdolls cost a millisecond a step, on one core, with none of Module 9's jobs. Sleeping
+    would make the lying ones free, if they slept; that is the other reason §13's refusal matters. And
+    the budget is spent where §8 said it should not be: on sweeps, where sub-steps would buy far more.
+  </p>

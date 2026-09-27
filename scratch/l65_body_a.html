@@ -1,0 +1,275 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-04-cook-torrance.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.4 — Cook–Torrance PBR, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-06-gltf.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.6 — glTF 2.0 Loading</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.5</div>
+    <h1>A Material System</h1>
+    <p class="deck">
+      Lesson 6.4 changed a surface description and had to edit <strong>forty-four call sites</strong>
+      across the engine, four demos and six test harnesses. That number is not a complaint — it is
+      a measurement, and what it measures is a type that does not exist. Three places in this
+      codebase have independently grown the same struct-shaped hole, one of them a <em>demo</em>
+      that invented the type because the engine did not offer it. This lesson fills the hole, and
+      the interesting part is not the struct: it is the <strong>question that decides what goes in
+      it</strong>, which turns out to be a question about hardware rather than about taste.
+      Everything here is a refactor, so there is exactly one claim to make at the end — the
+      reference render must be <strong>byte-identical</strong>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="06-04-cook-torrance.html">6.4 — Cook–Torrance PBR, Derived</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/material.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/cull.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/include/engine/gfx/scene.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>demos/common/demo_scene.{hpp,cpp}</code>,
+            <code>demos/ecs_swarm/main.cpp</code>,
+            <code>demos/sandbox/main.cpp</code>,
+            <code>scratch/verify_65.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A material the whole engine shares, referencing its texture by <strong>handle</strong>
+            rather than by pointer. 27 checks green, the reference render
+            <strong>byte-identical</strong> — and a demo type deleted because the engine finally
+            provides it.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the one question that decides whether something belongs in a material, and defend
+          it in terms of what the hardware does rather than what looks tidy.</li>
+      <li>…explain why a material stores a <em>handle</em> and a fill loop uses a <em>pointer</em>,
+          and where the conversion between them belongs.</li>
+      <li>…recognise a derived value being stored as a second field, and say what class of bug that
+          creates.</li>
+      <li>…decide when a pool earns its place, using a rule about sharing rather than about
+          size.</li>
+      <li>…tell a fact about the geometry from a decision about the draw, and put each where it
+          belongs.</li>
+      <li>…carry out a refactor whose correctness claim is a byte-identical output, in two
+          separately-verified halves.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem, Which the Codebase Already Wrote Down</a></li>
+      <li><a href="#invented">The Demo That Invented It</a></li>
+      <li><a href="#split">The Question That Draws the Line</a></li>
+      <li><a href="#handles">Handles, Pointers, and the Step Between</a></li>
+      <li><a href="#derived">One Field, One Answer</a></li>
+      <li><a href="#sharing">When a Pool Earns Its Place</a></li>
+      <li><a href="#closed">The Field That Was Not a Material After All</a></li>
+      <li><a href="#header">Where cull_mode Lives, and an Argument I Had to Withdraw</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#refactor">The Refactor, in Two Halves</a></li>
+      <li><a href="#cost">What It Cost</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem, Which the Codebase Already Wrote Down</h2>
+
+  <p>
+    Most lessons in this course open by showing you something broken. This one opens by showing you
+    something the code has been <em>saying</em> for three modules, in comments, without anybody
+    acting on it.
+  </p>
+
+  <p>
+    Here is <code>scene_object</code>, as Lesson 3.7 left it, with the comment that has sat on its
+    last field ever since:
+  </p>
+
+  <pre><code class="lang-cpp">struct scene_object
+{
+    transform xform;
+    mesh_handle geometry;
+    const char* name;
+    Uint32 tint;
+    bool closed;
+    microsurface surface;   // &lt;- and on this field:
+};
+
+// "Look at what just happened to this struct. `tint` was enough while a surface
+//  was one colour; then 3.4 needed `closed`; now 3.7 needs two more numbers, and
+//  all four describe the same thing — THE SURFACE — while `xform` and `geometry`
+//  describe where it is and what shape it is. That is two different kinds of data
+//  wearing one struct, and the second kind has a name: a material."</code></pre>
+
+  <p>
+    And here is <code>fill_style</code>, from Lesson 3.8, whose comment says the same thing about
+    itself in different words: <em>"`fill_style` is now two structs wearing one name."</em>
+  </p>
+
+  <p>
+    Two structs, written a lesson apart, each of which noticed it was accumulating a second kind of
+    data and each of which declined to fix it. That was the right call at the time, and 3.7 said
+    why: <strong>a material invented before three lessons have asked for one is a guess.</strong>
+  </p>
+
+  <p>
+    Three lessons have now asked. And Lesson 6.4 put a number on it.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What the absence cost, measured</span>
+    <p>Lesson 6.4 replaced <code>specular::colour</code> and <code>shininess</code> with roughness,
+       metallic and F0 — a change to <em>the surface description</em> and nothing else. It touched
+       <strong>forty-four call sites</strong> across the engine, four demos and six harnesses.</p>
+    <p>Not because the change was large. Because the description had <strong>no single
+       home</strong>, so every place that used a surface had assembled one out of loose fields.</p>
+  </div>
+
+  @@FIG_HOLE@@
+
+  <!-- =================================================================
+       2 — THE DEMO THAT INVENTED IT
+       ================================================================= -->
+  <h2 id="invented"><span class="num">2</span>The Demo That Invented It</h2>
+
+  <p>
+    The third panel of that figure is the one worth stopping on, because it is a different
+    <em>kind</em> of evidence from the other two.
+  </p>
+
+  <p>
+    <code>ecs_swarm</code> is a demo. Since Lesson 5.1 the boundary has been law: demos link the
+    engine and may use only its public headers. And in Lesson 5.7, needing to give its entities an
+    appearance, it wrote this:
+  </p>
+
+  <pre><code class="lang-cpp">/// What an entity looks like: `scene_object`'s `tint` and `surface`, which have
+/// always described the same thing and never been the same thing.
+struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;
+    engine::microsurface surface{};
+};</code></pre>
+
+  <p>
+    Read that comment again. The demo <em>knew</em>. It named the type, gave the reason, and built
+    it anyway, because the engine offered nothing to build on.
+  </p>
+
+  <div class="callout">
+    <span class="label">A signal worth learning to read</span>
+    <p><strong>When a consumer restricted to your public API has to invent one of your types, the
+       type is missing.</strong> Not "would be nice"; missing. A demo cannot reach into the engine
+       to work around a gap, so what it builds instead is a direct measurement of what the API does
+       not provide.</p>
+    <p>This is the strongest form of the pressure Lesson 3.7 said to wait for — and it is why the
+       first thing this lesson's diff does is <strong>delete</strong> that struct's fields.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE SPLIT
+       ================================================================= -->
+  <h2 id="split"><span class="num">3</span>The Question That Draws the Line</h2>
+
+  <p>
+    So we are writing a <code>material</code>. The temptation now is to sweep everything
+    surface-shaped into it — the tint, the roughness, the texture, the cull mode, the blend mode,
+    eventually the shader — because all of those are, in ordinary English, "what the surface is
+    like".
+  </p>
+
+  <p>
+    <strong>That would produce a type that cannot work</strong>, and the reason is not stylistic.
+    Ask a sharper question instead:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule</span>
+    <p><strong>Can this be a number in a buffer?</strong></p>
+    <p>If yes, it is per-draw data. The fragment stage reads it, the GPU pushes it as a uniform,
+       and two objects that differ only in it can be drawn back to back with <em>no state change
+       between them</em>.</p>
+    <p>If no, it is <strong>pipeline state</strong>. It is baked into a pipeline object at creation
+       time, and two objects that differ in it need two pipelines and a sort between them.</p>
+  </div>
+
+  @@FIG_SPLIT@@
+
+  <p>
+    This is not a rule we are inventing. It is the shape of the hardware, and Lesson 4.8 already
+    paid for the knowledge: porting the scene to SDL_GPU produced <strong>three pipeline
+    objects</strong> and a sort of the draw list, precisely because cull mode and fill mode cannot
+    be uniforms. The stats that lesson added — <code>pipeline_binds</code> against
+    <code>ideal_pipeline_binds</code> — exist to measure the cost of getting the sort wrong.
+  </p>
+
+  <p>
+    So the material gets four fields, and every one of them passes the test:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the type</span></figcaption>
+<pre><code class="lang-cpp">struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;   ///&lt; sRGB albedo, used when no map is bound
+    texture_handle albedo_map{}; ///&lt; when valid, REPLACES tint (3.9)
+    sampler samp{};              ///&lt; how to read it
+    microsurface surface{};      ///&lt; roughness, metallic, F0 (6.4)
+
+    [[nodiscard]] bool textured() const { return albedo_map.valid(); }
+};</code></pre>
+  </figure>
+
+  <p>
+    And <code>cull_mode</code>, <code>surface_style</code> and <code>specular_model</code> stay
+    exactly where they are — in <code>fill_style</code>, in <code>gpu_draw_item</code>, in
+    <code>render_options</code>. <strong>A material that swallowed them would be a material that
+    cannot be a uniform, which is not a material at all.</strong>
+  </p>
+
+  <p>
+    <code>verify_65</code> §A asserts the rule rather than describing it, in the bluntest way the
+    language allows:
+  </p>
+
+  <pre><code class="lang-cpp">checkf(std::is_trivially_copyable_v&lt;engine::material&gt;,
+       "a material is TRIVIALLY COPYABLE (%zu bytes) — which is the machine's "
+       "way of saying it can be pushed as a uniform");</code></pre>
+
+  <p>
+    If a field ever arrives that breaks that, it belongs on the other side of the line, and the
+    assertion is where you find out.
+  </p>

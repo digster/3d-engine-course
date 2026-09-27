@@ -1,0 +1,381 @@
+  <h2 id="listings">12. Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/integrate.hpp</code></td><td>new</td>
+          <td>Three rules, exact drag, and the four diagnostics §5 and §6 are about.</td></tr>
+      <tr><td><code>engine/src/phys/integrate.cpp</code></td><td>new</td>
+          <td>Everything that is not a template: the gravity path, drag, the limits.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>A new section in the table of contents — and the lint's seventh catch.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file, and the argument for <code>phys/</code> not being <code>math/</code>.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>A new target with no assets and no shaders.</td></tr>
+      <tr><td><code>demos/integrate/main.cpp</code></td><td>new</td>
+          <td>Phase space, an energy chart, a nested accumulator and a viewport clip.</td></tr>
+      <tr><td><code>scratch/verify_81.cpp</code></td><td>new</td>
+          <td>Nine sections, twelve controls, every number in this lesson.</td></tr>
+      <tr><td><code>scratch/build_verify_81.sh</code></td><td>new</td>
+          <td>Compiles the harness, and refuses an unoptimised <code>libengine.a</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/phys/integrate.hpp@@
+  @@LISTING:engine/src/phys/integrate.cpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:demos/integrate/main.cpp@@
+  @@LISTING:scratch/verify_81.cpp@@
+  @@LISTING:scratch/build_verify_81.sh@@
+
+  <h2 id="run">13. Build &amp; run</h2>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+
+  <p>
+    The configure step prints the umbrella lint's tally, and it moved by one:
+  </p>
+
+  <pre>-- engine: umbrella lists 89 of 90 public headers (1 documented exception)</pre>
+
+  <p>
+    It moved by one <em>after</em> refusing to configure at all, which is worth showing because it is
+    the seventh time in seven lessons and the message is the same every time:
+  </p>
+
+  <pre>CMake Error at engine/CMakeLists.txt:318 (message):
+  engine/include/engine/engine.hpp is missing public header(s):
+
+      engine/phys/integrate.hpp
+
+  It claims to list every public header (Lesson 5.12).  Add them, or add an
+  exception here with the reason written down.</pre>
+
+  <p>
+    Then the demo. No assets, no shaders, nothing loaded from disk — everything on screen it
+    computes.
+  </p>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/integrate
+
+# headless and deterministic: six simulated seconds, then a screenshot
+./build/demos/integrate --t 6 --shot scratch/integrate.ppm
+
+# start at a different simulation rate
+./build/demos/integrate --rate 240</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> On the left, a phase plot: a pale dashed circle (the exact
+    orbit), a pale dashed ellipse under it (what semi-implicit Euler conserves), and three tracks. The
+    green and violet ones trace the circle and stay on it — they will be indistinguishable from each
+    other and from the ellipse, which <em>is the result</em> and not a rendering fault, because at
+    <code>hω = 0.105</code> the ellipse is 2.7% off a circle. The red one spirals outward, visibly
+    after two seconds, and leaves the panel after about four. On the right, the same run as energy on
+    a log axis: two flat lines on 1, and a red one climbing as a straight line, which on a log axis
+    means exponential.
+  </p>
+
+  <p>
+    Then drive it. <kbd>Down</kbd> to 30 Hz and watch the red curve leave twice as fast.
+    <kbd>Up</kbd> to 480 Hz and watch it leave eight times more slowly and still leave.
+    <kbd>Right</kbd> to stiffen the spring until the panel reports <code>hω</code> near 2, and watch
+    the green ellipse become visibly eccentric before anything diverges — that is §6.3 in your hands.
+    Press <kbd>S</kbd> to hide the shadow ellipse and satisfy yourself that the green track really is
+    following it.
+  </p>
+
+  <p>
+    Then the harness, which is where every number in this page came from:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_81.sh</code></pre>
+
+  <p>
+    The script refuses to run against a build tree with an empty <code>CMAKE_BUILD_TYPE</code>, which
+    the repository's default <code>cmake -S . -B build</code> produces. Lesson 7.7 measured what
+    ignoring that costs at 16.9× on skinning; here it would be worse than wrong, because §10's entire
+    claim is that two rules cost <em>the same</em>, and a debug build's per-call overhead swamps the
+    difference the claim is about.
+  </p>
+
+  <h2 id="pitfalls">14. Common pitfalls &amp; debugging</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Symptom: everything is fine for thirty seconds, then the scene detonates.</strong>
+        <em>Cause:</em> explicit Euler somewhere, plus a position-dependent force. The tell is the
+        <em>shape</em> — it is not a jump, it is a smooth exponential ramp that crosses the visible
+        threshold all at once. <em>Fix:</em> swap the two lines. To confirm before you fix, log
+        <code>spring_energy</code> (or just <code>length(velocity)</code>) once a second and look for
+        a constant ratio between consecutive samples. A constant <em>ratio</em> is exponential growth;
+        a constant <em>difference</em> is something else entirely.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: you swapped the lines and it still blows up, but slower.</strong>
+        <em>Cause:</em> <code>hω ≥ 2</code>. Semi-implicit Euler is stable up to a limit and you are
+        past it, which happens the moment somebody raises a stiffness. <em>Fix:</em> call
+        <code>max_stable_step(rule, natural_frequency(k, m))</code> and compare it against your
+        <code>h</code>. If the answer is that you need 4 kHz, the fix is not a smaller step — go and
+        read §6.3, because the thing you are modelling as a spring probably should not be one.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: the simulation is stable but everything feels mushy and slightly dead.</strong>
+        <em>Cause:</em> you reached for backward Euler, or for an over-damped drag, or for a
+        "stabilisation" factor slightly below 1 that somebody added to stop pitfall 1. All three are
+        the <code>det &lt; 1</code> case of §5.3, and they trade an explosion for a slow leak.
+        <em>Fix:</em> the leak is not the price of stability — semi-implicit Euler is stable with
+        <code>det</code> exactly 1. If you want damping, add it deliberately with
+        <code>apply_drag</code>, where it has a coefficient you can tune and a name.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: the game plays differently on a 144 Hz machine.</strong> <em>Cause:</em>
+        almost always a per-step multiply like <code>v *= 0.99f</code>; occasionally a per-step
+        <em>additive</em> tweak, which has the same disease. <em>Fix:</em>
+        <code>damping_factor(retained_per_second, h)</code>, and check your change against §8.1's
+        control — at the rate the constant was tuned at, the two must agree to float precision, or you
+        have changed the feel rather than preserved it.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: a body passes through a thin floor at high speed.</strong> <em>Cause:</em>
+        not the integrator. That is tunnelling, and it is a collision-detection problem — the body was
+        on one side at step <code>n</code> and the other at <code>n+1</code> and nothing looked in
+        between. <em>Fix:</em> nothing in this lesson. Lesson 1.8 showed the swept test that catches
+        it and 8.13 is where it returns for real. It is listed here because "the physics is wrong" is
+        one symptom with several unrelated causes, and reaching for the integrator first is the common
+        misdiagnosis.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Symptom: your own energy meter says everything is perfect, forever.</strong>
+        <em>Cause:</em> you are plotting <code>shadow_energy</code>, or you wrote a meter that
+        evaluates the same expression the integrator is built from. <em>Fix:</em> plot
+        <code>spring_energy</code> for the physical claim and <code>shadow_energy</code> for the
+        numerical one, and expect them to disagree by <code>hω</code>. This is C.5's control in the
+        harness: it runs the shadow meter on <em>explicit</em> Euler, where it must also fail, so that
+        C.4's flat line is evidence about the method rather than about the meter.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="exercises">15. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Find the limit with your hands (guided).</strong> Run the demo, press <kbd>2</kbd> and
+        <kbd>3</kbd> to leave only semi-implicit Euler, and hold <kbd>Right</kbd> to stiffen the
+        spring while watching the <code>h*w</code> readout. Find the value at which the orbit stops
+        being an ellipse. Then check it against the panel's <code>max_stable_step</code>.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> it will not look like an explosion at first — it will look like the ellipse
+        getting narrower and more slanted, exactly as figure 6's left panel predicts, right up until
+        there is no ellipse. Watch the <em>shape</em>, not the size. If you overshoot, <kbd>R</kbd>
+        resets.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>The shadow energy, by substitution (guided).</strong> Verify algebraically that
+        <code>v² + ω²x² − hω²·xv</code> is invariant under semi-implicit Euler. Substitute
+        <code>x' = (1 − h²ω²)x + hv</code> and <code>v' = v − hω²x</code>, expand, and collect the
+        coefficients of <code>v²</code>, <code>x²</code> and <code>xv</code>.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> write <code>u = h²ω²</code> before you start and the algebra halves. The
+        <code>x²</code> coefficient is the one that looks hopeless and collapses:
+        <code>ω²[u + (1−u)² + u(1−u)] = ω²[u + 1 − 2u + u² + u − u²] = ω²</code>. If your
+        <code>xv</code> coefficient comes out as anything but <code>−hω²</code>, check the sign of the
+        cross term you got from squaring <code>x'</code>.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Position Verlet.</strong> There is a third symplectic method in common use, and it
+        stores no velocity at all: <code>x<sub>n+1</sub> = 2x<sub>n</sub> − x<sub>n−1</sub> +
+        a·h²</code>, with the velocity recovered when needed as
+        <code>(x<sub>n+1</sub> − x<sub>n−1</sub>)/2h</code>. Add it, measure its order and its
+        determinant with sections A and B, and then find the thing it is bad at.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> to write it as a matrix you need a state of <code>(x<sub>n</sub>,
+        x<sub>n−1</sub>)</code> rather than <code>(x, v)</code>. The thing it is bad at is a
+        <em>change of step size</em> — try halving <code>h</code> mid-run and watch what happens to a
+        body in flight, then work out why from the fact that <code>h</code> is baked into the stored
+        history rather than into a velocity.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>The exponent, empirically.</strong> §5.5 claims the time to double the energy is
+        proportional to <code>1/h</code>. Add a section to the harness that measures it as a function
+        of <code>ω</code> instead, at fixed <code>h</code>, and find the power.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> predict before you measure. <code>ln(2)/ln(1 + h²ω²) ≈ ln(2)/(h²ω²)</code>
+        steps, times <code>h</code> seconds each, so the time should go as <code>1/(hω²)</code> —
+        a slope of −2 in <code>ω</code>. Stiffness hurts twice as fast as step size helps, which is
+        the real reason a stiff spring is the dangerous case.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>RK4 is not the answer (engine challenge).</strong> Implement classical fourth-order
+        Runge–Kutta for this system and put it through sections A, B and C. You will find the best
+        order in the lesson and a determinant that is <em>not</em> 1. Then decide, with numbers,
+        whether you would ship it.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> its determinant is <code>1 − u³/72 + …</code> in <code>u = h²ω²</code> — less
+        than 1, so it is the backward-Euler disease in fifth-order clothing: it damps, very gently,
+        forever. Now weigh that against four force evaluations per step, which in Module 8 means four
+        broadphase queries. The interesting part of this exercise is the argument, not the code.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>An honest drag, inside the step (engine challenge).</strong> <code>apply_drag</code>
+        is exact for the velocity but leaves the position to whichever order you call it in. Derive
+        the exact position integral for <code>a = −kv</code> — it is
+        <code>x + (v/k)(1 − e^(−kh))</code> — implement an <code>integrate_with_drag</code>, and
+        measure the position error against the current "call them one after the other" approach at 60
+        Hz and at 10 Hz.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the interesting result is how small it is at 60 Hz and how fast it grows as
+        <code>hk</code> approaches 1. Then ask the design question the measurement raises: is an exact
+        drag integrator worth a special case in the step, or is the honest answer that anything with
+        <code>hk</code> near 1 is already outside what this loop should be asked to do?
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">16. Recap &amp; next</h2>
+
+  <p>
+    The engine can advance a state through time, and — just as usefully — it can tell you whether the
+    step size you chose is one that works.
+  </p>
+
+  <p>
+    The capability is small: two vectors, three rules, and about three hundred lines including the
+    comments. The argument is not. It began with a question that sounds like arithmetic — given a
+    velocity, where are you a moment later? — and the answer turned on the fact that
+    <strong>one step of an integrator is a matrix, and a matrix has a determinant</strong>. Explicit
+    Euler's is <code>1 + h²ω²</code>, which is greater than one for every step size that exists, so it
+    inflates phase space on every step forever: ×1.92 energy per second on a 1 Hz spring at 60 Hz,
+    <strong>×1.13 × 10¹⁷ in a minute</strong>, a one-centimetre overlap becoming 3,357 km. Moving one
+    line above another makes it exactly one, and costs nothing — 0.994 ns against 0.963 ns, a
+    difference smaller than the noise.
+  </p>
+
+  <p>
+    Four things are worth carrying forward past this page.
+  </p>
+
+  <ul>
+    <li>
+      <strong>Order of accuracy could not see any of it.</strong> It is a statement about
+      <code>h → 0</code> at fixed time; a game asks about <code>t → ∞</code> at fixed <code>h</code>.
+      Both Euler rules measured respectably on the first question while one of them was multiplying
+      its error by 1.9 every second on the second.
+    </li>
+    <li>
+      <strong>What is conserved is not what you assumed.</strong> Semi-implicit Euler does not
+      preserve energy — the true energy wobbles by exactly <code>hω</code>, 10.5% at 60 Hz. It
+      preserves a sheared cousin, to four parts in a million over 3,600 float steps, and the orbit is
+      a level set of <em>that</em>. Which is why the wobble never accumulates into a trend.
+    </li>
+    <li>
+      <strong>Stability was the same statement twice.</strong> Once as "the map does not inflate
+      area", once as "the conserved form is positive-definite, so its level sets are closed". Both are
+      one determinant, and the second gives <code>hω &lt; 2</code> — measured by bisection at
+      0.3182939 against a predicted 0.3183099.
+    </li>
+    <li>
+      <strong>Gravity forgives and contacts do not.</strong> Under constant acceleration all three
+      rules err by <code>±½·a·h·t</code>, linearly, and the relative error gets <em>better</em> the
+      longer you watch. The whole catastrophe is reserved for forces that depend on position, which
+      is every force in the rest of this module.
+    </li>
+  </ul>
+
+  <p>
+    That last point is also the bridge. §6.3 priced a stiff spring at 60 Hz and the answer was
+    thousands of steps per second for a single contact — which is the argument, made before meeting
+    the machinery, for why contacts in this engine will be impulses inside an iterative solver rather
+    than penalty springs. Lesson 8.10 is where that architecture arrives; the number that justifies it
+    was computed here.
+  </p>
+
+  <p>
+    <strong>Next, Lesson 8.2 — Forces, Gravity, and Linear Rigid Bodies.</strong> <code>motion</code>
+    gains a mass, and <code>F = ma</code> turns a pile of forces into the acceleration this lesson's
+    <code>integrate</code> has been taking as an argument. That is where "1 unit = 1 metre" stops
+    being pedantry — <code>9.81</code> is a number in those units and in no others — and where a
+    scaled parent in the transform hierarchy quietly stops meaning what you think it means.
+  </p>
+
+  <h2 id="reading">17. Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Glenn Fiedler, <em>Integration Basics</em></strong> (gafferongames.com). The canonical
+      short treatment for game developers, and the companion piece to the fixed-timestep article
+      Lesson 1.4 was built from. It goes further than this lesson in one direction — RK4 with worked
+      code — and this lesson goes further in the other, with the determinant.
+    </li>
+    <li>
+      <strong>Ernst Hairer, Christian Lubich and Gerhard Wanner, <em>Geometric Numerical
+      Integration</em></strong> (Springer, 2nd ed.). The real treatment of everything §6 gestured at:
+      symplecticity, backward error analysis, and where the shadow Hamiltonian comes from. Chapters I
+      and IX are the relevant ones. Heavy going and worth owning if you intend to write solvers.
+    </li>
+    <li>
+      <strong>Hairer, Lubich and Wanner, <em>Geometric numerical integration illustrated by the
+      Störmer–Verlet method</em></strong> (Acta Numerica, 2003). The same authors' thirty-page version,
+      freely available, and the best single document on why Verlet-family methods behave the way they
+      do.
+    </li>
+    <li>
+      <strong>Erin Catto, <em>Soft Constraints</em> and <em>Modeling and Solving Constraints</em></strong>
+      (GDC, box2d.org/publications). Where §6.3's conclusion leads: contacts as constraints rather
+      than springs, and the sequential-impulse solver Lesson 8.10 builds. Catto's slides are the
+      clearest published account of how a shipping 2D/3D solver is actually organised.
+    </li>
+    <li>
+      <strong>David Baraff and Andrew Witkin, <em>Physically Based Modeling</em></strong> (SIGGRAPH
+      course notes). The classic course notes; "Differential Equation Basics" covers this lesson's
+      ground from the ODE side, and "Implicit Methods" is the honest case <em>for</em> backward Euler
+      in the place it belongs, which is cloth.
+    </li>
+    <li>
+      <strong>Loup Verlet, <em>Computer "Experiments" on Classical Fluids</em></strong> (Physical
+      Review 159, 1967). The original, from molecular dynamics rather than graphics. Worth ten minutes
+      for the reminder that the method games use for projectiles was invented to simulate argon.
+    </li>
+  </ul>

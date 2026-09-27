@@ -1,0 +1,665 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-07-ecs-storage.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.7 — An ECS from Scratch: Storage Design</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-09-transform-hierarchy.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.9 — Transform Hierarchy and the Camera System</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.8</div>
+    <h1>The ECS Runtime</h1>
+    <p class="deck">
+      Lesson 5.7 chose the sparse set by measurement and left four rules behind. This lesson
+      builds it: an entity id minted once and honoured by every pool, a component pool that is
+      three arrays and about twenty lines of logic, a registry that ties them together without
+      RTTI, and a query that leads with the smallest pool because 5.7 measured what leading with
+      the biggest one costs. Then it runs the result at a hundred and twenty-one entities and
+      says plainly what that buys — which is <em>not</em> speed, and the lesson opens by
+      admitting it.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5–6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="05-06-data-oriented-design.html">5.6 — Data-Oriented Design</a>,
+          <a href="05-07-ecs-storage.html">5.7 — ECS Storage Design</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/ecs/entity.hpp</code>,
+            <code>engine/include/engine/ecs/pool.hpp</code>,
+            <code>engine/include/engine/ecs/registry.hpp</code>,
+            <code>engine/include/engine/ecs/view.hpp</code>,
+            <code>demos/ecs_swarm/main.cpp</code>, <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_58.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A working ECS — <code>create</code>, <code>destroy</code>, <code>add</code>,
+            <code>remove</code>, <code>has</code>, <code>get</code>, <code>view</code> — and a
+            demo of 121 entities built out of six component types, three of which describe
+            things the old <code>scene_object</code> could not express at all. 101 checks green;
+            the reference shot byte-identical for the eighth lesson running.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why an entity id is a different type from a resource handle even though it
+          has the same bits, and why the difference is not pedantry.</li>
+      <li>…implement a generational id allocator with a free list, and say what its high-water
+          mark is measured in.</li>
+      <li>…write a sparse set's <code>insert</code>, <code>erase</code>, <code>contains</code>
+          and <code>get</code>, including the one line whose absence corrupts the pool silently.</li>
+      <li>…erase a component from a packed array and patch the entity that moved — and step
+          through the edge case where the entity that moves is the one being erased.</li>
+      <li>…type-erase a heterogeneous set of containers <em>without</em> RTTI, and justify the
+          <code>static_cast</code> that does it.</li>
+      <li>…implement a multi-component query that leads with the smallest pool, and say what
+          that decision is worth in candidates skipped.</li>
+      <li>…state the one iteration rule a view imposes, why it exists, and the two safe patterns
+          around it.</li>
+      <li>…argue for an ECS at a hundred objects on grounds that are true at a hundred objects.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-have">What we already have, and the one thing it lacks</a></li>
+          <li><a href="#intuition-struct">A component is a struct; a system is a loop</a></li>
+          <li><a href="#intuition-absence">The useful thing is the absence</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-id">One shared id space</a></li>
+          <li><a href="#theory-word">The entity word, and what a generation check costs</a></li>
+          <li><a href="#theory-sparse">The sparse set, walked by hand</a></li>
+          <li><a href="#theory-view">A query is a set intersection</a></li>
+          <li><a href="#theory-erasure">Type erasure without RTTI</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">The Implementation</a>
+        <ol>
+          <li><a href="#impl-entity">entity.hpp — minting ids</a></li>
+          <li><a href="#impl-pool">pool.hpp — one component type's storage</a></li>
+          <li><a href="#impl-registry">registry.hpp — the world</a></li>
+          <li><a href="#impl-view">view.hpp — the query, and rule 3</a></li>
+          <li><a href="#impl-nogroups">What is deliberately not here</a></li>
+        </ol>
+      </li>
+      <li><a href="#demo">The Demo: Composition, Visible</a></li>
+      <li><a href="#verify">Verification</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Let us begin by throwing away the argument you were probably expecting.
+  </p>
+
+  <p>
+    The demo this course has been carrying since Lesson 2.12 holds its objects in an array of
+    four. Lesson 5.6 measured what that costs, at five world sizes, with the optimiser on and
+    off, and the answer for four objects was <strong>nothing</strong> — every storage layout it
+    tried came within one percent of every other below a thousand objects, and the knee where
+    layout starts to matter sat between 1,000 and 10,000. Lesson 5.7 then measured the two ECS
+    storage designs against each other and found the same shape again: below a thousand entities
+    every arm was within 16% of every other, and the interesting numbers only appeared at
+    100,000.
+  </p>
+
+  <p>
+    So an ECS is not going to make this engine faster today, and a lesson that opened by
+    implying otherwise would be teaching the exact folklore this course exists to argue with.
+    <strong>The reason to build one now is that <code>scene_object</code> has been quietly
+    failing for five lessons, and the failure is about expression rather than speed.</strong>
+  </p>
+
+  <p>
+    Here is the whole history, and it is short. In Lesson 2.12 a <code>scene_object</code> was a
+    transform and a mesh — the smallest honest definition of a renderable thing. Lesson 3.1
+    filled the triangles, so it needed a colour, and gained a <code>tint</code>. Lesson 3.4
+    added back-face culling, which is only valid on closed surfaces, so it gained
+    <code>closed</code>. Lesson 3.7 added specular highlights, so it gained a whole
+    <code>specular surface</code> sub-struct. Lesson 5.4 turned the mesh into a handle. And
+    at every one of those steps the comment in <code>scene.hpp</code> said some version of the
+    same uncomfortable thing:
+  </p>
+
+  <blockquote>
+    <p>
+      “Look at what just happened to this struct. <code>tint</code> was enough while a surface
+      was one colour; then 3.4 needed <code>closed</code>; now 3.7 needs two more numbers, and
+      all four describe the same thing — <em>the surface</em> — while <code>xform</code> and
+      <code>geometry</code> describe where it is and what shape it is. That is two different
+      kinds of data wearing one struct.”
+    </p>
+  </blockquote>
+
+  <p>
+    Two kinds became four. And because a struct is a promise that every instance has every
+    field, each addition was paid for by every object whether or not it meant anything: the
+    ground plane carries a <code>shininess</code> it never uses, and an object that should not
+    be drawn at all has no way to say so except a null handle and a branch in the renderer.
+  </p>
+
+  @@FIG_COMPOSE@@
+
+  <p>
+    Read the lower half of Figure 1 and notice what is <em>not</em> in it. There is no empty
+    cell to explain, because an entity that has no material does not have a blank material — it
+    has no row in the material pool, and the material pool has never heard of it. The render
+    query in <a href="#demo">§5</a> names <code>placement</code>, <code>geometry</code> and
+    <code>material</code>, and a waypoint entity that carries only the first is skipped by the
+    query rather than filtered by the renderer. Nobody wrote that skip. It falls out of asking
+    the right question.
+  </p>
+
+  <p>
+    That is what this lesson buys, and it is worth having at 121 objects. The performance
+    argument is Lesson 5.7's, it is real, and it applies at ten thousand — we will build the
+    thing that is ready for it, and we will not pretend it is why.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What this lesson does <em>not</em> do</span>
+    <p>
+      Nothing renders through the ECS yet. <code>collect_triangles</code> still takes a span of
+      <code>scene_object</code>, and the demo's render system walks a view and <em>fills one</em>
+      — a bridge, six lines long, marked temporary in the source. Converting the renderer is
+      Module 6's job, and doing it here would mean changing the architecture and the picture in
+      the same lesson, with no way afterwards to tell which change broke what. The reference
+      shot from Lesson 5.1 is still byte-identical after this lesson (<a href="#verify">§6</a>),
+      and that is a fact worth having rather than a coincidence.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-have">2.1 What we already have, and the one thing it lacks</h3>
+
+  <p>
+    Open <code>engine/include/engine/core/pool.hpp</code> — Lesson 5.4's container — and read
+    its member list with Lesson 5.7's vocabulary in your head:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The three arrays of Lesson 5.4's pool, and what each one is
+             called in sparse-set terms.</caption>
+    <thead><tr><th><code>pool&lt;T&gt;</code> calls it</th><th>a sparse set calls it</th>
+               <th>what it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>slots_</code></td><td>the sparse array</td>
+          <td>one entry per slot ever created, indexed by a handle's index field, never moves</td></tr>
+      <tr><td><code>items_</code></td><td>the dense data</td>
+          <td>live objects only, packed, no holes, order unspecified</td></tr>
+      <tr><td><code>owners_</code></td><td>the dense id list</td>
+          <td>which slot each dense element belongs to — the way back</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That <em>is</em> a sparse set. It has generations, it has swap-and-pop removal, it has O(1)
+    insert, remove, lookup and a contiguous iteration span. Lesson 5.7 noticed this out loud and
+    then refused to let it decide the architecture, on the grounds that choosing a design because
+    you happen to own something shaped like it is choosing by accident. Now that the design has
+    been chosen on the evidence, the resemblance is simply useful: most of this lesson's storage
+    code is code you have already read once.
+  </p>
+
+  <p>
+    So what is missing? One thing, and it is structural rather than incremental:
+  </p>
+
+  @@FIG_IDSPACE@@
+
+  <p>
+    <strong>Every <code>pool&lt;T&gt;</code> mints its own keys.</strong> Insert a mesh and you
+    get <code>handle&lt;mesh_data&gt;{index 7, generation 1}</code>; insert a texture into a
+    different pool and you get <code>handle&lt;texture&gt;{index 7, generation 1}</code>. Two
+    sevens. They came off two different free lists, they refer to two unrelated slots, and the
+    phantom type parameter exists precisely to stop you confusing them. Ask “does the thing in
+    mesh slot 7 also have a texture?” and you do not get a slow answer — you get no answer,
+    because the question is not well formed.
+  </p>
+
+  <p>
+    An ECS is the arrangement in which that question <em>is</em> well formed. Mint the id once,
+    from one allocator, and hand the same id to every pool. That is all. Everything else in this
+    lesson — the views, the systems, the composition argument — is a consequence of that single
+    inversion.
+  </p>
+
+  <h3 id="intuition-struct">2.2 A component is a struct; a system is a loop</h3>
+
+  <p>
+    Before any code, it is worth being precise about how little an ECS asks of you, because most
+    of the reputation for complexity comes from frameworks rather than from the idea.
+  </p>
+
+  <p>
+    A <strong>component</strong> is a plain struct. No base class, no virtual functions, no
+    registration macro, no header of its own. Our <code>registry</code> requires exactly one
+    thing of a component type — that it be movable — and it does not even require that it be
+    default-constructible. The demo in <a href="#demo">§5</a> uses <code>engine::transform</code>,
+    written in Lesson 2.8 by somebody who had never heard of an ECS, as a component without
+    modifying or recompiling it.
+  </p>
+
+  <p>
+    A <strong>system</strong> is a free function that takes the world and runs one query:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the whole shape of a system</span></figcaption>
+    <pre><code class="lang-cpp">void orbit_system(engine::ecs::registry&amp; world, float t)
+{
+    world.view&lt;placement, orbit&gt;().each([t](placement&amp; p, const orbit&amp; o) {
+        const float a = o.phase + o.speed * t;
+        p.position = { /* … */ };
+    });
+}</code></pre>
+  </figure>
+
+  <p>
+    Not a class, not a virtual <code>update()</code>, not a base <code>System</code>. There is
+    nothing for such a base to hold, because a system's entire state is the query it runs — and
+    Lesson 5.6 measured what a virtual call costs on an iteration (1.5–1.7× at <em>every</em>
+    world size, including four objects sitting in L1) and concluded that ECS iteration must not
+    be virtual. Free functions are not a stylistic preference here; they are that measurement,
+    obeyed.
+  </p>
+
+  <p>
+    There is a second thing to notice about that signature, and it will matter in Module 9. The
+    query <em>declares the data flow</em>: <code>orbit_system</code> writes placements and reads
+    orbits, and you can see that from the first line without reading the body. A job system
+    deciding whether two systems may run concurrently needs exactly that information, and here
+    it is legible for free.
+  </p>
+
+  <h3 id="intuition-absence">2.3 The useful thing is the absence</h3>
+
+  <p>
+    The mental shift that makes an ECS click is small and slightly counter-intuitive: <strong>an
+    entity is not a thing that has components. It is an id, and the components are filed
+    under it.</strong>
+  </p>
+
+  <p>
+    The difference sounds like philosophy and is entirely practical. If an entity <em>had</em>
+    components, an entity would need to be an object, that object would need to know what it
+    holds, and adding a component would mean modifying it. Because components are merely
+    <em>filed under</em> the id, adding one touches exactly one pool and nothing else in the
+    world learns about it — which is precisely the 4.2 ns structural change Lesson 5.7 measured,
+    and precisely why that number did not move when the entity grew from four component types to
+    twelve.
+  </p>
+
+  <p>
+    It also means the interesting queries are the ones about absence. “Every entity with a
+    placement and an orbit but no geometry” is a sentence about a set difference, and in a
+    world of structs it is a sentence about a flag somebody remembered to set. We will not build
+    exclusion queries in this lesson — <a href="#exercises">Exercise 10.2</a> does — but the
+    reason they are easy is visible already: the pools are sets, and set operations are what
+    sets are for.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-id">3.1 One shared id space</h3>
+
+  <p>
+    Lesson 5.7's rule 2 says the entity id must be minted once and handed to every pool. Two
+    consequences follow immediately, and both shape the code.
+  </p>
+
+  <p>
+    <strong>First: the id space must stay compact.</strong> Every pool's sparse array is indexed
+    by an entity's <em>index field</em>, so it must be at least as long as the largest index in
+    use. If ids were handed out by an ever-increasing counter, a game that spawned and killed a
+    thousand bullets a second would push that counter past three million in an hour, and every
+    component type in the world would carry a three-million-entry sparse array — twelve megabytes
+    each, almost all of it meaning “absent”.
+  </p>
+
+  <p>
+    A free list fixes this, and the fix is worth stating as an equation because it is the whole
+    reason Lesson 5.7 could rule out paged sparse arrays:
+  </p>
+
+  <div class="worked">
+    <span class="label">The high-water mark</span>
+    <p><strong>high-water mark = peak <em>simultaneously live</em> entities</strong>, not
+       entities ever created.</p>
+  </div>
+
+  <p>
+    Reuse a slot before minting a new one and the index space never grows past the largest number
+    of entities that were alive at one instant. The verification harness in
+    <a href="#verify">§6</a> makes this concrete: 200 frames of churn create <strong>518</strong>
+    entities and destroy 301, and the id space ends at <strong>220 slots</strong> — the peak
+    live count, not the 518.
+  </p>
+
+  <p>
+    <strong>Second: reuse means an old id can name a new occupant</strong>, which is Lesson 5.4's
+    aliasing failure arriving in a world where it happens constantly. Entities die every frame in
+    a way that meshes and textures do not, so the generation is not a nicety here; it is the
+    difference between “that entity is gone” and “that entity is now somebody else's spaceship”.
+  </p>
+
+  <h3 id="theory-word">3.2 The entity word, and what a generation check costs</h3>
+
+  <p>
+    We reuse Lesson 5.4's bit budget exactly — 20 bits of index, 12 of generation, generation 0
+    reserved so that the null entity is all-bits-zero — and we include those constants from
+    <code>core/handle.hpp</code> rather than restating them, so the budget has one home.
+  </p>
+
+  @@FIG_SLOTS@@
+
+  <p>
+    Work Figure 3 through with real numbers. Three entities are minted, so slots 0, 1 and 2 each
+    carry generation 1, and <code>b = {index 1, generation 1}</code>, which packs to:
+  </p>
+
+  <div class="worked">
+    <span class="label">Packing b</span>
+    <p class="mono">bits = (generation &lt;&lt; 20) | index = (1 &lt;&lt; 20) | 1
+       = 1,048,576 + 1 = <strong>1,048,577</strong></p>
+  </div>
+
+  <p>
+    Now <code>destroy(b)</code>. Slot 1 is marked free, its generation becomes 2, and index 1
+    goes onto the free list. <code>b</code> still holds 1,048,577, and the slot now says
+    generation 2, so:
+  </p>
+
+  <div class="worked">
+    <span class="label">Testing the stale id</span>
+    <p class="mono">alive(b) = (1 &lt; 3) &amp;&amp; slots[1].live &amp;&amp; (slots[1].generation == 1)</p>
+    <p class="mono">         = true &amp;&amp; <strong>false</strong> &amp;&amp; false
+       = <strong>false</strong></p>
+  </div>
+
+  <p>
+    Then <code>create()</code> pops slot 1 off the free list and returns
+    <code>b2 = {index 1, generation 2}</code>, packing to 2,097,153. Both ids name slot 1; only
+    one of them is alive; and the test that separates them is a single 32-bit comparison. That
+    is the entire mechanism, and it costs one integer compare on a value already in a register.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Bump on removal, never on insertion</span>
+    <p>
+      Lesson 5.4 derived this and it is worth re-stating because entities are the case that
+      makes it matter. If the generation were bumped when a slot was <em>taken</em>, there would
+      be a window — between the free and the next create — during which a freed slot still
+      carried the generation an outstanding id holds, and <code>alive()</code> would say yes.
+      Bumping on removal closes the window to zero width: from the instant of the free, every id
+      that ever named that slot is stale.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The 12-bit budget, and why entities are the case it worries about</span>
+    <p>
+      4,095 usable generations means a slot's generation <em>repeats</em> after 4,095 frees of
+      that same slot, and a LIFO free list hammers one slot rather than spreading the load.
+      <code>core/handle.hpp</code> did the arithmetic: at one recycle per frame that is 68
+      seconds. For assets — loaded at level boundaries, counted in hundreds — this is
+      unreachable. For entities in a bullet-hell it is not, and §A of the harness drives one slot
+      through 4,096 create/destroy pairs and confirms the wrap counter reads exactly 1. The
+      counter exists so the assumption is <em>monitored</em>; if it ever leaves zero, the two
+      fixes are a FIFO free list (which multiplies time-to-wrap by the slot count) or a 64-bit id
+      split 32/32.
+    </p>
+  </div>
+
+  <h3 id="theory-sparse">3.3 The sparse set, walked by hand</h3>
+
+  <p>
+    One component type's storage is three arrays. Let us fill them with actual numbers and then
+    take one apart.
+  </p>
+
+  <p>
+    Five entities — ids 7, 4, 91, 30 and 12 — each get a component, inserted in that order.
+    Insertion appends, so:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The three arrays of a sparse set holding five components.</caption>
+    <thead><tr><th></th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th></tr></thead>
+    <tbody>
+      <tr><td><code>dense_[i]</code></td><td>e=7</td><td>e=4</td><td>e=91</td><td>e=30</td>
+          <td>e=12</td></tr>
+      <tr><td><code>data_[i]</code></td><td>T(7)</td><td>T(4)</td><td>T(91)</td><td>T(30)</td>
+          <td>T(12)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    …and <code>sparse_</code> is indexed by entity, not by position, so it is a 92-entry array of
+    which five entries are set: <code>sparse_[7] = 0</code>, <code>sparse_[4] = 1</code>,
+    <code>sparse_[91] = 2</code>, <code>sparse_[30] = 3</code>, <code>sparse_[12] = 4</code>, and
+    the other 87 hold the “no component” sentinel.
+  </p>
+
+  <p>
+    A lookup is then two array reads: <code>data_[sparse_[e.index()]]</code>. The second read's
+    address depends on the first read's value, which is the two-deep dependent chain Lesson 5.7
+    spent a whole figure on, and 5.7's finding was that it is <em>latency</em> rather than work —
+    free until the working set leaves cache <em>and</em> the pools' orders diverge.
+  </p>
+
+  <p>
+    Removal is where the design earns its keep and where implementations go wrong. Erase entity
+    4's component:
+  </p>
+
+  @@FIG_ERASE@@
+
+  <p>
+    Step by step. <code>sparse_[4]</code> is 1, so the hole is at dense position 1. The last
+    element (position 4, entity 12) moves into it: <code>dense_[1] = 12</code> and
+    <code>data_[1] = T(12)</code>. Then both arrays are popped, and <code>sparse_[4]</code> is
+    set to “absent”.
+  </p>
+
+  <p>
+    <strong>And one more thing has to happen, which is the line people forget.</strong> Entity 12
+    did not ask to move. Its sparse entry still says 4 — a position that no longer exists — so it
+    must be patched to 1. Miss that line and the pool is not obviously broken: it is
+    <em>silently</em> broken, and the symptom appears an arbitrary number of frames later, in a
+    different system, as one entity reading another's data. Lesson 5.7 hit exactly this bug in
+    the archetype arm of its probe, and found it only because the test churned two hundred frames
+    before checking.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Worked edge case — erasing the last element</span>
+    <p>
+      Erase the element at the <em>end</em>, and the “element that moves” is the element being
+      erased. Trace it: <code>at</code> equals <code>last</code>, so the swap is skipped
+      entirely; both arrays pop; then <code>sparse_[e]</code> is set to absent. If the swap were
+      <em>not</em> skipped, it would copy the element onto itself and patch its own sparse entry
+      to the position it already occupies — harmless, and then immediately overwritten by the
+      final line. Either way the order saves us, and it is the order rather than the branch that
+      is load-bearing. §B of the harness tests this case on its own, because a test that only
+      ever erases from the middle passes forever.
+    </p>
+  </div>
+
+  <p>
+    Finally, <code>contains()</code> is three tests and the third is the one that costs a line
+    and buys the whole design:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the staleness check, in full</span></figcaption>
+    <pre><code class="lang-cpp">if (e.index() &gt;= sparse_.size()) { return false; }   // never seen this entity
+const std::uint32_t at = sparse_[e.index()];
+return at != k_none                                  // component was erased
+    &amp;&amp; dense_[at] == e;                              // …and it is THIS entity's</code></pre>
+  </figure>
+
+  <p>
+    <code>dense_</code> stores the full 32-bit entity word, generation included, so an id naming
+    the same slot with an <em>older</em> generation is rejected. Store a bare index there instead
+    — which is what a naïve sparse set does, and it saves nothing — and that third test cannot be
+    written at all. Lesson 5.4's aliasing failure walks straight back in.
+  </p>
+
+  <h3 id="theory-view">3.4 A query is a set intersection</h3>
+
+  <p>
+    <code>view&lt;placement, geometry, material&gt;</code> asks for the entities in all three
+    pools. That is an intersection of three sets, and the classic result about intersecting sets
+    is that <strong>you should iterate the smallest one</strong>: the cost is
+    <em>O</em>(smallest × lookups), not <em>O</em>(largest).
+  </p>
+
+  <p>
+    Lesson 5.7 turned that into a measurement rather than an assertion. At one-in-four
+    selectivity and 100,000 entities, leading with the big pool cost 1.73× a real archetype and
+    leading with the small one cost 1.46× — identical code, differing only in which array the
+    outer loop walks. That is rule 3, and here is what it looks like in candidates:
+  </p>
+
+  @@FIG_LEAD@@
+
+  <p>
+    The harness builds exactly the world in Figure 5: 60 entities, all with a position, every
+    second one with a velocity, every fifth with a label. So the pools are 60 / 30 / 12, and:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Candidates considered by a three-component view depending on
+             which pool leads.</caption>
+    <thead><tr><th>lead pool</th><th>candidates walked</th><th>rejections</th>
+               <th>answers</th></tr></thead>
+    <tbody>
+      <tr><td><code>position</code> (60)</td><td>60</td><td>54</td><td>6</td></tr>
+      <tr><td><code>velocity</code> (30)</td><td>30</td><td>24</td><td>6</td></tr>
+      <tr><td><strong><code>label</code> (12)</strong></td><td><strong>12</strong></td>
+          <td><strong>6</strong></td><td>6</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A fifth of the walk for the same six answers, and the gap widens as the component gets rarer:
+    a query for “entities with a placement and a <code>player_input</code>” in a world of 10,000
+    entities and one player walks <strong>one</strong> candidate if it leads correctly and 10,000
+    if it does not. The decision is one comparison in a constructor, made once per query rather
+    than once per entity, so it is free in every sense that matters.
+  </p>
+
+  <p>
+    There is a second, smaller prize in leading with a pool, and it is easy to miss. For the lead
+    pool, the dense position <em>is the loop counter</em> — we are walking its dense array in
+    order — so the lead's own component needs no sparse lookup at all. Only the other
+    <em>K</em>−1 pools pay the redirect.
+  </p>
+
+  <h3 id="theory-erasure">3.5 Type erasure without RTTI</h3>
+
+  <p>
+    One problem remains, and it is the only genuinely hard one in the file.
+    <code>registry::destroy(e)</code> must erase <code>e</code>'s row from <em>every</em> pool,
+    and those pools have different types. C++ offers two ways to hold a heterogeneous collection
+    like that.
+  </p>
+
+  <p>
+    The obvious one is RTTI: key the pools by <code>std::type_index</code> and recover the
+    concrete type with <code>dynamic_cast</code>. <strong>It is not available to us</strong> — the
+    engine core is built with RTTI off since Lesson 5.1 — and that turns out to be a mercy rather
+    than a constraint, because <code>dynamic_cast</code> is a runtime walk of the type graph and a
+    <code>type_index</code> lookup is a hash on a path that ought to be an array index.
+  </p>
+
+  <p>
+    The alternative is to assign the numbers ourselves:
+  </p>
+
+  @@FIG_ERASURE@@
+
+  <p>
+    Each component type gets a small integer the first time anybody asks, from a counter behind a
+    function-local static. That integer indexes a <code>std::vector&lt;std::unique_ptr&lt;pool_base&gt;&gt;</code>,
+    and the concrete type is recovered with a plain <code>static_cast</code> — which is safe for
+    a reason worth saying out loud: <strong>the id is what created the pool.</strong> The object
+    at index <code>component_id_of&lt;T&gt;()</code> was constructed as a <code>pool&lt;T&gt;</code>
+    and nothing else can ever be stored there, so the downcast is justified by construction
+    rather than checked at use. That is the difference between a cast that is safe and a cast
+    that is merely usually right.
+  </p>
+
+  <p>
+    The cost of not keeping a per-entity component mask is visible in the lower half of Figure 6:
+    destroying an entity that had three components makes five virtual calls, two of which return
+    after a single array read. At the five types in that figure — or the six the demo uses —
+    that is nothing. An engine with three
+    hundred component types would keep the mask, and Lesson 5.7 §9 said so.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — the function-template static</span>
+    <p>
+      <code>component_id_of&lt;T&gt;()</code> works because of two guarantees the language makes.
+      A <code>static</code> local inside a function template is <strong>one object per
+      instantiation, shared across every translation unit</strong> — which is what makes the id
+      for <code>placement</code> the same number in the demo and in the test harness, without a
+      registration step. And since C++11 its initialisation is thread-safe (“magic statics”), so
+      two threads calling it simultaneously cannot both run the initialiser.
+    </p>
+    <p>
+      What is <em>not</em> thread-safe is the counter increment behind it, so the honest rule is
+      the one in the header: <strong>touch each component type once before the job system
+      starts.</strong> That constraint is shared by every container in this engine until Module 9
+      revisits all of them at once.
+    </p>
+  </div>

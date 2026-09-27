@@ -1,0 +1,58 @@
+<svg viewBox="0 0 900 470" role="img" aria-labelledby="l87f4-t l87f4-d">
+  <title id="l87f4-t">A support function determines a convex set but cannot name one of its faces.</title>
+  <desc id="l87f4-d">Left: a square seen edge on, with its top edge drawn thick in red as the argmax set, its two endpoints marked, and a fan of dashed query directions inside the face's normal cone. Right: two tables. Over 4,000 directions drawn from a cone one thousandth of a degree wide, the support function returns all four corners while support_face returns the same four vertices every time and never changes its feature id. The control, a direction pointed at a corner, returns one corner of eight — so the ambiguity belongs to the query rather than to the function.</desc>
+  <defs>
+    <marker id="e-i-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-purple-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-green-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l87f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">`support(d)` returns ONE point even when the argmax is a whole face.</text>
+<path d="M 119.20,266.80 L 260.80,266.80 L 260.80,125.20 L 119.20,125.20 Z" fill="none" stroke="#5082e6" stroke-width="1.7"/>
+<line x1="119.2" y1="125.2" x2="260.8" y2="125.2" stroke="#e05c5c" stroke-width="4.0" fill="none"/>
+<circle cx="119.2" cy="125.2" r="4.4" fill="#e05c5c"/>
+<circle cx="260.8" cy="125.2" r="4.4" fill="#e05c5c"/>
+<line x1="190.0" y1="122.8" x2="205.8" y2="81.8" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="200.6" y2="80.1" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="195.4" y2="79.2" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="190.0" y2="78.8" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="184.6" y2="79.2" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="179.4" y2="80.1" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="190.0" y1="122.8" x2="174.2" y2="81.8" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="190" y="62" class="xs" text-anchor="middle">d, jittered inside the face's normal cone</text>
+<text x="190" y="312" class="xs muted" text-anchor="middle">the argmax is the whole top EDGE</text>
+<text x="190" y="330" class="xs muted" text-anchor="middle">(a face, in three dimensions)</text>
+<line x1="360" y1="60" x2="360" y2="350" class="grid" stroke-width="1.0"/>
+<text x="392" y="74" class="xs muted" text-anchor="start">§4 — the same query, two functions</text>
+<text x="392" y="94" class="xs muted" text-anchor="start">4,000 directions, cone 0.001° wide</text>
+<text x="836" y="94" class="xs muted" text-anchor="end">returned</text>
+<line x1="392" y1="102.0" x2="842" y2="102.0" class="grid" stroke-width="1.0"/>
+<text x="392" y="119.0" class="xs" text-anchor="start">distinct corners `support` gave back</text>
+<text x="836" y="119.0" class="xs mono" text-anchor="end">4 of 4</text>
+<text x="392" y="136.0" class="xs" text-anchor="start">`support_face` count == 4</text>
+<text x="836" y="136.0" class="xs mono" text-anchor="end">4000 of 4000</text>
+<text x="392" y="153.0" class="xs" text-anchor="start">distinct corners it named</text>
+<text x="836" y="153.0" class="xs mono" text-anchor="end">4</text>
+<text x="392" y="170.0" class="xs" text-anchor="start">its `feature` id ever changed</text>
+<text x="836" y="170.0" class="xs mono" text-anchor="end">never</text>
+<text x="392" y="206" class="xs muted" text-anchor="start">Which corner comes back is decided by a tie-break on three dot</text>
+<text x="392" y="222" class="xs muted" text-anchor="start">products that are all zero in exact arithmetic. The answer is</text>
+<text x="392" y="238" class="xs muted" text-anchor="start">DETERMINISTIC and it is ARBITRARY, and those are not the same</text>
+<text x="392" y="254" class="xs muted" text-anchor="start">thing.</text>
+<text x="392" y="292" class="xs muted" text-anchor="start">the control: a direction pointed at a CORNER</text>
+<text x="836" y="292" class="xs muted" text-anchor="end">returned</text>
+<line x1="392" y1="300.0" x2="842" y2="300.0" class="grid" stroke-width="1.0"/>
+<text x="392" y="317.0" class="xs" text-anchor="start">distinct corners `support` gave back</text>
+<text x="836" y="317.0" class="xs mono" text-anchor="end">1 of 8</text>
+<text x="392" y="338" class="xs muted" text-anchor="start">So the ambiguity belongs to the QUERY, not to the function: it</text>
+<text x="392" y="354" class="xs muted" text-anchor="start">appears exactly where the feature is bigger than a point —</text>
+<text x="392" y="370" class="xs t-hi" text-anchor="start">which is exactly where a manifold is needed.</text>
+<line x1="20" y1="396" x2="880" y2="396" class="grid" stroke-width="1.0"/>
+<text x="24" y="420" class="xs muted" text-anchor="start">8.5's claim stands: a convex set IS determined by its support function. But determining a set and naming one of its faces are</text>
+<text x="24" y="438" class="xs muted" text-anchor="start">different questions, and only the first one has an answer in a single point. So the interface widens by exactly one query.</text>
+<text x="24" y="460" class="xs" text-anchor="start">It did NOT need EPA's winning triangle. Its three vertices are support points, with the tie-break problem intact.</text>
+</svg>

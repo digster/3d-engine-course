@@ -1,0 +1,268 @@
+  <h2 id="fifteen">7. Fifteen candidates, and why six is not enough</h2>
+
+  <p>
+    §3 reduced the infinite search to "the face normals of the Minkowski difference". So: where do
+    those faces come from?
+  </p>
+
+  <p>
+    Slide one box around the outside of the other, keeping them touching. The set of positions its
+    centre can take is the surface of <code>A ⊖ B</code>, and there are exactly two ways to be in
+    contact while sliding freely:
+  </p>
+
+  <ol>
+    <li>
+      <strong>A face of one box is flat against something on the other.</strong> The face's plane is
+      the contact plane, and its normal is the direction to test. A box has six faces but only
+      <em>three distinct normals</em>: opposite faces differ only in sign, and <code>L</code> and
+      <code>−L</code> cast the same shadow. Three from each box, six in total.
+    </li>
+    <li>
+      <strong>An edge of one box crosses an edge of the other.</strong> Two skew lines touching at a
+      point — think of two pencils laid across each other. The contact plane here contains both edge
+      directions, so its normal is perpendicular to both, which is exactly their cross product. A box
+      has twelve edges but only <em>three distinct directions</em>, for the same reason it has three
+      distinct face normals. Three from each box gives <strong>3 × 3 = nine</strong> pairs.
+    </li>
+  </ol>
+
+  <p>
+    Six plus nine is <strong>fifteen</strong>. Figure 3 draws both cases and the arithmetic.
+  </p>
+
+  @@FIG_FIFTEEN@@
+
+  <p>
+    And that is the algorithm, complete:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      For each of the fifteen candidate directions <code>L</code>: if |t · L| &gt; r<sub>A</sub>(L)
+      + r<sub>B</sub>(L), where <code>t</code> is the offset between centres, the boxes are apart
+      and <code>L</code> proves it. If none of the fifteen says so, they overlap.
+    </p>
+  </div>
+
+  <p>
+    Nine multiply-adds per candidate, a comparison, and an early exit. It is hard to overstate how
+    unreasonable it is that this works — we are answering a question about two infinite point sets
+    by testing fifteen numbers.
+  </p>
+
+  <h3>7.1 The offset, and a subtraction that matters later</h3>
+
+  <p>
+    Notice the test is written with <code>t = c<sub>B</sub> − c<sub>A</sub></code> rather than by
+    comparing two absolute intervals. Algebraically it is the same; numerically it is not, and §11
+    is about the difference. Subtracting the centres first means the arithmetic that follows is on
+    numbers the size of the <em>boxes</em>; comparing absolute intervals means it is on numbers the
+    size of the <em>world</em>.
+  </p>
+
+  <h3>7.2 An AABB test is the same algorithm with twelve candidates deleted</h3>
+
+  <p>
+    Before the interesting case, the boring one — because it is not really a different algorithm.
+  </p>
+
+  <p>
+    Give both boxes the world's axes. Now A's three face normals and B's three face normals are the
+    same three directions, so six candidates collapse to three. And every cross product between them
+    is either zero (an axis with itself) or one of the same three axes again (<code>x × y = z</code>),
+    so the nine edge-edge candidates contribute nothing new. Three candidates, each of which is a
+    component read rather than a dot product.
+  </p>
+
+  <p>
+    That is a claim, so the harness checks it: 200,000 random AABB pairs put through the specialised
+    <code>collide(aabb, aabb)</code> and through the general <code>collide(obb, obb)</code> with
+    identity axes agree <strong>bit for bit on all 200,000</strong> — same verdict, same depth, same
+    axis, same index. Not "to within a tolerance". Identical.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The classic bug, and how often it fires.</strong> The AABB test is "the intervals
+      overlap on <em>every</em> axis". Write "on <em>some</em> axis" — which is what you get by
+      reaching for <code>||</code> when you meant <code>&amp;&amp;</code>, and which reads
+      perfectly naturally as "do they overlap anywhere?" — and on those same 200,000 pairs it is
+      wrong <strong>149,779 times, 74.9%</strong>. It reports a collision between a crate and a box
+      stacked three metres above it, because their shadows overlap in <code>x</code> and
+      <code>y</code>. The reason to quote the number is that it is not a subtle bug and it does not
+      behave like one: an engine with this mistake has <em>everything</em> colliding with
+      <em>everything</em>, which looks like a broadphase problem rather than a comparison.
+    </p>
+  </div>
+
+  <h3>7.3 Where six axes fail, built rather than found</h3>
+
+  <p>
+    Now the case this lesson exists for.
+  </p>
+
+  <p>
+    The face normals are the obvious candidates, and if you reason "a box is bounded by its faces,
+    so a gap must show up looking along a face normal" you will write six tests and ship. It is not
+    a straw man — it is a natural argument and it is wrong, and the way to see that it is wrong is
+    to construct a counterexample instead of hunting for one.
+  </p>
+
+  <p>
+    The construction is three lines, and it is the argument:
+  </p>
+
+  <ol>
+    <li>Take two long thin planks, 4.0 × 0.3 × 0.3 m, the second one turned by a generic
+        rotation — 0.7π about <code>(1, 2, 3)</code> normalised, which is 8.3 §6's rotation, chosen
+        because nothing in it is parallel or perpendicular to anything by accident.</li>
+    <li>Compute <code>L = normalise(a₀ × b₀)</code>, the cross product of one long edge from each.
+        <em>This is the direction we intend to be the separating one.</em></li>
+    <li>Put the second plank's centre at <code>L × (r<sub>A</sub>(L) + r<sub>B</sub>(L) + 0.05)</code>
+        — along that direction, just far enough to clear both shadows with 5 cm to spare.</li>
+  </ol>
+
+  <p>
+    By construction <code>L</code> separates them. The question is whether anything <em>else</em>
+    does — and Figure 4 is all fifteen candidates for exactly this configuration, straight out of
+    the harness.
+  </p>
+
+  @@FIG_CROSSED@@
+
+  <p>
+    One bar crosses the line. The six face normals report overlaps from
+    <strong>0.11772 m</strong> to <strong>3.12792 m</strong> — not marginal, not "nearly apart",
+    deeply overlapping by any reading. The single edge-edge axis <code>a₀ × b₀</code> reports a gap
+    of <strong>+0.05000 m</strong>, and re-proving it in double precision from the box data gives
+    <strong>+0.0500000</strong>.
+  </p>
+
+  <p>
+    Delete the nine cross products and this is a collision. Two planks with five centimetres of
+    daylight between them, reported as touching, by an engine that will then generate a contact,
+    solve an impulse, and shove them apart — objects visibly jumping away from each other with a gap
+    you can see.
+  </p>
+
+  <h3>7.4 The same thing, one keystroke apart</h3>
+
+  <p>
+    The <code>collide</code> demo is built around that configuration, because the argument is much
+    more convincing watched than read. Its right panel draws all fifteen candidate gaps as bars
+    against a zero line; its left panel draws the boxes, green when the test says apart and red when
+    it says touching. Pressing <strong>[F]</strong> throws away the nine edge-edge candidates and
+    keeps the six face normals.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <p>
+    Same geometry, same frame, one key. The bars do not move — the algorithm is still computing all
+    fifteen for the display — but the verdict flips, and the only bar on the right-hand side of the
+    line is the one the face-only test is not allowed to look at.
+  </p>
+
+  <h3>7.5 How often it matters, on pairs nobody chose</h3>
+
+  <p>
+    A constructed counterexample proves that six axes are <em>insufficient</em>. It says nothing
+    about how often that bites, and a fair objection to everything above is "yes, but you built
+    that". So: 200,000 random OBB pairs, random orientations, random half extents from 0.2 to 1.5 m,
+    centres scattered through a 3 m cube.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>On 200,000 random pairs</th><th>Count</th><th>Share</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Genuinely overlapping</td><td>117,583</td><td>58.8%</td></tr>
+      <tr><td>Six face axes alone say “overlapping”</td><td>123,310</td><td>61.7%</td></tr>
+      <tr><td><strong>Separated ONLY by an edge-edge axis</strong></td><td><strong>5,727</strong></td><td><strong>4.6% of what six axes called a collision</strong></td></tr>
+      <tr><td>…of which re-proved in double precision</td><td>5,727</td><td>100%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    One pair in twenty-two that a face-only test calls a collision is not one. That is not an edge
+    case; it is a steady background of objects being pushed apart that were never touching, which in
+    a game reads as jitter, as objects refusing to pass through gaps they fit through, and as a
+    character catching on scenery.
+  </p>
+
+  <p>
+    And there is a second number, which surprised me more. When boxes genuinely <em>do</em>
+    overlap, which candidate wins the minimum — which one is the shallowest way out?
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      An edge-edge axis, on <strong>58,550 of 117,583</strong> overlapping pairs — <strong>49.8%</strong>.
+    </p>
+  </div>
+
+  <p>
+    Very nearly half the contact normals in a scene of randomly oriented boxes come from a candidate
+    that the six-axis version does not have. Worth one caveat: these are <em>uniformly random</em>
+    orientations, and a real scene is not uniformly random — it is full of things resting on floors
+    and stacked squarely, where face contacts dominate. Take 49.8% as the upper end of the range and
+    4.6% as the number that survives into practice.
+  </p>
+
+  <h3>7.6 Two controls, both necessary</h3>
+
+  <p>
+    The first asks what the measurement would say if the thing being measured were <em>completely
+    fine</em>. Run the same comparison on 200,000 pairs with both boxes <strong>axis-aligned</strong>,
+    where §7.2 argued that the nine cross products contribute nothing: disagreements between
+    face-only and the full fifteen, <strong>0</strong>. If that number were not zero, the 5,727
+    above would be measuring a bug in one of the two implementations rather than a property of
+    geometry.
+  </p>
+
+  <p>
+    The second asks what it would say if the implementation were <em>completely broken</em>. We
+    ship two independent formulations of this test — the explicit one in <code>collide</code>, which
+    builds each axis and normalises it, and the matrix one in <code>overlaps</code>, which never
+    forms a cross product at all (§10.2). They were written from different derivations. On the same
+    200,000 pairs they agree <strong>200,000 / 200,000</strong>.
+  </p>
+
+  <h3>7.7 What a certificate is worth</h3>
+
+  <p>
+    That last table has a row in it that does more work than the others: <em>every one of the 5,727
+    re-proved in double precision</em>. It is worth being precise about what that means, because it
+    is the strongest form of testing available in this lesson and it is available because of the
+    shape of the answer rather than because of any cleverness in the harness.
+  </p>
+
+  <p>
+    When <code>collide</code> reports a gap it hands back the axis. Checking that claim does not
+    require re-running the search, or trusting a second implementation, or comparing against a
+    reference that might share the same bug. It requires four dot products:
+  </p>
+
+  <pre><code class="lang-cpp">double gap = |t · L| − (r_A(L) + r_B(L));      // in double, from the box data alone
+</code></pre>
+
+  <p>
+    If that is positive, the boxes are apart. Full stop — not "probably", not "the two
+    implementations agree". The axis is a <strong>proof</strong>, and the harness checks proofs
+    rather than answers. That is why §A, §D and §H each report a "certifies" count and why those
+    counts are the ones to look at first.
+  </p>
+
+  <p>
+    Overlap does not certify itself so cheaply, and the honest thing is to say so. The harness's
+    other half is a <em>witness hunt</em>: walk a 41³ grid over the first box and look for a point
+    inside the second. Finding one is a proof of overlap; not finding one proves nothing. On 365
+    overlapping pairs it found a witness for <strong>364</strong>, and the one it missed has a depth
+    of <strong>4.485e−03 m</strong> — a 4 mm overlap, sampled on a grid whose spacing is centimetres.
+    The instrument ran out of resolution, which is a different thing from the answer being wrong,
+    and reporting the depth of the miss is what lets you tell the two apart.
+  </p>

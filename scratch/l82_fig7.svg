@@ -1,0 +1,56 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l82f7-t l82f7-d">
+  <title id="l82f7-t">The one-over-root-s law that relates a world's length scale to its clock</title>
+  <desc id="l82f7-d">A dashed curve of one over the square root of s passes exactly through five measured points, crossing one when s is one. Beside it, the derivation from d equals half g t squared and the film-industry overcranking factor.</desc>
+  <defs>
+    <marker id="e-i-l82f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l82f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l82f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l82f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l82f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="40" y="30" class="sm t-hi" text-anchor="start">WHERE “ONE UNIT IS ONE METRE” STOPS BEING PEDANTRY</text>
+<rect x="60" y="74" width="330" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="60" y1="251.72727272727272" x2="390" y2="251.72727272727272" class="grid" stroke-width="0.8"/>
+<text x="52" y="255.72727272727272" class="xs mono muted" text-anchor="end">0.5</text>
+<line x1="60" y1="199.45454545454544" x2="390" y2="199.45454545454544" class="grid" stroke-width="0.8"/>
+<text x="52" y="203.45454545454544" class="xs mono muted" text-anchor="end">1</text>
+<line x1="60" y1="147.1818181818182" x2="390" y2="147.1818181818182" class="grid" stroke-width="0.8"/>
+<text x="52" y="151.1818181818182" class="xs mono muted" text-anchor="end">1.5</text>
+<line x1="60" y1="94.9090909090909" x2="390" y2="94.9090909090909" class="grid" stroke-width="0.8"/>
+<text x="52" y="98.9090909090909" class="xs mono muted" text-anchor="end">2</text>
+<line x1="133.33333333333331" y1="74" x2="133.33333333333331" y2="304" class="grid" stroke-width="0.8"/>
+<text x="133.33333333333331" y="320" class="xs mono muted" text-anchor="middle">1</text>
+<line x1="206.66666666666666" y1="74" x2="206.66666666666666" y2="304" class="grid" stroke-width="0.8"/>
+<text x="206.66666666666666" y="320" class="xs mono muted" text-anchor="middle">2</text>
+<line x1="280.0" y1="74" x2="280.0" y2="304" class="grid" stroke-width="0.8"/>
+<text x="280.0" y="320" class="xs mono muted" text-anchor="middle">3</text>
+<line x1="353.3333333333333" y1="74" x2="353.3333333333333" y2="304" class="grid" stroke-width="0.8"/>
+<text x="353.3333333333333" y="320" class="xs mono muted" text-anchor="middle">4</text>
+<text x="225.0" y="340" class="xs muted" text-anchor="middle">s — how many metres one unit is DRAWN as</text>
+<text x="14" y="189.0" class="xs muted" text-anchor="middle">×time</text>
+<path d="M 75.15,74.00 L 76.90,86.23 L 78.65,96.69 L 80.40,105.78 L 82.15,113.77 L 83.90,120.86 L 85.65,127.22 L 87.40,132.95 L 89.14,138.17 L 90.89,142.93 L 92.64,147.30 L 94.39,151.34 L 96.14,155.08 L 97.89,158.56 L 99.64,161.80 L 101.39,164.84 L 103.14,167.69 L 104.89,170.37 L 106.64,172.90 L 108.39,175.29 L 110.13,177.56 L 111.88,179.71 L 113.63,181.75 L 115.38,183.70 L 117.13,185.55 L 118.88,187.33 L 120.63,189.02 L 122.38,190.65 L 124.13,192.20 L 125.88,193.70 L 127.63,195.13 L 129.38,196.51 L 131.12,197.84 L 132.87,199.13 L 134.62,200.36 L 136.37,201.56 L 138.12,202.71 L 139.87,203.82 L 141.62,204.90 L 143.37,205.95 L 145.12,206.96 L 146.87,207.94 L 148.62,208.90 L 150.37,209.82 L 152.11,210.72 L 153.86,211.59 L 155.61,212.44 L 157.36,213.27 L 159.11,214.07 L 160.86,214.86 L 162.61,215.62 L 164.36,216.36 L 166.11,217.09 L 167.86,217.80 L 169.61,218.49 L 171.36,219.16 L 173.10,219.82 L 174.85,220.46 L 176.60,221.09 L 178.35,221.71 L 180.10,222.31 L 181.85,222.90 L 183.60,223.47 L 185.35,224.04 L 187.10,224.59 L 188.85,225.13 L 190.60,225.66 L 192.35,226.18 L 194.09,226.69 L 195.84,227.19 L 197.59,227.68 L 199.34,228.16 L 201.09,228.63 L 202.84,229.09 L 204.59,229.55 L 206.34,229.99 L 208.09,230.43 L 209.84,230.86 L 211.59,231.28 L 213.34,231.70 L 215.08,232.11 L 216.83,232.51 L 218.58,232.91 L 220.33,233.30 L 222.08,233.68 L 223.83,234.05 L 225.58,234.43 L 227.33,234.79 L 229.08,235.15 L 230.83,235.50 L 232.58,235.85 L 234.32,236.19 L 236.07,236.53 L 237.82,236.86 L 239.57,237.19 L 241.32,237.51 L 243.07,237.83 L 244.82,238.15 L 246.57,238.46 L 248.32,238.76 L 250.07,239.06 L 251.82,239.36 L 253.57,239.65 L 255.31,239.94 L 257.06,240.22 L 258.81,240.51 L 260.56,240.78 L 262.31,241.06 L 264.06,241.33 L 265.81,241.59 L 267.56,241.86 L 269.31,242.12 L 271.06,242.38 L 272.81,242.63 L 274.56,242.88 L 276.30,243.13 L 278.05,243.37 L 279.80,243.61 L 281.55,243.85 L 283.30,244.09 L 285.05,244.32 L 286.80,244.55 L 288.55,244.78 L 290.30,245.01 L 292.05,245.23 L 293.80,245.45 L 295.55,245.67 L 297.29,245.88 L 299.04,246.09 L 300.79,246.31 L 302.54,246.51 L 304.29,246.72 L 306.04,246.92 L 307.79,247.13 L 309.54,247.33 L 311.29,247.52 L 313.04,247.72 L 314.79,247.91 L 316.54,248.10 L 318.28,248.29 L 320.03,248.48 L 321.78,248.67 L 323.53,248.85 L 325.28,249.03 L 327.03,249.21 L 328.78,249.39 L 330.53,249.57 L 332.28,249.74 L 334.03,249.92 L 335.78,250.09 L 337.53,250.26 L 339.27,250.43 L 341.02,250.59 L 342.77,250.76 L 344.52,250.92 L 346.27,251.09 L 348.02,251.25 L 349.77,251.41 L 351.52,251.56 L 353.27,251.72 L 355.02,251.88 L 356.77,252.03 L 358.52,252.18 L 360.26,252.33 L 362.01,252.48 L 363.76,252.63 L 365.51,252.78 L 367.26,252.93 L 369.01,253.07 L 370.76,253.21 L 372.51,253.36 L 374.26,253.50 L 376.01,253.64 L 377.76,253.78 L 379.51,253.91 L 381.25,254.05 L 383.00,254.19 L 384.75,254.32 L 386.50,254.45 L 388.25,254.59 L 390.00,254.72" fill="none" stroke="#8f918a" stroke-width="1.6" stroke-dasharray="4 3"/>
+<circle cx="78.3" cy="94.9" r="4.5" fill="#5ac878"/>
+<circle cx="96.7" cy="156.2" r="4.5" fill="#5ac878"/>
+<circle cx="133.3" cy="199.5" r="4.5" fill="#5ac878"/>
+<circle cx="206.7" cy="230.1" r="4.5" fill="#5ac878"/>
+<circle cx="353.3" cy="251.7" r="4.5" fill="#5ac878"/>
+<line x1="60" y1="199.45454545454544" x2="390" y2="199.45454545454544" class="ink-soft" stroke-width="1.1" stroke-dasharray="2 4"/>
+<line x1="60.0" y1="362.0" x2="80.0" y2="362.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="88" y="366" class="xs" text-anchor="start">1/√s, the law</text>
+<line x1="60.0" y1="378.0" x2="80.0" y2="378.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="88" y="382" class="xs" text-anchor="start">measured, from the table</text>
+<text x="470" y="92" class="xs t-hi" text-anchor="start">WHY IT IS A SQUARE ROOT</text>
+<text x="470" y="114" class="xs mono" text-anchor="start">d = ½ g t²   ⟹   t = √(2d/g)</text>
+<text x="470" y="134" class="xs muted" text-anchor="start">Multiply every LENGTH by s and leave g alone,</text>
+<text x="470" y="152" class="xs muted" text-anchor="start">and every DURATION is multiplied by √s.</text>
+<text x="470" y="186" class="xs t-hi" text-anchor="start">WHAT THAT SOUNDS LIKE IN A GAME</text>
+<text x="470" y="208" class="xs" text-anchor="start">world modelled TOO BIG   →  floaty, moon-like</text>
+<text x="470" y="226" class="xs" text-anchor="start">world modelled TOO SMALL →  snappy, toy-like</text>
+<text x="470" y="244" class="xs muted" text-anchor="start">The symptom names the bug, if you know the law.</text>
+<text x="470" y="278" class="xs t-hi" text-anchor="start">AND WHAT FILM CREWS DO ABOUT IT</text>
+<text x="470" y="300" class="xs muted" text-anchor="start">A 1/8 scale model runs √8 = 2.8284× too fast,</text>
+<text x="470" y="318" class="xs muted" text-anchor="start">so the camera is overcranked to 67.9 fps and</text>
+<text x="470" y="336" class="xs muted" text-anchor="start">played back at 24. Same equation, other trade.</text>
+<text x="470" y="364" class="xs" text-anchor="start">Rescaling g by 1/s fixes the fall exactly — and</text>
+<text x="470" y="382" class="xs t-bad" text-anchor="start">carries no absolute tolerance with it (§8.4).</text>
+</svg>

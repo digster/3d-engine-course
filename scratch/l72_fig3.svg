@@ -1,0 +1,39 @@
+<svg viewBox="0 0 760 430" role="img" aria-labelledby="f72c-t f72c-d">
+  <title id="f72c-t">Rodrigues' formula, from the geometry</title>
+  <desc id="f72c-d">A vector v is drawn from the origin beside a teal rotation axis n. A teal arrow along the axis marks the component of v parallel to it. A dashed grey disc, centred on the tip of that parallel component and perpendicular to the axis, contains the rest. Inside the disc, a dashed amber arrow is the perpendicular component and a purple arrow is n cross v, at right angles to it and the same length. A blue arc sweeps 62 degrees from one to the rotated result, drawn as a blue arrow. A panel at the right names the three terms of the formula the picture produces.</desc>
+  <defs>
+    <marker id="e-i-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-teal-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<defs><marker id="e-amber-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-blue-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-purple-f72c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<path d="M 384.61,194.67 L 391.64,192.14 L 398.28,189.42 L 404.50,186.51 L 410.27,183.43 L 415.56,180.19 L 420.37,176.80 L 424.65,173.28 L 428.41,169.65 L 431.61,165.92 L 434.25,162.11 L 436.32,158.22 L 437.80,154.29 L 438.69,150.32 L 438.99,146.34 L 438.69,142.35 L 437.80,138.38 L 436.32,134.45 L 434.25,130.57 L 431.61,126.75 L 428.41,123.02 L 424.65,119.39 L 420.37,115.87 L 415.56,112.49 L 410.27,109.25 L 404.50,106.16 L 398.28,103.25 L 391.64,100.53 L 384.61,98.00 L 377.22,95.68 L 369.49,93.57 L 361.47,91.69 L 353.19,90.05 L 344.68,88.64 L 335.97,87.48 L 327.12,86.58 L 318.14,85.93 L 309.09,85.54 L 300.00,85.41 L 290.91,85.54 L 281.86,85.93 L 272.89,86.58 L 264.03,87.48 L 255.32,88.64 L 246.81,90.05 L 238.53,91.69 L 230.51,93.57 L 222.78,95.68 L 215.39,98.00 L 208.36,100.53 L 201.72,103.25 L 195.50,106.16 L 189.73,109.25 L 184.44,112.49 L 179.63,115.87 L 175.35,119.39 L 171.59,123.02 L 168.39,126.75 L 165.75,130.57 L 163.68,134.45 L 162.20,138.38 L 161.31,142.35 L 161.01,146.34 L 161.31,150.32 L 162.20,154.29 L 163.68,158.22 L 165.75,162.11 L 168.39,165.92 L 171.59,169.65 L 175.35,173.28 L 179.63,176.80 L 184.44,180.19 L 189.73,183.43 L 195.50,186.51 L 201.72,189.42 L 208.36,192.14 L 215.39,194.67 L 222.78,197.00 L 230.51,199.10 L 238.53,200.98 L 246.81,202.63 L 255.32,204.03 L 264.03,205.19 L 272.88,206.09 L 281.86,206.74 L 290.91,207.13 L 300.00,207.26 L 309.09,207.13 L 318.14,206.74 L 327.11,206.09 L 335.97,205.19 L 344.68,204.03 L 353.19,202.63 L 361.47,200.98 L 369.49,199.10 L 377.22,197.00 L 384.61,194.67 Z" fill="none" stroke="#8f918a" stroke-width="1.0" stroke-dasharray="3 4"/>
+<line x1="300.0" y1="288.1" x2="300.0" y2="43.1" stroke="#60ded0" stroke-width="2.0" fill="none"/>
+<line x1="300.00" y1="236.00" x2="300.00" y2="146.34" stroke="#60ded0" stroke-width="2.4" marker-end="url(#e-teal-f72c)"/>
+<line x1="300.00" y1="236.00" x2="384.61" y2="194.67" stroke="#f0961e" stroke-width="2.2" marker-end="url(#e-amber-f72c)"/>
+<line x1="300.00" y1="146.34" x2="384.61" y2="194.67" stroke="#f0961e" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-amber-f72c)"/>
+<line x1="300.00" y1="146.34" x2="410.27" y2="109.25" stroke="#9b7ede" stroke-width="1.8" marker-end="url(#e-purple-f72c)"/>
+<path d="M 384.61,194.67 L 387.56,193.65 L 390.45,192.60 L 393.27,191.51 L 396.02,190.39 L 398.71,189.23 L 401.32,188.04 L 403.85,186.83 L 406.31,185.58 L 408.70,184.31 L 411.00,183.00 L 413.22,181.67 L 415.36,180.32 L 417.42,178.94 L 419.38,177.53 L 421.27,176.11 L 423.06,174.66 L 424.76,173.19 L 426.37,171.70 L 427.89,170.19 L 429.32,168.67 L 430.65,167.13 L 431.88,165.57 L 433.02,164.00 L 434.06,162.41 L 435.00,160.82 L 435.85,159.21 L 436.59,157.60 L 437.24,155.97 L 437.78,154.34 L 438.23,152.71 L 438.57,151.06 L 438.81,149.42 L 438.95,147.77 L 438.99,146.12 L 438.92,144.48 L 438.76,142.83 L 438.49,141.19 L 438.12,139.54 L 437.65,137.91 L 437.08,136.28" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<line x1="300.00" y1="236.00" x2="437.08" y2="136.28" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-blue-f72c)"/>
+<text x="393" y="189" class="sm" text-anchor="start">v</text>
+<text x="437" y="124" class="sm" text-anchor="middle">v′</text>
+<text x="300" y="33" class="sm" text-anchor="middle">n</text>
+<text x="290" y="148" class="xs" text-anchor="end">v∥ = (n·v) n</text>
+<text x="393" y="209" class="xs" text-anchor="start">v⊥</text>
+<text x="404" y="125" class="xs" text-anchor="end">n × v</text>
+<rect x="546" y="70" width="190" height="150" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="560" y="90" class="xs muted" text-anchor="start">read off the picture</text>
+<text x="560" y="116" class="mono xs" text-anchor="start">v cos θ</text>
+<text x="560" y="130" class="xs muted" text-anchor="start">most of it leans over</text>
+<text x="560" y="154" class="mono xs" text-anchor="start">+ (n × v) sin θ</text>
+<text x="560" y="168" class="xs muted" text-anchor="start">and swings sideways</text>
+<text x="560" y="192" class="mono xs" text-anchor="start">+ n (n·v)(1 − cos θ)</text>
+<text x="560" y="206" class="xs muted" text-anchor="start">restoring the along-axis part</text>
+<text x="380.0" y="390" class="xs muted" text-anchor="middle">v⊥ and n × v are perpendicular and the SAME LENGTH, so they are a pair of axes for the disc</text>
+<text x="380.0" y="410" class="xs muted" text-anchor="middle">which turns the 3-D problem into the 2-D rotation of Lesson 1.7</text>
+</svg>

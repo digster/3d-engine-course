@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="f613a-t f613a-d">
+  <title id="f613a-t">Where each tonemap operator starts clipping</title>
+  <desc id="f613a-d">A logarithmic axis of linear value with the saturation point of four tonemap operators marked, and the engine's measured specular peak far beyond all of them.</desc>
+  <defs>
+    <marker id="e-i-f613a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f613a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f613a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f613a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f613a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Where 6.12 put the clipping point, and what is still above it</text>
+<line x1="130" y1="262" x2="640" y2="262" class="grid" stroke-width="1.0"/>
+<line x1="158.96140899300846" y1="258" x2="158.96140899300846" y2="267" class="grid" stroke-width="1.0"/>
+<text x="158.96140899300846" y="282" class="xs" text-anchor="middle">1</text>
+<line x1="255.16912719440677" y1="258" x2="255.16912719440677" y2="267" class="grid" stroke-width="1.0"/>
+<text x="255.16912719440677" y="282" class="xs" text-anchor="middle">10</text>
+<line x1="351.37684539580505" y1="258" x2="351.37684539580505" y2="267" class="grid" stroke-width="1.0"/>
+<text x="351.37684539580505" y="282" class="xs" text-anchor="middle">100</text>
+<line x1="447.5845635972034" y1="258" x2="447.5845635972034" y2="267" class="grid" stroke-width="1.0"/>
+<text x="447.5845635972034" y="282" class="xs" text-anchor="middle">1,000</text>
+<line x1="543.7922817986016" y1="258" x2="543.7922817986016" y2="267" class="grid" stroke-width="1.0"/>
+<text x="543.7922817986016" y="282" class="xs" text-anchor="middle">10,000</text>
+<line x1="640.0" y1="258" x2="640.0" y2="267" class="grid" stroke-width="1.0"/>
+<text x="640.0" y="282" class="xs" text-anchor="middle">100,000</text>
+<text x="385.0" y="304" class="xs" text-anchor="middle">linear value arriving at the resolve</text>
+<line x1="158.8" y1="57.0" x2="158.8" y2="75.0" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<text x="149.77296350685413" y="70" class="xs" text-anchor="end">clamp  0.9955</text>
+<text x="167.77296350685413" y="70" class="xs" text-anchor="start">15.78 stops above</text>
+<line x1="385.0" y1="83.0" x2="385.0" y2="101.0" stroke="#5ac878" stroke-width="2.0" fill="none"/>
+<text x="375.9760945809812" y="96" class="xs" text-anchor="end">reinhard  223.4789</text>
+<text x="393.9760945809812" y="96" class="xs" text-anchor="start">7.97 stops above</text>
+<line x1="216.4" y1="109.0" x2="216.4" y2="127.0" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<text x="207.41784822105177" y="122" class="xs" text-anchor="end">reinhard_white  3.9556</text>
+<text x="225.41784822105177" y="122" class="xs" text-anchor="start">13.79 stops above</text>
+<line x1="236.4" y1="135.0" x2="236.4" y2="153.0" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<text x="227.37433924020013" y="148" class="xs" text-anchor="end">aces  6.3774</text>
+<text x="245.37433924020013" y="148" class="xs" text-anchor="start">13.10 stops above</text>
+<rect x="236.37433924020013" y="176" width="403.62566075979987" height="74" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.12"/>
+<line x1="236.4" y1="176.0" x2="236.4" y2="262.0" stroke="#e05c5c" stroke-width="1.8" fill="none"/>
+<text x="438.18716962010006" y="198" class="xs" text-anchor="middle">above ACES's lid: 13.10 STOPS,</text>
+<text x="438.18716962010006" y="214" class="xs" text-anchor="middle">all of it code 255</text>
+<circle cx="615.7" cy="234" r="4.5" fill="#e05c5c"/>
+<text x="603.7117711183355" y="238" class="xs" text-anchor="end">the polished metal of 6.12   55,917</text>
+<text x="360.0" y="336" class="xs" text-anchor="middle">Reinhard has the HIGHEST lid and looks the worst, which is the whole paradox in one line: it spends its codes</text>
+<text x="360.0" y="354" class="xs" text-anchor="middle">reaching a white it never gets to. And the display itself holds only 11.69 stops (code 1 = 0.00030353),</text>
+<text x="360.0" y="372" class="xs" text-anchor="middle">so no curve can fix this. The constraint is not the curve.</text>
+</svg>

@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 426" role="img" aria-labelledby="l511f3-t l511f3-d">
+  <title id="l511f3-t">Debug line lifetimes across five frames, and the expiry rule</title>
+  <desc id="l511f3-d">A zero-second line spans one frame, a 0.05-second line spans four, and a two-second line spans all five. Below, the obvious expiry rule leaks when dt is zero and the shipped rule does not.</desc>
+  <defs>
+    <marker id="e-i-l511f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l511f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l511f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l511f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l511f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Three lines with three lifetimes, across five frames — and the ordering that deletes all of them.</text>
+<line x1="150" y1="44" x2="150" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="202.0" y="58" class="xs muted" text-anchor="middle">frame 0</text>
+<line x1="254" y1="44" x2="254" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="306.0" y="58" class="xs muted" text-anchor="middle">frame 1</text>
+<line x1="358" y1="44" x2="358" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="410.0" y="58" class="xs muted" text-anchor="middle">frame 2</text>
+<line x1="462" y1="44" x2="462" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="514.0" y="58" class="xs muted" text-anchor="middle">frame 3</text>
+<line x1="566" y1="44" x2="566" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="618.0" y="58" class="xs muted" text-anchor="middle">frame 4</text>
+<line x1="670" y1="44" x2="670" y2="300" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="140" y="94" class="xs mono" text-anchor="end">seconds = 0</text>
+<rect x="156" y="78" width="92" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="202.0" y="94" class="xs" text-anchor="middle">drawn once</text>
+<text x="262" y="94" class="xs muted" text-anchor="start">expired</text>
+<text x="140" y="148" class="xs mono" text-anchor="end">seconds = 0.05</text>
+<rect x="156" y="132" width="404" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="358.0" y="148" class="xs" text-anchor="middle">3 frames of time + 1</text>
+<text x="574" y="148" class="xs muted" text-anchor="start">expired</text>
+<text x="140" y="202" class="xs mono" text-anchor="end">seconds = 2.0</text>
+<rect x="156" y="186" width="508" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="410.0" y="202" class="xs" text-anchor="middle">still there when you look</text>
+<line x1="30" y1="250" x2="690" y2="250" class="grid" stroke-width="1.2"/>
+<text x="30" y="272" class="xs t-hi" text-anchor="start">THE EXPIRY RULE, AND WHY THE TEST COMES FIRST</text>
+<rect x="40" y="286" width="300" height="44" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="3 3" fill-opacity="0.1"/>
+<text x="190" y="304" class="xs mono" text-anchor="middle">remaining -= dt;  if (r &lt;= 0) drop;</text>
+<text x="190" y="322" class="xs t-bad" text-anchor="middle">dt == 0  →  a one-frame line NEVER dies</text>
+<rect x="380" y="286" width="300" height="44" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="530" y="304" class="xs mono" text-anchor="middle">if (r &lt;= 0) drop;  remaining -= dt;</text>
+<text x="530" y="322" class="xs t-ok" text-anchor="middle">dt == 0  →  drops anyway. Correct.</text>
+<text x="30" y="356" class="xs muted" text-anchor="start">dt is zero more often than you think: a paused clock, a single-frame --shot, a breakpoint. Those are exactly the</text>
+<text x="30" y="372" class="xs muted" text-anchor="start">moments you are looking hardest, and the wrong rule leaks without limit in precisely them.</text>
+<text x="30" y="400" class="xs t-hi" text-anchor="start">AND THE ORDER: queue → flush → advance. Age first and every default-lifetime line dies before it is drawn.</text>
+</svg>

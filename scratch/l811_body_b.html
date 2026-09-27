@@ -1,0 +1,309 @@
+  <h2 id="contact-row">3. A contact is a row</h2>
+
+  <p>
+    The claim of §2 is strong, and it is checkable: 8.9's normal solve is not <em>like</em> a
+    Jacobian row, it <em>is</em> one, with <code>d = n</code> and bounds <code>[0, ∞)</code>, and
+    every number it computes should come out of <code>point_row</code> and
+    <code>prepare_row</code> to rounding. The harness settles a yard of fifty crates in ten towers,
+    takes the manifolds of one step, and prepares every contact twice — once through 8.9's
+    <code>prepare_contacts</code>, once as rows built from the same normal and lever arms — at the
+    state the solver actually sees: <em>after</em> the velocity half of a step, when every resting
+    body carries this step's <code>g·h</code>.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — 8.9's contact, prepared both ways</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">  50 manifolds, 200 contact points, from a settled yard of 50 crates:
+     worst |J M^-1 J^T  vs  normal_mass|       1.858e-07 (relative)
+     worst |J M^-1 J^T  vs  tangent_mass|      1.887e-07 (relative)
+     worst |J V  vs  8.9's relative velocity|  3.448e-08 m/s
+
+  EIGHT SWEEPS OF THE WHOLE YARD, BOTH WAYS, from identical copies.
+  engine `solve_contacts` (friction off) against engine `solve_row`:
+     worst |v difference|    2.608e-08 m/s   (largest |v| 1.100e-01)
+     worst |w difference|    1.484e-07 rad/s</code></pre>
+  </div>
+
+  <p>
+    The effective masses agree to 1.9&nbsp;×&nbsp;10⁻⁷ — two different orders of the same
+    arithmetic, rounded differently — and so do the friction rows, which are the same
+    <code>point_row</code> along the two tangents. The velocities after eight full sweeps of the
+    yard agree to 2.6&nbsp;×&nbsp;10⁻⁸&nbsp;m/s on velocities of 0.11. A contact normal is a
+    Jacobian row.
+  </p>
+
+  <p>
+    Two controls, one for each half of the row. First, delete the angular halves — treat a contact
+    as a push on the centre of mass, which is the most common first mistake — and the effective
+    mass comes out wrong by between <strong>3.799×</strong> and <strong>4.032×</strong> over the
+    same 200 points. §2's worked example predicted 4.000 at a corner: 0.1 against 0.4. Second, flip
+    the row's sign. The <em>equation</em> <code>J·V = 0</code> does not care, because it is the
+    same equation; the <em>clamp</em> does, because <code>[0, ∞)</code> is now on the pulling side.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — control 2: J negated, as the yard's only contact solver for 0.5 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     J              lowest crate centre    fell by      rows with impulse
+     as derived             0.2172 m        0.0269 m      198 of 200
+     negated               -0.5395 m        0.7836 m      112 of 280
+     free fall over the same 0.5 s is g t^2 / 2 = 1.2263 m.</code></pre>
+  </div>
+
+  <p>
+    As derived, the rows hold the yard up — to 27&nbsp;mm of sink in half a second, which is the
+    cold-start sink 8.10 §4 measured, because this loop has neither warm starting nor a position
+    correction. Negated, the yard falls 784&nbsp;mm through the floor, and every row that acts is
+    <em>pulling</em> two separating surfaces together. The first draft of this control counted
+    flipped rows that pushed, and could not be made to say anything: in a stack, gravity adds the
+    same <code>g·h</code> to both crates of a crate-on-crate contact, so only the floor contacts are
+    clearly approaching and the rest are noise either side of zero. A consequence was the honest
+    instrument; a count was not.
+  </p>
+
+  <h3>What the general form costs, which refused its prediction</h3>
+
+  <p>
+    The lesson was handed a prediction: the hand-written contact is three dot products and the
+    general row is twelve multiplies, so rewriting the contact solver as rows would make it slower,
+    and should be measured before anyone tries. It was measured, both arms as harness-local copies
+    behind the same <code>noinline</code> boundary — 8.8 §7 timed a strictly more expensive hash
+    as three times faster because one arm crossed into the library and the other did not.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — per point per sweep, minimum of 400 runs</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     hand-written (8.9)   11.953 ns     76 bytes per point
+     Jacobian row          8.750 ns    108 bytes per point
+     ratio row / hand      0.732</code></pre>
+  </div>
+
+  @@FIG_COST@@
+
+  <p>
+    The row is <strong>27% faster</strong>. The prediction counted the wrong half of the work.
+    Measuring <code>J·V</code> is indeed four dot products against 8.9's two cross products and a
+    dot — twelve multiplies against fifteen, nearly a wash. The difference is in <em>applying</em>
+    the impulse. 8.9 applies it through <code>apply_impulse_pair</code>, which computes
+    <code>I⁻¹(r × J)</code> for each body on every visit: two cross products and two matrix-vector
+    products. A prepared row stores <code>I⁻¹</code> times its angular halves — the angular half of
+    <code>M⁻¹Jᵀ</code> — so applying <code>λ</code> is four scaled adds. Figure 2 counts them: 54
+    multiplies against 26. The general form is faster not because it is general but because it
+    makes a hoist 8.9 never made, and it pays 32 bytes a point for the privilege.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So why does <code>solve_contacts</code> stay hand-written?</strong> Because the saving
+      belongs to the hoist, not to the rewrite, and the hoist can be made inside 8.9's own struct —
+      one more <code>vec3</code> per lever arm — without touching anything else. And either change
+      moves, at the rounding level, every number 8.9 and 8.10 printed: every residual, every sink,
+      every sleep time. Those pages are an archive of what shipped, and their numbers should stay
+      reproducible by the lesson that owns them. The hoist is §18's third exercise, with this table
+      as the target to beat.
+    </p>
+  </div>
+
+  <h2 id="ropes">4. Rods and ropes</h2>
+
+  <p>
+    A distance joint is one point row along the line between its two anchors,
+    <code>u = (p_b − p_a)/|p_b − p_a|</code>, with <code>C = |p_b − p_a| − L</code>. If the joint's
+    two lengths are equal it is a <strong>rod</strong>: the row is bilateral, bounds
+    <code>(−∞, ∞)</code>, and it is exactly a contact with the clamp taken off. If its minimum length
+    is zero it is a <strong>rope</strong>, and the rope's row is the interesting one.
+  </p>
+
+  <p>
+    A contact keeps a separation from going <em>below</em> zero. A rope keeps a distance from going
+    <em>above</em> its length. Write the rope's constraint the way a contact is written — a quantity
+    that must stay non-negative — and it is <code>C = L − |p_b − p_a| ≥ 0</code>, whose rate is
+    <code>−u</code> along the line. So the rope's row is <code>point_row(−u)</code> with bounds
+    <code>[0, ∞)</code>: <strong>a contact turned inside out</strong>, and the minus sign is the
+    whole of the turn. The engine's code for it is the same one-sided row as a hinge limit, which is
+    §10's subject, including the speculative target that makes a slack rope catch its load without
+    overshooting.
+  </p>
+
+  <p>
+    The rope's behaviour has a sharp prediction attached, which is the reason for choosing this
+    fixture. Swing a bob on a joint of length <code>L</code> from the bottom with
+    <code>v₀² = 3.5·g·L</code> — enough to rise above the pivot, not enough to go over the top. At
+    height <code>y</code> above the pivot, energy gives <code>v² = v₀² − 2g(L + y)</code>, and the
+    joint's tension is <code>m(v²/L − g·y/L)</code>: the centripetal requirement minus the part of
+    gravity along the rope. Tension reaches zero where <code>v² = g·y</code>, which is
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ y^{*} \;=\; \frac{v_0^2 - 2gL}{3g} \;=\; \frac{3.5\,gL - 2\,gL}{3g} \;=\; \frac{L}{2} \]</span>
+    <span class="eq-plain">y* = (v0^2 - 2gL)/(3g) = L/2 above the pivot</span>
+  </div>
+
+  <p>
+    A rope goes slack there — its row's accumulated impulse hits the <code>[0, ∞)</code> bound and
+    stays — and the bob leaves the circle on a parabola. (That parabola has a small surprise in it:
+    released from <code>(√3/2, 1/2)·L</code> with <code>v² = gL/2</code> along the tangent, it reaches
+    <code>x = 0</code> at <code>t = √3·√(L)/v</code>, where <code>y = L/2 + 3L/2 − 3L = −L</code> —
+    the bob lands exactly on the <em>lowest</em> point of the circle, under the pin, and the rope
+    snaps taut again where the swing began.) A rod cannot go slack: its row's impulse
+    passes through zero and changes sign, from tension to <em>compression</em>, at exactly the same
+    height, and the bob carries on round the circle to <code>y = 3L/4</code>, where energy runs out.
+    Two different instruments — one row hitting a bound, another row changing sign — should report
+    one fact.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§B — a bob on a 1 m joint, v0^2 = 3.5 g L</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     rate      rope lets go at    rod turns at     rod peaks at   energy left
+       60 Hz          0.4134 m        0.4134 m        0.5574 m        89.87%
+      240 Hz          0.4819 m        0.4819 m        0.6990 m        97.32%
+      960 Hz          0.4956 m        0.4956 m        0.7371 m        99.32%
+     exact             0.5000 m        0.5000 m        0.7500 m      100.00%</code></pre>
+  </div>
+
+  @@FIG_ROPE@@
+
+  <p>
+    The two instruments agree with each other to four decimals at every rate: the rope lets go
+    exactly where the rod starts to push. And both disagree with the closed form at 60&nbsp;Hz, by
+    17%, which is the measurement refusing the section's claim — but it refuses in a very particular
+    way. The error has a sign (always low), it shrinks as the step shrinks (3.6% at 240&nbsp;Hz, 0.9%
+    at 960), and the last column says why: the bob reaches the release point with
+    <strong>10% less energy</strong> than it started with at 60&nbsp;Hz. Less energy, lower release.
+    Nothing about ropes did that. Something about solving a joint at the velocity level did, and it
+    is §5.
+  </p>
+
+  <h2 id="drift">5. Why a joint drifts</h2>
+
+  <p>
+    A row keeps <code>Ċ</code> on its target. It says nothing about <code>C</code>. That was
+    harmless for a contact at rest, because a resting contact's geometry does not change within a
+    step. It is not harmless for anything that turns, and the reason is one picture.
+  </p>
+
+  <p>
+    Take a bob on a rod, turning about a fixed pin. The velocity solve makes the bob's velocity
+    exactly perpendicular to the rod: the rod is neither lengthening nor shortening, <em>at this
+    instant</em>. Then the position update moves the bob by <code>v·h</code> along that velocity for
+    the whole step — along a straight line. A straight line tangent to a circle leaves the circle.
+    Pythagoras says by how much:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ r_{n+1} \;=\; \sqrt{\,r_n^2 + (v_n h)^2\,}, \qquad \delta \;=\; r_{n+1} - r_n \;\approx\; \frac{v^2 h^2}{2r} \]</span>
+    <span class="eq-plain">r(n+1) = sqrt(r(n)^2 + (v(n) h)^2); the drift is about v^2 h^2 / (2r)</span>
+  </div>
+
+  <p>
+    The small-step form has a physical reading: <code>v²/r</code> is the centripetal acceleration,
+    and <code>δ = ½·(v²/r)·h²</code> is how far the bob would have "fallen outward" in one step if the
+    rod had let go of it — which, for the duration of a position update, it has. And the next step
+    has a second consequence. The bob is now slightly outside the circle and moving along the old
+    tangent, which is no longer perpendicular to the rod; the solve removes the radial component of
+    its velocity. Removing a radial velocity leaves <code>r × v</code> alone, so
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v_{n+1}\,r_{n+1} \;=\; v_n\,r_n \qquad\text{(angular momentum about the pin, exactly)} \]</span>
+    <span class="eq-plain">v(n+1) r(n+1) = v(n) r(n): angular momentum about the pin is conserved exactly</span>
+  </div>
+
+  <p>
+    and the kinetic energy, <code>½mv²</code>, falls as <code>1/r²</code> while the rod stretches.
+    Those two lines are a recurrence that can be iterated in double precision with nothing from the
+    engine in it, and compared against the engine one step at a time.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — gravity off, a 1 kg bob on a 1 m rod at 5 m/s, no correction</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     step     r predicted     r measured    |v| measured    r x v / L0
+        1        1.003466       1.003466        5.000000     1.0000000
+        2        1.006897       1.006897        4.982728     1.0000000
+       10        1.033151       1.033151        4.854474     0.9999999
+       30        1.091214       1.091214        4.593369     0.9999997
+       60        1.163953       1.163953        4.303886     1.0000000
+
+     first step's drift     0.003466 m measured, 0.003466 predicted
+     v^2 h^2 / (2L)          0.003472 m   (the small-step form)
+     worst |r - recurrence| / r over 60 steps     1.654e-07
+     worst |r x v| drift over 60 steps             2.861e-07
+     kinetic energy after 1 s    0.740938 of the start; (L/r)^2 = 0.740937</code></pre>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> At 5&nbsp;m/s on a 1&nbsp;m rod at 60&nbsp;Hz, <code>v·h = 0.08333 m</code>,
+    so the first step lands at <code>√(1 + 0.006944) = 1.003466 m</code> — measured 1.003466. Sixty
+    such steps stretch the rod by <strong>16%</strong> in one second, and the recurrence tracks every
+    one of them to 1.7&nbsp;×&nbsp;10⁻⁷. The energy after a second is 0.740938 of the start against a
+    predicted 0.740937 — and the first draft of that check missed by 0.4%, because it paired the
+    velocity at the end of a step with the <em>final</em> radius. The velocity a step ends with was
+    solved at the radius the step <em>started</em> with, one drift earlier. An instrument that reads
+    two quantities from different instants is an instrument with an error of one step in it.
+  </p>
+
+  @@FIG_DRIFT@@
+
+  <h3>For a body, only the orbit is projected</h3>
+
+  <p>
+    A bead on a rod loses <code>(ω·h)²</code> of its kinetic energy per step — that is what
+    <code>1/r²</code> amounts to, one step at a time, with <code>ω = v/r</code>. A rigid body on a
+    pin is a bead <em>plus a spin</em>: its centre orbits the pin, and it also turns about its own
+    centre. The point constraint's projection touches only the orbit. So the energy it removes
+    should be <code>(ω·h)²</code> times the fraction of the kinetic energy that is <em>orbital</em>,
+    and that fraction has a name older than this course. The body's inertia about the pin is
+    <code>I_cm + m·d²</code> by the parallel-axis theorem 8.3 derived; the orbit is the
+    <code>m·d²</code> part; so
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \rho \;=\; \frac{m\,d^2}{I_{\text{cm}} + m\,d^2}, \qquad \frac{\Delta E}{E} \;=\; \rho\,(\omega h)^2 \ \text{per step} \]</span>
+    <span class="eq-plain">rho = m d^2 / (I_cm + m d^2); the fraction of energy lost per step is rho (w h)^2</span>
+  </div>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — a 1.0 × 2.0 × 0.1 m slab spun at 4 rad/s about a pin d from its centre</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     pin            rho      loss per step     rho (w h)^2     ratio
+     socket, d/4   0.4261        0.001778        0.001779    0.9994
+     socket, d/2   0.7481        0.002986        0.002987    0.9997
+     socket, d     0.9224        0.003597        0.003598    0.9998
+     hinge,  d/4   0.4261        0.001778        0.001779    0.9994
+     hinge,  d/2   0.7481        0.002986        0.002987    0.9997
+     hinge,  d     0.9224        0.003597        0.003598    0.9998</code></pre>
+  </div>
+
+  <p>
+    To 0.1% on six configurations, under both joint kinds. <code>lever_ratio</code> computes
+    <code>ρ</code> and <code>projection_loss_per_step</code> computes the loss, and this is the first
+    of three appearances <code>ρ</code> makes in this lesson. At 60&nbsp;Hz it is not small: a joint
+    turning at 5&nbsp;rad/s has <code>ω·h = 0.083</code>, and a point-like body on it loses 0.7% of
+    its energy <em>every step</em>. That is what took 10% out of §4's bob before it reached the
+    release point.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is not a bug, and there is no line of code to fix.</strong> It is what a
+      velocity-level constraint <em>is</em>: the solve is exact at the start of the step and the
+      motion is a straight line for the rest of it. Every sequential-impulse engine has it, and the
+      honest statement is that it is an energy loss of <code>ρ(ωh)²</code> per step. That is second
+      order in the step, and a second has <code>1/h</code> steps in it, so the loss over any fixed
+      time is <em>first</em> order: quarter the step and you quarter it, which is what §4's release
+      height did (17% low at 60&nbsp;Hz, 3.6% at 240, 0.9% at 960) — and why §14 ends on
+      sub-stepping. It reads as damping, and a game can live with damping. What §6 asks
+      is whether the position correction makes it better or worse.
+    </p>
+  </div>
+
+  <p>
+    The control is a rod that does not turn: the same rod between two bodies moving
+    <em>together</em> at 5&nbsp;m/s. Same speed, no curvature, and after a second its length error is
+    <strong>0.000e+00&nbsp;m</strong> — exactly zero. The drift is not a property of speed. It is a
+    property of turning.
+  </p>

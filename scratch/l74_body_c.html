@@ -1,0 +1,410 @@
+  <h2 id="commute">7. The one price, made visible</h2>
+
+  <p>
+    "Quaternions do not commute" is a sentence. <code>gimbal</code>'s new <kbd>C</kbd> mode turns
+    it into a picture and a number, and the picture is better than the number.
+  </p>
+
+  <p>
+    Take two turns of the same size <code>φ</code>, one about <code>+Y</code> and one about
+    <code>+X</code>, and perform them in both orders. There is exactly one parameter, so the whole
+    family is one slider — and it is the case everybody already knows by heart, because it is the
+    book you turn twice on a desk.
+  </p>
+
+  <h3>7.1 Derived first, so the measurement has something to disagree with</h3>
+
+  <p>
+    With <code>c = cos(φ/2)</code> and <code>s = sin(φ/2)</code>, §4.1's formula gives the two
+    composites directly, and they are startlingly close together:
+  </p>
+
+  <div class="eq">\[
+    \begin{aligned}
+      q_y(\varphi)\,q_x(\varphi) &amp;= \big(c^2,\;\; cs\,\hat x + cs\,\hat y - s^2 \hat z\big) \\
+      q_x(\varphi)\,q_y(\varphi) &amp;= \big(c^2,\;\; cs\,\hat x + cs\,\hat y + s^2 \hat z\big)
+    \end{aligned}
+  \]</div>
+
+  <p>
+    Identical but for the sign of the <code>z</code> component — which is the cross product, and
+    nothing else, exactly as §4.2 said. Their four-component dot product is therefore
+    <code>c⁴ + 2c²s² − s⁴</code>, and since the angle between two unit quaternions is twice the
+    arccosine of that (§8.2 explains the factor of two), the gap is
+  </p>
+
+  <div class="eq">\[ \text{gap}(\varphi) \;=\; 2\arccos\big|\,c^4 + 2c^2s^2 - s^4\,\big| \]</div>
+
+  <p>
+    At <code>φ = 90°</code>, <code>c = s = 1/\sqrt2</code>, so <code>c² = s² = 1/2</code> and the
+    dot product is <code>1/4 + 1/2 − 1/4 = 1/2</code>. So
+  </p>
+
+  <div class="eq">\[ \text{gap}(90°) \;=\; 2\arccos(1/2) \;=\; 2 \times 60° \;=\; 120° \]</div>
+
+  <p class="eq-plain">
+    <strong>Two perpendicular quarter-turns, performed in the two orders, leave you 120° apart.</strong>
+    Exactly 120°, with no rounding anywhere in the derivation.
+  </p>
+
+  <h3>7.2 Then measured, three ways</h3>
+
+  <pre>gimbal: commute 90.00 deg -&gt; gap 120.0000 deg
+gimbal:   matrix 120.0000, closed form 120.0000</pre>
+
+  <p>
+    Three routes to one number: the quaternion metric <code>angle_between</code>, the matrix metric
+    <code>angle_between_rotations</code> that Lesson 7.1 wrote and that has never heard of a
+    quaternion, and the closed form above. They share no code. A single route reporting 120° is a
+    hope; three agreeing is a fact.
+  </p>
+
+  <h3>7.3 And the picture is the better half</h3>
+
+  <p>
+    The first draft of this mode drew only the two <em>destinations</em> — two aircraft and an arc
+    between them. That is an honest picture of a fact nobody disputes, and it cannot show
+    <em>why</em> they differ. Drawing each order as the two arcs it actually is fixes that for
+    free:
+  </p>
+
+  @@FIG_COMMUTE@@
+
+  <p>
+    The four arcs form a quadrilateral that <strong>fails to close</strong>. Same two turns, same
+    two axes, same starting nose; the only difference is which one you do first, and the journeys
+    end 120° apart. It is the same picture as walking a mile south, a mile east, a mile north and a
+    mile west on a sphere and not arriving home — and it is the same phenomenon, which is why
+    people who have met differential geometry call the gap <em>holonomy</em> and everyone else
+    calls it "rotations don't commute".
+  </p>
+
+  <div class="callout">
+    <span class="label">Try it</span>
+    <p>
+      Press <kbd>C</kbd> and watch the gap open from nothing. The sweep runs <code>φ</code> from 0
+      to 180° and back, and the reason it goes back as well as out is that the interesting part is
+      not the 120° at the far end — it is that the gap is present at <em>every</em> angle but zero,
+      growing like <code>φ²</code> at first. Non-commutativity is not a threshold effect waiting at
+      large angles. A pair of 5° turns do not commute either; they miss by 0.44°, which is small
+      and is not nothing, and over a few thousand frames of integrating angular velocity it is
+      Module 8's problem.
+    </p>
+  </div>
+
+  <h2 id="cover">8. The double cover</h2>
+
+  <p>
+    §5.3 produced a sign that the derivation could not determine. This section is that observation,
+    promoted to a property, measured, and then turned into the one API decision it forces.
+  </p>
+
+  <h3>8.1 Why <code>q</code> and <code>−q</code> are the same rotation, exactly</h3>
+
+  <p>
+    Look at the sandwich: <code>q v q̄</code>. Replace <code>q</code> with <code>−q</code>. The
+    conjugate of <code>−q</code> is <code>−q̄</code>, so the expression becomes
+    <code>(−q) v (−q̄)</code>, and the two minus signs multiply to <code>+1</code>.
+  </p>
+
+  <div class="eq">\[ (-q)\,v\,\overline{(-q)} \;=\; (-1)(-1)\,q\,v\,\bar q \;=\; q\,v\,\bar q \]</div>
+
+  <p>
+    <strong>The sandwich is quadratic in <code>q</code></strong> — every term carries one factor
+    from each side — so a global sign cannot survive it. This is not "the same to within floating
+    point"; it is the same sequence of operations on the same magnitudes, and the measurement says
+    so:
+  </p>
+
+  <pre>D. HALF ANGLES AND THE DOUBLE COVER
+   worst |M(q) - M(-q)| over 20000:   0.000e+00
+  [PASS] D.1  q and -q are the same rotation, bitwise</pre>
+
+  <p>
+    <code>0.000e+00</code>, not <code>1e-7</code>. Over 20,000 random rotations, the two matrices
+    are bit-identical.
+  </p>
+
+  <p>
+    So the map from unit quaternions to rotations is <strong>two-to-one</strong>. Every rotation
+    has exactly two quaternions, differing by a sign, and no implementation can recover which one
+    you started from. That is what "double cover" names, and Lesson 7.3 predicted it three lessons
+    early from the mirrors: <code>R</code> and <code>−R</code> are different pairs of mirrors that
+    generate the same turn, because a rotation remembers the <em>angle between</em> its mirrors and
+    not <em>which</em> mirrors.
+  </p>
+
+  <h3>8.2 The bug you get if you forget</h3>
+
+  <p>
+    Here is the one place it must be handled, and it is the single most common quaternion bug in
+    shipped code. The angle between two orientations is
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline float angle_between(quat a, quat b)
+{
+    const float d = a.w * b.w + dot(a.v, b.v);
+    return 2.0f * std::acos(std::clamp(std::fabs(d), 0.0f, 1.0f));
+}</code></pre>
+
+  <p>
+    Two things in that body deserve attention. The first is that the real part of
+    <code>q̄ₐ q_b</code> is <em>exactly</em> the four-component dot product of <code>a</code> and
+    <code>b</code> — one of the small miracles of this algebra, and the reason every slerp
+    implementation you will ever read starts with a dot product. The second is the
+    <code>std::fabs</code>, and it is the double cover:
+  </p>
+
+  <pre>   angle_between(q, -q):    0.0000 deg
+   with the fabs removed: 360.0000 deg
+  [PASS] D.2  CONTROL: dropping the fabs reports 360 deg</pre>
+
+  <div class="callout warn">
+    <span class="label">Symptom → cause → fix</span>
+    <p>
+      <strong>Symptom:</strong> a character occasionally spins all the way round between two
+      keyframes that look adjacent in the authoring tool.<br>
+      <strong>Cause:</strong> a metric or a blend that treats <code>q</code> and <code>−q</code> as
+      far apart. The two poses <em>are</em> the same orientation; the two quaternions are
+      antipodal.<br>
+      <strong>Fix:</strong> take the absolute value of the dot product, or negate one input when
+      the dot product is negative. Lesson 7.5 pays for this properly — the same sign choice, made
+      once, is what makes slerp take the short way round.
+    </p>
+  </div>
+
+  <h3>8.3 Two full turns, on a dial</h3>
+
+  <p>
+    The <code>720°</code> business is usually presented as a curiosity about belts and coffee cups.
+    It is much more concrete than that. Turn an object steadily about one axis and watch
+    <code>w = cos(θ/2)</code>:
+  </p>
+
+  <pre>   turn      w        |v|     pose vs start
+      0  +1.00000  0.00000     0.0000 deg
+     90  +0.70711  0.70711    90.0000 deg
+    180  -0.00000  1.00000   180.0000 deg
+    270  -0.70711  0.70711    90.0000 deg
+    360  -1.00000  0.00000     0.0000 deg
+    450  -0.70711  0.70711    90.0000 deg
+    540  +0.00000  1.00000   180.0000 deg
+    630  +0.70711  0.70711    90.0000 deg
+    720  +1.00000  0.00000     0.0000 deg
+  [PASS] D.3  360 deg gives w = -1, 720 deg gives w = +1</pre>
+
+  <p>
+    Read the <code>360</code> row across. <strong>The pose is 0.0000° from where it started — the
+    object is home — and <code>w</code> is <code>−1</code>, which is as far from home as a unit
+    quaternion can get.</strong> It takes a second lap to bring both back together.
+  </p>
+
+  <p>
+    <code>gimbal</code>'s <kbd>D</kbd> mode puts both journeys on screen at once. The craft turns;
+    beside it a dial plots <code>(w, v·n̂)</code>, which is <code>(cos(θ/2), sin(θ/2))</code> and
+    therefore a point going round a circle at exactly half the craft's rate:
+  </p>
+
+  @@FIG_COVER@@
+
+  <p>
+    This is the direct sequel to Lesson 7.3's Figure 6, where the gold rotor arrow moved at half
+    the rate of the teal result arrow for as long as you held the key. Same gag, one more imaginary
+    unit, and for the same reason: the object is the square root of the rotation.
+  </p>
+
+  <p>
+    A small implementation note that is really a drawing note: the dial is built in the plane
+    <em>facing the camera</em> rather than in a fixed world plane. The first version drew it in the
+    <code>x</code>–<code>y</code> plane, where it appeared as an ellipse from the demo's camera, and
+    a dial whose angles cannot be read with a protractor held against the screen defeats its own
+    purpose. Lesson 7.3's figures had that property for free, because they were in the plane.
+  </p>
+
+  <h3>8.4 Is the double cover a problem?</h3>
+
+  <p>
+    Almost never, and it is occasionally a feature. §D's other two checks make the point:
+  </p>
+
+  <pre>   quat::i() is a turn of 180.0 deg
+  [PASS] D.4  quat::i() is a half-turn, not a quarter
+   quarter turn about x = (0.707107, 0.707107, 0, 0)
+  [PASS] D.5  a quarter turn has w = cos(45 deg)</pre>
+
+  <p>
+    And <code>axis_angle_from_quat</code> deliberately returns an angle in <code>[0, 2π)</code>
+    rather than <code>[0, π]</code>, because a quaternion genuinely <em>distinguishes</em> "turn
+    350° about <code>n̂</code>" from "turn 10° about <code>−n̂</code>", which a rotation matrix
+    cannot. That is exactly the information an animation system needs in order to take the long way
+    round on purpose — a turntable, a winding mechanism, a character that must pirouette rather than
+    snap. The double cover being useful rather than annoying.
+  </p>
+
+  <h2 id="extract">9. Extraction: four candidates, and no bad case</h2>
+
+  <p>
+    Going from a quaternion to a matrix is three calls to <code>rotate</code> — column 0 is
+    <code>rotate(q, x̂)</code> and so on, the definition of a matrix this course has used since
+    Lesson 2.5. Going the other way is the interesting direction, and it is where the fourth
+    component pays a dividend nobody advertises.
+  </p>
+
+  <h3>9.1 The naive route, and where it dies</h3>
+
+  <p>
+    The trace of a rotation matrix built from a unit quaternion is <code>4w² − 1</code>, so
+  </p>
+
+  <div class="eq">\[ w \;=\; \tfrac12\sqrt{1 + \operatorname{tr} R}, \qquad
+     x = \frac{r_{21} - r_{12}}{4w}, \quad y = \frac{r_{02} - r_{20}}{4w}, \quad z = \frac{r_{10} - r_{01}}{4w} \]</div>
+
+  <p>
+    Four lines, correct, and it is what almost every first implementation looks like. It divides by
+    <code>4w</code>, and <code>w = cos(θ/2)</code>, so <strong>as the rotation approaches a
+    half-turn it divides by nearly nothing</strong>, and at exactly 180° it divides by zero and
+    loses the axis entirely.
+  </p>
+
+  <h3>9.2 The fix is Lesson 7.2's fix, which is why they are taught in this order</h3>
+
+  <p>
+    Lesson 7.2 hit exactly this shape and solved it by <strong>pivoting on the largest of three
+    squared components</strong>, so that it never divided by something near zero. The three squares
+    sum to 1, so the largest is at least <code>1/3</code> and the divisor at least
+    <code>1/\sqrt3</code>. That was good but not unconditional, and 7.2 had to derive a crossover
+    at <code>tan(θ/2) = \sqrt3</code>, i.e. 120°, between two routes.
+  </p>
+
+  <p>
+    Here there are <em>four</em> squares to pivot on, and each is a trace-like combination of the
+    diagonal:
+  </p>
+
+  <div class="eq">\[
+    \begin{aligned}
+      4w^2 &amp;= 1 + r_{00} + r_{11} + r_{22} \qquad &amp; 4x^2 &amp;= 1 + r_{00} - r_{11} - r_{22} \\
+      4y^2 &amp;= 1 - r_{00} + r_{11} - r_{22} \qquad &amp; 4z^2 &amp;= 1 - r_{00} - r_{11} + r_{22}
+    \end{aligned}
+  \]</div>
+
+  <p>
+    Add the four. The diagonal terms cancel in pairs — <code>r₀₀</code> appears twice with a plus
+    and twice with a minus, and so does each of the others — leaving
+  </p>
+
+  <div class="eq">\[ 4w^2 + 4x^2 + 4y^2 + 4z^2 \;=\; 4 \]</div>
+
+  <p>
+    which is just <code>|q| = 1</code> restated, and is the whole argument:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Four numbers summing to 4 leave the largest at least 1</span>
+    <p>
+      So the divisor <code>2\sqrt{\text{largest}}</code> is always at least 2, and
+      <strong>this routine has no bad case anywhere on the range</strong>. No crossover to derive.
+      No threshold to tune. No second route. Four candidates instead of three is what buys that —
+      and four candidates is precisely what having a fourth component <em>means</em>.
+    </p>
+  </div>
+
+  <h3>9.3 Measured, both routes, across the whole range</h3>
+
+  <pre>E. EXTRACTION
+   worst |sum of candidates - 4|:     4.768e-07
+   smallest pivot seen:              1.038415
+   pivot chosen: w 11225  x 2943  y 2974  z 2858
+  [PASS] E.1  the four candidates sum to 4, pivot &gt;= 1
+   angle    Shepperd      naive
+      0.00  2.544e-14  2.544e-14
+      1.00  8.665e-08  8.665e-08
+     45.00  3.443e-06  3.443e-06
+     90.00  6.750e-07  6.750e-07
+    120.00  1.207e-06  4.978e-06
+    170.00  1.131e-05  1.559e-04
+    179.00  2.386e-07  2.321e-04
+    179.99  8.886e-06  1.800e+02
+    180.00  8.939e-06  1.800e+02
+  [PASS] E.2  Shepperd round-trips everywhere, naive does not</pre>
+
+  @@FIG_EXTRACT@@
+
+  <p>
+    The two routes are indistinguishable up to about 120°, which is the region a naive
+    implementation is tested in and the region it ships from. Past that the naive route degrades,
+    and at 179.99° it is off by <strong>180 degrees</strong> — not a precision loss, a completely
+    different orientation. At exactly 180° it returns the identity.
+  </p>
+
+  <p>
+    The method is named after Stanley Shepperd, whose 1978 note in the <em>Journal of Guidance and
+    Control</em> is the usual citation. It is a page long and it is worth reading after this
+    section, because it arrives at the same four candidates from the same argument.
+  </p>
+
+  <h3>9.4 A prediction the measurement refused</h3>
+
+  <p>
+    §G.3 was written to make a claim that turned out to be false, and the false version is more
+    instructive than the true one would have been.
+  </p>
+
+  <p>
+    The prediction: extracting an <em>axis</em> from a quaternion should be better conditioned at
+    small turns than extracting it from a matrix, because <code>|v| = sin(θ/2)</code> is a quantity
+    <em>of the size of the answer</em>, whereas the matrix route divides by <code>2 sin θ</code>
+    formed as a difference of near-equal entries. Lesson 7.2 measured that difference costing an
+    axis half a degree at <code>θ = 10⁻⁵</code>.
+  </p>
+
+  <p>
+    Feed both routes a matrix carrying <code>10⁻⁷</code> of absolute error in every entry — the same
+    magnitude 7.2 used, so the two lessons' numbers are comparable — and measure each against the
+    axis the matrix was <em>built</em> from:
+  </p>
+
+  <pre>   turn      matrix err    quat err
+      0.05   3.279e-03   3.281e-03
+      1.00   2.464e-04   2.441e-04
+     45.00   1.025e-05   8.538e-06
+    119.00   3.415e-06   4.830e-06
+    121.00   5.123e-06   1.093e-05
+    170.00   8.365e-06   7.636e-06
+    179.90   5.123e-06   3.818e-06
+   worst: matrix 3.279e-03, quat 3.281e-03
+   ratio at 0.05 deg: 1.0007
+  [PASS] G.3  the two extractions are equally conditioned</pre>
+
+  <div class="callout warn">
+    <span class="label">Why the prediction was wrong, and it is worth more than the prediction</span>
+    <p>
+      <code>quat_from_rotation</code>'s <em>input is a matrix</em>. At a small turn it pivots on
+      <code>w</code>, and the three vector components then come off exactly the same antisymmetric
+      differences the matrix route uses. <strong>The information was already gone before either
+      route ran.</strong> A quaternion's better conditioning is a property of <em>holding</em> one,
+      not of <em>extracting</em> one, and Lesson 7.2's hole at <code>θ = 0</code> is a hole in the
+      matrix that no extraction can patch.
+    </p>
+    <p>
+      So what the four-candidate pivot actually buys is <em>not accuracy</em>. It is the absence of
+      a decision — no crossover, no threshold, no second route, and no failure at exactly
+      <code>π</code>, which the naive quaternion route does have and §E.2 measures at 180° of error.
+      That is a real and different benefit, and stating it correctly is worth more than the
+      plausible claim the check was written to confirm.
+    </p>
+  </div>
+
+  <h3>9.5 Two more controls</h3>
+
+  <pre>   worst round trip over 20000:      3.331e-05 deg
+  [PASS] E.3  matrix -&gt; quat -&gt; matrix is exact
+   worst |q - +/-extract(M(q))|:      1.192e-07
+  [PASS] E.4  CONTROL: the components come back, up to sign</pre>
+
+  <p>
+    <code>E.3</code> would pass trivially on a routine that happened to return something whose
+    matrix is the identity for an identity input, so <code>E.4</code> starts from a
+    <em>known</em> quaternion, builds its matrix, extracts, and demands the components back — up
+    to sign, because §8.1 proved no implementation can do better than that.
+  </p>

@@ -1,0 +1,261 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l85f6-t l85f6-d">
+  <title id="l85f6-t">Four candidates cover a triangle's seven Voronoi regions, and the textbook shortcut that decides between them fails on slivers.</title>
+  <desc id="l85f6-d">Left, a triangle with the origin inside it, the three clamped-edge candidates marked in amber and dashed lines drawn to them. Right, the same failure one dimension down: a segment with the origin off to one side, an amber arrow to the true closest point on the segment and a red arrow to the foot of the perpendicular on the infinite line, which is nearer and wrong. A table gives the measured failure counts on fat and sliver triangles.</desc>
+  <defs>
+    <marker id="e-i-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-purple-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-amber-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l85f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The simplex solver: compute every candidate, or decide which one to compute.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+8
+"
+ 
+y
+=
+"
+4
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+2
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+1
+8
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+7
+2
+"
+ 
+y
+=
+"
+4
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+2
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+1
+8
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="18" y="64" class="xs muted" text-anchor="start">1 · four candidates cover all seven regions</text>
+<text x="482" y="64" class="xs muted" text-anchor="start">2 · and deciding goes wrong exactly where GJK lives</text>
+<path d="M 104.00,265.40 L 266.40,287.80 L 210.40,131.00 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<circle cx="104.0" cy="265.4" r="3.0" fill="#8f918a"/>
+<text x="90.0" y="269.4" class="xs muted" text-anchor="end">a</text>
+<circle cx="266.4" cy="287.8" r="3.0" fill="#8f918a"/>
+<text x="280.4" y="291.8" class="xs muted" text-anchor="start">b</text>
+<circle cx="210.4" cy="131.0" r="3.0" fill="#8f918a"/>
+<text x="224.4" y="135.0" class="xs muted" text-anchor="start">c</text>
+<line x1="182.0" y1="215.0" x2="194.0" y2="215.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="188.0" y1="209.0" x2="188.0" y2="221.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<circle cx="179.6" cy="275.8" r="3.2" fill="#f0961e"/>
+<line x1="188.0" y1="215.0" x2="179.6098016336056" y2="275.8289381563594" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<circle cx="234.5" cy="198.4" r="3.2" fill="#f0961e"/>
+<line x1="188.0" y1="215.0" x2="234.47239819004525" y2="198.4027149321267" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<circle cx="160.9" cy="193.5" r="3.2" fill="#f0961e"/>
+<line x1="188.0" y1="215.0" x2="160.89050160085378" y2="193.53831376734257" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="188.0" y="306" class="xs muted" text-anchor="middle">the origin is inside, so the interior candidate wins at 0</text>
+<text x="188.0" y="324" class="xs muted" text-anchor="middle">and the three clamped edges are the amber points</text>
+<text x="188.0" y="346" class="xs muted" text-anchor="middle">a clamped edge already contains its two endpoints, so three of them</text>
+<text x="188.0" y="360" class="xs muted" text-anchor="middle">cover all six boundary regions</text>
+<line x1="633.2" y1="151.3" x2="706.7" y2="108.8" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<line x1="567.9" y1="189.0" x2="731.8" y2="94.3" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<line x1="570.0" y1="196.0" x2="582.0" y2="196.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="576.0" y1="190.0" x2="576.0" y2="202.0" stroke="#5ac878" stroke-width="1.6" fill="none"/>
+<line x1="576.00" y1="196.00" x2="633.19" y2="151.28" stroke="#f0961e" stroke-width="2.0" marker-end="url(#e-amber-l85f6)"/>
+<line x1="576.00" y1="196.00" x2="570.94" y2="187.24" stroke="#e05c5c" stroke-width="2.0" marker-end="url(#e-red-l85f6)"/>
+<circle cx="633.2" cy="151.3" r="3.6" fill="#f0961e"/>
+<circle cx="570.9" cy="187.2" r="3.6" fill="#e05c5c"/>
+<text x="627.188" y="131.28199999999998" class="xs t-hi" text-anchor="end">nearest point OF the simplex: 1.252 m</text>
+<text x="580.9415384054928" y="207.24443874284074" class="xs" text-anchor="start">foot on its LINE: 0.174 m</text>
+<text x="482" y="254" class="xs muted" text-anchor="start">A mis-selected region returns the foot of the perpendicular on</text>
+<text x="482" y="270" class="xs muted" text-anchor="start">the simplex's own affine hull, which is NEARER than the simplex</text>
+<text x="482" y="286" class="xs muted" text-anchor="start">is. Measured on 200,000 triangles each:</text>
+<text x="482" y="310" class="xs muted" text-anchor="start">textbook answer beats ours</text>
+<text x="836" y="310" class="xs muted" text-anchor="end">count</text>
+<line x1="482" y1="318.0" x2="842" y2="318.0" class="grid" stroke-width="1.0"/>
+<text x="482" y="334.0" class="xs" text-anchor="start">fat, origin anywhere</text>
+<text x="836" y="334.0" class="xs mono" text-anchor="end">3</text>
+<text x="482" y="350.0" class="xs" text-anchor="start">slivers, origin 10 µm–10 mm away</text>
+<text x="836" y="350.0" class="xs mono" text-anchor="end">1,048</text>
+<text x="482" y="366.0" class="xs" text-anchor="start">worst relative on a sliver</text>
+<text x="836" y="366.0" class="xs mono" text-anchor="end">14.5%</text>
+</svg>

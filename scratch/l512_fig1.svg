@@ -1,0 +1,60 @@
+<svg viewBox="0 0 720 364" role="img" aria-labelledby="l512f1-t l512f1-d">
+  <title id="l512f1-t">Five demo programs against the engine boundary</title>
+  <desc id="l512f1-d">The engine library on the left with eight subsystems, the Lesson 5.1 boundary as a dashed line, and six programs on the right. Five were written to demonstrate a subsystem by the person who had just built it; collector, highlighted, is a game and uses all of them.</desc>
+  <defs>
+    <marker id="e-i-l512f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l512f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l512f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l512f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l512f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Six programs on one public API, and what each was written to prove.</text>
+<rect x="24" y="48" width="200" height="244" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="124" y="68" class="sm mono" text-anchor="middle">engine/</text>
+<text x="124" y="84" class="xs muted" text-anchor="middle">a static library</text>
+<rect x="40" y="104" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="117" class="xs" text-anchor="middle">platform / app</text>
+<rect x="40" y="127" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="140" class="xs" text-anchor="middle">asset store</text>
+<rect x="40" y="150" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="163" class="xs" text-anchor="middle">handles + pools</text>
+<rect x="40" y="173" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="186" class="xs" text-anchor="middle">ECS + hierarchy</text>
+<rect x="40" y="196" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="209" class="xs" text-anchor="middle">action map</text>
+<rect x="40" y="219" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="232" class="xs" text-anchor="middle">debug lines + UI</text>
+<rect x="40" y="242" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="255" class="xs" text-anchor="middle">software renderer</text>
+<rect x="40" y="265" width="168" height="18" rx="2" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="124" y="278" class="xs" text-anchor="middle">SDL_GPU renderer</text>
+<line x1="250" y1="44" x2="250" y2="300" class="ink" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="250" y="36" class="xs muted" text-anchor="middle">the boundary (5.1)</text>
+<text x="250" y="312" class="xs muted" text-anchor="middle">include path, not style guide</text>
+<rect x="290" y="52" width="404" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="300" y="65" class="xs mono" text-anchor="start">sandbox</text>
+<text x="300" y="77" class="xs muted" text-anchor="start">pre-refactor; owns its own loop</text>
+<line x1="250" y1="67" x2="286" y2="67" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l512f1)"/>
+<rect x="290" y="94" width="404" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="300" y="107" class="xs mono" text-anchor="start">pong</text>
+<text x="300" y="119" class="xs muted" text-anchor="start">Module 1's game, relocated</text>
+<line x1="250" y1="109" x2="286" y2="109" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l512f1)"/>
+<rect x="290" y="136" width="404" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="300" y="149" class="xs mono" text-anchor="start">hello_cube</text>
+<text x="300" y="161" class="xs muted" text-anchor="start">the smallest proof: one cube</text>
+<line x1="250" y1="151" x2="286" y2="151" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l512f1)"/>
+<rect x="290" y="178" width="404" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="300" y="191" class="xs mono" text-anchor="start">ecs_swarm</text>
+<text x="300" y="203" class="xs muted" text-anchor="start">the ECS, by the person who built it</text>
+<line x1="250" y1="193" x2="286" y2="193" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l512f1)"/>
+<rect x="290" y="220" width="404" height="30" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="300" y="233" class="xs mono" text-anchor="start">gltf_view</text>
+<text x="300" y="245" class="xs muted" text-anchor="start">the importer, ditto</text>
+<line x1="250" y1="235" x2="286" y2="235" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l512f1)"/>
+<rect x="290" y="262" width="404" height="30" rx="3" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<text x="300" y="275" class="xs mono t-hi" text-anchor="start">collector</text>
+<text x="300" y="287" class="xs muted" text-anchor="start">a GAME. nothing it needs was built for it</text>
+<line x1="250" y1="277" x2="286" y2="277" class="hi" stroke-width="1.4" marker-end="url(#e-h-l512f1)"/>
+<text x="20" y="338" class="xs muted" text-anchor="start">A demo may stop at the edge of the subsystem it demonstrates. A game has to cross every edge there is,</text>
+<text x="20" y="352" class="xs muted" text-anchor="start">and the seams between subsystems are where an API is weakest, because nobody has ever stood on them.</text>
+</svg>

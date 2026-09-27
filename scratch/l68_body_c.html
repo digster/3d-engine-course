@@ -1,0 +1,749 @@
+  <!-- =================================================================
+       7 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">7</span>Implementation</h2>
+
+  <h3 id="impl-bounds">7.1 — A box, at its fourth call site</h3>
+
+  <p>
+    Before anything else: the shadow fit needs the scene's world-space bounds, and that pattern has
+    now been written out by hand three times — <code>gltf_view</code> accumulates a
+    <code>bounds_min_</code>/<code>bounds_max_</code> pair to frame its camera,
+    <code>mesh_report</code> measures an extent, and Lesson 6.6's importer walks every position for
+    the same reason. Three call sites is this course's threshold for promoting a pattern into a type
+    (Lesson 3.3's <code>projector</code>, 3.8's <code>fill_style</code>), and this is the fourth.
+  </p>
+
+  <p>
+    The one design decision worth defending is the default:
+  </p>
+
+  <pre><code class="lang-cpp">vec3 min{ +1e30f, +1e30f, +1e30f };
+vec3 max{ -1e30f, -1e30f, -1e30f };</code></pre>
+
+  <p>
+    <strong>A default-constructed box is empty by being inside out</strong>, which is not a trick —
+    it is the identity element for <code>expand</code>. Growing an empty box by a point gives
+    exactly that point, with no "is this the first one?" branch at any call site. A first-point
+    special case is the commonest bug in bounds code, and this representation removes the
+    opportunity rather than documenting it.
+  </p>
+
+  <h3 id="impl-ortho">7.2 — <code>orthographic</code>, in <code>mat4.hpp</code></h3>
+
+  <p>
+    §3.2's matrix, written as four columns, next to <code>perspective</code> so the one structural
+    difference — the bottom row — is visible without scrolling. It takes a <em>signed</em> near
+    plane, and the doc comment says why in one sentence: an orthographic box has no divide, so
+    nothing forbids the near plane being behind the eye, and a light fitted to a scene routinely
+    wants that.
+  </p>
+
+  <h3 id="impl-fit">7.3 — The fit</h3>
+
+  <p>
+    <code>fit_directional</code> is §3.4's four steps and about thirty lines. Two of them are worth
+    reading closely.
+  </p>
+
+  <p>
+    The first is the padding. Without it the nearest vertex sits exactly <em>on</em> the near plane,
+    where <code>near_distance</code> returns 0 and the clipper's <code>&gt;= 0</code> test is
+    decided by the last bit of a float — a caster that flickers in and out of its own shadow map for
+    no visible reason. One per cent of the range, or a millimetre, whichever is larger.
+  </p>
+
+  <p>
+    The second is the sign flip. View space looks down −z, so the <em>nearest</em> surface has the
+    <em>largest</em> z. Reading the near and far planes off the transformed box therefore means
+    negating and swapping:
+  </p>
+
+  <pre><code class="lang-cpp">float near_z = -lv.max.z;   // the NEAREST surface has the LARGEST view-space z
+float far_z  = -lv.min.z;</code></pre>
+
+  <h3 id="impl-pass">7.4 — The depth pass, which is Module 3</h3>
+
+  <p>
+    <code>shadow_map::render</code> computes the bounds, fits the camera, clears the buffer, and
+    then does this:
+  </p>
+
+  <pre><code class="lang-cpp">collect_triangles(tris_, scratch_, objects, meshes, cv, pr, unused, opts, &amp;cstats);
+draw_triangles(*unused_colour_, depth_.get(), tris_, false, style);</code></pre>
+
+  <p>
+    That is the entire pass. <code>cv</code> is a <code>camera_view</code> holding the light's view
+    matrix; <code>pr</code> is a <code>projector</code> holding the orthographic matrix and a
+    viewport the size of the map. Nothing else changed. Every claim in Modules 2 and 3 about
+    clipping, winding, the top-left rule and perspective-correct interpolation carries over intact,
+    because it is literally the same code.
+  </p>
+
+  <p>
+    Two settings on the way through. <code>opts.shading = shade_eval::palette</code> is the "off"
+    position of the shading cycle — a depth pass has no use for a colour and computing one would be
+    per-vertex work thrown away. And <code>fill_style::depth_only</code> is new: the fragment
+    function is never called and no colour is stored.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The colour target that nothing writes to</span>
+    <p><code>shadow_map</code> owns a full-resolution <code>framebuffer</code> that is never
+       touched. It has to: <code>fill_triangle</code> clips its bounding box against the
+       <em>framebuffer's</em> dimensions, and there is nowhere else for a pass to learn how big it
+       is. At 1024² that is four megabytes allocated and never written.</p>
+    <p>On the GPU there is genuinely no colour attachment — <code>num_color_targets = 0</code>, and
+       the render pass carries its own dimensions. That gap is what a depth-only pass <em>is</em>,
+       and this is the most concrete form it takes in this course: the CPU can skip the work, and
+       only the GPU can skip the attachment. On tiled hardware the difference is the entire tile
+       write.</p>
+  </div>
+
+  <h3 id="impl-lookup">7.5 — The lookup</h3>
+
+  <p>
+    <code>shadow_map::visibility(world_pos, geometric_normal, n_dot_l)</code> returns 1 for fully
+    lit and 0 for fully shadowed. Six steps, and each has already been argued for:
+  </p>
+
+  <ol>
+    <li>Short-circuit if there is no map, or if <code>n_dot_l &lt;= 0</code> — a surface facing away
+        is already dark by Lesson 3.6's clamp, and consulting the map there could only introduce a
+        wrong answer at a silhouette.</li>
+    <li>Under <code>normal_offset</code>, move the sample point (§5.3).</li>
+    <li>Project with <code>clip_from_world</code>, then <code>vp.to_screen</code> — <strong>the same
+        viewport that wrote the map</strong>, y-flip and all. Two spellings of one mapping is how a
+        shadow ends up half a texel from its caster.</li>
+    <li>Range-check. Outside the light's box means "occluded by nothing", which is lit.</li>
+    <li>Compute the bias from the policy, plus the format's half-code.</li>
+    <li>Take the taps, comparing each one <em>then</em> averaging (§6.1).</li>
+  </ol>
+
+  <p>
+    Step 3 carries the <code>round</code>-versus-<code>floor</code> decision from §4.4, written into
+    the code beside the reason, because it is a two-character difference that halves the reach.
+  </p>
+
+  <h3 id="impl-shade">7.6 — Where the term enters the equation</h3>
+
+  <p>
+    <code>shade()</code> gains a final parameter, <code>float visibility = 1.0f</code>, and it
+    multiplies <code>E</code>:
+  </p>
+
+  <pre><code class="lang-cpp">const float er = lights.key.colour.r * lights.key.irradiance * n_dot_l * visibility;</code></pre>
+
+  <p>
+    Beside the cosine, for the reason §1 gave: both are statements about how much light reaches this
+    point, and neither is a statement about the surface. The default of 1 means every call site
+    written before this lesson behaves identically — which is why the reference render is
+    byte-identical for a seventeenth lesson.
+  </p>
+
+  <p>
+    In <code>raster.cpp</code> the fragment computes the visibility itself, from the
+    <em>geometric</em> normal and a cosine taken against it, and hands the result to
+    <code>shade</code>. §5.3 is the argument; the code says it again where the choice is made,
+    because a reader who has not read §5.3 will otherwise assume the two normals are the same one.
+  </p>
+
+  <!-- =================================================================
+       8 — THE GPU PORT
+       ================================================================= -->
+  <h2 id="gpu"><span class="num">8</span>The GPU Port: A Pass With No Colour</h2>
+
+  <p>
+    The port is interesting for exactly three reasons, all of them things the software version
+    cannot express.
+  </p>
+
+  <h3 id="gpu-pass">8.1 — A second render pass</h3>
+
+  <p>
+    Everything the GPU renderer has drawn since Lesson 4.8 has happened inside one
+    <code>SDL_BeginGPURenderPass</code>. The shadow map is a pass that runs <em>before</em> that
+    one, on the same command buffer, into a different attachment, with a different pipeline.
+  </p>
+
+  <p>
+    And it needs no barrier of ours at all, which is worth noticing rather than accepting: a render
+    pass is the unit SDL_GPU synchronises on, so everything the depth pass wrote is visible to
+    everything issued after <code>SDL_EndGPURenderPass</code>. That is one of the real arguments for
+    a pass-based API over a bare command list.
+  </p>
+
+  <h3 id="gpu-nocolour">8.2 — <code>num_color_targets = 0</code></h3>
+
+  <p>
+    <code>pipeline_desc</code>'s constructor fills in one colour target taken from the device's
+    swapchain, which is right for anything drawing into a window and wrong here. Zeroing the count
+    is what makes this a depth-only pipeline, and the pass then begins with a null colour array:
+  </p>
+
+  <pre><code class="lang-cpp">raw.target_info.num_color_targets = 0;
+// …and then, with a null colour array and a count of zero:
+SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, nullptr, 0, &amp;dsi);</code></pre>
+
+  <p>
+    Lesson 4.4's <code>colour_target_format</code> comment predicted this exact call — <em>"it is
+    wrong for a shadow map, a post-processing chain, or a headless test… Module 6 lives on this
+    method."</em>
+  </p>
+
+  <p>
+    The vertex shader is four lines and one attribute. The mesh is the identical
+    <code>gpu_vertex_pnu</code>, 48 bytes with position, normal, uv and tangent interleaved; this
+    pipeline declares the position at offset 0 and the hardware never fetches the rest. Lesson 6.7
+    established that a vertex layout is per-<em>pipeline</em> state when <code>describe</code> grew
+    its <code>with_tangent</code> parameter; this is the same fact at its limit, and it is why a
+    depth pass is cheap on bandwidth as well as on arithmetic.
+  </p>
+
+  <div class="callout">
+    <span class="label">Why there is a fragment shader that does nothing</span>
+    <p><code>shadow.frag.hlsl</code> is <code>void main() {}</code>.
+       <code>SDL_GPUGraphicsPipelineCreateInfo</code> has a <code>fragment_shader</code> field and
+       SDL's header does not document NULL as a legal value for it, so we do not pass one.
+       <strong>⚠ VERIFY:</strong> several backends do accept a null fragment shader for a
+       depth-only pipeline, and if SDL ever states that it forwards NULL this file becomes
+       deletable — check <code>SDL3/SDL_gpu.h</code>. Until then, an empty shader is the portable
+       spelling: five instructions the driver optimises to none, against a crash on the one backend
+       that disagrees.</p>
+    <p>It is also the honest home for the thing a depth pass sometimes <em>does</em> need. An
+       alpha-tested caster — a leaf, a chain-link fence — has to sample its albedo here and
+       <code>discard</code>, which is why "depth-only" and "no fragment shader" are not quite the
+       same statement.</p>
+  </div>
+
+  <h3 id="gpu-sampled">8.3 — A depth target that is also a texture</h3>
+
+  <p>
+    <code>create_depth</code> gains a <code>sampled</code> flag, which adds
+    <code>SDL_GPU_TEXTUREUSAGE_SAMPLER</code> to the usage. It is a parameter rather than always-on
+    because the comment it replaces was right: asking for a usage you do not need can force the
+    driver into a slower layout, and the scene's own depth buffer is read by nothing.
+  </p>
+
+  <p>
+    There is a second cost, and it is the one that bites on phones. The scene's depth attachment has
+    used <code>SDL_GPU_STOREOP_DONT_CARE</code> since Lesson 4.7 — nothing reads it after the pass,
+    so on tiled hardware it never leaves tile memory. A shadow map is read by a later pass, so its
+    store op must be <code>STORE</code> and the whole buffer is written out to main memory. The
+    comment in <code>gpu_scene.cpp</code> named this moment two modules ago.
+  </p>
+
+  <p>
+    And whether a depth format can be sampled at all is a question, not an assumption. SDL
+    guarantees <code>D16_UNORM</code> as an <em>attachment</em> and guarantees nothing about
+    sampling any depth format, so a device can legally support a depth buffer and refuse a shadow
+    map. <code>supported_shadow_format</code> asks for both usages <em>in one query</em>, because
+    that is the texture we are actually going to create — a device may support a format as an
+    attachment and as a texture and still refuse the combination.
+  </p>
+
+  <h3 id="gpu-sampler">8.4 — The comparison sampler, and a third identity element</h3>
+
+  <p>
+    <code>gpu_sampler::create_comparison</code> sets the two fields §6 exists to justify —
+    <code>enable_compare = true</code> and <code>compare_op = LESS_OR_EQUAL</code> — and this
+    discharges the <code>⚠ VERIFY</code> Lesson 6.7 left open: both names are confirmed against
+    <code>SDL3/SDL_gpu.h</code>. Every other field is dictated by the job, which is why it is a
+    named function rather than four more defaulted parameters: <code>LINEAR</code>, because
+    filtering the comparison results is the entire point; <code>CLAMP_TO_EDGE</code>, because a
+    lookup outside the map must not wrap round to the far side of the scene.
+  </p>
+
+  <p>
+    In the fragment shader the pair is a different <em>type</em> from the two above it:
+  </p>
+
+  <pre><code class="lang-hlsl">Texture2D&lt;float&gt;       shadow_map     : register(t2, space2);
+SamplerComparisonState shadow_sampler : register(s2, space2);</code></pre>
+
+  <p>
+    And the scene renderer gains a third fallback binding, which makes the pattern explicit at last:
+    <strong>hand the shader the identity element of the feature it is missing.</strong> White is the
+    identity for a multiply (4.7), lavender for a basis change (6.7), and <strong>1.0 is the
+    identity for a depth comparison</strong> — a map saying the nearest surface along every ray is
+    the far plane says nothing occludes anything.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The one that cannot be uploaded</span>
+    <p>The first two fallbacks are 1×1 images pushed through a copy pass.
+       <code>SDL_UploadToGPUTexture</code> cannot target a depth texture at all, so the only way to
+       put a value into this one is to have a render pass <em>clear</em> it: begin, clear to 1.0,
+       end, draw nothing. Three lines, completely ordinary, and the shape every "clear a render
+       target" helper in every engine eventually takes.</p>
+  </div>
+
+  <h3 id="gpu-varyings">8.5 — The lookup, and the varyings it does not cost</h3>
+
+  <p>
+    The textbook arrangement computes the light-space position in the <em>vertex</em> shader and
+    interpolates it — four more floats per fragment, on every draw in the scene, shadowed or not,
+    because a varying list is part of the shader signature and cannot vary per material.
+  </p>
+
+  <p>
+    We do it in the fragment shader instead, from <code>input.world</code> — the varying Lesson 3.7
+    added for the specular term. That is only legitimate because of §3's finding: the light's
+    projection is <strong>orthographic, so <em>w</em> is exactly 1</strong>, the map from world to
+    light clip is affine, and evaluating an affine function at an interpolated point gives the same
+    answer as interpolating its values at the corners. One matrix multiply per fragment, zero new
+    varyings, and Lesson 6.7's warning about the cost of a fourth varying does not have to be paid a
+    fifth time.
+  </p>
+
+  <p>
+    The uniform block grows from 64 bytes to <strong>176</strong> — a <code>float4x4</code> and
+    eleven floats. Lesson 6.7 made a point of a flag that cost zero bytes, so the contrast is worth
+    naming: this is a <em>per-frame</em> push, one copy for the whole frame, where
+    <code>material_uniforms</code> is charged once per draw. The two blocks are billed at completely
+    different rates and the design pressure on them differs in exactly that proportion.
+  </p>
+
+  <p>
+    One function fills all of it. <code>gpu_shadow_map::fill_uniforms</code> takes the same
+    <code>light_camera</code> and <code>shadow_settings</code> the CPU renderer reads, because
+    eleven floats transcribed twice is how a shadow ends up behaving differently on the two paths
+    for a reason nobody can find.
+  </p>
+
+  <!-- =================================================================
+       9 — MEASUREMENTS
+       ================================================================= -->
+  <h2 id="measure"><span class="num">9</span>What the Harness Measured</h2>
+
+  <p>
+    <code>verify_68</code> is 53 checks in eight sections, green in debug and release. The ones
+    worth carrying away:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Selected measurements from verify_68</caption>
+      <thead><tr><th>§</th><th>What</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td><em>w</em> after an orthographic projection, 64 points</td>
+            <td><strong>exactly 1.0f</strong>, all of them</td></tr>
+        <tr><td>A</td><td>one metre of depth, near plane vs far plane</td>
+            <td>the <strong>same</strong> device depth; perspective's ratio is &gt;100×</td></tr>
+        <tr><td>B</td><td>scene extent in light view space</td>
+            <td><em>z</em> = <strong>+2.608</strong> — behind the eye, so a negative near plane</td></tr>
+        <tr><td>C</td><td>acne on an unoccluded plane, no bias</td>
+            <td><strong>50.1%</strong> — the prediction was 50%</td></tr>
+        <tr><td>C</td><td>worst depth disagreement vs derived bound</td>
+            <td>1.931e−3 against 2.101e−3 — <strong>92% of the bound</strong></td></tr>
+        <tr><td>D</td><td>the same plane, slope-scaled</td><td><strong>0.0%</strong></td></tr>
+        <tr><td>D</td><td>constant bias sized for 50°, applied at 75°</td>
+            <td><strong>3.1× too small</strong></td></tr>
+        <tr><td>D</td><td>shadow lost when the bias exceeds the caster gap</td>
+            <td>shadowed at 0.5× the gap, <strong>lit at 1.5×</strong></td></tr>
+        <tr><td>E</td><td>3×3 kernel with a bias sized for one tap</td>
+            <td><strong>79.6%</strong> acne</td></tr>
+        <tr><td>E</td><td>…with the reach-corrected bias</td><td>0.00%</td></tr>
+        <tr><td>F</td><td><code>D16</code> half-code over a 20 m box</td>
+            <td>0.15 mm, <strong>everywhere</strong></td></tr>
+        <tr><td>G</td><td>the depth-only pipeline and pass</td>
+            <td>created and submitted on <code>D32_FLOAT</code></td></tr>
+        <tr><td>H</td><td>the reference render</td>
+            <td><strong>byte-identical, E917C06C</strong> — seventeenth lesson</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The measurement that was measuring its own grid</span>
+    <p>§C's first version reported <strong>3.3%</strong> acne where the truth is 50%, and a worst
+       error at 22% of a bound that is in fact tight. Nothing was wrong with the renderer. The
+       harness walked a plain 96×96 grid across the plane, whose spacing came out at 4.8 shadow
+       texels — so every sample landed at nearly the same position <em>inside</em> its texel, and
+       the measurement covered a sliver of the sub-texel space instead of all of it.</p>
+    <p>The fix is a Weyl sequence: step the sub-texel offset by the golden ratio's fractional part,
+       the number hardest to approximate by a rational and therefore the one that never falls back
+       into step with the grid. <strong>A regular grid sampled against a regular grid measures the
+       beat frequency, not the thing.</strong> That is not a testing footnote — it is the same
+       aliasing the shadow map itself suffers from, it is why a shadow's edge crawls when the light
+       moves, and it is the reason cascades snap their box to texel boundaries.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">10</span>Complete Code Listings</h2>
+
+  <p>
+    Twenty-two files were touched. Six are listed here in full — the ones where the lesson's
+    arguments live — and the rest are in the repository at the paths the manifest gives.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">File manifest for Lesson 6.8</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/math/mat4.hpp</code></td><td>modified</td>
+            <td><code>orthographic</code> — §3.2</td></tr>
+        <tr><td><code>engine/include/engine/gfx/bounds.hpp</code></td><td><strong>new</strong></td>
+            <td><code>aabb</code>, at its fourth call site</td></tr>
+        <tr><td><code>engine/include/engine/gfx/shadow.hpp</code></td><td><strong>new</strong></td>
+            <td>the fit, the policies, the derived bias, <code>shadow_map</code></td></tr>
+        <tr><td><code>engine/src/gfx/shadow.cpp</code></td><td><strong>new</strong></td>
+            <td>the depth pass and the lookup</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_shadow.hpp</code></td><td><strong>new</strong></td>
+            <td>the GPU map: pipeline, texture, comparison sampler</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_shadow.cpp</code></td><td><strong>new</strong></td>
+            <td>the depth-only pass, and <code>fill_uniforms</code></td></tr>
+        <tr><td><code>engine/include/engine/gfx/light.hpp</code></td><td>modified</td>
+            <td><code>shade(…, visibility)</code> — §7.6</td></tr>
+        <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+            <td><code>fill_style::shadows</code>, <code>::depth_only</code></td></tr>
+        <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>the fragment's lookup, and the depth-only path</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code>, <code>.cpp</code></td>
+            <td>modified</td>
+            <td><code>create_depth(…, sampled)</code>, <code>create_comparison</code>,
+                <code>supported_shadow_format</code></td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code>, <code>.cpp</code></td>
+            <td>modified</td>
+            <td>the third sampler slot and the 1×1 far map</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+            <td><code>scene_light_uniforms</code>: 64 → 176 bytes</td></tr>
+        <tr><td><code>shaders/shadow.vert.hlsl</code>, <code>shadow.frag.hlsl</code></td>
+            <td><strong>new</strong></td><td>the depth pass's stages</td></tr>
+        <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+            <td><code>shadow_visibility</code>, and where it multiplies</td></tr>
+        <tr><td><code>CMakeLists.txt</code>, <code>engine/CMakeLists.txt</code></td><td>modified</td>
+            <td>two shaders, two sources</td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+            <td>a ground plane and the CPU controls</td></tr>
+        <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td>
+            <td>the GPU pass and keys [1] [2] [3]</td></tr>
+        <tr><td><code>scratch/verify_68.cpp</code></td><td><strong>new</strong></td>
+            <td>53 checks in eight sections</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+@@LISTING:engine/include/engine/gfx/bounds.hpp@@
+
+@@LISTING:engine/include/engine/gfx/shadow.hpp@@
+
+@@LISTING:engine/src/gfx/shadow.cpp@@
+
+@@LISTING:engine/include/engine/gfx/gpu_shadow.hpp@@
+
+@@LISTING:engine/src/gfx/gpu_shadow.cpp@@
+
+@@LISTING:shaders/shadow.vert.hlsl@@
+
+@@LISTING:shaders/scene.frag.hlsl@@
+
+@@LISTING:scratch/verify_68.cpp@@
+
+  <!-- =================================================================
+       11 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">11</span>Build &amp; Run, and What You Should See</h2>
+
+  <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+sh scratch/build_verify_68.sh          # 53 checks, 0 failures</code></pre>
+
+  <p>Windows, from a Developer Command Prompt:</p>
+
+  <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
+
+  <h3 id="build-cpu">11.1 — The software renderer</h3>
+
+  <p>
+    <code>gltf_view</code> gained a ground plane — a shadow needs a receiver, and acne is a pattern
+    <em>across a lit surface</em>, so a scene with nothing large and lit in it cannot show one.
+  </p>
+
+  <pre><code class="lang-bash"># the artefact, first (Lesson 3.5's rule: show the failure)
+./build/demos/gltf_view --model torus.obj --shadow 1024 --bias none --pcf 0
+
+# the derived fix
+./build/demos/gltf_view --model torus.obj --shadow 1024 --bias slope-scaled --pcf 0
+
+# and a soft edge
+./build/demos/gltf_view --model torus.obj --shadow 1024 --pcf 2
+
+# what a small map looks like
+./build/demos/gltf_view --model torus.obj --shadow 128</code></pre>
+
+  <p>
+    <strong>What to look for, in order.</strong> With <code>--bias none</code>: a correct shadow
+    under the torus, and everything else covered in the moiré of Figure 4 — 36,786 pixels of a
+    480×270 frame. With <code>--bias slope-scaled</code>: the ground goes completely clean, and a
+    little speckle remains on the torus itself at its grazing edges, which is §4.3's clamp being
+    honest rather than a bug. With <code>--pcf 2</code>: the shadow's edge softens by about two
+    texels, and the ground stays clean, because the bias widened with the kernel. With
+    <code>--shadow 128</code>: the same shadow with visibly stair-stepped edges — one texel now
+    covers eight times as much world, and every formula in §4 scaled with it.
+  </p>
+
+  <p>
+    The run also prints the two numbers the whole lesson is built from:
+  </p>
+
+  <pre><code class="lang-bash">  shadow map    : 1024x1024, bias SLOPE-SCALED (derived), PCF 1x1, caster cull none
+  shadow pass   : 2306 caster triangles into 1048576 texels, 8.50 ms
+  fit           : 0.0115 world units per texel, depth range 9.653</code></pre>
+
+  <h3 id="build-gpu">11.2 — The GPU renderer</h3>
+
+  <p>
+    <code>sandbox</code> renders the depth pass every frame and binds the map at fragment slot 2.
+    Three keys:
+  </p>
+
+  <ul>
+    <li><strong>[1]</strong> — shadows on/off. Off is <code>shadow_strength = 0</code>, which
+        short-circuits the lookup, so the picture is bit-for-bit Lesson 6.7's.</li>
+    <li><strong>[2]</strong> — cycle the bias policy: none → constant → slope-scaled →
+        normal-offset. Two of those four exist to show failures, which is Lesson 3.5's rule.</li>
+    <li><strong>[3]</strong> — cycle the PCF radius, 0 through 3. Watch the edge soften, and watch
+        the ground <em>stay clean</em> — the reach correction is what buys that.</li>
+  </ul>
+
+  <p>
+    On startup it logs whether this machine can have shadows at all:
+  </p>
+
+  <pre><code class="lang-bash">  shadow map      : 1024x1024 D32/D24/D16, sampled + comparison sampler</code></pre>
+
+  <p>
+    …or <code>unavailable on this device</code>, which is a capability report rather than an error:
+    the demo runs, the renderer binds its 1×1 far map, and everything is lit.
+  </p>
+
+  <!-- =================================================================
+       12 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">12</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Shadow-mapping failures: symptom, cause, fix</caption>
+      <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Dense moiré stripes across every lit surface</td>
+          <td>No bias, or one far too small. §4.</td>
+          <td>Slope-scaled bias. If it persists, check the reach against the PCF radius (§6.2).</td>
+        </tr>
+        <tr>
+          <td>Shadows detached from the objects casting them, worst at contact</td>
+          <td>Bias too large — a constant one sized for the steepest surface. §5.1.</td>
+          <td>Slope-scaled. The quantity being over-corrected is
+              <code>bias × depth_range</code> world units.</td>
+        </tr>
+        <tr>
+          <td>Clean at one PCF setting, speckled at the next</td>
+          <td>The bias was sized for one tap. §6.2 — the 3×3 kernel reaches 3× further.</td>
+          <td><code>pcf_reach_texels(radius)</code> in the bias, not a constant.</td>
+        </tr>
+        <tr>
+          <td>Everything is lit; the map appears empty</td>
+          <td>Front-face culling on open geometry (§5.4), or the caster list is empty, or the
+              light's box does not contain the casters.</td>
+          <td>Log <code>shadow_stats::triangles</code>. Zero says the pass, not the lookup.</td>
+        </tr>
+        <tr>
+          <td>The whole screen goes black, or nothing draws</td>
+          <td>A declared sampler slot with nothing bound. The shader declares
+              <code>t2</code> and the draw bound only <code>t0</code> and <code>t1</code>.</td>
+          <td>Bind the fallback. And bind all three in ONE
+              <code>SDL_BindGPUFragmentSamplers</code>: a partial bind <em>replaces</em> the range
+              it names rather than merging.</td>
+        </tr>
+        <tr>
+          <td>A validation error the moment the shadow texture is bound</td>
+          <td>An ordinary sampler on a comparison lookup, or a comparison sampler on a colour
+              texture.</td>
+          <td><code>create_comparison</code> for the map;
+              <code>SamplerComparisonState</code> in the shader.</td>
+        </tr>
+        <tr>
+          <td>The shadow is offset half a texel from its caster</td>
+          <td>The lookup's NDC → texel mapping is not the one the pass used to write.</td>
+          <td>Share the <code>viewport</code>. And check
+              <code>round</code>-versus-<code>floor</code> against where your rasterizer samples
+              (§4.4).</td>
+        </tr>
+        <tr>
+          <td>Shadow smeared to the horizon beyond the light's box</td>
+          <td><code>CLAMP_TO_EDGE</code> is reporting the edge texel's occluder for everything
+              outside.</td>
+          <td>Range-check the NDC in the shader and return "lit". Clamping is the sampler's
+              fallback, not the semantics you want.</td>
+        </tr>
+        <tr>
+          <td>Casters flicker in and out of their own shadow at the box's edge</td>
+          <td>A vertex sitting exactly on the near plane, where the clipper's test is decided by
+              the last bit of a float.</td>
+          <td>Pad the fit (§7.3).</td>
+        </tr>
+        <tr>
+          <td>Shadows are blocky even at 1024</td>
+          <td>The box is fitted to something huge — usually a ground plane included as a
+              caster.</td>
+          <td>Fit to the <em>casters</em>. Log <code>world_per_texel</code>; if it is centimetres
+              when the scene is metres, the box is the problem.</td>
+        </tr>
+        <tr>
+          <td>Shadows are pure black</td>
+          <td>The visibility term multiplied the ambient term too. §1.</td>
+          <td>It multiplies <code>E</code> only.</td>
+        </tr>
+        <tr>
+          <td>Your acne measurement disagrees with your eyes</td>
+          <td>The sampling grid is commensurate with the texel grid. §9.</td>
+          <td>Jitter with a Weyl sequence.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- =================================================================
+       13 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">13</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Find the resolution where the bias stops mattering.</strong> The derived bias is
+         proportional to <code>world_per_texel</code>. Run <code>gltf_view</code> at 128, 256, 512,
+         1024 and 2048 with <code>--bias none</code>, and record the fraction of ground pixels that
+         speckle. Predict the trend before you measure it.</p>
+      <p class="hint"><em>Hint.</em> The acne <em>fraction</em> should barely move — half of every
+         texel is downhill regardless of how big a texel is. What changes is the spatial frequency,
+         and therefore how it aliases against the screen. Predicting "less acne" and measuring "the
+         same acne, finer" is the useful failure here.</p>
+    </li>
+
+    <li>
+      <p><strong>Make peter-panning photogenic.</strong> §5.1 measures it; the demo barely shows it,
+         because the torus meets the ground along a thin circle at an oblique light angle. Change
+         the light direction to something nearer vertical and put a box on the ground, then sweep
+         <code>--constant-bias</code> from 0 to 0.1 and find where the contact shadow disappears.
+         Check that the value matches <code>gap / depth_range</code>.</p>
+    </li>
+
+    <li>
+      <p><strong>A spot light.</strong> Replace <code>orthographic</code> with
+         <code>perspective</code> in <code>fit_directional</code> and give the light a position.
+         Almost everything survives; two things do not. Find them.</p>
+      <p class="hint"><em>Hint.</em> <code>depth_range</code> stops being one number — §3.3 — so
+         the conversion from a world-space error to a device-space bias becomes position-dependent.
+         And <em>w</em> stops being 1, so §8.5's argument for computing the light-space position in
+         the fragment shader needs re-examining. (It survives, but for a different reason: a
+         homogeneous coordinate is still affine in the world position. Work out why.)</p>
+    </li>
+
+    <li>
+      <p><strong>Measure what the fallback costs.</strong> <code>gpu_scene_renderer</code> now binds
+         three sampler slots on every texture change instead of two. Use Lesson 4.9's frame log to
+         count the binds in a frame, then work out whether hoisting the shadow binding out of the
+         per-item loop is possible at all.</p>
+      <p class="hint"><em>Hint.</em> Read the comment in <code>gpu_scene.cpp</code> about what a
+         partial <code>SDL_BindGPUFragmentSamplers</code> does to slots outside its range. This is a
+         "the obvious optimisation is a bug" exercise.</p>
+    </li>
+
+    <li>
+      <p><strong>Engine challenge: variance shadow maps.</strong> Store depth <em>and</em> depth
+         squared in a two-channel colour target, and use Chebyshev's inequality to get a
+         probabilistic visibility that can be blurred, mipmapped and filtered like an ordinary
+         texture — no comparison sampler, no bias, no acne. Then find the artefact it trades those
+         away for.</p>
+      <p class="hint"><em>Hint.</em> It is called <em>light bleeding</em>, and it shows up wherever
+         two occluders at very different depths share a filter footprint. Notice that this is the
+         same 0.3/0.9/0.5 situation from §6.1, arriving from the other side.</p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       14 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">14</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now answer a question it has never been able to ask: <em>can this point see the
+    light?</em> Concretely, it gained:
+  </p>
+
+  <ul>
+    <li>an <strong>orthographic projection</strong>, derived from an interval remap, whose
+        <em>w</em> stays exactly 1 — which makes device depth affine, precision uniform, and a
+        fragment's light-space position recoverable for free;</li>
+    <li>an <strong>AABB</strong>, at its fourth call site, and a fit that squares a box around a
+        scene for a light that has no position;</li>
+    <li>a <strong>shadow map on both renderers</strong> — the CPU's being
+        <code>collect_triangles</code> and <code>draw_triangles</code> with a different camera, the
+        GPU's being a second render pass with no colour attachment at all;</li>
+    <li>a <strong>bias that is derived rather than tuned</strong>: reach × texel × tan θ ÷ range,
+        measured to within 8% of the bound it claims;</li>
+    <li>four bias policies, two of which exist to show their own failure modes;</li>
+    <li><strong>PCF</strong> through a comparison sampler, and the reason the comparison has to
+        come first;</li>
+    <li>and the first place in the engine where the <strong>geometric normal and the shading normal
+        must be told apart</strong> — Lesson 6.7's gift, collected.</li>
+  </ul>
+
+  <p>
+    Three things are worth carrying forward. The first is that <strong>an artefact with a name is
+    usually an artefact with a formula</strong>: acne looked like a mystery and turned out to be
+    half a texel of lateral travel times a tangent. The second is the <em>reach</em> finding —
+    a correct bias that stops being correct the moment a kernel widens, and arrives looking like
+    somebody else's bug. The third is §9's: <strong>a measurement can alias against the thing it is
+    measuring</strong>, and a number that disagrees with your eyes deserves suspicion in both
+    directions.
+  </p>
+
+  <p>
+    <strong>Next: Lesson 6.9 — Cascaded Shadow Maps.</strong> One map over a whole outdoor scene
+    gives the near field far too few texels, and §11's <code>--shadow 128</code> is a preview of
+    what that looks like everywhere. The fix is to split the camera's frustum by distance and give
+    each slice its own map — which brings back everything this lesson could fit to a static scene
+    and leave alone: a box that moves with the camera, and therefore texel snapping; a per-cascade
+    <code>world_per_texel</code>, and therefore a per-cascade bias; and the seam between two
+    cascades, which is a new artefact with a new name.
+  </p>
+
+  <!-- =================================================================
+       15 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">15</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Williams, L., "Casting Curved Shadows on Curved Surfaces" (SIGGRAPH 1978).</strong>
+        The original. Four pages, and the algorithm in this lesson is recognisably the one described
+        there — including the observation that the comparison needs a tolerance.</li>
+    <li><strong>Reeves, Salesin &amp; Cook, "Rendering Antialiased Shadows with Depth Maps"
+        (SIGGRAPH 1987).</strong> Where percentage-closer filtering comes from, and where the
+        compare-then-filter argument of §6.1 is made first and best.</li>
+    <li><strong>Akenine-Möller, Haines &amp; Hoffman, <em>Real-Time Rendering</em> (4th ed.),
+        chapter 7.</strong> The complete survey: bias, cascades, variance and moment maps, filtering,
+        and the failure modes of each. §5.3's normal-offset and §6.3's soft shadows are both there in
+        more depth than here.</li>
+    <li><strong>Holbert, D., "Saying Goodbye to Shadow Acne" (GDC 2011).</strong> The source of the
+        normal-offset magnitude §5.3 uses, and honest about it being a heuristic.</li>
+    <li><strong>Microsoft, "Common Techniques to Improve Shadow Depth Maps."</strong> The best free
+        write-up of cascade fitting, texel snapping and depth-bias interaction — Lesson 6.9's
+        reading, listed here because §11's blocky 128-texel map is its opening argument.</li>
+    <li><strong>SDL3, <code>SDL_gpu.h</code>.</strong> <code>SDL_GPUSamplerCreateInfo</code>
+        (<code>enable_compare</code>, <code>compare_op</code>),
+        <code>SDL_GPUGraphicsPipelineTargetInfo</code> (<code>num_color_targets</code>), and
+        <code>SDL_GPUTextureSupportsFormat</code>. Every claim in §8 was checked against this
+        header rather than remembered.</li>
+    <li><strong>Conventions §4 and §5</strong> for the depth range and the handedness that fix
+        <code>orthographic</code>'s third row, and <strong>Math Toolbox §7g</strong> for the new
+        tools.</li>
+  </ul>

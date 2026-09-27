@@ -1,0 +1,1292 @@
+  <!-- ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Three files change, and one of the three changes in a way worth dwelling on. As always this
+    section is for <em>understanding</em> — every file appears whole in
+    §<a href="#listings">Complete Code Listings</a>.
+  </p>
+
+  <h3 id="impl-reflect">4.1 <code>reflect</code> grows a third component</h3>
+
+  <p>
+    Lesson 1.8 wrote <code>reflect</code> for <code>vec2</code>, to bounce a ball off a wall. The
+    3-D version is the same line, and it is worth noticing that the <em>derivation</em> needed no
+    changes either — the shadow argument never counted components. That is the third time this
+    course has moved something from 2-D to 3-D for free (the dot product in 2.6, the whole of
+    linear algebra in 2.6, and now this), and it is not luck: arguments phrased geometrically
+    tend not to depend on the dimension.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/math/vec3.hpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr vec3 reflect(vec3 v, vec3 n)
+{
+    return v - n * (2.0f * dot(v, n));
+}</code></pre>
+  </figure>
+
+  <p>
+    And in <code>light.hpp</code>, the same operation with the arrow the other way round:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr vec3 mirror_direction(vec3 normal_unit, vec3 to_light_unit)
+{
+    return normal_unit * (2.0f * dot(normal_unit, to_light_unit)) - to_light_unit;
+}</code></pre>
+  </figure>
+
+  <p>
+    Both exist, and both are documented as the other's negation. That may look like duplication,
+    and the alternative is worse: a single function whose caller has to remember which way the
+    argument points is a function whose caller will eventually get it wrong, and the symptom —
+    the highlight appearing on the far side of the object — reads as a lighting bug rather than a
+    sign bug. Two names, each honest about its own convention, cost one line.
+  </p>
+
+  <h3 id="impl-terms">4.2 The two terms, and one clamp that earns its keep</h3>
+
+  <p>
+    Both terms have the same shape: measure an alignment, discard it if it has gone negative,
+    raise it to the shininess.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] inline float phong_term(vec3 normal_unit, vec3 to_light_unit,
+                                      vec3 to_eye_unit, float shininess)
+{
+    const float alignment = dot(mirror_direction(normal_unit, to_light_unit), to_eye_unit);
+    if (alignment &lt;= 0.0f) { return 0.0f; }   // also keeps pow() away from 0^0
+    return std::pow(std::min(1.0f, alignment), shininess);
+}</code></pre>
+  </figure>
+
+  <p>
+    Two details in three lines, and neither is decoration.
+  </p>
+
+  <p>
+    <strong>The early return is not just the §3.5 clamp.</strong> It also keeps
+    <code>std::pow</code> away from <code>0<sup>0</sup></code>, which is 1 — so a surface at
+    exactly the cut-off boundary with a shininess of zero would return a full-strength highlight
+    instead of none. Shininess is documented as positive, but a guard that costs a branch we
+    already needed is cheaper than a documented precondition.
+  </p>
+
+  <p>
+    <strong>The upper clamp is not paranoia; it was measured.</strong> The dot product of two unit
+    vectors is a cosine and cannot exceed 1 — but it can <em>round</em> above it, and
+    <code>pow</code> then amplifies the excess rather than absorbing it. Before the clamp was
+    added, <code>verify_37</code>'s ground-truth peak on the torus printed <strong>1.00000</strong>
+    as <strong>1.00001</strong>. Invisible on screen, and still worth fixing: the function
+    advertises a range of <code>[0,1]</code>, and a clamp is what makes that a fact rather than an
+    intention. GPUs spell the same thing <code>saturate</code> and charge nothing for it.
+  </p>
+
+  <p>
+    Blinn's version is the same shape with a different question:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] inline float blinn_term(vec3 normal_unit, vec3 to_light_unit,
+                                      vec3 to_eye_unit, float shininess)
+{
+    const float alignment = dot(normal_unit, halfway(to_light_unit, to_eye_unit));
+    if (alignment &lt;= 0.0f) { return 0.0f; }
+    return std::pow(std::min(1.0f, alignment), shininess);   // see phong_term on the clamp
+}</code></pre>
+  </figure>
+
+  <p>
+    Both are kept, and Phong is kept specifically so it can be watched failing. That is the
+    <strong>eighth</strong> time this engine has made that bargain — <code>draw_line_naive</code>
+    (2.1), <code>swept_collision</code> (1.8), <code>blend_space::encoded</code> (2.4), the
+    <code>w</code> toggles (2.7), <code>trs_order</code> (2.8),
+    <code>interpolation::affine</code> (3.2), <code>near_mode</code> (3.3) and
+    <code>cull_choice::back_by_forward</code> (3.4). A bug you can summon with a keypress is worth
+    more than one you can only describe.
+  </p>
+
+  <h3 id="impl-specular">4.3 <code>specular</code>: two fields, and a name withheld</h3>
+
+  <p>
+    A highlight needs two numbers that the engine has nowhere to put: how tight it is, and what
+    colour it comes out. Both belong to the <em>surface</em> — not to the light, not to the
+    rasterizer, and not to <code>fill_style</code>, whose job is the state the <em>fill</em>
+    needs.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct specular
+{
+    linear_rgb colour{0.0f, 0.0f, 0.0f};   ///&lt; reflectance ratio; black = matte
+    float shininess = 32.0f;
+};</code></pre>
+  </figure>
+
+  <p>
+    <strong>This is a material, and it is deliberately not called one.</strong> A material is also
+    the albedo, the cull mode, the blend mode, the textures and eventually the shader itself, and
+    inventing four fifths of that here would be guessing at a design three lessons before the
+    course has earned it. What this struct <em>is</em> is the pull: watch it try to draw the other
+    fields in. Lesson 3.2 predicted the shading enum would strain; 3.4 noted that
+    <code>closed</code> belongs on a material and that two cull modes means two batches; 3.6 noted
+    that <code>fill_style</code> is the wrong home for lighting. This is the fourth pull in the
+    same direction, and Module 6 is where it is answered — with arguments, rather than by
+    accretion.
+  </p>
+
+  <p>
+    Note the default. A black specular colour means "no highlight", which makes
+    <code>specular{}</code> reproduce Lesson 3.6 exactly — and "exactly" is checked rather than
+    hoped: <code>verify_37</code> §I shades 100,000 random configurations both through
+    <code>shade()</code> with a default <code>specular</code> and through 3.6's arithmetic written
+    out longhand, and <strong>0 of 100,000 differ</strong>. Bit for bit. A new feature that cannot
+    change the old pictures is a feature you can ship without re-verifying the previous lesson.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — default member initialisers and aggregate init</span>
+    <p>
+      <code>specular</code> has no constructors, so it is an <em>aggregate</em>: it can be built
+      with braces, <code>{{0.85f, 0.85f, 0.85f}, 64.0f}</code>, and the members are initialised in
+      declaration order. The <code>= 32.0f</code> and <code>{0,0,0}</code> are
+      <em>default member initialisers</em>, used for any member the braces do not reach — so
+      <code>specular{}</code> is fully initialised and <code>specular{{1,1,1}}</code> gets a
+      shininess of 32 without saying so.
+    </p>
+    <p>
+      This is why the engine prefers plain aggregates for parameter bundles over constructors:
+      every field is named at the point of use, adding a field does not break existing call sites
+      that used designated initialisers, and there is no way to accidentally leave one
+      uninitialised. It is the same reasoning that gave <code>fill_style</code> its shape in 3.2.
+    </p>
+  </div>
+
+  <h3 id="impl-shade">4.4 A parameter with no default</h3>
+
+  <p>
+    <code>shade()</code> gains three parameters. Two of them default; one deliberately does not.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — changed signature</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] inline linear_rgb shade(linear_rgb albedo, vec3 normal, vec3 to_eye,
+                                      const lighting&amp; lights, specular surface = {},
+                                      specular_model model = specular_model::blinn)</code></pre>
+  </figure>
+
+  <p>
+    <strong><code>to_eye</code> has no default, and that is the entire point of its position in
+    the list.</strong> Every call site written before this lesson is now a compile error. Given a
+    default it would have been a silent behaviour change — a highlight computed against a viewer
+    who is not there, which produces a picture that looks plausible and is wrong. This is the same
+    bargain Lesson 3.1 made when it inserted <code>z</code> ahead of <code>colour</code> in
+    <code>vertex</code>: <em>when a change must be noticed, make the compiler notice it.</em>
+  </p>
+
+  <p>
+    The surface parameters do default, because there the safe answer and the correct answer
+    coincide: nothing to say about shininess means no highlight means 3.6's picture.
+  </p>
+
+  <p>
+    The body is where §3.6's argument becomes arithmetic:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/light.hpp — the body</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const vec3 n = normalised_or(normal, vec3{0.0f, 0.0f, 0.0f});
+    const vec3 l = lights.key.to_light();
+    const float n_dot_l = lambert(n, l);
+
+    float spec = 0.0f;
+    if (n_dot_l &gt; 0.0f &amp;&amp; model != specular_model::none
+        &amp;&amp; (surface.colour.r &gt; 0.0f || surface.colour.g &gt; 0.0f || surface.colour.b &gt; 0.0f))
+    {
+        spec = specular_term(model, n, l, normalised_or(to_eye, vec3{0.0f, 0.0f, 0.0f}),
+                             surface.shininess);
+    }
+
+    const float ir = lights.key.colour.r * lights.key.intensity * n_dot_l;
+    const float ig = lights.key.colour.g * lights.key.intensity * n_dot_l;
+    const float ib = lights.key.colour.b * lights.key.intensity * n_dot_l;
+
+    return {albedo.r * (ir + lights.ambient.r) + surface.colour.r * ir * spec,
+            albedo.g * (ig + lights.ambient.g) + surface.colour.g * ig * spec,
+            albedo.b * (ib + lights.ambient.b) + surface.colour.b * ib * spec};</code></pre>
+  </figure>
+
+  <p>
+    Read the last three lines against §3.6's equation. <code>ir</code> is the light
+    <em>arriving</em>, already carrying the cosine; the diffuse part multiplies it by the albedo
+    and the mirrored part by the highlight colour. They cannot simply be added before multiplying,
+    because they are multiplied by different things — which is the structural reason a material
+    needs two colours rather than one.
+  </p>
+
+  <p>
+    Notice also that the ambient term is added to the <em>diffuse</em> path only. Ambient is a
+    stand-in for light bouncing in from everywhere; it has no direction, so there is no mirror
+    direction for it to have come from, and giving it a highlight would be inventing a reflection
+    of a light that does not exist. (A real answer to "what does the whole environment reflect
+    off this surface?" is image-based lighting, Module 6.)
+  </p>
+
+  <p>
+    The early-out is worth one sentence of justification: a black highlight skips
+    <code>std::pow</code> entirely, so every scene from Lessons 3.1 through 3.6 pays nothing at
+    all for this lesson existing. A feature that taxes the code paths that do not use it is a
+    feature that gets removed later.
+  </p>
+
+  <h3 id="impl-world">4.5 The world position comes back</h3>
+
+  <p>
+    Here is the change that is genuinely structural rather than additive, and it is easy to miss
+    because it is three lines.
+  </p>
+
+  <p>
+    Through Lesson 3.6, <code>collect_triangles</code> composed the two transforms once per object
+    and sent each vertex straight from model space to view space:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — as of Lesson 3.6</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const engine::mat4 view_from_model = view_from_world * world_from_model;
+// ...
+view_pos.push_back(engine::xyz(view_from_model
+                             * engine::point(objects[i].geometry.vertices[v])));</code></pre>
+  </figure>
+
+  <p>
+    It could do that because <strong>nothing in the shading needed to know where the vertex
+    was</strong>. A directional light is a direction; Lambert compares two directions; the world
+    position never appeared. Composing the matrices was a real optimisation — one multiply per
+    vertex instead of two — and it was available precisely <em>because</em> the shading was
+    view-independent.
+  </p>
+
+  <p>
+    A highlight needs <code>eye − position</code>. That is a question about <em>places</em>, not
+    directions, so the world position has to exist, and the composition has to come apart:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — as of Lesson 3.7</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">world_pos.push_back(engine::xyz(world_from_model
+                              * engine::point(objects[i].geometry.vertices[v])));
+view_pos.push_back(engine::xyz(view_from_world * engine::point(world_pos.back())));
+clip_pos.push_back(to_clip(view_pos.back(), pr.proj));</code></pre>
+  </figure>
+
+  <p>
+    Same destination, one more matrix multiply per vertex. That is what view dependence costs,
+    and it is worth naming rather than absorbing: the optimisation was not lost to carelessness,
+    it was <em>bought out</em> by a feature. Being able to say which of your fast paths depend on
+    which of your simplifying assumptions is most of what performance work actually is.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The usual dodge, and why we are not taking it</span>
+    <p>
+      There is a well-known alternative: instead of moving every vertex into world space,
+      move the <em>eye</em> into model space once per object (and the light with it), and shade
+      entirely in model coordinates. That trades one matrix inverse per object against one matrix
+      multiply per vertex, which is an excellent trade for any object with more than a handful of
+      vertices.
+    </p>
+    <p>
+      We are not doing it here because it makes the normal-matrix story from 3.6 considerably
+      harder to follow — you would be shading with model-space normals and a model-space light,
+      and the inverse transpose would appear in a different place. Exercise 3.7.4 works it out.
+      This is the honest shape of a lot of optimisation: the fast version is fine, and it is the
+      version you write second.
+    </p>
+  </div>
+
+  <p>
+    The other half of the change is the eye itself. <code>cam.eye()</code> has existed since
+    Lesson 2.9, and it is worth noticing that the view matrix <em>contains</em> that position but
+    getting it back out would take an inverse. The general rule: <strong>when a transform is
+    built from meaningful inputs, keep the inputs.</strong> That is why Module 5's camera stores a
+    <code>transform</code> rather than a matrix.
+  </p>
+
+  <h3 id="impl-demo">4.6 The demo: two keys and a fair comparison</h3>
+
+  <p>
+    <kbd>H</kbd> cycles the model — none, Phong, Blinn — and <kbd>E</kbd> cycles the exponent
+    through powers of two from 2 to 256. The HUD reports both, plus two numbers.
+  </p>
+
+  <p>
+    The first is <strong>how many pixels the other model would have drawn differently</strong>, and
+    getting it to mean something took one decision worth explaining. Rendering Phong and Blinn at
+    the <em>same</em> exponent and counting differences mostly measures that one lobe is wider
+    than the other — which is true, is §3.4's whole point, and swamps the effect under test. So
+    the comparison render converts the exponent first:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — added</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] float matched_shininess(engine::specular_model from, float shininess)
+{
+    if (from == engine::specular_model::phong) { return shininess * 4.0f; }   // -&gt; blinn
+    if (from == engine::specular_model::blinn) { return shininess * 0.25f; }  // -&gt; phong
+    return shininess;
+}</code></pre>
+  </figure>
+
+  <p>
+    With the widths matched, the count measures what is actually different: the shape of the tail,
+    and the cut-off. This is a small instance of a large habit — <em>a comparison is only worth
+    running once you have controlled for the thing you already know differs.</em>
+  </p>
+
+  <p>
+    The second number is the brightest single channel anywhere in the viewport. One integer, and
+    it is the cheapest honest instrument available: a highlight is by definition the brightest
+    thing on a surface, so tracking the maximum tracks the highlight without needing to know where
+    it went — which is the thing under investigation. Watch it while the object spins.
+  </p>
+
+  <h3 id="impl-nothing">4.7 What did not change, for the third lesson running</h3>
+
+  <p>
+    <code>raster.cpp</code> gained nothing. <code>fill_style</code> gained no field,
+    <code>fill_triangle</code> gained no branch, and the rasterizer still has no idea that light
+    exists.
+  </p>
+
+  <p>
+    That is the same observation Lesson 3.6 made, and it is now starting to look less like a happy
+    accident and more like a structural fact: <strong>lighting produces a vertex colour, and
+    interpolating vertex colours is Lesson 2.4's job.</strong> The vertex stage and the fragment
+    stage are separating themselves without being asked, which is exactly what Module 4 will make
+    literal by giving each its own shader.
+  </p>
+
+  <p>
+    But there is a difference this time, and it is the reason Lesson 3.8 exists. Diffuse shading
+    <em>survives</em> that split: Lambert varies smoothly and slowly across a triangle, so
+    evaluating it at the corners and interpolating is a decent approximation. A highlight does not
+    vary smoothly and slowly. It is the sharpest feature in the whole image, deliberately — that
+    is what the exponent is <em>for</em> — and evaluating a sharp feature at three points and
+    drawing straight lines between them is the chord-under-a-curve error this course has now met
+    three times (2.4's sub-pixel bias, 3.2's affine texturing, and here).
+  </p>
+
+  <p>
+    Measured on the torus at 48×24 — 1,225 vertices, which is by far the densest mesh in the demo
+    — comparing per-vertex evaluation against evaluating at the interpolated normal:
+  </p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Shininess</th><th>Worst error</th><th>Samples differing by more than 1/255</th><th>…as a share of the lit area</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>4</td><td>0.048</td><td>60,084</td><td>44.0%</td></tr>
+          <tr><td>8</td><td>0.092</td><td>40,959</td><td>47.3%</td></tr>
+          <tr><td>32</td><td>0.311</td><td>16,875</td><td>72.4%</td></tr>
+          <tr><td>64</td><td>0.507</td><td>10,721</td><td>81.7%</td></tr>
+          <tr><td>128</td><td>0.722</td><td>6,278</td><td>87.8%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 5.</span> Per-vertex evaluation against per-pixel, sampled
+      uniformly across every triangle of the torus. Note the direction: the error gets
+      <em>worse</em> as the surface gets shinier, because a tighter highlight is a sharper feature
+      and a chord approximates a sharp feature badly. At shininess 128 the two disagree by 0.722
+      of full strength somewhere on the mesh.
+    </figcaption>
+  </figure>
+
+  <p>
+    And on a coarse mesh the highlight is not merely distorted — it is <em>missed</em>. The peak
+    a mesh can find at all, against the true peak on the analytic surface:
+  </p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Torus tessellation</th><th>Vertices</th><th>Best value at any vertex</th><th>Fraction of the true peak</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>8 × 6</td><td>63</td><td>0.00009</td><td><strong>0.0%</strong></td></tr>
+          <tr><td>12 × 8</td><td>117</td><td>0.08520</td><td>8.5%</td></tr>
+          <tr><td>24 × 12</td><td>325</td><td>0.73637</td><td>73.6%</td></tr>
+          <tr><td>48 × 24</td><td>1,225</td><td>0.99583</td><td>99.6%</td></tr>
+          <tr><td>96 × 48</td><td>4,753</td><td>0.99583</td><td>99.6%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 6.</span> Shininess 64, one fixed camera and light. At 8×6 the
+      mesh finds essentially none of the highlight. Note the last two rows: quadrupling the vertex
+      count from 1,225 to 4,753 improves nothing, because whether a vertex lands near the peak is
+      <em>luck</em> — and luck that changes as the object turns is exactly what flicker is.
+    </figcaption>
+  </figure>
+
+  <p>
+    So it flickers. Spin each mesh through 180 frames and count how many of them have no highlight
+    at all — the brightest pixel no brighter than the diffuse-only render:
+  </p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Mesh</th><th>Vertices</th><th>Frames with no highlight at all</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>icosahedron</td><td>12</td><td>107 of 180</td></tr>
+          <tr><td><code>cube.obj</code></td><td>24</td><td><strong>157 of 180</strong></td></tr>
+          <tr><td>torus 12 × 8</td><td>117</td><td>58 of 180</td></tr>
+          <tr><td>torus 48 × 24</td><td>1,225</td><td>0 of 180</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <span class="fignum">Table 7.</span> Shininess 64, Blinn, one light, one camera, the object
+      rotating about y. The cube is the worst of the four and the reason is instructive: on a flat
+      face the highlight's peak sits somewhere in the <em>middle</em> of the face, and per-vertex
+      shading only ever samples its corners.
+    </figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">This is not fixed today, and that is deliberate</span>
+    <p>
+      Everything in the three tables above is a property of <em>where the shading equation is
+      evaluated</em>, not of the equation. The equation is right; we are sampling it in the wrong
+      places. Lesson 3.8 separates those two axes properly — flat, Gouraud and per-pixel — and the
+      specular failure you can now summon with <kbd>H</kbd> and <kbd>E</kbd> is its motivating
+      case. Showing a problem clearly and leaving it standing for one lesson is better teaching
+      than quietly fixing it in the same breath as introducing it.
+    </p>
+  </div>
+
+  <div class="widget" id="w37">
+    <strong style="font-family:var(--font-ui);font-size:0.9rem">Drag the light and the eye</strong>
+    <p style="font-family:var(--font-ui);font-size:0.82rem;color:var(--text-muted);margin:.4em 0 .6em">
+      A cross-section through a surface. Drag either handle around the surface point; the mirror
+      direction <strong>R</strong> and the halfway vector <strong>h</strong> follow. Both terms are
+      shown as linear values and as the 8-bit codes a screen would actually display.
+    </p>
+    <p style="font-family:var(--font-ui);font-size:0.82rem;color:var(--text-muted);margin:0 0 .6em">
+      Two things to try. Push the handles onto the <em>same side</em> until <code>α ≥ 90°</code>:
+      Phong drops to zero and Blinn does not. Then raise the exponent and watch the gap close —
+      it starts at <code>p = 2</code>, the broad satin lobe where §3.4 says the two models differ
+      most, and by <code>p = 8</code> the cut-off region is already so dim that both read 0. The
+      difference between the models is a <em>rough-surface</em> difference.
+    </p>
+    <svg id="w37-svg" viewBox="0 0 660 300" style="width:100%;height:auto;touch-action:none">
+      <defs>
+        <marker id="w-a-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+                orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3a6ea5"/></marker>
+        <marker id="w-a-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+                orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f7d4f"/></marker>
+        <marker id="w-a-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+                orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7a7a72"/></marker>
+      </defs>
+      <line id="w-surf" x1="40" y1="250" x2="620" y2="250" stroke="var(--dia-ink)" stroke-width="2.5"/>
+      <g id="w-hatch" stroke="var(--dia-ink-soft)" stroke-width="1"></g>
+      <line id="w-normal" x1="330" y1="250" x2="330" y2="90" stroke="#7a7a72" stroke-width="1.8"
+            stroke-dasharray="6 4" marker-end="url(#w-a-n)"/>
+      <text x="338" y="94" class="sm muted">n</text>
+      <polyline id="w-lobe" fill="none" stroke="#2f7d4f" stroke-width="1.5" opacity="0.55"/>
+      <line id="w-R" x1="330" y1="250" x2="330" y2="250" stroke="#3a6ea5" stroke-width="2.2"
+            marker-end="url(#w-a-r)"/>
+      <line id="w-h" x1="330" y1="250" x2="330" y2="250" stroke="#2f7d4f" stroke-width="2.2"
+            marker-end="url(#w-a-h)"/>
+      <line id="w-l" x1="330" y1="250" x2="330" y2="250" stroke="#b8860b" stroke-width="2.6"/>
+      <line id="w-v" x1="330" y1="250" x2="330" y2="250" stroke="#7a4fa3" stroke-width="2.6"/>
+      <circle id="w-lh" r="9" fill="#b8860b" style="cursor:grab"/>
+      <circle id="w-vh" r="9" fill="#7a4fa3" style="cursor:grab"/>
+      <text id="w-lt" class="sm" text-anchor="middle">l</text>
+      <text id="w-vt" class="sm" text-anchor="middle">v</text>
+      <text id="w-Rt" class="sm" text-anchor="middle">R</text>
+      <text id="w-ht" class="sm" text-anchor="middle">h</text>
+      <text id="w-warn" x="330" y="288" class="sm t-warn" text-anchor="middle"></text>
+      <g id="w-swatches">
+        <rect x="44" y="26" width="150" height="26" rx="3" id="w-sw-p" fill="#000"
+              stroke="var(--rule-strong)"/>
+        <rect x="44" y="60" width="150" height="26" rx="3" id="w-sw-b" fill="#000"
+              stroke="var(--rule-strong)"/>
+        <text x="202" y="44" class="sm" id="w-tp">Phong</text>
+        <text x="202" y="78" class="sm" id="w-tb">Blinn</text>
+      </g>
+      <text x="440" y="34" class="sm mono" id="w-r1"></text>
+      <text x="440" y="52" class="sm mono" id="w-r2"></text>
+      <text x="440" y="70" class="sm mono" id="w-r3"></text>
+    </svg>
+    <div class="widget-controls">
+      <label>Phong exponent p
+        <input type="range" id="w-p" min="1" max="64" step="1" value="2">
+        <span class="widget-readout" id="w-pv">2</span>
+      </label>
+      <label>Blinn uses <span class="widget-readout" id="w-qv">8</span> (= 4p, §3.4)</label>
+    </div>
+  </div>
+
+  <script>
+  // Lesson 3.7's widget. Vanilla, no dependencies, and deliberately OUTSIDE the
+  // shared-script markers so the stamper never touches it.
+  (function () {
+    var svg = document.getElementById('w37-svg');
+    if (!svg) { return; }
+    var OX = 330, OY = 250, ARM = 150;
+    var lDeg = -48, vDeg = 22, drag = null;
+
+    // Ticks under the surface line, so "below the surface" reads as solid.
+    var hatch = document.getElementById('w-hatch');
+    for (var x = 52; x < 622; x += 14) {
+      var t = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      t.setAttribute('x1', x); t.setAttribute('y1', OY);
+      t.setAttribute('x2', x - 9); t.setAttribute('y2', OY + 9);
+      hatch.appendChild(t);
+    }
+
+    function toXY(deg, len) {
+      var a = deg * Math.PI / 180;
+      return [OX + Math.sin(a) * len, OY - Math.cos(a) * len];
+    }
+    function set(id, deg, len) {
+      var p = toXY(deg, len), e = document.getElementById(id);
+      e.setAttribute('x2', p[0].toFixed(1)); e.setAttribute('y2', p[1].toFixed(1));
+    }
+    function place(id, deg, len) {
+      var p = toXY(deg, len), e = document.getElementById(id);
+      if (e.tagName === 'circle') { e.setAttribute('cx', p[0].toFixed(1)); e.setAttribute('cy', p[1].toFixed(1)); }
+      else { e.setAttribute('x', p[0].toFixed(1)); e.setAttribute('y', p[1].toFixed(1)); }
+    }
+    // Lesson 1.6's transfer function, so the swatches show what a screen would show.
+    function encode(u) {
+      u = Math.max(0, Math.min(1, u));
+      var s = u <= 0.0031308 ? u * 12.92 : 1.055 * Math.pow(u, 1 / 2.4) - 0.055;
+      return Math.round(s * 255);
+    }
+    function grey(c) { return 'rgb(' + c + ',' + c + ',' + c + ')'; }
+
+    function update() {
+      var p = +document.getElementById('w-p').value;
+      var q = p * 4;
+      document.getElementById('w-pv').textContent = p;
+      document.getElementById('w-qv').textContent = q;
+
+      var rDeg = -lDeg;                    // R = l mirrored about n  (§3.1)
+      var hDeg = (lDeg + vDeg) / 2;        // h bisects l and v        (§3.3)
+      var alpha = Math.abs(vDeg - rDeg);   // angle(R, v)
+      var beta = Math.abs(hDeg);           // angle(n, h)
+
+      var ph = alpha >= 90 ? 0 : Math.pow(Math.cos(alpha * Math.PI / 180), p);
+      var bl = beta >= 90 ? 0 : Math.pow(Math.cos(beta * Math.PI / 180), q);
+
+      set('w-l', lDeg, ARM); set('w-v', vDeg, ARM);
+      set('w-R', rDeg, ARM * 0.92); set('w-h', hDeg, ARM * 0.78);
+      place('w-lh', lDeg, ARM); place('w-vh', vDeg, ARM);
+      place('w-lt', lDeg, ARM + 22); place('w-vt', vDeg, ARM + 22);
+      place('w-Rt', rDeg, ARM * 0.92 + 18); place('w-ht', hDeg, ARM * 0.78 + 18);
+
+      // The Blinn lobe as a polar curve about R, on the same axis as alpha —
+      // CLIPPED at the surface. Drawn unclipped it runs below the surface line,
+      // which reads as light leaving into the ground. The function is defined
+      // down there; the surface is not.
+      var pts = [];
+      for (var i = 0; i <= 240; i++) {
+        var off = -120 + 240 * i / 240;
+        var dir = rDeg + off;
+        if (Math.abs(dir) > 90) { continue; }
+        var b = Math.cos(off / 2 * Math.PI / 180);
+        var r = (b > 0 ? Math.pow(b, q) : 0) * ARM * 0.92;
+        var xy = toXY(dir, r);
+        pts.push(xy[0].toFixed(1) + ',' + xy[1].toFixed(1));
+      }
+      document.getElementById('w-lobe').setAttribute('points', pts.join(' '));
+
+      var cp = encode(ph), cb = encode(bl);
+      document.getElementById('w-sw-p').setAttribute('fill', grey(cp));
+      document.getElementById('w-sw-b').setAttribute('fill', grey(cb));
+      document.getElementById('w-tp').textContent = 'Phong  ' + ph.toFixed(4) + '  → ' + cp + '/255';
+      document.getElementById('w-tb').textContent = 'Blinn  ' + bl.toFixed(4) + '  → ' + cb + '/255';
+      document.getElementById('w-r1').textContent =
+        'l ' + lDeg.toFixed(0) + '°   v ' + vDeg.toFixed(0) + '°';
+      document.getElementById('w-r2').textContent =
+        'α = ' + alpha.toFixed(1) + '°   β = ' + beta.toFixed(1) + '°';
+      document.getElementById('w-r3').textContent =
+        'β / α = ' + (alpha > 0.01 ? (beta / alpha).toFixed(3) : '0.500');
+      document.getElementById('w-warn').textContent =
+        alpha >= 90 ? 'α ≥ 90°: the eye is outside R\'s hemisphere — Phong is cut off' : '';
+    }
+
+    function angleAt(evt) {
+      var r = svg.getBoundingClientRect();
+      var t = evt.touches ? evt.touches[0] : evt;
+      var sx = (t.clientX - r.left) / r.width * 660;
+      var sy = (t.clientY - r.top) / r.height * 300;
+      var a = Math.atan2(sx - OX, OY - sy) * 180 / Math.PI;
+      return Math.max(-85, Math.min(85, a));   // keep both handles above the surface
+    }
+    function down(which) {
+      return function (e) { drag = which; e.preventDefault(); };
+    }
+    document.getElementById('w-lh').addEventListener('pointerdown', down('l'));
+    document.getElementById('w-vh').addEventListener('pointerdown', down('v'));
+    svg.addEventListener('pointermove', function (e) {
+      if (!drag) { return; }
+      if (drag === 'l') { lDeg = angleAt(e); } else { vDeg = angleAt(e); }
+      update();
+    });
+    window.addEventListener('pointerup', function () { drag = null; });
+    document.getElementById('w-p').addEventListener('input', update);
+    update();
+  })();
+  </script>
+
+  <!-- ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>Every file this lesson touched, in full. Nothing elided.</p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table class="manifest">
+        <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>src/math/vec3.hpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>reflect</code> for three components — Lesson 1.8's bounce, unchanged in
+                  substance.</td></tr>
+          <tr><td>src/gfx/light.hpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>mirror_direction</code>, <code>halfway</code>, the two specular terms, the
+                  <code>specular</code> surface parameters, and a <code>shade()</code> that knows
+                  where the eye is.</td></tr>
+          <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+              <td>World positions in the vertex loop, per-object specular, the model on
+                  <kbd>H</kbd> and the exponent on <kbd>E</kbd>, the matched-exponent comparison,
+                  and the peak-brightness readout.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption><span class="fignum">Manifest.</span> Files touched in this lesson.
+      <code>CMakeLists.txt</code> is unchanged — everything added is header-only, and
+      <code>raster.cpp</code> is untouched for the third lesson running (§4.7).</figcaption>
+  </figure>
+
+@@LISTING:src/math/vec3.hpp@@
+@@LISTING:src/gfx/light.hpp@@
+@@LISTING:src/main.cpp@@
+
+  <!-- ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">all platforms</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">run</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># macOS / Linux
+./build/engine
+
+# Windows (multi-config generators put binaries in a config subdirectory)
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The scene opens as it did in Lesson 3.6, with one difference you should notice before reading
+    any HUD: the icosahedron now has a bright patch on it that <strong>does not turn with the
+    object</strong>. Spin it with <kbd>Space</kbd> and the shading slides over the surface rather
+    than rotating rigidly with it. That is the whole lesson, visible in the first two seconds.
+  </p>
+
+  <p>Then work through the following, in order:</p>
+
+  <ol>
+    <li>
+      <strong>Orbit with the arrow keys.</strong> The highlight moves across the surface. Press
+      <kbd>H</kbd> until the HUD reads <code>none</code> and orbit again: now nothing changes at
+      all, which is Lesson 3.6's behaviour and 3.6 was right about it.
+    </li>
+    <li>
+      <strong>Compare the two objects' highlights.</strong> The icosahedron's is white on an amber
+      body; the slab's is teal on a teal body. One is a plastic and one is a metal, and no
+      geometry or texture is doing that work (§3.9). The violet plinth has no highlight at all —
+      it is the control, and <kbd>H</kbd> and <kbd>E</kbd> must not change one pixel of it.
+    </li>
+    <li>
+      <strong>Cycle <kbd>E</kbd> from 2 to 256.</strong> The highlight tightens and the
+      <code>vs other</code> count on the HUD falls — the two models converge as surfaces get
+      shinier, exactly as Table 2 predicts.
+    </li>
+    <li>
+      <strong>Press <kbd>C</kbd> to the model scene and <kbd>L</kbd> to the torus.</strong> 1,225
+      vertices, and the highlight finally looks like a highlight. Then <kbd>L</kbd> to
+      <code>cube.obj</code>: 24 vertices, and it barely appears at all.
+    </li>
+    <li>
+      <strong>Watch the <code>peak</code> number while something spins.</strong> On the torus it
+      sits at 255. On the icosahedron it lurches. That lurch is Lesson 3.8's reason to exist.
+    </li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      With <kbd>H</kbd> on Blinn and <kbd>E</kbd> at 32: a white highlight on the icosahedron that
+      slides as you orbit and stays put as the light swings; a teal one on the slab; none on the
+      plinth. The HUD line reads
+      <code>[H] BLINN dot(n,h)^p [E] p=32 vs other &lt;some&gt; px peak &lt;some&gt;</code>, and
+      the <code>vs other</code> count is non-zero and drops as you raise the exponent. Pressing
+      <kbd>H</kbd> to <code>none</code> makes the picture identical to Lesson 3.6's — if it does
+      not, the specular colours are leaking somewhere they should not.
+    </p>
+  </div>
+
+  <p>
+    And the two harnesses, if you want the numbers this lesson quotes:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the numeric harness</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_37.cpp \
+    src/gfx/{mesh,obj,clip,raster,framebuffer,depth_buffer,colour}.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_37
+./scratch/verify_37</code></pre>
+  </figure>
+
+  <!-- ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>The highlight is on the wrong side of the object — <span class="sym">everything else looks right</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            The diffuse shading is correct — the lit side is the side facing the lamp — but the
+            bright patch sits on the opposite side of the object from where it should. Orbiting
+            moves it, so the view dependence is working; it just moves to the wrong place.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The mirror direction's sign. <code>reflect(l, n)</code> and
+            <code>mirror_direction(n, l)</code> are exact negations (§3.1), and if you reach for
+            the wrong one — or write <code>2·dot(n,l)·n + l</code>, an easy slip — the highlight
+            appears where the light <em>came from</em> rather than where it is going.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Use <code>mirror_direction</code>, and test it on the §3.1 worked example:
+            <code>n = (0,1,0)</code>, <code>l = (0.6, 0.8, 0)</code> must give
+            <code>(−0.6, 0.8, 0)</code>. The horizontal component flips and the vertical one does
+            not. If both flip, you negated the whole thing; if neither flips, you added instead of
+            subtracting. Switching to Blinn also makes it vanish as a class of bug, since
+            <code>halfway</code> has no sign to get wrong.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A bright crescent glows on the dark side — <span class="sym">light with no source</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            A curved band of light sits on the <em>unlit</em> half of an object, brightest right at
+            the terminator and fading into the shadow. It looks a little like a rim light, which is
+            why it sometimes survives review.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The specular term is not multiplied by <code>n·l</code>. Classic Phong shading as
+            published leaves it off (§3.6), and the halfway vector can point well above a surface
+            whose normal has already turned away from the light. Measured: <strong>0.608 of full
+            strength</strong> on geometry the light cannot reach, over a band covering 400 of 701
+            unlit-but-visible normals.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Multiply the specular by the same clamped cosine the diffuse term uses. The derivation
+            in §3.6 is the justification — the cosine law is about how much light <em>arrives</em>,
+            and it does not care what the surface does with it. As a bonus this removes the need
+            for a separate "zero the specular past the terminator" guard, because
+            <code>lambert()</code> already returns zero there.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Switching Phong → Blinn makes everything look matte — <span class="sym">or the reverse, chalky and blown out</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            You change one enum and the whole scene's materials change character. Blinn looks
+            washed out and over-broad, or Phong looks pinched and dull.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            The exponent was not converted. <code>dot(n,h)</code> falls off at half the rate of
+            <code>dot(R,v)</code> (§3.4), so the same number means a lobe about twice as wide in
+            angle. The two exponents are not the same parameter wearing the same name.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Multiply by 4 going to Blinn, divide by 4 going to Phong — the demo's
+            <code>matched_shininess</code>. Then re-tune, because 4× is a near-peak match and gets
+            worse the broader the lobe: measured 4.38× at <code>p = 4</code> converging to 4.01× by
+            <code>p = 128</code>.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A hard curved edge cuts the highlight off — <span class="sym">only on floors and walls, only sometimes</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            The sheen on a large flat surface ends along a crisp arc with nothing beyond it. It
+            comes and goes as the camera moves, and it never happens when you are looking toward
+            the light.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Phong's cut-off (§3.5). When the light and the eye are on the same side of the
+            normal — on a floor, when the sun is <em>behind</em> you — their angles sum past 90°
+            and the eye falls outside the hemisphere Phong answers in, so <code>dot(R, v)</code>
+            goes negative. (Not because the mirror ray points into the ground: it never does.
+            §3.5.) The arc is the <code>α = 90°</code> boundary drawn across the surface. Measured
+            on a plane:
+            at a sun elevation of 35°, Phong puts a highlight on <strong>0 of 30,806</strong> lit
+            pixels while Blinn covers all of them.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Use the halfway vector. This is not a tuning problem and cannot be tuned away — the
+            cut-off is exact and the boundary is sharp. It is also the honest reason Blinn's model
+            won, ahead of the arithmetic saving it is usually credited with.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The highlight flickers or vanishes as the object turns — <span class="sym">worse on simple shapes</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            A highlight pops in and out, or slides in jerky steps, or is a hard-edged polygon
+            rather than a round spot. Making the surface <em>shinier</em> makes it worse. It looks
+            fine on dense meshes and terrible on cubes.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Not a bug in the shading equation — a bug in <em>where it is evaluated</em>. Per-vertex
+            evaluation samples a very sharp function at a few points and draws straight lines
+            between them, so whether the peak is found at all is luck about vertex placement, and
+            that luck changes as the object turns. Measured: <code>cube.obj</code> has no highlight
+            at all in <strong>157 of 180</strong> frames of a rotation; the icosahedron in 107 of
+            180; the 48×24 torus in none.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Evaluate per pixel — interpolate the <em>normal</em> across the triangle and shade
+            each fragment — which is Lesson 3.8. Tessellating harder is the wrong fix and Table 6
+            shows why: going from 1,225 to 4,753 vertices improved nothing at all.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The highlight is a flat white blob with no shape — <span class="sym">and gets bigger, not brighter</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            The centre of the highlight is a featureless patch of pure white with a hard boundary.
+            Turning up the light makes the patch grow rather than intensify.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Clipping at 1.0. <code>to_encoded</code> clamps, and a specular term is the first thing
+            in this engine that routinely produces values above 1.0 — measured up to
+            <strong>1.86</strong> over a random sweep. Everything above white becomes white, so the
+            shape of the peak is thrown away and only its footprint remains.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Nothing today; this is genuinely correct behaviour for an 8-bit framebuffer. The real
+            answer is to render into a float target, keep the values above 1.0, and tonemap at the
+            end — Module 6's HDR pipeline, which exists precisely for this. In the meantime, lower
+            the specular colour or the light intensity so the peak lands near 1.0 rather than well
+            above it.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The highlight does not move when the camera does — <span class="sym">but the code has a to_eye in it</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>
+            There is a specular term, it produces a highlight, and orbiting the camera slides it
+            not at all — or slides it much less than it should.
+          </dd>
+          <dt>Cause</dt>
+          <dd>
+            Three candidates, in decreasing order of likelihood. (1) <code>to_eye</code> is
+            computed from a constant — the "infinite viewer" approximation, where <strong>v</strong>
+            is taken to be the camera's forward axis rather than the direction to each point. It
+            is a real and legitimate optimisation, but it removes exactly the variation you are
+            looking for on nearby objects. (2) The eye position and the surface position are in
+            different spaces: a world-space eye minus a model-space vertex is a vector with no
+            meaning. (3) You are shading per vertex on a mesh too coarse to show the motion — check
+            <code>peak</code> in the HUD, and re-read Table 7.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            For (2), which is the one that hides best: put an assertion on the space. In this
+            codebase the naming convention does the work —
+            <code>eye_world - world_pos[v]</code> reads correctly and
+            <code>eye_world - view_pos[v]</code> reads wrong, which is the whole point of the
+            <code>a_from_b</code> discipline from Lesson 2.8.
+          </dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.7.1</span>Predict the control<span class="difficulty">warm-up</span></h3>
+    <p>
+      The violet plinth has <code>specular{}</code> — a black highlight. Before running anything,
+      predict what the demo's <code>vs other</code> pixel count would do if you gave the plinth
+      the icosahedron's <code>{{0.85f, 0.85f, 0.85f}, shininess}</code>. Then do it and check.
+    </p>
+    <p>
+      Second part, and the interesting one: the plinth is the only object in the scene with
+      <em>identity</em> rotation and a non-uniform scale. Predict whether its highlight moves when
+      you orbit. Predict whether it moves when you swing the light with <kbd>A</kbd>/<kbd>D</kbd>.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The plinth is a flat-topped box. Which of its faces can carry a highlight at all, given
+        the light's fixed 40° elevation? And what did §3.8 say about where a highlight sits on a
+        flat surface?
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The count goes up — the plinth's faces now differ between the two models like every other
+        surface. The highlight <em>does</em> move under both controls, because §3.8's formula
+        <code>p = e − R·(e<sub>y</sub>/R<sub>y</sub>)</code> contains both the eye and (through
+        <strong>R</strong>) the light. But it moves in a very particular way on the flat top: as a
+        single smooth patch sliding across, rather than wrapping around a curve. And it will be
+        <em>badly</em> sampled, because the top face is two triangles with four corners between
+        them and §4.7's Table 7 is about exactly this — the cube is the worst subject in the demo.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.7.2</span>Ship the classic bug, on purpose<span class="difficulty">guided</span></h3>
+    <p>
+      Add a fourth <code>specular_model</code> — call it <code>phong_classic</code> — that is
+      Phong's term <em>without</em> the incoming <code>n·l</code> factor, exactly as published in
+      1975. Put it on the <kbd>H</kbd> cycle, then find a camera and light arrangement where the
+      crescent from §3.6 is unmistakable, and use the demo's comparison counter to measure how many
+      pixels it costs.
+    </p>
+    <p>
+      This is the engine's ninth "keep the wrong thing behind a key" bargain. Write the comment
+      that says why it is there.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The factor is applied in <code>shade()</code>, not in <code>phong_term</code>, so the new
+        model needs the multiplication to be conditional. The cleanest change is to compute
+        <code>spec</code> as now and then choose whether to multiply it by <code>ir</code> or by
+        the un-cosined light. Watch out: the existing early-out is guarded on
+        <code>n_dot_l &gt; 0</code>, which is precisely the guard the bug needs to <em>not</em>
+        have.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The guard is the interesting part. To reproduce the bug faithfully you must let the
+        specular through when <code>n_dot_l ≤ 0</code>, which means the early-out has to become
+        model-dependent — and noticing that is the exercise. It is a small demonstration of
+        something general: a correct implementation often has its correctness expressed as a
+        control-flow shortcut, and reintroducing a bug means unpicking an optimisation that was
+        only valid because the code was right.
+      </p>
+      <p>
+        Expect the crescent to be most visible with a low light and a camera roughly opposite it,
+        on the torus (a smooth mesh has a long terminator). A broad exponent, <code>p = 4</code> or
+        less, spreads the leak over more of the surface.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.7.3</span>Normalise the lobe, and watch it fail<span class="difficulty">guided</span></h3>
+    <p>
+      Multiply the Blinn term by <code>(m + 8) / (8π)</code> (§3.7) and run the demo through the
+      whole <kbd>E</kbd> range. Then answer three questions with numbers rather than impressions:
+    </p>
+    <ol>
+      <li>At which exponent does the peak first clip to 255?</li>
+      <li>How large is the clipped region at <code>m = 256</code>, as a fraction of the object?</li>
+      <li>Is the picture at <code>m = 4</code> better or worse than the unnormalised one, and
+          why?</li>
+    </ol>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The factor is 0.4775 at <code>m = 4</code> and 10.5042 at <code>m = 256</code>. One of
+        those makes a rough surface <em>dimmer</em>, which is the correct behaviour and may not be
+        the one you expected. The demo already reports the brightest channel on screen; a count of
+        pixels at exactly 255 is a three-line addition to <code>brightest_channel</code>.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The answer to (3) is "better, and it will not feel like it" — the normalised rough surface
+        is dimmer because a broad lobe genuinely spreads its energy over more directions, and the
+        unnormalised version was over-bright all along. The answer to (1) and (2) is that the
+        high-exponent end becomes unusable: with a factor of 10.5 the peak is ten times white and
+        the highlight is a flat clipped disc whose size, rather than whose brightness, encodes the
+        material. That is the concrete argument for HDR: the normalisation is <em>correct</em> and
+        an 8-bit target cannot carry it. Keep the change behind a flag and revisit it in Module 6.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.7.4</span>Shade in model space<span class="difficulty">engine</span></h3>
+    <p>
+      §4.5 gave up a matrix multiply per vertex to get world positions. Take it back: transform the
+      <em>eye</em> and the <em>light direction</em> into model space once per object, shade there,
+      and keep the composed <code>view_from_model</code> for the position pipeline. Measure the
+      per-frame cost both ways on the 1,225-vertex torus, and check that the rendered images are
+      identical.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        A <em>position</em> goes into model space through <code>inverse(world_from_model)</code>.
+        A <em>direction</em> does too. But a <strong>normal</strong> does not — and you already
+        have that machinery from 3.6, so ask yourself what the model-space normal actually is
+        before transforming anything. (It is the one the mesh stored. That is the whole saving.)
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The saving is real and larger than it looks: you also stop needing the normal matrix per
+        vertex, because model-space normals are what the mesh already holds. The cost is one 4×4
+        inverse per object per frame, plus a genuine conceptual burden — every quantity in the
+        shading is now in a per-object space, so a second light means transforming that one too,
+        and a light count of <em>n</em> costs <em>n</em> transforms per object rather than none.
+      </p>
+      <p>
+        That last point is why real engines mostly do <em>not</em> do this any more: it is a win
+        for one light and a loss for many, and it made more sense when vertex transforms were the
+        bottleneck than it does now. Worth implementing once to feel the trade, and worth knowing
+        why it fell out of fashion.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.7.5</span>A second light<span class="difficulty">open</span></h3>
+    <p>
+      <code>lighting</code> holds one <code>directional_light</code> and an ambient constant.
+      Give it several. Decide: a fixed array with a count, or a span? Does <code>shade()</code>
+      loop over them, or does the caller call it once per light and sum? What happens to the
+      ambient term — is it added once or once per light?
+    </p>
+    <p>
+      Then render a scene with a warm key from one side and a cool fill from the other, and look
+      carefully at the two highlights.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The ambient question has an unambiguous answer once you say what ambient <em>is</em>. And
+        for the shape: which choice would still work when Module 6 wants to sort draws by light
+        count, and which one bakes an assumption into the shading function?
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Ambient is added once — it is a stand-in for the whole environment, not a property of any
+        particular lamp, so adding it per light would scale a fudge by a number that has nothing to
+        do with it.
+      </p>
+      <p>
+        For the structure: summing inside <code>shade()</code> over a span is the better shape,
+        because the diffuse and specular terms both need the albedo and the surface parameters, and
+        splitting the loop outward would recompute <code>normalised(normal)</code> and
+        <code>normalised(to_eye)</code> for every light. Note what you have just built, though — a
+        loop over lights inside the shading function is a <em>forward renderer</em>, and its cost
+        is objects × lights. Module 6 names that and weighs it against the alternatives.
+      </p>
+      <p>
+        The two highlights are the payoff: a surface with a warm and a cool light shows two
+        distinctly coloured specular spots, and it is the most convincing "this is a real material"
+        cue the engine has produced so far.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>Draw a <strong>view-dependent</strong> highlight — the first shading term in this course
+          that changes when you move your head, and the reason a surface reads as smooth and hard
+          rather than as plaster.</li>
+      <li>Compute the mirror direction and the halfway vector, both derived rather than quoted, and
+          both verified against each other over tens of thousands of random configurations.</li>
+      <li>Evaluate <strong>either</strong> Phong or Blinn-Phong, compare them at matched visual
+          tightness, and say precisely where and why they differ.</li>
+      <li>Carry per-surface material parameters — a specular colour and a shininess — which is the
+          first time this engine has had a parameter that belongs to neither the geometry, the
+          light, nor the rasterizer.</li>
+      <li>Predict, in closed form, where a highlight will land on a flat surface — and confirm it
+          against a brute-force search to within one grid cell.</li>
+    </ul>
+    <p>
+      Three ideas here will keep paying. The <strong>halfway vector as a question about the
+      surface</strong> is what Module 6's microfacet theory is built on, and meeting it now means
+      GGX arrives as a better answer rather than a new mystery. The <strong>incoming cosine
+      belonging to every outgoing path</strong> is what makes a BRDF a BRDF. And the observation
+      that <strong>a fast path can be bought out by a feature</strong> — the composed matrix that
+      view dependence cost us — is the shape of most real performance work.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="03-08-shading-models.html">3.8 — Flat, Gouraud and Per-Pixel Shading</a>.
+      Everything in §4.7 was a measurement of the same defect: the shading equation is right and we
+      are evaluating it in the wrong places. Three tables and 157 blank frames out of 180 are a
+      more convincing argument than any assertion, and they are the argument 3.8 answers. It
+      separates <em>where the normal comes from</em> from <em>where the equation is evaluated</em>
+      — two axes that have been quietly tangled since 3.6 — and puts the highlight where it
+      belongs: on the pixel.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><span class="src">Phong, B. T. (1975)</span> <em>Illumination for Computer Generated
+        Pictures</em>, CACM 18(6). The original, and short. Worth reading to see how little
+        justification the <code>cos<sup>p</sup></code> lobe was given — it is presented frankly as
+        something that looks right.</li>
+    <li><span class="src">Blinn, J. F. (1977)</span> <em>Models of Light Reflection for Computer
+        Synthesized Pictures</em>, SIGGRAPH '77. Introduces the halfway vector, and — importantly —
+        already frames it in terms of microfacet distributions rather than as an optimisation.</li>
+    <li><span class="src">Ngan, Durand &amp; Matusik (2005)</span> <em>Experimental Analysis of
+        BRDF Models</em>, EGSR. Fits analytic models to measured materials. This is the paper
+        behind "Blinn-Phong matches reality better than Phong", and it is where the grazing-angle
+        behaviour of §3.5 is quantified against real data.</li>
+    <li><span class="src">Real-Time Rendering, 4th ed.</span> Chapter 9, §9.1–9.9. The
+        authoritative modern treatment, including the normalisation factors of §3.7 and the
+        dielectric/metal distinction of §3.9 done properly.</li>
+    <li><span class="src">Hoffman, N.</span> <em>Background: Physics and Math of Shading</em>,
+        SIGGRAPH course notes. The clearest short account of why the specular colour is not the
+        albedo, and the source of the <code>(m+8)/(8π)</code> approximation.</li>
+    <li><span class="src">Scratchapixel</span> <em>Introduction to Shading</em> — the diffuse and
+        specular sections, with a derivation of the reflection vector that complements §3.1.</li>
+    <li><span class="src">LearnOpenGL</span> <em>Basic Lighting</em> and <em>Advanced Lighting</em>.
+        The second of those is a compact treatment of exactly the Phong-versus-Blinn cut-off this
+        lesson measures.</li>
+  </ul>

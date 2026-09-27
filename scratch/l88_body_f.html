@@ -1,0 +1,271 @@
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <p>
+    Nine, in the order you are likely to meet them. A broadphase bug is unusually nasty because the
+    symptom appears in a different subsystem, several frames later, intermittently — so each of
+    these is written symptom first.
+  </p>
+
+  <div class="callout">
+    <span class="label">Things fall through the floor, but only sometimes</span>
+    <p>
+      <strong>Cause:</strong> a false negative. Almost always one of two things: the proxy was
+      inserted by its centre cell rather than its whole range (§5.1, and it loses two thirds of the
+      pairs), or the world AABB handed to the broadphase is stale — computed before the integrator
+      moved the body rather than after. <strong>Fix:</strong> run
+      <code>brute_force_pairs</code> beside the grid and diff the sets, which is what the demo's [B]
+      does. If they agree, the bug is in the boxes, not the grid.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">The pair count is right but the stack will not settle</span>
+    <p>
+      <strong>Cause:</strong> the pair order is not canonical. 8.7's manifold is not symmetric in its
+      two arguments, so a pair reported as <code>(3, 7)</code> one frame and <code>(7, 3)</code> the
+      next has its normal reversed and its reference face moved, and every warm start on it is lost.
+      <strong>Fix:</strong> sort at the point of emission, as <code>emit</code> does. The tell is
+      that raising the solver's iteration count helps a little and never fixes it.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Every pair arrives two, four or eight times</span>
+    <p>
+      <strong>Cause:</strong> the owner-cell rule is missing or wrong. <strong>Fix:</strong> §6. The
+      count of duplicates is <em>predictable</em> — the product of the overlap widths minus one,
+      summed over pairs — so if you are seeing a number other than zero, compute the expected one and
+      see whether they match; if they do, the rule is absent, and if they do not, the rule is applied
+      in the wrong place (it must be tested against the current cell, not against either proxy's own
+      minimum).
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">A frame occasionally takes eighty milliseconds</span>
+    <p>
+      <strong>Cause:</strong> either the grid is allocating (a <code>vector</code> per bucket, or
+      <code>starts_</code> reconstructed rather than <code>assign</code>ed), or one proxy has become
+      enormous — a body that got a NaN in its transform has an AABB spanning the universe, and at a
+      1 m cell that is an infinite loop in the range walk rather than a slow frame.
+      <strong>Fix:</strong> watch <code>stats().entries</code>, which is the number that spikes, and
+      keep <code>max_cells_per_proxy</code> on. The guard's real job is turning that particular
+      hang into a slow frame with a counter attached.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">The grid is slower than testing every pair</span>
+    <p>
+      <strong>Cause:</strong> the scene is small (§11 — below about a hundred bodies this is
+      expected and correct), or the cell size is wrong by a decade. <strong>Fix:</strong> read
+      <code>entries</code> and <code>bucket_tests</code>. If <code>entries</code> is many times the
+      proxy count the cell is too small; if <code>bucket_tests</code> is approaching
+      <code>n(n−1)/2</code> the cell is too large and you have rebuilt brute force with a hash table
+      in front of it.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">It works in the first octant and breaks near the origin</span>
+    <p>
+      <strong>Cause:</strong> <em>not</em> the truncating cell index, which §5.2 measured at zero
+      lost pairs. It is almost always a cell coordinate used as an array index without an offset — a
+      negative index into a <code>vector</code>, which is undefined behaviour and usually a crash or
+      silent corruption. <strong>Fix:</strong> hash the coordinate rather than indexing on it, which
+      is what <code>hash_cell</code> is for, and note the cast to <code>uint32_t</code> inside it:
+      multiplying a negative <code>int32</code> by a large prime is signed overflow and therefore
+      undefined.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Hashing looks expensive in the profile</span>
+    <p>
+      <strong>Cause:</strong> quite possibly a function call. §8.2 measured <code>hash_cell</code> at
+      0.115 ns inlined and 0.692 ns behind a call the compiler could not inline — six times, for
+      three multiplies. <strong>Fix:</strong> put trivially small functions that cross a
+      translation-unit boundary in the header. And before concluding your hash is slow, check the
+      other explanation: a hash that is not spreading produces long buckets, and what is expensive is
+      the quadratic loop inside them.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">The A/B comparison says the more complicated arm is faster</span>
+    <p>
+      <strong>Cause:</strong> the two arms differ in something other than the thing under test. In
+      §8.2's first draft one arm crossed a translation-unit boundary and the other did not.
+      <strong>Fix:</strong> ask what else differs before believing the difference you were looking
+      for. A result that contradicts the instruction count is the instrument talking, not the code.
+    </p>
+  </div>
+
+  <div class="callout">
+    <span class="label">Changing the cell size changes the physics</span>
+    <p>
+      <strong>Cause:</strong> a real bug, and a serious one — the cell size is a performance
+      decision and must not be observable in the output. <strong>Fix:</strong> the check is one line
+      (§7.3: sweep the cell size and compare pair sets), and the usual culprit is a pair emitted
+      from a cell test rather than from a box test, so that “within a cell of each other” has leaked
+      out as “touching”.
+    </p>
+  </div>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <h3>Exercise 1 — the crossover on <em>your</em> machine</h3>
+  <p>
+    §11's crossover is a property of this machine and this compiler. Run the harness and find yours,
+    then change one thing — build without <code>-O2</code>, or make the proxies ten times larger so
+    each spans more cells — and find it again. <em>Hint:</em> the cost model of §7 predicts which
+    direction each change moves it, and predicting before measuring is the point of the exercise.
+  </p>
+
+  <h3>Exercise 2 — the sweep-and-prune comparison</h3>
+  <p>
+    Implement a one-axis sweep and prune: sort the proxies by <code>box.min.x</code>, walk the sorted
+    list, and for each proxy test it against the following ones until one starts beyond its
+    <code>box.max.x</code>. Check it against <code>brute_force_pairs</code>, then measure it against
+    the grid on three scenes — the scattered one, the lattice, and one where every body is on a floor
+    at <code>y = 0.5</code>. <em>Solution sketch:</em> sweep and prune wins on scenes that are long
+    in the sweep axis and loses badly when many bodies share a coordinate on it; the floor scene
+    should be its worst case if you sweep on <em>y</em>, and you should try that on purpose.
+  </p>
+
+  <h3>Exercise 3 — the cost model as a tuner</h3>
+  <p>
+    Write the model from §7.1 into the engine: sweep three or four cell sizes on the first frame of a
+    level, read <code>entries</code> and <code>bucket_tests</code> from each, solve for
+    <em>a</em> and <em>b</em> once at start-up, and pick the cell size that minimises the model.
+    Compare against <code>auto_cell_size</code>. <em>Hint:</em> the two constants are machine
+    properties, so they only need finding once per platform — which makes this a build-time question
+    rather than a runtime one, and that may be the better answer.
+  </p>
+
+  <h3>Exercise 4 — static and dynamic</h3>
+  <p>
+    Add a <code>bool is_static</code> to <code>proxy</code> and skip pairs where both are static —
+    they can never move relative to each other, so they will either always collide or never.
+    Measure on a scene that is 90% static, which is what a level is. <em>Solution sketch:</em> the
+    saving is not the pair tests but the <em>entries</em>: a static proxy's cell range never changes,
+    so the real prize is a second grid that is built once and queried rather than rebuilt. Doing that
+    properly means the query walks a dynamic proxy's cells against the static table, which is a
+    different loop from the one in <code>build</code>.
+  </p>
+
+  <h3>Exercise 5 — swap the hash, end to end</h3>
+  <p>
+    §8.2 measured the textbook hash as 25.7% above chance on a lattice and worth 9.4% of the inner
+    loop. Replace <code>hash_cell</code> with the mixing function from the harness and measure the
+    whole broadphase, not the hash — on the lattice, on the scattered scene, and on the crowd.
+    <em>Hint:</em> predict the answer first from the two numbers in §8.2, then see whether the
+    prediction survives; a 9.4% saving on the inner loop is not a 9.4% saving on the stage, because
+    the entry pass does not get faster and the hash itself gets slower.
+  </p>
+
+  <h3>Exercise 6 — the layer mask</h3>
+  <p>
+    Add a <code>std::uint32_t layer</code> and a <code>std::uint32_t mask</code> to
+    <code>proxy</code>, and reject a candidate when <code>(a.layer &amp; b.mask) == 0</code> or the
+    reverse. Put the test where it belongs in the three-test order of §12.4 and justify the position
+    you chose. <em>Solution sketch:</em> it is cheaper than the AABB test and more selective than the
+    owner rule, but it must come <em>after</em> the owner test, or a pair rejected by the mask in its
+    owner cell would still be emitted from another one — which is a duplicate that only appears when
+    layers are in use.
+  </p>
+
+  <h3>Exercise 7 — an engine challenge: the two-level grid</h3>
+  <p>
+    §10 says the structural answer to the teapot is a hierarchy. Build the smallest one that works: a
+    coarse grid for proxies that trip <code>max_cells_per_proxy</code> and the existing fine grid for
+    everything else, with pairs generated within each level and across the two. Keep the contract —
+    check against <code>brute_force_pairs</code> at every step — and measure against §10's guard on
+    the <em>k</em> = 64 scene. <em>Hint:</em> the cross-level pass is the interesting one, and the
+    honest version of this exercise ends with a measurement of whether it was worth it, because for
+    one floor it will not be.
+  </p>
+
+  <h2 id="recap">18. Recap &amp; next</h2>
+
+  <p>
+    The engine can now find, in a scene of thousands of bodies, the handful of pairs worth asking the
+    narrow phase about — and it can prove that it has not missed any.
+  </p>
+
+  <p>
+    What was built: <code>proxy</code> and <code>broadphase_pair</code>, a <code>uniform_grid</code>
+    that hashes cell coordinates and rebuilds itself every frame in four linear passes,
+    <code>brute_force_pairs</code> as both oracle and baseline, <code>overlaps(aabb, aabb)</code> as
+    the six-comparison test that makes the whole arrangement pay, and a stats struct that reports
+    where the frame went.
+  </p>
+
+  <p>
+    What was measured, and what it changed:
+  </p>
+
+  <ul>
+    <li>The quadratic wall is at <strong>278 bodies</strong>, not at some large number.</li>
+    <li>The grid is <strong>137.7×</strong> faster at 8,192 proxies and <em>slower</em> below about a
+        hundred — and both halves of that sentence are worth knowing.</li>
+    <li>The famous <code>floor</code>-versus-cast bug loses <strong>zero pairs</strong> in a
+        range-walk grid, because monotonicity is all the range walk needs. The mistake that does lose
+        pairs — one cell per proxy, by its centre — loses <strong>66.7%</strong> of them.</li>
+    <li>The owner-cell rule removes every duplicate exactly, for three <code>max</code> calls, and
+        the closed form for how many it removed agrees with the counter at
+        <strong>3271 and 3271</strong>.</li>
+    <li>The cell-size rule of thumb is a two-term cost model whose constants
+        (<strong>8.1 and 5.4 ns</strong>) are the same on scenes of different density, and whose
+        minimum moves as the sixth root of the crowd.</li>
+    <li>The textbook spatial hash is <strong>25.7%</strong> worse than chance on the input a physics
+        scene actually produces, worth <strong>9.4%</strong> of the inner loop, and half the price of
+        the hash that fixes it — so it stays, for a reason.</li>
+    <li>A ground plate wants <strong>80,802 cells</strong> to itself at a 1 m cell, nearly three
+        times the whole scene, and a uniform grid can only notice.</li>
+  </ul>
+
+  <p>
+    And the promise this lesson makes to the two after it: pairs arrive with <code>a &lt; b</code>,
+    always, so <code>pair_key</code> indexes 8.7's <code>manifold_cache</code> and
+    <code>collide_manifold</code> is called with the same shape as <code>a</code> every frame. Warm
+    starting depends on it, and 8.10 is where that debt is collected.
+  </p>
+
+  <p>
+    <strong>Next: 8.9 — Impulse Response: Restitution and Friction.</strong> The pipeline is now
+    complete up to the point of <em>doing something about it</em>. A pair is found, a manifold is
+    generated, four contact points share a normal — and nothing has yet applied a single impulse.
+    8.9 derives the normal impulse from the relative velocity you want afterwards rather than from a
+    force, adds restitution as a coefficient on that velocity, and then Coulomb friction as a
+    tangential impulse clipped to a cone. It also decides the question this lesson deliberately left
+    open: how much speculative margin a solver wants, which is the moment
+    <code>broadphase_config::margin</code> stops being a knob nobody turns.
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul>
+    <li><strong>Matthias Teschner, Bruno Heidelberger, Matthias Müller, Danat Pomeranets and Markus
+        Gross, “Optimized Spatial Hashing for Collision Detection of Deformable Objects”</strong>
+        (VMV 2003) — the source of the three-prime hash in <code>hash_cell</code>, and worth reading
+        for its cell-size analysis, which reaches the same “about the object size” conclusion by a
+        different route.</li>
+    <li><strong>Christer Ericson, <em>Real-Time Collision Detection</em>, chapter 7</strong> — the
+        standard treatment of broadphase structures: uniform grids, hierarchical grids, sweep and
+        prune, and the trade-offs between them. Section 7.1.6 covers the duplicate problem and
+        arrives at a different fix from ours, which is worth comparing against §6.</li>
+    <li><strong>David Baraff, “Dynamic Simulation of Non-Penetrating Rigid Bodies”</strong> (thesis,
+        1992), chapter 2 — where sweep and prune enters the literature, and the coherence argument
+        that this lesson's grid deliberately does not make.</li>
+    <li><strong>Erin Catto, “Dynamic Bounding Volume Hierarchies”</strong> (GDC 2019) — the structure
+        this grid is not, explained by the author of Box2D, including why a physics engine's BVH
+        wants fattened AABBs and what that has to do with §9's margin.</li>
+    <li><strong>Randall Munroe's teapot, and A. S. Glassner, <em>An Introduction to Ray
+        Tracing</em></strong> — the “teapot in a stadium” problem is a ray-tracing idiom before it is
+        a physics one, and reading the original framing makes clear that it is a property of uniform
+        subdivision rather than of any particular application.</li>
+    <li><strong>Gino van den Bergen, <em>Collision Detection in Interactive 3D Environments</em>,
+        chapter 6</strong> — broadphase from the author of GJK's most-cited implementation, with a
+        careful treatment of why AABBs and not spheres, and when that flips.</li>
+  </ul>

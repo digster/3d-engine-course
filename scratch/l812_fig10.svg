@@ -1,0 +1,60 @@
+<svg viewBox="0 0 980 345" role="img" aria-labelledby="g10-t g10-d">
+  <title id="g10-t">The return to animation, and three ways of making bodies follow a clip</title>
+  <desc id="g10-d">Left: three pairs of bars — the first-frame jump when blending from the read-back pose against snapping, the pelvis slide with and without realignment, and the worst bone length change under a local and a model-space blend. Right: a table of steered, teleported, and teleported-with-chord bodies: the velocity lie, how deep a limb goes into a crate, the crate's top speed and the bodies' speed when let go.</desc>
+  <defs>
+    <marker id="e-i-g10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-g10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-g10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-g10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-g10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="26" y="30" class="sm" text-anchor="start">The return, after a trip and three seconds on the floor</text>
+<text x="26" y="68" class="xs" text-anchor="start">first-frame jump</text>
+<rect x="160" y="76" width="6.3458737864077674" height="16" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="174.34587378640776" y="88" class="xs mono" text-anchor="start">0.0581 m   blend from read_pose</text>
+<rect x="160" y="98" width="180.0" height="16" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="348.0" y="110" class="xs mono" text-anchor="start">1.648 m   snap to the clip</text>
+<text x="26" y="144" class="xs" text-anchor="start">pelvis slide</text>
+<rect x="160" y="152" width="1.5" height="16" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="169.5" y="164" class="xs mono" text-anchor="start">0 m   realigned</text>
+<rect x="160" y="174" width="180.0" height="16" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="348.0" y="186" class="xs mono" text-anchor="start">1.302 m   not realigned</text>
+<text x="26" y="220" class="xs" text-anchor="start">worst bone change</text>
+<rect x="160" y="228" width="1.5" height="16" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="169.5" y="240" class="xs mono" text-anchor="start">0.06 mm   local slerp blend</text>
+<rect x="160" y="250" width="180.0" height="16" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.6"/>
+<text x="348.0" y="262" class="xs mono" text-anchor="start">208.06 mm   model-space blend</text>
+<text x="26" y="288" class="xs muted" text-anchor="start">The worst joint crosses 115.5° of arc on the way back, where nlerp lags</text>
+<text x="26" y="303" class="xs muted" text-anchor="start">slerp by up to 1.98° — a hundred times what 7.7 found between two keys</text>
+<text x="26" y="318" class="xs muted" text-anchor="start">of a clip. The return blends with transform_blend_slerp.</text>
+<text x="500" y="30" class="sm" text-anchor="start">Jogging into a 5 kg crate: three ways to follow the clip</text>
+<text x="500" y="44" class="xs muted" text-anchor="start">Two seconds, then released</text>
+<text x="500" y="64" class="xs muted" text-anchor="start">bodies are</text>
+<text x="740" y="64" class="xs muted" text-anchor="end">velocity lie</text>
+<text x="820" y="64" class="xs muted" text-anchor="end">limb in crate</text>
+<text x="890" y="64" class="xs muted" text-anchor="end">crate top</text>
+<text x="960" y="64" class="xs muted" text-anchor="end">let go at</text>
+<line x1="500" y1="72.0" x2="966" y2="72.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="89.0" class="xs" text-anchor="start">kinematic, steered</text>
+<text x="740" y="89.0" class="xs mono" text-anchor="end">0.000 m/s</text>
+<text x="820" y="89.0" class="xs mono" text-anchor="end">69.7 mm</text>
+<text x="890" y="89.0" class="xs mono" text-anchor="end">4.78 m/s</text>
+<text x="960" y="89.0" class="xs mono" text-anchor="end">4.82 m/s</text>
+<text x="500" y="106.0" class="xs" text-anchor="start">dynamic, teleported</text>
+<text x="740" y="106.0" class="xs mono" text-anchor="end">20.626 m/s</text>
+<text x="820" y="106.0" class="xs mono" text-anchor="end">286.8 mm</text>
+<text x="890" y="106.0" class="xs mono" text-anchor="end">3.67 m/s</text>
+<text x="960" y="106.0" class="xs mono" text-anchor="end">20.90 m/s</text>
+<text x="500" y="123.0" class="xs" text-anchor="start">dynamic, teleported + chord</text>
+<text x="740" y="123.0" class="xs mono" text-anchor="end">0.000 m/s</text>
+<text x="820" y="123.0" class="xs mono" text-anchor="end">159.3 mm</text>
+<text x="890" y="123.0" class="xs mono" text-anchor="end">3.59 m/s</text>
+<text x="960" y="123.0" class="xs mono" text-anchor="end">4.82 m/s</text>
+<text x="500" y="151.5" class="xs muted" text-anchor="start">Steered bodies tell the truth: their velocity is their motion, to the bit. A</text>
+<text x="500" y="166.5" class="xs muted" text-anchor="start">teleported body's velocity is whatever the solver last left in it — 20.6 m/s of</text>
+<text x="500" y="181.5" class="xs muted" text-anchor="start">accumulated junk here — and that is what a contact sees and what the next</text>
+<text x="500" y="196.5" class="xs muted" text-anchor="start">handoff inherits. Giving it the chord fixes the lie and not the fight: the solve</text>
+<text x="500" y="211.5" class="xs muted" text-anchor="start">still pushes the limb out of the crate and the teleport puts it back, 159 mm</text>
+<text x="500" y="226.5" class="xs muted" text-anchor="start">deep. The 69.7 mm of the steered limb is one step of a fast leg's arrival,</text>
+<text x="500" y="241.5" class="xs muted" text-anchor="start">8.10's depth.</text>
+</svg>

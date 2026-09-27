@@ -1,0 +1,43 @@
+<svg viewBox="0 0 720 404" role="img" aria-labelledby="l64f5-t l64f5-d">
+  <title id="l64f5-t">Why a metal's colour lives in F0 and a dielectric's in its albedo</title>
+  <desc id="l64f5-d">A dielectric reflects a grey four percent off its clear surface layer and lets the rest in, where pigment scatters it back out carrying the colour, so its diffuse lobe is coloured and its F0 is grey. A conductor absorbs everything that crosses the interface within a few atomic layers, so it has no diffuse lobe at all and the colour has nowhere to live but F0.</desc>
+  <defs>
+    <marker id="e-i-l64f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l64f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l64f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l64f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l64f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="404" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">A metal is not a shinier plastic</text>
+<text x="190" y="62" class="sm" text-anchor="middle">DIELECTRIC</text>
+<text x="190" y="80" class="xs" text-anchor="middle">plastic, paint, skin, glass</text>
+<line x1="50" y1="200" x2="330" y2="200" class="ink" stroke-width="1.8"/>
+<rect x="50" y="200" width="280" height="66" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<line x1="72" y1="104" x2="166" y2="196" class="ink" stroke-width="1.8" marker-end="url(#e-i-l64f5)"/>
+<line x1="170" y1="194" x2="264" y2="108" class="ink-soft" stroke-width="1.8" marker-end="url(#e-s-l64f5)"/>
+<text x="272" y="106" class="xs" text-anchor="start">F0 = 0.04</text>
+<text x="272" y="122" class="xs" text-anchor="start">grey</text>
+<line x1="170" y1="202" x2="196" y2="240" class="ink-soft" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#e-s-l64f5)"/>
+<line x1="196" y1="240" x2="124" y2="114" stroke="#e05c5c" stroke-width="1.6" marker-end="url(#e-b-l64f5)"/>
+<text x="116" y="108" class="xs" text-anchor="end">diffuse</text>
+<text x="190" y="288" class="xs" text-anchor="middle">pigment scatters it back out</text>
+<text x="190" y="308" class="sm" text-anchor="middle">COLOUR LIVES IN THE ALBEDO</text>
+<text x="530" y="62" class="sm" text-anchor="middle">CONDUCTOR</text>
+<text x="530" y="80" class="xs" text-anchor="middle">gold, copper, iron</text>
+<line x1="390" y1="200" x2="670" y2="200" class="ink" stroke-width="1.8"/>
+<rect x="390" y="200" width="280" height="66" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.16"/>
+<line x1="412" y1="104" x2="506" y2="196" class="ink" stroke-width="1.8" marker-end="url(#e-i-l64f5)"/>
+<line x1="510" y1="194" x2="604" y2="108" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-b-l64f5)"/>
+<text x="612" y="106" class="xs" text-anchor="start">F0 = albedo</text>
+<text x="612" y="122" class="xs" text-anchor="start">COLOURED</text>
+<line x1="510" y1="202" x2="528" y2="234" class="ink-soft" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#e-s-l64f5)"/>
+<circle cx="528" cy="238" r="7" fill="#e05c5c" fill-opacity="0.5" stroke="#e05c5c" stroke-width="1.2"/>
+<text x="542" y="242" class="xs" text-anchor="start">absorbed</text>
+<text x="530" y="288" class="xs" text-anchor="middle">no diffuse lobe AT ALL</text>
+<text x="530" y="308" class="sm" text-anchor="middle">COLOUR LIVES IN F0</text>
+<rect x="60" y="330" width="600" height="56" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="352" class="xs" text-anchor="middle">One albedo field serves both. `metallic` decides which question it answers:</text>
+<text x="210.0" y="372" class="sm" text-anchor="middle">F0 = lerp(0.04, albedo, metallic)</text>
+<text x="510.0" y="372" class="sm" text-anchor="middle">diffuse = albedo × (1 - metallic)</text>
+</svg>

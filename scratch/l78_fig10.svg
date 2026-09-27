@@ -1,0 +1,91 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l78f10-t l78f10-d">
+  <title id="l78f10-t">Mixing cost against the audio deadline, on a logarithmic microsecond axis</title>
+  <desc id="l78f10-d">Horizontal bars show 1 to 64 voices costing 1.03 to 29.76 microseconds, one log line costing 1.02 microseconds and a set_gain call 0.009, against a deadline marked at 10,666 microseconds. Tables give buffer size against latency and the counters from a run on a real device.</desc>
+  <defs>
+    <marker id="e-i-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-amber-l78f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="130" y="60" width="400" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="54" y="26" class="xs muted" text-anchor="start">microseconds, log scale: what a buffer costs against what it has</text>
+<line x1="146.49246727339897" y1="60" x2="146.49246727339897" y2="290" class="grid" stroke-width="1.0"/>
+<text x="146.49246727339897" y="306" class="xs mono muted" text-anchor="middle">0.01</text>
+<line x1="201.2792576629134" y1="60" x2="201.2792576629134" y2="290" class="grid" stroke-width="1.0"/>
+<text x="201.2792576629134" y="306" class="xs mono muted" text-anchor="middle">0.1</text>
+<line x1="256.06604805242785" y1="60" x2="256.06604805242785" y2="290" class="grid" stroke-width="1.0"/>
+<text x="256.06604805242785" y="306" class="xs mono muted" text-anchor="middle">1</text>
+<line x1="310.85283844194225" y1="60" x2="310.85283844194225" y2="290" class="grid" stroke-width="1.0"/>
+<text x="310.85283844194225" y="306" class="xs mono muted" text-anchor="middle">10</text>
+<line x1="365.6396288314567" y1="60" x2="365.6396288314567" y2="290" class="grid" stroke-width="1.0"/>
+<text x="365.6396288314567" y="306" class="xs mono muted" text-anchor="middle">100</text>
+<line x1="420.4264192209711" y1="60" x2="420.4264192209711" y2="290" class="grid" stroke-width="1.0"/>
+<text x="420.4264192209711" y="306" class="xs mono muted" text-anchor="middle">1 ms</text>
+<line x1="475.2132096104856" y1="60" x2="475.2132096104856" y2="290" class="grid" stroke-width="1.0"/>
+<text x="475.2132096104856" y="306" class="xs mono muted" text-anchor="middle">10 ms</text>
+<line x1="530.0" y1="60" x2="530.0" y2="290" class="grid" stroke-width="1.0"/>
+<text x="530.0" y="306" class="xs mono muted" text-anchor="middle">100 ms</text>
+<rect x="130" y="74.125" width="126.81551476051243" height="12" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="84.125" class="xs" text-anchor="end">1 voices</text>
+<text x="262.81551476051243" y="84.125" class="xs mono" text-anchor="start">1.03</text>
+<rect x="130" y="102.875" width="145.92529941649286" height="12" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="112.875" class="xs" text-anchor="end">4 voices</text>
+<text x="281.92529941649286" y="112.875" class="xs mono" text-anchor="start">2.30</text>
+<rect x="130" y="131.625" width="175.4152143260099" height="12" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="141.625" class="xs" text-anchor="end">16 voices</text>
+<text x="311.4152143260099" y="141.625" class="xs mono" text-anchor="start">7.96</text>
+<rect x="130" y="160.375" width="190.58897738062478" height="12" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="170.375" class="xs" text-anchor="end">32 voices</text>
+<text x="326.5889773806248" y="170.375" class="xs mono" text-anchor="start">15.06</text>
+<rect x="130" y="189.125" width="206.8024658308733" height="12" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="199.125" class="xs" text-anchor="end">64 voices</text>
+<text x="342.8024658308733" y="199.125" class="xs mono" text-anchor="start">29.76</text>
+<rect x="130" y="217.875" width="126.57451791275554" height="12" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="227.875" class="xs" text-anchor="end">one log line</text>
+<text x="262.57451791275554" y="227.875" class="xs mono" text-anchor="start">1.02</text>
+<rect x="130" y="246.625" width="13.985561229301084" height="12" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="122" y="256.625" class="xs" text-anchor="end">set_gain</text>
+<text x="149.98556122930108" y="256.625" class="xs mono" text-anchor="start">0.01</text>
+<line x1="476.7" y1="54.0" x2="476.7" y2="294.0" stroke="#5ac878" stroke-width="2.0" fill="none"/>
+<text x="476.7488877701439" y="48" class="xs mono" text-anchor="middle">the deadline</text>
+<text x="54" y="334" class="xs" text-anchor="start">Sixty-four voices use 0.28% of the budget. One log line — which is a</text>
+<text x="54" y="350" class="xs t-hi" text-anchor="start">SYSCALL, and therefore unbounded — costs more than mixing four of them.</text>
+<text x="596" y="52" class="xs muted" text-anchor="start">the other half of the trade</text>
+<text x="596" y="72" class="xs muted" text-anchor="start">frames</text>
+<text x="782" y="72" class="xs muted" text-anchor="end">latency</text>
+<text x="872" y="72" class="xs muted" text-anchor="end">calls/s</text>
+<line x1="596" y1="80.0" x2="878" y2="80.0" class="grid" stroke-width="1.0"/>
+<text x="596" y="97.0" class="xs" text-anchor="start">128</text>
+<text x="782" y="97.0" class="xs mono" text-anchor="end">2.67 ms</text>
+<text x="872" y="97.0" class="xs mono" text-anchor="end">375</text>
+<text x="596" y="114.0" class="xs" text-anchor="start">256</text>
+<text x="782" y="114.0" class="xs mono" text-anchor="end">5.33 ms</text>
+<text x="872" y="114.0" class="xs mono" text-anchor="end">188</text>
+<text x="596" y="131.0" class="xs" text-anchor="start">512</text>
+<text x="782" y="131.0" class="xs mono" text-anchor="end">10.67 ms</text>
+<text x="872" y="131.0" class="xs mono" text-anchor="end">94</text>
+<text x="596" y="148.0" class="xs" text-anchor="start">1024</text>
+<text x="782" y="148.0" class="xs mono" text-anchor="end">21.33 ms</text>
+<text x="872" y="148.0" class="xs mono" text-anchor="end">47</text>
+<text x="596" y="165.0" class="xs" text-anchor="start">2048</text>
+<text x="782" y="165.0" class="xs mono" text-anchor="end">42.67 ms</text>
+<text x="872" y="165.0" class="xs mono" text-anchor="end">23</text>
+<text x="596" y="207.5" class="xs muted" text-anchor="start">on a real device</text>
+<text x="872" y="207.5" class="xs muted" text-anchor="end"></text>
+<line x1="596" y1="213.5" x2="878" y2="213.5" class="grid" stroke-width="1.0"/>
+<text x="596" y="229.5" class="xs" text-anchor="start">device</text>
+<text x="872" y="229.5" class="xs mono" text-anchor="end">44100 Hz</text>
+<text x="596" y="245.5" class="xs" text-anchor="start">buffers</text>
+<text x="872" y="245.5" class="xs mono" text-anchor="end">58</text>
+<text x="596" y="261.5" class="xs" text-anchor="start">late</text>
+<text x="872" y="261.5" class="xs mono" text-anchor="end">0</text>
+<text x="596" y="277.5" class="xs" text-anchor="start">queue_empty</text>
+<text x="872" y="277.5" class="xs mono" text-anchor="end">28</text>
+<text x="596" y="293.5" class="xs" text-anchor="start">worst mix</text>
+<text x="872" y="293.5" class="xs mono" text-anchor="end">11.29 us</text>
+<text x="596" y="309.5" class="xs" text-anchor="start">load</text>
+<text x="872" y="309.5" class="xs mono" text-anchor="end">0.097%</text>
+</svg>

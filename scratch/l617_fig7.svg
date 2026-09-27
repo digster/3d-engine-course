@@ -1,0 +1,40 @@
+<svg viewBox="0 0 760 350" role="img" aria-labelledby="l617f7-t l617f7-d">
+  <title id="l617f7-t">The hand-written frame and the compiled frame compared</title>
+  <desc id="l617f7-d">Two columns of recording code - eight hand-written calls including four explicit render-pass boundaries, against four calls that declare and execute - converging on one result: 262,144 channels compared, zero differing, with a control proving the comparison can report a difference.</desc>
+  <defs>
+    <marker id="e-i-l617f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">The only proof that matters: the same frame, assembled two ways.</text>
+<text x="150" y="52" class="xs" text-anchor="middle">ASSEMBLED BY HAND</text>
+<rect x="10" y="62" width="280" height="150" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="10" y="62" width="280" height="150" rx="3" fill="none" stroke="#f0961e" stroke-width="1.1"/>
+<text x="22" y="82" class="xs mono" text-anchor="start">shadow.render(cb, ...)</text>
+<text x="22" y="99" class="xs mono" text-anchor="start">BeginGPURenderPass(hdr, depth)</text>
+<text x="22" y="116" class="xs mono" text-anchor="start">scene.render(cb, pass, ...)</text>
+<text x="22" y="133" class="xs mono" text-anchor="start">EndGPURenderPass</text>
+<text x="22" y="150" class="xs mono" text-anchor="start">bloom.render(cb, hdr, ...)</text>
+<text x="22" y="167" class="xs mono" text-anchor="start">BeginGPURenderPass(ldr)</text>
+<text x="22" y="184" class="xs mono" text-anchor="start">tonemap.render(cb, pass, ...)</text>
+<text x="22" y="201" class="xs mono" text-anchor="start">EndGPURenderPass</text>
+<line x1="150" y1="216" x2="150" y2="244" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l617f7)"/>
+<text x="460" y="52" class="xs" text-anchor="middle">COMPILED FROM A DECLARATION</text>
+<rect x="320" y="62" width="280" height="150" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="320" y="62" width="280" height="150" rx="3" fill="none" stroke="#5ac878" stroke-width="1.1"/>
+<text x="332" y="82" class="xs mono" text-anchor="start">fg.reset()</text>
+<text x="332" y="99" class="xs mono" text-anchor="start">declare_frame(fg, ...)</text>
+<text x="332" y="116" class="xs mono" text-anchor="start">fg.compile(dev)</text>
+<text x="332" y="133" class="xs mono" text-anchor="start">fg.execute(cb)</text>
+<text x="332" y="167" class="xs mono" text-anchor="start">— no begin, no end,</text>
+<text x="332" y="184" class="xs mono" text-anchor="start">   no load op, no store op,</text>
+<text x="332" y="201" class="xs mono" text-anchor="start">   no order</text>
+<line x1="460" y1="216" x2="460" y2="244" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l617f7)"/>
+<rect x="240" y="248" width="280" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="240" y="248" width="280" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.2"/>
+<text x="380" y="269" class="xs mono" text-anchor="middle">262,144 channels, 0 differing</text>
+<text x="40" y="312" class="xs t-hi" text-anchor="start">AND THE INSTRUMENT CAN FAIL: the same comparison against a bloom-less frame reports 196,608 differing</text>
+<text x="40" y="328" class="xs muted" text-anchor="start">channels — the control 6.16 added after finding a golden that passed when both its file reads failed.</text>
+</svg>

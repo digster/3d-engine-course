@@ -1,0 +1,71 @@
+<svg viewBox="0 0 900 430" role="img" aria-labelledby="l83f7-t l83f7-d">
+  <title id="l83f7-t">Why an orientation cannot be integrated by addition</title>
+  <desc id="l83f7-d">Two ninety-degree turns applied in both orders send the same probe vector to results a hundred and twenty degrees apart, while the sum of the two rotation vectors is identical either way. Three tables then measure the linearised quaternion update: its length inflates by exactly the predicted square root each step, the angle it actually turns through is short by the predicted omega-h squared over twelve even after renormalising, and after a minute at ten radians per second that lag is seventy-nine degrees.</desc>
+  <defs>
+    <marker id="e-i-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blue-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-l83f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<rect x="40" y="74" width="300" height="180" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="40" y="58" class="xs muted" text-anchor="start">the same two 90° turns, in both orders</text>
+<circle cx="190.0" cy="164.0" r="3" fill="#8f918a"/>
+<line x1="190.00" y1="164.00" x2="242.00" y2="164.00" stroke="#e05c5c" stroke-width="2.2" marker-end="url(#e-red-l83f7)"/>
+<text x="252.0" y="168.0" class="xs mono" text-anchor="start">x then y</text>
+<line x1="190.00" y1="164.00" x2="190.00" y2="216.00" stroke="#5ac878" stroke-width="2.2" marker-end="url(#e-green-l83f7)"/>
+<text x="198.0" y="232.0" class="xs mono" text-anchor="start">y then x</text>
+<path d="M 220.0,164.0 A 30 30 0 0 1 190.0,194.0" fill="none" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="232.0" y="194.0" class="xs mono" text-anchor="start">120°</text>
+<text x="40" y="280" class="xs muted" text-anchor="start">The two rotation VECTORS summed are identical either way — addition</text>
+<text x="40" y="296" class="xs muted" text-anchor="start">commutes. So no vector can be the running total of a rotation, and</text>
+<text x="40" y="312" class="xs t-hi" text-anchor="start">q += ω·h is not merely inaccurate. It is not a rotation.</text>
+<text x="400" y="66" class="xs muted" text-anchor="start">one step, BEFORE renormalising — the length inflates</text>
+<text x="400" y="86" class="xs muted" text-anchor="start">ω·h</text>
+<text x="634" y="86" class="xs muted" text-anchor="end">|q| measured</text>
+<text x="794" y="86" class="xs muted" text-anchor="end">√(1 + (ωh/2)²)</text>
+<line x1="400" y1="94.0" x2="800" y2="94.0" class="grid" stroke-width="1.0"/>
+<text x="400" y="111.0" class="xs" text-anchor="start">0.0167</text>
+<text x="634" y="111.0" class="xs mono" text-anchor="end">1.000034690</text>
+<text x="794" y="111.0" class="xs mono" text-anchor="end">1.000034690</text>
+<text x="400" y="128.0" class="xs" text-anchor="start">0.1667</text>
+<text x="634" y="128.0" class="xs mono" text-anchor="end">1.003466249</text>
+<text x="794" y="128.0" class="xs mono" text-anchor="end">1.003466249</text>
+<text x="400" y="145.0" class="xs" text-anchor="start">0.5000</text>
+<text x="634" y="145.0" class="xs mono" text-anchor="end">1.030776381</text>
+<text x="794" y="145.0" class="xs mono" text-anchor="end">1.030776381</text>
+<text x="400" y="175.5" class="xs muted" text-anchor="start">…and AFTER renormalising, the angle is still short</text>
+<text x="400" y="195.5" class="xs muted" text-anchor="start">ω·h</text>
+<text x="614" y="195.5" class="xs muted" text-anchor="end">angle achieved</text>
+<text x="732" y="195.5" class="xs muted" text-anchor="end">rel. error</text>
+<text x="850" y="195.5" class="xs muted" text-anchor="end">−(ωh)²/12</text>
+<line x1="400" y1="203.5" x2="856" y2="203.5" class="grid" stroke-width="1.0"/>
+<text x="400" y="220.5" class="xs" text-anchor="start">0.0167</text>
+<text x="614" y="220.5" class="xs mono" text-anchor="end">0.016666</text>
+<text x="732" y="220.5" class="xs mono" text-anchor="end">-2.313e-05</text>
+<text x="850" y="220.5" class="xs mono" text-anchor="end">-2.315e-05</text>
+<text x="400" y="237.5" class="xs" text-anchor="start">0.1667</text>
+<text x="614" y="237.5" class="xs mono" text-anchor="end">0.166282</text>
+<text x="732" y="237.5" class="xs mono" text-anchor="end">-2.305e-03</text>
+<text x="850" y="237.5" class="xs mono" text-anchor="end">-2.315e-03</text>
+<text x="400" y="254.5" class="xs" text-anchor="start">0.5000</text>
+<text x="614" y="254.5" class="xs mono" text-anchor="end">0.489957</text>
+<text x="732" y="254.5" class="xs mono" text-anchor="end">-2.009e-02</text>
+<text x="850" y="254.5" class="xs mono" text-anchor="end">-2.083e-02</text>
+<text x="400" y="305.0" class="xs muted" text-anchor="start">3,600 steps at 10 rad/s</text>
+<text x="714" y="305.0" class="xs muted" text-anchor="end">|q|</text>
+<text x="850" y="305.0" class="xs muted" text-anchor="end">attitude error</text>
+<line x1="400" y1="313.0" x2="856" y2="313.0" class="grid" stroke-width="1.0"/>
+<text x="400" y="330.0" class="xs" text-anchor="start">linearised</text>
+<text x="714" y="330.0" class="xs mono" text-anchor="end">0.9999999</text>
+<text x="850" y="330.0" class="xs mono" text-anchor="end">79.2459°</text>
+<text x="400" y="347.0" class="xs" text-anchor="start">exponential</text>
+<text x="714" y="347.0" class="xs mono" text-anchor="end">1.0000000</text>
+<text x="850" y="347.0" class="xs mono" text-anchor="end">0.0019°</text>
+<text x="40" y="366" class="xs muted" text-anchor="start">Compounded without renormalising, 10 rad/s for one second gives |q| = 1.2307.</text>
+<text x="40" y="382" class="xs muted" text-anchor="start">And 79.2459° of attitude error after a minute is just the per-step 2.3e−03 × 600 radians</text>
+<text x="40" y="398" class="xs muted" text-anchor="start">of turning — the lag is predictable before it is measured.</text>
+</svg>

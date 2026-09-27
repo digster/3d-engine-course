@@ -1,0 +1,83 @@
+<svg viewBox="0 0 980 482.5" role="img" aria-labelledby="h5-t h5-d">
+  <title id="h5-t">Three ways to clip the rest of a move, in an obtuse corner</title>
+  <desc id="h5-d">Three panels of the same 120-degree corner with the stick 12 degrees off the bisector. The motion is first slid along wall A toward the corner. Clipping that remainder against the last plane, or against every plane, sends it back out along wall B; clipping the original motion against both planes leaves only the vertical crease, so the character stops. A table gives each rule's travel in 60 and 120 degree corners: 572 to 575 mm a second for the remainder rules, zero for the original.</desc>
+  <defs>
+    <marker id="e-i-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">A 120° corner, the stick 12° off its bisector: one move, three rules</text>
+<text x="26" y="62" class="sm" text-anchor="start">the remainder, last plane</text>
+<line x1="266.0" y1="190.0" x2="206.0" y2="86.1" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="196.0" y="78.07695154586737" class="xs" text-anchor="end">A</text>
+<line x1="266.0" y1="190.0" x2="206.0" y2="293.9" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="196.0" y="309.92304845413264" class="xs" text-anchor="end">B</text>
+<circle cx="196.0" cy="190.0" r="9.0" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<line x1="196.00" y1="190.00" x2="258.60" y2="176.69" stroke="#8f918a" stroke-width="1.4" marker-end="url(#e-grey-h5)"/>
+<line x1="196.00" y1="190.00" x2="228.00" y2="245.43" stroke="#5082e6" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#e-blue-h5)"/>
+<line x1="196.00" y1="190.00" x2="164.00" y2="245.43" stroke="#e05c5c" stroke-width="2.2" marker-end="url(#e-red-h5)"/>
+<text x="26" y="300" class="xs" text-anchor="start">back OUT along B</text>
+<text x="352" y="62" class="sm" text-anchor="start">the remainder, every plane</text>
+<line x1="592.0" y1="190.0" x2="532.0" y2="86.1" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="522.0" y="78.07695154586737" class="xs" text-anchor="end">A</text>
+<line x1="592.0" y1="190.0" x2="532.0" y2="293.9" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="522.0" y="309.92304845413264" class="xs" text-anchor="end">B</text>
+<circle cx="522.0" cy="190.0" r="9.0" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<line x1="522.00" y1="190.00" x2="584.60" y2="176.69" stroke="#8f918a" stroke-width="1.4" marker-end="url(#e-grey-h5)"/>
+<line x1="522.00" y1="190.00" x2="554.00" y2="245.43" stroke="#5082e6" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#e-blue-h5)"/>
+<line x1="522.00" y1="190.00" x2="490.00" y2="245.43" stroke="#e05c5c" stroke-width="2.2" marker-end="url(#e-red-h5)"/>
+<text x="352" y="300" class="xs" text-anchor="start">B alone passes the check: OUT</text>
+<text x="678" y="62" class="sm" text-anchor="start">the original, every plane</text>
+<line x1="918.0" y1="190.0" x2="858.0" y2="86.1" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="848.0" y="78.07695154586737" class="xs" text-anchor="end">A</text>
+<line x1="918.0" y1="190.0" x2="858.0" y2="293.9" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="848.0" y="309.92304845413264" class="xs" text-anchor="end">B</text>
+<circle cx="848.0" cy="190.0" r="9.0" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<line x1="848.00" y1="190.00" x2="910.60" y2="176.69" stroke="#8f918a" stroke-width="1.4" marker-end="url(#e-grey-h5)"/>
+<circle cx="848.0" cy="190.0" r="5.0" fill="#5ac878"/>
+<text x="678" y="300" class="xs" text-anchor="start">both fail; the crease is vertical: 0</text>
+<line x1="26.0" y1="332.0" x2="46.0" y2="332.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="54" y="336" class="xs" text-anchor="start">the stick, d</text>
+<line x1="26.0" y1="349.0" x2="46.0" y2="349.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="54" y="353" class="xs" text-anchor="start">after wall A: slid along it, toward the corner</text>
+<line x1="26.0" y1="366.0" x2="46.0" y2="366.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="54" y="370" class="xs" text-anchor="start">what the rule does with that next</text>
+<line x1="26.0" y1="383.0" x2="46.0" y2="383.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="54" y="387" class="xs" text-anchor="start">Quake 1: clip the ORIGINAL</text>
+<text x="470" y="332" class="xs muted" text-anchor="start">5 s pressed into the corner; the last second measured</text>
+<text x="470" y="352" class="xs muted" text-anchor="start">corner</text>
+<text x="754" y="352" class="xs muted" text-anchor="end">the rest of the move is</text>
+<text x="854" y="352" class="xs muted" text-anchor="end">travel</text>
+<text x="934" y="352" class="xs muted" text-anchor="end">blocked</text>
+<line x1="470" y1="360.0" x2="940" y2="360.0" class="grid" stroke-width="1.0"/>
+<text x="470" y="377.0" class="xs" text-anchor="start">60°</text>
+<text x="754" y="377.0" class="xs mono" text-anchor="end">the remainder, last plane</text>
+<text x="854" y="377.0" class="xs mono t-ok" text-anchor="end">0 mm/s</text>
+<text x="934" y="377.0" class="xs mono" text-anchor="end">60</text>
+<text x="470" y="394.0" class="xs" text-anchor="start">60°</text>
+<text x="754" y="394.0" class="xs mono" text-anchor="end">the remainder, every plane</text>
+<text x="854" y="394.0" class="xs mono t-ok" text-anchor="end">0 mm/s</text>
+<text x="934" y="394.0" class="xs mono" text-anchor="end">0</text>
+<text x="470" y="411.0" class="xs" text-anchor="start">60°</text>
+<text x="754" y="411.0" class="xs mono" text-anchor="end">the original, every plane</text>
+<text x="854" y="411.0" class="xs mono t-ok" text-anchor="end">0 mm/s</text>
+<text x="934" y="411.0" class="xs mono" text-anchor="end">0</text>
+<text x="470" y="428.0" class="xs" text-anchor="start">120°</text>
+<text x="754" y="428.0" class="xs mono" text-anchor="end">the remainder, last plane</text>
+<text x="854" y="428.0" class="xs mono t-bad" text-anchor="end">572 mm/s</text>
+<text x="934" y="428.0" class="xs mono" text-anchor="end">0</text>
+<text x="470" y="445.0" class="xs" text-anchor="start">120°</text>
+<text x="754" y="445.0" class="xs mono" text-anchor="end">the remainder, every plane</text>
+<text x="854" y="445.0" class="xs mono t-bad" text-anchor="end">575 mm/s</text>
+<text x="934" y="445.0" class="xs mono" text-anchor="end">1</text>
+<text x="470" y="462.0" class="xs" text-anchor="start">120°</text>
+<text x="754" y="462.0" class="xs mono" text-anchor="end">the original, every plane</text>
+<text x="854" y="462.0" class="xs mono t-ok" text-anchor="end">0 mm/s</text>
+<text x="934" y="462.0" class="xs mono" text-anchor="end">0</text>
+</svg>

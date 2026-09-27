@@ -1,0 +1,45 @@
+<svg viewBox="0 0 760 388" role="img" aria-labelledby="f73g-t f73g-d">
+  <title id="f73g-t">What the complex representation costs</title>
+  <desc id="f73g-d">Three bar charts. The first compares composing two plane rotations: a complex product at 0.605 nanoseconds, a two-by-two matrix product at 1.139, and adding the angles then calling cosine and sine at 3.903. The second compares applying a rotation to a point, where the complex number at 0.610 and the matrix at 0.637 are effectively identical. The third compares drift after a million composed rotations, where the matrix has drifted 6.15 times further. The summary is that the complex number is cheaper to compose and to keep and exactly as expensive to use.</desc>
+  <defs>
+    <marker id="e-i-f73g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f73g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f73g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f73g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f73g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="135.0" y="42.0" class="sm" text-anchor="middle">composing two rotations</text>
+<text x="135.0" y="58.0" class="xs muted" text-anchor="middle">10,240,000 operations, best of three</text>
+<rect x="30" y="72.0" width="210.0" height="176.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="38" y="92.0" width="20.771201639764282" height="19.94666666666667" rx="2" fill="#60ded0" stroke="#60ded0" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="38" y="85.0" class="xs muted" text-anchor="start">complex x complex</text>
+<text x="62.771201639764286" y="108.94666666666667" class="xs mono" text-anchor="start">0.605 ns</text>
+<rect x="38" y="150.66666666666666" width="39.10479118626698" height="19.94666666666667" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="38" y="143.66666666666666" class="xs muted" text-anchor="start">mat2 x mat2</text>
+<text x="81.10479118626698" y="167.61333333333332" class="xs mono" text-anchor="start">1.139 ns</text>
+<rect x="38" y="209.33333333333331" width="134.0" height="19.94666666666667" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="38" y="202.33333333333331" class="xs muted" text-anchor="start">add the angles, then cos + sin</text>
+<text x="176.0" y="226.27999999999997" class="xs mono" text-anchor="start">3.903 ns</text>
+<text x="381.0" y="42.0" class="sm" text-anchor="middle">applying one to a point</text>
+<text x="381.0" y="58.0" class="xs muted" text-anchor="middle">the row where nothing is saved</text>
+<rect x="276" y="72.0" width="210.0" height="176.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="284" y="92.0" width="128.32025117739403" height="29.92" rx="2" fill="#60ded0" stroke="#60ded0" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="284" y="85.0" class="xs muted" text-anchor="start">complex x vec2</text>
+<text x="416.320251177394" y="118.92" class="xs mono" text-anchor="start">0.610 ns</text>
+<rect x="284" y="180.0" width="134.0" height="29.92" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="284" y="173.0" class="xs muted" text-anchor="start">mat2 x vec2</text>
+<text x="422.0" y="206.92000000000002" class="xs mono" text-anchor="start">0.637 ns</text>
+<text x="627.0" y="42.0" class="sm" text-anchor="middle">drift after 10⁶ products</text>
+<text x="627.0" y="58.0" class="xs muted" text-anchor="middle">max |MᵀM − I|, both asked the same</text>
+<rect x="522" y="72.0" width="210.0" height="176.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="530" y="92.0" width="21.783305785123968" height="29.92" rx="2" fill="#60ded0" stroke="#60ded0" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="530" y="85.0" class="xs muted" text-anchor="start">complex</text>
+<text x="555.783305785124" y="118.92" class="xs mono" text-anchor="start">3.93e-06</text>
+<rect x="530" y="180.0" width="134.0" height="29.92" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="530" y="173.0" class="xs muted" text-anchor="start">mat2</text>
+<text x="668.0" y="206.92000000000002" class="xs mono" text-anchor="start">2.42e-05</text>
+<text x="380.0" y="292" class="sm t-hi" text-anchor="middle">1.88× cheaper to compose · 1.05× — a wash — to apply · 6.15× less drift · half the bytes</text>
+<text x="380.0" y="320" class="xs muted" text-anchor="middle">the middle panel is the one worth staring at: a representation can be strictly better at keeping and</text>
+<text x="380.0" y="338" class="xs muted" text-anchor="middle">combining rotations and not one instruction better at using them, because z × v and M × v are</text>
+<text x="380.0" y="356" class="xs muted" text-anchor="middle">the same four multiplies and the same two adds. Lesson 7.4 measures the 3-D version of this trade.</text>
+</svg>

@@ -1,0 +1,371 @@
+  <h2 id="units">8. Units: the square root under every miniature</h2>
+
+  <p>
+    <code>k_gravity</code> is <code>9.81f</code>. That number is in <strong>metres</strong> per second
+    squared, and it is the first line of code in this course for which the unit is not a matter of
+    taste. <code>conventions.html</code> §3 has said “one unit is one metre” since Module 2, when
+    nothing in the engine could have told the difference — a rasterizer does not care what a unit
+    means, and neither does a shadow map or a BRDF. A constant does.
+  </p>
+
+  <p>
+    So what actually happens if your art is authored at some other scale? Not “things look wrong”:
+    something specific and derivable.
+  </p>
+
+  <h3>8.1 The derivation, in two lines</h3>
+
+  <p>
+    Start from the only equation involved:
+  </p>
+
+  <div class="eq">
+    \[
+    d = \tfrac{1}{2} g t^{2}
+    \qquad\Longrightarrow\qquad
+    t = \sqrt{\frac{2d}{g}}
+    \]
+  </div>
+
+  <p>
+    Now multiply every <em>length</em> in the world by <code>s</code> and leave <code>g</code> alone.
+    The <code>d</code> under the square root scales by <code>s</code>, so the time scales by
+    <code>√s</code>:
+  </p>
+
+  <div class="eq">
+    \[
+    t' = \sqrt{\frac{2\,(s\,d)}{g}} = \sqrt{s}\;\sqrt{\frac{2d}{g}} = \sqrt{s}\;t
+    \]
+  </div>
+  <p class="eq-plain">
+    Scaling every length by s multiplies every duration by the square root of s, because the time to
+    fall a distance goes as the square root of that distance.
+  </p>
+
+  <p>
+    That is the whole law, and it is not restricted to free fall: any motion driven by a fixed
+    acceleration has time going as the square root of distance, so <em>everything</em> in a rescaled
+    world is slow or fast by the same <code>√s</code>. Splashes, tumbling, collapse, the arc of a
+    thrown object, the settling of a stack.
+  </p>
+
+  @@FIG_SCALE@@
+
+<pre><code class="lang-text">  G.2  a world where 1 unit depicts s metres, g left alone
+
+      s     fall of a 1.8 m figure   ratio   sqrt(s)
+   0.25             1.211565 s   2.0000  2.0000
+   0.50             0.856706 s   1.4142  1.4142
+   1.00             0.605783 s   1.0000  1.0000
+   2.00             0.428353 s   0.7071  0.7071
+   4.00             0.302891 s   0.5000  0.5000</code></pre>
+
+  <p>
+    Figure 7 plots those five measured points against the curve <code>1/√s</code>, and they sit on
+    it. Read the table the way a developer would hit it: a world modelled <strong>twice as large as
+    it depicts</strong> (a “1.8 m” character built 3.6 units tall, which is <code>s = 0.5</code>)
+    takes <strong>1.4142× too long</strong> for everything. A world modelled <strong>half as
+    large</strong> is 1.4142× too fast.
+  </p>
+
+  <h3>8.2 The symptom names the bug</h3>
+
+  <p>
+    “Everything feels floaty” and “everything feels like a toy” are not vague aesthetic complaints.
+    They are the two directions of this square root, and once you know the law you can read the scale
+    error off a playtest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>What it feels like</th><th>What it is</th><th>The number</th></tr></thead>
+    <tbody>
+      <tr><td>floaty, moon-like, slow to land</td>
+          <td>the world is modelled <em>bigger</em> than it depicts</td>
+          <td><code>s &lt; 1</code>, times ×<code>1/√s</code></td></tr>
+      <tr><td>snappy, twitchy, toy-like</td>
+          <td>the world is modelled <em>smaller</em> than it depicts</td>
+          <td><code>s &gt; 1</code>, times ×<code>1/√s</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Film has known this for a century and pays for it in the other currency. A model ship at 1/8
+    scale sits in water pulled by the same 9.81 m/s² the real one is, so every wave, every roll and
+    every collapse happens <code>√8 = 2.8284</code> times too fast — which an audience reads instantly
+    as “that is a toy” without being able to say why. The fix is to overcrank the camera by exactly
+    that factor, shooting at <strong>67.9 fps</strong> and playing back at 24, which slows the model's
+    world by <code>√8</code> and puts it back on the right clock. Same equation; you simply cannot
+    change <code>g</code> on a soundstage, so you change the frame rate instead.
+  </p>
+
+  <h3>8.3 “Just multiply g” — which works, and is not the fix</h3>
+
+  <p>
+    The reflex when things feel floaty is to raise gravity until they do not, and this section is
+    going to defend that reflex further than you might expect before taking it away.
+  </p>
+
+  <p>
+    It works. Exactly. Scaling <code>g</code> by <code>1/s</code> restores the fall time to the last
+    digit the simulation can produce, and G.4 measures it by actually running the integrator at each
+    scale rather than evaluating a formula in which <code>s</code> cancels algebraically:
+  </p>
+
+<pre><code class="lang-text">  G.4  scaling g by 1/s restores the fall, SIMULATED
+
+      s      g'       steps   fall time   vs s = 1
+   0.25   39.2400      36   0.600000 s  +0.0000 s
+   0.50   19.6200      36   0.600000 s  +0.0000 s
+   1.00    9.8100      36   0.600000 s  +0.0000 s
+   2.00    4.9050      36   0.600000 s  +0.0000 s
+   4.00    2.4525      36   0.600000 s  +0.0000 s</code></pre>
+
+  <p>
+    Thirty-six steps at every scale. Not approximately — the same integer. And that is not luck: what
+    you have actually done by scaling <code>g</code> is <strong>change the unit of length</strong>,
+    and a consistent change of units cannot change the physics. If every length, every velocity and
+    every acceleration in your program is expressed in the same units, then working in half-metres
+    with a gravity of 19.62 is exactly as correct as working in metres with 9.81.
+  </p>
+
+  <h3>8.4 …until a length turns up that did not get the memo</h3>
+
+  <p>
+    “Every length in your program” is doing heroic work in that sentence, and it is where the
+    argument turns. A rescale is only consistent if it reaches <em>everything</em>, and physics
+    engines are full of absolute lengths that nobody thinks of as content:
+  </p>
+
+  <ul>
+    <li><strong>Contact slop</strong> — the small overlap a solver tolerates so that resting bodies
+        do not jitter. Box2D's default is 0.005 m, and its manual is explicit that the library is
+        tuned for objects between 0.1 and 10 metres. <em>⚠ VERIFY:</em> the
+        <code>b2_linearSlop</code> value and the recommended size range, against the Box2D manual's
+        “Units” section — the principle does not depend on the constant, but the constant is quoted
+        here and should be checked before it is repeated.</li>
+    <li><strong>Sleep thresholds</strong> — how slowly a body must be moving, and for how long,
+        before 8.10 stops simulating it.</li>
+    <li><strong>Penetration recovery limits</strong>, restitution velocity cutoffs, broadphase cell
+        sizes, character step-up heights, the radius below which a shape is considered degenerate.</li>
+  </ul>
+
+  <p>
+    None of those is authored by an artist, none is in a file anybody rescales, and every one of them
+    is in metres. G.5 puts a single number on it:
+  </p>
+
+<pre><code class="lang-text">  G.5  what a rescaled g does NOT carry with it
+       a solver tolerance of 0.005 UNITS, in a world at s =
+        0.25  -&gt;     1.25 mm of real slop
+        0.50  -&gt;     2.50 mm of real slop
+        1.00  -&gt;     5.00 mm of real slop
+        2.00  -&gt;    10.00 mm of real slop
+        4.00  -&gt;    20.00 mm of real slop</code></pre>
+
+  <p>
+    At <code>s = 4</code> the solver's five-millimetre tolerance is two centimetres of visible
+    interpenetration, and no amount of tuning <code>g</code> touches it. At <code>s = 0.25</code> it
+    is 1.25 mm, which sounds harmless and is worse: every stack now jitters, because the tolerance
+    that was keeping it quiet has become smaller than the float error in the positions.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So the engine picks metres, once, and says so.</strong> Not because metres are special
+      but because <em>one</em> choice has to be written down where the tolerances can be written down
+      beside it. That is what <code>conventions.html</code> §3 has been for since Module 2, and 8.2 is
+      the lesson where it stops being a convention and starts being a constant.
+    </p>
+  </div>
+
+  <h2 id="frames">9. Frames: where a scaled parent stops meaning it</h2>
+
+  <p>
+    Here is a question with a boring-sounding answer and three interesting failure modes. When a
+    <code>rigid_body</code> says its position is <code>(3, 0, 4)</code>, <strong>in what space</strong>?
+  </p>
+
+  <p>
+    The engine has had a transform hierarchy since Module 5. An entity's <code>transform</code> is
+    expressed in its <em>parent's</em> space, and a chain of them composes down to world space. That
+    is the right design for a scene: a lamp bolted to a moving truck should be authored relative to
+    the truck. So the natural-looking thing to do is put a body on a node and integrate its local
+    transform, and the natural-looking thing is wrong in three separate ways.
+  </p>
+
+  <h3>9.1 Gravity is a direction, and a frame transforms directions</h3>
+
+  <p>
+    A parent's world matrix has a linear part <code>M</code>. Whatever the body does in local space,
+    the world sees <code>M</code> applied to it — and because an acceleration is a
+    <strong>direction</strong> rather than a position, it is the 3×3 linear part that acts on it and
+    not the full 4×4. That is Lesson 2.7's <code>w</code> doing its job: a translation must not change
+    an acceleration, or sliding a platform sideways would make everything on it fall harder.
+  </p>
+
+  <p>
+    So a local gravity <code>g</code> produces a world acceleration <code>M·g</code>, and
+    <code>inspect_frame</code> measures exactly that, for four frames:
+  </p>
+
+  @@FIG_FRAMES@@
+
+<pre><code class="lang-text">  H.1  CONTROL translate(3,-2,7) * rotate_z(45 deg)
+    g_world (6.9367, -6.9367, 0.0000)
+    gain 1.0000  tilt 45.000 deg  square 0.0000
+    scale uniform   frame inertial
+
+  H.2  uniform scale 2
+    g_world (0.0000, -19.6200, 0.0000)
+    gain 2.0000  tilt 0.000 deg  square 0.0000
+    scale uniform   frame NOT INERTIAL
+
+  H.3  non-uniform scale (2,1,1)
+    g_world (0.0000, -9.8100, 0.0000)
+    gain 1.0000  tilt 0.000 deg  square 0.0000
+    scale NON-UNIFORM   frame NOT INERTIAL
+
+  H.4  scale (2,1,1) AFTER a 45 deg turn
+    g_world (13.8734, -6.9367, 0.0000)
+    gain 1.5811  tilt 63.435 deg  square 0.6000
+    scale NON-UNIFORM   frame NOT INERTIAL</code></pre>
+
+  <p>
+    Figure 8 draws all four as arrows against a dashed reference pointing straight down, and the
+    control is first this time, deliberately: a frame that is a rotation and a translation must
+    report a <code>gain</code> of exactly 1 and a <code>square</code> of exactly 0, because a rotation
+    cannot change a length and cannot change an angle. If H.1 had reported anything else, nothing
+    below it would mean a thing.
+  </p>
+
+  <p>
+    <strong>H.2 is the one everybody hits.</strong> A parent scaled by 2 — an artist scaled a group
+    node, or a prefab was authored at half size and scaled up — and the body falls at
+    <code>19.62 m/s²</code>. Two g. The scene looks entirely normal; the object simply falls wrong,
+    and it falls wrong by an amount that depends on <em>which node it happens to be parented to</em>.
+  </p>
+
+  <h3>9.2 The trap in column three</h3>
+
+  <p>
+    H.3 is the row worth stopping on, because it is a test passing for the wrong reason. The frame has
+    a non-uniform scale of <code>(2, 1, 1)</code> — thoroughly broken — and the two numbers you would
+    naturally check both come back clean: gain <strong>1.0000</strong>, tilt <strong>0.000°</strong>.
+  </p>
+
+  <p>
+    Of course they do. Gravity points along <code>y</code>, and the scale is on <code>x</code>. This
+    particular vector never touches the broken axis. A diagnostic built only from “where does gravity
+    end up” would sign this frame off, and the first body to be <em>rotated</em> in it would fall
+    sideways.
+  </p>
+
+  <p>
+    Which is H.4, and it is the same frame: put a 45° turn between the body and the parent — a crate
+    that is not axis-aligned, which is most crates — and gravity comes out at
+    <strong>1.5811 g, 63.435° off vertical</strong>. Work it through by hand, because the arithmetic
+    is short. The turn sends local down <code>(0, −1, 0)</code> to <code>(0.7071, −0.7071, 0)</code>,
+    and then the scale stretches the <code>x</code> component and leaves <code>y</code>:
+  </p>
+
+  <div class="eq">
+    \[
+    \begin{bmatrix}2&0\\0&1\end{bmatrix}
+    \begin{bmatrix}0.7071\\-0.7071\end{bmatrix}
+    = \begin{bmatrix}1.4142\\-0.7071\end{bmatrix},
+    \qquad
+    |{\cdot}| = \sqrt{2 + 0.5} = 1.5811,
+    \qquad
+    \arccos\!\frac{0.7071}{1.5811} = 63.435^\circ
+    \]
+  </div>
+
+  <p>
+    A non-uniform scale <strong>does not preserve angles</strong>, so the direction that comes out
+    depends on the direction that went in — which is precisely why <code>gain</code> and
+    <code>tilt</code> cannot catch it and why <code>frame_report</code> carries
+    <code>out_of_square</code> and <code>uniform</code> as well. <code>out_of_square</code> reads
+    <strong>0.6000</strong> here, and it is a cosine, so it means the frame's own axes are
+    <code>arccos(0.6) = 53.13°</code> away from perpendicular.
+  </p>
+
+  <p>
+    That number is <em>Lesson 7.5's</em>. It was built for a completely different purpose — to report
+    what a <code>quat</code> could not hold when <code>transform::rotation</code> was narrowed from a
+    <code>mat3</code> — and it has been sitting in <code>math/transform.hpp</code> for three lessons
+    with no caller other than the decomposition that produces it. It is the exact diagnostic a physics
+    frame needs, because “does this frame preserve angles” is the whole question, and it is the same
+    question in both cases. <strong>A number that measures shear does not care why you wanted to know.</strong>
+  </p>
+
+  <h3>9.3 The same thing as a fall</h3>
+
+  @@FIG_FALL@@
+
+<pre><code class="lang-text">  H.5  1 s of falling, integrated in a frame scaled by 2
+       local  y = -4.986749 units
+       world  y = -9.973498 m
+       a world-space body falls -4.986749 m -&gt; ratio 2.0000</code></pre>
+
+  <p>
+    Figure 9 is H.2 as something you could watch: the integrator ran once, correctly, with
+    <code>g = 9.81</code>, and produced a body that fell 9.97 metres in a second. Nothing reported
+    anything. There was nothing to report — every line of arithmetic was right.
+  </p>
+
+  <h3>9.4 And the one a matrix cannot see</h3>
+
+  <p>
+    All of the above is about a <em>fixed</em> frame, and there is a failure mode underneath it that
+    no amount of inspecting a matrix can find. Put a body on a spinning platform. Give it no forces
+    at all — nothing, not even gravity — so that Newton's first law obliges it to travel in a
+    straight line at constant speed. Integrate it in the platform's local space, where a body with no
+    acceleration also travels in a straight line, and map the result out to the world:
+  </p>
+
+<pre><code class="lang-text">  H.6  no forces at all, 1 s, in a frame spinning at 2 rad/s
+       straight line   (1.0000, 0.0000, 2.0333)
+       integrated local, mapped to world
+                       (1.4024, 0.0000, -1.7416)
+       apart by 3.7963 m after one second</code></pre>
+
+  <p>
+    Nearly four metres, in one second, from a body that nothing was pushing. A rotating frame is
+    <strong>non-inertial</strong>: in it, Newton's laws do not hold as written, and the missing terms
+    are the ones physics calls <em>centrifugal</em> and <em>Coriolis</em>. They are real in the sense
+    that matters — something has to supply them or the answer is wrong — and nothing in a 4×4 matrix
+    can tell you they are needed, because <strong>a matrix has no time derivative</strong>.
+    <code>inspect_frame</code> reports this frame as perfectly inertial at every instant, and it is
+    right at every instant, and the body is still four metres away.
+  </p>
+
+  <h3>9.5 Which is why the rule is absolute</h3>
+
+  <div class="callout">
+    <p>
+      <strong>A <code>rigid_body</code>'s position and velocity are in world space. There is no
+      way to express anything else.</strong> <code>body_world</code> has no concept of a parent, a
+      hierarchy or a transform, and the absence <em>is</em> the design.
+    </p>
+  </div>
+
+  <p>
+    The bridge to the scene is one function, <code>place_in_parent</code>, which converts a body's
+    world position into a local <code>transform</code> for a node whose parent's world matrix you
+    hand it. It converts at the boundary, once per frame, rather than letting either space leak into
+    the other. Its implementation is worth a glance for a reason that has nothing to do with physics:
+    it needs the inverse of a general affine matrix, and it gets it by decomposing to a
+    <code>transform</code> and calling 7.6's <code>local_from_parent</code>, which inverts by
+    construction — transpose the rotation, reciprocate the scale, negate the translation — rather
+    than by cofactors. Forty operations saved is not the reason. The reason is that a decomposition
+    <em>reports what it could not represent</em> and a determinant does not.
+  </p>
+
+  <p>
+    And <code>inspect_frame</code> exists so that the rule is a measurable claim rather than an
+    assertion. Nothing in the engine calls it. It is there so a tool can point at a scene node and
+    say why physics must not happen there, and so that §9 could be written with numbers in it.
+  </p>

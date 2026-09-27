@@ -1,0 +1,51 @@
+<svg viewBox="0 0 760 378" role="img" aria-labelledby="f73d-t f73d-d">
+  <title id="f73d-t">Euler's formula from the velocity of a circling point</title>
+  <desc id="f73d-d">The unit circle with three positions marked. At each, a blue arrow runs from the origin to the point and a teal arrow leaves the point at right angles to it, in the direction of travel. The teal arrow is the blue one turned a quarter circle, which in this algebra is multiplication by i. A panel beside the picture turns that into the differential equation z prime of theta equals i times z of theta with z of zero equal to one, whose solution is exp of i theta, which is cosine theta plus i sine theta.</desc>
+  <defs>
+    <marker id="e-i-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-teal-f73d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<text x="196" y="28" class="sm" text-anchor="middle">a point going round at unit speed</text>
+<text x="196" y="45" class="xs muted" text-anchor="middle">blue is where it is, teal is where it is going</text>
+<line x1="64.0" y1="313.6" x2="64.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="108.0" y1="313.6" x2="108.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="152.0" y1="313.6" x2="152.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="240.0" y1="313.6" x2="240.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="284.0" y1="313.6" x2="284.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="328.0" y1="313.6" x2="328.0" y2="58.4" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="318.0" x2="342.1" y2="318.0" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="274.0" x2="342.1" y2="274.0" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="230.0" x2="342.1" y2="230.0" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="142.0" x2="342.1" y2="142.0" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="98.0" x2="342.1" y2="98.0" class="grid" stroke-width="0.8"/>
+<line x1="49.9" y1="186.0" x2="342.1" y2="186.0" class="ink-soft" stroke-width="1.0"/>
+<line x1="196.0" y1="313.6" x2="196.0" y2="58.4" class="ink-soft" stroke-width="1.0"/>
+<path d="M 284.00,186.00 L 283.81,180.24 L 283.25,174.51 L 282.31,168.83 L 281.00,163.22 L 279.33,157.71 L 277.30,152.32 L 274.92,147.08 L 272.21,142.00 L 269.17,137.11 L 265.82,132.43 L 262.16,127.98 L 258.23,123.77 L 254.02,119.84 L 249.57,116.18 L 244.89,112.83 L 240.00,109.79 L 234.92,107.08 L 229.68,104.70 L 224.29,102.67 L 218.78,101.00 L 213.17,99.69 L 207.49,98.75 L 201.76,98.19 L 196.00,98.00 L 190.24,98.19 L 184.51,98.75 L 178.83,99.69 L 173.22,101.00 L 167.71,102.67 L 162.32,104.70 L 157.08,107.08 L 152.00,109.79 L 147.11,112.83 L 142.43,116.18 L 137.98,119.84 L 133.77,123.77 L 129.84,127.98 L 126.18,132.43 L 122.83,137.11 L 119.79,142.00 L 117.08,147.08 L 114.70,152.32 L 112.67,157.71 L 111.00,163.22 L 109.69,168.83 L 108.75,174.51 L 108.19,180.24 L 108.00,186.00 L 108.19,191.76 L 108.75,197.49 L 109.69,203.17 L 111.00,208.78 L 112.67,214.29 L 114.70,219.68 L 117.08,224.92 L 119.79,230.00 L 122.83,234.89 L 126.18,239.57 L 129.84,244.02 L 133.77,248.23 L 137.98,252.16 L 142.43,255.82 L 147.11,259.17 L 152.00,262.21 L 157.08,264.92 L 162.32,267.30 L 167.71,269.33 L 173.22,271.00 L 178.83,272.31 L 184.51,273.25 L 190.24,273.81 L 196.00,274.00 L 201.76,273.81 L 207.49,273.25 L 213.17,272.31 L 218.78,271.00 L 224.29,269.33 L 229.68,267.30 L 234.92,264.92 L 240.00,262.21 L 244.89,259.17 L 249.57,255.82 L 254.02,252.16 L 258.23,248.23 L 262.16,244.02 L 265.82,239.57 L 269.17,234.89 L 272.21,230.00 L 274.92,224.92 L 277.30,219.68 L 279.33,214.29 L 281.00,208.78 L 282.31,203.17 L 283.25,197.49 L 283.81,191.76 Z" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<line x1="196.00" y1="186.00" x2="268.09" y2="135.53" stroke="#5082e6" stroke-width="1.7" marker-end="url(#e-blue-f73d)"/>
+<line x1="268.09" y1="135.53" x2="244.87" y2="102.37" stroke="#60ded0" stroke-width="1.8" marker-end="url(#e-teal-f73d)"/>
+<line x1="196.00" y1="186.00" x2="145.53" y2="113.91" stroke="#5082e6" stroke-width="1.7" marker-end="url(#e-blue-f73d)"/>
+<line x1="145.53" y1="113.91" x2="112.37" y2="137.13" stroke="#60ded0" stroke-width="1.8" marker-end="url(#e-teal-f73d)"/>
+<line x1="196.00" y1="186.00" x2="158.81" y2="265.76" stroke="#5082e6" stroke-width="1.7" marker-end="url(#e-blue-f73d)"/>
+<line x1="158.81" y1="265.76" x2="195.50" y2="282.86" stroke="#60ded0" stroke-width="1.8" marker-end="url(#e-teal-f73d)"/>
+<text x="252.7" y="147.5" class="sm mono" text-anchor="start">z</text>
+<text x="221.6" y="59.5" class="sm mono t-hi" text-anchor="middle">i·z</text>
+<text x="196" y="332" class="xs muted" text-anchor="middle">the teal arrow is the blue one, turned a quarter circle</text>
+<text x="196" y="350" class="xs t-hi" text-anchor="middle">and a quarter circle is × i</text>
+<rect x="406" y="56" width="322" height="248" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="567.0" y="80" class="sm" text-anchor="middle">why the exponential turns up</text>
+<text x="567.0" y="106" class="xs muted" text-anchor="middle">go round the unit circle at unit speed</text>
+<text x="567.0" y="125" class="xs muted" text-anchor="middle">the velocity is perpendicular to</text>
+<text x="567.0" y="144" class="xs muted" text-anchor="middle">the position, and always unit length</text>
+<text x="567.0" y="163" class="xs muted" text-anchor="middle">perpendicular, in this algebra, is × i</text>
+<text x="567.0" y="201" class="xs mono t-hi" text-anchor="middle">z′(θ) = i · z(θ),    z(0) = 1</text>
+<text x="567.0" y="239" class="xs muted" text-anchor="middle">the only function whose derivative is</text>
+<text x="567.0" y="258" class="xs muted" text-anchor="middle">itself times a constant is exp</text>
+<text x="567.0" y="296" class="xs mono t-hi" text-anchor="middle">z(θ) = exp(iθ) = cos θ + i sin θ</text>
+<text x="567.0" y="332" class="xs muted" text-anchor="middle">nothing here is a definition to be swallowed —</text>
+<text x="567.0" y="350" class="xs muted" text-anchor="middle">the equation is the picture, written down</text>
+</svg>

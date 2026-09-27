@@ -1,0 +1,41 @@
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="l59f6-t l59f6-d">
+  <title id="l59f6-t">A camera struct compared with a camera entity</title>
+  <desc id="l59f6-d">Above, a demo-owned orbit camera struct. Below, an entity carrying a transform, a world transform, a camera component and an active-camera tag, with the identity relating look_along and look_at.</desc>
+  <defs>
+    <marker id="e-i-l59f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l59f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l59f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l59f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l59f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">A camera stops being a kind of thing and becomes a set of components.</text>
+<text x="24" y="48" class="xs t-bad" text-anchor="start">BEFORE — demo::orbit_camera, a struct one program owned</text>
+<rect x="90" y="60" width="250" height="60" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="215" y="76" class="xs mono" text-anchor="middle">target, radius, azimuth, elevation</text>
+<text x="215" y="91" class="xs mono" text-anchor="middle">eye()  → vec3</text>
+<text x="215" y="106" class="xs mono" text-anchor="middle">view() → mat4</text>
+<text x="360" y="78" class="xs muted" text-anchor="start">One camera. Cannot be parented,</text>
+<text x="360" y="92" class="xs muted" text-anchor="start">cannot be swapped without a pointer,</text>
+<text x="360" y="106" class="xs muted" text-anchor="start">cannot be found by a query.</text>
+<line x1="24" y1="136" x2="696" y2="136" class="grid" stroke-width="1.2"/>
+<text x="24" y="158" class="xs t-ok" text-anchor="start">AFTER — an entity, and the components are the whole design</text>
+<rect x="120" y="176" width="150" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="195" y="191" class="xs mono" text-anchor="middle">transform</text>
+<text x="282" y="191" class="xs muted" text-anchor="start">where it is (local)</text>
+<rect x="120" y="202" width="150" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="195" y="217" class="xs mono" text-anchor="middle">world_transform</text>
+<text x="282" y="217" class="xs muted" text-anchor="start">…resolved, so it can be PARENTED</text>
+<rect x="120" y="228" width="150" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="195" y="243" class="xs mono" text-anchor="middle">camera</text>
+<text x="282" y="243" class="xs muted" text-anchor="start">fovy, near, far — NOT aspect</text>
+<rect x="120" y="254" width="150" height="22" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="195" y="269" class="xs mono" text-anchor="middle">active_camera</text>
+<text x="282" y="269" class="xs muted" text-anchor="start">a TAG: presence is the information</text>
+<text x="112" y="190" class="xs mono muted" text-anchor="end">entity</text>
+<line x1="24" y1="292" x2="696" y2="292" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="24" y="310" class="xs t-hi" text-anchor="start">THE IDENTITY THAT SAYS IT IS THE SAME MATHS:</text>
+<rect x="60" y="320" width="600" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.12"/>
+<text x="360" y="335" class="xs mono" text-anchor="middle">rigid_inverse(parent_from_local(look_along(e, t, u)))  ==  look_at(e, t, u)</text>
+<text x="24" y="360" class="xs muted" text-anchor="start">Bit for bit — verify_59 §D. Lesson 2.9 said the view matrix is the inverse of the camera's placement;</text>
+<text x="24" y="374" class="xs muted" text-anchor="start">now the camera HAS a placement, so the sentence became executable.</text>
+</svg>

@@ -1,0 +1,81 @@
+<svg viewBox="0 0 720 320" role="img" aria-labelledby="l56f5-t l56f5-d">
+  <title id="l56f5-t">SoA measured with and without vectorisation, on two workloads</title>
+  <desc id="l56f5-d">Two blocks of five ratios each. On the full-transform workload SoA wins about 0.66x at every size with vectorisation and exactly 1.00x without it. On the cull workload it wins only above ten thousand objects, and the win survives with vectorisation disabled.</desc>
+  <defs>
+    <marker id="e-i-l56f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l56f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l56f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l56f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l56f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">SoA wins twice, for two completely different reasons — and one experiment tells them apart.</text>
+<text x="24" y="52" class="xs t-hi" text-anchor="start">FULL TRANSFORM</text>
+<text x="24" y="66" class="xs muted" text-anchor="start">reads 60 of 96 bytes</text>
+<text x="200" y="40" class="xs muted" text-anchor="middle">-O2</text>
+<text x="200" y="54" class="xs muted" text-anchor="middle">(vectorised)</text>
+<text x="200" y="98" class="xs muted" text-anchor="middle">-fno-vectorize</text>
+<text x="288" y="40" class="xs muted" text-anchor="middle">4</text>
+<rect x="254" y="42" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="288" y="55" class="xs mono" text-anchor="middle">1.00x</text>
+<rect x="254" y="86" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="288" y="99" class="xs mono" text-anchor="middle">1.00x</text>
+<text x="370" y="40" class="xs muted" text-anchor="middle">100</text>
+<rect x="336" y="42" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="370" y="55" class="xs mono" text-anchor="middle">0.68x</text>
+<rect x="336" y="86" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="370" y="99" class="xs mono" text-anchor="middle">1.00x</text>
+<text x="452" y="40" class="xs muted" text-anchor="middle">1,000</text>
+<rect x="418" y="42" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="452" y="55" class="xs mono" text-anchor="middle">0.64x</text>
+<rect x="418" y="86" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="452" y="99" class="xs mono" text-anchor="middle">0.99x</text>
+<text x="534" y="40" class="xs muted" text-anchor="middle">10,000</text>
+<rect x="500" y="42" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="534" y="55" class="xs mono" text-anchor="middle">0.66x</text>
+<rect x="500" y="86" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="534" y="99" class="xs mono" text-anchor="middle">1.00x</text>
+<text x="616" y="40" class="xs muted" text-anchor="middle">100,000</text>
+<rect x="582" y="42" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="616" y="55" class="xs mono" text-anchor="middle">0.68x</text>
+<rect x="582" y="86" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="616" y="99" class="xs mono" text-anchor="middle">1.00x</text>
+<line x1="24" y1="116" x2="696" y2="116" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="168" class="xs t-hi" text-anchor="start">CULL</text>
+<text x="24" y="182" class="xs muted" text-anchor="start">reads 12 of 96 bytes</text>
+<text x="200" y="156" class="xs muted" text-anchor="middle">-O2</text>
+<text x="200" y="170" class="xs muted" text-anchor="middle">(vectorised)</text>
+<text x="200" y="214" class="xs muted" text-anchor="middle">-fno-vectorize</text>
+<text x="288" y="156" class="xs muted" text-anchor="middle">4</text>
+<rect x="254" y="158" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="288" y="171" class="xs mono" text-anchor="middle">0.82x</text>
+<rect x="254" y="202" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="288" y="215" class="xs mono" text-anchor="middle">1.00x</text>
+<text x="370" y="156" class="xs muted" text-anchor="middle">100</text>
+<rect x="336" y="158" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="370" y="171" class="xs mono" text-anchor="middle">0.58x</text>
+<rect x="336" y="202" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="370" y="215" class="xs mono" text-anchor="middle">0.97x</text>
+<text x="452" y="156" class="xs muted" text-anchor="middle">1,000</text>
+<rect x="418" y="158" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="452" y="171" class="xs mono" text-anchor="middle">0.52x</text>
+<rect x="418" y="202" width="68" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="452" y="215" class="xs mono" text-anchor="middle">0.98x</text>
+<text x="534" y="156" class="xs muted" text-anchor="middle">10,000</text>
+<rect x="500" y="158" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="534" y="171" class="xs mono" text-anchor="middle">0.19x</text>
+<rect x="500" y="202" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="534" y="215" class="xs mono" text-anchor="middle">0.37x</text>
+<text x="616" y="156" class="xs muted" text-anchor="middle">100,000</text>
+<rect x="582" y="158" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="616" y="171" class="xs mono" text-anchor="middle">0.19x</text>
+<rect x="582" y="202" width="68" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="616" y="215" class="xs mono" text-anchor="middle">0.36x</text>
+<line x1="24" y1="232" x2="696" y2="232" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="122" class="xs" text-anchor="start">The win is the SAME at every size — 384 bytes and 9.6 MB alike — and it VANISHES with the vectoriser off.</text>
+<text x="24" y="136" class="xs t-hi" text-anchor="start">It is not a cache effect at all. It is that a contiguous array vectorises and a 96-byte stride does not.</text>
+<text x="24" y="238" class="xs" text-anchor="start">The win APPEARS at 10,000 and not before, and survives the vectoriser being switched off.</text>
+<text x="24" y="252" class="xs t-hi" text-anchor="start">This one is the cache: 12 useful bytes per 96 fetched, which stops being free when the array leaves L2.</text>
+<line x1="24" y1="268" x2="696" y2="268" class="grid" stroke-width="1.2"/>
+<text x="24" y="286" class="xs t-hi" text-anchor="start">THE RULE THIS PRODUCES is not “use SoA”. It is: SPLIT THE DATA A LOOP DOES NOT READ AWAY FROM THE DATA IT DOES,</text>
+<text x="24" y="302" class="xs" text-anchor="start">and the size of the prize is the fraction you leave behind. 60 of 96 buys nothing; 12 of 96 buys 5x.</text>
+</svg>

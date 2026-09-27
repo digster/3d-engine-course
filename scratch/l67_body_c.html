@@ -1,0 +1,519 @@
+  <!-- =================================================================
+       9 — THE GPU PORT
+       ================================================================= -->
+  <h2 id="gpu"><span class="num">9</span>The GPU Port, and a Layout That Widened</h2>
+
+  <p>
+    Both renderers get this, in one commit, for the reason Lesson 6.4 gave when it changed the BRDF:
+    a material field that one renderer honours and the other ignores is exactly the pair of opinions
+    that can disagree. A <code>material</code> with a <code>normal_map</code> handle would be
+    silently flat on the GPU, and nothing anywhere would say so.
+  </p>
+
+  <p>
+    The fragment shader is line-for-line the software one — same Gram-Schmidt, same decode, same
+    basis change — so the interesting part of the port is everything <em>around</em> it.
+  </p>
+
+  <h3>9.1 — The flag that cost nothing</h3>
+
+  <p>
+    Lesson 6.4 left a `pad0` in <code>material_uniforms</code>, added purely to fill the second
+    16-byte register. This lesson spends it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_uniform.hpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">float textured;      // 24 — 0 = use `albedo`, 1 = sample the bound texture
+float normal_mapped; // 28 — was `pad0`. The block is STILL exactly 32 bytes.</code></pre>
+  </figure>
+
+  <p>
+    No binding code moved and no shader's register allocation changed, and the
+    <code>static_assert(sizeof(material_uniforms) == 32)</code> is what says so rather than a
+    comment. It is <em>derived</em> from <code>material::normal_mapped()</code> at the push, like
+    <code>textured</code> and for the same reason (6.5 §5): a flag beside a handle is two opinions,
+    and a flag computed from the handle is one.
+  </p>
+
+  <h3>9.2 — Two fallback texels, two identity elements</h3>
+
+  <p>
+    A declared sampler slot with nothing bound draws <em>nothing at all</em> — no pixels, no error
+    message — which Lesson 4.7 hit once and solved with a 1×1 white texture. The normal map needs
+    the same treatment with a different constant:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The two 1x1 fallback textures and what makes each the
+        identity for its operation</caption>
+      <thead><tr><th>Slot</th><th>Fallback</th><th>sRGB?</th><th>Why it is the identity</th></tr></thead>
+      <tbody>
+        <tr><td><code>t0</code> albedo</td><td>(255, 255, 255)</td><td><strong>yes</strong></td>
+            <td>white is the identity for a multiply</td></tr>
+        <tr><td><code>t1</code> normal</td><td>(128, 128, 255)</td><td><strong>no</strong></td>
+            <td>the lavender decodes to (0,0,1), and <code>T·0 + B·0 + N·1</code> is
+                <code>N</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    That <code>false</code> in the second row is this lesson's entire subject on the GPU side. Pass
+    <code>true</code> and the hardware asks for an <code>_SRGB</code> format, 128 decodes to 0.2159
+    rather than 0.5020, and <em>every unmapped surface in the scene</em> tilts by 38.8°.
+  </p>
+
+  <h3>9.3 — A shared vertex layout is an interface</h3>
+
+  <p>
+    <code>gpu_vertex_pnu</code> gained four floats, 32 bytes to 48. The
+    <code>static_assert</code> Lesson 4.5 wrote caught it before a pixel was drawn:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_mesh.hpp — 4.5's assertion doing its job</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">static_assert(sizeof(gpu_vertex_pnu) == 48, "gpu_vertex_pnu is expected to be 48 bytes");</code></pre>
+  </figure>
+
+  <p>
+    That is the whole value of asserting a number you also wrote in a diagram: the alternative is a
+    lesson page that says 32 bytes forever while the code says 48.
+  </p>
+
+  <p>
+    Then the interesting failure. <code>gpu_mesh::describe</code> now wants to emit a fourth
+    attribute at <strong>location 3</strong> — and vertex attribute locations are numbered
+    <em>across the whole pipeline</em>, not per buffer. Lesson 4.6's instancing pipeline already puts
+    its per-instance placement at location 3.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Caught by 4.5's <code>check_layout</code>, in <code>verify_46</code></span>
+    <p>The harness compares the declared attributes against the shader's <em>reflected</em> inputs
+       and reports <code>extra</code> and <code>duplicate</code>. It failed the moment
+       <code>describe</code> widened — before any rendering, with a name.</p>
+    <p>Without it the symptom would have been <code>placement</code> silently fetching a tangent's
+       bytes: seven instances stacked at nonsense positions, in a demo three modules old, with
+       nothing pointing at the lesson that broke it.</p>
+  </div>
+
+  <p>
+    Two fixes were available and the choice is instructive. <strong>Renumber</strong> every
+    downstream consumer to 4, 5, 6 — which teaches that a shared layout is an interface, and is
+    real churn. Or <strong>make the attribute optional</strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_mesh.hpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">static pipeline_desc&amp; describe(pipeline_desc&amp; desc, Uint32 slot = 0,
+                               bool with_tangent = true);</code></pre>
+  </figure>
+
+  <p>
+    The second is better engineering, and not because it is smaller. <strong>A vertex layout is
+    per-pipeline state.</strong> A shader that never reads a tangent should not have one declared:
+    it is a fetch paid for nothing, and the location it occupies is a resource other buffers want.
+    The vertex <em>buffer</em> still carries the tangent either way — the pitch is
+    <code>sizeof(gpu_vertex_pnu)</code> regardless — so a pipeline that opts out pays the memory and
+    not the bandwidth, which is the honest description of the trade.
+  </p>
+
+  <h3>9.4 — What the port cost</h3>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Sizes before and after Lesson 6.7</caption>
+      <thead><tr><th>Thing</th><th>Before</th><th>After</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td><code>gpu_vertex_pnu</code></td><td>32 B</td><td><strong>48 B</strong></td>
+            <td>+50% on every mesh, mapped or not</td></tr>
+        <tr><td><code>material_uniforms</code></td><td>32 B</td><td><strong>32 B</strong></td>
+            <td>the flag spent 6.4's padding</td></tr>
+        <tr><td><code>engine::mesh</code> (the view)</td><td>64 B</td><td>80 B</td>
+            <td>a fifth span; <code>verify_54</code> caught it</td></tr>
+        <tr><td><code>scene_object</code></td><td>112 B</td><td>120 B</td>
+            <td>a second texture handle; <code>verify_56</code> caught it</td></tr>
+        <tr><td>varyings per fragment</td><td>3</td><td><strong>4</strong></td>
+            <td>four more interpolated floats, forever</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The vertex growth is the one that matters and it is not avoidable per-draw, because a vertex
+    layout is pipeline state. Real engines address it by <em>compressing</em> the frame rather than
+    dropping it — a tangent can be two 16-bit octahedral components plus a sign bit, four bytes
+    instead of sixteen — and that is Exercise 5.
+  </p>
+
+  <!-- =================================================================
+       10 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">10</span>Complete Code Listings</h2>
+
+  <p>
+    The files where the technique lives, in full. The remaining touched files — the clipper, the
+    collector, the GPU mesh and scene, the shaders and the two demos — are the fragments quoted
+    above; their changes are the single lines shown in §8 and §9.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">File manifest for Lesson 6.7</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td>
+            <td><code>texel_space</code>, and <code>make_normal_bumps</code></td></tr>
+        <tr><td><code>engine/src/gfx/texture.cpp</code></td><td>modified</td>
+            <td>one branch in <code>fetch</code>; the analytic generator</td></tr>
+        <tr><td><code>engine/include/engine/gfx/mesh.hpp</code></td><td>modified</td>
+            <td><code>tangents</code>, <code>tangent_at</code>, <code>with_tangents</code></td></tr>
+        <tr><td><code>engine/src/gfx/mesh.cpp</code></td><td>modified</td>
+            <td>the derivation</td></tr>
+        <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>modified</td>
+            <td><code>normal_map</code>, <code>normal_mapped()</code>,
+                <code>bind_normal_map</code></td></tr>
+        <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>the fragment</td></tr>
+        <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+            <td>the same fragment, in HLSL</td></tr>
+        <tr><td><code>scratch/verify_67.cpp</code></td><td>new</td>
+            <td>33 checks in seven sections</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/texture.hpp@@
+  @@LISTING:engine/src/gfx/mesh.cpp@@
+  @@LISTING:engine/include/engine/gfx/material.hpp@@
+  @@LISTING:shaders/scene.frag.hlsl@@
+  @@LISTING:scratch/verify_67.cpp@@
+
+  <!-- =================================================================
+       11 — BUILD &amp; RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">11</span>Build &amp; Run, and What You Should See</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux and macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+
+# the comparison that is the whole lesson
+./build/demos/gltf_view --model torus.obj --bumps 0      # flat
+./build/demos/gltf_view --model torus.obj                # 6 cells, default
+
+./build/demos/gltf_view --model torus.obj --shot bumpy.ppm
+./build/demos/gltf_view --model cube.gltf                # see §4's warning
+
+sh scratch/build_verify_67.sh                              # 33 checks
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_67.sh # …and in release</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+
+.\build\demos\Debug\gltf_view.exe --model torus.obj --bumps 0
+.\build\demos\Debug\gltf_view.exe --model torus.obj</code></pre>
+  </figure>
+
+  @@FIG_RESULT@@
+
+  <p>
+    Run the two commands back to back. Same 2,304 triangles, same light, same material, same
+    silhouette — and a surface that has gone from smooth to quilted. Nothing about the geometry
+    changed; only what it claims its normal is.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Three things worth noticing in that picture</span>
+    <p><strong>The tangents were derived, not loaded.</strong> OBJ has no tangent attribute at all,
+       so every frame in that render came out of <code>with_tangents</code> and the uv chart. The
+       log line says <code>1225 tangents (OBJ carries none, so every one was DERIVED)</code>.</p>
+    <p><strong>The silhouette is unchanged.</strong> Look at the outer edge of the torus in both:
+       perfectly smooth, because the outline is geometry and geometry is what a normal map does not
+       touch. That is the technique's honest limit, visible in its own demo.</p>
+    <p><strong>The overall brightness is about the same.</strong> If it were not — if the bumpy one
+       were much darker — that would be the parameterisation bug §8.4 describes, and it is worth
+       running <code>--bumps 24</code> once to see what "too steep" looks like.</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">And the cube, which looks wrong on purpose</span>
+    <p><code>--model cube.gltf</code> comes out banded rather than dimpled, and §4 explains why:
+       Lesson 6.6 gave that asset one uv per box corner so its round-trip test could compare
+       index-for-index, and four of its six faces therefore have zero uv area and no frame at all.
+       Normal mapping is simply the first thing that makes an existing property of the asset
+       visible.</p>
+  </div>
+
+  <div class="callout">
+    <span class="label">The claim this lesson has to make</span>
+    <p><strong>33 checks, 0 failures</strong>, debug and release. <code>verify_45</code> through
+       <code>verify_66</code> all green — including <code>verify_46</code>, which failed first and
+       correctly.</p>
+    <p>And the reference render is <strong>byte-identical, hash E917C06C</strong> — the sixteenth
+       lesson at that hash. A fourth varying through the vertex, the clipper, the interpolator and
+       both shaders; the GPU vertex from 32 bytes to 48; a branch in the one function every texture
+       read goes through — and not one pixel moved, because no material in the reference scene has a
+       normal map. <em>A new capability is a new path.</em></p>
+  </div>
+
+  <!-- =================================================================
+       12 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">12</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Symptom, cause and fix for the failures this lesson's code
+        can produce</caption>
+      <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Everything is lit as though the light moved, and reducing the map's strength helps but
+              never fixes it.</td>
+          <td>The normal map was read as sRGB. 128 decodes to 0.216 instead of 0.502.</td>
+          <td><code>texel_space::linear</code>, and <code>create_sampled(…, false)</code> on the GPU.
+              The fingerprint is a uniform <strong>38.8°</strong> tilt.</td>
+        </tr>
+        <tr>
+          <td>Bumps read as dents.</td>
+          <td>The green channel's sense is inverted — a map baked for the other convention.</td>
+          <td>Negate <em>y</em> after the decode. glTF fixes the convention (green is +v, which is
+              <em>down</em> the image), so this is an asset problem, not a code one — but you will
+              meet it.</td>
+        </tr>
+        <tr>
+          <td>One half of a symmetric model is lit as the mirror image of the other.</td>
+          <td>The handedness was dropped — a <code>vec3</code> tangent, or a hard-coded
+              <code>cross(N, T)</code>.</td>
+          <td>Carry <code>w</code> and multiply the bitangent by it. <code>verify_67</code> §C is
+              the test.</td>
+        </tr>
+        <tr>
+          <td>The normal map looks rotated within the surface, but only on stretched objects.</td>
+          <td>The tangent was transformed by the normal matrix.</td>
+          <td>The model matrix. Both answers stay in the plane, which is why this is a
+              <em>skew</em> rather than an obvious break — and why it looks fine on everything
+              uniformly scaled.</td>
+        </tr>
+        <tr>
+          <td>Black pixels, or NaNs spreading through the shading.</td>
+          <td><code>normalize</code> of a zero tangent — geometry with no uvs, or a vertex all of
+              whose faces had zero uv area.</td>
+          <td>Guard the length before normalising, and fall back to the geometric normal. Both
+              renderers do; the GPU one costs a dot product per fragment.</td>
+        </tr>
+        <tr>
+          <td>The render is very dark and reads as a lighting bug.</td>
+          <td>The normal map is far too steep — an amplitude used where a slope was meant.</td>
+          <td>Check what your strength parameter actually scales. <code>A·cos(ku)cos(kv)</code> has
+              peak gradient <code>A·k</code>, so a fixed amplitude gets steeper as the cell count
+              rises.</td>
+        </tr>
+        <tr>
+          <td>A cube (or any box-projected asset) comes out banded rather than bumpy.</td>
+          <td>Faces with zero uv area have no tangent frame.</td>
+          <td>Nothing to fix in the renderer — the asset's chart is degenerate. Check
+              <code>mesh_data::tangents</code> for zero entries.</td>
+        </tr>
+        <tr>
+          <td>Instanced geometry draws at nonsense positions after adding a vertex attribute.</td>
+          <td>Attribute locations collided: they are numbered across the whole pipeline, not per
+              buffer.</td>
+          <td><code>check_layout</code> reports <code>duplicate</code> and <code>extra</code>. Either
+              renumber, or declare the attribute only on pipelines that read it.</td>
+        </tr>
+        <tr>
+          <td>A frame appears to work but a test asserting an exact round trip fails at ~5.5e−03.</td>
+          <td>Not a bug. 0.5 is not an 8-bit code, so a flat map tilts by 0.318°.</td>
+          <td>Predict the floor from the encoding and assert equality with it, rather than widening
+              the tolerance until it passes.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- =================================================================
+       13 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">13</span>Exercises</h2>
+
+  <h3>13.1 — Break each step on purpose <span class="tag">guided</span></h3>
+  <p>
+    Five one-line edits, each producing a distinct and recognisable artefact. Make each, look at
+    <code>torus.obj</code>, then run <code>verify_67</code> and note which section catches it:
+    read the map as <code>srgb</code>; skip the <code>*2-1</code> decode; skip the fragment's
+    Gram-Schmidt; force <code>handed = 1</code>; use <code>normal_matrix</code> for the tangent.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> Two of the five leave <code>verify_67</code> entirely green on the torus,
+    and that is the point of the exercise rather than a flaw in the harness — the torus has no
+    mirrored chart and is uniformly scaled. Work out which two, then write the asset that would
+    catch them. That is how a test suite actually grows.
+  </p>
+
+  <h3>13.2 — Remove the duplicated frame <span class="tag">guided</span></h3>
+  <p>
+    The TBN construction now exists three times: <code>raster.cpp</code>,
+    <code>scene.frag.hlsl</code>, and <code>verify_67</code>'s own <code>perturb</code>. The C++ two
+    can be one. Lift the frame into a small function in <code>microfacet.hpp</code> or a new header,
+    and have both the fragment and the harness call it.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> Note what the duplication currently costs: if the fragment changes and
+    the harness does not, <code>verify_67</code> keeps passing while the renderer is wrong. That is
+    the real argument, not tidiness. The HLSL copy cannot be shared — and thinking about why not is
+    worth more than the refactor: what would it take, and what does Module 9's shader work need to
+    exist first?
+  </p>
+
+  <h3>13.3 — Honour <code>normalTexture.scale</code> <span class="tag">engine challenge</span></h3>
+  <p>
+    glTF's normal texture carries a <code>scale</code> that multiplies the sampled <em>x</em> and
+    <em>y</em> before normalisation — so 2.0 doubles the apparent steepness and 0 flattens the
+    surface. <code>gltf_material_desc::normal_scale</code> reads it and nothing applies it. Make it
+    work.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> It needs a per-material float in the fragment, and
+    <code>material_uniforms</code> is exactly full at 32 bytes — so the interesting part is the
+    decision, not the arithmetic. Growing to 48 bytes costs a third register on every draw; packing
+    it into an existing field costs precision. Measure the push cost with
+    <code>verify_46</code>'s uniform benchmark before choosing, and write down which you picked and
+    why.
+  </p>
+
+  <h3>13.4 — Two-channel normal maps <span class="tag">open</span></h3>
+  <p>
+    §E notices that <em>z</em> is almost always near 1 and gets a full byte for the privilege, while
+    <em>x</em> and <em>y</em> use only half their range either side of 128. Store two channels and
+    reconstruct the third as <code>z = sqrt(1 - x² - y²)</code>.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> This is what BC5 compression assumes, which is why it is the standard
+    format for normal maps. Two things to measure rather than assume: how much precision the two
+    surviving channels gain if you rescale them to the full range, and what happens at the one place
+    the reconstruction is ill-conditioned — <code>x² + y²</code> slightly above 1 after filtering,
+    which is a negative square root in a shader.
+  </p>
+
+  <h3>13.5 — Compress the tangent <span class="tag">open</span></h3>
+  <p>
+    §9.4 prices the vertex growth at 50%. A unit vector plus a sign does not need sixteen bytes:
+    octahedral encoding maps a direction to two numbers with excellent uniformity, so a tangent can
+    be two 16-bit values with the handedness in a spare bit — four bytes.
+  </p>
+  <p class="hint">
+    <strong>Hint.</strong> Implement it on the CPU first and measure the worst angular error over a
+    few million random directions before touching the vertex format; the answer for 16 bits is
+    around a tenth of a degree, which you should confirm rather than take. Then note what the same
+    trick would do to the <em>normal</em>, which has the same problem and twice the history.
+  </p>
+
+  <!-- =================================================================
+       14 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">14</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now describe a surface finer than its triangles. Concretely, it gained:
+  </p>
+
+  <ul>
+    <li><strong>A tangent frame</strong>, derived from the uv chart rather than copied —
+        <code>with_tangents</code>, with the handedness recorded, the degenerate chart handled as a
+        case rather than a guard, and the whole thing checkable against a triangle solved on
+        paper.</li>
+    <li><strong>A texture that knows what it holds.</strong> <code>texel_space</code> closes a gap
+        that had been open since Lesson 4.7 gave the GPU an <code>srgb</code> flag the software
+        renderer never had a counterpart for — and it is part of the asset's identity, so the same
+        PNG read two ways is two textures over one decode.</li>
+    <li><strong>Per-pixel normals in both renderers</strong>, from the same four lines, with glTF's
+        <code>normalTexture</code> finally loaded.</li>
+    <li><strong>An analytic test image</strong>, whose closed form lets <code>verify_67</code> check
+        the sampled normal against the right answer rather than against a picture.</li>
+    <li><strong>A layout that widened safely</strong>, because Lesson 4.5's
+        <code>check_layout</code> turned an attribute-location collision into a named failure before
+        anything rendered.</li>
+  </ul>
+
+  <div class="callout ok">
+    <span class="label">The through-line, if you take one thing from this lesson</span>
+    <p>Three of the hardest bugs available here — the colour space, the handedness, the transform
+       matrix — share a shape: <strong>they produce a picture that is plausible.</strong> A uniform
+       38.8° tilt reads as an over-strong map. A dropped handedness reads as a modelling error. The
+       wrong matrix reads as an asset authored at the wrong angle. None of them looks like the thing
+       it is.</p>
+    <p>Which is why every one of them is a <em>type</em> or an <em>assertion</em> in this lesson
+       rather than a comment: a <code>vec4</code> that cannot lose its sign, an enum on the texture
+       that no caller can forget, and a round trip whose error floor is predicted from the
+       encoding.</p>
+  </div>
+
+  <p>
+    Two things deferred, both named with reasons. <strong>Metallic-roughness textures</strong> are
+    now unblocked — they are linear data and <code>texel_space</code> is what they were waiting for
+    — but reading them changes the shading equation's <em>inputs</em> rather than its normal, and
+    that belongs with the material work rather than here. And <strong>normalTexture.scale</strong>
+    is read and not applied, because <code>material_uniforms</code> is exactly full; that is
+    Exercise 3, and the exercise is the decision rather than the arithmetic.
+  </p>
+
+  <p>
+    <strong>Next: 6.8 — Shadow Mapping: Bias, Acne, and PCF.</strong> Every surface in this engine is
+    lit as though nothing were between it and the light, which is why the torus's inner ring is as
+    bright as its outer one. Shadow mapping fixes that by rendering the scene <em>from the light</em>
+    and asking, per pixel, whether what the light can see is what the camera can see — and the whole
+    lesson is that the comparison is between two floating-point depths that were computed
+    differently, which produces the most famous artefact in real-time graphics. This lesson leaves
+    you well placed for it: a normal map is the first time the engine has had a shading normal that
+    disagrees with the geometry, and shadow bias is the first time that disagreement will
+    <em>matter</em>.
+  </p>
+
+  <!-- =================================================================
+       15 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">15</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Eric Lengyel — <em>Mathematics for 3D Game Programming and Computer Graphics</em></strong>,
+        §7.8 "Bump Mapping". The 2×2 inversion in §4 is Lengyel's derivation, and his is the account
+        most later ones are downstream of. Worth reading for the way it arrives at the same two
+        equations from the chain rule instead.</li>
+    <li><strong>Morten Mikkelsen — <em>Simulation of Wrinkled Surfaces Revisited</em></strong> (2008).
+        The MikkTSpace thesis. The reason it matters is not a better formula but a
+        <em>standard</em>: if the baker and the renderer compute tangents differently, a normal map
+        is subtly wrong at every seam, and MikkTSpace exists so that both can agree bit-for-bit.
+        glTF's spec recommends it by name. Ours does not implement it, and §8 says so.</li>
+    <li><strong>Christian Schüler — <em>"Followup: Normal Mapping Without Precomputed Tangents"</em></strong>.
+        The frame can be reconstructed in the fragment shader from screen-space derivatives, with no
+        vertex attribute at all — which trades §9.4's 16 bytes a vertex for arithmetic per pixel.
+        Read it for the trade rather than the technique.</li>
+    <li><strong>Khronos — <em>glTF 2.0 Specification</em></strong>, §3.7.2.1 (the <code>TANGENT</code>
+        attribute and its <code>w</code>) and §5.28 (<code>normalTextureInfo.scale</code>). Short,
+        and the source for two decisions in this lesson.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.7</strong> "Bump Mapping", and §16.6 for the
+        vertex-compression material Exercise 5 needs.</li>
+    <li><strong>Cigolle, Donow, Evangelakos, Mara, McGuire, Meyer — <em>A Survey of Efficient
+        Representations for Independent Unit Vectors</em></strong> (JCGT, 2014). Octahedral encoding,
+        measured against every alternative. The reference for Exercise 5, and unusually good at
+        reporting error rather than asserting quality.</li>
+    <li><strong>Scratchapixel — <em>Normal Mapping</em></strong>. The gentler first pass, with the
+        tangent-space picture drawn out at length.</li>
+  </ul>

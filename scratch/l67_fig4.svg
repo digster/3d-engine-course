@@ -1,0 +1,52 @@
+<svg viewBox="0 0 720 384" role="img" aria-labelledby="l67f4-t l67f4-d">
+  <title id="l67f4-t">The four steps from stored bytes to a world-space normal</title>
+  <desc id="l67f4-d">Four linked boxes: the image's three bytes (128, 128, 255), decoded by dividing by 255 rather than through the sRGB curve, then mapped from [0,1] to [-1,1] giving very nearly (0, 0, 1), and finally combined with the tangent frame to return the geometric normal. Below, why an unperturbed map is lavender, and why the round trip's error floor is not zero.</desc>
+  <defs>
+    <marker id="e-i-l67f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l67f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l67f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l67f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l67f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="384" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">Tangent space to world, in one multiply</text>
+<rect x="24.0" y="52" width="156" height="104" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="24.0" y="52" width="156" height="104" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="102.0" y="74" class="sm" text-anchor="middle">the image</text>
+<line x1="36.0" y1="82" x2="168.0" y2="82" class="grid" stroke-width="1.0"/>
+<text x="102.0" y="104" class="xs" text-anchor="middle">(128, 128, 255)</text>
+<text x="102.0" y="132" class="xs" text-anchor="middle">three bytes</text>
+<line x1="184.0" y1="104" x2="192.0" y2="104" class="ink" stroke-width="1.4" marker-end="url(#e-i-l67f4)"/>
+<rect x="196.0" y="52" width="156" height="104" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="196.0" y="52" width="156" height="104" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="274.0" y="74" class="sm" text-anchor="middle">decoded</text>
+<line x1="208.0" y1="82" x2="340.0" y2="82" class="grid" stroke-width="1.0"/>
+<text x="274.0" y="104" class="xs" text-anchor="middle">(0.502, 0.502, 1.000)</text>
+<text x="274.0" y="132" class="xs" text-anchor="middle">byte / 255 — NOT sRGB</text>
+<line x1="356.0" y1="104" x2="364.0" y2="104" class="ink" stroke-width="1.4" marker-end="url(#e-i-l67f4)"/>
+<rect x="368.0" y="52" width="156" height="104" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="368.0" y="52" width="156" height="104" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.3"/>
+<text x="446.0" y="74" class="sm" text-anchor="middle">* 2 - 1</text>
+<line x1="380.0" y1="82" x2="512.0" y2="82" class="grid" stroke-width="1.0"/>
+<text x="446.0" y="104" class="xs" text-anchor="middle">(0.004, 0.004, 1.000)</text>
+<text x="446.0" y="132" class="xs" text-anchor="middle">a DIRECTION has negatives</text>
+<line x1="528.0" y1="104" x2="536.0" y2="104" class="ink" stroke-width="1.4" marker-end="url(#e-i-l67f4)"/>
+<rect x="540.0" y="52" width="156" height="104" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="540.0" y="52" width="156" height="104" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="618.0" y="74" class="sm" text-anchor="middle">T*x + B*y + N*z</text>
+<line x1="552.0" y1="82" x2="684.0" y2="82" class="grid" stroke-width="1.0"/>
+<text x="618.0" y="104" class="xs" text-anchor="middle">= N, exactly</text>
+<text x="618.0" y="132" class="xs" text-anchor="middle">the round trip, verify_67 §D</text>
+<rect x="24" y="176" width="672" height="78" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.07"/>
+<rect x="24" y="176" width="672" height="78" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="360.0" y="200" class="sm" text-anchor="middle">Why an unperturbed normal map is LAVENDER</text>
+<text x="360.0" y="222" class="xs" text-anchor="middle">(0, 0, 1) means “no change”, and packing it into bytes gives (128, 128, 255)</text>
+<text x="360.0" y="242" class="xs" text-anchor="middle">— a pale blue-violet. It is not a convention somebody chose; it is arithmetic.</text>
+<rect x="24" y="268" width="672" height="100" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.06"/>
+<rect x="24" y="268" width="672" height="100" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="360.0" y="292" class="sm" text-anchor="middle">…and “no change” is not exactly representable</text>
+<text x="360.0" y="314" class="xs" text-anchor="middle">0.5 is not an 8-bit code. The nearest is 128, and 128/255*2-1 = 1/255,</text>
+<text x="360.0" y="332" class="xs" text-anchor="middle">so the flattest storable map still tilts its surface by 0.318 degrees.</text>
+<rect x="230" y="342" width="260" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="360.0" y="356" class="xs" text-anchor="middle">measured floor  5.5460e-03  — matched to 7 digits</text>
+</svg>

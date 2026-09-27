@@ -1,0 +1,288 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-10-mipmaps.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.10 — Mipmaps, LOD, and Anisotropic Filtering</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-12-hdr-tonemapping.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.12 — HDR and Tonemapping</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.11</div>
+    <h1>Transparency: Alpha Modes, Blending, and Draw Order</h1>
+    <p class="deck">
+      This is not a lesson about adding a feature. It is a lesson about a <em>correctness gap in
+      code that already shipped</em>, and three facts make that precise. <code>gpu_pipeline.hpp</code>
+      has said <em>"no blending"</em> since Lesson 4.4. Lesson 6.6's glTF importer reads
+      <code>baseColorFactor[3]</code> and ignores <code>alphaMode</code> entirely. And that was the
+      one gap in that importer which fires <em>no status at all</em> — 6.6 §10 says so in as many
+      words — because a status code says <em>"this file wants what the engine cannot do"</em>, and
+      you cannot report a conflict with a concept that does not exist. So every cutout leaf and
+      every pane of glass in every asset anyone has downloaded has been importing as opaque
+      cardboard, silently, for five lessons. Closing that gap turns out to need four separate
+      ideas, one of which takes the z-buffer's most valuable property away from us.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>,
+          <a href="03-01-z-buffer.html">3.1 — The Z-Buffer</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping and Bilinear Filtering</a>,
+          <a href="06-05-material-system.html">6.5 — A Material System</a>,
+          <a href="06-06-gltf.html">6.6 — Loading glTF 2.0</a>,
+          <a href="06-10-mipmaps.html">6.10 — Mipmaps, LOD, and Anisotropic Filtering</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/blend.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/blend.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/draw_order.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/draw_order.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/texture.hpp</code>,
+            <code>engine/src/gfx/texture.cpp</code>,
+            <code>engine/include/engine/gfx/mipmap.hpp</code>,
+            <code>engine/src/gfx/mipmap.cpp</code>,
+            <code>engine/include/engine/gfx/material.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gltf.hpp</code>,
+            <code>engine/src/gfx/gltf.cpp</code>,
+            <code>engine/src/asset/asset_store.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_pipeline.hpp</code>,
+            <code>engine/src/gfx/gpu_pipeline.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_611.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Alpha masking, alpha blending and premultiplied alpha in <strong>both renderers</strong>;
+            a coverage-preserving mip chain; a per-frame back-to-front sort; and the glTF importer's
+            last silent gap closed. <strong>49 checks green</strong>, and the reference render
+            byte-identical for the <strong>twentieth</strong> lesson — this time through a
+            <em>refactor</em> of the sampler rather than an addition beside it.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the <code>over</code> operator from coverage, and say why it must be evaluated in
+          linear light.</li>
+      <li>…explain why alpha masking keeps the depth buffer honest and alpha blending does not,
+          and what each does to draw order as a result.</li>
+      <li>…say what premultiplied alpha is <em>for</em> — which is not compositing, but
+          <em>filtering</em> — and recognise the dark halo that its absence produces.</li>
+      <li>…explain why a mip chain makes alpha-tested foliage dissolve with distance, and fix it
+          without touching the alpha test.</li>
+      <li>…sort a frame's transparent draws correctly, and state precisely where per-object
+          sorting stops working.</li>
+      <li>…set SDL_GPU blend state from the arithmetic rather than from a recipe, and say why the
+          colour target's <em>format</em> decides whether that blend is correct.</li>
+      <li>…recognise that a second axis of pipeline state multiplies the pipeline count rather
+          than adding to it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: three facts that were already true</a></li>
+      <li><a href="#intuition">Building intuition: a fraction of a pixel</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: three facts that were already true</h2>
+
+  <p>
+    Most lessons in this course open by wanting something the engine cannot do. This one opens by
+    pointing at something the engine has been doing <em>wrongly</em>, and the difference is worth
+    sitting with, because the wrongness has been invisible.
+  </p>
+
+  <p>Three facts, none of them new today:</p>
+
+  <ol>
+    <li>
+      <strong><code>pipeline_desc</code> has said "no blending" since Lesson 4.4.</strong> Not as a
+      to-do — as a description. Its constructor comment reads <em>"triangle list, fill mode,
+      CCW-front and cull-back, no depth test yet, no blending"</em>. The depth test arrived in 4.7.
+      Blending never did, on either renderer.
+    </li>
+    <li>
+      <strong>Lesson 6.6's glTF importer reads <code>baseColorFactor[3]</code> and nothing else
+      about transparency.</strong> <code>gltf_material_desc::alpha</code> has existed since that
+      lesson, carrying a number that literally nothing consumed. <code>alphaMode</code> and
+      <code>alphaCutoff</code> were not read at all.
+    </li>
+    <li>
+      <strong>That gap is the only one in that importer which fires no status.</strong> Every other
+      limit reports: <code>too_many_vertices</code>, <code>unsupported_primitive</code>, a counted
+      and logged factor-versus-texture conflict. 6.6 §10 states its own rule —
+      <em>reported, never truncated</em> — and then names this one exception.
+    </li>
+  </ol>
+
+  <p>
+    Put them together and you get a specific, checkable claim about the engine as it stood at the
+    end of Lesson 6.10: <strong>download any glTF asset with foliage or glass, load it, and it
+    renders as opaque cardboard, with nothing anywhere telling you why.</strong> A tree becomes a
+    collection of green rectangles. A window becomes a solid tile. The importer is silent, the
+    renderer is silent, and the picture is confidently wrong.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Why the silence was structural, not sloppy</span>
+    <p>
+      It is tempting to file this as an oversight and move on. It is more useful to notice
+      <em>why</em> the importer could not report it, because the reason generalises.
+    </p>
+    <p>
+      A status code says: <em>the file asked for something this engine cannot do.</em> That
+      sentence needs two halves — what the file wants, and what the engine offers. The importer
+      could see the first half perfectly well. It had nothing to compare it against: there was no
+      blend state anywhere in the engine, no <code>alpha_mode</code> type, nothing that could be
+      the other operand of the comparison. <strong>You cannot report a conflict with a concept
+      that does not exist.</strong>
+    </p>
+    <p>
+      Which means the gap could not be <em>reported</em>; it could only be <em>removed</em>. That
+      is what this lesson does, and it is the better of the two honest outcomes.
+    </p>
+  </div>
+
+  <h3>What "transparency" turns out to be four of</h3>
+
+  <p>
+    The word covers four separate problems, and conflating them is the single most common way to
+    get this subject wrong. They are:
+  </p>
+
+  <ul>
+    <li><strong>A test.</strong> Is there a fragment here at all? (Cutout foliage, fences, decals.)</li>
+    <li><strong>A blend.</strong> How much of what is behind still shows through? (Glass, smoke,
+        water.)</li>
+    <li><strong>A filter.</strong> What happens when a half-covered texel is averaged with its
+        neighbours? (Every bilinear fetch, every mip level.)</li>
+    <li><strong>An order.</strong> Which of two overlapping transparent surfaces is composited
+        first? (A per-frame sort, and a hard ceiling on how well it can work.)</li>
+  </ul>
+
+  <p>
+    Only the second of those is what people usually mean by "alpha blending", and it is the only
+    one of the four that costs the engine its most valuable structural property. We will take them
+    in that order, because each one is a prerequisite for the next.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: a fraction of a pixel</h2>
+
+  <p>
+    Start with the question the alpha channel is actually answering, because the usual answer —
+    "how see-through it is" — is a description of the effect rather than of the quantity, and it
+    will lead you into arithmetic errors within about two paragraphs.
+  </p>
+
+  <p class="lede">
+    Alpha is <strong>coverage</strong>: the fraction of this pixel's area that the surface
+    occupies.
+  </p>
+
+  <p>
+    Imagine the edge of a leaf crossing a pixel diagonally. Sixty percent of that little square is
+    leaf; forty percent is whatever is behind. There is no partial transparency anywhere in that
+    picture — the leaf is perfectly opaque and the gap is perfectly empty — and yet the honest
+    colour for that pixel is a mixture, because a pixel is an <em>area</em> and the area contains
+    two things.
+  </p>
+
+  <p>
+    That single reframing does most of the work in this lesson:
+  </p>
+
+  <ul>
+    <li>
+      It explains why compositing is a <strong>weighted average</strong> and not something exotic:
+      you are averaging over the pixel's area, weighted by how much of the area each thing occupies.
+    </li>
+    <li>
+      It explains why alpha is <strong>not light</strong>, and must never go through a transfer
+      function. A fraction of an area is already linear in the only thing it measures.
+      <code>colour.hpp</code> has said exactly this since Lesson 1.6 — <em>"alpha is a coverage
+      fraction rather than a quantity of light… carry it separately if you need it"</em> — and this
+      lesson is what "carry it separately" turned out to mean.
+    </li>
+    <li>
+      It explains why <strong>filtering</strong> a texture with an alpha channel is subtle: you are
+      averaging coverages, and the colours you average alongside them belong to regions that may
+      not be there at all.
+    </li>
+  </ul>
+
+  <h3>The three machines</h3>
+
+  <p>
+    glTF gives a material one enum with three values — <code>OPAQUE</code>, <code>MASK</code>,
+    <code>BLEND</code> — and it reads like a dial from solid to see-through. It is not a dial. The
+    three values select three genuinely different sequences of operations, and they land on
+    <em>opposite sides</em> of the line Lesson 6.5 drew through <code>material</code>: <em>which
+    half of a surface description can be a number in a buffer?</em>
+  </p>
+
+  @@FIG_MODES@@
+
+  <p>
+    Read the middle column against the right one, because that contrast is the load-bearing
+    structure of the whole lesson:
+  </p>
+
+  <ul>
+    <li>
+      <strong><code>MASK</code> is a number in a buffer.</strong> The fragment compares its own
+      coverage against a cutoff and either exists or does not. Nothing about the pipeline changes;
+      <code>alpha_cutoff</code> is a uniform, exactly like <code>roughness</code>. A discarded
+      fragment writes neither colour nor depth, so it occludes nothing, so <em>no draw order can
+      be wrong</em>. Masked geometry is drawn with the opaque geometry and needs no sorting at all.
+    </li>
+    <li>
+      <strong><code>BLEND</code> is pipeline state.</strong> Blend factors, a blend op, and — the
+      part that matters most — depth writes turned <em>off</em>. Two objects that differ here
+      cannot be drawn back to back without a pipeline change between them, which is Lesson 4.8's
+      definition of the other side of that line. And because blending reads the destination, the
+      answer depends on what was drawn before it.
+    </li>
+  </ul>
+
+  <p>
+    The clearest evidence that this split is real rather than pedagogical is the pipeline count.
+    Adding <code>MASK</code> to this engine cost <strong>zero</strong> new pipelines. Adding
+    <code>BLEND</code> cost <strong>six</strong>, and §4.6 explains why it is six and not one.
+  </p>

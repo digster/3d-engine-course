@@ -1,0 +1,109 @@
+<svg viewBox="0 0 980 407.0" role="img" aria-labelledby="g6-t g6-d">
+  <title id="g6-t">Capsules against Dempster's segments, and the self-collision audit</title>
+  <desc id="g6-d">Left: bars of the lever ratio rho about the proximal joint for four limbs, capsule near 0.77 and Dempster near 0.66. Right: a table of the pairs of parts that touched in twelve falls, with the links between them and whether the two-links rule would exclude them; and a comparison of how long overlaps persist under the two-links rule and the default.</desc>
+  <defs>
+    <marker id="e-i-g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="26" y="30" class="sm" text-anchor="start">ρ about the proximal joint: capsule against Dempster</text>
+<text x="26" y="70" class="xs" text-anchor="start">upper arm</text>
+<rect x="150" y="56" width="197.34" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="355.34000000000003" y="68" class="xs mono" text-anchor="start">0.759  capsule</text>
+<rect x="150" y="78" width="168.22" height="16" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="326.22" y="90" class="xs mono" text-anchor="start">0.647  Dempster</text>
+<text x="26" y="126" class="xs" text-anchor="start">forearm + hand</text>
+<rect x="150" y="112" width="203.06" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="361.06" y="124" class="xs mono" text-anchor="start">0.781  capsule</text>
+<rect x="150" y="134" width="176.8" height="16" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="334.8" y="146" class="xs mono" text-anchor="start">0.680  Dempster</text>
+<text x="26" y="182" class="xs" text-anchor="start">thigh</text>
+<rect x="150" y="168" width="200.72" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="358.72" y="180" class="xs mono" text-anchor="start">0.772  capsule</text>
+<rect x="150" y="190" width="166.92000000000002" height="16" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="324.92" y="202" class="xs mono" text-anchor="start">0.642  Dempster</text>
+<text x="26" y="238" class="xs" text-anchor="start">shin + foot</text>
+<rect x="150" y="224" width="200.20000000000002" height="16" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="358.20000000000005" y="236" class="xs mono" text-anchor="start">0.770  capsule</text>
+<rect x="150" y="246" width="176.8" height="16" rx="2" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="334.8" y="258" class="xs mono" text-anchor="start">0.680  Dempster</text>
+<line x1="150" y1="50" x2="150" y2="270" class="grid" stroke-width="1.0"/>
+<text x="26" y="294" class="xs muted" text-anchor="start">A capsule puts the centre of mass at the middle and too little of its</text>
+<text x="26" y="309" class="xs muted" text-anchor="start">mass far from it, so every limb's ρ comes out about 0.1 high: slower</text>
+<text x="26" y="324" class="xs muted" text-anchor="start">convergence against its pin, more dissipation per step. The engine</text>
+<text x="26" y="339" class="xs muted" text-anchor="start">keeps capsules — the error is in the direction of settling — and says</text>
+<text x="26" y="354" class="xs muted" text-anchor="start">so.</text>
+<text x="500" y="44" class="xs muted" text-anchor="start">Twelve trips from the jog: which pairs touched</text>
+<text x="500" y="64" class="xs muted" text-anchor="start">pair</text>
+<text x="672" y="64" class="xs muted" text-anchor="end">links</text>
+<text x="718" y="64" class="xs muted" text-anchor="end">falls</text>
+<text x="774" y="64" class="xs muted" text-anchor="end">frames</text>
+<text x="858" y="64" class="xs muted" text-anchor="end">deepest mm</text>
+<text x="954" y="64" class="xs muted" text-anchor="end">two-links rule</text>
+<line x1="500" y1="72.0" x2="960" y2="72.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="89.0" class="xs" text-anchor="start">torso / forearm.R</text>
+<text x="672" y="89.0" class="xs mono" text-anchor="end">2</text>
+<text x="718" y="89.0" class="xs mono" text-anchor="end">9</text>
+<text x="774" y="89.0" class="xs mono" text-anchor="end">740</text>
+<text x="858" y="89.0" class="xs mono" text-anchor="end">94.8</text>
+<text x="954" y="89.0" class="xs mono" text-anchor="end">EXCLUDED</text>
+<text x="500" y="106.0" class="xs" text-anchor="start">torso / forearm.L</text>
+<text x="672" y="106.0" class="xs mono" text-anchor="end">2</text>
+<text x="718" y="106.0" class="xs mono" text-anchor="end">9</text>
+<text x="774" y="106.0" class="xs mono" text-anchor="end">667</text>
+<text x="858" y="106.0" class="xs mono" text-anchor="end">106.6</text>
+<text x="954" y="106.0" class="xs mono" text-anchor="end">EXCLUDED</text>
+<text x="500" y="123.0" class="xs" text-anchor="start">thigh.L / thigh.R</text>
+<text x="672" y="123.0" class="xs mono" text-anchor="end">2</text>
+<text x="718" y="123.0" class="xs mono" text-anchor="end">6</text>
+<text x="774" y="123.0" class="xs mono" text-anchor="end">414</text>
+<text x="858" y="123.0" class="xs mono" text-anchor="end">32.7</text>
+<text x="954" y="123.0" class="xs mono" text-anchor="end">EXCLUDED</text>
+<text x="500" y="140.0" class="xs" text-anchor="start">forearm.R / shin.R</text>
+<text x="672" y="140.0" class="xs mono" text-anchor="end">5</text>
+<text x="718" y="140.0" class="xs mono" text-anchor="end">5</text>
+<text x="774" y="140.0" class="xs mono" text-anchor="end">357</text>
+<text x="858" y="140.0" class="xs mono" text-anchor="end">20.2</text>
+<text x="954" y="140.0" class="xs mono" text-anchor="end">collides</text>
+<text x="500" y="157.0" class="xs" text-anchor="start">head / forearm.L</text>
+<text x="672" y="157.0" class="xs mono" text-anchor="end">3</text>
+<text x="718" y="157.0" class="xs mono" text-anchor="end">4</text>
+<text x="774" y="157.0" class="xs mono" text-anchor="end">130</text>
+<text x="858" y="157.0" class="xs mono" text-anchor="end">42.2</text>
+<text x="954" y="157.0" class="xs mono" text-anchor="end">collides</text>
+<text x="500" y="174.0" class="xs" text-anchor="start">forearm.R / thigh.R</text>
+<text x="672" y="174.0" class="xs mono" text-anchor="end">4</text>
+<text x="718" y="174.0" class="xs mono" text-anchor="end">4</text>
+<text x="774" y="174.0" class="xs mono" text-anchor="end">129</text>
+<text x="858" y="174.0" class="xs mono" text-anchor="end">24.4</text>
+<text x="954" y="174.0" class="xs mono" text-anchor="end">collides</text>
+<text x="500" y="191.0" class="xs" text-anchor="start">forearm.L / shin.L</text>
+<text x="672" y="191.0" class="xs mono" text-anchor="end">5</text>
+<text x="718" y="191.0" class="xs mono" text-anchor="end">4</text>
+<text x="774" y="191.0" class="xs mono" text-anchor="end">187</text>
+<text x="858" y="191.0" class="xs mono" text-anchor="end">20.9</text>
+<text x="954" y="191.0" class="xs mono" text-anchor="end">collides</text>
+<text x="500" y="208.0" class="xs" text-anchor="start">torso / thigh.R</text>
+<text x="672" y="208.0" class="xs mono" text-anchor="end">2</text>
+<text x="718" y="208.0" class="xs mono" text-anchor="end">2</text>
+<text x="774" y="208.0" class="xs mono" text-anchor="end">10</text>
+<text x="858" y="208.0" class="xs mono" text-anchor="end">14.9</text>
+<text x="954" y="208.0" class="xs mono" text-anchor="end">EXCLUDED</text>
+<text x="500" y="244.5" class="xs muted" text-anchor="start">Does the overlap persist?</text>
+<text x="500" y="264.5" class="xs muted" text-anchor="start">rule, same falls</text>
+<text x="814" y="264.5" class="xs muted" text-anchor="end">frames &gt; 20 mm</text>
+<text x="954" y="264.5" class="xs muted" text-anchor="end">deepest at rest</text>
+<line x1="500" y1="272.5" x2="960" y2="272.5" class="grid" stroke-width="1.0"/>
+<text x="500" y="289.5" class="xs" text-anchor="start">two links</text>
+<text x="814" y="289.5" class="xs mono" text-anchor="end">1503</text>
+<text x="954" y="289.5" class="xs mono" text-anchor="end">179.6 mm</text>
+<text x="500" y="306.5" class="xs" text-anchor="start">overlapping (default)</text>
+<text x="814" y="306.5" class="xs mono" text-anchor="end">509</text>
+<text x="954" y="306.5" class="xs mono" text-anchor="end">61.4 mm</text>
+<text x="500" y="335.0" class="xs muted" text-anchor="start">At rest — bind pose, the jog, 7.7's walk — no unjointed pair comes within 4 cm,</text>
+<text x="500" y="350.0" class="xs muted" text-anchor="start">so the default excludes exactly the ten jointed pairs. Two links excludes</text>
+<text x="500" y="365.0" class="xs muted" text-anchor="start">thirteen more, and three of them are the pairs that touch most. The default's</text>
+<text x="500" y="380.0" class="xs muted" text-anchor="start">61.4 mm is a chest lying on an arm, which is §8's problem, not the filter's.</text>
+</svg>

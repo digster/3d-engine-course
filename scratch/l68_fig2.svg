@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="l68f2-t l68f2-d">
+  <title id="l68f2-t">A shadow map is a z-buffer rendered from the light</title>
+  <desc id="l68f2-d">Two panels. Pass 1 renders depth only from the light's viewpoint: parallel rays leave a film, one per texel, and each records the nearest surface it meets — one of them stopping early at a caster. Pass 2 takes a camera fragment on the ground, projects it back along the light's direction, and compares its depth against what the map stored.</desc>
+  <defs>
+    <marker id="e-i-l68f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l68f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l68f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l68f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l68f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="356" class="bg"/>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One idea, two passes, and the engine already owns both</text>
+<rect x="24" y="40" width="312" height="248" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="180" y="62" class="sm" text-anchor="middle">PASS 1 — from the light</text>
+<text x="180" y="80" class="xs" text-anchor="middle">colour: none.  depth: kept.</text>
+<line x1="42" y1="232.0" x2="318" y2="232.0" class="ink-soft" stroke-width="1.6"/>
+<line x1="40.0" y1="168.0" x2="142.19099764656374" y2="108.99999999999999" class="ink" stroke-width="2.0"/>
+<text x="150" y="96" class="xs" text-anchor="start">the map</text>
+<line x1="46.92820323027551" y1="164.0" x2="86.18802153517007" y2="232.0" class="hi" stroke-width="1.1" marker-end="url(#e-h-l68f2)"/>
+<line x1="65.98076211353316" y1="153.0" x2="111.5914333795136" y2="232.0" class="hi" stroke-width="1.1" marker-end="url(#e-h-l68f2)"/>
+<line x1="85.0333209967908" y1="142.0" x2="136.99484522385714" y2="232.0" class="hi" stroke-width="1.1" marker-end="url(#e-h-l68f2)"/>
+<line x1="104.08587988004845" y1="131.0" x2="129.0" y2="174.15252187363006" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-b-l68f2)"/>
+<line x1="123.13843876330611" y1="119.99999999999999" x2="134.68544414709865" y2="140.0" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-b-l68f2)"/>
+<line x1="142.19099764656374" y1="108.99999999999999" x2="160.08885599144216" y2="140.0" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-b-l68f2)"/>
+<rect x="129" y="140" width="60" height="40" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<rect x="129" y="140" width="60" height="40" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="180" y="258" class="xs" text-anchor="middle">each texel stores the NEAREST depth along its ray</text>
+<text x="180" y="278" class="xs" text-anchor="middle">and the red ray is the one that stops early</text>
+<rect x="384" y="40" width="312" height="248" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="540" y="62" class="sm" text-anchor="middle">PASS 2 — from the camera</text>
+<text x="540" y="80" class="xs" text-anchor="middle">for each fragment: project, then compare</text>
+<line x1="402" y1="232.0" x2="678" y2="232.0" class="ink-soft" stroke-width="1.6"/>
+<rect x="489" y="140" width="60" height="40" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<rect x="489" y="140" width="60" height="40" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<circle cx="549.0" cy="232.0" r="4.5" fill="#5082e6"/>
+<text x="549.0222139978605" y="252.0" class="xs" text-anchor="middle">fragment</text>
+<line x1="549.0222139978605" y1="232.0" x2="474.0222139978605" y2="102.0961894323342" class="ink" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#e-i-l68f2)"/>
+<text x="592" y="132" class="xs" text-anchor="start">project it into the</text>
+<text x="592" y="150" class="xs" text-anchor="start">light's space, and look</text>
+<text x="592" y="168" class="xs" text-anchor="start">up what was stored</text>
+<text x="540" y="278" class="xs" text-anchor="middle">further than stored  =  something is in front</text>
+<text x="360.0" y="322" class="sm" text-anchor="middle">The first pass is Lesson 3.1's z-buffer with the camera moved. The second is one</text>
+<text x="360.0" y="342" class="xs" text-anchor="middle">matrix multiply and one comparison. Everything hard is in the comparison.</text>
+</svg>

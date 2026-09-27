@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f611d-t f611d-d">
+  <title id="f611d-t">Straight versus premultiplied alpha under a filter</title>
+  <desc id="f611d-d">Four texels averaged two ways: independently, which drags invisible black into the edge, and weighted by coverage, which does not.</desc>
+  <defs>
+    <marker id="e-i-f611d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f611d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f611d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f611d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f611d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Why a cutout gets a dark outline, and what removes it</text>
+<text x="166" y="56" class="sm" text-anchor="middle">STRAIGHT alpha</text>
+<rect x="70" y="72" width="44" height="44" rx="2" fill="#4E9A3C" stroke="#4E9A3C" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="92.0" y="98.0" class="xs" text-anchor="middle">leaf</text>
+<rect x="120" y="72" width="44" height="44" rx="2" fill="#4E9A3C" stroke="#4E9A3C" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="142.0" y="98.0" class="xs" text-anchor="middle">leaf</text>
+<rect x="170" y="72" width="44" height="44" rx="2" fill="#000000" stroke="#000000" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="192.0" y="98.0" class="xs" text-anchor="middle">clear</text>
+<rect x="220" y="72" width="44" height="44" rx="2" fill="#000000" stroke="#000000" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="242.0" y="98.0" class="xs" text-anchor="middle">clear</text>
+<text x="166" y="138" class="xs" text-anchor="middle">average the colours independently:</text>
+<text x="166" y="156" class="xs" text-anchor="middle">(green + green + black + black) / 4</text>
+<line x1="166" y1="164" x2="166" y2="186" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-f611d)"/>
+<rect x="144.0" y="190" width="44" height="44" rx="2" fill="#2b4a24" stroke="#2b4a24" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="166" y="252" class="xs" text-anchor="middle">green 0.2636 — HALF the leaf's 0.5271</text>
+<text x="516" y="56" class="sm" text-anchor="middle">PREMULTIPLIED</text>
+<rect x="420" y="72" width="44" height="44" rx="2" fill="#4E9A3C" stroke="#4E9A3C" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="442.0" y="98.0" class="xs" text-anchor="middle">leaf</text>
+<rect x="470" y="72" width="44" height="44" rx="2" fill="#4E9A3C" stroke="#4E9A3C" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="492.0" y="98.0" class="xs" text-anchor="middle">leaf</text>
+<rect x="520" y="72" width="44" height="44" rx="2" fill="#000000" stroke="#000000" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="542.0" y="98.0" class="xs" text-anchor="middle">0,0,0,0</text>
+<rect x="570" y="72" width="44" height="44" rx="2" fill="#000000" stroke="#000000" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="592.0" y="98.0" class="xs" text-anchor="middle">0,0,0,0</text>
+<text x="516" y="138" class="xs" text-anchor="middle">weight each by its own coverage:</text>
+<text x="516" y="156" class="xs" text-anchor="middle">(g*1 + g*1 + 0*0 + 0*0) / (1+1+0+0)</text>
+<line x1="516" y1="164" x2="516" y2="186" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-f611d)"/>
+<rect x="494.0" y="190" width="44" height="44" rx="2" fill="#4E9A3C" stroke="#4E9A3C" stroke-width="1.2" fill-opacity="0.95"/>
+<text x="516" y="252" class="xs" text-anchor="middle">green 0.5271 — the leaf, intact</text>
+<line x1="60" y1="296" x2="660" y2="296" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="320" class="xs" text-anchor="middle">The transparent texels are BLACK, because that is what an image editor leaves in a cleared region.</text>
+<text x="360.0" y="340" class="xs" text-anchor="middle">A straight-alpha filter has no way to know they are invisible, so it averages that black in at full weight —</text>
+<text x="360.0" y="360" class="xs" text-anchor="middle">and the darkening is proportional to how transparent the neighbours are, which is a halo that follows every edge.</text>
+<text x="360.0" y="382" class="xs" text-anchor="middle">Premultiplied storage is the representation in which averaging is already the right operation.</text>
+</svg>

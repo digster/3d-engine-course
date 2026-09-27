@@ -1,0 +1,1049 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Four new files, and one decision to make before any of them. Our window currently belongs to
+    an <code>SDL_Renderer</code>, created in Lesson 0.5 and used ever since — including by every
+    HUD in Modules 1 to 3, which are drawn with <code>SDL_RenderDebugText</code>. A window can be
+    claimed by an SDL_GPU device <em>or</em> driven by an <code>SDL_Renderer</code>. There is no
+    ordering in which it is both.
+  </p>
+
+  <p>
+    Deleting the HUD from the five demos <kbd>Tab</kbd> cycles, to make room for this one, is not a trade worth
+    making, so the GPU path becomes a second program inside the same executable, reached with a
+    flag:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">two programs, one binary</span></figcaption>
+    <pre><code>./engine          # the software demo of Modules 1-3, exactly as before
+./engine --gpu    # Lesson 4.2's GPU probe</code></pre>
+  </figure>
+
+  <p>
+    The flag is read before the window is created and the branch is taken before any renderer
+    exists. From Lesson 4.8 the GPU path becomes the default and this branch inverts; the flag is
+    scaffolding with a known removal date, which is the only kind worth building.
+  </p>
+
+  <h3 id="impl-device"><span class="num">4.1</span>The device, and the claim</h3>
+
+  <p>
+    Two resources, acquired in one order and released in the other. Creating the device picks a
+    backend and loads a driver; claiming the window creates the swapchain. On the way out, the
+    claim must be released <em>before</em> the device is destroyed, because the swapchain belongs
+    to the pairing rather than to either party.
+  </p>
+
+  <p>
+    An object whose destructor knows that order is strictly better than a comment asking you to
+    remember it, so <code>gpu_device</code> owns both:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_device.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void gpu_device::destroy()
+{
+    if (device_ == nullptr) { return; }
+
+    // Order matters and is the reason this class exists. Release the claim first:
+    // the swapchain belongs to the pairing, not to either party, and destroying
+    // the device while a window still references it is undefined.
+    if (window_ != nullptr)
+    {
+        SDL_ReleaseWindowFromGPUDevice(device_, window_);
+        window_ = nullptr;
+    }
+
+    SDL_DestroyGPUDevice(device_);
+    device_ = nullptr;
+    report_ = {};
+}</code></pre>
+  </figure>
+
+  <p>
+    Creation is the two-phase pattern the C++ style guide fixes for fallible construction: a
+    default constructor that cannot fail, and a <code>create</code> that reports what happened.
+    Without exceptions a constructor has no way to say "no" (C++ Style §5), and the price is that
+    <code>valid()</code> has to exist. The benefit is that every failure path is visible in a
+    signature rather than in a stack unwind.
+  </p>
+
+  <p>
+    Note one detail in <code>create</code> that is easy to get wrong: if the claim fails, we
+    destroy the device before returning.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_device.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    if (!SDL_ClaimWindowForGPUDevice(device_, window))
+    {
+        // Leave nothing half-built. A device with no window is a perfectly legal
+        // object — offscreen rendering uses one — but it is not what the caller
+        // asked for, and returning it would make `ok()` a lie.
+        SDL_Log("SDL_ClaimWindowForGPUDevice failed: %s", SDL_GetError());
+        SDL_DestroyGPUDevice(device_);
+        device_ = nullptr;
+        r.status = gpu_status::window_not_claimed;
+        report_ = r;
+        return r;
+    }</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — why the raw handle is public</span>
+    <p>
+      <code>gpu_device::handle()</code> hands out the raw <code>SDL_GPUDevice*</code>, which looks
+      like a leak in the abstraction. It is deliberate. A wrapper that forwarded all ninety-odd
+      SDL_GPU functions would hide exactly the API this course exists to teach, and every one of
+      those forwarding methods would be a place for our names to drift from SDL's.
+    </p>
+    <p>
+      The wrapper exists for <strong>lifetime</strong>, not for concealment: it guarantees the
+      device is created once, released once, and released in the right order relative to the
+      window. Everything else is SDL's, spelled SDL's way. This is the same judgement
+      <code>engine::framebuffer</code> made in Lesson 1.5 when it exposed <code>data()</code>.
+    </p>
+  </div>
+
+  <h3 id="impl-ask"><span class="num">4.2</span>Asking instead of assuming</h3>
+
+  <p>
+    Once the device exists, everything about it is a question with a real answer, and none of
+    those answers may be assumed. <code>gpu_report</code> is a struct with a query behind every
+    field, filled in at creation and logged at startup:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">./engine --gpu, on this lesson's machine</span></figcaption>
+    <pre><code>GPU device: ok
+  driver          : metal
+  driver [0]      : metal   &lt;- chosen
+  driver [1]      : vulkan
+  shaders asked   : SPIRV | DXIL | MSL
+  shaders granted : MSL | METALLIB
+  swapchain format: B8G8R8A8_UNORM
+  present modes   : VSYNC IMMEDIATE
+  frames in flight: 2
+  present target  : 320x180 as B8G8R8A8_UNORM
+  window 1280x720 points -&gt; swapchain 1280x720 pixels; 320x180 framebuffer lands at 0,0 size 1280x720</code></pre>
+  </figure>
+
+  <p>
+    Read the third and fourth lines together, because they are the first genuine surprise of the
+    API. We asked for <code>SPIRV | DXIL | MSL</code> and were granted
+    <code>MSL | METALLIB</code> — one format we named and one we did not. That is not a
+    negotiation failure. The mask you pass to <code>SDL_CreateGPUDevice</code> says <em>here is
+    what I am able to supply</em>, and SDL uses it to pick a backend that can consume at least one
+    of them; <code>SDL_GetGPUShaderFormats</code> then answers a different question — <em>here is
+    everything I accept</em>. Lesson 4.3 needs the second answer, not the first, to decide which
+    file to load.
+  </p>
+
+  <p>
+    The other lines matter for reasons that arrive later, and it is worth knowing which:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The swapchain format</strong> is not a constant and not ours to choose. In Lesson
+      4.4 a graphics pipeline whose colour-target format does not match this exactly will simply
+      fail to create — so this line is load-bearing, not informational.
+    </li>
+    <li>
+      <strong>MAILBOX is missing</strong> from the present modes on this machine. That is the
+      whole reason support is asked about rather than assumed: a program that hard-codes MAILBOX
+      works on the developer's Linux box and fails at startup on a Mac.
+    </li>
+    <li>
+      <strong>The window and swapchain sizes agree here</strong>, at 1280×720, and it is worth
+      knowing why they might not. A window is measured in points and a swapchain in pixels; they
+      coincide because this window was created without
+      <code>SDL_WINDOW_HIGH_PIXEL_DENSITY</code>. Ask for that flag on a Retina display and the
+      swapchain comes back at twice the window's numbers. Code that assumed they were equal then
+      draws into a quarter of the window and sends its author looking for a bug in the projection
+      matrix. The acquire returns the real numbers; use those.
+    </li>
+  </ul>
+
+  <h3 id="impl-present"><span class="num">4.3</span>Three hops from a pixel to the display</h3>
+
+  <p>
+    <code>gpu_present_target</code> owns the two objects that carry our framebuffer to the device:
+    a texture in device memory, and the transfer buffer that feeds it. Its <code>upload</code> is
+    where §2.1's two time frames sit side by side in one function, which is the best possible
+    place to see them:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_present.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // ---- Hop 1: CPU memory -&gt; memory both sides can see ---------------------
+    void* mapped = SDL_MapGPUTransferBuffer(device_, staging_, true);
+    if (mapped == nullptr) { /* ...log and bail... */ }
+    std::memcpy(mapped, fb.data(), bytes);
+    SDL_UnmapGPUTransferBuffer(device_, staging_);
+
+    // ---- Hop 2: recorded now, executed later --------------------------------
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cb);
+    /* ...fill in source and dest... */
+    SDL_UploadToGPUTexture(copy, &amp;source, &amp;dest, true);
+    SDL_EndGPUCopyPass(copy);</code></pre>
+  </figure>
+
+  <p>
+    The <code>memcpy</code> is finished when the line completes. The
+    <code>SDL_UploadToGPUTexture</code> below it has not copied anything at all — it has appended
+    a request to the command buffer, and this lesson measures that append at a few microseconds
+    against 0.0028 ms for the <code>memcpy</code> of a 320×180 frame. Two adjacent statements, two
+    entirely different meanings.
+  </p>
+
+  <p>
+    Both writes pass <code>true</code> for <code>cycle</code>, for the reason §3.2 gave: last
+    frame's upload may not have been consumed, and this frame's <code>memcpy</code> must not land
+    on top of it.
+  </p>
+
+  <p>
+    One field in <code>SDL_GPUTextureTransferInfo</code> deserves calling out because it produces
+    a spectacular and instantly recognisable bug:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_present.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // Both are counts of PIXELS and ROWS, not bytes — the one field in this
+    // struct that is routinely filled in with a pitch and silently produces a
+    // sheared image, exactly like Lesson 1.5's framebuffer pitch bug.
+    source.pixels_per_row = static_cast&lt;Uint32&gt;(width_);
+    source.rows_per_layer = static_cast&lt;Uint32&gt;(height_);</code></pre>
+  </figure>
+
+  <p>
+    Put <code>width * 4</code> there — the pitch, which is what the name suggests to anyone who
+    has used <code>SDL_UpdateTexture</code> — and the image shears diagonally, exactly as it did
+    in Lesson 1.5 when the framebuffer's pitch was wrong. The same bug, four modules apart, from
+    the same cause: a field that wants a count of elements being given a count of bytes.
+  </p>
+
+  <p>
+    The blit is the third hop, and it goes <em>outside</em> any pass, because a blit is itself
+    implemented as a pass. It also has to survive a window of any shape, which is where §3.5's
+    arithmetic is used:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_present.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const blit_rect fit = fit_centred(static_cast&lt;Uint32&gt;(width_),
+                                      static_cast&lt;Uint32&gt;(height_), swap_w, swap_h);
+    /* ... */
+    blit.destination.x = fit.x;
+    blit.destination.y = fit.y;
+    blit.destination.w = fit.w;
+    blit.destination.h = fit.h;
+
+    // LOAD, not CLEAR: the caller has already cleared the whole swapchain in a
+    // render pass, and CLEAR here would only clear the region we are about to
+    // overwrite anyway — leaving the letterbox bars undefined.
+    blit.load_op = SDL_GPU_LOADOP_LOAD;
+    blit.filter = smooth ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;</code></pre>
+  </figure>
+
+  <h3 id="impl-srgb"><span class="num">4.4</span>The transfer-function trap</h3>
+
+  <p>
+    Now a trap that §3.4 has already armed. Our framebuffer holds <strong>sRGB-encoded</strong>
+    bytes — that has been true since Lesson 1.6, and it is what every PNG an artist hands you
+    holds too. The swapchain may be a plain <code>_UNORM</code> format, which applies no transfer
+    function, or a <code>_UNORM_SRGB</code> one, which decodes on read and encodes on write.
+  </p>
+
+  <p>
+    Consider what a blit does: it <em>samples</em> the source and <em>writes</em> the destination.
+    So with an sRGB destination and a plain source, our already-encoded bytes are read unchanged
+    and then encoded again on the way in. Encoded twice. Mid-grey 128 becomes 188 becomes 226, and
+    the picture goes pale and foggy — the classic gamma artifact, arriving three modules before
+    the lesson that names it.
+  </p>
+
+  <p>
+    The fix is one line of thought and four of code: <strong>give the source texture the same
+    sRGB-ness as the destination</strong>, so a decode on read cancels the encode on write and the
+    pair is the identity.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_present.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const SDL_GPUTextureFormat layout =
+        SDL_GetGPUTextureFormatFromPixelFormat(SDL_PIXELFORMAT_ARGB8888);
+
+    format_ = layout;
+    if (is_srgb_format(dev.report().swapchain_format))
+    {
+        format_ = (layout == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM)
+                      ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB
+                      : SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB;
+    }</code></pre>
+  </figure>
+
+  <p>
+    The byte <em>layout</em> comes from asking SDL rather than from reasoning about it, and that
+    is worth a sentence of its own. <code>SDL_PIXELFORMAT_ARGB8888</code> is a <em>packed</em>
+    32-bit format: it describes the bits of a <code>Uint32</code>, not the order of four bytes in
+    memory, so on a little-endian machine those bytes come out B, G, R, A. The answer is therefore
+    endianness-dependent, and asking costs one call:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">scratch/verify_42.log §F</span></figcaption>
+    <pre><code>  SDL_PIXELFORMAT_ARGB8888 maps to GPU format enum 12
+    B8G8R8A8_UNORM is 12, R8G8B8A8_UNORM is 4
+  ok   our ARGB8888 framebuffer is a B8G8R8A8_UNORM texture, byte for byte
+  ok   the image comes back bit-identical: upload and 1:1 nearest blit are lossless</code></pre>
+  </figure>
+
+  <p>
+    That second check is the one that makes the whole path trustworthy. The harness draws a real
+    picture with the Module 3 rasterizer, sends it up through the transfer buffer, into a texture,
+    through a 1:1 nearest blit into a second texture, back down through another transfer buffer,
+    and compares all 921,600 bytes against the original. Not one differs. Whatever else goes wrong
+    later, it will not be the plumbing.
+  </p>
+
+  <h3 id="impl-frame"><span class="num">4.5</span>The frame, and where the waiting really is</h3>
+
+  <p>
+    The probe's frame is nine steps, and their order is the argument:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        // ---- 1. The picture, made on the CPU -------------------------------
+        draw_probe_scene(fb, spin, ring, k_ring, ring_head, fence_each_frame);
+
+        // ---- 2. Recording ---------------------------------------------------
+        SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(gpu.handle());
+        present.upload(cb, fb);
+
+        // ---- 3. The swapchain image ----------------------------------------
+        SDL_GPUTexture* swap = nullptr;
+        const bool acquired =
+            SDL_WaitAndAcquireGPUSwapchainTexture(cb, window, &amp;swap, &amp;swap_w, &amp;swap_h);</code></pre>
+  </figure>
+
+  <p>
+    The upload is recorded <em>before</em> the acquire, and that is deliberate. The acquire is
+    where a vsynced frame blocks; every microsecond of work you can place above it is work done
+    while the display is still busy with the previous frame. Move it below and nothing breaks —
+    the frame just gets longer by exactly that much.
+  </p>
+
+  <p>
+    Then the swapchain is cleared by a render pass that draws nothing at all:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">            SDL_GPUColorTargetInfo target{};
+            target.texture = swap;
+            target.clear_color = SDL_FColor{0.02f, 0.02f, 0.03f, 1.0f};
+            target.load_op = SDL_GPU_LOADOP_CLEAR;
+            target.store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, &amp;target, 1, nullptr);
+            SDL_EndGPURenderPass(pass);</code></pre>
+  </figure>
+
+  <p>
+    A render pass with no pipeline bound and no draw call is legal and useful, and it is the
+    clearest possible illustration of what a load op <em>is</em>. Clearing is not a draw that
+    happens to cover the screen; it is a property of <em>beginning</em> a pass. On tiled hardware —
+    every mobile GPU, and Apple silicon — <code>LOADOP_CLEAR</code> costs less than
+    <code>LOADOP_LOAD</code>, because loading means fetching the previous contents of each tile
+    from memory and clearing means not bothering. That is the single easiest performance mistake
+    to avoid in a mobile renderer, and it is available to you before you have written a shader.
+  </p>
+
+  <p>
+    Now the measurement. The probe times four things per frame and draws them as stacked columns,
+    one per frame, using nothing but <code>framebuffer::fill_rect</code>. There is no text in this
+    mode, because text needs a font and a shader and both are later lessons — so the graph
+    <em>is</em> the HUD.
+  </p>
+
+  @@FIG_FRAME@@
+
+  <p>
+    Figure 5 is the result, and the middle bar is the reason this section exists. Pressing
+    <kbd>4</kbd> turns on a full GPU sync every single frame — the thing every guide tells you
+    never to do. Watch what happens:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th></th><th>draw</th><th>record</th><th>acquire</th><th>fence</th><th>frame</th><th>fps</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>VSYNC, no fence</td><td>0.301</td><td>0.226</td><td><strong>16.002</strong></td><td>—</td><td>16.667</td><td>60.0</td></tr>
+      <tr><td>VSYNC, fence every frame</td><td>0.284</td><td>0.223</td><td><strong>15.272</strong></td><td>0.761</td><td>16.667</td><td>60.0</td></tr>
+      <tr><td>IMMEDIATE, no fence</td><td>0.329</td><td>0.165</td><td>4.238</td><td>—</td><td>4.816</td><td>247</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 3.</span> Milliseconds, averaged over 160 frames, on a 60 Hz
+    display. The three variants were built as three binaries and run <em>alternately</em> in one
+    session, twice, because Lesson 3.10's rule is that two numbers taken hours apart are not a
+    comparison. The fence costs <strong>0.761 ms</strong> and the acquire falls by
+    <strong>0.730 ms</strong>, so the frame time is unchanged to three decimal places.
+  </figcaption>
+  </figure>
+
+  <p>
+    <strong>The full GPU sync is free.</strong> Not cheap — free, to the precision we can measure.
+    And the reason is in the third row: at 60 Hz, 16.0 of the 16.667 ms was already being spent
+    waiting for the display. There was nothing else for the CPU to do with the 0.76 ms the fence
+    took, so taking it cost nothing. The wait simply moved from one blocking call to another.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Why this is the most dangerous result in the lesson</span>
+    <p>
+      A beginner's renderer that syncs every frame will measure perfectly on a simple scene, ship,
+      and fall apart the moment the GPU becomes the limit — because then there is no slack, the
+      sync stops being absorbed, and every frame pays the full round trip. §3.1 measured that case
+      and found <strong>1.60×</strong>.
+    </p>
+    <p>
+      So do not learn "syncing is slow" and do not learn "syncing is free". Learn this:
+      <strong>a sync costs you the overlap you had</strong>. When the frame is display-bound there
+      is no overlap to lose; when it is GPU-bound there is nothing else. Which regime you are in
+      is a measurement, and now you have the tool that makes it.
+    </p>
+  </div>
+
+  <p>
+    The third row is worth a moment too. IMMEDIATE present mode takes the frame from 16.667 ms to
+    4.816 — and the acquire is <em>still</em> 4.238 ms of it. Turning off vsync did not remove the
+    wait; it moved the limit from the display to the frames-in-flight budget. There is always
+    something pacing you. The question is only what.
+  </p>
+
+  <h3 id="impl-impossible"><span class="num">4.6</span>A number that could not be true</h3>
+
+  <p>
+    One more thing happened while measuring §2.1's table, and it is in the lesson because leaving
+    it out would teach the wrong habit.
+  </p>
+
+  <p>
+    The first version of the harness copied a 2048×2048 texture 48 times and reported
+    <strong>763 GB/s</strong>. That is a good-looking number. It is also impossible: this machine
+    is an Apple M4 Pro, whose published memory bandwidth is <strong>273 GB/s</strong>. A copy
+    cannot move bytes 2.8 times faster than the bus they travel on, so the measurement was wrong,
+    and the only question was how.
+  </p>
+
+  <p>
+    <strong>The first cause was elision.</strong> Blitting the same source to the same destination
+    48 times is 48 copies of one answer, and a driver is entitled to notice. Fixing it took one
+    line: ping-pong, so that blit <em>i+1</em> reads what blit <em>i</em> wrote and the chain
+    cannot be shortened or reordered. That brought the figure down — and not far enough.
+  </p>
+
+  <p>
+    <strong>The second cause was compression.</strong> Both textures were cleared to a flat colour,
+    and every modern GPU stores render targets in a losslessly compressed form. A flat texture
+    compresses to nearly nothing, so the copy was real but the <em>bytes were not</em>. Filling
+    both textures with xorshift noise — which cannot compress — makes the copy move what it claims
+    to move.
+  </p>
+
+  @@FIG_BANDWIDTH@@
+
+  <p>
+    Figure 6 is both versions at four sizes, and it is the most useful chart in the lesson. Read
+    the noise bars first: they converge on <strong>277.6 GB/s</strong> at 4096², against a
+    published bus of 273. The copy saturates the memory system, which is exactly the right answer
+    for a copy, and finding a measurement that lands on an independently known number is the
+    strongest evidence a benchmark can offer.
+  </p>
+
+  <p>
+    Then read the gap. Flat content copies at up to <strong>2.87×</strong> the rate of noise, and
+    the ratio grows with size, because compression saves more when there is more to save. That is
+    not a measurement error once you know what it is — it is a real and useful property of the
+    hardware, and it is why a cleared render target is cheaper to work with than a busy one. It
+    only became an error when it was quoted as bandwidth.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The habit, not the number</span>
+    <p>
+      Lesson 3.10 said: measure, then act. This section adds the step in between — <strong>check
+      that the number can be true</strong>. Bandwidth has a ceiling you can look up. Frame time
+      has a floor set by the refresh rate. A speedup cannot exceed the fraction of time you
+      changed (Amdahl's law, 3.10 §6). Every one of those is a free sanity check, and each of them
+      has caught a real error in this course's own harnesses.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>path</th><th>state</th><th>purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>src/gfx/gpu_device.hpp</code></td><td><strong>new</strong></td>
+          <td>The device and the window claim, as one owner. <code>gpu_report</code>: every fact
+              asked for rather than assumed.</td></tr>
+      <tr><td><code>src/gfx/gpu_device.cpp</code></td><td><strong>new</strong></td>
+          <td>Creation, the claim, present mode and frames-in-flight, and the startup log.</td></tr>
+      <tr><td><code>src/gfx/gpu_present.hpp</code></td><td><strong>new</strong></td>
+          <td><code>gpu_present_target</code> — a framebuffer's device-side mirror — and
+              <code>fit_centred</code>, the letterbox.</td></tr>
+      <tr><td><code>src/gfx/gpu_present.cpp</code></td><td><strong>new</strong></td>
+          <td>The three hops: memcpy, upload, blit. Format chosen to match the swapchain's
+              sRGB-ness.</td></tr>
+      <tr><td><code>src/main.cpp</code></td><td>modified</td>
+          <td><code>--gpu</code>, <code>run_gpu_probe</code>, the frame loop, and the timing graph
+              drawn with <code>fill_rect</code>.</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>Two new source files.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 4.</span> This lesson's file manifest. No existing behaviour is
+    removed: <code>./engine</code> with no arguments is byte-for-byte the demo Lesson 4.1 left.
+  </figcaption>
+  </figure>
+
+@@LISTING:src/gfx/gpu_device.hpp@@
+@@LISTING:src/gfx/gpu_device.cpp@@
+@@LISTING:src/gfx/gpu_present.hpp@@
+@@LISTING:src/gfx/gpu_present.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code>cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    A window titled <em>The SDL_GPU Mental Model</em> containing a dark checkerboard, a triangle
+    spinning slowly with red, green and blue corners smoothly blended between them — Lesson 2.4's
+    interpolation, unchanged — and along the bottom a strip of columns, one per frame, growing
+    rightwards.
+  </p>
+
+  <p>
+    In the columns, almost the whole height will be <strong>blue</strong>. That is the acquire:
+    your program waiting for the display. The green and cyan slivers at the bottom are the
+    software rasterizer and the command recording, and on any modern machine they will be a
+    hairline. A dashed grey line marks the 60 Hz budget; if your display runs at 120 Hz the columns
+    will reach only half as high.
+  </p>
+
+  <p>
+    Four keys, and the log narrates every one:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>key</th><th>what it does</th><th>what to watch</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>1</kbd></td><td>blit filter: NEAREST ↔ LINEAR</td>
+          <td>320×180 upscaled 4×: crisp squares, or soft. Lesson 3.9's two filters, now free.</td></tr>
+      <tr><td><kbd>2</kbd></td><td>present mode</td>
+          <td>IMMEDIATE collapses the blue band and the frame rate jumps. Refused modes are logged
+              rather than hidden.</td></tr>
+      <tr><td><kbd>3</kbd></td><td>frames in flight: 1 → 2 → 3</td>
+          <td>At 1, the blue band grows: no overlap left. The frame it changes on is junk, and
+              says so.</td></tr>
+      <tr><td><kbd>4</kbd></td><td>fence every frame</td>
+          <td>An orange band appears — and the columns do not get taller. §4.5.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption><span class="fignum">Table 5.</span> The probe's controls.</figcaption>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      Press <kbd>4</kbd> and watch the total height of the columns. If an orange band appears and
+      the columns stay the same height, you have reproduced this lesson's central measurement on
+      your own machine: <em>on a display-bound frame, a full GPU sync is absorbed by the wait that
+      was already there.</em> Now press <kbd>2</kbd> until you reach IMMEDIATE and press
+      <kbd>4</kbd> again — with the display no longer pacing you, the orange band starts to cost
+      something real.
+    </p>
+  </div>
+
+  <p>
+    To reproduce the numbers in this lesson rather than the picture, build and run the harness. It
+    needs no window:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the harness — Linux / macOS</span></figcaption>
+    <pre><code>c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_42.cpp \
+    src/gfx/colour.cpp src/gfx/framebuffer.cpp src/gfx/raster.cpp \
+    src/gfx/texture.cpp src/gfx/depth_buffer.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_present.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_42
+./scratch/verify_42</code></pre>
+  </figure>
+
+  <p>
+    Your numbers will differ from the ones printed here — they are one machine's — but four of the
+    findings should hold on any machine: the UNORM clear equals <code>round(255v)</code> exactly,
+    the sRGB clear matches your own <code>linear_to_srgb_u8</code>, the round trip is
+    bit-identical, and the read before the fence is wrong.
+  </p>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+
+    <details class="pitfall-item">
+      <summary>The downloaded data is garbage, or is last frame's</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> A readback contains the fill pattern you poisoned the buffer
+        with, or the previous frame's contents, or plausible-looking data that is subtly stale.
+        Every SDL call returned success.</p>
+        <p><strong>Cause.</strong> You read before the fence. <code>SDL_SubmitGPUCommandBuffer</code>
+        hands the work over; it does not perform it.</p>
+        <p><strong>Fix.</strong> Submit with
+        <code>SDL_SubmitGPUCommandBufferAndAcquireFence</code>, wait with
+        <code>SDL_WaitForGPUFences</code>, then map — and release the fence. This lesson's §D
+        measured the unfixed version wrong <strong>64 times out of 64</strong>. Be more suspicious,
+        not less, when it happens to work: a race that usually wins is a race you will ship.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>SDL_ClaimWindowForGPUDevice fails and the window looks fine</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> The device is created, the claim returns false, and the window
+        is on screen and perfectly healthy.</p>
+        <p><strong>Cause.</strong> Something else already owns it — nearly always an
+        <code>SDL_Renderer</code> created earlier, including one created by a helper you forgot
+        about. A window has exactly one presentation owner.</p>
+        <p><strong>Fix.</strong> Decide before the window is used. In this lesson the
+        <code>--gpu</code> branch is taken before <code>SDL_CreateRenderer</code> is ever reached,
+        which is why the flag is parsed at the top of <code>main</code> rather than read from a
+        config file later. If you must switch at runtime, destroy the renderer first.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The image fills a quarter of the window</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Everything renders into the bottom-left (or top-left) quarter,
+        as if the projection were scaled by two.</p>
+        <p><strong>Cause.</strong> You used the window's size where the swapchain's was wanted. A
+        window is measured in points; a swapchain in pixels. With
+        <code>SDL_WINDOW_HIGH_PIXEL_DENSITY</code> on a Retina or 4K-scaled display they differ by
+        the display scale.</p>
+        <p><strong>Fix.</strong> Use the width and height that
+        <code>SDL_WaitAndAcquireGPUSwapchainTexture</code> fills in. They are out-parameters
+        precisely so you never have to compute them, and the probe logs both numbers once at
+        startup so that a mismatch is visible before it is mysterious.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The picture is pale and washed out</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Everything looks foggy, blacks are grey, and the whole image
+        appears to have had its contrast reduced.</p>
+        <p><strong>Cause.</strong> A double sRGB encode. Your bytes are already encoded; the
+        target's format encoded them again. Mid-grey 128 became 188. (The opposite mistake, a
+        double decode, gives a picture that is far too dark and contrasty.)</p>
+        <p><strong>Fix.</strong> Match the source texture's sRGB-ness to the destination's, as
+        <code>gpu_present_target::create</code> does. And remember the rule from §3.4: a clear
+        colour is always linear light, and the format decides what is stored — never pre-encode
+        one yourself.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A flickering band of the previous frame, on some machines only</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Part of the image — often a horizontal strip — shows the
+        previous frame, intermittently, usually under load. Never reproducible on the developer's
+        machine.</p>
+        <p><strong>Cause.</strong> You wrote to a transfer buffer or texture that a pending command
+        buffer is still reading, with <code>cycle = false</code>.</p>
+        <p><strong>Fix.</strong> Pass <code>true</code> for <code>cycle</code> on every per-frame
+        write. The cost is memory, not time. And do not cycle a resource you intend to update only
+        partially: cycling makes the <em>whole</em> resource undefined.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A benchmark result that is too good</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> A copy or a clear reports bandwidth above the machine's memory
+        bus, or a draw takes zero time.</p>
+        <p><strong>Cause.</strong> The work did not happen. Two ways for that, both met in §4.6:
+        the driver elided repeated identical work, or the content was compressible enough that the
+        bytes never moved. A third, from Lesson 3.10: the optimiser deleted your benchmark's
+        arithmetic because nothing consumed the result.</p>
+        <p><strong>Fix.</strong> Chain the work so each step depends on the last, fill buffers with
+        incompressible noise, and — before anything else — <strong>look up the ceiling</strong>.
+        Every GPU measurement has one.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The same program measures 120 fps and then 60 fps</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Two runs of an unchanged binary, minutes apart, disagree by a
+        factor of two on frame time.</p>
+        <p><strong>Cause.</strong> The window opened on a different display. This happened while
+        writing this lesson: the first run landed on a 120 Hz laptop panel and the rest on a 60 Hz
+        external monitor, and for a few minutes there was a very exciting and completely false
+        conclusion that fencing halved the frame rate.</p>
+        <p><strong>Fix.</strong> The one Lesson 3.10 already gave, applied to a new axis: run the
+        variants <em>alternately, in one session</em>, and change one thing at a time. The numbers
+        in Table 3 were taken that way, twice, after the false result was found. If a vsynced
+        measurement surprises you, check what the display is doing before you believe it.</p>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>4.2.1 — Make the double encode happen</h3>
+    <p>
+      Force the bug in §4.4 so you can recognise it later. In
+      <code>gpu_present_target::create</code>, delete the <code>is_srgb_format</code> branch so the
+      source texture is always the plain <code>_UNORM</code> layout. Then switch the swapchain to
+      an sRGB one — <code>SDL_SetGPUSwapchainParameters</code> with
+      <code>SDL_GPU_SWAPCHAINCOMPOSITION_SDR_LINEAR</code>, checking
+      <code>SDL_WindowSupportsGPUSwapchainComposition</code> first — and describe precisely what
+      changed about the picture.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Look at the dark checkerboard squares rather than the bright triangle. The encode is
+        steepest near zero, so the damage is largest in the darks: byte 18 becomes 76.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The whole image lifts, and the shadows lift most — the background stops reading as near
+        black and becomes a flat mid-grey. Now restore the branch and watch it snap back. The
+        habit worth taking away is that <em>washed-out darks</em> is a specific diagnosis with a
+        specific cause, not a vague sense that the picture looks wrong.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.2.2 — Find your own frame's limit</h3>
+    <p>
+      Using only the probe's keys, determine what is pacing your machine. Record the four timings
+      at each of: VSYNC with 2 frames in flight; IMMEDIATE with 2; IMMEDIATE with 1; and IMMEDIATE
+      with 3. Which setting changes the frame time and which changes only where the time is spent?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Compare the <em>acquire</em> band across the four. Then apply §3.3's formula: with
+        <em>F</em> ≥ 2 the frame rate is <code>1/max(C, G)</code>, so if going from 2 to 3 changes
+        nothing you have learned which of C and G is larger.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        On the machine in this lesson: VSYNC pins the frame at 16.667 ms with the acquire absorbing
+        all the slack. IMMEDIATE drops it to about 4.8 ms, still mostly acquire — so the limit
+        became the frames-in-flight budget rather than the display. Dropping to 1 frame in flight
+        lengthens the frame, because CPU and GPU stop overlapping; raising it to 3 changes the
+        frame time hardly at all, which is §3.3's prediction that the second frame buys throughput
+        and the third buys only latency.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.2.3 — A screenshot, without stalling the frame</h3>
+    <p>
+      Add a key that saves the framebuffer as it appeared <em>on the GPU</em>, by downloading the
+      present target's texture — and do it without ever blocking the frame loop. Use
+      <code>SDL_QueryGPUFence</code> rather than <code>SDL_WaitForGPUFences</code>: request the
+      download this frame, check the fence each subsequent frame, and write the file on the frame
+      it reports done.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        You need three pieces of state that outlive the frame: the fence, the download transfer
+        buffer, and a flag saying a capture is outstanding. Refuse a second request while one is
+        pending — that is one line and saves you an entire class of bug. Lesson 3.5's
+        <code>save_obj</code> shows the file-writing pattern this codebase uses; a
+        <code>.ppm</code> is six lines to write.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The capture typically completes on the very next frame, which is the point: the same
+        result as a blocking wait, and no frame was delayed to get it. This is the shape of every
+        good readback in a real engine — GPU-side histograms, auto-exposure, picking, occlusion
+        queries — and it is exactly the "latency you can tolerate" trade the SDL_GPU header
+        describes for <code>SDL_DownloadFromGPUTexture</code>. Watch for one trap: the texture you
+        download must not be written again before the fence signals, so either cycle it or capture
+        into a texture of its own.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.2.4 — Prove the transfer buffer is necessary</h3>
+    <p>
+      Try to skip it. Attempt to <code>memcpy</code> straight into an <code>SDL_GPUTexture</code>,
+      and then write down, in one paragraph, why the API gives you no way to express that — even on
+      a unified-memory machine where the CPU and GPU are demonstrably looking at the same DRAM.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        There is no function that returns a pointer to a texture's storage. Ask why that is a
+        deliberate omission rather than a gap: what would such a pointer have to promise about the
+        arrangement of the bytes behind it?
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        A texture is not row-major. It is tiled so that a 2×2 quad's texels are neighbours (Lesson
+        4.1 §2.3), possibly swizzled, possibly losslessly compressed, and the exact scheme differs
+        between vendors and between two chips from one vendor. A pointer to it would be a pointer
+        to a layout you cannot know, so the only portable way to write a texture is to describe the
+        pixels in a layout you <em>can</em> know and let the driver rearrange them. That is what
+        the transfer buffer is. The unified-memory case does make the copy cheaper — 0.0028 ms for
+        320×180 here — but not expressible as a direct write.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.2.5 — Find the compression ceiling yourself</h3>
+    <p>
+      Extend §C of the harness to sweep <em>content</em> rather than size: copy a 4096² texture
+      that is flat, then a two-colour checkerboard, then four-bit noise, then full 32-bit noise,
+      and plot the reported bandwidth. Where does the curve reach the bus, and what does that tell
+      you about the compressor?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Keep every other variable identical — same size, same blit count, same ping-pong. Only the
+        bytes change. And take the minimum of several runs rather than the mean, as Lesson 3.10
+        argued for kernels.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        You should find a curve that falls towards the bus figure as the content gets less
+        compressible, flattening once it is genuinely incompressible. The interesting part is
+        <em>where</em> the knee is, because that tells you what block size and what kind of
+        redundancy the hardware's compressor exploits — and it is vendor-specific, undocumented,
+        and measurable in fifteen minutes with the harness you already have. That last sentence is
+        most of what graphics performance work is.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine gained</h2>
+    <ul>
+      <li>
+        <strong>A GPU device</strong>, owned properly — created, claimed to a window, and released
+        in the correct order by a destructor rather than by discipline.
+      </li>
+      <li>
+        <strong>A report instead of assumptions.</strong> Driver, shader formats granted, swapchain
+        format, present modes and frames in flight, every one asked for and logged at startup.
+      </li>
+      <li>
+        <strong>Your framebuffer on screen through SDL_GPU</strong>, by transfer buffer, texture
+        and blit, bit-identical to what the rasterizer drew, with no shader anywhere in the
+        program.
+      </li>
+      <li>
+        <strong>A frame graph</strong> drawn with <code>fill_rect</code>, showing the four places a
+        frame's time goes — and four keys that move time between them while you watch.
+      </li>
+      <li>
+        <strong>A regression test on the object model:</strong> our enumerators are checked against
+        SDL's, so "it is a rename" stays true rather than becoming folklore.
+      </li>
+    </ul>
+  </div>
+
+  <p>
+    The sentence to carry forward is the one this lesson opened with, now with a number attached:
+    <strong>a call records work rather than performing it</strong>, and on this machine describing
+    4.78 ms of work takes 0.19 ms — so the CPU spends 96% of that time free. Every object that was
+    new in Figure 3 exists to manage the consequences: the device is the connection, the command
+    buffer is the message, the transfer buffer is the shared ground, and the fence is how you find
+    out it is done.
+  </p>
+
+  <p>
+    Two results are worth keeping in your hands rather than your notes. A full GPU sync on a
+    display-bound frame costs <em>nothing measurable</em> — and on a GPU-bound one costs 1.60×;
+    the difference is not the sync but the overlap you had to give up. And a measurement that
+    beats the hardware's published ceiling is not a fast machine, it is a broken benchmark, twice
+    over in our case.
+  </p>
+
+  <p>
+    What we have not done is draw anything. The GPU has cleared, copied and blitted, and every one
+    of those is fixed-function work SDL performs on our behalf. To make the GPU compute a colour
+    we need a program to run on it — and that program has to exist in three different binary
+    formats, because Metal, Vulkan and D3D12 do not speak the same language.
+  </p>
+
+  <p>
+    <strong>Next: 4.3 — The Shader Toolchain.</strong> One HLSL source, compiled offline through
+    SDL_shadercross into SPIR-V, DXIL and MSL, wired into CMake so a shader edit is a build step
+    rather than a ritual. Then, in 4.4, the first triangle the GPU has ever drawn for us — and
+    §4.2's <code>shaders granted</code> line turns out to be the one that decides which file we
+    load.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>SDL3, <code>include/SDL3/SDL_gpu.h</code></strong> — the header's own overview is the
+      best short introduction to the API that exists, and its sections <em>A Note On Cycling</em>,
+      <em>Coordinate System</em> and <em>Uniform Data</em> are the authoritative statements of
+      three things this course pins down.
+      <a href="https://wiki.libsdl.org/SDL3/CategoryGPU">wiki.libsdl.org/SDL3/CategoryGPU</a>
+    </li>
+    <li>
+      <strong>Evan Hemsley, <em>Layers all the way down</em></strong> — SDL_GPU's author on why the
+      shader-format problem is shaped the way it is, and why SDL does not simply ship a shading
+      language. The header links it from the FAQ.
+      <a href="https://moonside.games/posts/layers-all-the-way-down/">moonside.games</a>
+    </li>
+    <li>
+      <strong>SDL_gpu_examples</strong> — a compact, readable set of working programs against this
+      exact API. <code>ClearScreen</code> and <code>TexturedQuad</code> are the two to read now.
+      <a href="https://github.com/TheSpydog/SDL_gpu_examples">github.com/TheSpydog/SDL_gpu_examples</a>
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §2 and §3</strong> — the graphics pipeline and the GPU
+      pipeline, at the level of abstraction this lesson has been operating at. §3.10 on the
+      command processor is the hardware behind our work order.
+    </li>
+    <li>
+      <strong>Vulkan Tutorial, <em>Drawing a triangle → Rendering and presentation</em></strong> —
+      worth reading precisely because it is <em>harder</em> than what we just did. The semaphores,
+      fences and per-frame resources it spends a chapter on are what SDL_GPU's <code>cycle</code>
+      flag and swapchain acquire are hiding.
+      <a href="https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation">vulkan-tutorial.com</a>
+    </li>
+    <li>
+      <strong>Apple, <em>Metal Best Practices: Persistent Objects</em></strong> and the
+      <em>Triple Buffering</em> note — the frames-in-flight argument of §3.3, from the vendor whose
+      driver is underneath these measurements.
+      <a href="https://developer.apple.com/library/archive/documentation/3DDrawing/Conceptual/MTLBestPracticesGuide/">developer.apple.com</a>
+    </li>
+    <li>
+      <strong>Fabian Giesen, <em>A trip through the Graphics Pipeline 2011</em>, parts 1–2</strong>
+      — what actually happens between your submit and the GPU starting work: command processors,
+      ring buffers and why the driver batches. Old, and still the clearest thing written on it.
+      <a href="https://fgiesen.wordpress.com/2011/07/09/a-trip-through-the-graphics-pipeline-2011-index/">fgiesen.wordpress.com</a>
+    </li>
+  </ul>

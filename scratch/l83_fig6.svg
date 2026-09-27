@@ -1,0 +1,74 @@
+<svg viewBox="0 0 900 452" role="img" aria-labelledby="l83f6-t l83f6-d">
+  <title id="l83f6-t">The similarity transform read as a three-step pipeline, and the wrong one</title>
+  <desc id="l83f6-d">A left-to-right chain shows an angular velocity in world axes being carried into body axes by R transpose, acted on by the tensor where it is constant, and carried back out by R — which is the whole of R I R transpose. Below, a table shows that the reversed sandwich has the same trace, the same determinant, the same symmetry and the same principal moments, and differs from the correct answer by more than one and a half units.</desc>
+  <defs>
+    <marker id="e-i-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blue-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amber-l83f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="40" y="56" class="xs muted" text-anchor="start">A tensor eats a vector and produces one, so it has to be converted on BOTH sides</text>
+<rect x="40" y="82" width="150" height="56" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2"/>
+<text x="115.0" y="115.0" class="sm mono" text-anchor="middle">ω, world axes</text>
+<line x1="196" y1="110.0" x2="228" y2="110.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l83f6)"/>
+<rect x="234" y="82" width="84" height="56" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<text x="276.0" y="115.0" class="sm mono" text-anchor="middle">Rᵀ</text>
+<text x="276.0" y="156" class="xs muted" text-anchor="middle">carry it INTO body axes</text>
+<line x1="324" y1="110.0" x2="356" y2="110.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l83f6)"/>
+<rect x="362" y="82" width="84" height="56" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<text x="404.0" y="115.0" class="sm mono" text-anchor="middle">I</text>
+<text x="404.0" y="156" class="xs muted" text-anchor="middle">the tensor acts, where</text>
+<text x="404.0" y="170" class="xs muted" text-anchor="middle">it is constant</text>
+<line x1="452" y1="110.0" x2="484" y2="110.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l83f6)"/>
+<rect x="490" y="82" width="84" height="56" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<text x="532.0" y="115.0" class="sm mono" text-anchor="middle">R</text>
+<text x="532.0" y="156" class="xs muted" text-anchor="middle">carry the result BACK</text>
+<line x1="580" y1="110.0" x2="612" y2="110.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l83f6)"/>
+<rect x="618" y="82" width="150" height="56" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2"/>
+<text x="693.0" y="115.0" class="sm mono" text-anchor="middle">L, world axes</text>
+<text x="40" y="204" class="xs muted" text-anchor="start">Read right to left, which is the order the matrices apply in. That is the whole of R I Rᵀ, and it is why a plain</text>
+<text x="40" y="220" class="xs muted" text-anchor="start">vector transforms with R alone while a tensor needs the sandwich.</text>
+<text x="40" y="262" class="xs muted" text-anchor="start">what you might check</text>
+<text x="374" y="262" class="xs muted" text-anchor="end">R I Rᵀ</text>
+<text x="524" y="262" class="xs muted" text-anchor="end">Rᵀ I R</text>
+<text x="644" y="262" class="xs muted" text-anchor="end"></text>
+<line x1="40" y1="270.0" x2="650" y2="270.0" class="grid" stroke-width="1.0"/>
+<text x="40" y="287.0" class="xs" text-anchor="start">trace</text>
+<text x="374" y="287.0" class="xs mono" text-anchor="end">9.333334</text>
+<text x="524" y="287.0" class="xs mono" text-anchor="end">9.333334</text>
+<text x="644" y="287.0" class="xs mono" text-anchor="end">same</text>
+<text x="40" y="304.0" class="xs" text-anchor="start">determinant</text>
+<text x="374" y="304.0" class="xs mono" text-anchor="end">24.074078</text>
+<text x="524" y="304.0" class="xs mono" text-anchor="end">24.074078</text>
+<text x="644" y="304.0" class="xs mono" text-anchor="end">same</text>
+<text x="40" y="321.0" class="xs" text-anchor="start">symmetric</text>
+<text x="374" y="321.0" class="xs mono" text-anchor="end">yes</text>
+<text x="524" y="321.0" class="xs mono" text-anchor="end">yes</text>
+<text x="644" y="321.0" class="xs mono" text-anchor="end">same</text>
+<text x="40" y="338.0" class="xs" text-anchor="start">principal moments</text>
+<text x="374" y="338.0" class="xs mono" text-anchor="end">unchanged</text>
+<text x="524" y="338.0" class="xs mono" text-anchor="end">unchanged</text>
+<text x="644" y="338.0" class="xs mono" text-anchor="end">same</text>
+<text x="40" y="355.0" class="xs" text-anchor="start">the actual tensor</text>
+<text x="374" y="355.0" class="xs mono" text-anchor="end">correct</text>
+<text x="524" y="355.0" class="xs t-hi" text-anchor="end">1.569413 out</text>
+<text x="644" y="355.0" class="xs mono" text-anchor="end">DIFFERENT</text>
+<text x="660" y="262" class="xs muted" text-anchor="start">Rᵀ I R is not nonsense — it is</text>
+<text x="660" y="277" class="xs muted" text-anchor="start">the basis change in the other</text>
+<text x="660" y="292" class="xs muted" text-anchor="start">direction, so it is symmetric,</text>
+<text x="660" y="307" class="xs muted" text-anchor="start">has the same invariants, and</text>
+<text x="660" y="322" class="xs muted" text-anchor="start">describes a real body.</text>
+<text x="660" y="337" class="xs muted" text-anchor="start"></text>
+<text x="660" y="352" class="xs t-hi" text-anchor="start">Just not this one.</text>
+<text x="660" y="367" class="xs muted" text-anchor="start"></text>
+<text x="660" y="382" class="xs muted" text-anchor="start">And a test built on a 90° turn</text>
+<text x="660" y="397" class="xs muted" text-anchor="start">passes with the transpose in</text>
+<text x="660" y="412" class="xs muted" text-anchor="start">either place: on a diagonal</text>
+<text x="660" y="427" class="xs muted" text-anchor="start">tensor a right angle is its own</text>
+<text x="660" y="442" class="xs muted" text-anchor="start">inverse up to a sign.</text>
+</svg>

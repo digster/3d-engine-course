@@ -1,0 +1,46 @@
+<svg viewBox="0 0 760 518" role="img" aria-labelledby="l618f2-t l618f2-d">
+  <title id="l618f2-t">The anatomy of one glyph: ink box, advance box, pen and baseline</title>
+  <desc id="l618f2-d">A magnified line of text showing the letter g placed by its metrics. The amber rectangle is the atlas ink; the dashed blue rectangle is the advance box; the pen sits on the baseline and the offsets carry it to the ink.</desc>
+  <defs>
+    <marker id="e-i-l618f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Two rectangles, and every text bug in this lesson is one of them mistaken for the other.</text>
+<rect x="178" y="104" width="195" height="240.0" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.07"/>
+<line x1="116" y1="104" x2="397" y2="104" class="grid" stroke-width="1.0" stroke-dasharray="4 3"/>
+<text x="110" y="108" class="xs muted" text-anchor="end">ascent line</text>
+<line x1="116" y1="292.2635" x2="397" y2="292.2635" class="grid" stroke-width="1.0"/>
+<text x="110" y="296.2635" class="xs t-hi" text-anchor="end">BASELINE</text>
+<line x1="116" y1="344.0" x2="397" y2="344.0" class="grid" stroke-width="1.0" stroke-dasharray="4 3"/>
+<text x="110" y="348.0" class="xs muted" text-anchor="end">descent line</text>
+<rect x="178.0" y="142.26350000000002" width="75" height="210" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<rect x="178.0" y="142.26350000000002" width="75" height="210" rx="3" fill="none" stroke="#f0961e" stroke-width="1.4"/>
+<text x="215.5" y="253.26350000000002" class="sm t-hi" text-anchor="middle">j</text>
+<rect x="208" y="104" width="64.46549999999999" height="240.0" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3" stroke-dasharray="5 4"/>
+<line x1="208.0" y1="281.3" x2="208.0" y2="303.3" stroke="#5ac878" stroke-width="2.6" fill="none"/>
+<line x1="204" y1="307.2635" x2="148" y2="324.2635" class="grid" stroke-width="1.0"/>
+<text x="144" y="328.2635" class="xs t-ok" text-anchor="end">pen</text>
+<line x1="208" y1="386.0" x2="272.4655" y2="386.0" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l618f2)"/>
+<line x1="272.4655" y1="386.0" x2="208" y2="386.0" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l618f2)"/>
+<text x="240.23275" y="378.0" class="xs mono" text-anchor="middle">advance 4.2977 px</text>
+<line x1="208" y1="66" x2="208" y2="282.2635" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line x1="178.0" y1="66" x2="178.0" y2="136.26350000000002" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line x1="208" y1="70" x2="178.0" y2="70" class="hi" stroke-width="1.3" marker-end="url(#e-h-l618f2)"/>
+<text x="193.0" y="60" class="xs mono" text-anchor="middle">offset_x -2.0</text>
+<text x="193.0" y="86" class="xs t-hi" text-anchor="middle">ink starts LEFT of the pen</text>
+<line x1="253.0" y1="142.26350000000002" x2="415" y2="142.26350000000002" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line x1="272.4655" y1="292.2635" x2="415" y2="292.2635" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<line x1="407" y1="292.2635" x2="407" y2="142.26350000000002" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l618f2)"/>
+<text x="419" y="217.26350000000002" class="xs mono" text-anchor="start">offset_y -10.0</text>
+<rect x="20" y="406.0" width="14" height="14" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<rect x="20" y="406.0" width="14" height="14" rx="3" fill="none" stroke="#f0961e" stroke-width="1.2"/>
+<text x="42" y="417.0" class="xs" text-anchor="start">INK: the atlas rectangle. Its size is the blit's size.</text>
+<rect x="20" y="430.0" width="14" height="14" rx="3" fill="none" stroke="#5082e6" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="42" y="441.0" class="xs" text-anchor="start">ADVANCE: where the pen goes next. A different number.</text>
+<line x1="20" y1="458.0" x2="740" y2="458.0" class="grid" stroke-width="1.2"/>
+<text x="20" y="478.0" class="xs muted" text-anchor="start">offset_y is NEGATIVE for every glyph with ink above the baseline.</text>
+<text x="20" y="496.0" class="xs muted" text-anchor="start">offset_x is negative for 'j': its ink starts LEFT of the pen.</text>
+</svg>

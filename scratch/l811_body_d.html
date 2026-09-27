@@ -1,0 +1,351 @@
+  <h2 id="hinge">9. The hinge</h2>
+
+  <p>
+    A hinge is a ball-socket that also refuses to let its two bodies tilt relative to each other
+    about anything but its axis. The socket takes three degrees of freedom away; the hinge takes two
+    more, and leaves one rotation. The two new rows are pure angular rows — they involve no linear
+    velocity at all — and they say: the relative angular velocity <code>ω_b − ω_a</code> may point
+    along the axis and nowhere else. Pick two unit vectors <code>p₀</code>, <code>p₁</code>
+    perpendicular to the axis and the rows are
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ J_i \;=\; \bigl[\;0 \;\big|\; -p_i \;\big|\; 0 \;\big|\; p_i\;\bigr], \qquad J_i V \;=\; p_i\cdot(\omega_b - \omega_a) \;=\; 0 \]</span>
+    <span class="eq-plain">J_i = [0, -p_i, 0, p_i], so J_i V = p_i . (w_b - w_a) = 0</span>
+  </div>
+
+  <p>
+    and their position error comes from the two copies of the axis the joint stores — one in each
+    body's frame, <code>a₁</code> as body <code>a</code> carries it and <code>b₁</code> as body
+    <code>b</code> does. When the hinge is healthy they coincide. When they drift apart, their cross
+    product <code>a₁ × b₁</code> is (for a small misalignment) the rotation vector that carries one
+    onto the other, and its components along <code>p₀</code> and <code>p₁</code> are the two angles
+    the hinge must not allow: <code>C_i = (a₁ × b₁)·p_i</code>. Differentiate and you get
+    <code>J_i·V</code> back, which is the check that the error and the row agree. The two rows share
+    a body and are coupled through its inertia tensor just as a socket's three are, so the engine
+    solves them as a 2×2 block, <code>K_ij = p_i·(I_a⁻¹ + I_b⁻¹)·p_j</code>, with no linear terms at
+    all: turning a body about its centre moves its centre nowhere.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§G — a 1.0 × 2.0 × 0.1 m, 10 kg door hinged at its edge, gravity on, 5 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     joint              worst anchor gap    worst misalignment    worst tilt
+     hinge                    0.088 mm           0.0001 deg         0.00 deg
+     ball-socket only           4.694 mm           0.0000 deg       175.98 deg</code></pre>
+  </div>
+
+  <p>
+    A door given 2&nbsp;rad/s about its vertical hinge stays within <strong>0.0001°</strong> of true
+    for five seconds of swinging. The same door on the socket alone — the three rows, without the
+    two — falls over, <strong>176°</strong>. That is the control and it is also the definition: the
+    socket holds the point, and gravity's torque about the point is exactly what the two angular rows
+    exist to answer.
+  </p>
+
+  <h3>The frame the angular impulse is cached in</h3>
+
+  <p>
+    The two rows' accumulated impulses are warm-started like everything else, and 8.10 §4 is the
+    reason to be careful about how. There, two cached friction impulses turned out to be
+    <em>coordinates</em> in a tangent basis that <code>tangent_basis</code> rebuilt every frame from
+    a world normal, choosing its seed from the normal's smallest component. On a near-vertical
+    normal two of its components are both near zero and cross constantly, the basis flips by 90°,
+    and last frame's friction was applied sideways. A hinge's two perpendicular impulses have
+    exactly the same shape, and a hinge axis along a coordinate axis has exactly the same
+    near-zero components.
+  </p>
+
+  <p>
+    The engine avoids it twice over. The basis is chosen from the axis <em>in body a's own frame</em>
+    — a constant, so the choice is a constant — and rotated into the world with the body, so it turns
+    exactly as smoothly as the body does. And the cached impulse is stored as a <em>world vector</em>
+    (<code>joint::angular_impulse</code>), which carries its own frame and is simply re-measured in
+    this step's basis. Either would have been enough. The harness probes what the obvious way would
+    have done, on a twelve-plank bridge hinged about z, sagging under a bouncing ball:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§G — basis rotation between consecutive steps, 10 s, every hinge</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     basis chosen from           rotated &gt; 30 deg      worst step-to-step
+     the world axis (8.10's way)     127 of 7787            90.000 deg
+     body a's own axis (8.11)          0 of 7787             9.767 deg</code></pre>
+  </div>
+
+  @@FIG_HINGE@@
+
+  <p>
+    127 flips, every one exactly 90°, against none. A plank moving in the x–y plane carries a z axis
+    whose x and y components are rounding noise either side of zero — the precise condition 8.10
+    found on a crate's normal. The body-chosen basis's worst step-to-step turn is 9.8°, which is the
+    plank itself turning under an impact. <strong>A cached quantity must carry its frame</strong> was
+    8.10's lesson, learned from a bug; here it was a design input, and the probe says what it was
+    worth.
+  </p>
+
+  <h2 id="limits">10. Limits: a contact that is always detected</h2>
+
+  <p>
+    A hinge limit is a one-sided angular row about the axis. For the upper stop,
+    <code>C = θ_max − θ ≥ 0</code>, with <code>θ</code> the hinge angle, and the row pushes only one
+    way, <code>λ ≥ 0</code>. It is a contact on an angle, and it would inherit a contact's defect: 8.10
+    §6 measured that a contact is only noticed on the step <em>after</em> the bodies cross, so it
+    arrives with an overlap that is uniform on <code>[0, v·h]</code>. A limit that exists only once
+    it is violated arrives with an overshoot uniform on <code>[0, ω·h]</code>, for the same reason.
+  </p>
+
+  <p>
+    Except that a limit has one thing a contact does not: <strong>a hinge always knows its
+    angle.</strong> So the row can exist before the stop is reached, with a target of
+    <code>−C/h</code> — "you may close this gap, but no faster than it would take one step to close
+    it" — and the <code>[0, ∞)</code> clamp makes it do nothing at all unless the door is approaching
+    fast enough to overshoot this step. That is a <strong>speculative</strong> constraint, and for a
+    contact it would need the narrow phase to run on pairs that are not touching yet, which is why
+    8.10 left speculative contacts as an open problem and this lesson gets speculative limits for
+    free.
+  </p>
+
+  <p>
+    The hinge angle itself is 7.4's quaternion read in the one way that ignores everything a limit
+    should not see. The joint stores the relative orientation it was authored in,
+    <code>rest = conj(q_a)·q_b</code>; the deviation from it is
+    <code>q = conj(q_a)·q_b·conj(rest)</code>, expressed in
+    <code>a</code>'s frame, and a pure turn about the axis by <code>θ</code> gives exactly
+    <code>q = (cos θ/2, sin θ/2 · axis)</code>. So <code>θ = 2·atan2(q.v·axis, q.w)</code>, with
+    <code>q</code> first moved to the hemisphere <code>w ≥ 0</code> — the double cover again — and any
+    swing of the axes, which the alignment rows prevent anyway, drops out of the dot product.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — a turnstile hinged through its centre, 200 arrival phases</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     limit            mean        largest      smallest
+     reactive           0.4985      0.9960      1.02e-03
+     speculative        0.0000      0.0000      0.00e+00</code></pre>
+  </div>
+
+  <p>
+    Overshoot past the stop, in units of <code>ω·h</code>, over 200 starting angles spaced evenly
+    across one step's travel. Reactive: uniform on <code>[0, 1]</code>, mean 0.4985 — 8.10 §6's
+    arrival depth, transplanted onto an angle. Speculative: <strong>zero</strong>. (The first draft of
+    this fixture swept the <em>speed</em> from 2.0 to 2.2&nbsp;rad/s instead, which moves the arrival
+    phase through 1.36 cycles rather than a whole number of them, and read a mean of 0.42. What has to
+    be sampled uniformly is the phase.)
+  </p>
+
+  <h3>The door, and the second appearance of ρ</h3>
+
+  <p>
+    That was a turnstile, hinged through its centre. Hinge the same slab at its <em>edge</em> — a door
+    — and the speculative limit is no longer exact, for a reason that is worth deriving because it is
+    not a defect of limits or of doors. It is a property of every angular row that shares a body with
+    a pin.
+  </p>
+
+  <p>
+    The limit row is angular, <code>J = [0, a, 0, −a]</code>, so its effective mass is the inertia
+    about the body's <em>centre</em>, <code>I_cm</code>. It computes the change in <code>ω</code>
+    that would stop the door at the stop if the door turned about its centre. But a door does not
+    turn about its centre; it turns about the pin. Having changed <code>ω</code>, the row has left the
+    door's centre moving at a velocity that no longer matches <code>ω × r</code> about the pin, so the
+    pin row pulls it back into line — and in doing so gives back part of the change in
+    <code>ω</code>. Work it through for a body on a fixed pin at distance <code>d</code> from its
+    centre and the fraction given back is
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \rho \;=\; \frac{m\,d^2}{I_{\text{cm}} + m\,d^2} \]</span>
+    <span class="eq-plain">rho = m d^2 / (I_cm + m d^2), the fraction of the limit's change the pin undoes</span>
+  </div>
+
+  <p>
+    so Gauss–Seidel between the limit and the pin contracts by <code>ρ</code> per sweep. It is §5's
+    <code>ρ</code> — the parallel-axis ratio — arriving the second time, as a <em>rate</em> rather
+    than a loss. For any uniform slab hinged at its edge, <code>I_cm = m·W²/12</code> and
+    <code>d = W/2</code>, so <code>ρ = (1/4)/(1/12 + 1/4) = 3/4</code> whatever the door's size or
+    mass. The harness puts the slab one step from its stop turning at 2&nbsp;rad/s into it, and
+    measures what fraction of the required change is still missing after <code>n</code> sweeps:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§H — error left after n sweeps, relative to before, by pin offset</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     hinge offset   rho predicted   n=1       n=2       n=4       n=8       per sweep
+     d = 0.00 W       0.0000    -0.0000   -0.0000   -0.0000   -0.0000    0.0000
+     d = 0.25 W       0.4261     0.4261    0.1816    0.0330    0.0011    0.4261
+     d = 0.50 W       0.7481     0.7481    0.5597    0.3133    0.0981    0.7481
+     d = 1.00 W       0.9224     0.9224    0.8508    0.7238    0.5239    0.9224</code></pre>
+  </div>
+
+  <p>
+    To four figures, on every shape: exact through the centre, 0.4261 a quarter of the way out,
+    0.7481 at the edge (the slab's 0.1&nbsp;m thickness moves it off 3/4), and 0.9224 on a bracket a
+    full width out. Not "roughly geometric" — the measured error after <code>n</code> sweeps
+    <em>is</em> <code>ρⁿ</code>. It is the cleanest agreement between a derivation and a measurement
+    in the module.
+  </p>
+
+  @@FIG_LIMITS@@
+
+  <div class="listing">
+    <figcaption><span class="path">§H — at the shipped eight sweeps, into the stop at 2 rad/s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     hinge offset   rho^8      overshoot     rebound
+     d = 0.00 W    0.00000    0.00000 rad    -0.0000
+     d = 0.25 W    0.00109    0.00003 rad     0.0011
+     d = 0.50 W    0.09813    0.00318 rad     0.0753
+     d = 1.00 W    0.52388    0.01744 rad     0.2706</code></pre>
+  </div>
+
+  <p>
+    And the consequence, which is visible: at eight sweeps a door with <strong>restitution zero</strong>
+    bounces off its stop at <strong>7.5%</strong> of the speed it arrived at, and an arm on a bracket at
+    27%. That is not restitution. It is the ρ⁸ of the correction that eight sweeps left undone, stored
+    in the accumulated impulse, handed to the next step by the warm start, and unwound as a
+    separating velocity. The knob that removes it is the sweep count — at 32 sweeps a door's
+    ρ³² is 9&nbsp;×&nbsp;10⁻⁵ — and §14 prices sweeps. The fix that would remove it at any sweep count
+    is to solve the limit row and the pin as one 4×4 block, with the limit's clamp handled by trying
+    both cases; that is the "block with one clamp" 8.10 wondered about, and it is named here rather
+    than built.
+  </p>
+
+  <h2 id="motors">11. Motors, and what friction was all along</h2>
+
+  <p>
+    A motor is the axis row with a target that is not zero — the speed it wants — and a symmetric
+    clamp, <code>|λ| ≤ τ_max·h</code>, which is how much impulse its torque can supply in a step.
+    That clamp is what makes it a motor and not a hinge welded to a spinning frame: a load heavier
+    than the motor can turn simply stalls. While the motor is short of its speed the clamp is
+    saturated, it applies exactly <code>τ_max·h</code> every step, and the spin-up should take
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ t \;=\; \frac{I_{\text{pivot}}\,\omega}{\tau_{\max}} \]</span>
+    <span class="eq-plain">t = I_pivot * w / tau_max</span>
+  </div>
+
+  <p>
+    with <code>I_pivot</code> the inertia about the pin — because once the clamp is deciding the
+    impulse, the row's own <code>I_cm</code>-based effective mass never enters. That was the claim.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — 0 to 4 rad/s at 5 N·m</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     slab             I about pin   rho      I w / tau    with §5's loss   measured
+     through centre    0.8417 kg m2  0.000     0.6733 s       0.6733 s       0.6833 s
+     door, at edge     3.3417 kg m2  0.748     2.6733 s       2.8847 s       2.8833 s</code></pre>
+  </div>
+
+  <p>
+    Through the centre, right to the step. At the edge, <strong>7.9% slow</strong> — the fourth
+    measurement in this lesson to refuse its section. The clamp really does apply
+    <code>τ_max·h</code> per step. What the claim forgot is that the joint is also losing energy the
+    whole time, at §5's rate: <code>ρ(ωh)²</code> of its kinetic energy per step, which is
+    <code>½·ρ·h·ω²</code> of its angular momentum per second. So the motor is fighting
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{d\omega}{dt} \;=\; \frac{\tau_{\max}}{I_{\text{pivot}}} \;-\; \frac{\rho\,h}{2}\,\omega^3 \]</span>
+    <span class="eq-plain">dw/dt = tau_max / I_pivot - (rho h / 2) w^3</span>
+  </div>
+
+  <p>
+    and integrating <em>that</em> predicts 2.8847&nbsp;s against a measured 2.8833 — within a step.
+    That is <code>ρ</code>'s third appearance, and the one that ties the other two together: the loss
+    a motor has to overcome is the same parallel-axis fraction that set the pendulum's period and the
+    limit's convergence.
+  </p>
+
+  <p>
+    The stall is the cleaner test. A 1&nbsp;m, 2&nbsp;kg arm hinged at its end about a horizontal
+    axis, held level, motor asked to lift it: gravity's torque about the pin is
+    <code>m·g·d = 9.8100 N·m</code>, and bisecting the motor's torque over eighteen halvings for the
+    smallest that lifts the arm finds <strong>9.8100&nbsp;N·m</strong>, to 4.8&nbsp;×&nbsp;10⁻⁶. The
+    clamp is a torque, exactly.
+  </p>
+
+  <h3>Friction was this row all along</h3>
+
+  <p>
+    8.9's friction rows clip the tangential impulse to <code>μ</code> times the normal impulse. A
+    motor's row clips to <code>τ_max·h</code>. Set a motor's target speed to <strong>zero</strong> and
+    it is a brake with a fixed maximum torque — which is Coulomb friction in the hinge: a constant
+    decelerating torque while the door slides, and <em>exactly zero</em> relative speed held once the
+    required impulse falls inside the clamp, which is static friction from the same line of code.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — a door pushed at 2 rad/s against a zero-speed motor</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     tau          predicted stop    measured stop    speed after 5 s
+      2.0 N m        3.2752 s        3.2833 s     7.29e-43 rad/s
+      4.0 N m        1.6538 s        1.6833 s     1.40e-45 rad/s
+      0.0 N m         never           never       1.7904 rad/s   (control: no brake)</code></pre>
+  </div>
+
+  <p>
+    The prediction includes §5's loss, which here helps the brake. The door stops within two steps of
+    it and then stays stopped to 10⁻⁴³&nbsp;rad/s. What lateness there is — under two steps at
+    4&nbsp;N·m — is the last step, where the door is slower than <code>τ·h</code> can stop, so the
+    brake is <em>not</em> saturated, and an unsaturated axis row on a door converges at §10's
+    <code>ρ</code> per sweep. The control has no brake and is still turning at 1.7904&nbsp;rad/s after
+    five seconds. The missing speed is §5 once more, and with the motor's term deleted the equation
+    above has a closed form, <code>ω(t) = ω₀ / √(1 + ρ·h·ω₀²·t)</code>, which says 1.7894.
+  </p>
+
+  <p>
+    That is why <code>contact_material</code> — a restitution and a friction coefficient — stops being
+    the right shape for "what a constraint may do". Friction is a bound derived from another row's
+    impulse; a motor is a bound from a torque; a limit is a bound at zero on one side. They are all
+    <code>jacobian_row::lower</code> and <code>upper</code>.
+  </p>
+
+  <h2 id="islands">12. Islands, sleeping and joints</h2>
+
+  <p>
+    8.10 built islands on one rule: a contact is an edge of the island graph when both of its bodies
+    can move, because a fixed body cannot propagate an impulse and would otherwise weld the level
+    into one island. A joint is an edge by exactly the same rule — and in the code it is literally
+    the same function, <code>union_edge</code>, lifted out of the contact loop so that joints could
+    call it and the two could never disagree.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§J — two eight-link chains from one fixed ceiling</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     islands with joint edges       2   (the solver reports 2)
+     islands without them          16</code></pre>
+  </div>
+
+  <p>
+    With joint edges, two chains hung from one ceiling are two islands: each chain is joined along
+    its length, and the fixed ceiling joins nothing. Without them, every link is an island of one,
+    because the links of a chain never touch — their joints hold them apart.
+  </p>
+
+  <p>
+    What that would cost is sleeping, and a chain is the case where it is guaranteed to bite. 8.10
+    §10 showed that a body slept on its own becomes, to everything else, an immovable body, and hangs
+    in the air when its support is knocked away. A chain's links go quiet together, so they would
+    sleep together under either rule — the difference only appears when something <em>wakes</em> one
+    of them.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§J — a sleeping chain, its bottom link struck at 2 m/s, one second later</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     rule                 asleep before   awake after   moved &gt; 1 mm   bottom swung
+     per island (engine)        8 of 8          8 of 8         8 of 8     0.329 m
+     per link                  8 of 8          1 of 8         1 of 8     0.129 m</code></pre>
+  </div>
+
+  <p>
+    Under the island rule the whole chain wakes and swings. Under a per-link rule — emulated, as 8.10
+    §10 did it, by making the other seven links <em>fixed</em>, which is not an approximation but the
+    same statement in the type system — one link swings as a 0.25&nbsp;m pendulum hung from a frozen
+    chain in mid-air. (The first draft counted links that had moved more than a centimetre and
+    reported seven of eight under the island rule: the top link, pinned to the ceiling, moves less
+    than that. The direct instrument is whether each link is <em>awake</em>.)
+  </p>

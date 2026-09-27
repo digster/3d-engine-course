@@ -1,0 +1,61 @@
+<svg viewBox="0 0 640 302" role="img" aria-labelledby="f3104-t f3104-d">
+  <title id="f3104-t">A ladder of fragment work, one rung at a time</title>
+  <desc id="f3104-d">A waterfall chart of nanoseconds per covered pixel. Coverage plus colour interpolation costs 2.68; the perspective divide adds nothing measurable; the depth test adds 0.27; the sRGB encode adds 6.09 - more than twice everything before it combined. Texturing adds a further 15 for a nearest fetch and 7 more for bilinear, and per-pixel lighting another 21. Two brackets at the bottom compare coverage plus divide plus depth, 2.94 nanoseconds, against the encode alone at 6.09.</desc>
+  <defs>
+    <marker id="e-i-f3104" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f3104" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f3104" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f3104" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+  </defs>
+  <text x="16" y="22" class="sm muted">nanoseconds per covered pixel, 2 triangles over 272,223 px at 960x540</text>
+  <text x="168.0" y="55.0" class="xs mono" text-anchor="end">coverage + colour</text>
+  <rect x="176.0" y="44.0" width="0.0" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="176.0" y="44.0" width="19.8" height="15" fill="#eb786e"/>
+  <text x="203.8" y="55.0" class="xs mono"> 2.68</text>
+  <text x="168.0" y="76.0" class="xs mono" text-anchor="end">+ perspective divide</text>
+  <rect x="176.0" y="65.0" width="19.8" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="195.7" y="65.0" width="0.1" height="15" fill="#78c88c"/>
+  <text x="203.7" y="76.0" class="xs mono"> 2.66</text>
+  <text x="243.7" y="76.0" class="xs mono muted">−0.02</text>
+  <text x="168.0" y="97.0" class="xs mono" text-anchor="end">+ depth test & write</text>
+  <rect x="176.0" y="86.0" width="19.7" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="195.7" y="86.0" width="2.0" height="15" fill="#eb786e"/>
+  <text x="205.7" y="97.0" class="xs mono"> 2.94</text>
+  <text x="245.7" y="97.0" class="xs mono muted">+0.27</text>
+  <text x="168.0" y="118.0" class="xs mono" text-anchor="end">+ sRGB encode (pow)</text>
+  <rect x="176.0" y="107.0" width="21.7" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="197.7" y="107.0" width="45.1" height="15" fill="#eb786e"/>
+  <text x="250.8" y="118.0" class="xs mono"> 9.02</text>
+  <text x="290.8" y="118.0" class="xs mono muted">+6.09</text>
+  <text x="168.0" y="139.0" class="xs mono" text-anchor="end">textured, nearest</text>
+  <rect x="176.0" y="128.0" width="66.8" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="242.8" y="128.0" width="67.8" height="15" fill="#eb786e"/>
+  <text x="318.6" y="139.0" class="xs mono">18.19</text>
+  <text x="358.6" y="139.0" class="xs mono muted">+9.16</text>
+  <text x="168.0" y="160.0" class="xs mono" text-anchor="end">textured, bilinear</text>
+  <rect x="176.0" y="149.0" width="134.6" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="310.6" y="149.0" width="51.0" height="15" fill="#eb786e"/>
+  <text x="369.6" y="160.0" class="xs mono">25.08</text>
+  <text x="409.6" y="160.0" class="xs mono muted">+6.89</text>
+  <text x="168.0" y="181.0" class="xs mono" text-anchor="end">lit per pixel</text>
+  <rect x="176.0" y="170.0" width="185.6" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="361.6" y="170.0" width="59.0" height="15" fill="#eb786e"/>
+  <text x="428.6" y="181.0" class="xs mono">33.05</text>
+  <text x="468.6" y="181.0" class="xs mono muted">+7.97</text>
+  <text x="168.0" y="202.0" class="xs mono" text-anchor="end">lit + textured</text>
+  <rect x="176.0" y="191.0" width="244.6" height="15" fill="#eb786e" opacity="0.28"/>
+  <rect x="420.6" y="191.0" width="99.2" height="15" fill="#eb786e"/>
+  <text x="527.8" y="202.0" class="xs mono">46.46</text>
+  <text x="567.8" y="202.0" class="xs mono muted">+13.41</text>
+  <rect x="176.0" y="226.0" width="21.7" height="13" fill="var(--dia-ink-soft)" opacity="0.5"/>
+  <text x="168.0" y="236.0" class="xs mono" text-anchor="end">coverage + divide + depth</text>
+  <text x="205.7" y="236.0" class="xs mono muted">2.94 ns/px</text>
+  <rect x="176.0" y="244.0" width="45.1" height="13" fill="var(--dia-hi)"/>
+  <text x="168.0" y="254.0" class="xs mono t-hi" text-anchor="end">the sRGB encode alone</text>
+  <text x="229.1" y="254.0" class="xs mono t-hi">6.09 ns/px &#8212; 2.1x</text>
+  <text x="16" y="280.0" class="sm">The whole lit + textured fragment: <tspan class="mono">46.46</tspan> ns/px with <tspan class="mono">pow</tspan>, <tspan class="mono t-hi">35.21</tspan> with the fitted encode.</text>
+</svg>

@@ -1,0 +1,416 @@
+# engine/CMakeLists.txt — the engine, as a library.
+#
+# Lesson 5.1. Everything above this line in the course built ONE executable, and
+# a single executable can be arranged however you like because nothing outside it
+# can tell. A library is different in kind: it has an outside, and the outside is
+# the part you can never take back once somebody depends on it.
+#
+# Three properties below do the entire job of drawing that boundary, and it is
+# worth reading them as a group before reading them one at a time.
+
+# STATIC, not SHARED, and not a choice made by shrugging.
+#
+# A static library is copied into each executable at link time. A shared one is a
+# separate file the program finds at startup, which buys you the ability to swap
+# the engine without relinking the game — and costs you an ABI you must not break,
+# per-call indirection, and a deployment story ("which .dll did it load?").
+#
+# We are one repository building both sides from the same source, so we get none
+# of the benefit and all of the cost. Engines that DO ship shared libraries do it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
+# reloads shaders and assets, not code. If that ever changes, this word is the
+# only thing that has to.
+add_library(engine STATIC
+    # Lesson 7.6. A new directory, and the same argument asset/ made in 5.5 and
+    # ui/ made in 5.11: animation is not a graphics subsystem. Nothing in these
+    # files mentions a framebuffer, a pipeline or a colour — they compose
+    # transforms and deform arrays — and Lesson 7.7's clip sampling landed here
+    # beside them, exactly as this comment predicted it would. Putting them under
+    # gfx/ would say that a character stops moving when nobody is looking at it.
+    #
+    # Lesson 7.7. `clip.cpp` is FIRST in the group and last in the dependency
+    # graph: it includes `anim/skeleton.hpp` (a sample needs the bind pose to fall
+    # back to) and nothing includes it. Alphabetical order and dependency order
+    # agree here by luck rather than by design, which is worth noticing precisely
+    # because the list is maintained alphabetically and will not keep agreeing.
+    src/anim/clip.cpp
+    src/anim/skeleton.cpp
+    src/anim/skin.cpp
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader's
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
+    # Lesson 7.8. The fourth new directory since the refactor, and the first
+    # whose contents never touch a pixel. `sound.cpp` is a loader and a
+    # resampler, `spatial.cpp` is a distance curve and a pan law, and `mixer.cpp`
+    # is the only file in this library that runs on a thread SDL owns.
+    #
+    # NOT under `asset/`, although one of the three loads files — 5.5 predicted
+    # this directory by name ("it loads meshes, images, and in Module 7 sounds")
+    # and predicted the wrong home for it. The asset system's job is finding,
+    # caching and owning; decoding a WAV into floats is what a subsystem does for
+    # its own format, exactly as `gfx/image.cpp` decodes a PNG and lives under
+    # gfx/.
+    src/audio/mixer.cpp
+    src/audio/sound.cpp
+    src/audio/spatial.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action's level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
+    src/core/profile.cpp
+    # Lesson 6.11. Compositing, and the two enums that say what a surface's
+    # alpha MEANS. Below `colour.cpp` in the list and above it in the dependency
+    # graph: `blend.hpp` includes `colour.hpp` and nothing includes `blend.cpp`.
+    # Lesson 6.14. Two prefilters that look unrelated and are the same
+    # operation: a linear-light box down for coverage, and a widened NDF for
+    # shading. A translation unit because the first is a loop over pixels and the
+    # second pulls in <cmath>, and neither belongs in every TU that shades.
+    src/gfx/antialias.cpp
+    src/gfx/blend.cpp
+    # Lesson 6.13. The bloom's four filters and the chain that orders them. A
+    # translation unit and not a header: every function in it is a loop over
+    # pixels, and inlining a loop over 129,600 texels into six call sites buys
+    # nothing and costs a rebuild of all six whenever a kernel weight changes.
+    src/gfx/bloom.cpp
+    src/gfx/clip.cpp
+    src/gfx/colour.cpp
+    # Lesson 6.15. The environment map and the two integrals it feeds:
+    # irradiance (exact for Lambert) and the split sum (approximate, and
+    # measured). It sits in gfx/ rather than under a new `env/` because it
+    # is a texture type, not a subsystem — the same argument gpu_texture.hpp
+    # makes for keeping depth targets beside sampled ones.
+    src/gfx/cubemap.cpp
+    src/gfx/debug_draw.cpp
+    # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
+    # than one because their include lists must differ: this one is reachable
+    # from a physics system, debug_draw.cpp is reachable only from a renderer.
+    src/gfx/debug_lines.cpp
+    src/gfx/depth_buffer.cpp
+    # Lesson 6.11. Bucketing and back-to-front sorting. A translation unit rather
+    # than a header because `order_draws` is a real algorithm over a span, and
+    # 6.16's frustum culling walks the same list — one place, not two.
+    src/gfx/draw_order.cpp
+    src/gfx/framebuffer.cpp
+    # Lesson 6.17. The frame, declared instead of assembled. A translation unit
+    # because `compile` is four real passes over two arrays and belongs in one
+    # place, and because nothing that merely *declares* a pass should have to
+    # recompile when the scheduler changes.
+    src/gfx/frame_graph.cpp
+    # Lesson 6.16. The six planes, extracted from the view-projection matrix, and
+    # the walk that rejects what they exclude. A translation unit for the reason
+    # draw_order.cpp gives one line above: `cull_visible` is a real algorithm over
+    # a span, and the extraction has six sign conventions in it that must have
+    # exactly one home.
+    src/gfx/frustum.cpp
+    # Lesson 6.18. The three halves of text, kept apart on purpose.
+    #
+    # `font.cpp` is the ONE translation unit that contains stb_truetype — the
+    # same isolation image.cpp and gltf.cpp get, and for the same reason: a
+    # third-party library reaches exactly as far as its types appear in headers,
+    # and this keeps that reach at one .cpp.
+    #
+    # `overlay.cpp` knows nothing about either renderer. It builds quads and it
+    # composites them onto a framebuffer, so the software path and the GPU path
+    # consume the SAME batch — which is what makes Lesson 6.18 §9 able to render
+    # one frame two ways and compare every channel.
+    #
+    # `gpu_overlay.cpp` is the only one of the three that mentions SDL_GPU.
+    src/gfx/font.cpp
+    src/gfx/overlay.cpp
+    src/gfx/gpu_overlay.cpp
+    src/gfx/gpu_buffer.cpp
+    src/gfx/gpu_debug.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
+    # Lesson 6.16. Grouping a culled set into instanced draws. Beside gpu_mesh
+    # rather than inside it, because a mesh that knew how many copies of itself
+    # exist would be deciding something that belongs to the scene — which is the
+    # rule `gpu_mesh::bind` has stated since 4.5 and is why it refuses to bind
+    # slot 1.
+    src/gfx/instancing.cpp
+    src/gfx/gpu_pipeline.cpp
+    # Lesson 6.12. The first pass that draws no geometry: one full-screen
+    # triangle, one texture in, one texture out. 6.13 turns it into a stack.
+    src/gfx/gpu_post.cpp
+    src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
+    src/gfx/gpu_shader.cpp
+    # Lesson 6.8. The GPU half of the shadow map: a second render pass, a
+    # pipeline with no colour target, and a depth texture that can be sampled.
+    src/gfx/gpu_shadow.cpp
+    src/gfx/gpu_texture.cpp
+    # Lesson 6.12. Exposure, the tonemap curves and the CPU resolve. A translation
+    # unit rather than a header because `resolve` is a full-screen loop and
+    # `measure` walks every pixel — neither belongs in every file that mentions a
+    # colour.
+    src/gfx/hdr.cpp
+    # Lesson 6.6. The second asset format, and it gets its own translation
+    # unit for the same reason obj.cpp has one: it is the ONLY file allowed
+    # to see cgltf, so the dependency has exactly one place to leak from.
+    src/gfx/gltf.cpp
+    src/gfx/image.cpp
+    src/gfx/mipmap.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
+    src/gfx/raster.cpp
+    src/gfx/renderable.cpp                # 5.12 — the ECS -> scene_object bridge
+    # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
+    # header because it owns buffers and reaches into the whole software
+    # pipeline — `collect_triangles` and `draw_triangles` both — which is more
+    # than a header should drag into every file that mentions a light.
+    src/gfx/cascade.cpp
+    src/gfx/shadow.cpp
+    src/gfx/soft_renderer.cpp
+    src/gfx/texture.cpp
+    # Lesson 8.1. The FIFTH new directory since the refactor, and the second
+    # (after audio/) whose contents never touch a pixel. It is also the smallest
+    # a subsystem has ever started: one translation unit, holding the parts of an
+    # integrator that are not templates.
+    #
+    # NOT under `math/`, although every line of it is arithmetic on vectors. The
+    # test is what the file KNOWS: `math/` knows about numbers and nothing else,
+    # which is why it has no .cpp files at all, while `integrate.cpp` knows that
+    # a velocity is measured in metres per second and that a step size has a
+    # stability limit. Those are statements about a simulation, not about a
+    # vector space. Modules 8.2 onward fill this directory with bodies, shapes,
+    # contacts and a solver, none of which would fit under `math/` either.
+    src/phys/integrate.cpp
+    # Lesson 8.3. How a body's mass is spread out, which is a different question
+    # from how much of it there is — and a separate file from rigid_body.cpp for
+    # exactly that reason. This one knows about SHAPES (a box, a capsule, a cloud
+    # of point masses) and nothing about bodies; rigid_body.cpp knows about bodies
+    # and asks this file what a shape weighs. The dependency runs one way, as the
+    # note below promised it would.
+    src/phys/inertia.cpp
+    # Lesson 8.2. The second file, and the directory's shape is now visible: the
+    # stepper knows nothing about bodies and the bodies know nothing about how
+    # they are stepped. `rigid_body.cpp` includes `integrate.hpp` and not the
+    # other way round, which is the dependency direction the rest of the module
+    # inherits — shapes will know about bodies, the broadphase about shapes, the
+    # solver about contacts, and nothing will ever point back up the chain.
+    src/phys/rigid_body.cpp
+    src/phys/shape.cpp
+    src/phys/collide.cpp
+
+    # Lesson 8.5. GJK depends on `convex.hpp` (header-only: a function pointer and
+    # four inline adapters) and on nothing else in the module, which is the
+    # physical shape of the claim it makes — an algorithm that needs no knowledge
+    # of the shapes it is handed does not need to be compiled against them.
+    src/phys/gjk.cpp
+
+    # Lesson 8.6. EPA is the other half of 8.5's idea and it needed no change to
+    # `gjk.hpp` at all: `cso_support`, `simplex` and `gjk_result::terminal` were
+    # already the public interface it is written against. What it does NOT depend
+    # on is `shape.hpp`, exactly as GJK does not — the algorithm that measures how
+    # deep two things overlap never learns what either of them is.
+    src/phys/epa.cpp
+
+    # Lesson 8.7. And this one DOES depend on `shape.hpp`, which is the first
+    # break in the run gjk.cpp and epa.cpp made — and the break is the lesson.
+    # Distance and depth are questions about a set, answerable from a support
+    # function alone; a CONTACT MANIFOLD is a question about a FEATURE, and a
+    # support function cannot name one. So `convex` grew a second entry point and
+    # this file is compiled against the shapes that implement it.
+    src/phys/manifold.cpp
+
+    # Lesson 8.8. The broadphase, and it is the FIRST file in phys/ that depends
+    # on no shape at all — six floats and an index is the whole of what it knows
+    # about a body, and that is deliberate rather than minimal: the stage whose
+    # entire value is being cheap is the stage that must not be able to look
+    # inside anything. It compiles against `collide.hpp` only for the six-line
+    # `overlaps(aabb, aabb)` this lesson added there.
+    src/phys/broadphase.cpp
+
+    # Lesson 8.11. A constraint as a Jacobian row, and the three joints built
+    # from rows. It sits BELOW solver.cpp in the dependency graph and above
+    # rigid_body.cpp: it knows what a body's velocity and inverse inertia are,
+    # and it knows nothing about contacts, manifolds or the loop that visits it
+    # — which is the physical shape of the lesson's claim that a contact is a
+    # special case of a row rather than the other way round. `solver.hpp`
+    # includes it; it includes nothing from the solver. (Its one reach sideways
+    # is `pair_key`, from manifold.hpp, for the collision filter.)
+    src/phys/constraint.cpp
+
+    # Lesson 8.9. The first file in phys/ that WRITES a velocity. Everything
+    # above it answers a question — do these overlap, how deep, at which points,
+    # which pairs are worth asking about — and the whole of `engine::phys` could
+    # have been declared `const` until this file. It depends on `manifold.hpp`
+    # for what a contact is and on `rigid_body.hpp` for what to change, which is
+    # the dependency direction the note at the top of this block predicted three
+    # lessons ago: the solver knows about contacts, and nothing points back up.
+    src/phys/solver.cpp
+
+    # Lesson 8.12. The ragdoll, and the FIRST file in phys/ that knows what a
+    # skeleton is. The arrow points from physics to `anim/skeleton.hpp` and not
+    # the other way, and the reason is the one 5.12 gave for renderable.hpp:
+    # the arrow points at the more general. A skeleton is joints and bind
+    # transforms and includes nothing but math; an animation system in a game
+    # with no physics must still compile, and a ragdoll is a physics object
+    # built FROM a skeleton. It reaches down to solver.hpp only to hand joints
+    # to `constraint_solver::add`, and down to gjk.hpp once, at build time, to
+    # ask which capsules overlap at rest.
+    src/phys/ragdoll.cpp
+
+    # Lesson 8.13. Two files, and they split along the lesson's own seam. The
+    # CAST is a query — "how far can this shape move before it touches that
+    # one?" — and like gjk.cpp it knows nothing about bodies or shapes, only
+    # about `convex`; a projectile, a camera boom or a line of sight needs it
+    # as much as a character does. The CHARACTER is policy written on top of
+    # the query: it reaches down to rigid_body.hpp for where the obstacles are
+    # and how a platform moved, and to collide.hpp once, for 8.6's EPA when
+    # something has already moved into it. It does NOT include solver.hpp —
+    # the controller is deliberately outside the simulation, and the only
+    # thing it hands the solver is a proxy's velocity, which is a float3.
+    src/phys/cast.cpp
+    src/phys/character.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library's to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
+    # Lesson 5.11. A new directory again, and the same argument asset/ made in
+    # 5.5: tooling UI is not a graphics subsystem. Module 9's editor lands here
+    # beside it, and the top-level tools/ directory is a different thing — the
+    # executables that USE the engine, not part of it.
+    src/ui/debug_ui.cpp
+)
+
+# `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
+# double colon in it CANNOT be mistaken for a file. If a demo asks to link
+# `engine::engine` and no such target exists, CMake stops at configure time with
+# "target not found". If it asks to link plain `engine` and no such target
+# exists, CMake happily passes `-lengine` to the linker and you find out much
+# later, in a different language, from a different tool. Every library worth
+# using exports a namespaced alias — SDL3::SDL3 is one — and now so do we.
+add_library(engine::engine ALIAS engine)
+
+# ---- The boundary ----------------------------------------------------------
+#
+# THIS IS THE MOST IMPORTANT PROPERTY IN THE PROJECT, so read it slowly.
+#
+#   PUBLIC  include/ : everything that links this library gets this directory on
+#                      its include path. It contains ONE thing — a directory
+#                      called `engine` — so from outside, the only spellings that
+#                      resolve are <engine/gfx/raster.hpp> and its siblings.
+#   PRIVATE src/     : the engine's own sources get this, and nobody else does.
+#
+# The consequence is the whole point of Lesson 5.1: a demo that writes
+# `#include "gfx/raster.hpp"` — the spelling every file in this repository used
+# until today — does not compile. Not "is discouraged", not "fails review". Does
+# not compile, with a message naming the file it could not find.
+#
+# A boundary maintained by discipline is a boundary that lasts until the week
+# somebody is in a hurry. This one is maintained by the include path, which is
+# never in a hurry.
+target_include_directories(engine
+    PUBLIC  include
+    PRIVATE src)
+
+# PUBLIC because SDL is in our public headers: `framebuffer.hpp` says `Uint32`,
+# `gpu_device.hpp` takes an `SDL_Window*`, and `input.hpp` reads `SDL_Event`.
+# Anybody who includes those needs SDL's headers too, and PUBLIC is CMake's word
+# for "this dependency is contagious, and it has to be".
+#
+# It is also an admission. A renderer whose public API names another library's
+# types has adopted that library's vocabulary permanently — port to a different
+# platform layer and every one of those signatures changes. §6 of the lesson
+# weighs that honestly; we keep it, and we keep knowing about it.
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+
+# stb_image, by contrast, is PRIVATE: exactly one translation unit
+# (src/gfx/image.cpp) includes it, and `image.hpp` deliberately exposes our own
+# `engine::image` instead. So the dependency stops at the boundary — a demo can
+# neither see stb nor accidentally start depending on it. That is what a good
+# wrapper buys, and this line is the proof it worked.
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes <cgltf.h>, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead. A demo can neither see cgltf nor
+# start depending on it — which is what makes "swap the glTF library" a
+# one-file change rather than a project-wide one.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
+
+# Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
+# engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a
+# CONCEPT (decode bytes into pixels), which is one function and one type. ImGui's
+# value IS its vocabulary — four hundred widget calls — and a wrapper around that
+# is a re-spelling with no content that has to be re-spelled again forever.
+#
+# So demos include <imgui.h> and call ImGui:: directly, and this line is what
+# makes that legal. Note precisely what it costs: two more directories on the
+# include path of everything that links the engine, and a second third-party
+# vocabulary inside our public API. What makes it acceptable is that the only
+# code allowed to speak it is TOOLING code.
+target_link_libraries(engine PUBLIC imgui::imgui)
+
+# ---------------------------------------------------------------------------
+# Lesson 5.12 — the umbrella header must list every public header
+# ---------------------------------------------------------------------------
+#
+# `engine/engine.hpp` calls itself "the whole public API, in one include" and "a
+# TABLE OF CONTENTS ... the fastest way to see whether something is public".
+# Lesson 5.12 checked, and it listed 40 of 55 — missing the entire ECS, the asset
+# store, handles, logging, assertions and the action map. Nothing had ever asked.
+#
+# A GLOB USED AS A LINT, NOT AS A SOURCE LIST, and the distinction is the whole
+# justification. The usual objection to `file(GLOB)` is that a NEW FILE does not
+# re-trigger CMake, so the build silently misses it; that objection is about
+# globbing SOURCES. Here a stale glob can only make the check miss a header that
+# was added since the last configure — it can never break the build or drop a
+# translation unit, and the moment anything else re-runs CMake the check catches
+# up. Against that: the failure it replaces is a silent wrong answer that stood
+# for thirteen lessons.
+file(GLOB_RECURSE engine_public_headers
+     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+     CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/*/*.hpp")
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/engine.hpp"
+     engine_umbrella_lines REGEX "^#include <engine/")
+
+set(engine_umbrella_missing "")
+foreach(header IN LISTS engine_public_headers)
+    # The ONE documented exception, and it is an exception for a reason the
+    # umbrella states itself: including <engine/platform/main.hpp> defines a
+    # program's entry point, so an "include everything, it is harmless" header
+    # must not be a way to acquire a main() by accident.
+    if(header STREQUAL "engine/platform/main.hpp")
+        continue()
+    endif()
+
+    # An ANCHORED match, because the first version of this check grepped the
+    # whole file and passed on headers that were only ever MENTIONED IN A
+    # COMMENT — including the one exception above, which the umbrella names in
+    # prose precisely to say it is absent. A check that reads its own excuse as
+    # compliance is worse than no check.
+    list(FIND engine_umbrella_lines "#include <${header}>" found)
+    if(found EQUAL -1)
+        list(APPEND engine_umbrella_missing "${header}")
+    endif()
+endforeach()
+
+list(LENGTH engine_public_headers engine_public_header_count)
+if(engine_umbrella_missing)
+    string(REPLACE ";" "\n    " engine_umbrella_pretty "${engine_umbrella_missing}")
+    message(FATAL_ERROR
+        "engine/include/engine/engine.hpp is missing public header(s):\n"
+        "    ${engine_umbrella_pretty}\n"
+        "It claims to list every public header (Lesson 5.12). Add them, or add "
+        "an exception here with the reason written down.")
+endif()
+math(EXPR engine_umbrella_listed "${engine_public_header_count} - 1")
+message(STATUS "engine: umbrella lists ${engine_umbrella_listed} of "
+               "${engine_public_header_count} public headers (1 documented exception)")
+
+engine_set_warnings(engine)

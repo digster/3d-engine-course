@@ -1,0 +1,87 @@
+<svg viewBox="0 0 760 380" role="img" aria-labelledby="f75c-t f75c-d">
+  <title id="f75c-t">The schedule error against the arc</title>
+  <desc id="f75c-d">The worst gap between nlerp and slerp plotted against the rotation arc, with the six measured points on the derived curve and the table of speed ratios beside it.</desc>
+  <defs>
+    <marker id="e-i-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#eca856"/></marker></defs>
+<defs><marker id="e-blue-f75c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7ebcf8"/></marker></defs>
+<text x="214.0" y="30" class="sm" text-anchor="middle">how far nlerp is from slerp, at the worst t</text>
+<text x="214.0" y="46" class="xs muted" text-anchor="middle">degrees of pose, against the rotation arc</text>
+<rect x="56.0" y="76.0" width="316.0" height="216.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="56.0" y1="76.0" x2="56.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="56.0" y="306.0" class="xs mono muted" text-anchor="middle">0</text>
+<line x1="135.0" y1="76.0" x2="135.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="135.0" y="306.0" class="xs mono muted" text-anchor="middle">45</text>
+<line x1="214.0" y1="76.0" x2="214.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="214.0" y="306.0" class="xs mono muted" text-anchor="middle">90</text>
+<line x1="293.0" y1="76.0" x2="293.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="293.0" y="306.0" class="xs mono muted" text-anchor="middle">135</text>
+<line x1="372.0" y1="76.0" x2="372.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="372.0" y="306.0" class="xs mono muted" text-anchor="middle">180</text>
+<line x1="56.0" y1="292.0" x2="372.0" y2="292.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="48.0" y="296.0" class="xs mono muted" text-anchor="end">0</text>
+<line x1="56.0" y1="244.0" x2="372.0" y2="244.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="48.0" y="248.0" class="xs mono muted" text-anchor="end">2</text>
+<line x1="56.0" y1="196.0" x2="372.0" y2="196.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="48.0" y="200.0" class="xs mono muted" text-anchor="end">4</text>
+<line x1="56.0" y1="148.0" x2="372.0" y2="148.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="48.0" y="152.0" class="xs mono muted" text-anchor="end">6</text>
+<line x1="56.0" y1="100.0" x2="372.0" y2="100.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="48.0" y="104.0" class="xs mono muted" text-anchor="end">8</text>
+<path d="M 56.00,292.00 L 57.76,292.00 L 59.51,292.00 L 61.27,292.00 L 63.02,292.00 L 64.78,292.00 L 66.53,291.99 L 68.29,291.99 L 70.04,291.98 L 71.80,291.98 L 73.56,291.97 L 75.31,291.96 L 77.07,291.95 L 78.82,291.94 L 80.58,291.92 L 82.33,291.90 L 84.09,291.88 L 85.84,291.86 L 87.60,291.83 L 89.36,291.80 L 91.11,291.77 L 92.87,291.73 L 94.62,291.69 L 96.38,291.64 L 98.13,291.59 L 99.89,291.54 L 101.64,291.48 L 103.40,291.42 L 105.16,291.35 L 106.91,291.28 L 108.67,291.21 L 110.42,291.12 L 112.18,291.04 L 113.93,290.94 L 115.69,290.84 L 117.44,290.74 L 119.20,290.63 L 120.96,290.51 L 122.71,290.38 L 124.47,290.25 L 126.22,290.11 L 127.98,289.97 L 129.73,289.81 L 131.49,289.65 L 133.24,289.48 L 135.00,289.31 L 136.76,289.12 L 138.51,288.93 L 140.27,288.73 L 142.02,288.52 L 143.78,288.30 L 145.53,288.07 L 147.29,287.84 L 149.04,287.59 L 150.80,287.33 L 152.56,287.07 L 154.31,286.79 L 156.07,286.50 L 157.82,286.21 L 159.58,285.90 L 161.33,285.58 L 163.09,285.25 L 164.84,284.91 L 166.60,284.56 L 168.36,284.19 L 170.11,283.82 L 171.87,283.43 L 173.62,283.03 L 175.38,282.62 L 177.13,282.19 L 178.89,281.75 L 180.64,281.30 L 182.40,280.84 L 184.16,280.36 L 185.91,279.87 L 187.67,279.36 L 189.42,278.84 L 191.18,278.31 L 192.93,277.76 L 194.69,277.20 L 196.44,276.62 L 198.20,276.02 L 199.96,275.41 L 201.71,274.79 L 203.47,274.15 L 205.22,273.49 L 206.98,272.81 L 208.73,272.12 L 210.49,271.42 L 212.24,270.69 L 214.00,269.95 L 215.76,269.19 L 217.51,268.41 L 219.27,267.62 L 221.02,266.80 L 222.78,265.97 L 224.53,265.12 L 226.29,264.25 L 228.04,263.36 L 229.80,262.45 L 231.56,261.52 L 233.31,260.57 L 235.07,259.60 L 236.82,258.61 L 238.58,257.60 L 240.33,256.57 L 242.09,255.52 L 243.84,254.44 L 245.60,253.35 L 247.36,252.23 L 249.11,251.09 L 250.87,249.92 L 252.62,248.74 L 254.38,247.53 L 256.13,246.29 L 257.89,245.04 L 259.64,243.76 L 261.40,242.45 L 263.16,241.12 L 264.91,239.77 L 266.67,238.38 L 268.42,236.98 L 270.18,235.55 L 271.93,234.09 L 273.69,232.61 L 275.44,231.09 L 277.20,229.56 L 278.96,227.99 L 280.71,226.40 L 282.47,224.78 L 284.22,223.13 L 285.98,221.45 L 287.73,219.74 L 289.49,218.00 L 291.24,216.24 L 293.00,214.44 L 294.76,212.61 L 296.51,210.76 L 298.27,208.87 L 300.02,206.95 L 301.78,205.00 L 303.53,203.02 L 305.29,201.00 L 307.04,198.95 L 308.80,196.87 L 310.56,194.76 L 312.31,192.61 L 314.07,190.42 L 315.82,188.21 L 317.58,185.95 L 319.33,183.66 L 321.09,181.34 L 322.84,178.98 L 324.60,176.58 L 326.36,174.15 L 328.11,171.68 L 329.87,169.17 L 331.62,166.62 L 333.38,164.03 L 335.13,161.41 L 336.89,158.74 L 338.64,156.04 L 340.40,153.29 L 342.16,150.51 L 343.91,147.68 L 345.67,144.81 L 347.42,141.90 L 349.18,138.94 L 350.93,135.95 L 352.69,132.91 L 354.44,129.82 L 356.20,126.69 L 357.96,123.51 L 359.71,120.29 L 361.47,117.03 L 363.22,113.71 L 364.98,110.35 L 366.73,106.94 L 368.49,103.48 L 370.24,99.98 L 372.00,96.42" fill="none" stroke="#eca856" stroke-width="1.6"/>
+<circle cx="108.67" cy="291.21" r="3.2" fill="#7ebcf8"/>
+<circle cx="161.33" cy="285.58" r="3.2" fill="#7ebcf8"/>
+<circle cx="214.00" cy="269.95" r="3.2" fill="#7ebcf8"/>
+<circle cx="266.67" cy="238.38" r="3.2" fill="#7ebcf8"/>
+<circle cx="319.33" cy="183.66" r="3.2" fill="#7ebcf8"/>
+<circle cx="372.00" cy="96.42" r="3.2" fill="#7ebcf8"/>
+<text x="366.0" y="86.42159999999998" class="xs mono t-hi" text-anchor="end">8.1491° at 180°</text>
+<text x="214.0" y="322.0" class="xs muted" text-anchor="middle">rotation arc, degrees</text>
+<text x="564.0" y="30" class="sm" text-anchor="middle">and the speed ratio it comes from</text>
+<text x="564.0" y="46" class="xs muted" text-anchor="middle">sec²(Ω/2), derived in §5.3</text>
+<rect x="418.0" y="62" width="292.0" height="162.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="432.0" y="80.0" class="xs muted" text-anchor="start">rot arc</text>
+<text x="506.0" y="80.0" class="xs muted" text-anchor="start">Ω</text>
+<text x="594.0" y="80.0" class="xs muted" text-anchor="start">gap</text>
+<text x="696.0" y="80.0" class="xs muted" text-anchor="end">sec²(Ω/2)</text>
+<line x1="426.0" y1="87.0" x2="702.0" y2="87.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="102.0" class="xs mono" text-anchor="start">30°</text>
+<text x="506.0" y="102.0" class="xs mono" text-anchor="start">15°</text>
+<text x="594.0" y="102.0" class="xs mono" text-anchor="start">0.0331°</text>
+<text x="696.0" y="102.0" class="xs mono" text-anchor="end">1.0173</text>
+<line x1="426.0" y1="109.0" x2="702.0" y2="109.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="124.0" class="xs mono" text-anchor="start">60°</text>
+<text x="506.0" y="124.0" class="xs mono" text-anchor="start">30°</text>
+<text x="594.0" y="124.0" class="xs mono" text-anchor="start">0.2675°</text>
+<text x="696.0" y="124.0" class="xs mono" text-anchor="end">1.0718</text>
+<line x1="426.0" y1="131.0" x2="702.0" y2="131.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="146.0" class="xs mono" text-anchor="start">90°</text>
+<text x="506.0" y="146.0" class="xs mono" text-anchor="start">45°</text>
+<text x="594.0" y="146.0" class="xs mono" text-anchor="start">0.9188°</text>
+<text x="696.0" y="146.0" class="xs mono" text-anchor="end">1.1716</text>
+<line x1="426.0" y1="153.0" x2="702.0" y2="153.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="168.0" class="xs mono" text-anchor="start">120°</text>
+<text x="506.0" y="168.0" class="xs mono" text-anchor="start">60°</text>
+<text x="594.0" y="168.0" class="xs mono" text-anchor="start">2.2340°</text>
+<text x="696.0" y="168.0" class="xs mono" text-anchor="end">1.3333</text>
+<line x1="426.0" y1="175.0" x2="702.0" y2="175.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="190.0" class="xs mono" text-anchor="start">150°</text>
+<text x="506.0" y="190.0" class="xs mono" text-anchor="start">75°</text>
+<text x="594.0" y="190.0" class="xs mono" text-anchor="start">4.5140°</text>
+<text x="696.0" y="190.0" class="xs mono" text-anchor="end">1.5888</text>
+<line x1="426.0" y1="197.0" x2="702.0" y2="197.0" class="grid" stroke-width="1.0"/>
+<text x="432.0" y="212.0" class="xs mono" text-anchor="start">180°</text>
+<text x="506.0" y="212.0" class="xs mono" text-anchor="start">90°</text>
+<text x="594.0" y="212.0" class="xs mono" text-anchor="start">8.1491°</text>
+<text x="696.0" y="212.0" class="xs mono" text-anchor="end">2.0000</text>
+<text x="418.0" y="250.0" class="xs t-hi" text-anchor="start">The bottom row is the worst case that exists.</text>
+<text x="418.0" y="266.0" class="xs muted" text-anchor="start">A rotation arc cannot exceed 180° once nearest has</text>
+<text x="418.0" y="279.0" class="xs muted" text-anchor="start">chosen the hemisphere, so Ω cannot exceed 90° and</text>
+<text x="418.0" y="292.0" class="xs muted" text-anchor="start">sec²(Ω/2) cannot exceed sec²(45°) = 2, exactly.</text>
+<text x="418.0" y="305.0" class="xs muted" text-anchor="start">Figure 5 measures that bound over 20,000 pairs.</text>
+</svg>

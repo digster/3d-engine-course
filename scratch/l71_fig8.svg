@@ -1,0 +1,75 @@
+<svg viewBox="0 0 780 360" role="img" aria-labelledby="f71h-t f71h-d">
+  <title id="f71h-t">Two spellings of one formula</title>
+  <desc id="f71h-d">A log-log plot of relative error against the true angle, with a floor line marked at float resolution. The blue atan2 form sits on or just above the floor across the whole range. The red acos-of-the-trace form leaves the floor at ten degrees and climbs steeply, reaching a relative error of one — meaning it returned zero — at a true angle of 0.004 degrees.</desc>
+  <defs>
+    <marker id="e-i-f71h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f71h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f71h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f71h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f71h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="390.0" y="24" class="sm" text-anchor="middle">Relative error of two ways to measure the angle between two rotations</text>
+<text x="390.0" y="42" class="xs muted" text-anchor="middle">against a known turn; both axes logarithmic</text>
+<rect x="92.0" y="66.0" width="464.0" height="206.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="154.65772100607853" y1="66.0" x2="154.65772100607853" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="154.7" y="288.0" class="mono xs muted" text-anchor="middle">0.01°</text>
+<line x1="244.30065363177795" y1="66.0" x2="244.30065363177795" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="244.3" y="288.0" class="mono xs muted" text-anchor="middle">0.1°</text>
+<line x1="333.94358625747736" y1="66.0" x2="333.94358625747736" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="333.9" y="288.0" class="mono xs muted" text-anchor="middle">1°</text>
+<line x1="423.5865188831767" y1="66.0" x2="423.5865188831767" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="423.6" y="288.0" class="mono xs muted" text-anchor="middle">10°</text>
+<line x1="513.2294515088761" y1="66.0" x2="513.2294515088761" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="513.2" y="288.0" class="mono xs muted" text-anchor="middle">100°</text>
+<line x1="92.0" y1="66.0" x2="556.0" y2="66.0" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="70.0" class="mono xs muted" text-anchor="end">1</text>
+<line x1="92.0" y1="95.42857142857144" x2="556.0" y2="95.42857142857144" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="99.4" class="mono xs muted" text-anchor="end">1e-1</text>
+<line x1="92.0" y1="124.85714285714286" x2="556.0" y2="124.85714285714286" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="128.9" class="mono xs muted" text-anchor="end">1e-2</text>
+<line x1="92.0" y1="154.28571428571428" x2="556.0" y2="154.28571428571428" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="158.3" class="mono xs muted" text-anchor="end">1e-3</text>
+<line x1="92.0" y1="183.71428571428572" x2="556.0" y2="183.71428571428572" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="187.7" class="mono xs muted" text-anchor="end">1e-4</text>
+<line x1="92.0" y1="213.14285714285714" x2="556.0" y2="213.14285714285714" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="217.1" class="mono xs muted" text-anchor="end">1e-5</text>
+<line x1="92.0" y1="242.57142857142858" x2="556.0" y2="242.57142857142858" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="246.6" class="mono xs muted" text-anchor="end">1e-6</text>
+<line x1="92.0" y1="272.0" x2="556.0" y2="272.0" class="grid" stroke-width="0.8"/>
+<text x="84.0" y="276.0" class="mono xs muted" text-anchor="end">1e-7</text>
+<line x1="92.0" y1="272.0" x2="556.0" y2="272.0" stroke="#8f918a" stroke-width="1.6" fill="none"/>
+<text x="98.0" y="264.0" class="xs muted" text-anchor="start">at or below float resolution</text>
+<path d="M 118.99,180.97 L 217.32,215.92 L 276.73,225.88 L 333.94,236.97 L 423.59,272.00 L 509.13,272.00 L 533.89,272.00" fill="none" stroke="#5082e6" stroke-width="1.9"/>
+<circle cx="119.0" cy="181.0" r="3.2" fill="#5082e6"/>
+<circle cx="217.3" cy="215.9" r="3.2" fill="#5082e6"/>
+<circle cx="276.7" cy="225.9" r="3.2" fill="#5082e6"/>
+<circle cx="333.9" cy="237.0" r="3.2" fill="#5082e6"/>
+<circle cx="423.6" cy="272.0" r="3.4" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="509.1" cy="272.0" r="3.4" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="533.9" cy="272.0" r="3.4" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<path d="M 118.99,66.00 L 217.32,110.44 L 276.73,140.08 L 333.94,178.79 L 423.59,247.73 L 509.13,272.00 L 533.89,272.00" fill="none" stroke="#e05c5c" stroke-width="1.9"/>
+<circle cx="119.0" cy="66.0" r="3.2" fill="#e05c5c"/>
+<circle cx="217.3" cy="110.4" r="3.2" fill="#e05c5c"/>
+<circle cx="276.7" cy="140.1" r="3.2" fill="#e05c5c"/>
+<circle cx="333.9" cy="178.8" r="3.2" fill="#e05c5c"/>
+<circle cx="423.6" cy="247.7" r="3.2" fill="#e05c5c"/>
+<circle cx="509.1" cy="272.0" r="3.4" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<circle cx="533.9" cy="272.0" r="3.4" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<circle cx="119.0" cy="66.0" r="7" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<text x="132.98521161962086" y="100.0" class="xs t-bad" text-anchor="start">returns 0</text>
+<line x1="572.0" y1="78.0" x2="592.0" y2="78.0" stroke="#5082e6" stroke-width="1.9" fill="none"/>
+<text x="572.0" y="94.0" class="mono xs" text-anchor="start">atan2(|R−Rᵀ|/2,</text>
+<text x="572.0" y="107.0" class="mono xs" text-anchor="start">  (tr R − 1)/2)</text>
+<text x="572.0" y="123.0" class="xs t-ok" text-anchor="start">what we ship</text>
+<line x1="572.0" y1="152.0" x2="592.0" y2="152.0" stroke="#e05c5c" stroke-width="1.9" fill="none"/>
+<text x="572.0" y="168.0" class="mono xs" text-anchor="start">acos((tr R − 1)/2)</text>
+<text x="572.0" y="182.0" class="xs muted" text-anchor="start">every textbook</text>
+<text x="572.0" y="198.0" class="xs t-bad" text-anchor="start">100% wrong at</text>
+<text x="572.0" y="212.0" class="mono xs t-bad" text-anchor="start">0.004°</text>
+<circle cx="582.0" cy="238.0" r="3.4" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<text x="572.0" y="256.0" class="xs muted" text-anchor="start">hollow: measured</text>
+<text x="572.0" y="270.0" class="xs muted" text-anchor="start">as exactly zero</text>
+<text x="390.0" y="310.0" class="xs muted" text-anchor="middle">the angle actually turned</text>
+<text x="390.0" y="326" class="xs" text-anchor="middle">a 2,048-step path across 120° takes 0.059° steps, so the red curve is measuring nothing there</text>
+<text x="390.0" y="344" class="xs muted" text-anchor="middle">the two formulas are algebraically identical, and one of them cannot do the job</text>
+</svg>

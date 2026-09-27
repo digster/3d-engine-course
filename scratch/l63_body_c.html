@@ -1,0 +1,595 @@
+  <!-- =================================================================
+       9 — THE TEST FOUND A BUG IN float
+       ================================================================= -->
+  <h2 id="float"><span class="num">9</span>The Test Found a Bug in <code>float</code></h2>
+
+  <p>
+    §3 claimed that having a test whose expected answer is exactly <strong>1</strong> is worth more
+    than having a picture somebody likes. Here is that claim cashing out, on the first run.
+  </p>
+
+  <p>
+    The §A table, before any of the implementation below was written, looked like this — with
+    tolerances set from the double-precision probe, which had reported clean 1.0000000s:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_63 §A — the first run</span></figcaption>
+<pre><code class="lang-bash">      roughness  Blinn          Beckmann       GGX
+      0.10       1.0000002      0.9999710      0.9998170
+      0.25       0.9999999      0.9999998      0.9999998
+      …
+  [FAIL] ALL THREE distributions integrate to 1 — worst error 1.83e-04 (GGX at roughness 0.10)</code></pre>
+  </figure>
+
+  <p>
+    The obvious response is to loosen the tolerance: 1.8e−4 is small, the picture would be fine,
+    and the number is smallest exactly where the surface is smooth and nobody is looking closely.
+    <strong>Do not do this.</strong> The value of a test with a known answer is entirely in
+    believing the known answer, and a tolerance widened to admit a failure is a test deleted
+    slowly.
+  </p>
+
+  <p>
+    The right first question is <em>which</em> error this is. There are only two candidates —
+    the quadrature, or the arithmetic — and they are trivially distinguishable:
+  </p>
+
+  <div class="callout note">
+    <span class="label">Quadrature error shrinks when the grid refines. Arithmetic error does not.</span>
+    <p>Refining the integration 5× moved the answer from 0.9998169 to 0.9998154 — nothing.
+       Meanwhile the identical formula evaluated in <code>double</code>, on the identical grid,
+       gave 1.0000000.</p>
+    <p>Two runs, and the diagnosis is complete: <strong>the error is in <code>float</code></strong>,
+       and it is in the formula rather than in the integrator.</p>
+  </div>
+
+  <p>
+    Look again at GGX's denominator as every reference prints it:
+  </p>
+
+  <div class="eq">
+    \[ d = \cos^2\theta_h \left(\alpha^2 - 1\right) + 1 \]
+  </div>
+
+  <p>
+    Near the peak, <em>cos²θ<sub>h</sub></em> is very close to 1 and <em>(α²−1)</em> is very close
+    to −1. So this computes the difference of two numbers of size 1 that very nearly agree — which
+    is <strong>catastrophic cancellation</strong>, the classic way to destroy precision. A
+    <code>float</code> holds about seven significant digits, so a quantity of size 1 carries an
+    absolute error around 1e−7. At α = 0.01 the true value of <em>d</em> at the peak is
+    <strong>1e−4</strong>. A thousandth of it is noise before we start. Then it is
+    <em>squared</em>, which doubles the relative error.
+  </p>
+
+  <p>
+    The fix is one line of algebra and no extra operations:
+  </p>
+
+  <div class="eq">
+    \[ d = \cos^2\theta_h \left(\alpha^2 - 1\right) + 1
+         = \left(1 - \cos^2\theta_h\right) + \alpha^2\cos^2\theta_h
+         = (1 - c)(1 + c) + \alpha^2 c^2 \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the same expression, rearranged so the subtraction is (1 − c)(1 + c) rather than a
+    near-cancelling sum.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">Why <code>(1 − c)</code> is the win — Sterbenz's lemma</span>
+    <p>For any two floating-point numbers <em>a</em> and <em>b</em> with
+       <em>b</em>/2 ≤ <em>a</em> ≤ 2<em>b</em>, the subtraction <em>a</em> − <em>b</em> is computed
+       <strong>exactly</strong>, with no rounding at all, in any IEEE format. It is one of the very
+       few operations that is free of error, and it is free precisely in the case that looks most
+       dangerous.</p>
+    <p>Here <em>a</em> = 1 and <em>b</em> = <em>c</em>, so the condition is <em>c</em> ≥ 0.5 — which
+       covers the entire peak region, exactly where the old form was worst. The near-cancellation
+       is not avoided; it is made <em>exact</em>.</p>
+    <p>The habit worth keeping: when a formula subtracts two nearly-equal quantities, look for an
+       algebraically identical form that subtracts them in one operation instead of accumulating
+       them through several.</p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — what the rearrangement is worth</span>
+    <p>Both forms, integrated against the identity, in <code>float</code>:</p>
+    <p class="mono">α = 0.001 &nbsp; textbook 0.9891063 &nbsp; rearranged 1.0023035<br>
+                    α = 0.010 &nbsp; textbook 0.9998169 &nbsp; rearranged 1.0000004<br>
+                    α = 0.050 &nbsp; textbook 1.0000006 &nbsp; rearranged 1.0000000</p>
+    <p>At mirror-like roughness the textbook form <strong>loses 1.1% of the model's energy to
+       rounding alone</strong>. At α = 0.01 the rearrangement is a <strong>450× improvement</strong>
+       in the error. Above α ≈ 0.05 there is nothing in it, which is why this is invisible in
+       ordinary scenes and shows up on chrome and still water.</p>
+    <p><code>verify_63</code> §A asserts the comparison directly — computing the textbook form
+       inline and requiring ours to beat it by 4× — because the rearranged version looks like a
+       pointless shuffle, and the next person to tidy it back should be told by a failing test
+       rather than by a code review.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">10</span>Implementation</h2>
+
+  <p>
+    One new header, <code>engine/gfx/microfacet.hpp</code>, header-only like
+    <code>light.hpp</code> — so the public header count goes 56 → 57 and
+    <code>engine/CMakeLists.txt</code> does not move.
+  </p>
+
+  <h3>10.1 Roughness, α, and a remap that is a choice</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float alpha_from_roughness(float roughness)
+{
+    const float r = std::clamp(roughness, 0.0f, 1.0f);
+    return std::max(k_min_alpha, r * r);
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>α = roughness²</code> is <strong>Disney's remap, and it is a convention rather than
+    physics.</strong> The distributions are written in α, which is the RMS slope — a real quantity
+    you could measure. But α is a terrible thing to put on a slider: almost all the visible change
+    happens in its bottom fifth, so four fifths of the travel does nothing. Squaring a [0,1]
+    parameter pushes resolution toward the smooth end where the eye is.
+  </p>
+
+  <p>
+    That is the same argument Lesson 6.1 made about sRGB spending codes where the eye is, arriving
+    in a completely different place — and it is worth flagging that a roughness value copied from
+    a renderer that squares differently <em>will not match</em>. This is a real interoperability
+    trap and it is entirely conventional.
+  </p>
+
+  <h3>10.2 The floor on α, which is a lie with a physical reading</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">inline constexpr float k_min_alpha = 1.0e-3f;</code></pre>
+  </figure>
+
+  <p>
+    A perfectly smooth surface is not a small number — it is a <strong>delta function</strong>.
+    Every facet faces exactly <strong>n</strong>, so <em>D</em> is infinite at
+    <strong>h</strong> = <strong>n</strong> and zero everywhere else. That is correct physics and
+    unrepresentable: the denominator goes to zero, the answer arrives as <code>inf</code>, and the
+    first multiplication by a zero turns it into <code>NaN</code>.
+  </p>
+
+  <p>
+    Clamping is standard, and the honest framing is that it is a lie which happens to be closer to
+    the truth than the alternative: no real surface is smooth at the scale of a light wavelength,
+    so a floor on roughness is more physical than zero is. At 1e−3 the peak of GGX is
+    <code>1/(πα²)</code> = 318,310 — large, and finite.
+  </p>
+
+  <h3>10.3 The three distributions behind one enum</h3>
+
+  <p>
+    <code>ndf_model</code> is <strong>pipeline state, not a material parameter</strong> — the same
+    call Lesson 3.7 made for <code>specular_model</code>, for the same reason. A real engine bakes
+    one choice into a shader; it is a runtime knob here so the three can be compared and the
+    differences <em>measured</em> rather than asserted, which is what §5 and §6 did with it.
+  </p>
+
+  <p>
+    Blinn stays in, and not out of sentiment: showing that <code>cos<sup>s</sup></code> satisfies
+    the same identity as the other two is the whole argument of §4, and an argument you can run is
+    worth more than one you can read.
+  </p>
+
+  <h3>10.4 Two geometry terms, because the choice was measurable</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp — new</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float smith_g(float n_dot_l, float n_dot_v, float alpha)
+{
+    if (n_dot_l &lt;= 0.0f || n_dot_v &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float a2 = a * a;
+    const float lv = n_dot_l * std::sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
+    const float ll = n_dot_v * std::sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
+    return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}</code></pre>
+  </figure>
+
+  <p>
+    The height-correlated form is the default and <code>smith_g_separable</code> is kept beside it,
+    named for its assumption. Keeping both is only worth the lines because §7 <em>measured</em> the
+    gap at 1.715× — without that number the second function would be ceremony, and with it the
+    default is a decision rather than a preference.
+  </p>
+
+  <h3>10.5 Nothing is wired in, and that is the design</h3>
+
+  <p>
+    <code>shade()</code> is untouched. <code>scene.frag.hlsl</code> is untouched. The only edit
+    outside the new header is a comment in <code>light.hpp</code> pointing at it and recording the
+    17× measurement next to the constant it is about.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the parts ship before the assembly</span>
+    <p>A microfacet BRDF is <em>D</em>, <em>G</em> and <em>F</em> over a denominator, and Fresnel
+       is the term that couples the diffuse and specular lobes — which is the thing §1's 1.1386
+       actually needs. Shipping <em>D</em> and <em>G</em> live would leave the renderer running a
+       model that is neither the old one nor the new one for the length of a lesson: worse
+       pictures, and a golden image that has to be re-baselined twice.</p>
+    <p>So 6.3 builds the parts and tests each one against a property it must satisfy on its own.
+       6.4 assembles, derives the <em>4(n·l)(n·v)</em> denominator, adds Fresnel, and replaces
+       <code>shade()</code>'s specular half. <strong>The golden survives a fourteenth lesson here
+       and will certainly not survive 6.4</strong> — which is exactly the right place for it to
+       break, because that is the lesson that changes the picture on purpose.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — WHAT THIS LESSON DOES NOT DO
+       ================================================================= -->
+  <h2 id="notdone"><span class="num">11</span>What This Lesson Does Not Do</h2>
+
+  <p>
+    <strong>It does not compensate for multiple scattering.</strong> §8 measured the deficit at
+    69% for a fully rough surface, and the standard fixes — Kulla–Conty's tabulated energy
+    compensation, or Turquin's cheaper analytic fit — both work by measuring <em>R</em>(v) offline
+    and adding back a lobe carrying the missing energy. Both are a lesson's worth of work and both
+    need the assembled BRDF from 6.4 to compensate. Named here so the darkness of rough metal is a
+    known limitation rather than a mystery.
+  </p>
+
+  <p>
+    <strong>It does not do anisotropy.</strong> Brushed metal, hair and vinyl have slope
+    distributions that are wider in one surface direction than the other, which needs two α values
+    and a tangent frame to orient them. The tangent frame arrives in Lesson 6.7 for normal mapping;
+    anisotropic GGX is a natural exercise once it exists.
+  </p>
+
+  <p>
+    <strong>It does not use the Smith height-correlated <em>visibility</em> form.</strong> Real
+    shaders fold the <code>4(n·l)(n·v)</code> denominator into <em>G</em> and evaluate
+    <em>V = G/(4(n·l)(n·v))</em> as one expression, which avoids a division by two numbers that
+    both go to zero at grazing angles. That is an assembly concern, so it is 6.4's.
+  </p>
+
+  <p>
+    <strong>It does not model the facets' arrangement.</strong> The distribution says how many
+    face each way and nothing about <em>where</em> they are, which is why this model produces a
+    smooth highlight and real snow, car paint and the sea produce glints. Glinty appearance models
+    are an active research area and well outside this course.
+  </p>
+
+  <!-- =================================================================
+       12 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">12</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/microfacet.hpp</code></td><td>new</td>
+          <td>the roughness remap, three NDFs, and two forms of the Smith geometry term</td></tr>
+      <tr><td><code>engine/include/engine/gfx/light.hpp</code></td><td>modified</td>
+          <td>a pointer to the new header, and the 17× measurement recorded beside the constant it
+              is about</td></tr>
+      <tr><td><code>scratch/verify_63.cpp</code></td><td>new</td>
+          <td>27 checks in seven sections, including 6.2's hemisphere integrator reused character
+              for character</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/microfacet.hpp@@
+
+  @@LISTING:scratch/verify_63.cpp@@
+
+  <!-- =================================================================
+       13 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">13</span>Build &amp; Run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+
+sh scratch/build_verify_63.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_63.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <h3>13.1 What you should see</h3>
+
+  <p>
+    The scene, unchanged — nothing is wired in. What is new is the harness, and these are the
+    lines that carry the lesson:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">sh scratch/build_verify_63.sh</span></figcaption>
+<pre><code class="lang-bash">  [PASS] ALL THREE distributions integrate to 1 against cos(theta_h) — worst error
+         3.74e-07 (GGX at roughness 0.10)
+  [PASS] at mirror roughness the TEXTBOOK denominator integrates to 0.9891063 — it
+         loses 1.1% of the model's energy to rounding — while ndf()'s rearranged
+         form gives 1.0023035
+  [PASS] so at the demo's default shininess of 32 the engine's highlight is 17x
+         DIMMER than a normalised distribution
+  [PASS] …and 45 degrees off the peak GGX is 456x Beckmann
+  [PASS] the two forms agree to four decimals on smooth surfaces and disagree by
+         1.715x at alpha 0.8 with both directions at 80 degrees
+  [PASS] …but a fully rough one returns only 0.3069. THAT IS NOT A BUG
+
+27 checks, 0 failures</code></pre>
+  </figure>
+
+  <p>
+    <code>verify_63</code> takes a few seconds in a debug build. §A integrates at 400,000 samples
+    and §E fits an exponent on a scan — both deliberate, because §A's whole claim is that the
+    answer is 1 to five decimals and a cheap grid cannot say that.
+  </p>
+
+  <!-- =================================================================
+       14 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">14</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The highlight vanishes as the surface gets smooth</span>
+    <p><strong>Symptom:</strong> lowering roughness makes the highlight tighter and then it blinks
+       out entirely, or the whole surface goes black or white.</p>
+    <p><strong>Cause:</strong> α reached zero. <em>D</em> divides by α², so you get
+       <code>inf</code>, and the first multiplication by a zero elsewhere turns it into
+       <code>NaN</code> — which then propagates through every blend it touches.</p>
+    <p><strong>Fix:</strong> the <code>k_min_alpha</code> floor. And when hunting it, remember that
+       <code>NaN</code> compares false to everything, so <code>if (x &gt; 0)</code> does
+       <em>not</em> catch it — Lesson 3.10 hit the same shape of bug and the rule there was to
+       write the test as <code>!(x &lt;= 0)</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your NDF integrates to 2, or 0.5, or 6.28</span>
+    <p><strong>Symptom:</strong> the normalisation test fails by a clean-looking factor.</p>
+    <p><strong>Cause and fix:</strong> the factor names it, exactly as in Lesson 6.2.
+       <strong>2.0</strong> means the <code>cos θ<sub>h</sub></code> weight is missing.
+       <strong>0.5</strong> means the <code>sin θ</code> in <code>dω</code> is.
+       <strong>2π</strong> means you integrated θ and forgot φ.</p>
+    <p>Establish the integrator first, on something with a known answer: integrate the constant 1
+       and check you get 2π, then cos θ and check you get π. Two lines, and they separate the
+       instrument from the subject.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A failure that will not shrink</span>
+    <p><strong>Symptom:</strong> a numerical test is off by a small amount and refining the grid
+       does not help.</p>
+    <p><strong>Cause:</strong> it is not a quadrature error. Quadrature error shrinks with the
+       grid, by definition; anything that does not is arithmetic.</p>
+    <p><strong>Fix:</strong> run the identical formula in <code>double</code> on the identical
+       grid. If <code>double</code> is clean, the bug is in <code>float</code> and it is almost
+       always cancellation — look for a subtraction of two nearly-equal quantities and rearrange
+       it. This is §9's entire method and it took two runs.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Materials imported from another engine look wrong at the same numbers</span>
+    <p><strong>Symptom:</strong> roughness 0.4 in one renderer does not look like roughness 0.4 in
+       yours.</p>
+    <p><strong>Cause:</strong> the roughness→α remap. Squaring is a convention, not physics, and
+       not everyone squares. Some tools author α directly; some square twice.</p>
+    <p><strong>Fix:</strong> convert at the import edge and write down which convention you store —
+       exactly the two-conversions-at-the-edges discipline Lesson 6.1 arrived at for colour, and
+       for the same reason.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Rough metal is too dark and turning the light up does not fix it</span>
+    <p><strong>Symptom:</strong> rough metallic surfaces look dull and lifeless; raising the light
+       blows out the smooth parts of the scene before the rough parts look right.</p>
+    <p><strong>Cause:</strong> not a bug — §8's single-scattering deficit, which is 69% at full
+       roughness. It is a <em>fraction</em> of the arriving light, so a brighter light scales the
+       problem rather than fixing it.</p>
+    <p><strong>Fix:</strong> multiple-scattering compensation (§11), or accept it and know what you
+       are accepting. Recognising the shape of the error — proportional, worse with roughness,
+       worst on metal — is most of the value here.</p>
+  </div>
+
+  <!-- =================================================================
+       15 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">15</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>15.1 — Normalise the old model, and predict the picture first.</strong> Change
+         <code>specular_brdf</code> in <code>light.hpp</code> to use <code>(s+2)/2π</code> instead
+         of <code>1/π</code>, and <em>before</em> rebuilding, write down what you expect to see and
+         what you would have to do to the demo's materials to compensate.</p>
+      <details><summary>Hint</summary>
+         <p>17× at shininess 32, and §8's energy test now applies to the result. What does 17×
+            a specular of 0.30 do to Lesson 6.2's 1.1386?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The highlights blow out completely — and the honest reading is not "the constant is
+            wrong" but that the <em>material</em> was authored against the old constant, so it is
+            now a material with a specular reflectance of 5.1, which is not a surface. Divide the
+            demo's specular colours by 17 and the picture comes back nearly unchanged, which is the
+            proof that the parameter had absorbed the error. Then run 6.2's energy test: a white
+            albedo with the corrected specular is still over 1, because normalising
+            <em>D</em> does not supply the coupling. That is 6.4's job, and this exercise is the
+            cleanest way to feel why a normalising constant was never going to be enough.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.2 — Break the stable denominator on purpose.</strong> Replace
+         <code>ndf()</code>'s GGX denominator with the textbook <code>c2 * (a2 - 1) + 1</code>,
+         watch §A fail, and then find the roughness at which the failure disappears.</p>
+      <details><summary>Hint</summary>
+         <p>Somewhere between α = 0.02 and α = 0.05. The relevant comparison is the true value of
+            <code>d</code> at the peak — which is α² — against a <code>float</code>'s absolute
+            resolution near 1, which is about 6e−8.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It becomes invisible once α² is comfortably above float's ~1e−7 resolution at 1, so
+            around α ≈ 0.05, which is roughness 0.22. Above that the cancellation still happens and
+            simply does not matter. The transferable point is that the bug is <em>bounded by the
+            data</em>: it lives entirely in the smooth end, which is why it survives in production
+            renderers and shows up on chrome and still water rather than everywhere.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.3 — Test your own distribution.</strong> Implement the original Phong lobe as
+         an NDF — <code>cos<sup>s</sup></code> about the <em>mirror</em> direction rather than the
+         halfway vector — and put it through §A's identity.</p>
+      <details><summary>Hint</summary>
+         <p>The identity is an integral over microfacet <em>normals</em>. What is the mirror
+            direction the normal of?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>It is not an NDF at all, and the exercise is worth doing to find out <em>why</em> rather
+            than to get a number. A distribution of microfacet normals is a function of
+            <strong>h</strong>, and Phong's lobe is a function of the angle between the mirror
+            direction and the eye — a quantity that depends on where you are standing, so it cannot
+            be a property of the surface. That is a much sharper statement of Phong's defect than
+            Lesson 3.7 could make, and it explains 3.7's measured hard cut-off: the model was never
+            describing a surface, so there was nothing to stop it describing an impossible one.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.4 — Anisotropy.</strong> Extend GGX to two roughness values, α<sub>x</sub> and
+         α<sub>y</sub>, along two tangent directions, and check that the anisotropic form still
+         integrates to 1.</p>
+      <details><summary>Hint</summary>
+         <p>The isotropic denominator is a function of <code>cos²θ<sub>h</sub></code> and
+            <code>sin²θ<sub>h</sub></code>. Anisotropy splits the sine term into its two tangent
+            components, each divided by its own α. You will need <strong>h</strong> in tangent
+            space, which the engine does not have until Lesson 6.7 — so build the test on a
+            synthetic frame.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The normalisation becomes <code>1/(π α_x α_y …)</code> and the identity still holds,
+            which is the point of checking: an anisotropic distribution is still a distribution.
+            Setting α<sub>x</sub> = α<sub>y</sub> must reproduce the isotropic form exactly —
+            assert that, because it is the cheapest possible regression test and it catches most
+            of the ways this goes wrong.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>15.5 — Measure the deficit properly, and make a table.</strong> §8 sampled
+         <em>R</em>(v) at two view angles and five roughnesses. Build the full 2-D table that a
+         multiple-scattering compensation term needs — <em>R</em> as a function of roughness and
+         <code>n·v</code> — and look at its shape.</p>
+      <details><summary>Hint</summary>
+         <p>32×32 is plenty. Watch the cost: each cell is its own hemisphere integral, so this is
+            a few million evaluations and belongs in a one-off program rather than in
+            <code>verify_63</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The surface is smooth and monotone in roughness, and — the thing worth noticing — it is
+            <em>not</em> monotone in view angle at high roughness: §8 already shows 0.3069 at 0° but
+            0.5906 at 75°. That is why compensation terms are tabulated in two dimensions rather
+            than fitted to roughness alone. Having built the table you have most of Kulla–Conty;
+            the remaining step is adding back a lobe carrying <code>1 − R</code>, which needs
+            6.4's assembled BRDF to attach to.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       16 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">16</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine now has a story about what a surface is, and it is a story that can be checked. A
+    surface is a landscape of perfect mirrors; the shape of a highlight is a histogram of their
+    slopes; and that histogram is a <em>distribution</em>, so it must satisfy
+  </p>
+
+  <div class="eq">
+    \[ \int_{\Omega} D(\mathbf{h}) \cos\theta_h \, d\omega = 1 \]
+  </div>
+
+  <p>
+    which is the first equation in this shading arc with a right-hand side you can hold a model to.
+  </p>
+
+  <p>
+    What the engine gained: <code>gfx/microfacet.hpp</code>, with three distributions, two forms of
+    the Smith geometry term, and the roughness remap — 56 → 57 public headers, nothing wired in.
+    What it learned about itself: <strong>Blinn-Phong was a microfacet distribution all along,
+    missing only its constant</strong>, and the constant this engine ships is wrong by exactly
+    <code>(s+2)/2</code> — <strong>17×</strong> at the default material, silently absorbed by every
+    specular colour an artist ever tuned.
+  </p>
+
+  <p>
+    And three numbers worth carrying forward. GGX beats Beckmann by <strong>456×</strong> in the
+    tail at 45°, which is the entire reason it won. The height-correlated Smith term differs from
+    the separable one by <strong>1.715×</strong> at grazing on rough surfaces, which is why "either
+    is fine" is not true. And single-scattering microfacet theory <strong>loses 69%</strong> of the
+    light at full roughness, which is why rough metal renders dark in every engine that has not
+    bought it back.
+  </p>
+
+  <p>
+    The test also found a bug that has nothing to do with microfacets: the textbook GGX denominator
+    loses <strong>1.1%</strong> of the model's energy to catastrophic cancellation in
+    <code>float</code>, and one line of algebra plus Sterbenz's lemma removes it. That is what a
+    test whose expected answer is a round number is <em>for</em>.
+  </p>
+
+  <p>
+    <strong>Next, Lesson 6.4: Cook–Torrance, derived.</strong> The parts are built and each is
+    tested against a property it must satisfy alone. 6.4 assembles them — which means deriving the
+    <em>4(n·l)(n·v)</em> denominator rather than quoting it, and adding the term this lesson
+    deliberately left out. <strong>Fresnel is the coupling.</strong> It says what fraction of the
+    arriving light bounces off the interface, and only the remainder — <em>1 − F</em> — is left to
+    go into the surface and scatter back out diffusely. The two lobes stop being independent, and
+    §1's 1.1386 stops being possible. That is the centrepiece of the module, and everything in this
+    lesson is the apparatus it needs to make its argument in numbers rather than adjectives.
+  </p>
+
+  <!-- =================================================================
+       17 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">17</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Walter, Marschner, Li &amp; Torrance, "Microfacet Models for Refraction through
+        Rough Surfaces" (EGSR 2007).</strong> The paper that introduced GGX to graphics and derived
+        the Smith masking function for it. Appendix A is the source of the exact
+        <em>G</em><sub>1</sub> this lesson implements. Readable, and short.</li>
+    <li><strong>Heitz, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"
+        (JCGT 2014).</strong> The definitive treatment of §7, including the height-correlated form
+        and a careful account of what the separable one assumes. Also the clearest available
+        explanation of why <em>D</em> must be normalised the way it is.</li>
+    <li><strong>Cook &amp; Torrance, "A Reflectance Model for Computer Graphics" (SIGGRAPH
+        1981).</strong> The original, and Lesson 6.4's subject. Worth reading now for how much of
+        the framework was already complete forty years ago.</li>
+    <li><strong>Trowbridge &amp; Reitz (1975).</strong> The distribution, thirty-two years before
+        graphics noticed it — derived by fitting measured surfaces rather than from optics, which
+        is why it has the better tail.</li>
+    <li><strong>Filament's documentation, §4.4 "Standard model"</strong>
+        (google.github.io/filament). The most careful published account of the implementation
+        choices — including the roughness remap and the visibility form 6.4 will use.</li>
+    <li><strong>Kulla &amp; Conty, "Revisiting Physically Based Shading at Imageworks" (SIGGRAPH
+        2017).</strong> Where §8's 69% deficit gets bought back, and the reference for the
+        compensation term §11 declines to build.</li>
+    <li><strong>Goldberg, "What Every Computer Scientist Should Know About Floating-Point
+        Arithmetic" (1991).</strong> For §9. Sterbenz's lemma and catastrophic cancellation are in
+        §2; it is thirty years old and has not dated at all.</li>
+  </ul>

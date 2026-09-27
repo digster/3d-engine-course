@@ -1,0 +1,526 @@
+  <h2 id="listings">11. Complete code listings</h2>
+
+  <p>
+    Every file this lesson creates or changes, in full. The manifest first:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>engine/include/engine/math/rotation.hpp</code></td>
+        <td>new</td>
+        <td>What is true of a rotation whatever you store it as. Today: the metric,
+            moved out of <code>euler.hpp</code> as that file's own doc comment asked.</td>
+      </tr>
+      <tr>
+        <td><code>engine/include/engine/math/axis_angle.hpp</code></td>
+        <td>new</td>
+        <td>The representation. Rodrigues forward, the extraction with both degenerate ends, the
+            exponential and logarithm maps, and <code>rotation_slerp</code>.</td>
+      </tr>
+      <tr>
+        <td><code>engine/include/engine/math/euler.hpp</code></td>
+        <td>modified</td>
+        <td>Gives up the metric it never owned; includes <code>rotation.hpp</code> so no call site
+            changes.</td>
+      </tr>
+      <tr>
+        <td><code>engine/include/engine/engine.hpp</code></td>
+        <td>modified</td>
+        <td>Two new public headers listed. The configure-time lint from 5.12 refused to configure
+            until they were.</td>
+      </tr>
+      <tr>
+        <td><code>demos/gimbal/main.cpp</code></td>
+        <td>modified</td>
+        <td><kbd>A</kbd> poses by Rodrigues and prints the disagreement; <kbd>B</kbd> runs the two
+            blends side by side with the geodesic's fixed axis drawn.</td>
+      </tr>
+      <tr>
+        <td><code>scratch/verify_72.cpp</code></td>
+        <td>new</td>
+        <td>Forty-two checks, eleven of them controls. Every number on this page.</td>
+      </tr>
+      <tr>
+        <td><code>scratch/build_verify_72.sh</code></td>
+        <td>new</td>
+        <td>Compiles and runs the harness. Links nothing.</td>
+      </tr>
+      <tr>
+        <td><code>scratch/golden_72.cpp</code></td>
+        <td>new</td>
+        <td>The reference render, checked for the sixth lesson running — and the structural
+            argument, computed this time rather than grepped.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/rotation.hpp@@
+  @@LISTING:engine/include/engine/math/axis_angle.hpp@@
+  @@LISTING:engine/include/engine/math/euler.hpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:demos/gimbal/main.cpp@@
+  @@LISTING:scratch/verify_72.cpp@@
+  @@LISTING:scratch/build_verify_72.sh@@
+  @@LISTING:scratch/golden_72.cpp@@
+
+  <h2 id="run">12. Build &amp; run</h2>
+
+  <p>
+    Nothing new to configure — both new files are headers, and both are already listed in
+    <code>engine/engine.hpp</code> (the configure-time lint would have refused otherwise).
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+<pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --target gimbal -j8
+sh scratch/build_verify_72.sh</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC, Developer PowerShell)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo --target gimbal
+cl /std:c++20 /W4 /O2 /EHsc /I engine\include scratch\verify_72.cpp /Fe:build\verify_72.exe
+build\verify_72.exe</code></pre>
+  </figure>
+
+  <p>
+    The harness links nothing at all — no <code>libengine.a</code>, no SDL — because everything
+    this lesson adds is <code>inline</code> in a header. That is the clearest possible statement of
+    what axis-angle costs a program that uses it: a header, and rather more trigonometry than you
+    would like.
+  </p>
+
+  <h3 id="run-expect">12.1 What you should see</h3>
+
+  <p>
+    The harness ends with:
+  </p>
+
+<pre><code class="lang-text">42/42 checks passed</code></pre>
+
+  <p>
+    Then the demo. <code>./build/demos/gimbal</code> opens with the three rings of Lesson 7.1 and
+    one addition: a <strong>teal line through the fuselage</strong>, which is the axis of the
+    single turn the current pose performs. Drive the knobs and watch it move; the panel prints the
+    axis and angle beside it.
+  </p>
+
+  <ul>
+    <li>
+      <strong>Press <kbd>A</kbd></strong>. The craft is now posed by
+      <code>rotation_from_axis_angle</code> on the extracted turn rather than by
+      <code>rotation_from_euler</code> on the three angles. <em>Nothing on screen moves.</em> That
+      is the point, and the panel says by how much it did not move: <code>Euler product vs
+      Rodrigues: 0.000003 deg</code>. Two completely different constructions of one orientation,
+      agreeing to three millionths of a degree.
+    </li>
+    <li>
+      <strong>Set the pitch to exactly 180°</strong> using the slider — or run
+      <code>./build/demos/gimbal --pose 0 180 0 --shot out.ppm</code> — and watch the route change
+      to <code>reversal</code> and the axis come back as <code>(−1, 0, 0)</code> where you might
+      have expected <code>(+1, 0, 0)</code>. Both are right (§8.6).
+    </li>
+    <li>
+      <strong>Press <kbd>B</kbd></strong>. The rings vanish and two wireframe craft set off from
+      the same pose toward the same pose, one interpolating three angles and one turning about the
+      single axis. Watch the teal line: <em>the blue craft rotates about it and it never moves.</em>
+      The panel prints <code>204.29°</code> against <code>179.05°</code> as they go.
+    </li>
+  </ul>
+
+  <p>
+    Headless, for a reproducible still:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the two figures on this page, regenerated</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+<pre><code class="lang-bash">./build/demos/gimbal --pose 25 40 -15 --shot scratch/l72_axis_rings.ppm
+./build/demos/gimbal --pose 25 40 -15 --no-rings --shot scratch/l72_axis.ppm
+./build/demos/gimbal --blend 0.35 --shot scratch/l72_blend_0.35.ppm
+./build/demos/gimbal --blend 1.00 --shot scratch/l72_blend_1.00.ppm</code></pre>
+  </figure>
+
+  <p>
+    Each prints a two-line receipt, and the second line is the one that matters:
+  </p>
+
+<pre><code class="lang-text">gimbal: single turn 51.7083 deg about (+0.69828, +0.56235, -0.44290), route 0,
+        blend t 0.000, Euler-vs-Rodrigues 0.000003 deg</code></pre>
+
+  <p>
+    Two runs with the same arguments print the same numbers or the picture is not reproducible,
+    whatever it looks like. And <strong>check the exit status as well as the file</strong>: Lesson
+    7.1 had this demo write a correct PPM, print its receipt, and exit 139.
+  </p>
+
+  <h3 id="run-golden">12.2 The golden, and why it is blind to this lesson again</h3>
+
+  <p>
+    <code>scratch/golden_72.cpp</code> re-renders Lesson 5.2's reference scene and compares it byte
+    for byte. It is byte-identical, for the sixth lesson running, and it could not have been
+    anything else — but the argument for that is worth more than the result, and this lesson had to
+    improve it.
+  </p>
+
+  <p>
+    Lesson 7.1's rule was <em>grep the include path, not the name</em>, after
+    <code>grep -rn euler demos/common</code> turned up the Euler characteristic from 3.5's mesh
+    validator. That rule is not enough here. Grepping the path
+    <code>"math/euler.hpp"</code> reports <code>math/transform.hpp</code> and
+    <code>math/rotation.hpp</code> as includers, and <strong>neither one includes it</strong> —
+    both merely mention the path inside a doc comment. A path in prose is indistinguishable from a
+    path in a directive to a substring search.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Compute the closure instead</span>
+    <p>
+      Start from the six engine headers <code>demos/common/demo_scene.cpp</code> actually includes
+      and follow every <code>^#include &lt;engine/...&gt;</code> transitively. The math headers
+      reachable are <code>mat3</code>, <code>mat4</code>, <code>transform</code>, <code>vec2</code>,
+      <code>vec3</code>, <code>vec4</code> — and nothing else. All three files this lesson touched
+      in <code>math/</code> are <strong>unreachable</strong>, by construction rather than by
+      assertion.
+    </p>
+  </div>
+
+  <p>
+    One edit did deserve a second look. Unlike 7.1, this lesson <em>removed</em> code from an
+    existing header — the metric left <code>euler.hpp</code> — and that is exactly the shape of
+    change that breaks a distant translation unit by taking a declaration away from it. It cannot
+    here, for two independent reasons: <code>euler.hpp</code> includes <code>rotation.hpp</code>,
+    so every name it used to declare is still visible through it, and <code>euler.hpp</code> is not
+    in the closure anyway. Two reasons, because one of them being wrong is how this class of
+    mistake ships.
+  </p>
+
+  <h2 id="pitfalls">13. Common pitfalls &amp; debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Objects shear instead of rotating</span>
+    <p>
+      <strong>Symptom.</strong> Meshes stretch and skew as they turn; normals stop being unit;
+      lighting crawls. <strong>Cause.</strong> A non-unit axis passed to
+      <code>rotation_from_axis_angle</code> — almost always the raw output of a <code>cross</code>.
+      Rodrigues scales the in-plane part by <code>|n|</code> and the along-axis part by
+      <code>|n|²</code>, so the result is not a rotation at all. <strong>Fix.</strong> Normalise at
+      the call site, or notice that what you are holding is a rotation vector and call
+      <code>rotation_from_rotation_vector</code>, which has no unit requirement to violate.
+      <strong>Confirm it.</strong> <code>max|RᵀR − I|</code> should be under 1e-6; if it is 0.3 you
+      have found this.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">An object flips to a wild orientation at one specific pose</span>
+    <p>
+      <strong>Symptom.</strong> A blend or an IK solver is stable everywhere except near one
+      configuration, where the object snaps through a large angle and back.
+      <strong>Cause.</strong> Code comparing two recovered <em>axes</em> near a half-turn, where the
+      sign is genuinely free (§8.6). Two extractions of nearly the same rotation can return
+      <code>n</code> and <code>−n</code>. <strong>Fix.</strong> Never compare axes. Compare
+      rotations, with <code>angle_between_rotations</code>, which does not care.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A NaN appears somewhere unrelated, three systems downstream</span>
+    <p>
+      <strong>Symptom.</strong> An object vanishes; a bounding box becomes NaN; the renderer culls
+      everything. <strong>Cause.</strong> An extraction that normalised a zero-length skew vector
+      and returned a zero axis, which built a degenerate matrix that has been propagating quietly
+      ever since. <strong>Fix.</strong> It is why <code>axis_route::no_axis</code> exists — the
+      engine returns a valid placeholder unit axis rather than a zero one. If you write your own
+      extraction, this is the branch to write first, not last. <strong>Confirm it.</strong> Print
+      <code>sin_angle</code> and <code>route</code> at the site that produced the value.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Round-tripping through axis-angle in a loop drifts</span>
+    <p>
+      <strong>Symptom.</strong> An orientation stored as <code>(axis, angle)</code>, converted to a
+      matrix each frame and back, wanders over minutes. <strong>Cause.</strong> Each round trip
+      costs about <code>ε / (2 cos(θ/2))</code> of orientation, which is fine once and accumulates
+      forever. <strong>Fix.</strong> The same rule Lesson 7.1 gave for Euler angles: do not
+      round-trip through a representation in a loop. Pick one storage format and convert at the
+      edges. Lesson 7.4's quaternion is the one this engine will pick.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A micro-benchmark reports an impossible number</span>
+    <p>
+      <strong>Symptom.</strong> A 3×3 matrix product times at 0.41 ns — about one cycle for 45
+      floating-point operations. <strong>Cause.</strong> Two different eliminations, and §10.1 hit
+      both. Reading one element of the returned matrix let the compiler compute only that element;
+      and feeding the loop a fixed input array let it compute all 256 answers once and replay them
+      across every repetition. <strong>Fix.</strong> Consume the whole result (the harness sums all
+      nine entries), and make each repetition genuinely different work by indexing with the
+      repetition counter. <strong>Confirm it.</strong> Divide the reported time by the operation
+      count and ask whether the answer is physically possible.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A structural argument built on grep is wrong</span>
+    <p>
+      <strong>Symptom.</strong> "Nothing the renderer compiles includes this file" — asserted from
+      a grep, and false. <strong>Cause.</strong> <code>grep -rln "math/euler.hpp"</code> matches the
+      path wherever it appears, including inside the doc comments that this codebase is full of.
+      Two of the four hits for that string are prose. <strong>Fix.</strong> Match
+      <code>^#include &lt;…&gt;</code>, and better, walk the graph transitively from the actual
+      roots — §12.2 does it in fifteen lines of Python. A one-level grep also misses a header
+      reached through two others, which is the more dangerous error of the two.
+    </p>
+  </div>
+
+  <h2 id="exercises">14. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Rotate a vector without building a matrix, and find out when it pays.</strong>
+        <code>rotation_from_axis_angle</code> amortises two trig calls across every vector you
+        rotate; <code>rotate_about_axis</code> pays them per vector. Write a benchmark that rotates
+        <em>N</em> vectors by one turn, both ways, and find the <em>N</em> at which building the
+        matrix wins. Then predict the answer before you run it, from §7.4's numbers alone.
+      </p>
+      <details>
+        <summary>Hint</summary>
+        <p>
+          §7.4 says one <code>sin</code> plus one <code>cos</code> is about 2.1 ns and the whole
+          matrix is about 5.5 ns. A matrix–vector product is 9 multiplies and 6 adds. Read every
+          lesson of §10.1's pitfall before trusting your own timing loop — consume the whole result
+          and vary the input per repetition, or you will measure the compiler.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Move the threshold and watch it cost something.</strong> Set
+        <code>k_axis_angle_reversal_angle</code> to 179° (effectively disabling the symmetric
+        route) and re-run <code>verify_72</code>. Which checks fail, and by how much? Then set it
+        to 30° and answer the same question. Report the two failure modes in one sentence each —
+        they are not the same failure.
+      </p>
+      <details>
+        <summary>Solution sketch</summary>
+        <p>
+          At 179° the skew route is used up to a half-turn, where §8.4's table says its worst axis
+          error is 6.9e-03° — about 570× worse than the alternative — so the round-trip check
+          degrades at the top of its range while everything else passes. At 30° the symmetric route
+          is used from 30° upward, where it divides by a small <code>1 − cos θ</code>; §8.4 measures
+          1.19e-04° there. <strong>Neither setting produces a catastrophe</strong>, and that is the
+          honest finding: both routes are usable over a wide middle, which is why the band in
+          Figure 6 is wide. The threshold is a choice about the tails.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Give the engine <code>mat3</code>'s missing operators, and write Rodrigues the way
+        the books do.</strong> Add <code>operator+</code>, <code>operator-</code>, scalar multiply,
+        and <code>outer_product(vec3, vec3)</code> to <code>mat3.hpp</code>, plus
+        <code>skew_matrix(vec3)</code> for <code>[n]ₓ</code>. Then write
+        <code>rotation_from_axis_angle</code> as <code>I·cos θ + sin θ·[n]ₓ + (1 − cos θ)·n nᵀ</code>
+        and check it against the shipped version with the test in §B.2, which already exists.
+        Finally: measure it, and decide whether you would ship it.
+      </p>
+      <details>
+        <summary>Hint</summary>
+        <p>
+          Module 8 needs all five of those for the inertia tensor, so this is not throwaway work —
+          but notice that adding them changes <code>mat3.hpp</code>, which puts it inside the
+          reference render's include closure (§12.2). The golden stops being a null instrument the
+          moment you do this, which is itself worth seeing: run it before and after.
+        </p>
+      </details>
+      <details>
+        <summary>Solution sketch</summary>
+        <p>
+          The expression version is likely to be <em>slower</em> than both, because each operator
+          returns a temporary <code>mat3</code> and there are four of them. That is the standard
+          argument against expression-style linear algebra in a hot path and the standard argument
+          for expression templates, which are a large amount of machinery to avoid a copy the
+          optimiser often elides anyway. The defensible conclusion is to add the operators for
+          Module 8, which needs them for readability in code that runs once per body per frame, and
+          leave this function alone.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Find the worst round trip.</strong> §8.2 reports a worst orientation error of
+        2.755e-05° over 50,000 random rotations, on the reversal branch. Search harder — a few
+        million, biased toward the angles and axis orientations you expect to be worst — and report
+        the worst case you can find, the <code>(axis, angle)</code> that produced it, and whether it
+        is where the theory of §8.3 and §8.4 says it should be. If it is not, explain the
+        discrepancy; that is the valuable outcome.
+      </p>
+      <details>
+        <summary>Hint</summary>
+        <p>
+          The theory predicts trouble near <code>θ = π</code> for the skew route and near
+          <code>θ = 0</code> for the symmetric one, and predicts that the pivot choice matters most
+          when two diagonal entries are nearly equal — that is, when the axis lies near a plane
+          bisecting two coordinate axes, such as <code>(1, 1, 0)/√2</code>. Sample those
+          deliberately rather than uniformly; a uniform sweep of 50,000 spends almost none of its
+          budget there.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Make the blend lie, then catch it.</strong> Change
+        <code>rotation_slerp</code> to interpolate <em>the axis as well as the angle</em> — lerp
+        from the identity's placeholder axis to the relative rotation's axis while scaling the
+        angle. This is a plausible-looking mistake and the endpoints are still exact. Measure the
+        excess turning with §9.2's instrument, and then explain, in one sentence, why the endpoints
+        being right told you nothing.
+      </p>
+      <details>
+        <summary>Solution sketch</summary>
+        <p>
+          The path is no longer a rotation about a fixed axis, so it is no longer a geodesic, and
+          the excess becomes non-zero — how non-zero depends on how far the placeholder axis is from
+          the real one, which is arbitrary. The sentence is the general one: <strong>endpoint checks
+          test two points out of a continuum</strong>, and every wrong interpolation in this lesson
+          and the last one gets both endpoints right. That is exactly why §9 measures a path length
+          and not a pair of poses.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">15. Recap &amp; next</h2>
+
+  <p>
+    The engine can now answer "what single turn is this?" for any rotation, and perform the answer.
+    That sentence hides a theorem, two derivations of one formula, an inverse with two genuinely
+    different failure modes, and the first interpolation in this course that is provably optimal.
+  </p>
+
+  <p>
+    What you can do now that you could not before, stated as capabilities rather than facts:
+  </p>
+
+  <ul>
+    <li>
+      <strong>Blend two orientations correctly.</strong> <code>rotation_slerp</code> performs
+      exactly the turning a move requires, at constant speed, at every pose — 0.00% excess against
+      Lesson 7.1's 14.10% and 209.5%, measured with 7.1's own instrument on 7.1's own pairs.
+    </li>
+    <li>
+      <strong>Measure how far apart two orientations are</strong> without building a separate
+      instrument for it, because the angle of the single turn <em>is</em> that distance.
+    </li>
+    <li>
+      <strong>Recognise which of a representation's singularities matter.</strong>
+      <code>2 sin(θ/2)</code> is the whole answer: the hole at the identity is multiplied by zero
+      and the hole at the half-turn is multiplied by two. That reasoning transfers — every
+      parameterisation has this question, and most treatments do not ask it.
+    </li>
+    <li>
+      <strong>Set a threshold by deriving a crossover and then measuring it</strong>, and recognise
+      when the measurement says something better than the derivation did: here, that the crossover
+      is a 45°-wide band rather than a point, and that 120° sits in the middle of it.
+    </li>
+    <li>
+      <strong>Integrate a rotation.</strong> <code>rotation_from_rotation_vector(ω · dt)</code> is
+      one step of a rigid body's spin, with no singularity at rest, which is where Module 8 starts.
+    </li>
+    <li>
+      <strong>Tell a real optimisation from a coincidence</strong> — and tell a real benchmark from
+      one the compiler has quietly deleted.
+    </li>
+  </ul>
+
+  <p>
+    And what is still wrong, because it is the reason Module 7 has two more lessons in it.
+    Axis-angle <strong>does not compose</strong>: there is no usable formula for the single turn of
+    "do this, then that", so every composition goes out to a matrix and back. And it is
+    <strong>expensive to interpolate</strong> — 82% of a slerp is trigonometry recovering a
+    quantity the representation declined to store. Both problems have the same shape: the numbers
+    we keep are not the numbers the operations want.
+  </p>
+
+  <p>
+    <strong>Next: 7.3 — Complex Numbers Rotate the Plane.</strong> Before attacking three
+    dimensions, we solve two, where the answer is school algebra rather than a mystery. A complex
+    number <code>cos θ + i sin θ</code> composes rotations <em>by multiplication</em> — no
+    trigonometry at the point of use, no matrix, no extraction — and it interpolates along the
+    geodesic by a formula two lines long. Understanding exactly <em>why</em> that works in the
+    plane is the only honest route to the four-dimensional object that does the same job in space,
+    and it is the difference between deriving a quaternion in 7.4 and being handed one.
+  </p>
+
+  <h2 id="reading">16. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Palais, Palais &amp; Rodi, "A Disorienting Look at Euler's Theorem on the Axis of a
+      Rotation"</strong> (<em>American Mathematical Monthly</em>, 2009). Several independent proofs
+      of §4's theorem, including the determinant argument above and a purely geometric one, with a
+      careful account of what Euler actually proved. The best single source on why the theorem is
+      about odd dimensions.
+    </li>
+    <li>
+      <strong>Rodrigues, "Des lois géométriques qui régissent les déplacements d'un système
+      solide…"</strong> (1840). The original, and it predates vector notation entirely — worth ten
+      minutes just to see how much harder this was before <code>×</code> and <code>·</code> existed.
+    </li>
+    <li>
+      <strong>Möller &amp; Hughes, "Efficiently Building a Matrix to Rotate One Vector to
+      Another"</strong> (<em>Journal of Graphics Tools</em>, 1999). The special case §8's machinery
+      makes easy, done without any trigonometry at all, plus the near-antiparallel degeneracy —
+      which is §8.4's half-turn problem arriving from a different direction.
+    </li>
+    <li>
+      <strong><em>Real-Time Rendering</em>, 4th edition, §4.2</strong> ("Special Matrix
+      Transforms and Operations"). The closed form, the extraction, and the standard warnings,
+      stated compactly. Good to read <em>after</em> this lesson to see how much a compact statement
+      leaves out.
+    </li>
+    <li>
+      <strong>Shoemake, "Animating Rotation with Quaternion Curves"</strong> (SIGGRAPH 1985),
+      §§1–3. The paper that made slerp standard practice. Sections 1 to 3 are about exactly the
+      argument of §9 — why interpolating a parameterisation is not interpolating a rotation — and
+      are readable now; the rest becomes readable after Lesson 7.4.
+    </li>
+    <li>
+      <strong>Goldman, "Understanding Quaternions"</strong> (<em>Graphical Models</em>, 2011),
+      §§2–3. Develops axis-angle and the exponential map first and quaternions second, which is
+      this module's order, and is unusually careful about what each representation cannot do.
+    </li>
+    <li>
+      <strong>Higham, <em>Accuracy and Stability of Numerical Algorithms</em>, ch. 1</strong>. The
+      general theory behind §6.3's finding — that a catastrophically wrong intermediate can produce
+      a perfectly good result, and the only way to know is to track the error to the output.
+    </li>
+    <li>
+      <strong>Conventions page, §2 and §8b</strong>, and the <strong>Math Toolbox</strong>, which
+      gains axis-angle, Rodrigues, the exponential map and the amplification law in this lesson.
+    </li>
+  </ul>

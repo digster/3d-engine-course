@@ -1,0 +1,56 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l57f3-t l57f3-d">
+  <title id="l57f3-t">The cost of adding one component, in each design</title>
+  <desc id="l57f3-d">Top: an archetype move, drawn as three columns of data being copied from a chunk holding transform, velocity and bounds into a chunk that also holds material. Bottom: a sparse-set insert, drawn as one dense array growing by one element and one sparse slot being written, with the other pools untouched.</desc>
+  <defs>
+    <marker id="e-i-l57f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l57f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l57f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l57f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l57f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Adding one component to one entity, in each design.</text>
+<text x="24" y="46" class="xs t-hi" text-anchor="start">ARCHETYPE — the entity CHANGES ARCHETYPE, so every column travels.</text>
+<text x="52" y="74" class="xs muted" text-anchor="end">from</text>
+<rect x="60" y="62" width="92" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="106" y="75" class="xs mono" text-anchor="middle">xform</text>
+<rect x="160" y="62" width="92" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="206" y="75" class="xs mono" text-anchor="middle">vel</text>
+<rect x="260" y="62" width="92" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="306" y="75" class="xs mono" text-anchor="middle">bnd</text>
+<text x="366" y="75" class="xs mono muted" text-anchor="start">{xform, vel, bnd}</text>
+<text x="52" y="134" class="xs muted" text-anchor="end">to</text>
+<rect x="60" y="122" width="92" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="106" y="135" class="xs mono" text-anchor="middle">xform</text>
+<rect x="160" y="122" width="92" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="206" y="135" class="xs mono" text-anchor="middle">vel</text>
+<rect x="260" y="122" width="92" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="306" y="135" class="xs mono" text-anchor="middle">bnd</text>
+<rect x="360" y="122" width="92" height="18" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="406" y="135" class="xs mono" text-anchor="middle">material</text>
+<text x="466" y="135" class="xs mono muted" text-anchor="start">{xform, vel, bnd, material}</text>
+<line x1="106" y1="84" x2="106" y2="118" class="hi" stroke-width="1.4" marker-end="url(#e-h-l57f3)"/>
+<line x1="206" y1="84" x2="206" y2="118" class="hi" stroke-width="1.4" marker-end="url(#e-h-l57f3)"/>
+<line x1="306" y1="84" x2="306" y2="118" class="hi" stroke-width="1.4" marker-end="url(#e-h-l57f3)"/>
+<text x="24" y="160" class="xs muted" text-anchor="start">92 bytes copied into the destination, plus 92 more moved inside the source by swap-and-pop, plus two</text>
+<text x="24" y="174" class="xs muted" text-anchor="start">index writes — one for this entity and one for whichever entity the re-pack displaced.</text>
+<text x="24" y="194" class="xs t-bad" text-anchor="start">AND THE COST IS PER COLUMN.</text>
+<text x="192" y="194" class="xs" text-anchor="start">Twelve components instead of four is eight more arrays to touch, in eight</text>
+<text x="24" y="208" class="xs" text-anchor="start">different places. Measured: 13.1 ns narrow, 58.5 ns wide.</text>
+<line x1="24" y1="226" x2="696" y2="226" class="grid" stroke-width="1.2"/>
+<text x="24" y="248" class="xs t-hi" text-anchor="start">SPARSE SET — one pool grows by one. Nothing else is touched.</text>
+<rect x="60" y="262" width="240" height="20" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="180" y="276" class="xs mono" text-anchor="middle">material: dense + data</text>
+<rect x="60" y="286" width="200" height="14" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="262" y="286" width="38" height="14" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="281" y="296" class="xs" text-anchor="middle">new</text>
+<rect x="330" y="262" width="130" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="395" y="276" class="xs mono" text-anchor="middle">material.sparse[e]</text>
+<rect x="330" y="286" width="130" height="14" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<line x1="302" y1="293" x2="328" y2="293" class="hi" stroke-width="1.3" marker-end="url(#e-h-l57f3)"/>
+<text x="480" y="280" class="xs" text-anchor="start">push_back, push_back, one write.</text>
+<text x="480" y="296" class="xs t-ok" text-anchor="start">Measured: 4.2 ns, at every width.</text>
+<text x="24" y="328" class="xs muted" text-anchor="start">The transform, velocity and bounds pools do not appear in this picture, and that is the finding. They are not read, not</text>
+<text x="24" y="342" class="xs muted" text-anchor="start">written, and not even known about. An entity's OTHER components are irrelevant to changing one of them.</text>
+<line x1="24" y1="358" x2="696" y2="358" class="grid" stroke-width="1.2" stroke-dasharray="2 3"/>
+<text x="24" y="378" class="xs t-hi" text-anchor="start">One design's structural change scales with how wide the entity is. The other one does not scale with anything.</text>
+</svg>

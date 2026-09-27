@@ -1,0 +1,291 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-05-gjk.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.5 — GJK: Convex Distance from a Support Function</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-07-contact-manifolds.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.7 — Contact Manifolds and Persistence</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.6</div>
+    <h1>EPA: Penetration Depth</h1>
+    <p class="deck">
+      8.5 ended on an IOU. <code>collide(convex, convex)</code> returned <code>+0</code> when two
+      shapes overlapped and its own doc comment called that a placeholder, because GJK cannot
+      measure penetration: the origin is inside <code>A ⊖ B</code> and the depth is a distance to
+      its <em>boundary</em>, which the search never looks at. This lesson pays the IOU, and starts
+      by measuring how bad the placeholder really was — the axis 8.5 shipped beside it was not a
+      poor normal but the <strong>zero vector, on 200,000 overlapping pairs out of 200,000</strong>,
+      because <code>gjk_result::direction</code> is only written on the separated path. The
+      definition that fixes it needs two lines and 8.5 already proved the equivalence they turn on:
+      A and <code>B + t</code> overlap exactly when <code>t ∈ A ⊖ B</code>, so
+      <strong>the translations that keep two shapes overlapping <em>are</em> the Minkowski
+      difference</strong>, and the shortest one that separates them is the nearest point of its
+      boundary. GJK measured the distance from the origin to the <em>set</em>; EPA measures the
+      distance from the origin to the set's <em>boundary</em>, with the same support function and
+      the same sandwich of bounds run in the other direction — a polytope growing inside the set,
+      whose closest face only ever gets <em>further</em> away. Then the part every write-up skips.
+      Every description of EPA opens “start from the tetrahedron GJK terminated with”, and on the
+      commonest arrangement in a game — two crates standing on the same floor — 8.5 measured that
+      there is none: <strong>a four-point simplex arrives 0 times in 50,000</strong>, and what
+      arrives instead is a flat <em>triangle</em>. Building the starting polytope is on the
+      critical path, and it is where three of this lesson's four bugs lived. One apex is not enough
+      (the origin ends up on the base, so the lower bound starts and stays at zero —
+      <strong>30,000 times out of 30,000</strong>); six faces stitched by hand are not a polytope
+      (<strong>52.85% of them are not convex</strong>); and the textbook visibility test tears the
+      horizon on <strong>4.17% of crates on a floor</strong>, worst case 61.7% low, while being
+      almost invisible at free orientations and never firing at all on random hulls — the third
+      lesson running in which the failure needs the structure a real scene is made of. Ships
+      <code>epa.hpp</code>, a demo that draws the polytope growing beside a ghost of the shape it
+      is about to push free, <strong>nine measured sections and 2,028 checks</strong>, and a 23%
+      speed-up that came from deleting two default member initialisers.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-03-barycentric.html">2.3 — Barycentric Coordinates from Signed Areas</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor: Engine and Demos</a>,
+          <a href="08-04-collision-primitives.html">8.4 — Collision Primitives: Spheres, AABBs, OBBs, and the SAT</a>,
+          <a href="08-05-gjk.html">8.5 — GJK: Convex Distance from a Support Function</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/epa.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/epa.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/collide.hpp</code>,
+            <code>engine/src/phys/collide.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/epa/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_86.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_86.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can measure <strong>how deeply two convex shapes overlap and which way to
+            push them apart</strong> — box, sphere, capsule, arbitrary point set, in any
+            combination — with the contact points on both surfaces. <code>gjk.hpp</code> needed
+            <em>no change at all</em>: <code>cso_support</code>, <code>simplex</code> and
+            <code>gjk_result::terminal</code> were already the interface EPA is written against.
+            <strong>Nine measured sections, 2,028 checks</strong>, every answer certified against
+            the minimum-over-directions definition it comes from, and every box pair checked
+            against 8.4's SAT — which, it turns out, was the exact minimum translation for boxes
+            all along. The <code>epa</code> demo grows the polytope one keystroke at a time and
+            draws a ghost of the shape at the position the current answer would push it to.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…define penetration depth as a minimum translation, and derive in two lines why the set
+          of translations that keep two shapes overlapping <em>is</em> their Minkowski
+          difference.</li>
+      <li>…state the two bounds EPA maintains, say which direction each one moves, and explain why
+          that is GJK's sandwich turned inside out.</li>
+      <li>…predict what terminal simplex GJK will hand over for a given arrangement, and say why
+          two objects resting on a floor never produce a tetrahedron.</li>
+      <li>…build a starting polytope from a flat simplex, and say why one support call out of the
+          plane is not enough and six hand-stitched faces are not a polytope.</li>
+      <li>…implement beneath-and-beyond expansion, find the horizon by edge cancellation, and
+          name the numerical event that tears it.</li>
+      <li>…use Euler's formula as a runtime test that the surface is still a surface.</li>
+      <li>…say from the shape alone whether EPA will terminate exactly or converge forever, and
+          why the sphere is GJK's easiest case and EPA's worst.</li>
+      <li>…explain why the SAT's minimum-overlap axis is the <em>exact</em> penetration depth for
+          two boxes, and use it as a reference.</li>
+      <li>…recognise when a default member initialiser has turned a scratch array into a memset,
+          and measure it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: <code>+0</code> is not an answer</a></li>
+      <li><a href="#intuition">Building intuition: the balloon in the dark room</a></li>
+      <li><a href="#definition">What penetration depth actually is</a></li>
+      <li><a href="#bounds">The sandwich, run the other way</a></li>
+      <li><a href="#seed">What GJK actually hands over</a></li>
+      <li><a href="#apex">Building the starting polytope</a></li>
+      <li><a href="#horizon">The horizon, and the set that must be connected</a></li>
+      <li><a href="#implementation">Implementation</a></li>
+      <li><a href="#demo">Watching it, and breaking it on purpose</a></li>
+      <li><a href="#converge">Polytopes terminate, curves do not</a></li>
+      <li><a href="#accuracy">How close, and where it gives out</a></li>
+      <li><a href="#budget">The budget, and two struct definitions</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: <code>+0</code> is not an answer</h2>
+
+  <p>
+    Here is the whole of 8.5's overlap path, as it shipped:
+  </p>
+
+  <pre><code class="lang-cpp">    // Overlapping, or out of iterations, which a caller must treat the same way.
+    // `depth` is +0 and it is a PLACEHOLDER — the header says so in as many
+    // words, because a zero here is the one value that could be mistaken for a
+    // measurement. The axis is the last search direction, which is a reasonable
+    // guess at a contact normal and nothing more. 8.6 replaces both.
+    out.axis = g.direction;
+    out.depth = 0.0f;
+    return out;</code></pre>
+
+  <p>
+    Lesson 8.9 will push two overlapping bodies apart with an impulse along a contact normal,
+    scaled by how far they have interpenetrated. Neither number is there. A solver handed
+    <code>depth = 0</code> does nothing at all, and a solver handed a wrong normal does something
+    worse than nothing: it pushes along a direction that does not separate the pair, so the next
+    frame finds them still overlapping and pushes again, and the stack jitters or sinks.
+  </p>
+
+  <p>
+    But look more carefully at that comment, because the first measurement of this lesson is that
+    <strong>it is wrong</strong>. “The last search direction” describes something reasonable.
+    <code>gjk_result::direction</code> is assigned in exactly one place in
+    <code>gjk.cpp</code> — at the bottom, on the <em>separated</em> path, after the distance has
+    been computed:
+  </p>
+
+  <pre><code class="lang-cpp">    r.direction = (d2 &gt; 0.0f) ? -v * (1.0f / r.distance) : vec3{};</code></pre>
+
+  <p>
+    Both of the intersecting returns happen earlier and neither touches it, so on an overlap it is
+    whatever <code>gjk_result</code>'s default member initialiser left there: the zero vector.
+    §A.2 of this lesson's harness counts it, because a claim like that should be counted rather
+    than asserted:
+  </p>
+
+  <pre><code class="lang-text">  A.2  200000 overlapping box pairs, random orientations
+
+       8.5's axis (gjk_result::direction) was zero:
+         200000 / 200000  = 100.0%</code></pre>
+
+  <div class="callout">
+    <p>
+      <strong>A comment that describes what the code was <em>meant</em> to do is worse than no
+      comment.</strong> No reader of that function would have gone looking: it says the axis is a
+      guess, guesses are allowed to be poor, and a poor normal and a zero normal look identical
+      from the outside until something divides by it. The fix in this lesson is not to improve the
+      comment — it is to delete the whole branch, which is the only kind of fix that cannot rot.
+    </p>
+  </div>
+
+  <h3>1.1 And centre-to-centre is not the fallback either</h3>
+
+  <p>
+    The obvious thing to reach for when you have no normal is the direction from one shape's centre
+    to the other's. It is free, it is never zero for two shapes that are not concentric, and it
+    <em>feels</em> like it ought to be close. §A.2 measures it against the true minimum-translation
+    normal over the same 200,000 pairs:
+  </p>
+
+  <pre><code class="lang-text">       centre-to-centre as a contact normal, vs the truth
+         mean  40.15 deg   p50  37.75   p95  78.19   max  90.00
+         push distance it implies, as a multiple of the MTV
+         mean   1.71x       p50   1.46x  p95    2.4x  max    2538x
+
+       CONTROL — EPA's normal vs the same exact reference
+         mean 0.0089 deg   p95 0.0222   p99.9 0.0283
+         depth error: mean 2.574e-07  max 3.107e-04 m</code></pre>
+
+  <p>
+    Forty degrees off, on average. And the second pair of rows is the one that matters for a
+    solver: the translation you would actually have to make along that guessed direction to
+    separate the pair is <strong>1.71× the minimum</strong> on average and can be
+    <strong>2,538×</strong> — which happens when two long boxes overlap slightly along their
+    length, so the centres are nearly in line with the <em>worst</em> escape direction rather than
+    the best one. Push a resting box by 2,538 times the depth and it leaves the level.
+  </p>
+
+  @@FIG_PLACEHOLDER@@
+
+  <p>
+    The control at the bottom of that block is what this lesson delivers: the same comparison
+    against the same exact reference, with the answer EPA computes. Nine thousandths of a degree,
+    and a depth error of a quarter of a micron on average. Where the exact reference comes from is
+    §<a href="#accuracy">11</a>, and it is a pleasant surprise: it is 8.4's Separating Axis
+    Theorem, which turns out to have been computing the true penetration depth for boxes all along.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: the balloon in the dark room</h2>
+
+  <p>
+    You are standing in a dark room and you want to know the distance to the nearest wall. You
+    cannot see the walls. You cannot feel them — the room might be enormous. The only thing you
+    can do is shout a direction, and a voice tells you how far you could walk that way before
+    leaving the room.
+  </p>
+
+  <p>
+    That voice is the support function, and it is all EPA has. The room is the Minkowski
+    difference <code>A ⊖ B</code>; you are standing at the origin, which is inside it because the
+    two shapes overlap; and the distance to the nearest wall is the penetration depth.
+  </p>
+
+  <p>
+    Shouting a direction gives you an <em>upper</em> bound and nothing else. If the voice says “you
+    could walk four metres north”, then the nearest wall is at most four metres away — but it might
+    be half a metre away to the east, and you have no way to know. Shout a thousand directions and
+    you still only ever get upper bounds, each one possibly far too generous.
+  </p>
+
+  <p>
+    So do something else as well: <strong>inflate a balloon</strong>.
+  </p>
+
+  <p>
+    Start with a small shape you know exactly — you built it out of points the voice gave you, so
+    every one of its corners is a real point of the room. Because the room is convex and all the
+    corners are inside it, the whole balloon is inside it. And that gives you the thing shouting
+    alone could never give you: <strong>the balloon's nearest wall is no further away than the
+    room's.</strong> A lower bound, at last.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Two bounds that move toward each other is the entire method, and it is the same
+      shape of argument 8.5 made.</strong> There, the upper bound was a real vector between two
+      real surface points and it only fell; the lower bound was a supporting plane and it only
+      rose. Here the roles swap. The lower bound is a polytope inside the set and it only
+      <em>rises</em> as the polytope grows; the upper bound is a supporting plane and it only
+      falls. Same sandwich, opposite handedness — which is why the two algorithms are usually
+      described as one, and why this file is two hundred lines rather than a thousand.
+    </p>
+  </div>
+
+  <p>
+    Now the question is where to inflate. The answer is the obvious one and it is also the right
+    one: <strong>push the balloon out at its own nearest wall</strong>. Find the balloon's closest
+    face, shout in the direction that face points, and add the point the voice reports. That does
+    two things at once — it tells you exactly how far the room's wall is <em>in that one
+    direction</em> (an upper bound, and the best one you have so far), and it grows the balloon
+    precisely where it was tightest (so the lower bound rises).
+  </p>
+
+  <p>
+    When the two agree, you are done, and you are done in a strong sense: you have a real point of
+    the boundary and a proof that nothing is nearer. That is the whole of EPA. The rest of this
+    lesson is what happens when you try to write it down.
+  </p>

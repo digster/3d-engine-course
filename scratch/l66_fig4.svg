@@ -1,0 +1,67 @@
+<svg viewBox="0 0 720 430" role="img" aria-labelledby="l66f4-t l66f4-d">
+  <title id="l66f4-t">The glTF reference BRDF compared term by term against this engine's</title>
+  <desc id="l66f4-d">Two columns of six terms. Distribution, geometry term, Fresnel approximation, dielectric F0 and the metallic blend are all marked identical in green. Only the diffuse coupling differs, marked in red: the spec applies one Fresnel crossing at the half vector, this engine applies two, at the light and eye angles. Below, four measured consequences.</desc>
+  <defs>
+    <marker id="e-i-l66f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l66f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l66f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l66f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l66f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="430" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">The ⚠ VERIFY, discharged: one factor differs</text>
+<rect x="24" y="46" width="324" height="250" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="186.0" y="68" class="sm" text-anchor="middle">Khronos glTF 2.0, Appendix B</text>
+<line x1="36" y1="78" x2="336" y2="78" class="grid" stroke-width="1.0"/>
+<rect x="372" y="46" width="324" height="250" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="534.0" y="68" class="sm" text-anchor="middle">this engine, Lessons 6.3 + 6.4</text>
+<line x1="384" y1="78" x2="684" y2="78" class="grid" stroke-width="1.0"/>
+<rect x="36" y="87" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="384" y="87" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="186.0" y="100" class="xs" text-anchor="middle">GGX, alpha = roughness^2</text>
+<text x="534.0" y="100" class="xs" text-anchor="middle">ndf(ggx), alpha_from_roughness</text>
+<text x="360.0" y="100" class="sm" text-anchor="middle">=</text>
+<rect x="36" y="119" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="384" y="119" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="186.0" y="132" class="xs" text-anchor="middle">Smith, height-correlated</text>
+<text x="534.0" y="132" class="xs" text-anchor="middle">smith_g, height-correlated</text>
+<text x="360.0" y="132" class="sm" text-anchor="middle">=</text>
+<rect x="36" y="151" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="384" y="151" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="186.0" y="164" class="xs" text-anchor="middle">Schlick, f90 = 1</text>
+<text x="534.0" y="164" class="xs" text-anchor="middle">fresnel_schlick</text>
+<text x="360.0" y="164" class="sm" text-anchor="middle">=</text>
+<rect x="36" y="183" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="384" y="183" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="186.0" y="196" class="xs" text-anchor="middle">0.04, from ior 1.5</text>
+<text x="534.0" y="196" class="xs" text-anchor="middle">k_dielectric_f0 = 0.04</text>
+<text x="360.0" y="196" class="sm" text-anchor="middle">=</text>
+<rect x="36" y="215" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="384" y="215" width="300" height="20" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="186.0" y="228" class="xs" text-anchor="middle">mix of two BRDFs</text>
+<text x="534.0" y="228" class="xs" text-anchor="middle">one BRDF, lerped F0</text>
+<text x="360.0" y="228" class="sm" text-anchor="middle">=</text>
+<rect x="36" y="247" width="300" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<rect x="384" y="247" width="300" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.26"/>
+<text x="186.0" y="260" class="xs" text-anchor="middle">1 − F(v·h)   [one crossing]</text>
+<text x="534.0" y="260" class="xs" text-anchor="middle">(1−F(n·l))(1−F(n·v))   [two]</text>
+<text x="360.0" y="260" class="sm" text-anchor="middle">≠</text>
+<rect x="24" y="306" width="672" height="108" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="328" class="sm" text-anchor="middle">…and the difference is measured, not argued</text>
+<text x="298" y="350" class="xs" text-anchor="end">metal blend, worst error over 4851 points</text>
+<rect x="306" y="339" width="90" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="351" y="350" class="xs" text-anchor="middle">1.19e-07</text>
+<text x="406" y="350" class="xs" text-anchor="start">identical: Schlick is affine in f0</text>
+<text x="298" y="368" class="xs" text-anchor="end">diffuse coupling at normal incidence</text>
+<rect x="306" y="357" width="90" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="351" y="368" class="xs" text-anchor="middle">1.036x</text>
+<text x="406" y="368" class="xs" text-anchor="start">one crossing of a 4% interface</text>
+<text x="298" y="386" class="xs" text-anchor="end">diffuse coupling at 88 degrees</text>
+<rect x="306" y="375" width="90" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="351" y="386" class="xs" text-anchor="middle">5.62x</text>
+<text x="406" y="386" class="xs" text-anchor="start">which is why it hides at the centre and shows at the rim</text>
+<text x="298" y="404" class="xs" text-anchor="end">white furnace: spec's form / ours</text>
+<rect x="306" y="393" width="90" height="16" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="351" y="404" class="xs" text-anchor="middle">1.3395 / 0.9255</text>
+<text x="406" y="404" class="xs" text-anchor="start">the spec REQUIRES energy conservation; only one form has it</text>
+</svg>

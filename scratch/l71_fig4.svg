@@ -1,0 +1,52 @@
+<svg viewBox="0 0 760 330" role="img" aria-labelledby="f71d-t f71d-d">
+  <title id="f71d-t">The three knob axes, losing a dimension</title>
+  <desc id="f71d-d">Three panels at pitch zero, sixty and ninety degrees. Each shows the three axes the three knobs turn about, as arrows from a common origin, with the parallelepiped they span shaded. At zero the box is fat and the determinant is one. At sixty it is visibly flattened, determinant one half. At ninety the green and blue arrows are parallel and the box has collapsed to a flat sheet with zero volume.</desc>
+  <defs>
+    <marker id="e-i-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-bl-f71d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<rect x="8.0" y="36" width="237.33333333333334" height="234" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 4"/>
+<path d="M 126.67,168.00 L 126.67,110.99 L 178.40,125.19 L 178.40,182.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 126.67,168.00 L 126.67,110.99 L 91.77,132.04 L 91.77,189.04 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 126.67,168.00 L 178.40,182.19 L 143.50,203.23 L 91.77,189.04 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 143.50,146.23 L 143.50,203.23 L 91.77,189.04 L 91.77,132.04 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 143.50,146.23 L 91.77,132.04 L 126.67,110.99 L 178.40,125.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 143.50,146.23 L 178.40,125.19 L 178.40,182.19 L 143.50,203.23 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<line x1="126.67" y1="168.00" x2="126.67" y2="110.99" stroke="#5ac878" stroke-width="2.4" marker-end="url(#e-g-f71d)"/>
+<line x1="126.67" y1="168.00" x2="178.40" y2="182.19" stroke="#e05c5c" stroke-width="2.4" marker-end="url(#e-b-f71d)"/>
+<line x1="126.67" y1="168.00" x2="91.77" y2="189.04" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-bl-f71d)"/>
+<text x="126.66666666666667" y="26" class="sm" text-anchor="middle">pitch 0°</text>
+<text x="126.66666666666667" y="288" class="mono sm" text-anchor="middle">|det J| = 1.000</text>
+<text x="126.66666666666667" y="306" class="xs" text-anchor="middle">a box: three directions</text>
+<rect x="261.33333333333337" y="36" width="237.33333333333334" height="234" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 4"/>
+<path d="M 380.00,168.00 L 380.00,110.99 L 431.73,125.19 L 431.73,182.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 380.00,168.00 L 380.00,110.99 L 362.55,170.88 L 362.55,227.89 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 380.00,168.00 L 431.73,182.19 L 414.29,242.08 L 362.55,227.89 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 414.29,185.08 L 414.29,242.08 L 362.55,227.89 L 362.55,170.88 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 414.29,185.08 L 362.55,170.88 L 380.00,110.99 L 431.73,125.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 414.29,185.08 L 431.73,125.19 L 431.73,182.19 L 414.29,242.08 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<line x1="380.00" y1="168.00" x2="380.00" y2="110.99" stroke="#5ac878" stroke-width="2.4" marker-end="url(#e-g-f71d)"/>
+<line x1="380.00" y1="168.00" x2="431.73" y2="182.19" stroke="#e05c5c" stroke-width="2.4" marker-end="url(#e-b-f71d)"/>
+<line x1="380.00" y1="168.00" x2="362.55" y2="227.89" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-bl-f71d)"/>
+<text x="380.0" y="26" class="sm" text-anchor="middle">pitch 60°</text>
+<text x="380.0" y="288" class="mono sm" text-anchor="middle">|det J| = 0.500</text>
+<text x="380.0" y="306" class="xs" text-anchor="middle">flatter: the same knobs buy less</text>
+<rect x="514.6666666666667" y="36" width="237.33333333333334" height="234" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 4"/>
+<path d="M 633.33,168.00 L 633.33,110.99 L 685.07,125.19 L 685.07,182.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 633.33,168.00 L 633.33,110.99 L 633.33,168.00 L 633.33,225.01 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 633.33,168.00 L 685.07,182.19 L 685.07,239.20 L 633.33,225.01 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 685.07,182.19 L 685.07,239.20 L 633.33,225.01 L 633.33,168.00 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 685.07,182.19 L 633.33,168.00 L 633.33,110.99 L 685.07,125.19 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<path d="M 685.07,182.19 L 685.07,125.19 L 685.07,182.19 L 685.07,239.20 Z" fill="#f0961e" fill-opacity="0.10" stroke="#f0961e" stroke-width="0.7"/>
+<line x1="633.33" y1="168.00" x2="633.33" y2="110.99" stroke="#5ac878" stroke-width="2.4" marker-end="url(#e-g-f71d)"/>
+<line x1="633.33" y1="168.00" x2="685.07" y2="182.19" stroke="#e05c5c" stroke-width="2.4" marker-end="url(#e-b-f71d)"/>
+<line x1="633.33" y1="168.00" x2="633.33" y2="225.01" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-bl-f71d)"/>
+<text x="633.3333333333334" y="26" class="sm" text-anchor="middle">pitch 90°</text>
+<text x="633.3333333333334" y="288" class="mono sm" text-anchor="middle">|det J| = 0.000</text>
+<text x="633.3333333333334" y="306" class="xs t-bad" text-anchor="middle">FLAT: yaw and roll are one axis</text>
+<text x="380.0" y="322" class="xs muted" text-anchor="middle">green = yaw's axis · red = pitch's axis · blue = roll's axis</text>
+</svg>

@@ -1,0 +1,48 @@
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="f47e-t f47e-d">
+  <title id="f47e-t">Which way up, and what _SRGB did</title>
+  <desc id="f47e-d">The test image carries a differently-coloured block in each corner, so reading the four corners of the readback answers two questions numerically. Under a _UNORM format the sampled bytes match the file exactly, which means the decoder, the upload and the sampler all agreed about which way v runs. Under an _SRGB format the same texels come back darker, because the sampler performed the sRGB to linear decode that Lesson 3.9 did by hand per texel — for free, and before the filter rather than after.</desc>
+  <defs>
+    <marker id="e-i-f47e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f47e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f47e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the four corners of the test image, read back out of the GPU</text>
+  <text x="225.0" y="46.0" class="xs muted" text-anchor="middle">in the file</text>
+  <text x="375.0" y="46.0" class="xs muted" text-anchor="middle">sampled, _UNORM</text>
+  <text x="525.0" y="46.0" class="xs muted" text-anchor="middle">sampled, _SRGB</text>
+  <text x="24" y="86.0" class="xs">top-left</text>
+  <rect x="150.0" y="54.0" width="142.0" height="56.0" fill="#de463c" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="221.0" y="86.0" class="xs mono t-inv" text-anchor="middle">222,70,60</text>
+  <rect x="300.0" y="54.0" width="142.0" height="56.0" fill="#de463c" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="371.0" y="86.0" class="xs mono t-inv" text-anchor="middle">222,70,60</text>
+  <rect x="450.0" y="54.0" width="142.0" height="56.0" fill="#ba100c" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="521.0" y="86.0" class="xs mono t-inv" text-anchor="middle">186,16,12</text>
+  <text x="24" y="146.0" class="xs">top-right</text>
+  <rect x="150.0" y="114.0" width="142.0" height="56.0" fill="#52be6e" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="221.0" y="146.0" class="xs mono t-inv" text-anchor="middle">82,190,110</text>
+  <rect x="300.0" y="114.0" width="142.0" height="56.0" fill="#52be6e" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="371.0" y="146.0" class="xs mono t-inv" text-anchor="middle">82,190,110</text>
+  <rect x="450.0" y="114.0" width="142.0" height="56.0" fill="#168328" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="521.0" y="146.0" class="xs mono t-inv" text-anchor="middle">22,131,40</text>
+  <text x="24" y="206.0" class="xs">bottom-left</text>
+  <rect x="150.0" y="174.0" width="142.0" height="56.0" fill="#5082e6" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="221.0" y="206.0" class="xs mono t-inv" text-anchor="middle">80,130,230</text>
+  <rect x="300.0" y="174.0" width="142.0" height="56.0" fill="#5082e6" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="371.0" y="206.0" class="xs mono t-inv" text-anchor="middle">80,130,230</text>
+  <rect x="450.0" y="174.0" width="142.0" height="56.0" fill="#1439ca" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="521.0" y="206.0" class="xs mono t-inv" text-anchor="middle">20,57,202</text>
+  <text x="24" y="266.0" class="xs">bottom-right</text>
+  <rect x="150.0" y="234.0" width="142.0" height="56.0" fill="#eed696" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="221.0" y="266.0" class="xs mono t-inv" text-anchor="middle">238,214,150</text>
+  <rect x="300.0" y="234.0" width="142.0" height="56.0" fill="#eed696" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="371.0" y="266.0" class="xs mono t-inv" text-anchor="middle">238,214,150</text>
+  <rect x="450.0" y="234.0" width="142.0" height="56.0" fill="#daab4e" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="521.0" y="266.0" class="xs mono t-inv" text-anchor="middle">218,171,78</text>
+  <rect x="24" y="296" width="672" height="72" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="316" class="xs t-ok">the _UNORM column matches the file EXACTLY, corner for corner</text>
+  <text x="40" y="332" class="xs muted">so nothing between the decoder and the readback reordered a row or a channel</text>
+  <text x="40" y="354" class="xs t-hi">the _SRGB column is darker: the sampler decoded to linear on the way out, free, and BEFORE the filter</text>
+</svg>

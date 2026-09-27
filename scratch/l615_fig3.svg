@@ -1,0 +1,40 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f615c-t f615c-d">
+  <title id="f615c-t">The split-sum approximation, and which half is exact</title>
+  <desc id="f615c-d">The rendering equation over an environment, split into a diffuse half that factors exactly because the Lambert BRDF is constant, and a specular half that does not factor and is approximated anyway. Below, the measured error of the approximation.</desc>
+  <defs>
+    <marker id="e-i-f615c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One integral, split two ways — and only the first split is exact</text>
+<text x="360.0" y="50" class="sm" text-anchor="middle">Lₒ(v) = ∫ fᵣ(l, v) · Lᵢ(l) · (n·l) dω</text>
+<rect x="44" y="76" width="306" height="200" rx="4" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="44" y="76" width="306" height="200" rx="4" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="197.0" y="100" class="xs" text-anchor="middle">THE DIFFUSE HALF — EXACT</text>
+<text x="197.0" y="126" class="xs" text-anchor="middle">fᵣ = albedo/π is a CONSTANT,</text>
+<text x="197.0" y="142" class="xs" text-anchor="middle">so it comes out of the integral:</text>
+<text x="197.0" y="168" class="sm" text-anchor="middle">Lₒ = (albedo/π) · E(n)</text>
+<text x="197.0" y="194" class="xs" text-anchor="middle">and E(n) depends ONLY on the normal.</text>
+<text x="197.0" y="210" class="xs" text-anchor="middle">Precompute it into a small cube map;</text>
+<text x="197.0" y="226" class="xs" text-anchor="middle">one fetch at run time.</text>
+<text x="197.0" y="250" class="xs" text-anchor="middle">No approximation — only discretisation,</text>
+<text x="197.0" y="266" class="xs" text-anchor="middle">1.1e-05 relative at 64×64.</text>
+<rect x="370" y="76" width="306" height="200" rx="4" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.1"/>
+<rect x="370" y="76" width="306" height="200" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="523.0" y="100" class="xs" text-anchor="middle">THE SPECULAR HALF — WE PRETEND</text>
+<text x="523.0" y="126" class="xs" text-anchor="middle">fᵣ depends on l AND v, so NOTHING</text>
+<text x="523.0" y="142" class="xs" text-anchor="middle">comes out. The split sum does it anyway:</text>
+<text x="523.0" y="170" class="xs" text-anchor="middle">[ prefiltered Lᵢ ] × [ ∫ fᵣ (n·l) dω ]</text>
+<text x="523.0" y="196" class="xs" text-anchor="middle">a mip chain indexed by</text>
+<text x="523.0" y="212" class="xs" text-anchor="middle">ROUGHNESS, times a 2-D table</text>
+<text x="523.0" y="228" class="xs" text-anchor="middle">of (n·v, roughness) that depends</text>
+<text x="523.0" y="244" class="xs" text-anchor="middle">on NEITHER the environment nor</text>
+<text x="523.0" y="260" class="xs" text-anchor="middle">the material.</text>
+<rect x="44" y="292" width="632" height="92" rx="4" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="360.0" y="312" class="xs" text-anchor="middle">AND THE PRICE IS A MEASUREMENT, NOT A HEDGE</text>
+<text x="360.0" y="332" class="xs" text-anchor="middle">roughness 0.10: 0.08% error   ·   near-normal, any roughness: ≤ 5.8% dark   ·   grazing, roughness 1: 29.0% dark</text>
+<text x="360.0" y="352" class="xs" text-anchor="middle">with a sun disc in the sky: 73.0% dark. The error of this technique depends on the ENVIRONMENT,</text>
+<text x="360.0" y="372" class="xs" text-anchor="middle">not only on the material — which is not something you can read off the paper.</text>
+</svg>

@@ -1,0 +1,94 @@
+<svg viewBox="0 0 980 429" role="img" aria-labelledby="f6-t f6-d">
+  <title id="f6-t">A ball-socket solved as three rows and as one block</title>
+  <desc id="f6-d">Left: the residual after each visit on a log axis — the rows falling by 0.2323 per visit along K's Gauss-Seidel spectral radius, the block at 1.2e-07 after one visit. Right: worst residuals over a thousand random sockets, the cost of each form, and a twelve-link chain where the block barely helps.</desc>
+  <defs>
+    <marker id="e-i-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="26" y="34" class="sm" text-anchor="start">One socket, residual |dC/dt| after each visit</text>
+<rect x="70" y="64" width="400" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="70" y1="314.0" x2="470" y2="314.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="318.0" class="xs mono" text-anchor="end">1e-8</text>
+<line x1="70" y1="282.75" x2="470" y2="282.75" class="grid" stroke-width="0.6"/>
+<text x="64" y="286.75" class="xs mono" text-anchor="end">1e-7</text>
+<line x1="70" y1="251.5" x2="470" y2="251.5" class="grid" stroke-width="0.6"/>
+<text x="64" y="255.5" class="xs mono" text-anchor="end">1e-6</text>
+<line x1="70" y1="220.25" x2="470" y2="220.25" class="grid" stroke-width="0.6"/>
+<text x="64" y="224.25" class="xs mono" text-anchor="end">1e-5</text>
+<line x1="70" y1="189.0" x2="470" y2="189.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="193.0" class="xs mono" text-anchor="end">1e-4</text>
+<line x1="70" y1="157.75" x2="470" y2="157.75" class="grid" stroke-width="0.6"/>
+<text x="64" y="161.75" class="xs mono" text-anchor="end">1e-3</text>
+<line x1="70" y1="126.5" x2="470" y2="126.5" class="grid" stroke-width="0.6"/>
+<text x="64" y="130.5" class="xs mono" text-anchor="end">1e-2</text>
+<line x1="70" y1="95.25" x2="470" y2="95.25" class="grid" stroke-width="0.6"/>
+<text x="64" y="99.25" class="xs mono" text-anchor="end">1e-1</text>
+<line x1="70" y1="64.0" x2="470" y2="64.0" class="grid" stroke-width="0.6"/>
+<text x="64" y="68.0" class="xs mono" text-anchor="end">1</text>
+<path d="M 88.00,68.94 L 128.44,88.74 L 168.89,108.54 L 209.33,128.34 L 249.78,148.14 L 290.22,167.94 L 330.67,187.74 L 371.11,207.54 L 411.56,227.34 L 452.00,247.14" fill="none" stroke="#9b7ede" stroke-width="7" stroke-opacity="0.35"/>
+<path d="M 88.00,68.94 L 128.44,89.45 L 168.89,109.36 L 209.33,129.18 L 249.78,148.98 L 290.22,168.78 L 330.67,188.59 L 371.11,208.42 L 411.56,228.40 L 452.00,248.05" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="88.0" cy="68.9" r="3.2" fill="#5082e6"/>
+<circle cx="128.4" cy="89.5" r="3.2" fill="#5082e6"/>
+<circle cx="168.9" cy="109.4" r="3.2" fill="#5082e6"/>
+<circle cx="209.3" cy="129.2" r="3.2" fill="#5082e6"/>
+<circle cx="249.8" cy="149.0" r="3.2" fill="#5082e6"/>
+<circle cx="290.2" cy="168.8" r="3.2" fill="#5082e6"/>
+<circle cx="330.7" cy="188.6" r="3.2" fill="#5082e6"/>
+<circle cx="371.1" cy="208.4" r="3.2" fill="#5082e6"/>
+<circle cx="411.6" cy="228.4" r="3.2" fill="#5082e6"/>
+<circle cx="452.0" cy="248.1" r="3.2" fill="#5082e6"/>
+<circle cx="88.0" cy="280.4" r="4.2" fill="#5ac878"/>
+<circle cx="128.4" cy="308.6" r="4.2" fill="#5ac878"/>
+<text x="88.0" y="330" class="xs mono" text-anchor="middle">1</text>
+<text x="128.44444444444446" y="330" class="xs mono" text-anchor="middle">2</text>
+<text x="168.88888888888889" y="330" class="xs mono" text-anchor="middle">3</text>
+<text x="209.33333333333331" y="330" class="xs mono" text-anchor="middle">4</text>
+<text x="249.77777777777777" y="330" class="xs mono" text-anchor="middle">5</text>
+<text x="290.22222222222223" y="330" class="xs mono" text-anchor="middle">6</text>
+<text x="330.66666666666663" y="330" class="xs mono" text-anchor="middle">7</text>
+<text x="371.11111111111114" y="330" class="xs mono" text-anchor="middle">8</text>
+<text x="411.55555555555554" y="330" class="xs mono" text-anchor="middle">9</text>
+<text x="452.0" y="330" class="xs mono" text-anchor="middle">10</text>
+<text x="270.0" y="346" class="xs muted" text-anchor="middle">visit</text>
+<line x1="70.0" y1="360.0" x2="90.0" y2="360.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="98" y="364" class="xs" text-anchor="start">three rows, one at a time — 0.2323 per visit</text>
+<line x1="70.0" y1="377.0" x2="90.0" y2="377.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="98" y="381" class="xs" text-anchor="start">K's Gauss–Seidel radius, 0.2325 — the halo under it</text>
+<line x1="70.0" y1="394.0" x2="90.0" y2="394.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="98" y="398" class="xs" text-anchor="start">the 3×3 block — 1.2e-07, then exactly zero</text>
+<text x="560" y="26" class="xs muted" text-anchor="start">Relative residual, random sockets</text>
+<text x="560" y="46" class="xs muted" text-anchor="start">after ONE visit</text>
+<text x="884" y="46" class="xs muted" text-anchor="end">worst of 1,000</text>
+<line x1="560" y1="54.0" x2="890" y2="54.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="71.0" class="xs" text-anchor="start">block</text>
+<text x="884" y="71.0" class="xs mono" text-anchor="end">5.9e-07</text>
+<text x="560" y="88.0" class="xs" text-anchor="start">rows</text>
+<text x="884" y="88.0" class="xs mono" text-anchor="end">0.925</text>
+<text x="560" y="105.0" class="xs" text-anchor="start">rows, socket at the centre</text>
+<text x="884" y="105.0" class="xs mono" text-anchor="end">9.7e-08</text>
+<text x="560" y="127.5" class="xs muted" text-anchor="start">Cost per joint</text>
+<text x="560" y="147.5" class="xs muted" text-anchor="start"></text>
+<text x="774" y="147.5" class="xs muted" text-anchor="end">prepare</text>
+<text x="884" y="147.5" class="xs muted" text-anchor="end">one visit</text>
+<line x1="560" y1="155.5" x2="890" y2="155.5" class="grid" stroke-width="1.0"/>
+<text x="560" y="172.5" class="xs" text-anchor="start">rows</text>
+<text x="774" y="172.5" class="xs mono" text-anchor="end">64.8 ns</text>
+<text x="884" y="172.5" class="xs mono" text-anchor="end">23.1 ns</text>
+<text x="560" y="189.5" class="xs" text-anchor="start">block</text>
+<text x="774" y="189.5" class="xs mono" text-anchor="end">58.4 ns</text>
+<text x="884" y="189.5" class="xs mono" text-anchor="end">10.8 ns</text>
+<text x="560" y="212.0" class="xs muted" text-anchor="start">And on a chain, 8 sweeps</text>
+<text x="560" y="232.0" class="xs muted" text-anchor="start">12-link chain</text>
+<text x="774" y="232.0" class="xs muted" text-anchor="end">worst gap</text>
+<text x="884" y="232.0" class="xs muted" text-anchor="end">mean gap</text>
+<line x1="560" y1="240.0" x2="890" y2="240.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="257.0" class="xs" text-anchor="start">block</text>
+<text x="774" y="257.0" class="xs mono" text-anchor="end">93.9 mm</text>
+<text x="884" y="257.0" class="xs mono" text-anchor="end">8.1 mm</text>
+<text x="560" y="274.0" class="xs" text-anchor="start">rows</text>
+<text x="774" y="274.0" class="xs mono" text-anchor="end">101.9 mm</text>
+<text x="884" y="274.0" class="xs mono" text-anchor="end">11.4 mm</text>
+</svg>

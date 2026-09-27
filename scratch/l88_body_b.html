@@ -1,0 +1,334 @@
+  <h2 id="checking">4. Checking a thing that is allowed to be wrong</h2>
+
+  <p>
+    8.5 and 8.6 had a hard time verifying themselves. GJK's answer is a distance, and the only
+    second opinion available was another distance algorithm with its own bugs; EPA's answer is a
+    penetration depth, and 8.6 §8 had to <em>prove</em> that the SAT's minimum-overlap axis is the
+    true minimum translation before it had an oracle at all.
+  </p>
+
+  <p>
+    This lesson has it easy, and it is worth pausing on why, because the luxury is a consequence of
+    the contract rather than of the algorithm. A broadphase answers a question that something else
+    can answer exactly, in bounded time, for any input: <em>which pairs of boxes overlap?</em> Test
+    all of them.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/phys/broadphase.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">int brute_force_pairs(std::span&lt;const proxy&gt; proxies, std::vector&lt;broadphase_pair&gt;&amp; out)
+{
+    out.clear();
+    const std::size_t n = proxies.size();
+
+    for (std::size_t i = 0; i &lt; n; ++i)
+    {
+        for (std::size_t j = i + 1; j &lt; n; ++j)
+        {
+            if (!overlaps(proxies[i].box, proxies[j].box)) { continue; }
+
+            const std::uint32_t a = proxies[i].index;
+            const std::uint32_t b = proxies[j].index;
+            out.push_back(a &lt; b ? broadphase_pair{a, b} : broadphase_pair{b, a});
+        }
+    }
+    return static_cast&lt;int&gt;(out.size());
+}</code></pre>
+  </figure>
+
+  <p>
+    Nine lines, and it does three separate jobs that the rest of this lesson leans on constantly.
+  </p>
+
+  <p>
+    It is the <strong>oracle</strong>. Every claim below about the grid being correct is checked by
+    running both on the same scene and comparing the pair lists <em>as sets</em>. It is the
+    <strong>baseline</strong>, because “the grid is faster” is not a claim until there is a number
+    it is faster than. And — this one surprises people — it is the <strong>right answer</strong>
+    below some scene size, which §10 measures and which turns out not to be small.
+  </p>
+
+  <p>
+    Notice <code>j = i + 1</code>. That is the whole of why this is <code>n(n−1)/2</code> and not
+    <code>n²</code>: a pair is unordered, so starting the inner loop past the outer index visits
+    each one exactly once. And notice that it still sorts the two indices before pushing. The
+    <em>proxies</em> arrive in whatever order the caller had them; the <em>pairs</em> leave in
+    canonical order, always, which is a promise §11 will explain the cost of breaking.
+  </p>
+
+  <h3>4.1 The check itself</h3>
+
+  <p>
+    §3 of the harness runs twelve independent placements of 900 tumbling proxies — 5,230 genuinely
+    overlapping pairs across the twelve — and asks two questions of each frame: how many pairs of
+    the oracle's are missing from the grid's (the contract), and are the two sets in fact
+    <em>equal</em> (stronger than the contract, and true here because the grid runs the AABB test
+    itself).
+  </p>
+
+  <pre><code class="lang-text">  12 frames, 900 proxies: 5230 true pairs
+  missed by the grid                         0
+  frames on which the sets were equal       12 / 12</code></pre>
+
+  <p>
+    Zero is the only acceptable number in the middle row. Note that this is a <em>much</em> stronger
+    test than “the demo looks right”: a broadphase that dropped one pair in ten thousand would look
+    perfect in a demo and would still put an object through a floor every few minutes.
+  </p>
+
+  <h2 id="cells">5. Cells, and two ways to get the cell map wrong</h2>
+
+  <p>
+    Now the structure. Cut space into a lattice of equal boxes — <em>cells</em> — and give each one
+    a list of the proxies that touch it. Two proxies that share no cell cannot possibly overlap, so
+    the only pairs worth testing are pairs found together in some cell. That is the entire idea, and
+    it is the reason a grid can beat a quadratic: it never enumerates pairs, it enumerates
+    <em>cells</em>, and most cells hold nothing.
+  </p>
+
+  <p>
+    Which cell is a point in? Divide by the cell size and take the floor:
+  </p>
+
+  <div class="eq">
+    \[
+    c(x) \;=\; \left\lfloor \frac{x}{s} \right\rfloor
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the cell index on one axis is <em>x</em> divided by the cell size <em>s</em>, rounded down.
+  </p>
+
+  <p>
+    Work one through by hand, with <code>s = 2 m</code>. A point at <code>x = 5.4</code> gives
+    <code>5.4 / 2 = 2.7</code>, floor 2 — cell 2, which spans [4, 6). A point at
+    <code>x = −0.4</code> gives <code>−0.2</code>, floor <code>−1</code> — cell −1, which spans
+    [−2, 0). A point at <code>x = −2.0</code> gives exactly <code>−1.0</code>, floor −1 — the cell
+    boundary belongs to the cell above it, which is what makes the map a partition rather than an
+    overlap.
+  </p>
+
+  <h3>5.1 A proxy is not a point</h3>
+
+  <p>
+    And here is the first thing a first draft gets wrong. A proxy is a <em>box</em>, so it does not
+    occupy a cell; it occupies a <strong>range</strong> of cells — every integer from the cell of
+    its minimum corner to the cell of its maximum corner, on all three axes.
+  </p>
+
+  @@FIG_CELLMAP@@
+
+  <p>
+    Panel A of Figure 3 is one proxy spanning cells 1 through 3 on x and 1 through 2 on y: six
+    insertions for one object. The natural first draft does something much simpler — objects are
+    small and cells are big, so put each proxy in the one cell containing its <em>centre</em> — and
+    it is a false-negative machine. Two crates a centimetre apart, either side of a cell boundary,
+    are in different cells and are never tested. Measured on 3,000 proxies:
+  </p>
+
+  <pre><code class="lang-text">  control 2: one cell per proxy, by its centre
+    true overlapping pairs                  2836
+    lost                                    1892  (66.7%)</code></pre>
+
+  <p>
+    <strong>Two thirds of the pairs there are.</strong> Not an edge case, not a rare configuration —
+    two thirds. The reason it is such an attractive mistake is that it is <em>nearly</em> right: the
+    third it finds are the ones where both objects happen to sit well inside the same cell, which is
+    most of the ones you will notice while you are debugging it.
+  </p>
+
+  <h3>5.2 The floor, and the warning everybody repeats</h3>
+
+  <p>
+    Every tutorial on grids says the same thing: use <code>std::floor</code>, never a cast to
+    <code>int</code>, because a C++ cast truncates <em>toward zero</em>. Under truncation
+    <code>−0.4</code> and <code>+0.4</code> both give cell 0, so cells −1 and 0 merge into one
+    double-width cell straddling the origin, and every cell to the left of it shifts by one. Panel B
+    of Figure 3 draws exactly that.
+  </p>
+
+  <p>
+    The warning is real. The conclusion usually drawn from it — that truncation loses pairs — is
+    <em>false for this structure</em>, and the harness was written expecting to demonstrate the
+    opposite. It measured zero.
+  </p>
+
+  <pre><code class="lang-text">  control 1: cell index by cast, not floor
+    3000 proxies centred on the origin, cell 2.33 m
+    pairs lost by truncation                   0
+    pairs lost by floor                        0</code></pre>
+
+  <p>
+    The reason is one line of order theory, and it is worth having. A range-walk grid finds a pair
+    when the two proxies' cell ranges <em>intersect</em>. A cell map is a function from the reals to
+    the integers, and both floor and truncation are <strong>monotone</strong> — non-decreasing. If
+    two intervals overlap, so do their images under a non-decreasing map:
+  </p>
+
+  <div class="eq">
+    \[
+    \max(a_0, b_0) \le \min(a_1, b_1) \;\Longrightarrow\;
+    c(\max(a_0, b_0)) \le c(\min(a_1, b_1))
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — if the later of the two starts is no later than the earlier of the two ends, then applying a
+    non-decreasing map to both sides preserves the inequality, and the mapped ranges still meet.
+  </p>
+
+  <p>
+    Monotonicity is <em>all</em> the range walk needs. It does not need the cells to be the same
+    size, or contiguous, or centred anywhere in particular. Truncation is monotone, so it is
+    correct, and so would be a map that made every third cell twice as wide.
+  </p>
+
+  <p>
+    What truncation costs is <strong>occupancy</strong>. Eight cells become one, and a cell's pair
+    loop is quadratic in what is inside it, so where the correct map runs eight small loops the
+    truncating one runs a single large one. Measured on a dense scene centred on the origin:
+  </p>
+
+  <pre><code class="lang-text">    6000 dense proxies, the {-1,0}^3 neighbourhood:
+      fullest cell, truncating                83 proxies
+      fullest cell, flooring                  28 proxies
+      pair tests there, truncating          7844
+      pair tests there, flooring            1957
+      excess                                 4.0x</code></pre>
+
+  <p>
+    Four times the comparisons — in one cell, of a scene with thousands. It is a footnote, not a
+    bug. Use <code>floor</code> anyway: it is the same instruction count, and a cell map that
+    behaves identically everywhere is one less thing that is only true away from the origin. But
+    know <em>which</em> of the two mistakes on this page is the one that will cost you a weekend,
+    because it is not the one with the famous name.
+  </p>
+
+  <div class="callout">
+    <span class="label">Two corrections, in one section</span>
+    <p>
+      §4 of the harness was written to show that truncation loses pairs and that a naive grid is
+      obviously broken. It disproved the first claim and relocated the second. This is the third
+      time in Module 8 that a control has answered a question the section did not mean to ask — 8.6
+      §1 found a knob measuring exactly zero, 8.7 §9 found a control convicting the code of the
+      <em>test's</em> mistake — and the pattern is the same each time: a measurement written to
+      confirm something is only worth writing if it is allowed to refuse.
+    </p>
+  </div>
+
+  <h2 id="duplicates">6. Duplicates, and the cell that owns a pair</h2>
+
+  <p>
+    Insert every proxy into every cell of its range, walk each cell, test every pair inside it. Now
+    count how many times a given pair gets reported.
+  </p>
+
+  <p>
+    Two proxies whose cell ranges overlap are both present in <em>every</em> cell of the overlap. If
+    their ranges share a 2×2 block, they meet four times and the pair is reported four times. Figure
+    4 draws that case; the harness measures a worst case of eight shared cells on ordinary crates,
+    and it gets worse fast for anything larger.
+  </p>
+
+  @@FIG_OWNER@@
+
+  <p>
+    Duplicates are not merely untidy. A duplicated pair means a duplicated narrow-phase call at
+    432 ns, a duplicated manifold, and — once 8.10's solver arrives — the same contact solved twice
+    in one iteration, which is a stiffer contact than the one you asked for.
+  </p>
+
+  <h3>6.1 The two fixes everybody writes</h3>
+
+  <p>
+    The obvious answer is to remember which pairs you have already emitted. 8.7 already gave us the
+    key: <code>pair_key(a, b)</code> packs two 32-bit indices into one 64-bit integer,
+    order-independently. So keep a <code>std::set&lt;std::uint64_t&gt;</code> and skip anything
+    already in it. Or, if you know sets are slow, collect all the emissions into a vector, sort it,
+    and run <code>std::unique</code>.
+  </p>
+
+  <p>
+    Both work. Here is what they cost, on the same 2,000-proxy scene, measured against the
+    <em>entire</em> broadphase they are supposed to be a small part of:
+  </p>
+
+  <pre><code class="lang-text">  control: deduplicating 2131 keys instead
+    std::set                               0.036 ms
+    sort + unique                          0.004 ms
+    the WHOLE broadphase, rule included    0.080 ms
+    the set, as a share of the broadphase     45.2%</code></pre>
+
+  <p>
+    The <code>std::set</code> costs <strong>45% of the whole stage</strong> — a red-black tree
+    allocating a node per key and chasing pointers through it, to solve a problem that is not
+    actually about memory. The sort is far better at 5%, and it is still 5% spent on a question that
+    has a closed-form answer.
+  </p>
+
+  <h3>6.2 The owner cell</h3>
+
+  <p>
+    Here is the observation. The overlap of two axis-aligned cell <em>ranges</em> is itself an
+    axis-aligned range of cells — a box of cells — and a box has exactly one minimum corner. So:
+  </p>
+
+  <div class="callout">
+    <span class="label">The owner-cell rule</span>
+    <p>
+      Report a pair only from the cell at the <strong>minimum corner of the overlap of its two cell
+      ranges</strong>, which is <code>max(lo_a, lo_b)</code> on each axis.
+    </p>
+  </div>
+
+  <p>
+    The proof that this reports each pair exactly once is one sentence in each direction.
+    <em>At least once:</em> the owner cell lies inside both ranges by construction, and every proxy
+    is inserted into every cell of its own range, so both proxies are present there and the pair is
+    examined. <em>At most once:</em> there is only one minimum corner, so the test
+    <code>this cell == owner cell</code> passes in exactly one of the shared cells.
+  </p>
+
+  <p>
+    It is exact, not heuristic. It costs three <code>max</code> calls and three integer comparisons,
+    and no memory at all.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/phys/broadphase.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] inline std::int32_t owner_cell(std::int32_t lo_a, std::int32_t lo_b)
+{
+    return lo_a &gt; lo_b ? lo_a : lo_b;
+}</code></pre>
+  </figure>
+
+  <p>
+    And here is the instrument that makes this section a measurement rather than an argument. The
+    number of duplicate meetings is <em>computable in closed form</em>: for each pair whose ranges
+    meet, the number of shared cells is the product over the three axes of the overlap's width, and
+    the duplicates are that minus one. Sum it over the scene and compare it against the counter the
+    grid keeps while doing something completely different:
+  </p>
+
+  <pre><code class="lang-text">  2000 proxies, cell 2.322 m
+  pairs whose cell ranges meet              5204
+  most cells one pair shares                   8
+  duplicate meetings, predicted             3271
+  duplicate meetings, counted               3271
+  pairs reported                             963
+  duplicates in the reported list              0</code></pre>
+
+  <p>
+    <strong>3271 and 3271.</strong> Two completely independent routes to the same integer, agreeing
+    exactly rather than approximately — which is the kind of check worth reaching for whenever it is
+    available, because it cannot be passed by accident.
+  </p>

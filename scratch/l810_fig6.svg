@@ -1,0 +1,72 @@
+<svg viewBox="0 0 980 500" role="img" aria-labelledby="f6-t f6-d">
+  <title id="f6-t">Islands: a fixed body is not a bridge</title>
+  <desc id="f6-d">Left: four towers standing on one floor make four islands, because an edge of the contact graph counts only when both ends can move. Right: the same scene with a union-find that lets a fixed body join its neighbours collapses to a single island, and a yard of twenty towers goes from twenty islands to one.</desc>
+  <defs>
+    <marker id="e-i-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="30" y="36" class="sm" text-anchor="start">A fixed body is NOT a bridge</text>
+<line x1="30.0" y1="210.0" x2="450.0" y2="210.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="34" y="228" class="xs muted" text-anchor="start">one fixed floor, in every contact</text>
+<rect x="70" y="176" width="56" height="30" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<rect x="70" y="142" width="56" height="30" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<rect x="70" y="108" width="56" height="30" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<line x1="98.0" y1="176.0" x2="98.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<rect x="166" y="176" width="56" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<rect x="166" y="142" width="56" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<rect x="166" y="108" width="56" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.5"/>
+<line x1="194.0" y1="176.0" x2="194.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<rect x="262" y="176" width="56" height="30" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5"/>
+<rect x="262" y="142" width="56" height="30" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5"/>
+<rect x="262" y="108" width="56" height="30" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5"/>
+<line x1="290.0" y1="176.0" x2="290.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<rect x="358" y="176" width="56" height="30" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.5"/>
+<rect x="358" y="142" width="56" height="30" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.5"/>
+<rect x="358" y="108" width="56" height="30" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.5"/>
+<line x1="386.0" y1="176.0" x2="386.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="240" y="264" class="sm" text-anchor="middle">20 islands</text>
+<text x="510" y="36" class="sm" text-anchor="start">…and if it is</text>
+<line x1="510.0" y1="210.0" x2="930.0" y2="210.0" stroke="#8f918a" stroke-width="2.4" fill="none"/>
+<text x="514" y="228" class="xs muted" text-anchor="start">one fixed floor, in every contact</text>
+<rect x="550" y="176" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="550" y="142" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="550" y="108" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<line x1="578.0" y1="176.0" x2="578.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="578.0" y1="210.0" x2="674.0" y2="210.0" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<rect x="646" y="176" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="646" y="142" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="646" y="108" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<line x1="674.0" y1="176.0" x2="674.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="674.0" y1="210.0" x2="770.0" y2="210.0" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<rect x="742" y="176" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="742" y="142" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="742" y="108" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<line x1="770.0" y1="176.0" x2="770.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="770.0" y1="210.0" x2="866.0" y2="210.0" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<rect x="838" y="176" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="838" y="142" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<rect x="838" y="108" width="56" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<line x1="866.0" y1="176.0" x2="866.0" y2="210.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="866.0" y1="210.0" x2="962.0" y2="210.0" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<text x="720" y="264" class="sm" text-anchor="middle">1 island</text>
+<text x="30" y="306" class="xs muted" text-anchor="start">An impulse applied to a fixed body changes nothing any other contact can read, so it propagates nothing and joins nothing.</text>
+<text x="30" y="324" class="xs muted" text-anchor="start">Let it bridge and one rolling marble keeps every crate in the level awake — which is not a slow simulation, it is no sleeping at all.</text>
+<text x="30" y="370" class="xs muted" text-anchor="start">yard of twenty towers</text>
+<text x="436" y="370" class="xs muted" text-anchor="end">value</text>
+<line x1="30" y1="378.0" x2="442" y2="378.0" class="grid" stroke-width="1.0"/>
+<text x="30" y="395.0" class="xs" text-anchor="start">bodies (one floor, 100 crates)</text>
+<text x="436" y="395.0" class="xs mono" text-anchor="end">101</text>
+<text x="30" y="412.0" class="xs" text-anchor="start">manifolds</text>
+<text x="436" y="412.0" class="xs mono" text-anchor="end">100</text>
+<text x="30" y="429.0" class="xs" text-anchor="start">islands, fixed bodies not bridges</text>
+<text x="436" y="429.0" class="xs mono" text-anchor="end">20</text>
+<text x="30" y="446.0" class="xs" text-anchor="start">islands, fixed bodies bridging</text>
+<text x="436" y="446.0" class="xs mono" text-anchor="end">1</text>
+<text x="30" y="463.0" class="xs" text-anchor="start">union-find and labelling</text>
+<text x="436" y="463.0" class="xs mono" text-anchor="end">0.250 µs (2.48 ns/body)</text>
+</svg>

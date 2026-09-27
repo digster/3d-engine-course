@@ -1,0 +1,70 @@
+<svg viewBox="0 0 900 290" role="img" aria-labelledby="l86f10-t l86f10-d">
+  <title id="l86f10-t">EPA's accuracy against its tolerance, and the effect of distance from the world origin on the two support formulations.</title>
+  <desc id="l86f10-d">Left, a table of mean and maximum depth error for tolerances from 1e-2 to 1e-6, with the maximum error divided by tolerance times size staying between 0.34 and 1.36. Right, a table of the same overlap measured from 2 m to 1.8 million metres from the world origin: the relative support formulation holds at about 1.5e-8 m throughout while the naive world-space one degrades to 1e-2 m.</desc>
+  <defs>
+    <marker id="e-i-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l86f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">How close, and what the arithmetic costs a kilometre from the origin.</text>
+<text x="240" y="54" class="xs" text-anchor="middle">|EPA − exact| for 1 m crates</text>
+<text x="60" y="80" class="xs muted" text-anchor="start">tolerance</text>
+<text x="264" y="80" class="xs muted" text-anchor="end">mean err</text>
+<text x="374" y="80" class="xs muted" text-anchor="end">max err</text>
+<text x="474" y="80" class="xs muted" text-anchor="end">÷ tol·size</text>
+<line x1="60" y1="88.0" x2="480" y2="88.0" class="grid" stroke-width="1.0"/>
+<text x="60" y="105.0" class="xs" text-anchor="start">1e−2</text>
+<text x="264" y="105.0" class="xs mono" text-anchor="end">1.119e-03</text>
+<text x="374" y="105.0" class="xs mono" text-anchor="end">2.347e-02</text>
+<text x="474" y="105.0" class="xs mono" text-anchor="end">1.35</text>
+<text x="60" y="122.0" class="xs" text-anchor="start">1e−3</text>
+<text x="264" y="122.0" class="xs mono" text-anchor="end">1.307e-05</text>
+<text x="374" y="122.0" class="xs mono" text-anchor="end">1.880e-03</text>
+<text x="474" y="122.0" class="xs mono" text-anchor="end">1.09</text>
+<text x="60" y="139.0" class="xs" text-anchor="start">1e−4</text>
+<text x="264" y="139.0" class="xs mono" text-anchor="end">1.835e-07</text>
+<text x="374" y="139.0" class="xs mono" text-anchor="end">2.167e-04</text>
+<text x="474" y="139.0" class="xs mono" text-anchor="end">1.25</text>
+<text x="60" y="156.0" class="xs" text-anchor="start">1e−5</text>
+<text x="264" y="156.0" class="xs mono" text-anchor="end">5.022e-08</text>
+<text x="374" y="156.0" class="xs mono" text-anchor="end">6.972e-06</text>
+<text x="474" y="156.0" class="xs mono" text-anchor="end">0.40</text>
+<text x="60" y="173.0" class="xs" text-anchor="start">1e−6</text>
+<text x="264" y="173.0" class="xs mono" text-anchor="end">4.958e-08</text>
+<text x="374" y="173.0" class="xs mono" text-anchor="end">5.855e-07</text>
+<text x="474" y="173.0" class="xs mono" text-anchor="end">0.34</text>
+<text x="60" y="207.5" class="xs muted" text-anchor="start">The max error tracks `tolerance × size` to within a factor</text>
+<text x="60" y="223.5" class="xs muted" text-anchor="start">of 1.4, which is what makes `tolerance` a relative quantity</text>
+<text x="60" y="239.5" class="xs muted" text-anchor="start">rather than a distance — 8.5 §11's finding, inherited.</text>
+<text x="680" y="54" class="xs" text-anchor="middle">the same overlap, walked away from the origin</text>
+<text x="500" y="80" class="xs muted" text-anchor="start">distance</text>
+<text x="744" y="80" class="xs muted" text-anchor="end">relative</text>
+<text x="864" y="80" class="xs muted" text-anchor="end">naive</text>
+<line x1="500" y1="88.0" x2="870" y2="88.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="105.0" class="xs" text-anchor="start">2 m</text>
+<text x="744" y="105.0" class="xs mono" text-anchor="end">1.490e-08</text>
+<text x="864" y="105.0" class="xs mono" text-anchor="end">0</text>
+<text x="500" y="122.0" class="xs" text-anchor="start">28 m</text>
+<text x="744" y="122.0" class="xs mono" text-anchor="end">1.490e-08</text>
+<text x="864" y="122.0" class="xs mono" text-anchor="end">1.670e-06</text>
+<text x="500" y="139.0" class="xs" text-anchor="start">1,774 m</text>
+<text x="744" y="139.0" class="xs mono" text-anchor="end">1.490e-08</text>
+<text x="864" y="139.0" class="xs mono" text-anchor="end">9.780e-06</text>
+<text x="500" y="156.0" class="xs" text-anchor="start">28,378 m</text>
+<text x="744" y="156.0" class="xs mono" text-anchor="end">1.490e-08</text>
+<text x="864" y="156.0" class="xs mono" text-anchor="end">1.720e-03</text>
+<text x="500" y="173.0" class="xs" text-anchor="start">227,023 m</text>
+<text x="744" y="173.0" class="xs mono" text-anchor="end">1.490e-08</text>
+<text x="864" y="173.0" class="xs mono" text-anchor="end">1.000e-02</text>
+<text x="500" y="190.0" class="xs" text-anchor="start">1,816,187 m</text>
+<text x="744" y="190.0" class="xs mono" text-anchor="end">7.450e-09</text>
+<text x="864" y="190.0" class="xs mono" text-anchor="end">1.000e-02</text>
+<text x="500" y="224.5" class="xs muted" text-anchor="start">Two arms, and they are NOT two implementations: the same</text>
+<text x="500" y="240.5" class="xs muted" text-anchor="start">`epa.cpp` in both columns, differing only in the `convex` view</text>
+<text x="500" y="256.5" class="xs muted" text-anchor="start">they are handed. The relative form's error does not move;</text>
+<text x="500" y="272.5" class="xs t-hi" text-anchor="start">the naive form reaches a CENTIMETRE.</text>
+</svg>

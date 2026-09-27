@@ -1,0 +1,420 @@
+  <h2 id="sign">6. The double cover, twice: a sign and a bound</h2>
+
+  <p>
+    Everything so far would have worked in Lesson 7.3 with <code>complex</code> substituted for
+    <code>quat</code>. This section would not, and it is the reason 7.4 deliberately left slerp
+    unwritten.
+  </p>
+
+  <h3>6.1 Two names for one destination</h3>
+
+  <p>
+    Lesson 7.4 §8 established, and measured bitwise over 20,000 rotations, that <code>q</code> and
+    <code>−q</code> are the <em>same rotation</em>. The sandwich <code>q v q̄</code> is quadratic in
+    <code>q</code>, so a global sign cannot survive it: <code>|M(q) − M(−q)| = 0.000e+00</code>, not
+    a tolerance.
+  </p>
+
+  <p>
+    That is a fact about <em>orientations</em>. Interpolation is not about orientations; it is about
+    <em>points</em>, and <code>q</code> and <code>−q</code> are antipodal points on the unit
+    3-sphere. So there are two great-circle arcs between any two orientations — one through
+    <code>b</code> and one through <code>−b</code> — whose angles sum to <code>2π</code>. Exactly
+    one of them is the short way, and <strong>nothing in the two endpoints' identity as orientations
+    says which</strong>.
+  </p>
+
+  <h3>6.2 The fix is one comparison</h3>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr quat nearest(quat reference, quat q)
+{
+    return (reference.w * q.w + dot(reference.v, q.v) &lt; 0.0f) ? -q : q;
+}</code></pre>
+
+  <p>
+    The four-component dot product is the cosine of the angle between the two <em>points</em>, and
+    it is also the scalar part of <code>conj(a)·b</code> — one of this algebra's small coincidences,
+    and the reason every slerp implementation in the world opens with a dot product. Negative means
+    the angle between the points exceeds 90°, which means the rotation between them exceeds 180°,
+    which means the other way round is shorter.
+  </p>
+
+  <div class="callout">
+    <span class="label">Worked, with numbers</span>
+    <p>
+      Take <code>a = 1</code> (the identity) and <code>b</code> a turn of <strong>350° about
+      <code>+y</code></strong>. Then <code>b = cos175° + sin175°·ŷ = (−0.99619, 0, 0.08716, 0)</code>.
+      The dot product with the identity is just <code>b.w = −0.99619</code>, which is negative, so
+      <code>nearest</code> returns <code>−b = (0.99619, 0, −0.08716, 0)</code>.
+    </p>
+    <p>
+      Read that back: <code>cos(5°) + sin(5°)·(−ŷ)</code> — a <strong>10° turn about
+      <code>−y</code></strong>. Which is the same place. The blend now covers ten degrees instead of
+      three hundred and fifty, and the only thing that changed was a sign on a number the caller
+      never sees.
+    </p>
+  </div>
+
+  <h3>6.3 The bug you ship without it</h3>
+
+  <p>
+    This is not a theoretical tidiness. Here is the shape it takes in practice, and it does not look
+    like a sign error when you meet it.
+  </p>
+
+  <p>
+    An exporter writes an animation clip as a list of quaternion keyframes. It has no reason to make
+    their signs consistent — <code>q</code> and <code>−q</code> are the same pose, the file format
+    says nothing, and the maths that produced them (a matrix extraction, say, with a pivot that
+    changed between frames) does not care. So two adjacent keyframes describing poses
+    <strong>one degree apart</strong> can perfectly well be stored with opposite signs.
+  </p>
+
+  @@FIG_SIGN@@
+
+  <p>
+    Blend them without the comparison and the character takes the <strong>359°</strong> route
+    between two poses that were a degree apart: a whole-body spin lasting exactly one keyframe
+    interval, in the middle of a walk cycle. It reads as "the animation is corrupt", not as
+    "somebody forgot a dot product", and it is the single most common quaternion bug in shipped
+    code.
+  </p>
+
+  <p>
+    The harness measures the frequency, because "sometimes" is not a design input:
+    <strong>9,923 of 20,000</strong> uniformly sampled pairs — <strong>49.6%</strong> — need the
+    flip. It is not an edge case. It is a coin toss.
+  </p>
+
+  <p>
+    nlerp's version of the same failure is worse, and worth seeing separately. The chord between two
+    <em>antipodal</em> representatives passes through the origin, where there is no direction left
+    to normalise. On the keyframe pair above, the raw chord passes within
+    <strong>0.00436</strong> of zero — so the blend does not merely take the long way, it goes
+    through a point where the answer is whatever <code>normalised</code>'s zero policy happens to
+    be.
+  </p>
+
+  <h3>6.4 And now the dividend</h3>
+
+  <p>
+    Here is the part that is genuinely new, that 7.3 could not have found, and that turns the double
+    cover from a tax into a guarantee.
+  </p>
+
+  <p>
+    <code>nearest</code> forces the four-component dot product to be non-negative. That is the same
+    as saying the sphere arc <code>Ω</code> is at most <strong>90°</strong>. Substitute into §5.3's
+    closed form:
+  </p>
+
+  <div class="eq">\[ \sec^2(\Omega/2) \;\le\; \sec^2(45°) \;=\; \frac{1}{\cos^2 45°}
+      \;=\; \frac{1}{1/2} \;=\; 2 \]</div>
+
+  <p class="eq-plain">
+    <strong>Exactly 2. Not approximately, not usually — the worst speed ratio nlerp can ever have,
+    over every pair of orientations that exists, is a factor of two.</strong>
+  </p>
+
+  @@FIG_CAP@@
+
+  <p>
+    Compare what the plane could do. In Lesson 7.3 there was no double cover to exploit:
+    <code>z</code> and <code>−z</code> are genuinely different rotations of the plane, so
+    <code>Ω</code> could reach 180°, <code>sec²(Ω/2)</code> could reach <strong>13,131</strong>, and
+    the positional gap could reach <strong>26.34°</strong>. None of those are reachable here. The
+    gap caps at <strong>8.1491°</strong>, and the harness measures it over 20,000 random pairs:
+    largest sphere arc seen <strong>89.9969°</strong> against a bound of 90; largest gap seen
+    <strong>8.1345°</strong> against a bound of 8.1491.
+  </p>
+
+  <p>
+    The control is the same 20,000 pairs with the comparison deleted, where the arc reaches
+    <strong>176.3020°</strong> and no bound applies at all.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Why this is worth stopping on</span>
+    <p>
+      "nlerp is an approximation" is the usual summary, and an approximation with no error bound is
+      not something you can build on. This one has a bound, it is <em>tight</em>, and it comes from
+      the very feature that made the sign comparison necessary. <strong>The cost and the guarantee
+      are the same fact.</strong> That is worth more than either half: it means a system can use
+      nlerp everywhere, know its worst case is 8.15° of pose, and decide with a threshold on the
+      arc rather than with a preference.
+    </p>
+  </div>
+
+  <h2 id="measure">7. Measuring it, and fixing the instrument first</h2>
+
+  <p>
+    Every claim above is now a number. Getting those numbers required rewriting the thing that
+    measures them, which is the finding this lesson did not plan for.
+  </p>
+
+  <h3>7.1 The demo: a dial with two rows of ticks</h3>
+
+  <p>
+    <code>gimbal</code> gains <kbd>S</kbd>. It blends between two orientations 150° apart and puts
+    three craft on the arc: slerp in pale blue, nlerp in amber, and — in magenta — the same pair of
+    poses blended the way round that <code>nearest</code> exists to avoid.
+  </p>
+
+  <p>
+    The two poses are at most 8° apart, which at this radius is a third of a unit, so two aircraft
+    would be indistinguishable. <strong>The ticks carry the argument.</strong> Eleven equally spaced
+    values of <code>t</code> are marked twice on the same circle — outward for slerp, inward for
+    nlerp — and the difference between an evenly spaced row and a bunched one is visible from across
+    the room.
+  </p>
+
+  @@FIG_RENDER@@
+
+  <p>
+    Two drawing decisions in that figure are load-bearing and both were mistakes first. The
+    <strong>rotation axis points at the camera</strong>, so the nose's path renders as a circle
+    rather than an ellipse — an ellipse's arc lengths are not proportional to its angles, so the
+    tick spacing would have been compressed at the ends by perspective and not by nlerp, and no
+    reader could tell which. That is Lesson 7.4's dial lesson arriving a second time. And
+    <strong>both rows of ticks touch the same circle</strong>, one pointing out and one in: drawing
+    the second row on a smaller circle would have said the two paths differ, which is the single
+    most common misconception about nlerp and the thing this mode exists to kill.
+  </p>
+
+  <p>
+    The right-hand panel is <code>t = 0.5</code>, and there is only one glyph in it. That is not a
+    rendering failure:
+  </p>
+
+  <pre>gimbal: sched t 0.500  arc 150.00 deg
+gimbal:   slerp 75.0000, nlerp 75.0000 deg turned
+gimbal:   nlerp lag 0.0000 deg
+gimbal:   long way 105.0000 deg turned</pre>
+
+  <p>
+    <strong>nlerp and slerp agree exactly at the midpoint</strong>, and it is a symmetry rather than
+    a coincidence: the chord's midpoint is equidistant from both endpoints, and so is the arc's, and
+    on a circle there is only one such point on the short side. The harness checks it at seven arcs
+    from 10° to 179° and the worst chord between the two midpoints is <strong>6.664e−08</strong>.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Which makes the obvious unit test useless</span>
+    <p>
+      A test that samples <code>t = 0</code>, <code>t = 0.5</code> and <code>t = 1</code> certifies
+      nlerp as slerp, because <strong>those are precisely the three values at which they are the
+      same function</strong>. The gap at <code>t = 0.5</code> is <code>0.0000°</code>; at
+      <code>t = 0.229</code> it is <code>4.5140°</code>.
+    </p>
+    <p>
+      This is Lesson 7.4's finding one level up. That lesson found <code>renormalised_fast</code>
+      exact at <code>|q| = 1</code> <em>and</em> at <code>|q| = 2</code> and catastrophic between,
+      and drew the moral <em>choose the sample points</em>. Here the sample points that hide the
+      difference are the three a reasonable person would choose first.
+    </p>
+  </div>
+
+  <h3>7.2 The path, against a number Lesson 7.1 measured</h3>
+
+  <p>
+    Total turning along a path, at a fixed step count, against the straight-line separation of the
+    endpoints. Lesson 7.1 built this instrument for matrices and Lesson 7.2 used it to prove
+    slerp's geodesic property. Here it is again, on the same pose pair, in a different
+    representation:
+  </p>
+
+  <pre>   geodesic  179.0527 deg
+   slerp     179.0524 deg   excess   -0.00%
+   nlerp     179.0524 deg   excess   -0.00%
+   euler     204.2903 deg   excess  +14.10%</pre>
+
+  <p>
+    The Euler row is the check, and it is a stronger one than it looks. Lesson 7.2's harness
+    measures the same three quantities on the same pose pair using <code>mat3</code> throughout and
+    <code>angle_between_rotations</code> as its metric — code that has never heard of a quaternion,
+    written three lessons ago:
+  </p>
+
+  <pre>  generic pair       path   geodesic     excess    speed
+  Euler lerp      204.29°    179.05°     14.10%   1.556x  &lt;- CONTROL (7.1's number)
+  slerp           179.05°    179.05°     -0.00%   1.000x</pre>
+
+  <p>
+    <strong>Every figure agrees to the digit.</strong> Two representations, two metrics, two
+    harnesses, no shared code — and that agreement is what makes the <em>other</em> two rows
+    believable, because a path integral that reports <code>−0.00%</code> for a function you wrote
+    yourself is exactly the kind of number that should be distrusted until something independent
+    confirms it. <strong>This lesson's first attempt at that measurement did not survive that
+    scepticism, and §7.3 is what it found.</strong>
+  </p>
+
+  <h3>7.3 The instrument that had to be rewritten first</h3>
+
+  <p>
+    Those numbers are the second set. The first set said this:
+  </p>
+
+  <pre>   geodesic  179.0527 deg
+   slerp     164.7134 deg   excess   -8.01%
+   nlerp     162.4646 deg   excess   -9.26%
+   euler     188.0517 deg   excess   +5.03%</pre>
+
+  <p>
+    A path integral reporting that <strong>slerp's own geodesic is 8% shorter than the distance
+    between its endpoints</strong> is not a finding about slerp. It is a broken ruler, and it took
+    a while to believe that rather than the numbers.
+  </p>
+
+  <p>
+    The culprit is <code>angle_between(quat, quat)</code>, which Lesson 7.4 shipped as the formula
+    every reference gives:
+  </p>
+
+  <div class="eq">\[ \theta \;=\; 2\arccos\big|\,a \cdot b\,\big| \]</div>
+
+  @@FIG_METRIC@@
+
+  <p>
+    Look at the left panel of figure 7. Near zero the cosine is <em>quadratic</em> in the angle and
+    the sine is <em>linear</em>. So for a small separation the dot product lands within a few
+    <code>float</code> ulps of 1, and <code>acos</code> is being asked to read the angle off a
+    quantity that has already lost almost all of it. The noise floor is computable: the ulp below 1
+    is <code>eps/2</code>, so
+  </p>
+
+  <div class="eq">\[ \theta_{\text{floor}} \;\approx\; 2\sqrt{2\,\varepsilon}
+      \;=\; 2\sqrt{2 \times 1.192\times10^{-7}} \;=\; 0.0560° \]</div>
+
+  <p>
+    A path integral over 4,096 steps of a 150° arc takes steps of <strong>0.037°</strong> — every
+    one of them below that floor. So every step is quantised, and quantised <em>downward</em>, and
+    4,096 biased errors do not average out. The right panel of figure 7 is the result:
+  </p>
+
+  <pre>   endpoints are 150.0000 deg apart
+   slerp path by 7.4's acos form: 88.3437 deg  (-41.10%)
+   slerp path by the atan2 form:  150.0000 deg  (-0.00%)</pre>
+
+  <p>
+    <strong>−41.10%.</strong> The metric was failing slerp for not walking the path it was walking.
+  </p>
+
+  <p>
+    The repair is the form the same file already uses eleven lines higher.
+    <code>axis_angle_from_quat</code> reads its angle with <code>atan2(|v|, w)</code> and its doc
+    comment says why, in as many words — and then <code>angle_between</code>, directly below it,
+    uses <code>acos</code>. Writing the difference quaternion's two parts out by hand:
+  </p>
+
+  <div class="eq">\[ \operatorname{conj}(a)\,b \;=\;
+      \big(\,a\!\cdot\!b,\;\; a_w b_v - b_w a_v - a_v \times b_v \,\big)
+      \qquad
+      \theta \;=\; 2\operatorname{atan2}\big(|v|,\;|a\!\cdot\!b|\,\big) \]</div>
+
+  <p>
+    About twelve multiplies where the old form was four. For a metric — called in tests, in editors
+    and in path integrals, and never per vertex — that is the right side of the trade, and the
+    <code>acos</code> form is kept in the file as <code>angle_between_by_cosine</code> so the two
+    can be measured against each other rather than argued about. That is exactly the arrangement
+    <code>math/rotation.hpp</code> has had for matrices since Lesson 7.1.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The lesson underneath, which is not about <code>acos</code></span>
+    <p>
+      7.4 wrote <code>angle_between</code> for a <em>separation</em> — how far apart are these two
+      poses — where the answer is large and <code>acos</code> is fine. A path integral asks the same
+      function for a <em>step</em>, where the answer is tiny. <strong>The function did not change;
+      the question did</strong>, and nothing in the type system or the name marks the difference.
+      When you reuse a numerical routine at a different scale, re-derive its conditioning at that
+      scale. Fourth appearance of this trap in Module 7, and the first inside the engine.
+    </p>
+  </div>
+
+  <h3>7.4 The textbook form, and a table that lied</h3>
+
+  <p>
+    Every reference prints slerp like this:
+  </p>
+
+  <div class="eq">\[ \operatorname{slerp}(a,b,t) \;=\;
+      \frac{\sin\big((1-t)\Omega\big)\,a \;+\; \sin\big(t\Omega\big)\,b}{\sin \Omega} \]</div>
+
+  <p>
+    It is the same function — measured agreement <strong>1.192e−07</strong>, one float ulp, over a
+    120° arc. It is also worse, and in a way that matters exactly where animation lives.
+  </p>
+
+  <p>
+    It divides by <code>sin Ω</code>. As the arc closes, <code>sin Ω → 0</code> and so does the
+    numerator, and <em>the cancellation is not arranged</em> — both parts are computed separately
+    and then divided. Worse, <code>Ω</code> itself comes from an <code>acos</code>, so it becomes
+    exactly <code>0</code> as soon as the dot product rounds to 1. Then <code>sin 0 = 0</code> and
+    the whole thing is <code>0/0</code>.
+  </p>
+
+  <p>
+    We can predict where. The ulp below 1 is <code>eps/2</code>, so round-to-nearest takes anything
+    within <code>eps/4</code> of 1; <code>1 − cos Ω ≈ Ω²/2</code>, so the cliff is at
+    <code>Ω = √(eps/2)</code> and the rotation arc is twice that:
+  </p>
+
+  <div class="eq">\[ \theta_{\text{cliff}} \;=\; 2\sqrt{\varepsilon/2}
+      \;=\; 2\sqrt{5.96\times10^{-8}} \;=\; 0.0280° \]</div>
+
+  <pre>   arc (deg)     textbook       ours err
+      1.0000     1.1921e-07     5.7032e-10
+      0.1000     1.1921e-07     7.1290e-11
+      0.0100     101 NaN of 101   7.7173e-12
+      0.0001     101 NaN of 101   6.5122e-14
+      0.0000     101 NaN of 101   0.0000e+00
+   textbook form goes NaN below an arc of 0.0279 deg
+   predicted: 2*sqrt(eps/2) = 0.0280 deg</pre>
+
+  <p>
+    <strong>0.0279 measured against 0.0280 predicted.</strong> And a <code>NaN</code> pose does not
+    stay local — it propagates through every child in the skeleton, and the symptom is an entire
+    character disappearing on one frame.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And the first version of that table said <code>0.0000e+00</code> in all four rows</span>
+    <p>
+      It accumulated the worst error with <code>std::max</code>. Every comparison against a
+      <code>NaN</code> is false, so <code>std::max(x, NaN)</code> returns <code>x</code>: <strong>a
+      <code>NaN</code> can never win a maximum.</strong> The textbook column therefore printed a
+      clean, perfect, entirely fictional zero for a function that was failing in all 101 samples of
+      all four rows — and the row it printed <em>correctly</em>, at 1°, showed it beating our
+      version, which made the table look like an argument for the textbook form.
+    </p>
+    <p>
+      <strong>A <code>NaN</code> has to be counted, never maximised.</strong> Fifth blind instrument
+      in Module 7, and the first one in a harness rather than in engine code.
+    </p>
+  </div>
+
+  <h3>7.5 What it costs</h3>
+
+  @@FIG_COST@@
+
+  <p>
+    Three interpolations, three lessons, one benchmark. <code>quat_nlerp</code> at
+    <strong>4.763 ns</strong>, <code>quat_slerp</code> at <strong>16.288 ns</strong>, and Lesson
+    7.2's <code>rotation_slerp</code> on <code>mat3</code> at <strong>45.752 ns</strong> — which is
+    2.81× the quaternion version, because it extracts an axis and an angle with
+    <code>axis_angle_from_rotation</code>, scales the angle, and rebuilds with Rodrigues.
+  </p>
+
+  <p>
+    The representation is <em>cheaper than the one it replaced, at the job it replaced it for</em>,
+    which is not something Lesson 7.4 could say: that lesson found quaternions 1.57× cheaper to
+    compose and 1.57× <em>dearer</em> to apply to a vector. Interpolation is the row where the
+    fourth component pays for itself outright.
+  </p>
+
+  <p>
+    Every timed loop here obeys the rules Module 7 has accumulated the hard way: consume the whole
+    result, never overwrite the accumulator (7.4 §F.1 measured 0.000 ns that way), vary the input
+    with the repetition counter (7.2), best of three after a warm-up, and check the answer is
+    physically possible before believing it.
+  </p>

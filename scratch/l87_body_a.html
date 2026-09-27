@@ -1,0 +1,287 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-06-epa.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.6 — EPA: Penetration Depth</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-08-broadphase.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.8 — Broadphase: A Uniform Grid</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.7</div>
+    <h1>Contact Manifolds and Persistence</h1>
+    <p class="deck">
+      8.6 finished the narrow phase's arithmetic. <code>epa_penetration</code> returns how deep two
+      convex shapes overlap, which way to push them apart, and a pair of witness points on the two
+      surfaces — everything a solver asks for — and a crate resting on a floor still will not sit
+      still. A contact force acts <em>at a point</em>, so the torque it exerts about that point is
+      zero, and a body held up by one point is a body balanced on a pin. This lesson measures that
+      on the engine's own <code>rigid_body</code> with the same gravity, the same impulses and the
+      same normal in both arms: four contact points settle at <strong>1.16 mm</strong> of
+      penetration and 5.2 °/s of residual rotation, and the same contact reduced to its deepest
+      single point sinks <strong>21.27 mm</strong> and rocks at <strong>27.99 °/s</strong>, for
+      ever. The moment a support polygon can carry is derivable before it is measured —
+      <code>m·g·(w/2)</code>, 49.05 N·m — and a bisection lands on <strong>47.87</strong>. Then the
+      part that needed a new interface. 8.5's claim that a convex set is <em>determined</em> by its
+      support function is true, and <code>support(d)</code> still returns <strong>one point</strong>
+      when the argmax is a whole square: 4,000 directions drawn from a cone a thousandth of a degree
+      wide about a face normal come back with <strong>all four corners</strong>, deterministically
+      and arbitrarily, which are not the same thing. So the shapes learn to return a whole feature,
+      and the two features are clipped against each other — Sutherland and Hodgman, which 3.3 wrote
+      for the near plane, doing a different job. The second half is the word <em>persistence</em>,
+      and the reason for it is 8.10's solver: warm starting needs to know which of this frame's
+      contacts <em>is</em> which of last frame's, and the tempting answer is wrong. Positions are
+      floats computed by a different route through the same code; over a crate's landing a
+      ten-micrometre position match finds <strong>0.00%</strong> of them while an id match finds
+      <strong>82%</strong>, rising to <strong>100% of 1,999 consecutive frames</strong> once it
+      settles. And a control that expected zero matches after a two-metre teleport got four of four
+      — because the manifold was right and the control was wrong. Ships
+      <code>manifold.hpp</code>, <code>support_face</code> for every primitive, a frame-to-frame
+      cache, a demo that applies one clip plane per keystroke, <strong>nine measured sections and
+      92 checks</strong>, and a knob that was written, measured at zero over 208,000 pairs, and
+      taken back out.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-03-barycentric.html">2.3 — Barycentric Coordinates from Signed Areas</a>,
+          <a href="03-03-near-plane-clipping.html">3.3 — Near-Plane Clipping</a>,
+          <a href="08-03-angular-dynamics.html">8.3 — Angular Dynamics: Torque and the Inertia Tensor</a>,
+          <a href="08-05-gjk.html">8.5 — GJK: Convex Distance from a Support Function</a>,
+          <a href="08-06-epa.html">8.6 — EPA: Penetration Depth</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/manifold.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/manifold.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/shape.hpp</code>,
+            <code>engine/src/phys/shape.cpp</code>,
+            <code>engine/include/engine/phys/convex.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/manifold/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_87.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_87.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can produce a <strong>contact manifold</strong>: up to four contact points
+            sharing one normal, each carrying a stable identity, plus the machinery to carry
+            impulses across a frame boundary and a cache to hold them. A crate rests flat on a
+            floor with four points and a support polygon of 0.6667 m²; a ball on the same floor gets
+            <em>one</em> point, correctly. <code>epa.hpp</code> needed <strong>no change at
+            all</strong> — the prediction that this lesson would want EPA's winning triangle turned
+            out to be wrong, and §4 says why. <strong>Nine measured sections, 92 checks</strong>,
+            every contact point checked against both shapes with a signed distance field, one
+            fixture whose answer is written down on paper first, and a demo that applies one
+            Sutherland–Hodgman side plane per keystroke.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a single contact point cannot hold a body up, in terms of torque rather than
+          of accuracy, and predict the moment a given support polygon can carry.</li>
+      <li>…say what a contact manifold is — a set of points sharing one normal — and why the number
+          four is forced rather than budgeted.</li>
+      <li>…explain why a support function determines a convex set and still cannot name one of its
+          faces, and recognise the tie-break that decides which point comes back.</li>
+      <li>…implement <code>support_face</code> for a box, a sphere, a capsule and a point cloud, and
+          say which of the four needs a tolerance and why.</li>
+      <li>…choose a reference face and an incident face, state what the parallelism tolerance buys
+          and costs, and bound the error it introduces exactly.</li>
+      <li>…clip one convex polygon against another's side planes with Sutherland–Hodgman, and say
+          what a reversed winding does to the result.</li>
+      <li>…reduce a clipped contact set to four points deterministically, and justify the choice
+          against a brute-forced optimum.</li>
+      <li>…design a contact identity that survives a frame boundary, and explain why matching on
+          position is a trap that only shows itself once things move.</li>
+      <li>…recognise when a knob you wrote for a real hazard measures zero, and take it back out.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a crate balanced on a pin</a></li>
+      <li><a href="#polygon">Building intuition: the support polygon</a></li>
+      <li><a href="#manifold">What a manifold is, and why four</a></li>
+      <li><a href="#argmax">The feature a support function cannot name</a></li>
+      <li><a href="#faces">Asking a shape for its face</a></li>
+      <li><a href="#reference">Reference, incident, and how parallel is parallel</a></li>
+      <li><a href="#clip">The clip</a></li>
+      <li><a href="#four">Four, and why not five</a></li>
+      <li><a href="#persistence">Identity, and what survives a frame</a></li>
+      <li><a href="#demo">Watching it, and breaking it on purpose</a></li>
+      <li><a href="#budget">The budget, and a knob that came back out</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a crate balanced on a pin</h2>
+
+  <p>
+    Here is where 8.6 left the engine. Two convex shapes overlap;
+    <code>epa_penetration</code> returns the minimum translation that separates them, the direction
+    of it, and a pair of witness points — one on each surface — that the depth is measured between.
+    That is a complete answer to the question “how are these two intersecting”, and it is the
+    answer every paper on penetration depth sets out to compute.
+  </p>
+
+  <p>
+    Now build the simplest thing in the world out of it. A floor. A crate. Gravity. Each step, ask
+    the narrow phase where they touch, push the crate out along the normal with an impulse, and
+    integrate. Run it for two seconds.
+  </p>
+
+  <p>
+    The crate does not sit still. It rocks, gently and for ever, and it sits a couple of centimetres
+    inside the floor while it does it. Turn up the solver's iteration count and it rocks with a
+    smaller amplitude and does not stop. Turn up the position correction and it rocks faster. Drop
+    it from higher and it rocks harder. Nothing about the tuning fixes it, because nothing about the
+    tuning is wrong.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A contact force acts at a point, so the torque it exerts about that point is
+      zero.</strong> Put the point anywhere but directly beneath the centre of mass and the force
+      and the weight form a couple, so the body turns. As it turns, the contact point moves to the
+      other corner, and the couple reverses. There is no equilibrium unless the single point happens
+      to sit exactly under the centre of mass — which is a set of measure zero, and which the crate
+      leaves on the first frame it is disturbed.
+    </p>
+  </div>
+
+  <p>
+    That is not a numerical problem and it is not an accuracy problem. A one-point contact does not
+    <em>approximate</em> a resting crate badly; it describes a <em>different physical situation</em>
+    — a crate balanced on a pin — and simulates that one correctly. Figure 1 is the whole argument
+    in a picture and a table.
+  </p>
+
+@@FIG_PIN@@
+
+  <p>
+    Read the middle two columns rather than the first. The tilt after two seconds is small in both
+    arms, and it is small in the one-point arm for a reason that is worth being uncomfortable about:
+    a single point <em>does</em> hold a crate up, by chattering. It pushes the lowest corner, which
+    turns the other corner down, which becomes the lowest corner, which gets pushed in turn. Averaged
+    over a few frames the contact point sweeps the whole face and the average force can act anywhere
+    on it, which is exactly what a support polygon does — at 27.99 °/s of permanent rocking and
+    21 mm of sink, where the four-point contact rocks at 5.2 and sinks 1.16.
+  </p>
+
+  <p>
+    This is why single-point contact looks nearly fine in a demo and is unusable in a game. Drop one
+    crate on a floor and it lands, wobbles for a moment and looks settled. Stack six and the stack
+    breathes; put a character on top and the character jitters; ask a physics-driven door to stay
+    shut and it buzzes. Every one of those is the same fact wearing a different hat, and none of them
+    is fixed downstream.
+  </p>
+
+  <h3>The number you can write down first</h3>
+
+  <p>
+    The good news about a statement this clean is that it comes with arithmetic. A support polygon
+    <code>w</code> metres wide, under a body of weight <code>m·g</code>, can resist a moment of at
+    most <code>m·g·(w/2)</code>: the largest moment arm available is half the polygon's width,
+    because that is as far from the centre as the resultant can be pushed before it leaves the
+    polygon and the body tips.
+  </p>
+
+  <p class="eq-plain">
+    For a 10 kg crate one metre wide, <code>m·g·(w/2) = 10 × 9.81 × 0.5 = 49.05 N·m</code>.
+  </p>
+
+  <p>
+    §A.2 of the harness applies a steady torque about <code>z</code> and bisects for the value at
+    which the crate stops resting. Fourteen bisection steps land on <strong>47.869 N·m</strong>,
+    2.41% below the prediction — and the 2.41% is not error. It is the penetration the solver allows
+    before it pushes back, which puts the crate's effective lip a hair inside its geometric one. A
+    prediction that survives three digits is a different kind of statement from one that survives a
+    bracket.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And the manifold was never told where anything was.</strong> §A.3 slides the same
+      crate off the edge of a ledge and asks, at each overhang, whether the centre of mass projects
+      inside the contact set the manifold returned. It does at 0.00, 0.20, 0.40 and 0.45 m of
+      overhang, and the crate rests to within a tenth of a degree. It does not at 0.55 and 0.70, and
+      the crate topples 156° and 108°. Statics predicts the crossing at exactly half a metre, where
+      the centre of mass passes over the lip. Nothing in the simulation knows there is a ledge.
+    </p>
+  </div>
+
+@@FIG_POLYGON@@
+
+  <h3>The other thing 8.6 left behind</h3>
+
+  <p>
+    8.6 §13 named a second problem and did not solve it, because it is not solvable: <strong>the
+    contact normal is discontinuous.</strong> Slide a box along a wall toward the wall's end. Until
+    it passes the corner, the shortest way out is through the wall's face; past the corner, the
+    shortest way out is past the end. The minimum translation switches from one to the other in a
+    single frame, and the direction swings ninety degrees while the <em>depth</em> — the thing the
+    two escapes are being compared on — changes by nothing at all.
+  </p>
+
+@@FIG_SWING@@
+
+  <p>
+    §B.1 walks a 0.4 m cube past that crossing in ten-micrometre steps. Between two adjacent steps
+    the normal changes by <strong>90.00°</strong> and the depth changes by
+    <strong>0.01001 mm</strong>, which is the step size times the slope. Both numbers are correct.
+    They are correct because <code>min</code> of two smooth functions is not smooth where the argmin
+    changes, and penetration depth <em>is</em> a minimum: every implementation of it has this, and
+    no amount of care in EPA removes it.
+  </p>
+
+  <p>
+    Nothing in this lesson removes it either. What this lesson does is make the contact
+    <em>set</em> stable within a feature pair, so that the swing becomes a single discrete event
+    affecting a handful of identities rather than four points re-derived from scratch on every
+    frame. §B.2 measures the difference on the mildest motion there is — a crate sliding two
+    millimetres across a floor, one micrometre at a time:
+  </p>
+
+  <pre><code class="lang-text">     samples                          : 2000
+     the crate travelled              : 1.999 mm
+     EPA's witness point travelled    : 502.749 mm
+     its worst single step            : 500.863 mm
+     steps where it moved over 10 um  : 1
+     manifold contact ids changed     : 0 times</code></pre>
+
+  <p>
+    The crate moved two millimetres. EPA's witness point moved half a metre, essentially all of it
+    in one step, because the face it sits on is a metre across and which corner of it the support
+    function returns is decided by a tie-break. The manifold's four identities did not change at
+    all, and the control says that is not because they cannot: slide the same crate off the floor's
+    edge, where the contact genuinely becomes a different one, and they change three times.
+  </p>
+
+  <p>
+    Two problems, then, and they have one answer between them. A resting body needs a
+    <em>set</em> of contact points rather than a point, and a solver needs to recognise this frame's
+    set as last frame's. The rest of this lesson is that answer, and the four steps it takes.
+  </p>

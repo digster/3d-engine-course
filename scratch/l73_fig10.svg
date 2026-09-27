@@ -1,0 +1,54 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f73j-t f73j-d">
+  <title id="f73j-t">The trig-free circle, measured</title>
+  <desc id="f73j-d">Two panels. The left is a bar chart of the cost of generating one point of a circle: calling cosine and sine costs 1.851 nanoseconds, stepping a complex number by one multiply costs 1.529, and running four such chains interleaved costs 0.526. The right is a table of the worst angle error the recurrence accumulates against a double-precision walk, at 64, 4096, 262144 and 16.7 million points, with and without a cheap renormalise. The renormalised column is highlighted at the two longest walks, where it is worse than leaving the drift alone.</desc>
+  <defs>
+    <marker id="e-i-f73j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f73j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f73j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f73j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f73j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="199.0" y="44.0" class="sm" text-anchor="middle">generating one point of a circle</text>
+<text x="199.0" y="60.0" class="xs muted" text-anchor="middle">4,096 points × 400 circles, best of three</text>
+<rect x="34.0" y="74.0" width="330.0" height="168.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="44.0" y="94.0" width="238.0" height="16.8" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="44.0" y="87.0" class="xs muted" text-anchor="start">cos + sin per point</text>
+<text x="286.0" y="107.8" class="xs mono" text-anchor="start">1.851 ns</text>
+<text x="286.0" y="122.8" class="xs muted" text-anchor="start">independent</text>
+<rect x="44.0" y="150.0" width="196.59751485683412" height="16.8" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="44.0" y="143.0" class="xs muted" text-anchor="start">one complex multiply (z = z * step)</text>
+<text x="244.59751485683412" y="163.8" class="xs mono" text-anchor="start">1.529 ns</text>
+<text x="244.59751485683412" y="178.8" class="xs muted" text-anchor="start">serial chain</text>
+<rect x="44.0" y="206.0" width="67.63263101026473" height="16.8" rx="2" fill="#60ded0" stroke="#60ded0" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="44.0" y="199.0" class="xs muted" text-anchor="start">four chains interleaved</text>
+<text x="115.63263101026473" y="219.8" class="xs mono" text-anchor="start">0.526 ns</text>
+<text x="115.63263101026473" y="234.8" class="xs muted" text-anchor="start">chain broken</text>
+<text x="570.0" y="44.0" class="sm" text-anchor="middle">and what the recurrence costs</text>
+<text x="570.0" y="60.0" class="xs muted" text-anchor="middle">worst angle error vs a double-precision walk</text>
+<rect x="414.0" y="74.0" width="312.0" height="168.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="480.0" y="92.0" class="xs mono muted" text-anchor="end">points</text>
+<text x="564.0" y="92.0" class="xs mono muted" text-anchor="end">plain</text>
+<text x="650.0" y="92.0" class="xs mono muted" text-anchor="end">renormalised</text>
+<text x="720.0" y="92.0" class="xs mono muted" text-anchor="end">|z|−1</text>
+<text x="480.0" y="114.0" class="xs mono" text-anchor="end">64</text>
+<text x="564.0" y="114.0" class="xs mono" text-anchor="end">9.82e-06°</text>
+<text x="650.0" y="114.0" class="xs mono" text-anchor="end">1.74e-06°</text>
+<text x="720.0" y="114.0" class="xs mono muted" text-anchor="end">3.6e-07</text>
+<text x="480.0" y="138.0" class="xs mono" text-anchor="end">4,096</text>
+<text x="564.0" y="138.0" class="xs mono" text-anchor="end">9.10e-05°</text>
+<text x="650.0" y="138.0" class="xs mono" text-anchor="end">1.37e-05°</text>
+<text x="720.0" y="138.0" class="xs mono muted" text-anchor="end">6.8e-05</text>
+<text x="480.0" y="162.0" class="xs mono" text-anchor="end">262,144</text>
+<text x="564.0" y="162.0" class="xs mono" text-anchor="end">2.84e-04°</text>
+<text x="650.0" y="162.0" class="xs mono t-hi" text-anchor="end">2.41e-03°</text>
+<text x="720.0" y="162.0" class="xs mono muted" text-anchor="end">7.6e-05</text>
+<text x="480.0" y="186.0" class="xs mono" text-anchor="end">16,777,216</text>
+<text x="564.0" y="186.0" class="xs mono" text-anchor="end">7.17e-01°</text>
+<text x="650.0" y="186.0" class="xs mono t-hi" text-anchor="end">1.28e+00°</text>
+<text x="720.0" y="186.0" class="xs mono muted" text-anchor="end">3.7e-03</text>
+<text x="570.0" y="230.0" class="xs muted" text-anchor="middle">highlighted where renormalising made the ANGLE worse</text>
+<text x="380.0" y="286" class="xs muted" text-anchor="middle">the op count predicts 6× and the measurement says 1.21×, because z = z × step is a SERIAL CHAIN:</text>
+<text x="380.0" y="304" class="xs muted" text-anchor="middle">each multiply waits for the last, so the loop measures LATENCY while the trig loop — every point independent —</text>
+<text x="380.0" y="322" class="xs muted" text-anchor="middle">measures THROUGHPUT. Run four circles at once and the chain is broken: 0.526 ns, 3.5×.</text>
+<text x="380.0" y="348" class="xs t-hi" text-anchor="middle">And renormalising fixes the modulus, does nothing for the angle, and past a quarter of a million steps makes it worse.</text>
+</svg>

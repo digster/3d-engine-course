@@ -1,0 +1,276 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-11-transparency.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.11 — Transparency: Alpha Modes, Blending, and Draw Order</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-13-bloom-post-stack.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.13 — Bloom and the Post-Processing Stack</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.12</div>
+    <h1>HDR and Tonemapping</h1>
+    <p class="deck">
+      This engine does not have an HDR bug. It has been <em>avoiding the question by
+      construction</em>, which is a different thing and worth seeing clearly before anything is
+      built. Two choices have been holding the lid on: Lesson 6.2 set
+      <code>k_reference_irradiance</code> to π precisely so a white surface renders at exactly 1.0,
+      and the demo's roughness is 0.49 — which peaks at <strong>0.8676</strong>, just under. Change
+      the second number and the lid comes off at once: the <em>same</em> shading equation returns
+      11.59 at roughness 0.20 and <strong>55,917</strong> for a polished metal, and
+      <code>to_encoded</code> stores every one of those as code 255. Not "a bit too bright" — the
+      same code for all of them, with the highlight's entire shape replaced by a constant. Fixing
+      it needs a buffer that can hold the values, an exposure that decides what maps to white, a
+      curve that brings the range down, and — the part that is architecture rather than arithmetic
+      — a second render pass.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>,
+          <a href="06-02-what-a-brdf-is.html">6.2 — Radiometry-Lite: What a BRDF Is</a>,
+          <a href="06-04-cook-torrance.html">6.4 — Cook–Torrance PBR, Derived</a>,
+          <a href="06-11-transparency.html">6.11 — Transparency</a>,
+          <a href="04-04-first-triangle.html">4.4 — The First Triangle</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/hdr.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/hdr.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_post.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/gpu_post.cpp</code> <em>(new)</em>,
+            <code>shaders/fullscreen.vert.hlsl</code> <em>(new)</em>,
+            <code>shaders/tonemap.frag.hlsl</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_612.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A float render target and a full-screen resolve in <strong>both renderers</strong>;
+            four tonemap operators with the properties that make one legal; exposure in real
+            photographic units, paying a debt 6.2 recorded by name. <strong>45 checks green</strong>,
+            CPU and GPU agreeing on every curve <strong>to the code</strong>, and the reference
+            render byte-identical for the <strong>twenty-first</strong> lesson — this time for a
+            structural reason rather than a flag.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what an 8-bit render target actually costs, in stops, on your own content.</li>
+      <li>…convert between an exposure value and a render-time multiplier, and explain which
+          part of that conversion is physics and which part is a camera standard.</li>
+      <li>…state the three properties that make a tonemap operator legal, and check a candidate
+          against them.</li>
+      <li>…derive Reinhard and its white-point variant, rather than copying them.</li>
+      <li>…explain why tonemapping per-channel desaturates highlights and why doing it on
+          luminance alone does not fix the problem it appears to fix.</li>
+      <li>…order exposure, curve and encode correctly, and recognise each wrong ordering by its
+          signature.</li>
+      <li>…render a full-screen pass with no vertex buffer, and say why it is one triangle.</li>
+      <li>…explain what an HDR target does to Lesson 6.11's compositing rule.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a lid, and what has been holding it on</a></li>
+      <li><a href="#intuition">Building intuition: a camera, not a clamp</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: a lid, and what has been holding it on</h2>
+
+  <p>
+    Two lessons in this module left a note saying this one would arrive. It is worth reading them
+    before reading any code, because between them they say exactly what is wrong and exactly why
+    nobody has noticed.
+  </p>
+
+  <p>The first is in <code>light.hpp</code>, beside the constant that sets a light's brightness:</p>
+
+  <blockquote>
+    <p>
+      …so it renders at exactly 1.0 when <code>E_perp</code> is <strong>pi</strong>. That is the
+      physical meaning of "correctly exposed" for this engine, and it is the same convention a
+      photographer's white card encodes. <strong>It is a <em>choice</em>, not a law</strong> —
+      Lesson 6.12 replaces it with a real exposure control and a tonemapper, at which point lights
+      get authored in lux and this constant becomes the default rather than the rule.
+    </p>
+  </blockquote>
+
+  <p>The second is forty lines further down, beside <code>shade_encoded</code>:</p>
+
+  <blockquote>
+    <p>
+      <code>to_encoded</code> clamps, which is where an over-bright result gets clipped to white…
+      A specular highlight is the first thing in this engine that routinely exceeds 1.0, so the
+      clamp stops being theoretical here: <strong>a bright highlight arrives at the screen as a
+      flat white blob with its shape clipped off</strong>, which is exactly the information
+      tonemapping exists to keep.
+    </p>
+  </blockquote>
+
+  <h3>So why has nothing looked wrong?</h3>
+
+  <p>
+    Because of the first note. <code>k_reference_irradiance = π</code> was chosen so that a white
+    Lambertian surface lit square-on renders at exactly 1.0 — and then the demo's materials came in
+    at roughness 0.49, whose specular peak at the mirror angle is <strong>0.8676</strong>.
+  </p>
+
+  <p class="lede">
+    The engine has been living <em>just under</em> the lid, on purpose, for six modules.
+  </p>
+
+  <p>
+    That is not a criticism of either decision. It is the observation that makes the rest of the
+    lesson measurable: change one number and the situation changes completely, and we can say by
+    how much.
+  </p>
+
+  @@FIG_LID@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> One material, five roughnesses, evaluated at the light's
+       actual mirror direction (<code>verify_612</code> §A).</p>
+    <div class="tbl-scroll">
+    <table>
+      <caption>The same white dielectric, the same light, the same shading equation</caption>
+      <thead><tr><th>roughness</th><th>peak linear value</th><th>stops above white</th><th>stored as</th></tr></thead>
+      <tbody>
+        <tr><td>0.49 <em>(the demo's)</em></td><td>0.8676</td><td>−0.2</td><td>code 235</td></tr>
+        <tr><td>0.35</td><td>1.7370</td><td>+0.8</td><td>code 255</td></tr>
+        <tr><td>0.20</td><td>11.5899</td><td>+3.5</td><td>code 255</td></tr>
+        <tr><td>0.10</td><td>177.0252</td><td>+7.5</td><td>code 255</td></tr>
+        <tr><td>0.05</td><td>2823.9907</td><td>+11.5</td><td>code 255</td></tr>
+        <tr><td>0.05 <em>(metal)</em></td><td><strong>55,916.92</strong></td><td><strong>+15.8</strong></td><td>code 255</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>
+      Fifteen and a half stops of range, stored as one number. And note what the last column is
+      <em>not</em> saying: this is not a rounding error at the margin. Above 1.0 the clamp is
+      <strong>total</strong> — 1.0, 4.0 and 55,917 are the same pixel.
+    </p>
+  </div>
+
+  <h3>The same problem wearing a suit: the units debt</h3>
+
+  <p>
+    Lesson 6.2 renamed <code>intensity</code> to <code>irradiance</code> and made a point of why:
+    <em>"<code>intensity</code> meant nothing: it was a number you turned up until the picture
+    looked right. <code>irradiance</code> is a measurable physical quantity."</em> It was right, and
+    it was incomplete — because having made the field measurable, the engine could not then let
+    anybody author a measurement into it.
+  </p>
+
+  <p>
+    Full daylight is about <strong>120,000 lux</strong>. Put that number into
+    <code>directional_light::irradiance</code> and the polished surface above returns
+    <strong>8,333,875</strong>, which is code 255, as is every other pixel in the scene.
+  </p>
+
+  <p class="lede">
+    You cannot author lights in physical units until something downstream decides what maps to
+    white. That something is an <strong>exposure control</strong>, and its absence is why
+    <code>k_reference_irradiance</code> had to exist.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: a camera, not a clamp</h2>
+
+  <p>
+    The real world has an enormous range of luminance in it — starlight to direct sun is something
+    like twenty stops — and every device that has ever produced an image of it has had a much
+    smaller range to work with. Film, paper, a phone screen: all of them narrow. So the problem is
+    not new, and the solution is not new either.
+  </p>
+
+  <p>A camera does exactly two things about it, and they are separate things:</p>
+
+  <ol>
+    <li>
+      <strong>An exposure</strong> decides <em>which part of the range you are interested in</em>.
+      Shutter speed, aperture, ISO — three dials that combine into one number, and what that number
+      says is "this much light shall be white". Point a camera at a dim room and at a beach and you
+      change the exposure, not the film.
+    </li>
+    <li>
+      <strong>A response curve</strong> decides <em>what happens to the light that is still too
+      bright</em>. Film does not clip; it rolls off, compressing the highlights into a shoulder so
+      that a bright sky retains some structure rather than becoming a white hole.
+    </li>
+  </ol>
+
+  <p>
+    Those are the two halves of this lesson, and keeping them separate is more than tidiness —
+    they answer different questions, they are set by different people (an exposure is a shot
+    decision, a curve is a look decision), and §3.5 shows that performing them in the wrong order
+    destroys the ability of the first to do its job.
+  </p>
+
+  <h3>What "clamping" actually is</h3>
+
+  <p>
+    It is worth naming the status quo in the same vocabulary, because it makes the gap obvious:
+    <code>min(x, 1)</code> is a response curve. A very bad one — it is the curve that maps
+    everything above white to white — but it is a member of the same family, and treating it as one
+    is how the lesson keeps it honest. That is why <code>tonemap::clamp</code> is a named operator
+    in the code rather than the absence of one.
+  </p>
+
+  <h3>And one thing this is not about</h3>
+
+  <div class="callout warn">
+    <span class="label">"HDR" means two different things, and this lesson is only one of them</span>
+    <p>
+      <strong>HDR rendering</strong> — this lesson — means computing and storing light values
+      without an artificial ceiling, then mapping them down for a display. The display is an
+      ordinary one; the pipeline is what changed.
+    </p>
+    <p>
+      <strong>HDR display</strong> — the label on a television — means the panel itself accepts a
+      wider range and a different transfer function (PQ or HLG rather than sRGB), so the mapping
+      down is to a bigger target. SDL exposes this: <code>gpu_device</code>'s report carries an
+      <code>SDL_GPUSwapchainComposition</code>, and Lesson 6.1 logged it.
+    </p>
+    <p>
+      The first is a prerequisite for the second, and only the first changes how you render. This
+      lesson does the first and leaves the second as an exercise, because the interesting part of
+      it — which is colour volume and metadata, not range — is a different subject.
+    </p>
+  </div>

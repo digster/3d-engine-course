@@ -1,0 +1,230 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-11-imgui-debug-draw.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.11 — Dear ImGui and the Debug Draw System</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-01-linear-and-srgb.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.1 — Linear and sRGB: The Gamma Lesson</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.12</div>
+    <h1>Checkpoint: A Small 3D Game on the Public API</h1>
+    <p class="deck">
+      Eleven lessons ago we drew a line and called it law: <code>engine/</code> is a library,
+      <code>demos/</code> are programs, and a program may include nothing but
+      <code>&lt;engine/…&gt;</code>. Since then we have built an application layer, a logger, a
+      handle system, an asset store, an ECS, a transform hierarchy, a camera, an action map, a debug
+      drawer and a debug UI — and <strong>every single program that used them was written by the
+      person who had just built them, in the same afternoon, to show them off</strong>. That is not
+      a test of an API. A demo can stop at the edge of the one subsystem it demonstrates; a
+      <em>game</em> has to cross every edge there is — load an asset, spawn an entity, parent a
+      camera, read a button, move a body, test an overlap, tell the player what happened — and the
+      seams <em>between</em> subsystems are exactly where a public API is weakest, because nobody
+      has ever stood on them. So this lesson writes a game. It is small on purpose: drive a rover
+      round an arena and collect twelve orbs, half of them riding a carousel. What it is not is
+      forgiving. Every time the published headers could not do something, this file did it itself,
+      in the open, with a comment naming what was missing — and there are <strong>seven</strong>.
+      Two of them turn out to be promises the engine had already made and not kept: the header that
+      calls itself <em>“the whole public API, in one include”</em> lists
+      <strong>40 of 55</strong> public headers and is missing the entire ECS, the asset store, the
+      action map and the logger; and <code>scene.hpp</code> has said since Lesson 5.1 that
+      <em>“Module 5's ECS replaces the struct with components”</em>, which Module 5 never did. Both
+      are fixed here, one of them against this engine's own three-caller rule and owing a reason.
+      The other five are named, measured, and handed to the module that owns them. Along the way a
+      camera parented to a rolling car produces a matrix that is <em>not rigid</em>, an assertion
+      fires, and a headless run hangs for ever — which is one composition order written the way it
+      reads in English rather than the way the algebra says.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 8 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="05-01-the-refactor.html">5.1 — The Refactor: Engine, Demos, and the Public API</a>,
+          <a href="05-08-ecs-runtime.html">5.8 — The ECS Runtime</a>,
+          <a href="05-09-transform-hierarchy.html">5.9 — Transform Hierarchy and the Camera System</a>,
+          <a href="05-10-input-mapping.html">5.10 — Input Mapping: Actions, Not Keycodes</a>,
+          <a href="05-11-imgui-debug-draw.html">5.11 — Dear ImGui and the Debug Draw System</a>,
+          <a href="05-05-asset-system.html">5.5 — The Asset System v1</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/renderable.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/renderable.cpp</code> <em>(new)</em>,
+            <code>demos/collector/main.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_512.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_512.sh</code> <em>(new)</em>,
+            <code>scratch/golden_512.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A playable game, written entirely from outside the boundary — 30 entities, six
+            game components, five systems, one carousel, and <strong>zero</strong> reaches for a
+            private header. <strong>27 checks green</strong>, including a matrix round trip that is
+            exact rather than nearly exact, a camera chain that reproduces this lesson's own crash
+            with a control that fires, and a check on <code>engine.hpp</code>'s contents that the
+            build now runs at configure time. The umbrella header goes from 40 listed headers to
+            55 — and the compile-time measurement comes out the <em>opposite</em> way round from
+            the obvious prediction. The reference render is byte-identical, as it has
+            been since Lesson 5.1, and §12 says why that is a null result here and what was
+            built instead.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what a game asks of an engine that a demo does not, and why the seams between
+          subsystems are where a public API fails first.</li>
+      <li>…audit a public API from outside it, and tell a genuine gap apart from a thing you have
+          not found yet.</li>
+      <li>…decide when the engine should define a component, from a rule you can apply rather than
+          a preference.</li>
+      <li>…place a new header on the correct side of a dependency, and forward-declare instead of
+          including when the signature allows it.</li>
+      <li>…derive the local transform of a camera boom, and explain why the inverse of a product
+          reverses its order — with a matrix that fails an assertion when you get it wrong.</li>
+      <li>…recognise the two conventions <code>scale</code> can mean, and write the one helper that
+          stops the confusion recurring.</li>
+      <li>…justify hoisting shared code at <em>two</em> callers rather than three, or decline to.</li>
+      <li>…write a completeness check for a document that no compiler validates.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a boundary nobody has stood on</a></li>
+      <li><a href="#game">What a game asks that a demo does not</a></li>
+      <li><a href="#umbrella">Finding one: the table of contents that was not one</a></li>
+      <li><a href="#bridge">Finding two: a promise Module 5 made and did not keep</a></li>
+      <li><a href="#where">Where the new header goes, and what it may include</a></li>
+      <li><a href="#boom">The camera boom, and an assertion that hangs</a></li>
+      <li><a href="#build">Building the world</a></li>
+      <li><a href="#gaps">What the game could not find</a></li>
+      <li><a href="#instrument">The instrument, and proving it can fail</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#golden">The golden, and why it is blind to this lesson</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a boundary nobody has stood on</h2>
+
+  <p>
+    Lesson 5.1 made a claim with a mechanism behind it. The claim was that <code>engine/</code> is a
+    library with a public API; the mechanism was the include path, so that
+    <code>#include "gfx/raster.hpp"</code> — the spelling every file in this repository had used for
+    four modules — stopped resolving. A demo that reaches for an internal does not get a review
+    comment, it gets a compile error. That was the right mechanism and it has held perfectly.
+  </p>
+
+  <p>
+    But look at what has actually stood on it.
+  </p>
+
+  @@FIG_BOUNDARY@@
+
+  <p>
+    <code>sandbox</code> predates the boundary and owns its own loop. <code>pong</code> is Module 1's
+    game, relocated. <code>hello_cube</code> is a hundred lines that draw one cube.
+    <code>ecs_swarm</code> was written in Lesson 5.8 to demonstrate the ECS — by the person who had
+    written the ECS that morning. <code>gltf_view</code> shows off the importer, by the person who
+    wrote the importer.
+  </p>
+
+  <p>
+    There is a specific kind of blindness in that arrangement, and it is not about competence.
+    When you write the demo for a subsystem you have just built, <strong>you already know where
+    everything is</strong>. You do not discover that the function you want is not exported, because
+    you know it is not, and you reach for the one that is without ever noticing you made a choice.
+    You do not discover that a header is missing from the umbrella, because you never use the
+    umbrella — you type the include you know is correct. You do not discover that two subsystems
+    have no path between them, because you are only using one of them.
+  </p>
+
+  <p>
+    A public API is a promise made to somebody who <em>does not</em> know where everything is. The
+    only way to find out whether the promise holds is to have that person write something. We do not
+    have that person. What we have is the next best thing, which is a program with requirements that
+    were not chosen to flatter the engine.
+  </p>
+
+  <div class="callout note">
+    <p class="label">Why now, and not at the capstone</p>
+    <p>
+      Module 9 ends with a complete game built solely on the public API, and that is the real
+      proof. The trouble with waiting for it is arithmetic: the capstone sits at roughly hour 434 of
+      this course with about ten hours of budget around it, and anything it finds has to be absorbed
+      by an engine that eighty more lessons have been built on top of. We are at hour 62. A design
+      bug found here costs a header; found there it costs a refactor of everything that has since
+      depended on the bug. <strong>The cheapest moment to discover that your API does not work is
+      the first moment somebody could have discovered it.</strong>
+    </p>
+  </div>
+
+  <h2 id="game">2. What a game asks that a demo does not</h2>
+
+  <p>
+    The game is called <code>collector</code> and it fits in one sentence: drive a rover round a
+    14 × 14 metre arena and collect twelve orbs before a ninety-second clock runs out. Six orbs sit
+    still and bob; six ride a carousel, so they move while you chase them. Eight pillars stand in
+    the way. That is the whole design, and it was chosen to be <em>ordinary</em> rather than
+    interesting — a game with an unusual requirement would exercise an unusual part of the API,
+    and the question here is whether the <em>usual</em> parts work together.
+  </p>
+
+  <p>
+    Write down what that sentence needs, subsystem by subsystem, and the shape of the exercise
+    appears:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>The game says</th><th>which needs</th><th>from</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>a rover, twelve orbs, eight pillars, a floor</td><td>entities with components</td><td>5.8</td></tr>
+      <tr><td>“…and a nose, so you can see which way it faces”</td><td>a parent–child transform</td><td>5.9</td></tr>
+      <tr><td>“…six orbs ride a carousel”</td><td>a moving parent, resolved before anything reads it</td><td>5.9</td></tr>
+      <tr><td>“drive with W and S, or the arrow keys, or both”</td><td>an action, not a scancode</td><td>5.10</td></tr>
+      <tr><td>a cube mesh and an icosahedron mesh</td><td>an asset store, even for generated content</td><td>5.5</td></tr>
+      <tr><td>“a collected orb is destroyed”</td><td>a handle that survives its referent dying</td><td>5.4</td></tr>
+      <tr><td>a camera that follows the rover</td><td>a camera that is an entity</td><td>5.9</td></tr>
+      <tr><td>“show me the pickup radii”</td><td>a debug drawer with no framebuffer in its signature</td><td>5.11</td></tr>
+      <tr><td>a panel with the live counts</td><td>ImGui, arbitrated against the game's own input</td><td>5.11</td></tr>
+      <tr><td>a window, a loop, a fixed step, a headless mode</td><td>the application layer</td><td>5.2</td></tr>
+      <tr><td>“…and draw all of that”</td><td><em>nothing. there is no way to do this.</em></td><td>§4</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Ten of those eleven rows are a pleasure. The engine has the piece, it is public, it is named
+    what you would guess, and it composes with the piece next to it. That is worth saying plainly
+    before the rest of this lesson goes looking for trouble: <strong>the boundary drawn in 5.1
+    mostly works, and the parts Module 5 built are mostly right.</strong> A checkpoint that found
+    nothing but problems would be a checkpoint that had gone looking for them.
+  </p>
+
+  <p>
+    The eleventh row is the interesting one, and it is where we start.
+  </p>

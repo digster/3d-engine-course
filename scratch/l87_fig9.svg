@@ -1,0 +1,80 @@
+<svg viewBox="0 0 900 496" role="img" aria-labelledby="l87f9-t l87f9-d">
+  <title id="l87f9-t">Reducing the clipped contact set to four points, and what the fifth would buy.</title>
+  <desc id="l87f9-d">Left: eight clipped points on a dashed grey octagon, with the four the reduction keeps joined into an amber quadrilateral. The deepest point is labelled first, the point farthest from it second, and the remaining two are the largest triangles on each side of that axis. Right: a bar chart of how many points the clip produces before reduction over 99,995 face contacts — 4 points 36.96 percent of the time, 5 points 33.06, 6 points 20.97, and 7 or 8 the rest. Below, a table: the four kept points span 88.9 percent of the whole clipped polygon and 96.3 percent of the best four there are, and lose no depth at all.</desc>
+  <defs>
+    <marker id="e-i-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-l87f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The clip produces up to eight points. A solver can use four, and which four is not a matter of taste.</text>
+<path d="M 256.22,176.02 L 218.89,133.61 L 154.10,124.23 L 99.79,153.38 L 87.78,203.98 L 125.11,246.39 L 189.90,255.77 L 244.21,226.62 Z" fill="none" stroke="#8f918a" stroke-width="1.4" stroke-dasharray="3 3"/>
+<circle cx="256.2" cy="176.0" r="3.0" fill="#8f918a"/>
+<circle cx="218.9" cy="133.6" r="3.0" fill="#8f918a"/>
+<circle cx="154.1" cy="124.2" r="3.0" fill="#8f918a"/>
+<circle cx="99.8" cy="153.4" r="3.0" fill="#8f918a"/>
+<circle cx="87.8" cy="204.0" r="3.0" fill="#8f918a"/>
+<circle cx="125.1" cy="246.4" r="3.0" fill="#8f918a"/>
+<circle cx="189.9" cy="255.8" r="3.0" fill="#8f918a"/>
+<circle cx="244.2" cy="226.6" r="3.0" fill="#8f918a"/>
+<path d="M 125.11,246.39 L 154.10,124.23 L 256.22,176.02 L 189.90,255.77 Z" fill="none" stroke="#f0961e" stroke-width="2.2"/>
+<circle cx="125.1" cy="246.4" r="4.6" fill="#f0961e"/>
+<circle cx="154.1" cy="124.2" r="4.6" fill="#f0961e"/>
+<circle cx="256.2" cy="176.0" r="4.6" fill="#f0961e"/>
+<circle cx="189.9" cy="255.8" r="4.6" fill="#f0961e"/>
+<text x="125.10657908520618" y="266.3922089886503" class="xs" text-anchor="middle">1. deepest</text>
+<text x="282.21850842318065" y="156.02001790941387" class="xs" text-anchor="middle">2. farthest from it</text>
+<text x="172" y="62" class="xs" text-anchor="middle">eight clipped points, four kept</text>
+<text x="172" y="312" class="xs muted" text-anchor="middle">3. and 4. the largest triangle on EACH</text>
+<text x="172" y="328" class="xs muted" text-anchor="middle">side of that axis — which is what stops</text>
+<text x="172" y="344" class="xs muted" text-anchor="middle">the four collapsing onto a line</text>
+<line x1="360" y1="56" x2="360" y2="330" class="grid" stroke-width="1.0"/>
+<text x="392" y="74" class="xs" text-anchor="start">§8 — clipped points before reduction, 99,995 face contacts</text>
+<text x="392" y="104" class="xs" text-anchor="start">2</text>
+<rect x="422" y="92" width="2.0" height="13" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="432.0" y="103" class="xs mono" text-anchor="start">8  ( 0.01%)</text>
+<text x="392" y="124" class="xs" text-anchor="start">3</text>
+<rect x="422" y="112" width="16.173056630320087" height="13" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="446.1730566303201" y="123" class="xs mono" text-anchor="start">1,573  ( 1.57%)</text>
+<text x="392" y="144" class="xs" text-anchor="start">4</text>
+<rect x="422" y="132" width="380.0" height="13" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="810.0" y="143" class="xs mono" text-anchor="start">36,959  (36.96%)</text>
+<text x="392" y="164" class="xs" text-anchor="start">5</text>
+<rect x="422" y="152" width="339.86038583295004" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="769.86038583295" y="163" class="xs mono" text-anchor="start">33,055  (33.06%)</text>
+<text x="392" y="184" class="xs" text-anchor="start">6</text>
+<rect x="422" y="172" width="215.62704618631457" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="645.6270461863146" y="183" class="xs mono" text-anchor="start">20,972  (20.97%)</text>
+<text x="392" y="204" class="xs" text-anchor="start">7</text>
+<rect x="422" y="192" width="65.27828133878081" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="495.2782813387808" y="203" class="xs mono" text-anchor="start">6,349  ( 6.35%)</text>
+<text x="392" y="224" class="xs" text-anchor="start">8</text>
+<rect x="422" y="212" width="11.093914878649315" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="441.09391487864934" y="223" class="xs mono" text-anchor="start">1,079  ( 1.08%)</text>
+<text x="392" y="258" class="xs muted" text-anchor="start">A third of face contacts clip to more than four, so the reduction</text>
+<text x="392" y="274" class="xs muted" text-anchor="start">is not an edge case — it runs on one contact in three.</text>
+<line x1="20" y1="346" x2="880" y2="346" class="grid" stroke-width="1.0"/>
+<text x="24" y="374" class="xs muted" text-anchor="start">61,455 manifolds that clipped past four</text>
+<text x="488" y="374" class="xs muted" text-anchor="end">mean</text>
+<text x="588" y="374" class="xs muted" text-anchor="end">median</text>
+<text x="688" y="374" class="xs muted" text-anchor="end">worst</text>
+<line x1="24" y1="382.0" x2="694" y2="382.0" class="grid" stroke-width="1.0"/>
+<text x="24" y="399.0" class="xs" text-anchor="start">area kept, as a fraction of the WHOLE clipped polygon</text>
+<text x="488" y="399.0" class="xs mono" text-anchor="end">0.88871</text>
+<text x="588" y="399.0" class="xs mono" text-anchor="end">—</text>
+<text x="688" y="399.0" class="xs mono" text-anchor="end">0.50219</text>
+<text x="24" y="416.0" class="xs" text-anchor="start">area kept, as a fraction of the BEST four (brute forced)</text>
+<text x="488" y="416.0" class="xs mono" text-anchor="end">0.96316</text>
+<text x="588" y="416.0" class="xs mono" text-anchor="end">1.00000</text>
+<text x="688" y="416.0" class="xs mono" text-anchor="end">0.50572</text>
+<text x="24" y="433.0" class="xs" text-anchor="start">depth lost by the reduction</text>
+<text x="488" y="433.0" class="xs mono" text-anchor="end">0.000 m</text>
+<text x="588" y="433.0" class="xs mono" text-anchor="end">—</text>
+<text x="688" y="433.0" class="xs mono" text-anchor="end">0.000 m</text>
+<text x="24" y="458" class="xs muted" text-anchor="start">Four points can never span an octagon: the largest quadrilateral inscribed in a regular one is 70.7% of it. That is most of the gap in the first row</text>
+<text x="24" y="476" class="xs" text-anchor="start">and none of it in the second. The reduction is within a few per cent of the best four there are, for four comparisons and no search.</text>
+</svg>

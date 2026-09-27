@@ -1,0 +1,85 @@
+<svg viewBox="0 0 900 552" role="img" aria-labelledby="l87f5-t l87f5-d">
+  <title id="l87f5-t">Each primitive presents a different kind of contact feature, and only the hull's needs a tolerance.</title>
+  <desc id="l87f5-d">Five small diagrams in a row, each with an arrow showing the query direction and the returned feature marked in red: a sphere returns one vertex, a capsule queried end on returns one, a capsule queried side on returns a two-vertex segment, a box returns its four-vertex dominant face, and a hull returns the vertices on its supporting plane. Below, a table sweeping the hull's gather tolerance on a 24-sided prism: at 0.002 and 0.010 it recovers the true four-vertex quad with no bulge, and at 0.050 and 0.200 it merges neighbouring faces into an eight-vertex polygon bulging 33.8 and 99.0 millimetres.</desc>
+  <defs>
+    <marker id="e-i-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-purple-l87f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">`support_face` returns the whole feature, and the counts are the features these shapes actually have.</text>
+<path d="M 168.00,150.00 L 167.44,141.93 L 165.75,134.01 L 162.99,126.41 L 159.19,119.26 L 154.43,112.72 L 148.81,106.90 L 142.43,101.92 L 135.43,97.87 L 127.92,94.84 L 120.07,92.88 L 112.02,92.04 L 103.94,92.32 L 95.97,93.72 L 88.27,96.22 L 81.00,99.77 L 74.29,104.30 L 68.28,109.71 L 63.08,115.91 L 58.79,122.77 L 55.50,130.16 L 53.27,137.94 L 52.14,145.95 L 52.14,154.05 L 53.27,162.06 L 55.50,169.84 L 58.79,177.23 L 63.08,184.09 L 68.28,190.29 L 74.29,195.70 L 81.00,200.23 L 88.27,203.78 L 95.97,206.28 L 103.94,207.68 L 112.02,207.96 L 120.07,207.12 L 127.92,205.16 L 135.43,202.13 L 142.43,198.08 L 148.81,193.10 L 154.43,187.28 L 159.19,180.74 L 162.99,173.59 L 165.75,165.99 L 167.44,158.07 L 168.00,150.00 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="110.0" cy="208.0" r="4.2" fill="#e05c5c"/>
+<line x1="110.00" y1="246.00" x2="110.00" y2="222.00" stroke="#9b7ede" stroke-width="1.5" marker-end="url(#e-purple-l87f5)"/>
+<text x="110" y="62" class="xs" text-anchor="middle">sphere</text>
+<text x="110" y="272" class="xs mono t-hi" text-anchor="middle">1 vertex</text>
+<text x="110" y="290" class="xs muted" text-anchor="middle">a ball has no flat feature</text>
+<path d="M 247.20,181.90 L 247.63,187.34 L 248.90,192.65 L 250.99,197.70 L 253.85,202.35 L 257.39,206.51 L 261.55,210.05 L 266.20,212.91 L 271.25,215.00 L 276.56,216.27 L 282.00,216.70 L 287.44,216.27 L 292.75,215.00 L 297.80,212.91 L 302.45,210.05 L 306.61,206.51 L 310.15,202.35 L 313.01,197.70 L 315.10,192.65 L 316.37,187.34 L 316.80,181.90 L 316.80,118.10 L 316.37,112.66 L 315.10,107.35 L 313.01,102.30 L 310.15,97.65 L 306.61,93.49 L 302.45,89.95 L 297.80,87.09 L 292.75,85.00 L 287.44,83.73 L 282.00,83.30 L 276.56,83.73 L 271.25,85.00 L 266.20,87.09 L 261.55,89.95 L 257.39,93.49 L 253.85,97.65 L 250.99,102.30 L 248.90,107.35 L 247.63,112.66 L 247.20,118.10 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="282.0" cy="216.7" r="4.2" fill="#e05c5c"/>
+<line x1="282.00" y1="246.00" x2="282.00" y2="222.00" stroke="#9b7ede" stroke-width="1.5" marker-end="url(#e-purple-l87f5)"/>
+<text x="282" y="62" class="xs" text-anchor="middle">capsule, end on</text>
+<text x="282" y="272" class="xs mono t-hi" text-anchor="middle">1 vertex</text>
+<text x="282" y="290" class="xs muted" text-anchor="middle">the pole of a cap</text>
+<path d="M 419.20,181.90 L 419.63,187.34 L 420.90,192.65 L 422.99,197.70 L 425.85,202.35 L 429.39,206.51 L 433.55,210.05 L 438.20,212.91 L 443.25,215.00 L 448.56,216.27 L 454.00,216.70 L 459.44,216.27 L 464.75,215.00 L 469.80,212.91 L 474.45,210.05 L 478.61,206.51 L 482.15,202.35 L 485.01,197.70 L 487.10,192.65 L 488.37,187.34 L 488.80,181.90 L 488.80,118.10 L 488.37,112.66 L 487.10,107.35 L 485.01,102.30 L 482.15,97.65 L 478.61,93.49 L 474.45,89.95 L 469.80,87.09 L 464.75,85.00 L 459.44,83.73 L 454.00,83.30 L 448.56,83.73 L 443.25,85.00 L 438.20,87.09 L 433.55,89.95 L 429.39,93.49 L 425.85,97.65 L 422.99,102.30 L 420.90,107.35 L 419.63,112.66 L 419.20,118.10 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="419.2" cy="181.9" r="4.2" fill="#e05c5c"/>
+<circle cx="419.2" cy="118.1" r="4.2" fill="#e05c5c"/>
+<line x1="419.2" y1="181.9" x2="419.2" y2="118.1" stroke="#e05c5c" stroke-width="3.2" fill="none"/>
+<line x1="454.00" y1="246.00" x2="454.00" y2="222.00" stroke="#9b7ede" stroke-width="1.5" marker-end="url(#e-purple-l87f5)"/>
+<text x="454" y="62" class="xs" text-anchor="middle">capsule, side on</text>
+<text x="454" y="272" class="xs mono t-hi" text-anchor="middle">2 vertices</text>
+<text x="454" y="290" class="xs muted" text-anchor="middle">the segment along its spine</text>
+<path d="M 576.70,199.30 L 675.30,199.30 L 675.30,100.70 L 576.70,100.70 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="576.7" cy="199.3" r="4.2" fill="#e05c5c"/>
+<circle cx="675.3" cy="199.3" r="4.2" fill="#e05c5c"/>
+<line x1="576.7" y1="199.3" x2="675.3" y2="199.3" stroke="#e05c5c" stroke-width="3.2" fill="none"/>
+<line x1="626.00" y1="246.00" x2="626.00" y2="222.00" stroke="#9b7ede" stroke-width="1.5" marker-end="url(#e-purple-l87f5)"/>
+<text x="626" y="62" class="xs" text-anchor="middle">box</text>
+<text x="626" y="272" class="xs mono t-hi" text-anchor="middle">4 vertices</text>
+<text x="626" y="290" class="xs muted" text-anchor="middle">the dominant face</text>
+<path d="M 854.73,137.94 L 815.92,94.84 L 759.19,106.90 L 741.27,162.06 L 780.08,205.16 L 836.81,193.10 Z" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="741.3" cy="162.1" r="4.2" fill="#e05c5c"/>
+<circle cx="780.1" cy="205.2" r="4.2" fill="#e05c5c"/>
+<line x1="741.3" y1="162.1" x2="780.1" y2="205.2" stroke="#e05c5c" stroke-width="3.2" fill="none"/>
+<line x1="798.00" y1="246.00" x2="798.00" y2="222.00" stroke="#9b7ede" stroke-width="1.5" marker-end="url(#e-purple-l87f5)"/>
+<text x="798" y="62" class="xs" text-anchor="middle">hull</text>
+<text x="798" y="272" class="xs mono t-hi" text-anchor="middle">n vertices</text>
+<text x="798" y="290" class="xs muted" text-anchor="middle">the vertices on the plane</text>
+<line x1="20" y1="320" x2="880" y2="320" class="grid" stroke-width="1.0"/>
+<text x="24" y="330" class="xs muted" text-anchor="start">§5 — a 24-sided prism, whose face has to be GATHERED</text>
+<text x="24" y="350" class="xs muted" text-anchor="start">gather_sin</text>
+<text x="308" y="350" class="xs muted" text-anchor="end">prism side face</text>
+<text x="408" y="350" class="xs muted" text-anchor="end">bulge</text>
+<text x="518" y="350" class="xs muted" text-anchor="end">end cap</text>
+<line x1="24" y1="358.0" x2="524" y2="358.0" class="grid" stroke-width="1.0"/>
+<text x="24" y="375.0" class="xs" text-anchor="start">0.002</text>
+<text x="308" y="375.0" class="xs mono" text-anchor="end">4 vertices</text>
+<text x="408" y="375.0" class="xs mono" text-anchor="end">0.0000 m</text>
+<text x="518" y="375.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="24" y="392.0" class="xs" text-anchor="start">0.010</text>
+<text x="308" y="392.0" class="xs mono" text-anchor="end">4 vertices</text>
+<text x="408" y="392.0" class="xs mono" text-anchor="end">0.0000 m</text>
+<text x="518" y="392.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="24" y="409.0" class="xs" text-anchor="start">0.050  (default)</text>
+<text x="308" y="409.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="408" y="409.0" class="xs mono" text-anchor="end">0.0338 m</text>
+<text x="518" y="409.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="24" y="426.0" class="xs" text-anchor="start">0.200</text>
+<text x="308" y="426.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="408" y="426.0" class="xs mono" text-anchor="end">0.0990 m</text>
+<text x="518" y="426.0" class="xs mono" text-anchor="end">8 vertices</text>
+<text x="560" y="356" class="xs muted" text-anchor="start">A box, a sphere and a capsule answer with closed</text>
+<text x="560" y="373" class="xs muted" text-anchor="start">forms, because they KNOW their own faces. A hull is</text>
+<text x="560" y="390" class="xs muted" text-anchor="start">a point cloud with no face list, so its face has to</text>
+<text x="560" y="407" class="xs muted" text-anchor="start">be recovered from the supporting plane — and how</text>
+<text x="560" y="424" class="xs muted" text-anchor="start">wide to make that plane is a guess about geometry</text>
+<text x="560" y="441" class="xs muted" text-anchor="start">that nothing in the data answers.</text>
+<text x="560" y="472" class="xs" text-anchor="start">TOO TIGHT and a cylinder's side contact is a bare</text>
+<text x="560" y="489" class="xs" text-anchor="start">edge. TOO LOOSE and three flat faces merge into one</text>
+<text x="560" y="506" class="xs" text-anchor="start">bulged polygon. There is no value that is right,</text>
+<text x="560" y="523" class="xs" text-anchor="start">because the question is topological. The fix is to</text>
+<text x="560" y="540" class="xs" text-anchor="start">give hull its faces.</text>
+</svg>

@@ -1,0 +1,321 @@
+  <!-- =================================================================
+       5 — CULLING
+       ================================================================= -->
+  <h2 id="cull"><span class="num">5</span>Culling: what feeds the outside world</h2>
+
+  <p>
+    The worked example used a word without defining it. <code>out</code> was <em>imported</em>, and
+    that made <code>combine</code> a root. Why that and not something else?
+  </p>
+
+  <p>
+    Because an import is the only thing in a frame whose value is observable after the frame ends.
+    A transient exists to feed something; if nothing it feeds reaches the outside world, it was
+    computed for nobody. So:
+  </p>
+
+  <p class="eq-plain">
+    <strong>A pass survives if and only if it transitively feeds a write to an imported
+    resource.</strong>
+  </p>
+
+  <p>
+    That is one sentence, it needs no <code>present()</code> call and no "this pass has side
+    effects" flag, and it is computed by backward reachability iterated to a fixed point — at most
+    <em>P</em> rounds for <em>P</em> passes, which is fourteen here and finishes in two.
+  </p>
+
+  <h3>What it does to the bloom</h3>
+
+  <p>
+    Now watch it do something real. <code>gpu_post_stack::render_bloom</code> begins today with:
+  </p>
+
+  <pre><code class="lang-cpp">if (!s.enabled) { return; }</code></pre>
+
+  <p>
+    That line is correct and it is also a <em>second place</em> where a dependency is written down.
+    The first place is in the tonemap shader, which samples <code>t1</code> and multiplies by
+    <code>bloom_intensity</code>. When the intensity is zero the shader does not need the bloom, and
+    somebody had to notice that and add the flag.
+  </p>
+
+  <p>
+    Under the graph, the resolve pass either samples the bloom's finished level 0 or it samples the
+    1×1 stand-in. Nothing else changes. Here is what <code>verify_617</code> §E reports when it
+    declares exactly the same fourteen passes and changes only that one <code>sample</code> call:
+  </p>
+
+  <pre><code class="lang-text">declared: 14 passes
+live:     3
+culled:   11
+
+culled, by name:
+  bloom bright
+  bloom down 1 .. bloom down 5
+  bloom up 5 .. bloom up 1</code></pre>
+
+  <p>
+    Eleven passes disappeared, along with the six pyramid textures they needed, because nothing
+    reads them. No flag exists anywhere in the graph; nothing in <code>frame_graph.cpp</code> knows
+    what a bloom is. And the same mechanism handles the cases nobody wrote a flag for: a debug
+    overlay whose output is not composited, a depth prepass nobody samples, a shadow cascade for a
+    light that got switched off this frame.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>The first time a pass you wanted gets culled, it will look like the pass is
+      broken.</strong> You will see no draws, an empty RenderDoc capture, and a black target. The
+      diagnosis is always the same and it is always upstream: <em>nothing reads what this pass
+      produced</em>. That is why <code>dump_frame_graph</code> exists and why it prints the culled
+      list by name — the answer is one function call away, and without it you will spend the
+      afternoon in the pass body.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — THE SCHEDULE
+       ================================================================= -->
+  <h2 id="order"><span class="num">6</span>The schedule, and why determinism is correctness</h2>
+
+  <p>
+    With edges and a live set, ordering is Kahn's algorithm: repeatedly emit a pass whose
+    dependencies have all been emitted. It is six lines. Two details about it are not incidental.
+  </p>
+
+  <h3>6.1 — Ties are broken by declaration order, always</h3>
+
+  <p>
+    At any point several passes may be ready. Which one you pick is free — any topological order is
+    legal — and that freedom is a trap. Pick by iterating a hash map, or by whichever pass a
+    <code>std::sort</code> happened to leave first, and the same declarations can produce different
+    schedules on different runs.
+  </p>
+
+  <p>
+    Does that matter, if every order is legal? Yes, and the reason is worth generalising well beyond
+    frame graphs. A legal reordering changes <em>floating-point rounding</em> the moment two passes
+    write to the same target, changes which texture the pool hands to whom, and changes what a
+    capture looks like. The symptom is a golden-image test that fails one run in five. By the time
+    anyone has noticed the pattern, the scheduler is the last thing they suspect — they are
+    three days into the shader.
+  </p>
+
+  <p>
+    So the loop scans passes in declaration order and takes the first ready one. It is the slowest
+    possible implementation of "pick a ready pass" and it is the right one, because the property it
+    buys is that <strong>the same declarations always produce the same schedule</strong>. §3's check
+    compares the compiled order against the hand-written order name for name, and that check would
+    be meaningless against a scheduler that was allowed to wander.
+  </p>
+
+  <h3>6.2 — A cycle must be named, not merely detected</h3>
+
+  <p>
+    If no pass is ready and passes remain, there is a cycle. Kahn's algorithm detects this for free:
+    the loop simply runs out of candidates. What it does with the detection is the design decision.
+  </p>
+
+  <p>
+    Returning <code>false</code> is useless. The graph knows exactly which passes never became ready
+    and how many dependencies each is still waiting on, so it logs them:
+  </p>
+
+  <pre><code class="lang-text">ERROR: frame_graph: cycle - these passes never became ready:
+ERROR: frame_graph:   'A' (waiting on 1)
+ERROR: frame_graph:   'B' (waiting on 1)</code></pre>
+
+  <p>
+    It is worth noticing how hard a cycle is to write. You cannot do it by accident with this API,
+    because <code>write</code> returns the new handle and you can only pass a handle you already
+    hold — so to build one, <code>verify_617</code> §F has to construct a version handle by hand for
+    a pass that has not been declared yet. That is a feature of the API rather than of the detector,
+    and it means the cycle check is cheap insurance rather than a core mechanism.
+  </p>
+
+  <!-- =================================================================
+       7 — MEMORY
+       ================================================================= -->
+  <h2 id="memory"><span class="num">7</span>The memory claim, measured</h2>
+
+  <p>
+    Now the promise from §1. Lifetimes are computed; a pool can hand one texture to two resources
+    whose intervals do not overlap. How much does that save on this engine's frame?
+  </p>
+
+  @@FIG_MEMORY@@
+
+  <p>
+    The bars answer it, and the answer is <strong>nothing</strong>. Descriptor-keyed reuse saves
+    0 bytes of 1,223,296. That is not a disappointing result to be buried in a footnote — it is the
+    most useful thing in this lesson, provided the two reasons behind it are kept apart, because
+    they have completely different consequences.
+  </p>
+
+  <h3>7.1 — Reason one: SDL_GPU cannot express aliasing at all</h3>
+
+  <p>
+    Memory aliasing, as the literature means it, is two <em>resources</em> placed at the same offset
+    in one <em>allocation</em>. Vulkan has <code>vkBindImageMemory</code> onto a
+    <code>VkDeviceMemory</code> you allocated; D3D12 has <code>CreatePlacedResource</code> onto a
+    heap. SDL_GPU has neither. Checked against <code>SDL3/SDL_gpu.h</code> at version 3.4.12: there
+    is no placed resource, no heap, no aliasing flag, and no way to ask for a texture that shares
+    storage with another.
+  </p>
+
+  <p>
+    So the strongest form of reuse available here is <strong>handing back a whole texture whose
+    descriptor matches exactly</strong> — same width, height, format, sample count, layer count,
+    depth-ness, sampled-ness. That is strictly weaker, and in this frame it is weaker by everything.
+    Look at the Gantt chart: <code>shadow</code> is 256×256 sampled depth, 262,144 bytes, and it dies
+    at pass 1. <code>bloom 0</code> is 128×128 RGBA16F, 131,072 bytes, and is born at pass 2. Those
+    262,144 dead bytes could comfortably hold 131,072 live ones, and there is no call in the API
+    that asks for it.
+  </p>
+
+  <h3>7.2 — Reason two: a chain has nothing to alias</h3>
+
+  <p>
+    Suppose SDL_GPU grew placed resources tomorrow. How much would we then save? That number is
+    computable from the lifetimes alone: it is the largest total of simultaneously-live bytes, the
+    <em>peak</em> rather than the <em>sum</em>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Strategy</th><th>Bytes (256×256 frame)</th><th>Share</th><th>What it is</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>no sharing at all</td><td>1,223,296</td><td>100.0%</td>
+          <td>one texture per transient — today</td></tr>
+      <tr><td>true memory aliasing</td><td>1,048,576</td><td>85.7%</td>
+          <td>the literature's claim, if the API allowed it</td></tr>
+      <tr><td>descriptor-keyed reuse</td><td>1,223,296</td><td>100.0%</td>
+          <td>what SDL_GPU can express — and what we built</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    So the entire prize is <strong>174,720 bytes — 14.3%</strong>, and we collect none of it. At a
+    resolution anybody actually renders at, the same frame declared at 1920×1080 with a 2048 shadow
+    map gives 45.00 MB unshared against 39.73 MB with perfect aliasing: an unreachable
+    <strong>5.27 MB</strong>. Which, if you work out what is in it, is <em>exactly the bloom
+    pyramid</em> — the whole chain would fit inside the shadow map's memory after the shadow map
+    dies, and cannot be asked to.
+  </p>
+
+  <p>
+    And 14.3% is small for a reason that is structural rather than accidental:
+  </p>
+
+  @@FIG_SHAPE@@
+
+  <p>
+    Read the Gantt bars again. <code>hdr</code> spans the entire schedule, because the resolve reads
+    it at the very end. All six pyramid levels are live simultaneously at the turn between the down
+    chain and the up chain — which is not a quirk of our implementation, it is what an additive
+    pyramid <em>means</em>: every level must survive until the upsample that adds it back. Our frame
+    is a chain, and in a chain almost nothing is dead while anything else is alive.
+  </p>
+
+  <h3>7.3 — And the mechanism does work, on a frame shaped for it</h3>
+
+  <p>
+    It would be easy to conclude from the above that the pool is dead code, so §7 of the harness
+    builds the smallest graph that uses it: a scene, two half-resolution effects applied one after
+    the other, and a composite. Effect A's scratch target dies before effect B's is born.
+  </p>
+
+  <pre><code class="lang-text">effect A scratch -> pool slot 1   live [1, 2]
+effect B scratch -> pool slot 1   live [3, 4]
+one texture per transient :    786432 B
+pooled                    :    655360 B  (saved 131072)</code></pre>
+
+  <p>
+    Both land on one texture and the saving is real. That is the shape a post-processing stack takes
+    as it grows past two effects — SSAO, screen-space reflections, depth of field and motion blur
+    each want scratch targets they finish with — and it is the shape to watch for. Until then, the
+    pool costs a dozen lines and saves nothing, and both halves of that sentence should be said out
+    loud.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>The general problem here has a name and it is worth knowing you are not solving it.</strong>
+      Assigning intervals to the fewest resources is <em>interval graph colouring</em>, which for
+      intervals on a line is solvable optimally by a greedy sweep — and that is what the pool does,
+      visiting resources in order of first use. What makes real frame-graph allocators hard is not
+      the colouring; it is that with true aliasing the "resources" have different sizes and
+      alignments, which turns it into bin packing with lifetimes, and that is where the published
+      work goes.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — WHAT MUST NOT BE REORDERED
+       ================================================================= -->
+  <h2 id="forbidden"><span class="num">8</span>What a frame graph must never reorder</h2>
+
+  <p>
+    A scheduler that moves work around is a scheduler that can move work that was not allowed to
+    move. Two things in this engine are ordered for reasons that are <em>semantic</em> rather than
+    data-dependent, and a graph that reordered either would be silently wrong. They are worth
+    stating precisely, because the reasoning is the interesting part and it generalises.
+  </p>
+
+  <h3>8.1 — The blended tail (Lesson 6.11)</h3>
+
+  <p>
+    Lesson 6.11 established that opaque geometry may be drawn in any order, because the z-buffer
+    resolves visibility, and that blended geometry must be drawn <strong>back to front</strong>,
+    because <code>over</code> is not commutative. <code>order_draws</code> sorts the transparent
+    bucket by view depth and the renderer issues it in that order.
+  </p>
+
+  <p>
+    Could this graph break that? No, and the reason is structural rather than lucky:
+    <strong>the graph orders passes, not draws.</strong> Everything inside a pass body is recorded
+    by the callback, in the order the callback issues it, and the graph has no visibility into it at
+    all. The blended tail lives inside <code>gpu_scene_renderer::render</code>, one pass, and is
+    untouchable from here.
+  </p>
+
+  <p>
+    That is a real architectural boundary and it is worth naming as one. The unit of scheduling is
+    the render pass. If you ever find yourself wanting the graph to reorder <em>draws</em>, you are
+    proposing something much more dangerous, and the first thing it would need is a way to know
+    which draws commute — which is exactly the knowledge <code>blend_style</code> encodes and
+    exactly the knowledge a pass callback has and the graph does not.
+  </p>
+
+  <h3>8.2 — Instanced batching (Lesson 6.16)</h3>
+
+  <p>
+    One lesson ago, <code>batch_instances</code> started permuting the opaque draw list so that
+    objects sharing a mesh, material, texture, normal map and style could be issued as one
+    instanced draw. That permutation is legal <em>because</em> the z-buffer makes opaque order free
+    — the same property, used the other way round. And 6.16 refuses to batch blended geometry, which
+    is the same rule again.
+  </p>
+
+  <p>
+    Again the graph cannot touch it, for the same reason. But notice what would happen if the
+    boundary were drawn one level lower: a scheduler that could reorder draws would happily
+    interleave a batched opaque run with a blended one, and the failure would be a transparent
+    surface compositing against a background that had not been drawn yet. The symptom is a window
+    showing the skybox through a wall.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>The general rule, which is worth carrying past this lesson:</strong> a dependency
+      graph can only respect the constraints you declared. Ordering that comes from <em>data</em>
+      (this pass reads what that one wrote) is safe to hand over. Ordering that comes from
+      <em>semantics</em> (this composite is not commutative) is not, unless you have found a way to
+      declare it — and until you have, it must live inside an atom the scheduler cannot open.
+      Here the atom is the render pass.
+    </p>
+  </div>

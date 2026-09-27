@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""Assemble docs/lessons/03-06-normals-and-lambert.html from the template + authored body.
+
+Code listings and implementation excerpts are read from the REAL source files, so
+the page cannot drift from the repository. Run from the repo root.
+"""
+import html
+import pathlib
+import re
+import sys
+
+sys.path.insert(0, 'scratch')
+from l36_body1 import BODY1          # noqa: E402
+from l36_body2 import BODY2          # noqa: E402
+from l36_body3 import BODY3          # noqa: E402
+
+ROOT = pathlib.Path('.')
+TPL = (ROOT / 'docs/_template/lesson-template.html').read_text(encoding='utf-8')
+
+
+def region(name, text=TPL):
+    m = re.search(r'<!-- %s:BEGIN -->(.*?)<!-- %s:END -->' % (name, name), text, re.S)
+    if not m:
+        raise SystemExit('missing region ' + name)
+    return m.group(1)
+
+
+SHARED_CSS = region('SHARED-CSS')
+SHARED_SCRIPT = region('SHARED-SCRIPT')
+
+
+def read(path):
+    return (ROOT / path).read_text(encoding='utf-8').replace('\r\n', '\n')
+
+
+def grab(path, start_sub, end_sub='};', extra=0, dedent=True):
+    """Lines from the first containing start_sub through the first later one
+    containing end_sub, plus `extra` more lines."""
+    lines = read(path).split('\n')
+    try:
+        i = next(k for k, ln in enumerate(lines) if start_sub in ln)
+    except StopIteration:
+        raise SystemExit('excerpt start not found in %s: %r' % (path, start_sub))
+    try:
+        j = next(k for k in range(i, len(lines)) if end_sub in lines[k])
+    except StopIteration:
+        raise SystemExit('excerpt end not found in %s: %r' % (path, end_sub))
+    chunk = lines[i:j + 1 + extra]
+    if dedent:
+        pads = [len(ln) - len(ln.lstrip()) for ln in chunk if ln.strip()]
+        cut = min(pads) if pads else 0
+        chunk = [ln[cut:] if len(ln) >= cut else ln for ln in chunk]
+    return '\n'.join(chunk)
+
+
+LANG = {'.hpp': 'cpp', '.cpp': 'cpp', '.txt': 'cmake', '.obj': 'cpp', '': 'bash'}
+
+
+def listing(caption, code, tag=None, lang='cpp', shell=False):
+    cls = 'listing shell' if shell else 'listing'
+    tag_html = ('<span class="tag %s">%s</span>' % (tag, tag)) if tag else ''
+    label = {'cpp': 'C++', 'cmake': 'CMake', 'bash': 'shell'}.get(lang, lang)
+    return (
+        '<figure class="%s">\n'
+        '    <figcaption>\n'
+        '      <span class="path">%s</span>\n'
+        '      %s\n'
+        '      <span class="lang" data-lang="%s">%s</span>\n'
+        '    </figcaption>\n'
+        '    <pre><code class="lang-%s">%s</code></pre>\n'
+        '  </figure>' % (cls, html.escape(caption), tag_html, lang, label, lang,
+                         html.escape(code.rstrip('\n')))
+    )
+
+
+def file_listing(path, tag, caption=None, lang=None):
+    p = pathlib.Path(path)
+    lang = lang or LANG.get(p.suffix, 'cpp')
+    return listing(caption or path, read(path), tag=tag, lang=lang)
+
+
+# ---- implementation excerpts ------------------------------------------------
+EXC = {
+    'directional_light': listing(
+        'src/gfx/light.hpp — the sign that everyone gets wrong once',
+        grab('src/gfx/light.hpp', '/// A light infinitely far away'), 'new'),
+
+    'lambert': listing(
+        'src/gfx/light.hpp — the law, in three lines',
+        grab('src/gfx/light.hpp', "/// **Lambert's cosine law**", '}'), 'new'),
+
+    'shade': listing(
+        'src/gfx/light.hpp — albedo, ambient, and one decode/encode pair',
+        grab('src/gfx/light.hpp', '/// The light leaving a surface of colour', '}'), 'new'),
+
+    'normal_matrix': listing(
+        'src/math/mat4.hpp — the inverse transpose, derived in place',
+        grab('src/math/mat4.hpp', '/// The upper-left 3x3', '}'), 'modified'),
+
+    'per_vertex': listing(
+        'src/main.cpp — shade once per vertex, in world space',
+        grab('src/main.cpp', '// The authored normal, carried into world space',
+             'vertex_colour.push_back(objects[i].tint);', extra=1), 'modified'),
+
+    'face_normal': listing(
+        'src/main.cpp — the fallback, and it obeys the same rule',
+        grab('src/main.cpp', '// The FACE normal, from this triangle',
+             'const engine::vec3 face_world = to_world_normal * face_model;'), 'modified'),
+
+    'shade_mode': listing(
+        'src/main.cpp — three modes, one of which is deliberately wrong',
+        grab('src/main.cpp', '/// Where the surface normal used for shading comes from'),
+        'modified'),
+
+    'normal_toggle': listing(
+        'src/main.cpp — the toggle, and the matrix it chooses between',
+        grab('src/main.cpp', '// ---- Lesson 3.6: the matrix that transforms NORMALS',
+             'const engine::mat3 reference_normal'), 'modified'),
+}
+
+# ---- full listings ----------------------------------------------------------
+FULL = '\n\n  '.join([
+    file_listing('src/gfx/light.hpp', 'new'),
+    file_listing('src/math/mat4.hpp', 'modified'),
+    file_listing('src/main.cpp', 'modified'),
+])
+
+STATE = """course: Build a Professional 3D Game Engine (SDL3 + C++20)
+version: 1.0
+
+conventions:
+  world: right-handed, Y-up, -Z forward
+  clip: left-handed, +Y up, z in [0,1] (SDL_GPU; projection absorbs the flip)
+  matrices: column vectors, v&#39; = M*v, column-major storage
+  winding: CCW = front, cull back; front-facing is edge_function &lt; 0 in screen space
+  units: 1 unit = 1 metre; radians internally
+  axis colours: x/y/z = red/green/blue
+  assets: OBJ is 1-based, negative = relative; vt stored as written (flip decided in 3.9)
+  lighting: in WORLD space, per vertex, in LINEAR light. A directional light stores the
+        direction light TRAVELS; the cosine law wants to_light() = -direction.
+        NORMALS ARE TRANSFORMED BY THE INVERSE TRANSPOSE, never by the model matrix.
+
+completed:
+  - 0.1 What a Game Engine Is … 0.6 Headers and the Debugger
+  - 1.1 Events … 1.8 Pong (Module 1 checkpoint)
+  - 2.1 Lines … 2.12 A Spinning Wireframe Mesh (Module 2 complete)
+  - 3.1 The Painter&#39;s Problem and the Z-Buffer
+  - 3.2 Perspective-Correct Interpolation
+  - 3.3 Near-Plane Clipping
+  - 3.4 Back-Face Culling
+  - 3.5 A Hand-Rolled OBJ Loader
+  - 3.6 Normals and Lambert&#39;s Cosine Law
+
+capabilities:
+  - fixed-timestep loop with render interpolation; input state and events
+  - CPU framebuffer via an SDL3 streaming texture; sRGB-aware colour
+  - hand-built vec2/3/4, mat2/3/4, transforms, look-at, perspective, viewport,
+    normal_matrix (inverse transpose)
+  - triangle raster with edge functions, fill rule, perspective-correct attributes
+  - z-buffer (f32 / unorm24 / unorm16), near-plane clipping, back-face culling
+  - OBJ loading and saving; owning mesh_data; mesh validation (euler, boundary,
+    winding, signed volume); procedural torus
+  - directional light + Lambert diffuse, per-vertex, in world space and linear light
+
+files:
+  /: CLAUDE.md, README.md, ARCHITECTURE.md, LEARNINGS.md, PROMPT.md, LICENSE,
+     .gitignore, CMakeLists.txt, STATE.md
+  src/: main.cpp
+  src/core/: input.hpp/.cpp, clock.hpp/.cpp, fixed_step.hpp/.cpp
+  src/gfx/: clip.hpp/.cpp, colour.hpp/.cpp, depth_buffer.hpp/.cpp,
+            framebuffer.hpp/.cpp, light.hpp, mesh.hpp/.cpp, obj.hpp/.cpp,
+            raster.hpp/.cpp, viewport.hpp
+  src/math/: vec2.hpp, vec3.hpp, vec4.hpp, mat2.hpp, mat3.hpp, mat4.hpp, transform.hpp
+  src/game/: pong.hpp/.cpp
+  assets/: cube.obj, twisted.obj, quirks.obj, torus.obj
+  docs/: index.html, conventions.html, math-toolbox.html, cpp-style.html
+  docs/lessons/: 00-01 … 03-06 (32 lessons)
+
+next: 3.7 — Specular and Blinn-Phong"""
+
+
+NAV = """  <nav class="lesson-nav" aria-label="Lesson navigation (%s)">
+    <a class="prev-l" href="03-05-obj-loader.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">3.5 — A Hand-Rolled OBJ Loader</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="03-07-specular-blinn-phong.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">3.7 — Specular and Blinn-Phong</span>
+    </a>
+  </nav>"""
+
+body = BODY1 + BODY2 + BODY3
+for key, value in EXC.items():
+    marker = '<!--EXC:%s-->' % key
+    if marker not in body:
+        raise SystemExit('unused excerpt: ' + key)
+    body = body.replace(marker, value)
+left = re.findall(r'<!--EXC:(\w+)-->', body)
+if left:
+    raise SystemExit('unfilled excerpt markers: %s' % left)
+body = body.replace('<!--LISTINGS-->', FULL)
+
+PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3.6 — Normals and Lambert's Cosine Law · Build a Professional 3D Game Engine</title>
+<meta name="description" content="Lambert's cosine law derived from a spreading beam, the clamp that keeps light non-negative, and the inverse-transpose normal matrix — derived from the one property that defines a normal, and measured where it matters.">
+
+<!-- ==========================================================================
+     SHARED COURSE STYLESHEET  —  v1.0
+     ==========================================================================
+     This block is IDENTICAL in every lesson file. It is duplicated rather than
+     linked because each lesson must be a fully self-contained document that
+     renders from a bare filesystem with no network and no build step.
+
+     Source of truth: docs/_template/lesson-template.html
+     ========================================================================== -->
+<!-- SHARED-CSS:BEGIN -->%s<!-- SHARED-CSS:END -->
+
+<!-- KaTeX (optional). If unreachable the raw TeX remains readable, and every
+     equation is also stated in prose + .eq-plain, so nothing is lost. -->
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+"
+      crossorigin="anonymous">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="course" href="../index.html">Build a Professional 3D Game Engine</a>
+    <span class="spacer"></span>
+    <a href="../index.html">Contents</a>
+    <a href="../conventions.html">Conventions</a>
+    <a href="../math-toolbox.html">Math Toolbox</a>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+%s
+%s
+  <details class="state">
+    <summary>STATE — resume key</summary>
+<pre>%s</pre>
+  </details>
+
+%s
+
+  <footer class="foot">
+    <p>
+      Build a Professional 3D Game Engine ·
+      <a href="../index.html">Contents</a> ·
+      <a href="../conventions.html">Conventions</a> ·
+      <a href="../math-toolbox.html">Math Toolbox</a> ·
+      <a href="../cpp-style.html">C++ Style</a>
+    </p>
+    <p>MIT licensed. Copyright © 2026 digster.</p>
+  </footer>
+</div>
+
+<!-- ==========================================================================
+     PAGE SCRIPTS
+     ========================================================================== -->
+<!-- SHARED-SCRIPT:BEGIN -->%s<!-- SHARED-SCRIPT:END -->
+</body>
+</html>
+""" % (SHARED_CSS, NAV % 'top', body, STATE, NAV % 'bottom', SHARED_SCRIPT)
+
+out = ROOT / 'docs/lessons/03-06-normals-and-lambert.html'
+out.write_text(PAGE, encoding='utf-8')
+print('wrote %s  (%.0f KB)' % (out, len(PAGE) / 1024))
+
+# quick sanity checks
+eqs = PAGE.count('class="eq"')
+plain = PAGE.count('eq-plain')
+print('  equations: %d  (.eq-plain twins: %d)' % (eqs, plain))
+print('  figures:   %d' % PAGE.count('<figure class="dia'))
+print('  listings:  %d' % PAGE.count('<figure class="listing'))
+print('  pitfalls:  %d' % PAGE.count('class="pitfall-item"'))
+print('  exercises: %d' % PAGE.count('class="exercise"'))
+text_only = re.sub(r'<pre>.*?</pre>', ' ', PAGE, flags=re.S)
+text_only = re.sub(r'<script.*?</script>', ' ', text_only, flags=re.S)
+text_only = re.sub(r'<style.*?</style>', ' ', text_only, flags=re.S)
+text_only = re.sub(r'<svg.*?</svg>', ' ', text_only, flags=re.S)
+text_only = re.sub(r'<[^>]+>', ' ', text_only)
+print('  words (excluding code, svg, script): %d'
+      % len(html.unescape(text_only).split()))

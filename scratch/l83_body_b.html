@@ -1,0 +1,508 @@
+  <h2 id="tensor">4. The inertia tensor, derived — and the form that loses it</h2>
+
+  <p>
+    Now the other half. We know how hard we are turning something; we need to know how hard it is to
+    turn.
+  </p>
+
+  <p>
+    The linear case took one line: <code>p = m v</code>, momentum is mass times velocity, and
+    <code>F = dp/dt</code>. We want the rotational analogue, and the honest way to get it is to
+    build it out of the linear one — because a rigid body is nothing but a very large number of
+    point masses that happen to keep their distances from each other.
+  </p>
+
+  <h3>4.1 Four lines</h3>
+
+  <p>
+    <strong>Line one.</strong> Angular momentum of a point mass about the origin is defined as
+    <code>ℓ = r × p = m (r × v)</code>. It is a definition rather than a discovery, and the reason
+    it is the <em>useful</em> definition is that its time derivative turns out to be the torque —
+    differentiate it and the <code>v × v</code> term vanishes, leaving
+    <code>dℓ/dt = r × F = τ</code>. So angular momentum is to torque what momentum is to force,
+    which is what makes it worth tracking. For a whole body, sum over its parts:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{L} = \sum_i m_i\,(\mathbf{r}_i \times \mathbf{v}_i)
+    \]
+  </div>
+
+  <p>
+    <strong>Line two.</strong> The body is <em>rigid</em>, and that is the entire content of the
+    word: every point in it is at a fixed distance from every other, so the only motion available to
+    it (once you have subtracted the motion of the centre of mass) is a rotation. And a point at
+    <code>r</code> from the centre of a body rotating at angular velocity <code>ω</code> moves at
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{v}_i = \boldsymbol{\omega} \times \mathbf{r}_i
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — which is worth reading rather than accepting. The point travels in a circle about the
+    <code>ω</code> axis; its speed is the rate <code>|ω|</code> times the radius of <em>that
+    circle</em>, which is <code>|r| sin θ</code> and not <code>|r|</code>; and its direction is
+    perpendicular to both the axis and the lever arm. Magnitude <code>|ω||r| sin θ</code>,
+    perpendicular to both: that is the cross product, again, arriving for the third time in this
+    lesson from a completely different question.
+  </p>
+
+  <p>
+    <strong>Line three.</strong> Substitute, and look at what one term now is:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{L} = \sum_i m_i\,\bigl(\mathbf{r}_i \times (\boldsymbol{\omega} \times \mathbf{r}_i)\bigr)
+    \]
+  </div>
+
+  <p>
+    That is a vector triple product, and there is an identity for it — the one usually remembered as
+    <em>BAC minus CAB</em>: <code>a × (b × c) = b (a·c) − c (a·b)</code>. With
+    <code>a = r</code>, <code>b = ω</code>, <code>c = r</code>:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{r} \times (\boldsymbol{\omega} \times \mathbf{r})
+      = \boldsymbol{\omega}\,(\mathbf{r}\cdot\mathbf{r}) - \mathbf{r}\,(\mathbf{r}\cdot\boldsymbol{\omega})
+      = |\mathbf{r}|^2\,\boldsymbol{\omega} - \mathbf{r}\,(\mathbf{r}\cdot\boldsymbol{\omega})
+    \]
+  </div>
+
+  <p>
+    <strong>Line four, and this is the step that matters.</strong> Both terms on the right are
+    linear in <code>ω</code>. The first is <code>|r|²</code> times the identity applied to
+    <code>ω</code>. The second — <code>r (r·ω)</code> — takes <code>ω</code>, measures how much of
+    it lies along <code>r</code>, and hands back that much of <code>r</code>. That <em>is</em> a
+    matrix acting on <code>ω</code>, and it is called the <strong>outer product</strong>
+    <code>r ⊗ r</code>. So:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{L} = \underbrace{\left[\sum_i m_i\bigl(|\mathbf{r}_i|^2\,\mathbf{1} - \mathbf{r}_i \otimes \mathbf{r}_i\bigr)\right]}_{\textstyle \mathbf{I}}\;\boldsymbol{\omega}
+    \qquad\Longrightarrow\qquad
+    \mathbf{L} = \mathbf{I}\,\boldsymbol{\omega}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    Angular momentum equals the inertia tensor times the angular velocity. It is <code>p = m v</code>
+    with a matrix where the scalar was — and the matrix is there because the cross products in lines
+    one and two did not cancel into a scalar, which is not something anyone chose.
+  </p>
+
+  <h3>4.2 Reading the expression rather than the formula</h3>
+
+  <p>
+    <code>|r|² · 1 − r ⊗ r</code> looks like arithmetic and is geometry. Take it in two pieces.
+  </p>
+
+  <p>
+    <code>|r|² · 1</code> says: <em>resist every axis equally, by <code>m r²</code></em>. That is the
+    skater's square, and it is where the whole square-law intuition lives.
+  </p>
+
+  <p>
+    <code>− r ⊗ r</code> says: <em>…then take all of that back along <code>r</code> itself</em>. The
+    outer product is the projection onto <code>r</code>, scaled by <code>|r|²</code>, so subtracting
+    it annihilates the <code>r</code> direction exactly and leaves everything perpendicular
+    untouched.
+  </p>
+
+  <p>
+    Together: a point mass resists rotation about any axis perpendicular to it by <code>m r²</code>,
+    and rotation about an axis running <em>through</em> it by <strong>nothing at all</strong> —
+    which is exactly right, because a point spun about an axis through itself does not move. A
+    formula that produced anything else would be wrong.
+  </p>
+
+  @@FIG_OUTER@@
+
+  <p>
+    Here is that in the harness, on a 3 kg mass sitting two metres up the <code>y</code> axis:
+  </p>
+
+<pre><code class="lang-text">  B.1  r x (omega x r)  vs  (|r|^2 I - r(x)r) omega
+       worst relative difference  1.2075e-06
+
+  B.4  3 kg at    |  12.000000   0.000000   0.000000 |
+                  |   0.000000   0.000000   0.000000 |
+       (0, 2, 0)  |   0.000000   0.000000  12.000000 |
+
+       spun about y (through it):  I = 0.000000
+       spun about x (across it) :  I = 12.000000  = m r^2
+
+  B.5  CONTROL asymmetry over 20,000 tensors: 0.0000e+00</code></pre>
+
+  <p>
+    <code>m r² = 3 × 4 = 12</code>, in the two directions that are not <code>y</code>, and an exact
+    zero in the direction that is. B.1 is the derivation itself under test: 20,000 random
+    <code>(r, ω)</code> pairs pushed through the cross products directly and through the matrix, and
+    the two agree to a part in a million, which is `float`'s noise floor.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>B.5 is the control, and it is a control of the second kind</strong> — the one that asks
+      what the instrument would say if everything were <em>fine</em>. Every tensor this expression
+      can build is symmetric, because <code>1</code> is and <code>r ⊗ r</code> is and sums of
+      symmetric matrices are. So <code>asymmetry()</code> on any of them is not a tolerance to tune;
+      it is a bug detector whose correct reading is exactly zero, and it reads exactly zero across
+      20,000 tensors. Every subsequent section prints it beside whatever it built.
+    </p>
+  </div>
+
+  <h3>4.3 Why <code>mat3</code> only now grows arithmetic</h3>
+
+  <p>
+    The outer product does not exist in this engine yet, and neither does adding two
+    <code>mat3</code>s, or multiplying one by a scalar. Eighty lessons of graphics code and nobody
+    ever wanted them. That is not an oversight, and the reason is the most interesting thing in
+    <code>mat3.hpp</code>.
+  </p>
+
+  <p>
+    Since Lesson 2.5 a <code>mat3</code> has been exactly one thing: <em>where do the basis vectors
+    land</em>. Under that reading the operators above are meaningless. The sum of two rotations is
+    not a rotation. Half a shear is not half as sheared in any useful sense. Nothing in the renderer
+    ever wanted either, which is why neither was ever written.
+  </p>
+
+  <p>
+    An inertia tensor is a <code>mat3</code> under a <em>different</em> reading. It is not a map from
+    vectors to vectors that happens to be useful; it is a <strong>quantity</strong> — the way a
+    body's mass is spread out — which turns out to need nine numbers, and which is <em>used</em> as a
+    map only because that is what its nine numbers mean. Quantities add. Two lumps of matter bolted
+    together have the sum of their tensors about a common point, for exactly the same reason they
+    have the sum of their masses, and §5 builds a compound body by doing precisely that.
+  </p>
+
+  <p>
+    So the arithmetic arrives eighty lessons late because until today there was nothing in this
+    engine that a matrix could be the <em>amount of</em>.
+  </p>
+
+  <h3>4.4 …and the form the derivation produced is the one you must not ship</h3>
+
+  <p>
+    Here is where this lesson stopped going to plan.
+  </p>
+
+  <p>
+    There is a second way to write the same thing. Lesson 3.4's cross product can be written as a
+    matrix — the <em>cross-product matrix</em> <code>[w]ₓ</code>, whose action is
+    <code>v ↦ w × v</code> — and if you expand <code>−[r]ₓ[r]ₓ</code> by the same triple-product
+    identity we used in line three, you get <code>|r|² 1 − r ⊗ r</code> back. Same algebra, different
+    operators. So they must agree.
+  </p>
+
+  <p>
+    Algebraically, yes. In <code>float</code>, the harness says no:
+  </p>
+
+<pre><code class="lang-text">  B.2  -[r]x [r]x  vs  |r|^2 I - r(x)r
+       algebraically identical; bit-identical in float
+       on all 20,000: no</code></pre>
+
+  <p>
+    Disagreeing in the last bit would be unremarkable — two expressions evaluated in a different
+    order round differently, and that is every day of floating-point arithmetic. But look at
+    <em>which</em> bits, on a body shaped like the things games are full of:
+  </p>
+
+<pre><code class="lang-text">  B.3  the same two forms on a LONG THIN body,
+       a sample at r = (1000, 0.001, 0):
+
+       |r|^2 I - r(x)r     Ixx = 0.000000e+00
+       inertia_of_point    Ixx = 1.000000e-06
+       exact                     1.000000e-06
+       relative error of the derived form: 100.0%</code></pre>
+
+  <p>
+    Not the last bit. <strong>All of them.</strong>
+  </p>
+
+  <p>
+    The cause is visible once you write out what the diagonal of the derived form actually computes.
+    The <code>xx</code> entry is <code>|r|² − x²</code>, which for <code>r = (1000, 0.001, 0)</code>
+    is
+  </p>
+
+  <div class="eq">
+    \[
+    (1000^2 + 0.001^2 + 0^2) - 1000^2 = 1{,}000{,}000.000001 - 1{,}000{,}000
+    \]
+  </div>
+
+  <p>
+    A <code>float</code> has 24 bits of significand. At a magnitude of 10⁶ the gap between
+    representable values is <code>2⁻²³ × 2²⁰ ≈ 0.0625</code>, so the <code>0.000001</code> is not
+    rounded away at the end — <em>it was never in the sum</em>. The addition produced exactly
+    1,000,000, and subtracting 1,000,000 from it gives exactly zero. This is catastrophic
+    cancellation in the textbook sense: a small true answer computed as the difference of two large
+    nearly-equal numbers.
+  </p>
+
+  <p>
+    The cross-product-matrix form never forms that sum. Its <code>xx</code> entry is
+    <code>y² + z²</code> directly — the two terms that actually belong in it — and it returns
+    <code>1e−06</code> exactly.
+  </p>
+
+  @@FIG_CANCELLATION@@
+
+  <div class="callout">
+    <p>
+      <strong>This is not a contrived input.</strong> It is a plank, a rail, a sword, a lamp post, a
+      fence panel — anything far longer than it is thick, which describes a great deal of what a
+      level is built out of. And the consequence is not a small numerical error, it is a
+      <em>behavioural</em> one: a zero principal moment makes the tensor singular,
+      <code>inverse_inertia</code> refuses it, and the body silently will not rotate about its own
+      length no matter what torque you apply. Which is a bug you would chase for a day, because
+      everything else about the body works.
+    </p>
+  </div>
+
+  <p>
+    So <code>inertia_of_point</code> ships the well-conditioned form — the diagonal built from the
+    two terms that belong in it, the off-diagonal from the products that belong in that — and the
+    derivation's version appears nowhere in the engine. It is also faster: nine multiplies against
+    two matrix products. That is the rare case where the numerically better choice costs nothing,
+    and the only reason to have written the other one first is that it is the one the derivation
+    hands you.
+  </p>
+
+  <p>
+    The transferable version of this: <strong>a derivation tells you what to compute, not how to
+    compute it</strong>, and the two questions have different answers more often than
+    undergraduate courses suggest. Lesson 6.16 found the same thing in
+    <code>perspective()</code>, where forming <code>A + 1</code> with <code>A = −1.003009</code>
+    discarded eight bits and amplified one ulp by 332×. Whenever a formula subtracts two things that
+    are nearly equal, look for the version that does not.
+  </p>
+
+  <h3>4.5 Six shapes, and why they are all diagonal</h3>
+
+  <p>
+    Equation (1) is a sum over point masses, and a real shape is an integral of it. Those integrals
+    were done centuries ago and <code>inertia.hpp</code> carries six of them: a solid box, a solid
+    sphere, a thin spherical shell, a solid cylinder, a thin rod, and a capsule. The box, which is
+    the one you will use most, is
+  </p>
+
+  <div class="eq">
+    \[
+    I_{xx} = \tfrac{m}{3}\,(b^2 + c^2), \qquad
+    I_{yy} = \tfrac{m}{3}\,(a^2 + c^2), \qquad
+    I_{zz} = \tfrac{m}{3}\,(a^2 + b^2)
+    \]
+  </div>
+
+  <p class="eq-plain">
+    for half-extents <code>(a, b, c)</code>. Note what is <em>not</em> in the <code>x</code> entry:
+    <code>a</code>, the extent along <code>x</code>. Resistance to spinning about an axis depends on
+    how far the mass is from that <em>axis</em>, and mass lying along <code>x</code> is at zero
+    distance from the <code>x</code> axis. Each entry is built from the other two. Getting this
+    backwards is the single most common inertia bug there is, and it produces a body that looks
+    almost right, which is worse than one that looks wrong.
+  </p>
+
+  <p>
+    All six are <strong>diagonal</strong>, and that is neither coincidence nor approximation. Each of
+    these shapes is symmetric about all three coordinate planes, so for every point mass at
+    <code>(x, y, z)</code> there is a mirror one at <code>(−x, y, z)</code> whose
+    <code>−m x y</code> off-diagonal term cancels the first one's exactly. Body axes chosen along a
+    shape's symmetries are its <strong>principal axes</strong>, and a tensor written in its principal
+    axes is diagonal. This is why engines let you author a box rather than a nine-float matrix.
+  </p>
+
+  <p>
+    The capsule is the one whose formula you cannot check by inspection, and §5's parallel-axis
+    theorem is what it is built from. Its two limits are the only practical test:
+  </p>
+
+<pre><code class="lang-text">  C.4  the capsule's two limits
+       H -> 0   capsule 0.76800001  sphere 0.76800007
+                max element difference 5.9605e-08
+       R -> 0   capsule 1.00013328  rod    1.00000000
+                relative difference    1.3328e-04</code></pre>
+
+  <p>
+    Shrink the cylindrical section to nothing and a capsule <em>is</em> a sphere; shrink the radius
+    and it <em>is</em> a rod. Both limits land on the independently-derived closed form. A formula
+    that passes two limits it was not built from is a formula you can trust.
+  </p>
+
+  <h2 id="parallel">5. Moving a tensor: the parallel-axis theorem</h2>
+
+  <p>
+    A tensor is about a point. Every closed form above is about the shape's own centre of mass,
+    which is the only point that makes sense as a default — and the moment you want to assemble two
+    of them into one body, or spin something about a hinge that is not its centre, you need to move
+    one.
+  </p>
+
+  <p>
+    The theorem is three lines from equation (1). Suppose you know <code>I</code> about the centre of
+    mass and want it about a point offset by <code>d</code>. Every sample's position becomes
+    <code>r − d</code>, so
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{I}_{\mathbf{d}} = \sum_i m_i\Bigl(|\mathbf{r}_i - \mathbf{d}|^2\,\mathbf{1}
+      - (\mathbf{r}_i - \mathbf{d}) \otimes (\mathbf{r}_i - \mathbf{d})\Bigr)
+    \]
+  </div>
+
+  <p>
+    Expand, and three groups of terms fall out. The ones with no <code>d</code> are
+    <code>I</code> itself. The ones with <code>d</code> twice sum to
+    <code>M(|d|² 1 − d ⊗ d)</code>, since <code>Σ mᵢ = M</code>. And the cross terms carry a factor of
+    <code>Σ mᵢ rᵢ</code> — which is <em>the definition of the centre of mass, times the total mass</em>,
+    and the centre of mass is where we measured <code>r</code> from, so it is zero.
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{I}_{\mathbf{d}} = \mathbf{I}_{\text{cm}} + M\bigl(|\mathbf{d}|^2\,\mathbf{1} - \mathbf{d} \otimes \mathbf{d}\bigr)
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — and the correction term is <em>exactly</em> <code>inertia_of_point(M, d)</code>, the tensor of
+    a single point mass <code>M</code> sitting at the offset. That is the theorem's real content:
+    <strong>moving the reference point costs exactly as much as if the whole body were concentrated
+    at its centre of mass.</strong>
+  </p>
+
+  <p>
+    And the vanishing cross term is why <strong>it only works from the centre of mass</strong>.
+    Shifting from an arbitrary point to another arbitrary point by calling it twice is wrong, because
+    the first call's reference is not where the mass balances.
+  </p>
+
+  <h3>5.1 A test that only passes if the theorem is exactly true</h3>
+
+  <p>
+    Every closed form in <code>inertia.hpp</code> is a transcription, which means every one of them
+    could be a typo. The honest check is to compute the same tensor by brute force — fill the shape
+    with point masses and sum equation (1) — and see whether the two agree.
+  </p>
+
+  <p>
+    Do that naively and something odd happens:
+  </p>
+
+<pre><code class="lang-text">  C.2  the same box as a grid of point masses
+
+      N    points     Ixx(points)   ratio   1 - 1/N^2
+      4        64      4.062500   0.937500  0.937500
+      8       512      4.265625   0.984375  0.984375
+     20      8000      4.322488   0.997497  0.997500
+     50    125000      4.331634   0.999608  0.999600</code></pre>
+
+  <p>
+    The point sum is <em>low</em>, and not by a random amount: by <strong>exactly
+    <code>1/N²</code></strong>, at every resolution tried, to six decimal places.
+  </p>
+
+  <p>
+    That is predictable before it is measured, and predicting it is the point. A grid of
+    <code>N³</code> point masses replaces each little cell of the box with a point at its centre —
+    which has the cell's mass but none of the cell's own <em>spread</em>. The missing piece per cell
+    is that cell's own tensor, and for a cell of half-size <code>b/N</code> by <code>c/N</code> it is
+    <code>m_cell(b² + c²)/(3N²)</code>. Summed over all the cells that is
+    <code>M(b² + c²)/(3N²)</code> — which is <code>I_xx / N²</code>. The whole deficit is a factor of
+    <code>1 − 1/N²</code>, exactly, which is what the last two columns say.
+  </p>
+
+  <p>
+    Now add it back. Each cell is a solid box, so its tensor about the assembly's origin is its own
+    tensor <em>shifted</em> by the parallel-axis theorem. Sum those instead:
+  </p>
+
+<pre><code class="lang-text">      N      Ixx(cells)    relative error
+      4      4.333332   3.3012e-07
+      8      4.333342   1.8707e-06
+     20      4.333335   3.3012e-07</code></pre>
+
+  <p>
+    Exact at <code>N = 4</code>, which is sixty-four samples. And it can only be exact at sixty-four
+    samples if the parallel-axis theorem is <em>exactly</em> true rather than a good approximation —
+    which is the thing this section is actually claiming. The closed form is 4.333333; the check
+    agrees to float's noise floor with a laughably coarse grid.
+  </p>
+
+  @@FIG_GRID@@
+
+  <h3>5.2 Compound bodies, and a wrong answer that passes every test</h3>
+
+  <p>
+    Real bodies are assemblies. <code>inertia_assembly</code> takes a list of parts, each with its
+    own mass, its own tensor about its own centre, and where it sits, and does the three steps the
+    theorem implies: total the masses and take the mass-weighted mean of the centres; shift each
+    part's tensor out to that common centre; add.
+  </p>
+
+  <p>
+    Here is a dumbbell — two 2 kg balls on a 0.5 kg bar, the balls 1.5 m either side of centre:
+  </p>
+
+<pre><code class="lang-text">  D.3  a dumbbell: 2 x 2 kg balls, a 0.5 kg bar
+       total mass   4.5000 kg
+       centre       (0.0000, 0.0000, 0.0000)
+                     |   9.631312   0.000000   0.000000 |
+              I      |   0.000000   0.256625   0.000000 |
+                     |   0.000000   0.000000   9.631312 |
+       Ixx / Iyy = 37.5307  (hard across, easy along)</code></pre>
+
+  <p>
+    Thirty-seven times harder to turn across the bar than along it, which is exactly the experience
+    of holding one. Almost all of the 9.63 comes from the parallel-axis term:
+    <code>2 × 2 kg × 1.5² = 9.0</code>, against 0.256 for everything else. The balls' own tensors
+    contribute <code>2 × (2/5)(2)(0.4²) = 0.256</code>, and the bar the rest.
+  </p>
+
+  <p>
+    Now the mistake. Add the parts' tensors <em>without</em> shifting them:
+  </p>
+
+<pre><code class="lang-text">  D.4  the same parts added WITHOUT shifting:
+       Ixx 0.631312 against 9.631312 — 15.3x too small,
+       and it still passes every test in inspect_inertia:
+       asym 0.00e+00  positive 1  triangle 1  usable 1</code></pre>
+
+  <p>
+    Fifteen times too small, and the engine accepts it without a murmur. It is symmetric. It is
+    positive-definite. It satisfies the triangle inequality. Every physical test we have passes,
+    because the wrong answer <em>is</em> a perfectly good inertia tensor — it is the tensor of a body
+    whose parts are all piled on top of each other at the balance point, which is a thing that could
+    exist. It is just not this thing.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A validity check tells you a tensor could exist. It cannot tell you it is the tensor of
+      the object you meant.</strong> That distinction is worth carrying: it is the same one that
+      makes 8.7's contact manifolds hard, where a perfectly well-formed contact can be between the
+      wrong pair of features. Validation catches the impossible. It does not catch the merely wrong,
+      and the merely wrong is the common case.
+    </p>
+  </div>
+
+  @@FIG_PARALLEL@@
+
+  <p>
+    The controls for this section are both of the "what if everything is fine" kind: shifting by the
+    zero vector must return the tensor bit-identically, and an assembly of one part must return that
+    part untouched. Both do. A theorem implementation that changes something when asked to change
+    nothing is a theorem implementation with a typo in it.
+  </p>

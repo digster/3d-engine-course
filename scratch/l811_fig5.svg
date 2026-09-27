@@ -1,0 +1,70 @@
+<svg viewBox="0 0 980 394" role="img" aria-labelledby="f5-t f5-d">
+  <title id="f5-t">Baumgarte on a turning joint and on a dislocated one</title>
+  <desc id="f5-d">Left: the inward bias velocity at one step, rotated by the joint's turn, has a component along the next step's tangent equal to the speed the projection removes. Right: the stretch and energy loss of a spinning rod under three corrections, and the energy left in a cube pulled back into a corner socket.</desc>
+  <defs>
+    <marker id="e-i-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="26" y="34" class="sm" text-anchor="start">Why Baumgarte keeps a turning joint's energy</text>
+<path d="M 260.00,250.00 L 259.88,243.37 L 259.54,236.75 L 258.96,230.14 L 258.15,223.56 L 257.11,217.01 L 255.85,210.50 L 254.36,204.03 L 252.64,197.63 L 250.70,191.29 L 248.54,185.02 L 246.16,178.82 L 243.57,172.72 L 240.77,166.71 L 237.76,160.80 L 234.54,155.00 L 231.13,149.32 L 227.52,143.75 L 223.71,138.32 L 219.72,133.02 L 215.55,127.87 L 211.20,122.87 L 206.67,118.01 L 201.99,113.33 L 197.13,108.80 L 192.13,104.45 L 186.98,100.28 L 181.68,96.29 L 176.25,92.48 L 170.68,88.87 L 165.00,85.46 L 159.20,82.24 L 153.29,79.23 L 147.28,76.43 L 141.18,73.84 L 134.98,71.46" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<circle cx="70.0" cy="250.0" r="3.5" fill="#8f918a"/>
+<line x1="70.0" y1="250.0" x2="253.5" y2="200.8" stroke="#5082e6" stroke-width="1.0" fill="none" stroke-dasharray="3 4"/>
+<circle cx="253.5" cy="200.8" r="3.8" fill="#5082e6"/>
+<text x="263.525906994923" y="204.82438143052104" class="xs" text-anchor="start">step n</text>
+<line x1="70.0" y1="250.0" x2="204.4" y2="115.6" stroke="#5082e6" stroke-width="1.0" fill="none" stroke-dasharray="3 4"/>
+<circle cx="204.4" cy="115.6" r="3.8" fill="#5082e6"/>
+<text x="214.35028842544403" y="119.649711574556" class="xs" text-anchor="start">step n+1</text>
+<line x1="253.53" y1="200.82" x2="199.43" y2="215.32" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-red-f5)"/>
+<line x1="204.35" y1="115.65" x2="150.26" y2="130.14" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-red-f5)"/>
+<line x1="204.35" y1="115.65" x2="184.55" y2="95.85" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-green-f5)"/>
+<line x1="26.0" y1="272.0" x2="46.0" y2="272.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="54" y="276" class="xs" text-anchor="start">the bias: a REAL inward velocity δ/h, the same vector at both steps</text>
+<line x1="26.0" y1="289.0" x2="46.0" y2="289.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="54" y="293" class="xs" text-anchor="start">the part of it along step n+1's tangent: (δ/h)·ωh</text>
+<text x="26" y="322" class="xs muted" text-anchor="start">The joint turns by ωh between steps, so ωh of the inward bias velocity now lies</text>
+<text x="26" y="337" class="xs muted" text-anchor="start">along the tangent: (δ/h)(ωh) = v(ωh)²/2, which is exactly the speed the</text>
+<text x="26" y="352" class="xs muted" text-anchor="start">projection removes. Baumgarte adds energy — and on a turning joint it adds it</text>
+<text x="26" y="367" class="xs muted" text-anchor="start">where the projection takes it away.</text>
+<text x="520" y="26" class="xs muted" text-anchor="start">A rod spun at 5 m/s, after 1 s</text>
+<text x="520" y="46" class="xs muted" text-anchor="start">correction</text>
+<text x="710" y="46" class="xs muted" text-anchor="end">stretch</text>
+<text x="796" y="46" class="xs muted" text-anchor="end">δ/β</text>
+<text x="914" y="46" class="xs muted" text-anchor="end">energy lost / step</text>
+<line x1="520" y1="54.0" x2="920" y2="54.0" class="grid" stroke-width="1.0"/>
+<text x="520" y="71.0" class="xs" text-anchor="start">none</text>
+<text x="710" y="71.0" class="xs mono" text-anchor="end">163.95 mm</text>
+<text x="796" y="71.0" class="xs mono" text-anchor="end">—</text>
+<text x="914" y="71.0" class="xs mono" text-anchor="end">0.00386</text>
+<text x="520" y="88.0" class="xs" text-anchor="start">Baumgarte</text>
+<text x="710" y="88.0" class="xs mono" text-anchor="end">16.55 mm</text>
+<text x="796" y="88.0" class="xs mono" text-anchor="end">16.53 mm</text>
+<text x="914" y="88.0" class="xs mono" text-anchor="end">0.00000</text>
+<text x="520" y="105.0" class="xs" text-anchor="start">split impulse</text>
+<text x="710" y="105.0" class="xs mono" text-anchor="end">12.50 mm</text>
+<text x="796" y="105.0" class="xs mono" text-anchor="end">12.22 mm</text>
+<text x="914" y="105.0" class="xs mono" text-anchor="end">0.00488</text>
+<text x="520" y="131.5" class="xs muted" text-anchor="start">A cube spawned 0.2 m out of a corner socket</text>
+<text x="520" y="151.5" class="xs muted" text-anchor="start">correction</text>
+<text x="734" y="151.5" class="xs muted" text-anchor="end">gap after 3 s</text>
+<text x="914" y="151.5" class="xs muted" text-anchor="end">energy left in it</text>
+<line x1="520" y1="159.5" x2="920" y2="159.5" class="grid" stroke-width="1.0"/>
+<text x="520" y="176.5" class="xs" text-anchor="start">none</text>
+<text x="734" y="176.5" class="xs mono" text-anchor="end">0.20000 m</text>
+<text x="914" y="176.5" class="xs mono" text-anchor="end">0.000000 J</text>
+<text x="520" y="193.5" class="xs" text-anchor="start">Baumgarte</text>
+<text x="734" y="193.5" class="xs mono" text-anchor="end">0.00009 m</text>
+<text x="914" y="193.5" class="xs mono" text-anchor="end">0.349951 J</text>
+<text x="520" y="210.5" class="xs" text-anchor="start">split impulse</text>
+<text x="734" y="210.5" class="xs mono" text-anchor="end">0.00000 m</text>
+<text x="914" y="210.5" class="xs mono" text-anchor="end">0.000000 J</text>
+<text x="520" y="241.0" class="xs muted" text-anchor="start">Pulled back at a corner, Baumgarte's real impulse spins the cube, and a</text>
+<text x="520" y="256.0" class="xs muted" text-anchor="start">socket has no row that resists spin: the energy lands in the joint's FREE</text>
+<text x="520" y="271.0" class="xs muted" text-anchor="start">degrees of freedom and stays. Through the centre it leaves nothing. Split</text>
+<text x="520" y="286.0" class="xs muted" text-anchor="start">impulse leaves nothing either way.</text>
+</svg>

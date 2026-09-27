@@ -1,0 +1,548 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-10-input-mapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.10 — Input Mapping: Actions, Not Keycodes</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-12-checkpoint-game.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.12 — Checkpoint: A Small 3D Game on the Public API</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.11</div>
+    <h1>Dear ImGui and the Debug Draw System</h1>
+    <p class="deck">
+      Two subsystems, and they are one lesson because they are one thing: the tooling. ImGui is
+      the tooling <em>interface</em>; debug draw is the tooling <em>in the world</em>. This is the
+      first library in the course whose vocabulary we let through the engine's public boundary,
+      and the argument for that is not "it is hard" — the rasterizer was hard and we wrote it.
+      Along the way, a debug-draw header that has been quietly wrong since Module 3 gets the
+      rework it has been owed, and a text field turns out to be the hardest input problem in the
+      engine.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-03-near-plane-clipping.html">3.3 — Near-Plane Clipping</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor</a>,
+          <a href="05-09-transform-hierarchy.html">5.9 — Transform Hierarchy</a>,
+          <a href="05-10-input-mapping.html">5.10 — Input Mapping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/debug_lines.hpp</code>,
+            <code>engine/src/gfx/debug_lines.cpp</code>,
+            <code>engine/include/engine/ui/debug_ui.hpp</code>,
+            <code>engine/src/ui/debug_ui.cpp</code>,
+            <code>engine/include/engine/gfx/debug_draw.hpp</code>,
+            <code>engine/src/gfx/debug_draw.cpp</code>,
+            <code>engine/include/engine/core/actions.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>CMakeLists.txt</code>, <code>engine/CMakeLists.txt</code>,
+            <code>demos/ecs_swarm/main.cpp</code>, <code>scratch/verify_511.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>The hierarchy you have been taking on faith since Lesson 5.9, visible as 152 lines
+            queued by code that never sees a framebuffer; a debug panel with tables, sliders and
+            a text field you can type into without the game reacting. 60 checks green; the
+            reference shot byte-identical for the <strong>eleventh</strong> lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the test this course applies before taking a third-party dependency, and apply
+          it to a case where the answer differs from <code>stb_image</code>'s.</li>
+      <li>…explain what immediate-mode UI actually means, and why it is the right model for a
+          debug tool specifically.</li>
+      <li>…name the three things wrong with an immediate-mode debug drawer, and show that one
+          change fixes all three.</li>
+      <li>…design a header whose <em>include list</em> is the interface, and say what a single
+          renderer type in it would cost.</li>
+      <li>…write an expiry rule for timed debug geometry that survives a frame with
+          <code>dt == 0</code>, and say why that case is the one that matters.</li>
+      <li>…place a UI library's calls in a fixed-timestep frame, and predict the exact symptom of
+          getting one of them one hook late.</li>
+      <li>…arbitrate between two consumers of one keyboard without routing events, and explain why
+          routing them is the fix that leaves a key stuck down.</li>
+      <li>…prove that a delta cannot be masked by masking one of its endpoints, and implement the
+          virtual cursor that fixes it.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#imgui">Why We Do Not Hand-Roll This</a>
+        <ol>
+          <li><a href="#imgui-test">The test, and where the line falls</a></li>
+          <li><a href="#imgui-immediate">What immediate mode actually means</a></li>
+          <li><a href="#imgui-public">A public dependency, for the first time</a></li>
+        </ol>
+      </li>
+      <li><a href="#rework">The Rework: Saying and Doing</a>
+        <ol>
+          <li><a href="#rework-wrong">Three problems wearing one coat</a></li>
+          <li><a href="#rework-includes">The include list is the interface</a></li>
+        </ol>
+      </li>
+      <li><a href="#lifetimes">Lifetimes, and the Frame That Has No Time</a></li>
+      <li><a href="#frame">ImGui in the Frame</a>
+        <ol>
+          <li><a href="#frame-backends">Two backends, and which one first</a></li>
+          <li><a href="#frame-order">Where each call goes</a></li>
+          <li><a href="#frame-absent">The surface with no renderer</a></li>
+        </ol>
+      </li>
+      <li><a href="#seam">The Input Seam</a>
+        <ol>
+          <li><a href="#seam-levels">Arbitrate on levels, never on events</a></li>
+          <li><a href="#seam-delta">You cannot mask a delta</a></li>
+        </ol>
+      </li>
+      <li><a href="#notbuilt">What We Did Not Build</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 5.9 built a transform hierarchy and made a claim about it: a moon's world placement is
+    computed by nobody, because <code>world(moon) = world(planet) × local(moon)</code> is what
+    "relative to my parent" means. The demo has been running ever since with 154 entities in a
+    three-level tree, and you have had exactly two ways to believe that claim — read the code, or
+    read a line of text that says <code>hierarchy 154 rows, 2 roots, 3 levels</code>.
+  </p>
+
+  <p>
+    Both are fine. Neither is <em>seeing</em> it. And the difference matters enormously the first
+    time something is wrong, because a count of 154 rows is equally consistent with a correct
+    tree and with a tree in which forty-eight entities are parented to the wrong planet.
+  </p>
+
+  <p>
+    We have had the tool to fix that since Module 3. <code>engine/gfx/debug_draw.hpp</code> can
+    draw a world-space line:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/debug_draw.hpp — since Lesson 3.3</span></figcaption>
+    <pre><code class="lang-cpp">void line3_world(framebuffer&amp; fb, const mat4&amp; view, const projector&amp; pr,
+                 vec3 a, vec3 b, Uint32 colour);</code></pre>
+  </figure>
+
+  <p>
+    Now try to call it from the place that knows about parents. That code is a system: it takes a
+    <code>registry</code> and walks a view. It does not have a <code>framebuffer</code>, it does
+    not have a <code>projector</code>, and — this is the part worth sitting with — it
+    <strong>should not have them</strong>. The moment you hand a framebuffer to an ECS pass so it
+    can draw a diagnostic line, every caller of that pass needs one too, and their callers, and
+    the "debug feature" has become an architecture.
+  </p>
+
+  <p>
+    So the tool exists and cannot be used by the code that needs it. That is a design problem
+    rather than a missing feature, and it has two siblings hiding behind it, which §3 takes apart.
+  </p>
+
+  @@FIG_REWORK@@
+
+  <p>
+    The second half of the lesson comes from the same demo, five lines further down. This is what
+    <code>ecs_swarm</code> has been calling a HUD:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — before</span></figcaption>
+    <pre><code class="lang-cpp">SDL_SetRenderScale(r, 2.0f, 2.0f);
+SDL_RenderDebugTextFormat(r, 6.0f,  6.0f, "ECS  entities %3zu   components %4zu …", …);
+SDL_RenderDebugTextFormat(r, 6.0f, 20.0f, "hierarchy  rows %3zu  roots %3zu …", …);
+SDL_RenderDebugTextFormat(r, 6.0f, 34.0f, "render view  lead %zu   candidates %3zu …", …);
+SDL_RenderDebugTextFormat(r, 6.0f, 48.0f, "camera %s   sun %s   fps %5.1f", …);
+SDL_RenderDebugTextFormat(r, 6.0f, 62.0f, "actions %2zu   bindings %2zu …", …);
+SDL_SetRenderScale(r, 1.0f, 1.0f);</code></pre>
+  </figure>
+
+  <p>
+    Look at the y coordinates: 6, 20, 34, 48, 62. That is a layout engine, implemented as
+    arithmetic in your head, and it has all the properties you would expect of one. Inserting a
+    line in the middle renumbers everything below it. Nothing can be collapsed, scrolled or
+    sorted. No value can be <em>changed</em> — you can print the light's elevation but you cannot
+    drag it. And every column is aligned by counting spaces in a format string.
+  </p>
+
+  <p>
+    Neither of these is a performance problem, and this lesson — like 5.10 — measures nothing.
+    Both are limits on what the code is <em>able to say</em>.
+  </p>
+
+  <!-- =================================================================
+       2 — WHY WE DO NOT HAND-ROLL THIS
+       ================================================================= -->
+  <h2 id="imgui"><span class="num">2</span>Why We Do Not Hand-Roll This</h2>
+
+  <h3 id="imgui-test">2.1 The test, and where the line falls</h3>
+
+  <p>
+    This course has a rule about third-party libraries, stated in the master prompt and applied
+    four times so far: every dependency arrives with an explicit justification for not writing it
+    ourselves. The rule is easy to state badly. It is <strong>not</strong> "we write the easy
+    things and buy the hard ones" — we wrote the rasterizer, and a rasterizer is harder than a
+    PNG decoder. The test is:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The test</span>
+    <p><strong>Is the hard part the subject?</strong> If the difficulty is the thing the course is
+       about, we write it, however long it takes. If the difficulty is somewhere else entirely,
+       we take the library and spend the time on the subject.</p>
+  </div>
+
+  <p>
+    Apply it to a debug UI. What is actually hard about one? Four things, and they are four
+    different fields:
+  </p>
+
+  <ul>
+    <li><strong>Text.</strong> A font rasterizer, an atlas, kerning, and — the moment anybody
+        types a character outside ASCII — shaping. Module 6's text-rendering lesson does this
+        properly, and even that is the <em>drawing</em> — the shaping is a library there
+        too.</li>
+    <li><strong>Layout.</strong> Where does the next widget go? What happens when the window is
+        narrower than the label? What are the rules for a table column that wants to stretch?
+        This is the y-coordinate arithmetic above, generalised — and generalising it correctly is
+        an entire discipline.</li>
+    <li><strong>Input routing.</strong> Which widget has focus, what happens when you drag from
+        inside one widget to another, what a click means when two windows overlap, how the
+        keyboard moves between fields.</li>
+    <li><strong>Widget state across frames.</strong> A slider being dragged is a state machine
+        that spans frames, and so is a text field with a cursor and a selection, and so is a
+        collapsing header that remembers it is open.</li>
+  </ul>
+
+  <p>
+    Not one of those is graphics, engine architecture, or maths. And a half-built version of all
+    four is worse than useless: it is the tool you stop trusting the first time it misreports a
+    number, at which point you are debugging your debugger.
+  </p>
+
+  <p>
+    <strong>The numbers make the trade concrete.</strong> Dear ImGui's core is 41,385 lines across
+    four files. Its SDL3 backends are another 1,232. Our integration — the file that owns the
+    whole lifecycle — is 182 lines, and you will read all of it in §8.
+  </p>
+
+  <h3 id="imgui-immediate">2.2 What immediate mode actually means</h3>
+
+  <p>
+    "Immediate mode" gets used as a slogan, so it is worth being precise, because the property it
+    names is exactly why this is the right library for a <em>debug</em> tool rather than merely a
+    convenient one.
+  </p>
+
+  <p>
+    In a <strong>retained-mode</strong> UI — every desktop toolkit, every game-engine editor built
+    on one — you construct objects. A <code>Label</code>, a <code>Slider</code>, a
+    <code>TreeView</code>. They live in a tree, they persist between frames, and your job is to
+    keep them in sync with the world: when an entity is destroyed you must remember to remove its
+    row; when a value changes you must remember to push it to the label. Every one of those
+    "must remember"s is a bug waiting to happen, and the bug's symptom is a UI that shows
+    something that is no longer true.
+  </p>
+
+  <p>
+    In an <strong>immediate-mode</strong> UI there are no objects. There is a function that runs
+    every frame:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the whole idea, in five lines</span></figcaption>
+    <pre><code class="lang-cpp">if (ImGui::Begin("world"))
+{
+    ImGui::Text("entities %zu", world_.size());     // read the world, now
+    ImGui::Checkbox("hierarchy links", &amp;show_links_);
+}
+ImGui::End();</code></pre>
+  </figure>
+
+  <p>
+    There is no <code>Label</code> object holding a stale copy of <code>world_.size()</code>,
+    because there is no object at all — the number is read from the world during the frame it is
+    displayed in. <strong>The panel cannot be stale, because there is nowhere for staleness to
+    live.</strong> Destroy every entity and the panel says zero on the very next frame, with no
+    invalidation, no observers, and no code that anybody had to remember to write.
+  </p>
+
+  <p>
+    The <code>Checkbox</code> line is the same trick running the other way: it takes the
+    <em>address</em> of the program's own boolean and toggles it. The panel is not a second copy
+    of the program's state that must be reconciled; it is a window onto the state itself.
+  </p>
+
+  <p>
+    That model has real costs — it rebuilds all its geometry every frame, and it makes animation
+    and complex layout awkward — which is exactly why the rule "tooling only, never gameplay UI"
+    is a binding one in this course rather than a stylistic preference. A game's HUD needs a font
+    the art director chose, a layout that survives translation into German, controller focus, and
+    safe areas on a television. ImGui offers none of that and does not pretend to.
+  </p>
+
+  <h3 id="imgui-public">2.3 A public dependency, for the first time</h3>
+
+  <p>
+    Lesson 4.7 took this project's first non-SDL dependency, <code>stb_image</code>, and hid it
+    completely. Exactly one translation unit includes it; <code>engine::image</code> is our own
+    type; and <code>engine/CMakeLists.txt</code> links it <code>PRIVATE</code>, so a demo can
+    neither see stb nor accidentally start depending on it. The dependency stops at the library
+    boundary. That is what a good wrapper buys.
+  </p>
+
+  <p>
+    ImGui gets the opposite treatment, and the reason is not laziness.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why one was wrapped and the other is not</span>
+    <p>With <code>stb_image</code> we wrapped a <strong>concept</strong> — "decode these bytes
+       into pixels" — which is one function and one type. The wrapper is small because the
+       concept is small.</p>
+    <p>ImGui's value <strong>is its vocabulary</strong>: <code>Begin</code>, <code>Text</code>,
+       <code>SliderFloat</code>, <code>BeginTable</code>, <code>Checkbox</code>, and several
+       hundred more, each with overloads, flags and an interaction model. A wrapper around that
+       surface is a re-spelling with no content in it — and it has to be re-spelt again for every
+       widget, forever, by somebody who is not the person who wrote the widget.</p>
+  </div>
+
+  <p>
+    So <code>demos/</code> includes <code>&lt;imgui.h&gt;</code> directly and calls
+    <code>ImGui::</code> functions, and the engine links imgui <code>PUBLIC</code>. Say the cost
+    out loud rather than discovering it later: <strong>the engine's public API now contains a
+    second third-party vocabulary</strong>, and if ImGui were ever replaced, every panel in the
+    project would be rewritten.
+  </p>
+
+  <p>
+    What makes that acceptable is <em>containment</em>. The only code allowed to speak ImGui is
+    tooling code, and tooling code is code that can be rewritten without the game changing
+    behaviour by one pixel. Compare Lesson 5.1 §6 on SDL in our public headers: the same
+    admission, made for the same reason, with the same eyes open.
+  </p>
+
+  <p>
+    One more thing the build teaches, because it is a small surprise the first time:
+    <strong>ImGui ships sources, not a build.</strong> There is no <code>CMakeLists.txt</code> in
+    that repository — deliberately, on its author's part, because the library is a handful of
+    <code>.cpp</code> files and every project wants to compile them its own way.
+    <code>FetchContent_MakeAvailable</code> notices the absence and only <em>populates</em>; the
+    target is ours to declare. Being forced to declare it is how you find out exactly which files
+    you are compiling, which is a better position to be in than the alternative.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">CMakeLists.txt — the shape of it (full listing in §8)</span></figcaption>
+    <pre><code class="lang-cmake">FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.9b   # pinned — never a branch name
+    GIT_SHALLOW    TRUE)
+FetchContent_MakeAvailable(imgui)          # populates only: there is no CMakeLists to add
+
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp                          # the best widget reference there is
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp            # the PLATFORM backend
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp)   # the RENDERER backend</code></pre>
+  </figure>
+
+  <p>
+    <code>imgui_demo.cpp</code> is 11,299 lines of showcase and it is in that list on purpose:
+    <code>ImGui::ShowDemoWindow()</code> is the fastest widget reference in existence, and its
+    source is the documentation — every widget in the window is a few lines away in a file you
+    already have. Drop it when a real game ships.
+  </p>
+
+  <p>
+    Note also what is <em>not</em> in the build: <code>engine_set_warnings(imgui)</code>. Our
+    <code>-Wall -Wextra</code> discipline applies to our targets and never to somebody else's,
+    for the reason <code>cmake/EngineHelpers.cmake</code> gave in Lesson 5.1 — warnings you cannot
+    act on train you to ignore the ones you can.
+  </p>
+
+  <!-- =================================================================
+       3 — THE REWORK
+       ================================================================= -->
+  <h2 id="rework"><span class="num">3</span>The Rework: Saying and Doing</h2>
+
+  <h3 id="rework-wrong">3.1 Three problems wearing one coat</h3>
+
+  <p>
+    Back to <code>line3_world(fb, view, pr, a, b, colour)</code>. §1 found one problem with it.
+    There are three, they all come from the same root, and they are worth separating because two
+    of them are invisible until later modules.
+  </p>
+
+  <ol>
+    <li>
+      <p><strong>The caller must be the renderer.</strong> Two of the six parameters are
+         renderer state, so only code holding renderer state can call it. §1's collision system,
+         ECS pass and mesh loader are all locked out.</p>
+    </li>
+    <li>
+      <p><strong>It works on one surface.</strong> <code>framebuffer</code> is the software
+         renderer's target. Under <code>surface::gpu</code> — the path Module 4 spent nine
+         lessons building, and the path Module 6 lives on — there is no framebuffer at all.
+         Every one of these calls is simply unavailable there.</p>
+    </li>
+    <li>
+      <p><strong>A line lives exactly one frame.</strong> This one is the most easily dismissed
+         and the most important. A collision normal exists for one simulation step. At 60 Hz that
+         is 16.7 milliseconds on screen. Human visual processing needs something on the order of
+         250 ms to register that a small thing appeared and vanished — so a single-frame marker
+         for a single-frame event is, for the person the debug drawing exists to serve,
+         <strong>invisible</strong>.</p>
+    </li>
+  </ol>
+
+  <p>
+    That third point deserves to be stated as a design principle, because it is the one that
+    justifies building a system rather than adding a function:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The reason debug geometry has lifetimes</span>
+    <p>The events you most need to see are the ones that happen in a single frame — a contact, a
+       re-parent, a spawn, a raycast hit. Those are precisely the events a per-frame drawing
+       cannot show you. <strong>A debug view without lifetimes can only show you state, never
+       events</strong>, and it is usually the events you are hunting.</p>
+  </div>
+
+  <p>
+    One change fixes all three: <strong>separate saying what to draw from doing it.</strong> A
+    <code>debug_lines</code> queue holds world-space segments with lifetimes. Anybody can queue.
+    A backend flushes the queue through whatever it has — a framebuffer today, an SDL_GPU render
+    pass in Module 6 — and the queue never learns which.
+  </p>
+
+  <p>
+    Notice that the queue makes nothing faster. It removes an <em>argument</em> from every call
+    site, and that argument was the entire reason the caller had to be the renderer.
+  </p>
+
+  <h3 id="rework-includes">3.2 The include list is the interface</h3>
+
+  <p>
+    Here is where the design could quietly fail. It is tempting to put the queue in
+    <code>debug_draw.hpp</code>, which is after all the debug-drawing header. Do that and
+    everything compiles, everything works, and the promise is broken — because
+    <code>debug_draw.hpp</code> includes the framebuffer, the depth buffer, the projector, the
+    viewport and <code>mesh</code>, and C++ include dependencies are transitive.
+  </p>
+
+  <p>
+    A physics system that includes it to draw one box compiles the renderer. Not links — that is
+    the linker's business and it is fine — <em>compiles</em>, in every translation unit, forever.
+  </p>
+
+  @@FIG_INCLUDES@@
+
+  <p>
+    So the rework is two files, and the direction between them is the design:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>File</th><th>Job</th><th>Includes</th><th>Who may include it</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>gfx/debug_lines.hpp</code></td>
+        <td>says what to draw</td>
+        <td>colour, mat4, vec3, <code>&lt;span&gt;</code>, <code>&lt;vector&gt;</code></td>
+        <td>anybody</td>
+      </tr>
+      <tr>
+        <td><code>gfx/debug_draw.hpp</code></td>
+        <td>draws it</td>
+        <td>the above, plus framebuffer, depth buffer, mesh, projector, viewport</td>
+        <td>code that already owns a framebuffer</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That constraint has one visible consequence in the API, and it is worth defending because it
+    looks like fussiness. <code>wire_mesh</code> does not take a <code>mesh</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/debug_lines.hpp</span></figcaption>
+    <pre><code class="lang-cpp">void wire_mesh(std::span&lt;const vec3&gt; vertices,
+               std::span&lt;const std::uint16_t&gt; indices,
+               const mat4&amp; world_from_local, Uint32 colour,
+               float seconds = k_debug_this_frame);</code></pre>
+  </figure>
+
+  <p>
+    <code>mesh</code> lives in <code>gfx/mesh.hpp</code>, which pulls in <code>core/pool.hpp</code>
+    and the whole handle system — none of which a collision routine should compile in order to
+    draw a wireframe. Taking the two arrays costs a caller nine characters
+    (<code>m.vertices, m.indices</code>) and keeps the promise at the top of the file intact.
+    <strong>Take the data, not the type</strong> is a general move, and this is a clean example of
+    when it earns its keep.
+  </p>
+
+  <p>
+    Everything in <code>debug_draw.hpp</code> survives unchanged. It was never wrong as a
+    <em>backend</em> — it was wrong as an interface. So the flush is four lines and reuses six
+    lessons of well-tested clipping:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/debug_draw.cpp</span></figcaption>
+    <pre><code class="lang-cpp">int draw_debug_lines(framebuffer&amp; fb, const mat4&amp; view, const projector&amp; pr,
+                     const debug_lines&amp; queue)
+{
+    int drawn = 0;
+    for (const debug_line&amp; l : queue.lines())
+    {
+        if (line3_world(fb, view, pr, l.a, l.b, l.colour)) { ++drawn; }
+    }
+    return drawn;
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>line3</code> and <code>line3_world</code> gained a <code>bool</code> return in this
+    lesson, and it changes no pixel: both places that now return <code>false</code> were already
+    <code>return</code>, and both already drew nothing. What is new is that the fact is
+    <em>reported</em>, so a HUD reading <code>queued 152, drawn 151</code> names a real event —
+    one line went behind the near plane — instead of printing the queue size twice. A number in a
+    HUD is a checkable claim, and a claim the code cannot actually back is worse than no number
+    at all.
+  </p>

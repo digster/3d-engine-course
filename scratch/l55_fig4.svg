@@ -1,0 +1,38 @@
+<svg viewBox="0 0 720 320" role="img" aria-labelledby="l55f4-t l55f4-d">
+  <title id="l55f4-t">Unloading a source cascades to everything derived from it</title>
+  <desc id="l55f4-d">A chain of three assets: a loaded mesh, the with_normals output derived from it, and the GPU upload's copy derived from that. Unloading the source releases all three.</desc>
+  <defs>
+    <marker id="e-i-l55f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l55f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l55f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l55f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l55f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">unload_mesh(torus) — and everything that only existed because it did.</text>
+<rect x="40" y="52" width="180" height="40" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="130" y="70" class="sm mono" text-anchor="middle">torus.obj</text>
+<text x="130" y="84" class="xs muted" text-anchor="middle">LOADED — has a name</text>
+<rect x="40" y="132" width="180" height="40" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="130" y="150" class="xs mono" text-anchor="middle">with_normals(flat)</text>
+<text x="130" y="164" class="xs muted" text-anchor="middle">DERIVED — no name</text>
+<rect x="40" y="212" width="180" height="40" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="130" y="230" class="xs mono" text-anchor="middle">the GPU upload's copy</text>
+<text x="130" y="244" class="xs muted" text-anchor="middle">DERIVED from the derived</text>
+<line x1="130" y1="94" x2="130" y2="128" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l55f4)"/>
+<line x1="130" y1="174" x2="130" y2="208" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l55f4)"/>
+<text x="240" y="74" class="xs" text-anchor="start">A derived asset has NO NAME, because</text>
+<text x="240" y="88" class="xs" text-anchor="start">nobody asked for it by one: it exists only</text>
+<text x="240" y="102" class="xs" text-anchor="start">as a consequence of its source existing,</text>
+<text x="240" y="116" class="xs" text-anchor="start">and it should stop existing for the same</text>
+<text x="240" y="130" class="xs" text-anchor="start">reason.</text>
+<rect x="240" y="150" width="300" height="26" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="390" y="167" class="xs mono" text-anchor="middle">unload_mesh(torus)  →  3 assets released</text>
+<text x="240" y="194" class="xs" text-anchor="start">TRANSITIVELY. A cascade that stops after</text>
+<text x="240" y="208" class="xs" text-anchor="start">one hop is a leak, and the chain above is</text>
+<text x="240" y="222" class="xs" text-anchor="start">what a real pipeline produces.</text>
+<text x="240" y="248" class="xs t-hi" text-anchor="start">THE HOLE 5.4 LEFT, CLOSED. Its mesh cache</text>
+<text x="240" y="262" class="xs t-hi" text-anchor="start">held a second pool with no rule connecting</text>
+<text x="240" y="276" class="xs t-hi" text-anchor="start">it: free the source and the derived copy</text>
+<text x="240" y="290" class="xs t-hi" text-anchor="start">lived on, keyed by a handle that no longer</text>
+<text x="240" y="304" class="xs t-hi" text-anchor="start">resolved — a leak with a clean bill of health.</text>
+</svg>

@@ -1,0 +1,69 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="l57f4-t l57f4-d">
+  <title id="l57f4-t">Sparse-set query cost relative to the archetype, versus world size</title>
+  <desc id="l57f4-d">A line chart with world size from 4 to 100,000 entities on the x axis and cost relative to an archetype on the y axis. All four series sit near 1x up to a thousand entities. Beyond that the cheap scrambled series rises to 2.40x, cheap aligned to 1.31x, real scrambled to 1.34x, and real aligned stays at 0.96x.</desc>
+  <defs>
+    <marker id="e-i-l57f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l57f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l57f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l57f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l57f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Sparse-set query cost relative to the archetype, K = 4 components. 1.00x means the design made no difference.</text>
+<rect x="92" y="52" width="452" height="200" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="2 4"/>
+<line x1="92" y1="232.0" x2="544" y2="232.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="236.0" class="xs muted" text-anchor="end">0.8x</text>
+<line x1="92" y1="212.0" x2="544" y2="212.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="216.0" class="xs muted" text-anchor="end">1.0x</text>
+<line x1="92" y1="172.0" x2="544" y2="172.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="176.0" class="xs muted" text-anchor="end">1.4x</text>
+<line x1="92" y1="132.0" x2="544" y2="132.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="136.0" class="xs muted" text-anchor="end">1.8x</text>
+<line x1="92" y1="92.0" x2="544" y2="92.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="96.0" class="xs muted" text-anchor="end">2.2x</text>
+<line x1="92" y1="52.0" x2="544" y2="52.0" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="84" y="56.0" class="xs muted" text-anchor="end">2.6x</text>
+<line x1="92" y1="212.0" x2="544" y2="212.0" class="ink" stroke-width="1.4"/>
+<text x="92.0" y="268" class="xs muted" text-anchor="middle">4</text>
+<text x="205.0" y="268" class="xs muted" text-anchor="middle">100</text>
+<text x="318.0" y="268" class="xs muted" text-anchor="middle">1,000</text>
+<text x="431.0" y="268" class="xs muted" text-anchor="middle">10,000</text>
+<text x="544.0" y="268" class="xs muted" text-anchor="middle">100,000</text>
+<text x="318.0" y="284" class="xs muted" text-anchor="middle">entities in the world</text>
+<circle cx="92.0" cy="228.0" r="2.6" fill="#e05c5c"/>
+<circle cx="205.0" cy="214.0" r="2.6" fill="#e05c5c"/>
+<circle cx="318.0" cy="196.0" r="2.6" fill="#e05c5c"/>
+<circle cx="431.0" cy="120.0" r="2.6" fill="#e05c5c"/>
+<circle cx="544.0" cy="72.0" r="2.6" fill="#e05c5c"/>
+<polyline points="92.0,228.0 205.0,214.0 318.0,196.0 431.0,120.0 544.0,72.0" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<circle cx="92.0" cy="231.0" r="2.6" fill="#f0961e"/>
+<circle cx="205.0" cy="221.0" r="2.6" fill="#f0961e"/>
+<circle cx="318.0" cy="206.0" r="2.6" fill="#f0961e"/>
+<circle cx="431.0" cy="186.0" r="2.6" fill="#f0961e"/>
+<circle cx="544.0" cy="181.0" r="2.6" fill="#f0961e"/>
+<polyline points="92.0,231.0 205.0,221.0 318.0,206.0 431.0,186.0 544.0,181.0" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<circle cx="92.0" cy="214.0" r="2.6" fill="#5082e6"/>
+<circle cx="205.0" cy="207.0" r="2.6" fill="#5082e6"/>
+<circle cx="318.0" cy="207.0" r="2.6" fill="#5082e6"/>
+<circle cx="431.0" cy="195.0" r="2.6" fill="#5082e6"/>
+<circle cx="544.0" cy="178.0" r="2.6" fill="#5082e6"/>
+<polyline points="92.0,214.0 205.0,207.0 318.0,207.0 431.0,195.0 544.0,178.0" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<circle cx="92.0" cy="215.0" r="2.6" fill="#5ac878"/>
+<circle cx="205.0" cy="207.0" r="2.6" fill="#5ac878"/>
+<circle cx="318.0" cy="207.0" r="2.6" fill="#5ac878"/>
+<circle cx="431.0" cy="210.0" r="2.6" fill="#5ac878"/>
+<circle cx="544.0" cy="216.0" r="2.6" fill="#5ac878"/>
+<polyline points="92.0,215.0 205.0,207.0 318.0,207.0 431.0,210.0 544.0,216.0" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<line x1="547.0" y1="72.0" x2="549.0" y2="72.0" stroke="#e05c5c" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="553" y="76.0" class="xs mono" style="fill:#e05c5c" text-anchor="start">cheap, scrambled</text>
+<line x1="547.0" y1="178.0" x2="549.0" y2="178.0" stroke="#5082e6" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="553" y="182.0" class="xs mono" style="fill:#5082e6" text-anchor="start">real, scrambled</text>
+<line x1="547.0" y1="181.0" x2="549.0" y2="192.0" stroke="#f0961e" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="553" y="196.0" class="xs mono" style="fill:#f0961e" text-anchor="start">cheap, aligned</text>
+<line x1="547.0" y1="216.0" x2="549.0" y2="216.0" stroke="#5ac878" stroke-width="0.8" stroke-dasharray="2 2"/>
+<text x="553" y="220.0" class="xs mono" style="fill:#5ac878" text-anchor="start">real, aligned</text>
+<line x1="24" y1="300" x2="696" y2="300" class="grid" stroke-width="1.2"/>
+<text x="24" y="320" class="xs t-ok" text-anchor="start">THE CONTROL:</text>
+<text x="104" y="320" class="xs" text-anchor="start">at K = 1 both designs perform literally the same walk, and the measured ratio is 1.00x at every</text>
+<text x="24" y="336" class="xs" text-anchor="start">size — so the harness is measuring the redirect and not itself. THE SPREAD: the same redirect costs 2.4x on a body with</text>
+<text x="24" y="352" class="xs t-hi" text-anchor="start">nothing to hide behind and 1.34x on one that builds a model matrix. Alignment is worth as much as the body is.</text>
+</svg>

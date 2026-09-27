@@ -1,0 +1,925 @@
+  <!-- ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Five files, and for the first time in three lessons one of them is
+    <code>raster.cpp</code>. As always this section is for <em>understanding</em>; every file
+    appears whole in §<a href="#listings">Complete Code Listings</a>.
+  </p>
+
+  <h3 id="impl-varyings">4.1 Two varyings, and a vertex that changed meaning</h3>
+
+  <p>
+    To evaluate the shading at a fragment, the fragment needs the shading's inputs. It has the
+    albedo already — that is the interpolated corner colour — and it needs two more things:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.hpp — added to <code>vertex</code></span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    vec3 normal{};   ///&lt; world-space surface normal at this corner
+    vec3 world{};    ///&lt; world-space position of this corner</code></pre>
+  </figure>
+
+  <p>
+    Two fields, and they change what <code>vertex</code> <em>is</em>. Every field before them was
+    either geometry (<code>x</code>, <code>y</code>, <code>z</code>, <code>inv_w</code>) or a
+    finished answer (<code>colour</code>, <code>u</code>, <code>v</code>). These are
+    <strong>inputs to a calculation that has not happened yet</strong>, carried across the
+    triangle so that something downstream can do it.
+  </p>
+
+  <p>
+    That has a name. A GPU vertex shader emits a clip-space position plus an arbitrary bundle of
+    values that the rasterizer interpolates and hands to the fragment shader, and those values
+    are called <strong>varyings</strong>. Our <code>vertex</code> just became a position plus
+    varyings, which is what it will be for the rest of the course.
+  </p>
+
+  <p>
+    One consequence is worth stating because it is easy to be sloppy about:
+    <code>vertex::colour</code> now <em>means different things in different pipelines</em>. Under
+    <code>shading::vertex_colour</code> it is a lit result. Under <code>shading::lit</code> it is
+    the albedo, an input. That is not a wart — deciding what a varying means is precisely the
+    vertex stage's job, and this is the first time this engine has had one whose meaning depends
+    on what it is bound to.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The cost, said out loud</span>
+    <p>
+      Six floats. <code>vertex</code> goes from 28 bytes to 52 — nearly double — and the fill
+      interpolates six more values per pixel whether or not it uses them. That is not free and
+      it is not hidden: it is the price of moving a calculation downstream, paid in bandwidth so
+      it can be saved in accuracy. Module 4's GPU pipeline pays the same price, which is why
+      minimising the number of varyings is a real optimisation there.
+    </p>
+  </div>
+
+  <h3 id="impl-clip">4.2 The clipper has to carry them too</h3>
+
+  <p>
+    Easy to miss, and it fails in a way that only shows up when you walk into geometry.
+  </p>
+
+  <p>
+    Lesson 3.3 established that clipping happens <em>before</em> the perspective divide, on its
+    own vertex type. When the near plane cuts a triangle, the clipper creates a genuinely new
+    corner and interpolates every attribute to it with the crossing parameter <code>t</code>. If
+    the normal and the world position are not among those attributes, a clipped triangle gets
+    whatever was left in the struct — and the symptom is that geometry lights correctly until it
+    touches the near plane, then goes wrong at the edge of the screen.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/clip.cpp — added to <code>lerp</code></span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    out.normal = a.normal + (b.normal - a.normal) * t;
+    out.world = a.world + (b.world - a.world) * t;</code></pre>
+  </figure>
+
+  <p>
+    Note what is <em>not</em> done: the normal is not renormalised here. It is going to be
+    interpolated again by the fill on its way to the pixel, which will shorten it further, so
+    normalising at this point fixes nothing that the fragment's own normalise would not.
+    §<a href="#theory-normal">3.4</a> is the whole argument; the code just declines to do the
+    work twice.
+  </p>
+
+  <h3 id="impl-fill">4.3 The fragment loop</h3>
+
+  <p>
+    Here is the change the lesson is named for, and it is six lines in the middle of a loop that
+    has not been touched since Lesson 3.2.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp — the new branch</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
+             (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
+             (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
+const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
+             (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
+             (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
+
+const linear_rgb albedo{
+    (f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+    (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+    (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+
+row[x] = to_encoded(shade(albedo, n, style.eye - p,
+                          *style.lights, style.surface, style.model));</code></pre>
+  </figure>
+
+  <p>
+    Three things about that are worth noticing, and none of them is the arithmetic.
+  </p>
+
+  <p>
+    <strong>The interpolation is the same interpolation.</strong> Those are the identical three
+    multiply-adds and the identical <code>w_recip</code> that carry a colour or a texture
+    coordinate. Lesson 3.2's derivation of perspective-correct interpolation never mentioned what
+    the attribute <em>was</em> — it only required that the quantity be linear over the surface —
+    which is why it covers a normal and a position with no new argument at all. The rasterizer
+    still does not know what it is carrying.
+  </p>
+
+  <p>
+    <strong>The equation is the same equation.</strong> <code>shade()</code> is unchanged, byte
+    for byte, from Lesson 3.7. Nothing about the lighting model moved. This is the distinction
+    the whole lesson is drawing, and it is worth seeing that the diff says it too.
+  </p>
+
+  <p>
+    <strong>The albedo goes in linear and comes out encoded once.</strong> Under <code>lit</code>
+    the corner colours are decoded to linear (they always were, under
+    <code>blend_space::linear</code>), interpolated, multiplied by light, and encoded exactly
+    once at the end — where an encode belongs. That also means <code>blend_space::encoded</code>
+    has no meaning under <code>lit</code>, and rather than honour it into nonsense the fill
+    ignores it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp — the effective blend space</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const bool lit = (style.shade == shading::lit) &amp;&amp; (style.lights != nullptr);
+const blend_space space = lit ? blend_space::linear : style.space;</code></pre>
+  </figure>
+
+  <p>
+    And note the null check. A pipeline set to <code>lit</code> with no lights is a
+    configuration mistake, not a crash: it falls back to the unlit path and draws an unlit
+    surface, which is a thing you can see and diagnose. Dereferencing a null pointer per fragment
+    is not.
+  </p>
+
+  <h3 id="impl-coupling">4.4 The dependency this adds, named</h3>
+
+  <p>
+    <code>raster.hpp</code> now includes <code>light.hpp</code>. For seven lessons the rasterizer
+    had no idea that light existed; today it calls the shading function directly.
+  </p>
+
+  <p>
+    <strong>That is a layering violation and it is being shipped on purpose.</strong> The
+    rasterizer's job is coverage and interpolation; what a covered pixel should look like is
+    somebody else's business. Lesson 2.4 said so when it created the <code>shading</code> enum:
+  </p>
+
+  <blockquote>
+    <p>
+      "This enum is a <strong>placeholder for a fragment shader</strong> … A real renderer lets
+      the caller supply the function; Module 4 does exactly that."
+    </p>
+  </blockquote>
+
+  <p>
+    The clean fix is to make the fragment calculation a <em>parameter</em> — a callback, or a
+    template, or a small object the caller supplies. That is what a fragment shader is, and
+    building it here would mean inventing Module 4's answer three lessons before the question is
+    fully formed. So the enum grows one more value and the coupling is written down instead.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This is exactly what happened historically</span>
+    <p>
+      Fixed-function graphics hardware made this same trade and lost the same way. Lighting was
+      baked into the pipeline as a fixed set of modes with fixed parameters, which was fast and
+      entirely sufficient right up until somebody wanted a material the hardware designers had
+      not anticipated. The whole programmable-shader era is the industry paying off this exact
+      debt. Feeling the pull yourself, on twenty lines of your own code, is worth more than being
+      told about it.
+    </p>
+  </div>
+
+  <h3 id="impl-material">4.5 One material per triangle, which a GPU cannot do</h3>
+
+  <p>
+    Under Gouraud, the material was consumed in the vertex stage and never reached the fill.
+    Under per-pixel it has to be available inside the fragment loop — and the demo draws the
+    whole scene as one batch with one <code>fill_style</code>, while the three objects have three
+    different materials.
+  </p>
+
+  <p>
+    The demo solves this by carrying the material on each triangle and rebinding it in the draw
+    loop:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — <code>draw_triangles</code></span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">style.surface = t.surface;
+engine::fill_triangle(fb, depth, t.v[0], t.v[1], t.v[2], style);</code></pre>
+  </figure>
+
+  <p>
+    <strong>A GPU cannot do that,</strong> and the reason is the same one <code>fill_style</code>
+    exists for. Material parameters live in a bound pipeline or a uniform buffer; changing them
+    means ending the draw call and issuing another. Real renderers therefore <em>batch by
+    material</em>, and a scene with three materials is three draws — which is why sorting draws
+    by material is a standard optimisation and why "how many draw calls?" is a question people
+    ask about a frame.
+  </p>
+
+  <p>
+    We take the shortcut because splitting the demo's single pass into per-object draws would
+    break the painter's-algorithm comparison that has run since Lesson 3.1 (that one needs to
+    sort <em>across</em> objects, so it cannot be done per object). It is named rather than
+    hidden, and it is the third time this pressure has appeared from a new direction: 3.4 found
+    it with cull modes, 3.7 found it with <code>specular</code>, and this is the same finger
+    pointing at Module 6's material system.
+  </p>
+
+  <h3 id="impl-demo">4.6 Two keys for two axes</h3>
+
+  <p>
+    <kbd>G</kbd> cycles the evaluation point — palette, flat, Gouraud, per-pixel — and
+    <kbd>Q</kbd> cycles the normal source between face and vertex. Two keys, because two
+    questions, and the HUD prints them on two lines for the same reason. A single line reading
+    <code>[G] smooth</code> was precisely the conflation this lesson exists to undo.
+  </p>
+
+  <p>
+    The HUD's third number is the grid's own check: <strong>how many pixels this cell differs
+    from per-pixel by</strong>, rendered every frame. Two cells must read exactly 0, and watching
+    them do so is how you confirm the axes are wired correctly:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — the corrected rule</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] bool is_degenerate(normal_source n, shade_eval e, engine::specular_model m)
+{
+    if (n != normal_source::face) { return false; }
+    if (e == shade_eval::flat) { return false; }   // flat IS the thing compared against
+    return m == engine::specular_model::none;
+}</code></pre>
+  </figure>
+
+  <p>
+    The first version of that function had <code>if (e == shade_eval::gouraud) return true;</code>
+    — degenerate unconditionally, no dependence on the specular model. It was wrong, the harness
+    found 761 pixels that said so, and the corrected version is <em>shorter</em>. That is usually
+    how it goes: a rule with an exception carved into it is often a rule stated at the wrong
+    level.
+  </p>
+
+  <p>
+    Finally, the fill is timed. "Per-pixel shading is expensive" is a claim, and a claim wants a
+    number:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — timing the fill</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const Uint64 fill_t0 = SDL_GetTicksNS();
+draw_triangles(fb, want_painter ? nullptr : &amp;scene_depth,
+               scene_tris, want_painter, style, &amp;scene_cull);
+const double fill_ns = static_cast&lt;double&gt;(SDL_GetTicksNS() - fill_t0);
+shade_ns = (shade_ns == 0.0) ? fill_ns : shade_ns * 0.9 + fill_ns * 0.1;</code></pre>
+  </figure>
+
+  <p>
+    It measures the <em>fill</em> only — not the projection, not the clip, not the HUD — because
+    that is the part the evaluation point actually changes. Smoothed across frames the way
+    <code>clock::fps()</code> is (Lesson 1.3) and for the same reason: one frame's timing on a
+    desktop OS is mostly noise.
+  </p>
+
+  <div class="widget" id="w38">
+    <strong style="font-family:var(--font-ui);font-size:0.9rem">Sample the same curve three ways</strong>
+    <p style="font-family:var(--font-ui);font-size:0.82rem;color:var(--text-muted);margin:.4em 0 .6em">
+      A cross-section through a curved surface approximated by flat facets. The green curve is
+      the true shading — what per-pixel evaluates. The red line is what Gouraud produces: the
+      same function sampled at the facet boundaries and joined with straight lines. The steps are
+      flat shading.
+    </p>
+    <p style="font-family:var(--font-ui);font-size:0.82rem;color:var(--text-muted);margin:0 0 .6em">
+      Drag the facet count down and watch the red line come apart. Then raise the
+      <em>shininess</em>: the curve sharpens, the chords get worse faster than the tessellation
+      can keep up, and at high exponents Gouraud misses the peak entirely — which is 3.7's Table
+      5 happening in front of you.
+    </p>
+    <svg id="w38-svg" viewBox="0 0 660 300" style="width:100%;height:auto">
+      <line id="w38-ax" x1="60" y1="240" x2="630" y2="240" stroke="var(--dia-ink)" stroke-width="1.6"/>
+      <line x1="60" y1="240" x2="60" y2="40" stroke="var(--dia-ink)" stroke-width="1.6"/>
+      <text x="52" y="46" class="xs muted" text-anchor="end">1.0</text>
+      <text x="52" y="244" class="xs muted" text-anchor="end">0</text>
+      <text x="345" y="268" class="sm muted" text-anchor="middle">across the surface</text>
+      <polyline id="w38-flat" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.6"/>
+      <polyline id="w38-true" fill="none" stroke="var(--ok-bd)" stroke-width="2.6"/>
+      <polyline id="w38-gouraud" fill="none" stroke="var(--verify-bd)" stroke-width="2.2"
+                stroke-dasharray="7 4"/>
+      <g id="w38-knots"></g>
+      <text x="72" y="34" class="xs muted" id="w38-legend"></text>
+      <text x="630" y="34" class="xs t-bad" text-anchor="end" id="w38-err"></text>
+    </svg>
+    <div class="widget-controls">
+      <label>facets
+        <input type="range" id="w38-n" min="2" max="40" step="1" value="8">
+        <span class="widget-readout" id="w38-nv">8</span>
+      </label>
+      <label>shininess
+        <input type="range" id="w38-p" min="0" max="7" step="1" value="2">
+        <span class="widget-readout" id="w38-pv">8</span>
+      </label>
+      <label><input type="checkbox" id="w38-flatbox"> show flat shading</label>
+    </div>
+  </div>
+
+  <script>
+  // Lesson 3.8's widget. Vanilla, no dependencies, deliberately OUTSIDE the
+  // shared-script markers so the stamper never touches it.
+  (function () {
+    var svg = document.getElementById('w38-svg');
+    if (!svg) { return; }
+    var X0 = 60, Y0 = 240, W = 570, H = 200;
+    var SPAN = 150;                       // degrees of surface swept
+    var EXPO = [1, 4, 8, 16, 32, 64, 128, 256];
+
+    // The shading along the cross-section: a clamped diffuse term plus a Blinn
+    // lobe, both as functions of the surface angle. Same shape as `shade()`, in
+    // one dimension — enough to show the sampling, which is the point.
+    function shade(deg, p) {
+      var d = Math.max(0, Math.cos((deg - 70) * Math.PI / 180));
+      var s = Math.max(0, Math.cos((deg - 70) * Math.PI / 180));
+      return Math.min(1, 0.18 + 0.55 * d + 0.75 * Math.pow(s, p));
+    }
+    function gx(t) { return X0 + t * W; }
+    function gy(v) { return Y0 - v * H; }
+
+    function update() {
+      var n = +document.getElementById('w38-n').value;
+      var p = EXPO[+document.getElementById('w38-p').value];
+      var showFlat = document.getElementById('w38-flatbox').checked;
+      document.getElementById('w38-nv').textContent = n;
+      document.getElementById('w38-pv').textContent = p;
+
+      // The truth, densely sampled.
+      var t = [], i;
+      for (i = 0; i <= 300; i++) {
+        var u = i / 300;
+        t.push(gx(u).toFixed(1) + ',' + gy(shade(u * SPAN, p)).toFixed(1));
+      }
+      document.getElementById('w38-true').setAttribute('points', t.join(' '));
+
+      // Gouraud: sample at the facet boundaries, straight lines between.
+      var g = [], knots = '';
+      for (i = 0; i <= n; i++) {
+        var u2 = i / n;
+        var x = gx(u2), y = gy(shade(u2 * SPAN, p));
+        g.push(x.toFixed(1) + ',' + y.toFixed(1));
+        knots += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1)
+               + '" r="3" fill="var(--verify-bd)"/>';
+      }
+      document.getElementById('w38-gouraud').setAttribute('points', g.join(' '));
+      document.getElementById('w38-knots').innerHTML = knots;
+
+      // Flat: one sample per facet, at its centre, held across it.
+      var fl = [];
+      if (showFlat) {
+        for (i = 0; i < n; i++) {
+          var mid = shade(((i + 0.5) / n) * SPAN, p);
+          fl.push(gx(i / n).toFixed(1) + ',' + gy(mid).toFixed(1));
+          fl.push(gx((i + 1) / n).toFixed(1) + ',' + gy(mid).toFixed(1));
+        }
+      }
+      document.getElementById('w38-flat').setAttribute('points', fl.join(' '));
+
+      // The worst gap between the chord and the curve — the chord error, live.
+      var worst = 0, atu = 0;
+      for (i = 0; i <= 600; i++) {
+        var u3 = i / 600;
+        var seg = Math.min(n - 1, Math.floor(u3 * n));
+        var a = shade((seg / n) * SPAN, p), b = shade(((seg + 1) / n) * SPAN, p);
+        var f = u3 * n - seg;
+        var chord = a + (b - a) * f;
+        var e = Math.abs(chord - shade(u3 * SPAN, p));
+        if (e > worst) { worst = e; atu = u3; }
+      }
+      document.getElementById('w38-err').textContent =
+        'worst chord error ' + worst.toFixed(3) + '  (' + Math.round(worst * 255) + '/255)';
+      document.getElementById('w38-legend').textContent =
+        'solid = per-pixel (the truth)   dashed = Gouraud   ' + (showFlat ? 'steps = flat' : '');
+      void atu;
+    }
+
+    ['w38-n', 'w38-p'].forEach(function (id) {
+      document.getElementById(id).addEventListener('input', update);
+    });
+    document.getElementById('w38-flatbox').addEventListener('change', update);
+    update();
+  })();
+  </script>
+
+  <!-- ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>Every file this lesson touched, in full. Nothing elided.</p>
+
+  <figure class="tbl">
+    <div class="tbl-scroll">
+      <table class="manifest">
+        <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>src/gfx/clip.hpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>clip_vertex</code> carries the two new varyings, so a clipped corner gets
+                  a correct normal and position.</td></tr>
+          <tr><td>src/gfx/clip.cpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>lerp</code> interpolates them; deliberately does not renormalise.</td></tr>
+          <tr><td>src/gfx/raster.hpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>vertex</code> gains the varyings, <code>shading</code> gains
+                  <code>lit</code>, and <code>fill_style</code> gains the four uniforms a
+                  fragment needs. Includes <code>light.hpp</code> — §4.4.</td></tr>
+          <tr><td>src/gfx/raster.cpp</td><td><span class="badge mod">modified</span></td>
+              <td>The fragment branch: interpolate the inputs, renormalise, shade. First change
+                  to the inner loop since Lesson 3.2.</td></tr>
+          <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+              <td><code>shade_mode</code> split into <code>normal_source</code> and
+                  <code>shade_eval</code>; the 2×3 grid; <kbd>Q</kbd>; per-triangle material;
+                  the grid comparison and the fill timer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption><span class="fignum">Manifest.</span> Files touched in this lesson.
+      <code>CMakeLists.txt</code> is unchanged — no new translation units.</figcaption>
+  </figure>
+
+@@LISTING:src/gfx/clip.hpp@@
+@@LISTING:src/gfx/clip.cpp@@
+@@LISTING:src/gfx/raster.hpp@@
+@@LISTING:src/gfx/raster.cpp@@
+@@LISTING:src/main.cpp@@
+
+  <!-- ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">all platforms</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">run</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># macOS / Linux
+./build/engine
+
+# Windows (multi-config generators put binaries in a config subdirectory)
+.\build\Debug\engine.exe</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Press <kbd>C</kbd> to the model scene and <kbd>L</kbd> to the torus, then work the two new
+    keys. In order:
+  </p>
+
+  <ol>
+    <li>
+      <strong><kbd>G</kbd> through the four evaluation points.</strong> Palette, flat, Gouraud,
+      per-pixel. The step from flat to Gouraud is the big visual one — 2,304 facets become a
+      smooth surface. The step from Gouraud to per-pixel is subtler and it is the one to look at
+      properly: the highlight becomes round and stops having faint creases across it.
+    </li>
+    <li>
+      <strong><kbd>Q</kbd> to face normals, then <kbd>G</kbd> through all four again.</strong>
+      With the highlight off (<kbd>H</kbd>), flat, Gouraud and per-pixel become
+      <em>indistinguishable</em> and the HUD reads <code>DEGENERATE cell = flat, 0 px</code>.
+      That zero is §3.1's claim, live.
+    </li>
+    <li>
+      <strong>Now press <kbd>H</kbd> to turn the highlight back on.</strong> With face normals
+      still selected, the three stop matching — the HUD count jumps off zero. The normal is still
+      constant; it is the <em>viewer</em> that varies across a face.
+    </li>
+    <li>
+      <strong><kbd>L</kbd> to <code>cube.obj</code>, and try to fix it with <kbd>G</kbd>.</strong>
+      You cannot. Six normals is six normals, and no evaluation point invents a seventh (§3.6).
+    </li>
+    <li>
+      <strong>Watch the microseconds.</strong> The HUD prints the fill's own time. At this
+      resolution per-pixel is <em>faster</em> than Gouraud on the torus, for the reason §3.7
+      measures.
+    </li>
+  </ol>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      On the torus with <kbd>Q</kbd> on <code>VERTEX</code> and <kbd>H</kbd> off: stepping
+      <kbd>G</kbd> from Gouraud to per-pixel changes several thousand pixels, and the HUD's
+      <code>vs PER-PIXEL</code> count drops to 0 when you arrive. Switch <kbd>Q</kbd> to
+      <code>FACE</code> and all three lit cells read 0. If <em>any</em> of those zeros is not
+      zero, the varyings are not reaching the fragment — check the clipper first (§4.2), because
+      that is the one that only breaks on triangles touching the near plane.
+    </p>
+  </div>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the numeric harness</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_38.cpp \
+    src/gfx/{mesh,obj,clip,raster,framebuffer,depth_buffer,colour}.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_38
+./scratch/verify_38</code></pre>
+  </figure>
+
+  <!-- ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+    <details class="pitfall-item">
+      <summary>Per-pixel looks identical to Gouraud — <span class="sym">the mode switch does nothing</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You wire up per-pixel shading, the code runs, and the picture does not change. The
+              pixel-difference count reads 0.</dd>
+          <dt>Cause</dt>
+          <dd>
+            Three candidates. (1) You are looking at a mesh whose normals are <strong>split</strong>
+            — a cube, or any mesh with hard edges — where the normal is constant per triangle and
+            the two modes genuinely agree (§3.1). That is correct behaviour, not a bug. (2) The
+            varyings are not being written; the fill is interpolating three zero normals and
+            <code>normalised_or</code> is handing back the fallback. (3) The shading is still
+            being done in the vertex stage as well, so the fragment is lighting an
+            already-lit colour.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Test on a mesh with genuinely smooth normals — the torus — before believing anything.
+            For (3), remember that <code>vertex::colour</code> must be the raw
+            <strong>albedo</strong> under <code>lit</code>: if it still holds a lit result you
+            are shading twice, and the tell is that the object gets brighter and washes out
+            rather than looking wrong.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Shading breaks only at the edge of the screen — <span class="sym">and only when you walk into things</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Everything is fine until geometry touches the near plane, at which point the
+              clipped triangles light wrongly — often black, sometimes wildly bright.</dd>
+          <dt>Cause</dt>
+          <dd>
+            The clipper is not interpolating the new varyings (§4.2). A clipped triangle's new
+            corner gets whatever the default-constructed <code>clip_vertex</code> had, which for
+            a normal is the zero vector.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Add them to <code>lerp</code>. The general rule is worth internalising because it
+            recurs every time you add a varying: <strong>anything the fragment reads must be
+            interpolated by every stage between the vertex and the fragment</strong>, and the
+            clipper is a stage that is easy to forget precisely because it usually does nothing.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Surfaces are dimmer in the middle of each triangle — <span class="sym">a faint dark blotch per face</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A soft darkening toward the centre of every triangle, zero at the corners, giving
+              a curved surface a subtly quilted look.</dd>
+          <dt>Cause</dt>
+          <dd>
+            The interpolated normal is not renormalised (§3.4). Its length is
+            <code>cos(θ/2)</code> at the midpoint for normals <code>θ</code> apart — 3.4% short
+            at 30°, 13.4% at 60° — and an un-normalised normal scales brightness by its length.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Normalise in the fragment. In this engine <code>shade()</code> already does it, so
+            the bug is unreachable — but recognise the signature: <strong>zero at the corners and
+            maximal in the middle</strong> is a chord drawn under a curve, and it is the same
+            fingerprint as 3.2's affine texturing and 2.4's sub-pixel bias.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Faint bright and dark stripes along triangle edges — <span class="sym">that survive more colour depth</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>A smoothly shaded curved surface shows narrow bright or dark bands exactly where
+              facets meet. Sampling the framebuffer at those pixels shows nothing unusual.</dd>
+          <dt>Cause</dt>
+          <dd>
+            Mach bands (§3.5). Gouraud's intensity ramp is continuous but its <em>slope</em> is
+            not, and lateral inhibition in the visual system turns each slope break into an
+            apparent stripe. The bands are not in the buffer, which is why measuring the pixels
+            finds nothing.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Per-pixel shading, which evaluates a curve with no kinks. Do <em>not</em> reach for
+            more colour precision — it changes nothing — and be sceptical of tessellating your
+            way out: the error falls as <code>O(h²)</code> but the number of joins rises, and it
+            never terminates.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Per-pixel is slower than expected, or unexpectedly faster — <span class="sym">the numbers make no sense</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>Switching to per-pixel costs far more than the "2×" everyone quotes, or — more
+              confusingly — costs <em>less</em>.</dd>
+          <dt>Cause</dt>
+          <dd>
+            You are measuring at a pixels-per-triangle ratio where the folklore does not apply
+            (§3.7). Below about three pixels per triangle there are more vertices than covered
+            pixels and per-vertex shading is the expensive one; measured here, 0.91× at 320×180
+            and 2.15× at 4K. Also check whether you are timing the <em>fill</em> or the whole
+            frame: at low resolution the projection and clip dominate and neither changes.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Report the ratio alongside the timing, always. A shading cost quoted without the
+            triangle density it was measured at is not a number anyone else can use.
+          </dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The highlight still vanishes on some meshes — <span class="sym">even with per-pixel on</span></summary>
+      <div class="pitfall-body">
+        <dl>
+          <dt>Symptom</dt>
+          <dd>You implement per-pixel shading specifically to fix 3.7's flickering highlight, and
+              on a cube or a low-poly prop it flickers exactly as much as before.</dd>
+          <dt>Cause</dt>
+          <dd>
+            Wrong axis (§3.6). Per-pixel shading fixes an <em>interpolation</em> error. A cube has
+            six normals, and whether any of them points near the halfway vector is settled by the
+            geometry before shading begins. Measured: <code>cube.obj</code> goes from 157 blank
+            frames out of 180 to… 157.
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            Fix the mesh, not the pipeline: weld the vertices and average the normals so the
+            surface has smoothly varying normals to interpolate (Lesson 3.5). Then per-pixel has
+            something to do — the 12×8 torus goes 58 → 0.
+          </dd>
+        </dl>
+      </div>
+    </details>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.8.1</span>Predict the zeros<span class="difficulty">warm-up</span></h3>
+    <p>
+      Before running anything, fill in this table with "0" or "not 0" for the pixel difference
+      against per-pixel, and then check each one in the demo.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Cell</th><th>Highlight off</th><th>Highlight on</th></tr></thead>
+        <tbody>
+          <tr><td>face × flat</td><td>?</td><td>?</td></tr>
+          <tr><td>face × Gouraud</td><td>?</td><td>?</td></tr>
+          <tr><td>vertex × flat</td><td>?</td><td>?</td></tr>
+          <tr><td>vertex × Gouraud</td><td>?</td><td>?</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        One question decides all four: <em>does anything the shading equation reads vary across
+        this triangle?</em> List the inputs, and ask of each whether a face normal makes it
+        constant.
+      </p>
+    </details>
+    <details>
+      <summary>Solution</summary>
+      <p>
+        The face row is 0 / not 0; the vertex row is not 0 / not 0. With a face normal the only
+        varying input is the position, which enters only through the specular term — so the top
+        two cells collapse exactly when the highlight is off and separate when it is on
+        (1,231 px and 761 px respectively). With vertex normals the normal itself varies, so
+        nothing collapses in either column.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.8.2</span>Break the clipper, on purpose<span class="difficulty">guided</span></h3>
+    <p>
+      Comment out the two lines §4.2 added to <code>clip_vertex lerp</code>, then find a camera
+      position where the bug is visible and one where it is not. Measure the difference in pixels
+      using the demo's comparison machinery.
+    </p>
+    <p>
+      Then answer the question that matters: <em>how long could this bug survive in a codebase?</em>
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The floor scene, and <kbd>=</kbd> held down. Lesson 3.3 built that scene specifically
+        because it is the only one where geometry passes the near plane.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Indefinitely, is the answer. Clipping only fires when geometry crosses the near plane,
+        which in a well-behaved scene is rare — so the bug is invisible in every screenshot, every
+        static test, and most play sessions, and appears only when a player walks into a wall.
+        That is the same detection profile as 2.7's <code>w = 0</code> bug and 3.3's whole
+        subject, and it is why the near plane deserves its own test scene rather than being
+        exercised incidentally.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.8.3</span>Skip the renormalise<span class="difficulty">guided</span></h3>
+    <p>
+      <code>shade()</code> normalises its normal argument, so this engine cannot exhibit §3.4's
+      artifact. Add a <code>fill_style</code> flag that pre-scales the interpolated normal so the
+      normalise is a no-op, and reproduce the darkening. Then measure it on the torus, and find
+      the tessellation at which it drops below one 8-bit code.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        You cannot easily stop <code>shade()</code> normalising — but you can make its input
+        already unit, and separately multiply the <em>result</em> by the length you would have
+        lost. That reproduces the artifact exactly without touching a function two lessons of
+        code depend on.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Expect a very small number on a dense mesh — the shipped torus is 0.95% short at worst,
+        which is about 2 codes out of 255 — and a large one on a coarse one, because the shortfall
+        depends on the angle between adjacent normals rather than on the triangle's size in
+        pixels. That dependence is the interesting part: it means the artifact gets
+        <em>worse</em> on exactly the low-poly meshes where you are least likely to be looking
+        for a subtle shading error.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.8.4</span>Make the fragment stage a parameter<span class="difficulty">engine</span></h3>
+    <p>
+      §4.4 ships a layering violation on purpose. Fix it: instead of a <code>shading</code> enum
+      with a <code>lit</code> value, let the caller supply the fragment calculation — as a
+      function pointer, a <code>std::function</code>, or a template parameter on
+      <code>fill_triangle</code>. Then measure all three against the enum.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The three options are not equivalent and the differences are the exercise. One costs an
+        indirect call per pixel; one costs an indirect call plus a possible allocation; one costs
+        nothing at run time and a copy of the inner loop per shader in your binary. Guess the
+        ranking before measuring.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The template wins on speed and loses on compile time and code size — and it cannot express
+        a shader chosen at run time, which is exactly what a real engine needs. That tension is
+        why GPUs compile shaders to machine code at load time: it is the template approach with
+        the compilation deferred until the shader is known. Seeing why the obvious C++ answers are
+        all slightly wrong is the best possible preparation for Module 4.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3><span class="xnum">3.8.5</span>Find your own crossover<span class="difficulty">open</span></h3>
+    <p>
+      §3.7 measured per-pixel at 0.91× the cost of Gouraud at 320×180 and 2.15× at 4K, on one
+      machine with one mesh. Reproduce it on yours, then push on it: does the crossover move if
+      you subdivide the mesh instead of changing the resolution? If you drop the specular term?
+      If you add a second light?
+    </p>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Subdividing and lowering the resolution should land on the same curve, because both move
+        the same ratio — confirming that pixels-per-triangle really is the variable, rather than
+        either quantity separately, is the point of the exercise. Dropping the specular removes
+        the <code>powf</code> and flattens the per-pixel cost sharply. A second light multiplies
+        the fragment cost and leaves the vertex cost per-vertex, so it pushes the crossover
+        left — which is the beginning of the argument for deferred shading, where the lighting
+        cost is decoupled from the geometry entirely. That is Module 6 territory.
+      </p>
+    </details>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine can do now that it could not before</h2>
+    <ul>
+      <li>Shade <strong>per fragment</strong> — the first time <code>raster.cpp</code>'s inner
+          loop has changed since Lesson 3.2, and the first time it has known that light
+          exists.</li>
+      <li>Carry <strong>varyings</strong>: arbitrary per-vertex data interpolated to the pixel,
+          through the clipper and the perspective divide, which is the shape every GPU pipeline
+          has.</li>
+      <li>Choose the normal source and the evaluation point <strong>independently</strong>, and
+          predict which combinations coincide.</li>
+      <li>Report what the choice costs, in microseconds, every frame.</li>
+    </ul>
+    <p>
+      Three things here will keep paying. <strong>Separating two questions that arrived as one
+      knob</strong> is a move you will make again — the same shape produced <code>fill_style</code>
+      in 3.2 and will produce the material system in Module 6. <strong>A varying</strong> is the
+      abstraction the entire programmable pipeline is built on, and you now have one because you
+      needed one. And <strong>the folklore was wrong about the cost</strong>: per-pixel shading is
+      cheaper than per-vertex below three pixels per triangle, which is a fact you can only have
+      by measuring.
+    </p>
+    <p>
+      <strong>Next:</strong> <a href="03-09-textures.html">3.9 — Texture Mapping and Bilinear
+      Filtering</a>. The floor is still shaded by <code>checker_at</code>, a procedural pattern
+      with no image behind it, and it is the one surface in the scene this lesson deliberately
+      left unlit — because a texture and a light have to <em>multiply</em>, and there is no
+      texture yet. 3.9 replaces the rule with a real sampler, settles the uv-origin question
+      Lesson 3.5 left open, and derives bilinear filtering as what it is: a weighted average of
+      weighted averages, which is the third thing in this course to turn out to be a lerp.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><span class="src">Gouraud, H. (1971)</span> <em>Continuous Shading of Curved Surfaces</em>,
+        IEEE Transactions on Computers C-20(6). Six pages, and the whole idea is on the first
+        two. Worth reading for how carefully it argues something we now take for granted.</li>
+    <li><span class="src">Phong, B. T. (1975)</span> <em>Illumination for Computer Generated
+        Pictures</em>, CACM 18(6). Contains <em>both</em> contributions §3.3 disentangles — the
+        reflection model and the interpolation scheme — which is precisely why they get
+        confused.</li>
+    <li><span class="src">Ratliff, F. (1965)</span> <em>Mach Bands: Quantitative Studies on
+        Neural Networks in the Retina</em>. The standard reference for the perceptual effect in
+        §3.5, and the source of the name.</li>
+    <li><span class="src">Real-Time Rendering, 4th ed.</span> §5.2 on shading models and §23.1 on
+        the hardware pipeline, where varyings and their cost are treated properly.</li>
+    <li><span class="src">Scratchapixel</span> <em>Shading: Normals and Interpolation</em> — a
+        complementary treatment of the same grid, with a different worked example.</li>
+    <li><span class="src">Fabien Sanglard</span> The Quake and Doom engine code reviews, for what
+        per-vertex shading and lookup tables bought when a divide cost 40 cycles. The
+        constraints §3.2 describes were not hypothetical.</li>
+  </ul>

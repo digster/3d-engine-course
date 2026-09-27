@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 320" role="img" aria-labelledby="l44f4-t l44f4-d">
+  <title id="l44f4-t">Winding, and what culling does about it</title>
+  <desc id="l44f4-d">Three panels. The first shows the vertices in counter-clockwise order, filled, covering 20,808 pixels. The second shows the same three points with the first two swapped, so the order is clockwise: it is drawn only as a dashed outline because the measurement is 0 pixels — the triangle is culled entirely. The third shows the clockwise order again with culling disabled, covering 20,808 pixels, exactly the first panel's count, which proves the geometry was never the problem.</desc>
+  <defs>
+    <marker id="e-i-l44f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l44f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l44f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">the same three points, in two orders, with cull-back on</text>
+<rect x="46.0" y="72.0" width="150.0" height="150.0" class="fill-soft ink-soft" stroke-width="1"/>
+<polygon points="61.0,207.0 181.0,207.0 121.0,87.0" fill="#5082e6" opacity="0.22" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="61.0" cy="207.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="61.0" y="211.0" class="xs t-inv" text-anchor="middle">1</text>
+<circle cx="181.0" cy="207.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="181.0" y="211.0" class="xs t-inv" text-anchor="middle">2</text>
+<circle cx="121.0" cy="87.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="121.0" y="91.0" class="xs t-inv" text-anchor="middle">3</text>
+<text x="121.0" y="60.0" class="xs" text-anchor="middle">counter-clockwise</text>
+<text x="121.0" y="244.0" class="xs mono" text-anchor="middle">20,808 px</text>
+<rect x="270.0" y="72.0" width="150.0" height="150.0" class="fill-soft ink-soft" stroke-width="1"/>
+<polygon points="405.0,207.0 285.0,207.0 345.0,87.0" fill="none" stroke="#eb786e" stroke-width="1.4" stroke-dasharray="4 4"/>
+<circle cx="405.0" cy="207.0" r="9" fill="#eb786e" opacity="0.9"/>
+<text x="405.0" y="211.0" class="xs t-inv" text-anchor="middle">1</text>
+<circle cx="285.0" cy="207.0" r="9" fill="#eb786e" opacity="0.9"/>
+<text x="285.0" y="211.0" class="xs t-inv" text-anchor="middle">2</text>
+<circle cx="345.0" cy="87.0" r="9" fill="#eb786e" opacity="0.9"/>
+<text x="345.0" y="91.0" class="xs t-inv" text-anchor="middle">3</text>
+<text x="345.0" y="60.0" class="xs" text-anchor="middle">clockwise</text>
+<text x="345.0" y="244.0" class="xs mono t-hi" text-anchor="middle">0 px</text>
+<rect x="494.0" y="72.0" width="150.0" height="150.0" class="fill-soft ink-soft" stroke-width="1"/>
+<polygon points="629.0,207.0 509.0,207.0 569.0,87.0" fill="#5082e6" opacity="0.22" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="629.0" cy="207.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="629.0" y="211.0" class="xs t-inv" text-anchor="middle">1</text>
+<circle cx="509.0" cy="207.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="509.0" y="211.0" class="xs t-inv" text-anchor="middle">2</text>
+<circle cx="569.0" cy="87.0" r="9" fill="#5082e6" opacity="0.9"/>
+<text x="569.0" y="91.0" class="xs t-inv" text-anchor="middle">3</text>
+<text x="569.0" y="60.0" class="xs" text-anchor="middle">clockwise, cull NONE</text>
+<text x="569.0" y="244.0" class="xs mono" text-anchor="middle">20,808 px</text>
+<text x="24" y="286" class="xs">The middle one is not flipped, or dark, or behind anything. It is <tspan class="t-hi">not drawn at all</tspan> &#8212; and the third panel proves the geometry never changed,</text>
+<text x="24" y="304" class="xs">because turning culling off brings back exactly the same 20,808 pixels as the first panel.</text>
+</svg>

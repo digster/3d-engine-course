@@ -1,0 +1,358 @@
+
+  <h2 id="run">13. Build &amp; run</h2>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+
+  <p>
+    The configure step prints the umbrella lint's tally, and it moved by three:
+  </p>
+
+  <pre>-- engine: umbrella lists 88 of 89 public headers (1 documented exception)</pre>
+
+  <p>
+    Then the demo. No assets, no shaders, and no <code>.wav</code> anywhere in the repository — every
+    sound it makes it synthesises with <code>make_tone</code>.
+  </p>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/audio
+
+# headless, silent, deterministic — opens no device at all
+./build/demos/audio --t 3.2 --shot scratch/audio.ppm</code></pre>
+
+  <p>
+    <strong>What you should see, and hear.</strong> A top-down map with the listener at the centre,
+    its forward axis drawn in blue and its right axis in red, and three emitters joined to it by
+    coloured lines. The faint rings around the listener are at 2, 4, 8, 16 and 32 metres, so
+    <em>each ring is one halving — six decibels</em>. Each emitter carries two short bars: its left
+    gain above and its right gain below, drawn in decibels from −60 to 0, because an amplitude bar
+    would spend 98% of its length on the first 6 dB.
+  </p>
+
+  <ul>
+    <li>The amber <strong>siren</strong> orbits the listener at six metres. Its two bars swap
+        smoothly as it crosses in front and behind, and its <em>total</em> length does not change —
+        that is the constant-power law, visible.</li>
+    <li>The green <strong>fly-by</strong> crosses at two metres and is the one to listen to. It
+        arrives from the left, gets loud, sweeps hard across the image and leaves. This is §7's
+        subject: turn the ramp off (the exercise below) and you can hear the difference.</li>
+    <li>The violet <strong>music</strong> emitter uses <code>falloff::none</code>, so its bars never
+        move however far you walk. That is not a broken emitter; it is what a music bus is.</li>
+  </ul>
+
+  <p>
+    Press <kbd>L</kbd> to cycle the siren's falloff law and listen for the difference between
+    <code>inverse</code> and <code>linear</code>: the linear curve holds up far too long and then
+    dies, which is exactly what its shape in figure 6 says it will do. Press <kbd>Space</kbd> to fire
+    a one-shot ping. Walk away with <kbd>S</kbd> and watch the bars shorten by six decibels per ring.
+  </p>
+
+  <p>
+    The panel's last three lines are the ones to watch while it runs:
+  </p>
+
+  <pre>voices live 3   started 7   finished 4
+buffers 2847   late 0   queue empty 1391   clipped 0
+peak 0.4127   mix worst 14.2 us of 10666.7 us budget (0.13%)</pre>
+
+  <p>
+    <code>late 0</code> is the one that matters. <code>queue empty</code> climbing steadily is
+    normal, and §9.5 is the story of finding that out.
+  </p>
+
+  <p>
+    Then the harness, which is where every number in this lesson comes from. It refuses to measure
+    against an unoptimised library, for the reason Lesson 7.7 discovered at a factor of 16.9:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_78.sh</code></pre>
+
+  <p>
+    And the four lines that do open a device:
+  </p>
+
+  <pre><code class="lang-bash">c++ -std=c++20 -O2 -I engine/include -I build/_deps/sdl3-src/include \
+    scratch/devcheck_78.cpp build-rel/engine/libengine.a \
+    -L build-rel/_deps/sdl3-build -lSDL3 \
+    -Wl,-rpath,"$PWD/build-rel/_deps/sdl3-build" -o build/demos/devcheck_78
+./build/demos/devcheck_78</code></pre>
+
+  <h2 id="pitfalls">14. Common pitfalls &amp; debugging</h2>
+
+  <p>
+    <strong>Symptom: complete silence, and every counter reads zero.</strong><br>
+    Cause: the stream was never resumed. <code>SDL_OpenAudioDeviceStream</code> returns a stream that
+    is <em>paused</em>, and this is a deliberate change from SDL2, where opening a device started it.
+    Fix: <code>SDL_ResumeAudioStreamDevice(stream)</code> after opening. The tell is that
+    <code>report().buffers</code> stays at 0 — the callback is not running at all, as opposed to
+    running and producing silence.
+  </p>
+
+  <p>
+    <strong>Symptom: complete silence, and <code>buffers</code> is climbing.</strong><br>
+    Now the callback <em>is</em> running, so the problem is in the mix. Check
+    <code>live_voices</code>: if it is zero, either <code>play</code> returned a null handle (the
+    table was full, or the sound was empty) or <code>update()</code> retired the voice immediately,
+    which happens when the sound has zero frames. If <code>live_voices</code> is right and
+    <code>peak</code> is 0.0000, the gains are zero — which on a spatial voice usually means the
+    emitter is past <code>max_distance</code>.
+  </p>
+
+  <p>
+    <strong>Symptom: everything plays at the wrong speed and the channels sound scrambled.</strong><br>
+    Frames confused with samples somewhere. In mono the two are the same number, so this bug is
+    invisible until the first stereo file. Grep for anything that divides a buffer length without
+    dividing by <code>channels</code>.
+  </p>
+
+  <p>
+    <strong>Symptom: a very loud thump at the start, then normal sound.</strong><br>
+    An unsigned 8-bit file widened as if it were signed. <code>SDL_AUDIO_U8</code> is centred on 128,
+    so treating it as signed produces a constant offset of about −1.0 for the whole file, which is a
+    DC step at the start and a DC step at the end. In a waveform viewer the file looks fine, because
+    the shape is right and only the baseline is wrong.
+  </p>
+
+  <p>
+    <strong>Symptom: a regular tick, roughly sixty times a second, under a moving sound.</strong><br>
+    §7. The gain is being applied as a step. Confirm it without ears: render the voice offline twice,
+    once with the gains pushed and once with them held constant, subtract, and look at where the
+    energy is. If it is broadband, it is the reconstruction.
+  </p>
+
+  <p>
+    <strong>Symptom: a click exactly once per loop.</strong><br>
+    The sound's last sample does not meet its first. <code>apply_fade(s, 0.004f, 0.004f)</code>, and
+    §7.3 for why the fade removes the step rather than shrinking it. If the sound is a musical tone,
+    the alternative fix is to author it at a whole number of cycles.
+  </p>
+
+  <p>
+    <strong>Symptom: a harsh buzz that gets worse as more sounds play.</strong><br>
+    <code>report().clipped</code> is non-zero. Lower <code>master_gain</code>; §5.1 for how much.
+    Do not make the clamp cleverer — by the time it runs, the damage is already in the sum.
+  </p>
+
+  <p>
+    <strong>Symptom: sounds are correct but everything is a semitone and a half sharp.</strong><br>
+    A 44.1 kHz file being played at 48 kHz without resampling: the ratio is 1.0884, which is 1.47
+    semitones. Check <code>wav_report::resampled</code>, and check that the rate you passed to
+    <code>load_wav</code> is the device's rate and not a constant you assumed.
+  </p>
+
+  <p>
+    <strong>Symptom: a crash on level unload, in the audio callback, with a stack that makes no
+    sense.</strong><br>
+    A sound was destroyed while a voice was still reading it (§9.3). Call
+    <code>mixer::stop_sound()</code> before releasing any sound, or <code>stop_all()</code> before
+    tearing down a level. This is the one failure in this subsystem that is undefined behaviour
+    rather than a counter, which is why it is the last item here and the loudest comment in the
+    header.
+  </p>
+
+  <p>
+    <strong>Symptom: occasional clicks under load that you cannot reproduce.</strong><br>
+    Check <code>report().late</code>. If it is non-zero, something on the audio thread is taking
+    longer than the buffer's deadline — and §10 says it will not be the mixing. Look for anything
+    that allocates, logs, or locks something the main thread holds for a long time.
+  </p>
+
+  <h2 id="exercises">15. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Hear the step (guided).</strong> Add a <code>--step</code> flag to the demo that
+        bypasses the ramp: keep a <code>bool</code> in the app, and when it is set, call
+        <code>set_gain</code> twice in a row with the same value so that <code>cur_</code> and
+        <code>tgt_</code> are already equal when the buffer runs. Listen to the fly-by with it on and
+        off.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the two calls work because <code>mix_into</code> assigns
+        <code>cur_ = tgt_</code> at the end of every buffer, so the second call finds nothing to
+        ramp. Then check your ears against the meter: render both offline and compare
+        <code>max_step</code>, exactly as §G.2 does.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Distance low-pass (guided).</strong> Air absorbs high frequencies, so a distant sound
+        is duller as well as quieter — and this is a large part of why a distance model with only a
+        gain in it sounds like a volume knob rather than like distance. Add a one-pole low-pass per
+        voice: <code>y += a * (x - y)</code>, with <code>a</code> going from 1.0 at
+        <code>ref_distance</code> to about 0.15 at <code>max_distance</code>.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> <code>y</code> is per-voice state and belongs beside the cursor, one per
+        channel. Ramp <code>a</code> across the buffer for the same reason the gain is ramped — a
+        filter coefficient that jumps is a click too, and this is the cheapest way to prove to
+        yourself that §7's rule was about reconstruction and not about gain.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Doppler.</strong> Compute the relative velocity of emitter and listener along the
+        line between them and turn it into a pitch ratio:
+        <code>(c + v<sub>l</sub>) / (c + v<sub>e</sub>)</code>, with <code>c</code> around 340 m/s.
+        Feed it to <code>set_pitch</code>. Then find the case that breaks it.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the case is an emitter approaching at or above the speed of sound, where the
+        denominator reaches zero. Clamp the ratio; games clamp it far tighter than physics requires
+        (typically to about [0.5, 2]) because a correct Doppler on a fast projectile is unlistenable.
+        Also: your velocity must be measured over the fixed step, not over the frame — Lesson 1.4.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Voice stealing.</strong> When the table is full, instead of refusing, find the voice
+        with the lowest current gain and replace it. Then measure whether it was worth it: play 96
+        overlapping sounds through both policies, render offline, and subtract.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the interesting part is not the search, it is the discontinuity. Stealing a
+        voice mid-sample is a step to zero, which is §7 again; a real implementation ramps the stolen
+        voice to silence over a few milliseconds before reusing its slot. Your subtraction should
+        show the stealing policy is <em>worse</em> until you do that.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>The looping interpolation bug (engine challenge).</strong>
+        <code>fetch()</code> clamps <code>i1</code> to the last frame, so the final fraction of a
+        looping sound interpolates toward itself instead of toward frame 0 — named in the comment and
+        not fixed. Quantify it: build a sound whose last and first samples differ a lot, loop it, and
+        measure the error at the wrap with <code>max_step</code>. Then implement the fix and measure
+        what the extra branch costs in §I.1's table.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> the branch is in the innermost loop in the engine, which is why the comment
+        declines to guess. Consider a branchless version: since a looping voice's wrap index is
+        <code>0</code>, <code>i1 = (i0 + 1) % frames</code> is one modulo — but a modulo is a divide,
+        so measure that too rather than assuming it is cheaper than a well-predicted branch.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>A limiter (engine challenge).</strong> §5.1 leaves the headroom question with two
+        unsatisfying answers. Implement the third: a look-ahead limiter. Delay the mix by a few
+        milliseconds, look at the peak in the window ahead, and pull the gain down smoothly before
+        the peak arrives rather than clamping it when it does.
+      </p>
+      <p class="hint">
+        <em>Hint:</em> a few milliseconds of delay is a ring buffer sized in <code>open()</code>,
+        because you may not allocate on this thread. The gain reduction must attack fast and release
+        slowly — and if you make it ramp per sample you have already written the mechanism, in §7.
+        Measure it by playing 32 voices at 0.1 and comparing <code>clipped</code> and the THD of
+        §D against the clamp.
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">16. Recap &amp; next</h2>
+
+  <p>
+    The engine can hear. Concretely, it gained:
+  </p>
+
+  <ul>
+    <li><strong>A sound asset</strong> — WAV in, interleaved float out, six source formats widened
+        and any rate resampled, with a report that counts what it found and what it cost.</li>
+    <li><strong>A mixer</strong> — a voice table behind generational handles, gain ramping, pitch,
+        looping, a master gain, a clip counter, and a report with eleven fields the audio thread
+        fills in without ever logging.</li>
+    <li><strong>A spatial model</strong> — a listener built from a <code>transform</code>, four
+        distance laws including one of our own that ends without a cliff, and the constant-power pan
+        law derived rather than copied.</li>
+    <li><strong>An offline path</strong> — <code>open_offline</code> and a public
+        <code>mix_into</code>, which is what makes every number in this lesson reproducible on a
+        machine with no sound card, and what let the subsystem be tested before it ever made a
+        noise.</li>
+  </ul>
+
+  <p>
+    And four findings worth carrying past this lesson, none of which is about audio:
+  </p>
+
+  <p>
+    <strong>Energy adds, amplitudes do not.</strong> The √N result, the 3.01 dB pan hole and the 20
+    rather than 10 in the decibel formula are all the same fact wearing three hats. Whenever you
+    combine two signals that are not correlated, the quantity that adds is the square.
+  </p>
+
+  <p>
+    <strong>Every sampled quantity has a reconstruction, and choosing it by accident is choosing the
+    worst one.</strong> 7.7 found this in keyframes and thought it was about animation. It is about
+    any value produced at one rate and consumed at another, and a gain is one of those.
+  </p>
+
+  <p>
+    <strong>A counter that fires on the healthy case is not a counter.</strong> The dropout proxy
+    said 28 of 58 on a perfectly healthy run, which is the most dangerous kind of wrong: it would
+    have been "working" forever, and it would have had nothing new to say on the day a real dropout
+    happened.
+  </p>
+
+  <p>
+    <strong>Real-time code you cannot call from a test is undebuggable.</strong> Making
+    <code>mix_into</code> a pure function with a public entry point cost one extra method and bought
+    every measurement in this lesson.
+  </p>
+
+  <p>
+    <strong>Module 7 is finished.</strong> Eight lessons that began with three gimbal rings locking
+    and end with a listener walking past a siren. The thread running through them is that
+    <em>orientation and motion are data</em>: Euler angles could not compose, axis-angle could not
+    either, the plane showed why a rotation carries a half-angle, quaternions made composition one
+    multiplication, slerp made interpolation a schedule, skinning made a pose deform a surface, clips
+    made motion a function of time — and this lesson used the same <code>transform</code> that
+    carries all of it to decide what a thing <em>sounds</em> like.
+  </p>
+
+  <p>
+    <strong>Next:</strong> Module 8, and physics from first principles. Lesson 8.1 starts where this
+    module's very first lesson did — with an integrator, and a demonstration of one that explodes —
+    and the fixed timestep from 1.4 finally gets the consumer it was built for. The quaternions of
+    7.4 come back immediately in 8.3 as the thing an angular velocity integrates <em>into</em>, and
+    the skeleton of 7.6 comes back in 8.12 with a ragdoll hanging off it.
+  </p>
+
+  <h2 id="reading">17. Further reading</h2>
+
+  <ul>
+    <li><strong>SDL3 wiki, <a href="https://wiki.libsdl.org/SDL3/CategoryAudio">CategoryAudio</a></strong>
+        — the authoritative reference for everything in §9. Read <code>SDL_OpenAudioDeviceStream</code>
+        and <code>SDL_AudioStreamCallback</code> in full before changing anything in
+        <code>mixer.cpp</code>; the paused-on-open behaviour is stated there and is the first pitfall
+        in §14.</li>
+    <li><strong>Ross Bencina, <em>Real-time audio programming 101: time waits for nothing</em></strong>
+        — the canonical statement of §10's rules, and more careful than this lesson has room to be
+        about why each one is unbounded rather than merely slow.</li>
+    <li><strong>Julius O. Smith III, <em>Physical Audio Signal Processing</em> and
+        <em>Spectral Audio Signal Processing</em></strong> (free online, CCRMA) — where §8's
+        resampler goes next. The windowed-sinc chapter is the design procedure this lesson declined
+        to reproduce.</li>
+    <li><strong>Curtis Roads, <em>The Computer Music Tutorial</em></strong>, chapters on sampling and
+        on spatialisation — the long-form version of §2 and §6, and the place to read about
+        amplitude panning laws beyond the two here (the −4.5 dB compromise law that film mixing uses
+        sits between them).</li>
+    <li><strong>Ville Pulkki, <em>Virtual sound source positioning using vector base amplitude
+        panning</em></strong> (JAES, 1997) — the generalisation of §6.3 to arbitrary speaker layouts,
+        and the paper to implement if you ever need more than two channels.</li>
+    <li><strong>The OpenAL 1.1 specification</strong>, §3.4 on distance models — where
+        <code>falloff</code>'s names come from, and worth reading for the sentence that
+        <code>inverse_ranged</code> exists to fix: the specification defines
+        <em>inverse-distance-clamped</em> and simply does not say what happens at the clamp.</li>
+    <li><strong>Lesson 7.7 §9.3</strong>, on fitting a lossy transformation with its consumer's
+        reconstruction — because §7 of this lesson is the same finding, and reading them together is
+        the fastest way to see that it is not about animation.</li>
+  </ul>

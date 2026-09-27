@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l67f5-t l67f5-d">
+  <title id="l67f5-t">A surface patch before and after a non-uniform scale</title>
+  <desc id="l67f5-d">Two panels each showing a horizontal surface with an upward normal N and a tangent T at an angle. After a scale of two in x the normal is unchanged and the tangent has rotated toward the stretched axis — which is why a normal needs the inverse transpose and a tangent needs the plain model matrix.</desc>
+  <defs>
+    <marker id="e-i-l67f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l67f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l67f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l67f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l67f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="400" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">A normal is perpendicular. A tangent is not.</text>
+<rect x="24" y="46" width="300" height="236" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="174.0" y="68" class="sm" text-anchor="middle">before</text>
+<line x1="38" y1="78" x2="310" y2="78" class="grid" stroke-width="1.0"/>
+<rect x="396" y="46" width="300" height="236" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="546.0" y="68" class="sm" text-anchor="middle">after a scale of (2, 1, 1)</text>
+<line x1="410" y1="78" x2="682" y2="78" class="grid" stroke-width="1.0"/>
+<line x1="96.0" y1="210" x2="252.0" y2="210" class="ink" stroke-width="1.6"/>
+<line x1="174.0" y1="210" x2="174.0" y2="134" class="ink" stroke-width="1.8" marker-end="url(#e-i-l67f5)"/>
+<text x="186.0" y="130" class="sm" text-anchor="start">N</text>
+<line x1="174.0" y1="210" x2="227.7401153701776" y2="156.2598846298224" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f5)"/>
+<text x="237.7401153701776" y="150.2598846298224" class="sm" text-anchor="start">T</text>
+<text x="174.0" y="236" class="xs" text-anchor="middle">T at 45 deg from +u</text>
+<text x="174.0" y="254" class="xs" text-anchor="middle">N unchanged</text>
+<line x1="468.0" y1="210" x2="624.0" y2="210" class="ink" stroke-width="1.6"/>
+<line x1="546.0" y1="210" x2="546.0" y2="134" class="ink" stroke-width="1.8" marker-end="url(#e-i-l67f5)"/>
+<text x="558.0" y="130" class="sm" text-anchor="start">N</text>
+<line x1="546.0" y1="210" x2="613.9764665159936" y2="176.0117667420032" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f5)"/>
+<text x="623.9764665159936" y="170.0117667420032" class="sm" text-anchor="start">T</text>
+<text x="546.0" y="236" class="xs" text-anchor="middle">T at 27 deg from +u</text>
+<text x="546.0" y="254" class="xs" text-anchor="middle">N unchanged</text>
+<rect x="24" y="296" width="672" height="92" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="320" class="sm" text-anchor="middle">The normal did not move; the tangent did. So they are carried by different matrices:</text>
+<text x="170" y="344" class="xs" text-anchor="end">a NORMAL</text>
+<rect x="180" y="333" width="132" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="246" y="344" class="xs" text-anchor="middle">inverse transpose</text>
+<text x="326" y="344" class="xs" text-anchor="start">perpendicularity is what it must keep (3.6)</text>
+<text x="170" y="366" class="xs" text-anchor="end">a TANGENT</text>
+<rect x="180" y="355" width="132" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="246" y="366" class="xs" text-anchor="middle">the model matrix</text>
+<text x="326" y="366" class="xs" text-anchor="start">it is a difference of POSITIONS (6.7)</text>
+<text x="360.0" y="394" class="xs" text-anchor="middle">Use the wrong one and the frame is SKEWED by 36.9 degrees — and only under a non-uniform scale.</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg viewBox="0 0 660 286" role="img" aria-labelledby="g3-t g3-d">
+  <title id="g3-t">Interpolating two unit normals produces a shorter vector</title>
+  <desc id="g3-d">Two unit normal arrows leave a common origin, 60 degrees apart, their tips on a dashed circular arc. A straight red chord joins the two tips. A red arrow from the origin to the midpoint of that chord is visibly shorter than the two unit arrows: its length is the cosine of 30 degrees, 0.86603, which is 13.4 percent short. A dotted line marks the gap between the chord's midpoint and the arc where unit length would be.</desc>
+  <defs>
+    <marker id="d-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ok-bd)"/></marker>
+    <marker id="d-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+    <marker id="d-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+  </defs>
+<path class="arcline" d="M 255.0,102.1 A 150.0,150.0 0 0 1 405.0,102.1" fill="none" stroke="var(--dia-ink-soft)" stroke-width="1.2" stroke-dasharray="4 4"/><line x1="255.0" y1="102.1" x2="405.0" y2="102.1" stroke="var(--verify-bd)" stroke-width="1.6"/><line x1="330.0" y1="232.0" x2="255.0" y2="102.1" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#d-n)"/><line x1="330.0" y1="232.0" x2="405.0" y2="102.1" stroke="var(--ok-bd)" stroke-width="2.4" marker-end="url(#d-n)"/><text x="231.0" y="94.1" class="lbl-n sm" font-weight="700">n₀</text><text x="415.0" y="94.1" class="lbl-n sm" font-weight="700">n₁</text><line x1="330.0" y1="232.0" x2="330.0" y2="102.1" stroke="var(--verify-bd)" stroke-width="2.6" marker-end="url(#d-s)"/><text x="330.0" y="260.0" class="t-bad sm" text-anchor="middle" font-weight="700">the interpolated normal: |n| = cos(30°) = 0.86603</text><line x1="330.0" y1="102.1" x2="330.0" y2="82.0" stroke="var(--dia-ink-soft)" stroke-width="1" stroke-dasharray="2 3"/><circle cx="330.0" cy="82.0" r="3" fill="var(--dia-ink-soft)"/><text x="330.0" y="66.0" class="xs muted" text-anchor="middle">unit length lives here</text><text x="16" y="30" class="sm" font-weight="700">A chord passes inside the circle.</text><text x="16" y="50" class="xs muted">60&#176; apart &#8594; 13.4% short</text>
+</svg>

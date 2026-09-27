@@ -1,0 +1,296 @@
+  <h2 id="polygon">2. Building intuition: the support polygon</h2>
+
+  <p>
+    Before any code, the statics — because it is three sentences long and it explains everything
+    §1 measured.
+  </p>
+
+  <p>
+    A body resting on a set of contact points is held up by a set of <em>normal</em> forces, one per
+    point. Each of them pushes and none of them pulls: a floor can hold a crate up and cannot hold
+    it down. So each force <code>fᵢ</code> is a non-negative number times the shared normal
+    <code>n</code>, and the total force on the body is
+  </p>
+
+  <p class="eq-plain">
+    <code>F = n · Σ fᵢ</code>, with every <code>fᵢ ≥ 0</code>.
+  </p>
+
+  <p>
+    That is the easy half. The interesting half is the <em>torque</em>. Taking moments about the
+    centre of mass, with <code>rᵢ</code> the vector from the centre to contact point
+    <code>pᵢ</code>:
+  </p>
+
+  <p class="eq-plain">
+    <code>τ = Σ rᵢ × (n fᵢ) = (Σ fᵢ rᵢ) × n</code>
+  </p>
+
+  <p>
+    and the thing being crossed with <code>n</code> is <code>Σ fᵢ rᵢ</code>. Divide through by
+    <code>Σ fᵢ</code> and it is a <em>weighted average of the contact points</em>, with non-negative
+    weights summing to one. That is exactly the definition of a point in the convex hull of the
+    <code>pᵢ</code>.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The resultant of a set of normal contact forces acts at a point of their convex
+      hull, and can act at any point of it.</strong> That hull — projected onto the contact plane —
+      is what statics calls the <strong>support polygon</strong>. A body rests when gravity's line
+      of action passes through the support polygon, because then there is a choice of non-negative
+      <code>fᵢ</code> that cancels both the force and the torque. It tips when gravity's line
+      passes outside, because then there is not.
+    </p>
+  </div>
+
+  <h3>The worked example, with real numbers</h3>
+
+  <p>
+    Take the crate from §1: 10 kg, one metre on a side, resting on four contact points at the
+    corners of its base. Put the origin under its centre of mass and let the contacts be at
+    <code>x = ±0.5</code>, <code>z = ±0.5</code>, all at <code>y = 0</code>, with
+    <code>n = (0, 1, 0)</code>.
+  </p>
+
+  <p>
+    Gravity is <code>(0, −98.1, 0)</code> N through the centre. For equilibrium,
+    <code>Σ fᵢ = 98.1 N</code>, and the four weights must average to a point directly under the
+    centre — which, with the centre at <code>x = 0</code>, means
+    <code>Σ fᵢ xᵢ = 0</code>. One solution is <code>fᵢ = 24.525 N</code> each. There are infinitely
+    many others (this is the rank deficiency §3 comes back to), and every one of them works.
+  </p>
+
+  <p>
+    Now push the crate sideways until its centre of mass is at <code>x = 0.4</code>. The weights
+    must now average to <code>x = 0.4</code>. The most any average of four numbers drawn from
+    <code>{−0.5, +0.5}</code> can be is <code>+0.5</code>, so <code>0.4</code> is achievable: put
+    <code>f = 88.29 N</code> on the two contacts at <code>+0.5</code> and <code>9.81 N</code> on the
+    two at <code>−0.5</code>, and check that
+    <code>(88.29 × 0.5 + 9.81 × −0.5) × 2 / 98.1 = 0.4</code>. ✓
+  </p>
+
+  <p>
+    Push it to <code>x = 0.6</code> and there is no solution, because no average of numbers that are
+    all at most <code>0.5</code> reaches <code>0.6</code>. The crate must tip. The boundary is at
+    <code>x = 0.5</code>, which is where §A.3 measured it — between 0.45 and 0.55.
+  </p>
+
+  <p>
+    And the moment form of the same statement: the largest moment the polygon can resist about the
+    centre is <code>m·g</code> times the farthest the resultant can be pushed, which is half the
+    polygon's width. <code>10 × 9.81 × 0.5 = 49.05 N·m</code>, measured at 47.869.
+  </p>
+
+  <h3>Why one point is a special case rather than a small one</h3>
+
+  <p>
+    Run the same argument with a single contact point. The hull of one point is that point, so
+    <code>Σ fᵢ rᵢ / Σ fᵢ = r₁</code> always, whatever <code>f₁</code> is. There is exactly one line
+    of action available, and unless gravity happens to lie on it there is no equilibrium at any
+    force.
+  </p>
+
+  <p>
+    Two points are better and still not enough: their hull is a <em>segment</em>, so the body is held
+    against rotation about every axis except the one along that segment, about which it is free. A
+    crate resting on two contact points is a crate on a hinge. §6 measures exactly this happening to
+    a lightly tilted crate, and it is why the parallelism tolerance there is worth spending a
+    section on.
+  </p>
+
+  <h2 id="manifold">3. What a manifold is, and why four</h2>
+
+  <div class="callout">
+    <p>
+      <strong>A <em>contact manifold</em> is a set of contact points that share one normal.</strong>
+      Not a set of independent contacts — a set of points on <em>one</em> contact, each with its own
+      position and its own depth, all resolved against the same direction.
+    </p>
+  </div>
+
+  <p>
+    The shared normal is the part that makes it a manifold rather than a list. Two convex shapes
+    touching along a face touch along a <em>planar region</em>, and every point of that region has
+    the same outward direction; the depths differ from point to point, which is precisely what a
+    four-point manifold knows about a slightly tilted crate and a single averaged contact does not.
+    Handing a solver four contacts with four <em>different</em> normals would be describing four
+    different collisions, and the solver would fight itself.
+  </p>
+
+  <h3>The contact region is a polygon, and that is a theorem</h3>
+
+  <p>
+    Where exactly do two convex shapes touch? The set of points they have in common. Both shapes are
+    convex; the intersection of two convex sets is convex; so <strong>the contact region is
+    convex</strong>. When the two shapes meet face to face, that region is the intersection of two
+    convex <em>polygons</em> lying in the same plane, which is a convex polygon — and a polygon with
+    at most <code>m + n</code> vertices when the two have <code>m</code> and <code>n</code>, because
+    each edge of one can cut each boundary of the other at most twice and each cut adds at most one
+    vertex net.
+  </p>
+
+  <p>
+    That bound is why <code>k_max_clip_points</code> is <code>2 × k_max_face_vertices</code> and not
+    a guess, and §7 measures what a real mix actually produces: over 99,995 face contacts between
+    random boxes, the clip returns four points 36.96% of the time, five 33.06%, six 20.97%, and
+    seven or eight the rest.
+  </p>
+
+  <h3>Four</h3>
+
+  <p>
+    A convex polygon can have any number of vertices; a manifold holds four. That is not a budget.
+  </p>
+
+  <p>
+    Go back to §2's arithmetic. The manifold's job is to let the resultant act anywhere in the
+    support polygon, and that needs enough independent non-negative weights to reach every point of
+    a convex region in the plane. Three points span a triangle. Four span a quadrilateral, which is
+    the general shape of a planar convex region's extremes in two independent directions. Five add a
+    weight that is a <em>linear combination</em> of the other four as far as the resultant is
+    concerned: the system of equations the solver is trying to satisfy —
+    total force, two components of torque — has three rows, and four unknowns already over-determine
+    the position of the resultant.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A fifth contact point makes the solution non-unique rather than better.</strong> This
+      is the same statement as “a four-legged table wobbles”: three legs determine a plane and the
+      fourth is a redundant constraint that the table resolves by rocking. A physical
+      four-point manifold on a rigid body has the same redundancy, and a solver resolves it by
+      distributing the impulse arbitrarily among the points, which is fine — the resultant is what
+      matters. Adding more points adds more arbitrariness and no more resultant.
+    </p>
+  </div>
+
+  <p>
+    §8 measures what the fifth point would buy on this engine's own geometry, and the answer has two
+    halves. Against the <em>whole</em> clipped polygon, four points span 88.87% of the area. Against
+    the <em>best</em> four points there are — brute-forced over every four-subset, seventy
+    combinations for an eight-point clip — they span <strong>96.32%</strong>, with a median of
+    <strong>1.00000</strong>. And the depth lost by the reduction, over 61,455 manifolds, is
+    <strong>exactly zero</strong>, because the reduction picks the deepest point first.
+  </p>
+
+  <p>
+    Box2D, Bullet's persistent manifold and Havok all land on four. They land on it for this reason
+    and not by coincidence.
+  </p>
+
+  <h2 id="argmax">4. The feature a support function cannot name</h2>
+
+  <p>
+    Now the part that needed a new interface, and the part that is genuinely surprising if you have
+    been reading 8.5 carefully.
+  </p>
+
+  <p>
+    8.5's header makes a strong claim and the claim is true: a convex set is completely
+    <em>determined</em> by its support function. Not described by, not approximated by — determined.
+    A convex set is the intersection of all the half-spaces that contain it, <code>support</code>
+    names the boundary of each one, and knowing every half-space is knowing the set. Two convex
+    shapes with the same support function are the same shape.
+  </p>
+
+  <p>
+    So a manifold generator ought to be writable in terms of <code>support</code> alone. It is not,
+    and the reason is one word: <strong>argmax</strong>.
+  </p>
+
+  <p class="eq-plain">
+    <code>support_X(d) = the point of X that is farthest along d</code>
+  </p>
+
+  <p>
+    Read it again. <em>The</em> point. When <code>d</code> is a face normal, the set of points
+    farthest along <code>d</code> is the whole face — four corners for a box, and every point
+    between them — and the function has to return one of them. Which one is decided by the
+    implementation:
+  </p>
+
+  <pre><code class="lang-cpp">// engine/src/phys/shape.cpp, from 8.5, unchanged
+const float sx = (dot(box.axes.c0, d) >= 0.0f) ? box.half_extents.x : -box.half_extents.x;
+const float sy = (dot(box.axes.c1, d) >= 0.0f) ? box.half_extents.y : -box.half_extents.y;
+const float sz = (dot(box.axes.c2, d) >= 0.0f) ? box.half_extents.z : -box.half_extents.z;
+return box.axes.c0 * sx + box.axes.c1 * sy + box.axes.c2 * sz;</code></pre>
+
+  <p>
+    Three sign tests. When <code>d</code> is the box's <code>+y</code> axis exactly, the first and
+    third dot products are zero, the <code>>= 0</code> sends both to the positive side, and the
+    function returns the <code>(+, +, +)</code> corner. That is deterministic, and it is reasonable,
+    and it is <strong>arbitrary</strong> — which is not the same thing. Perturb <code>d</code> by a
+    millionth of a degree and a different corner wins.
+  </p>
+
+@@FIG_ARGMAX@@
+
+  <p>
+    §C.1 measures it directly. Four thousand directions drawn from a cone one thousandth of a degree
+    wide about a unit cube's <code>+y</code> face normal — a cone every direction in which has
+    exactly the same four-corner argmax set:
+  </p>
+
+  <pre><code class="lang-text">     distinct corners `support` returned  : 4 of 4
+     `support_face` count == 4            : 4000 of 4000
+     distinct corners it named            : 4</code></pre>
+
+  <p>
+    All four. Which is to say that the point <code>support</code> returns is a
+    <em>discontinuous</em> function of a direction that is everywhere inside the same argmax set —
+    and that discontinuity is not a defect, because every one of the four answers is correct. The
+    question simply has four answers and the function can only give one.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The control says the ambiguity belongs to the query and not to the function.</strong>
+      §C.2 runs the same jitter about a direction pointed at a <em>corner</em>, where the argmax
+      really is a single point, and gets <strong>1 corner of 8</strong>. So the arbitrariness appears
+      exactly where the feature is bigger than a point — which is exactly where a manifold is
+      needed, and nowhere else.
+    </p>
+  </div>
+
+  <h3>The prediction that turned out to be wrong</h3>
+
+  <p>
+    There is an obvious-looking way round this, and it is worth saying why it does not work, because
+    it was this lesson's plan until it was tried.
+  </p>
+
+  <p>
+    EPA finishes with a <em>face</em> of the Minkowski difference — the triangle whose plane is
+    closest to the origin. A face of <code>A ⊖ B</code> is always one of three things: a face of A
+    against a vertex of B, a vertex of A against a face of B, or an edge of each. So the contacting
+    features are, in principle, recoverable from EPA's winning triangle, and this lesson was
+    expected to widen <code>epa_result</code> to carry it.
+  </p>
+
+  <p>
+    Two things are wrong with that. The first is that the triangle's three vertices are
+    <em>support points</em> — differences of two support calls — so they carry the tie-break problem
+    above intact, and recovering “which face of A” from them means undoing the very ambiguity that
+    made the problem. The second is more basic: EPA's triangle is a <em>piece</em> of the difference
+    set's face, not the whole of it. The face is a polygon; EPA covered it with triangles and stopped
+    at the first one that proved the bound. Recovering the whole face from one triangle means walking
+    the polytope's neighbours and merging coplanar faces, which is more code than asking the shape.
+  </p>
+
+  <p>
+    So the interface widens instead, by exactly one query, on the shapes themselves:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] contact_face support_face(const obb&amp; box, vec3 d);
+[[nodiscard]] contact_face support_face(const engine::sphere&amp; s, vec3 d);
+[[nodiscard]] contact_face support_face(const capsule&amp; c, vec3 d);
+[[nodiscard]] contact_face support_face(const hull&amp; h, vec3 d,
+                                        float gather_sin = k_face_gather_sin);</code></pre>
+
+  <p>
+    <code>epa.hpp</code> is untouched by this lesson. That is a nicer outcome than the one that was
+    planned, and it is worth noticing the shape of it: the prediction was made by looking at where
+    the <em>information</em> was, and the right answer came from asking where the information was
+    <em>exact</em>.
+  </p>

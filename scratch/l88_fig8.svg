@@ -1,0 +1,67 @@
+<svg viewBox="0 0 900 495" role="img" aria-labelledby="f88h-t f88h-d">
+  <title id="f88h-t">The margin</title>
+  <desc id="f88h-d">The Minkowski sum of two boxes and what fattening them costs in pairs.</desc>
+  <defs>
+    <marker id="e-i-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grn-f88h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="60" y="52" class="sm" text-anchor="start">the Minkowski sum decides which pairs overlap</text>
+<rect x="60" y="92" width="74.80000000000001" height="54.400000000000006" rx="3" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<text x="97.4" y="84" class="xs" text-anchor="middle">box A, extent e_a</text>
+<rect x="168.8" y="98.8" width="54.400000000000006" height="40.8" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<text x="196.0" y="84" class="xs" text-anchor="middle">box B, e_b</text>
+<rect x="80.4" y="187.2" width="129.2" height="81.6" rx="3" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<text x="145.0" y="234.79999999999998" class="xs" text-anchor="middle">e_a + e_b</text>
+<rect x="63.400000000000006" y="170.2" width="163.2" height="115.6" rx="3" fill="none" stroke="#5ac878" stroke-width="1.8" stroke-dasharray="5 4"/>
+<text x="145.0" y="160.2" class="xs" text-anchor="middle">e_a + e_b + 4m</text>
+<text x="60" y="309.79999999999995" class="xs muted" text-anchor="start">fattening each box by m adds 2m to its own extent,</text>
+<text x="60" y="326.79999999999995" class="xs muted" text-anchor="start">and therefore 4m to the sum</text>
+<text x="470" y="74" class="xs muted" text-anchor="start">§8 — 4000 proxies, mean summed extent 2.912 m</text>
+<text x="470" y="94" class="xs muted" text-anchor="start">margin m</text>
+<text x="600" y="94" class="xs muted" text-anchor="end">pairs</text>
+<text x="674" y="94" class="xs muted" text-anchor="end">measured</text>
+<text x="762" y="94" class="xs muted" text-anchor="end">((E+4m)/E)³</text>
+<text x="852" y="94" class="xs muted" text-anchor="end">contains m=0</text>
+<line x1="470" y1="102.0" x2="858" y2="102.0" class="grid" stroke-width="1.0"/>
+<text x="470" y="119.0" class="xs" text-anchor="start">0.00</text>
+<text x="600" y="119.0" class="xs mono" text-anchor="end">833</text>
+<text x="674" y="119.0" class="xs mono" text-anchor="end">1.000</text>
+<text x="762" y="119.0" class="xs mono" text-anchor="end">1.000</text>
+<text x="852" y="119.0" class="xs mono" text-anchor="end">yes</text>
+<text x="470" y="136.0" class="xs" text-anchor="start">0.01</text>
+<text x="600" y="136.0" class="xs mono" text-anchor="end">879</text>
+<text x="674" y="136.0" class="xs mono" text-anchor="end">1.055</text>
+<text x="762" y="136.0" class="xs mono" text-anchor="end">1.042</text>
+<text x="852" y="136.0" class="xs mono" text-anchor="end">yes</text>
+<text x="470" y="153.0" class="xs" text-anchor="start">0.05</text>
+<text x="600" y="153.0" class="xs mono" text-anchor="end">1,005</text>
+<text x="674" y="153.0" class="xs mono" text-anchor="end">1.206</text>
+<text x="762" y="153.0" class="xs mono" text-anchor="end">1.221</text>
+<text x="852" y="153.0" class="xs mono" text-anchor="end">yes</text>
+<text x="470" y="170.0" class="xs" text-anchor="start">0.10</text>
+<text x="600" y="170.0" class="xs mono" text-anchor="end">1,186</text>
+<text x="674" y="170.0" class="xs mono" text-anchor="end">1.424</text>
+<text x="762" y="170.0" class="xs mono" text-anchor="end">1.471</text>
+<text x="852" y="170.0" class="xs mono" text-anchor="end">yes</text>
+<text x="470" y="187.0" class="xs" text-anchor="start">0.25</text>
+<text x="600" y="187.0" class="xs mono" text-anchor="end">1,918</text>
+<text x="674" y="187.0" class="xs mono" text-anchor="end">2.303</text>
+<text x="762" y="187.0" class="xs mono" text-anchor="end">2.425</text>
+<text x="852" y="187.0" class="xs mono" text-anchor="end">yes</text>
+<text x="470" y="204.0" class="xs" text-anchor="start">0.50</text>
+<text x="600" y="204.0" class="xs mono" text-anchor="end">3,770</text>
+<text x="674" y="204.0" class="xs mono" text-anchor="end">4.526</text>
+<text x="762" y="204.0" class="xs mono" text-anchor="end">4.800</text>
+<text x="852" y="204.0" class="xs mono" text-anchor="end">yes</text>
+<text x="60" y="360.79999999999995" class="xs muted" text-anchor="start">A margin is the one knob here that 8.9 will actually turn, and it has two separate uses worth keeping apart:</text>
+<text x="60" y="377.79999999999995" class="xs muted" text-anchor="start">SPECULATION, because a pair a micron short of touching produces no manifold at all, and a solver that wants to stop a</text>
+<text x="60" y="394.79999999999995" class="xs muted" text-anchor="start">collision before it happens has to hear about it; and HYSTERESIS, because a proxy fattened by more than one frame's</text>
+<text x="60" y="411.79999999999995" class="xs muted" text-anchor="start">motion need not be reinserted at all. This grid rebuilds every frame and uses only the first. What it costs is the</text>
+<text x="60" y="428.79999999999995" class="xs muted" text-anchor="start">cube of the fattened sum rather than the ratio of the boxes' own volumes — measured within 12% of the prediction at</text>
+<text x="60" y="445.79999999999995" class="xs muted" text-anchor="start">every margin from a centimetre to half a metre — and it is conservative at every one of them: no margin ever lost a</text>
+<text x="60" y="462.79999999999995" class="xs muted" text-anchor="start">pair that a smaller one found.</text>
+</svg>

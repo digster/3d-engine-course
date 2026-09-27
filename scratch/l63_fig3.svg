@@ -1,0 +1,41 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l63f3-t l63f3-d">
+  <title id="l63f3-t">The constant Blinn-Phong was missing</title>
+  <desc id="l63f3-d">For five shininess values, the constant the engine multiplies the lobe by against the one a normalised distribution requires. The ratio is (s+2)/2, which is 17 at the default shininess of 32.</desc>
+  <defs>
+    <marker id="e-i-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l63f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Blinn-Phong is a microfacet distribution. It has only ever been missing its constant — and the engine ships the wrong one.</text>
+<text x="150" y="58" class="xs muted" text-anchor="start">the constant multiplying cosˢ:</text>
+<text x="140" y="86" class="xs mono muted" text-anchor="end">shininess 4</text>
+<rect x="150" y="74" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+<rect x="150" y="85" width="4.392677999999999" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="164.392678" y="90" class="xs mono t-bad" text-anchor="start">3×</text>
+<text x="140" y="112" class="xs mono muted" text-anchor="end">shininess 8</text>
+<rect x="150" y="100" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+<rect x="150" y="111" width="7.3211254" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="167.3211254" y="116" class="xs mono t-bad" text-anchor="start">5×</text>
+<text x="140" y="138" class="xs mono muted" text-anchor="end">shininess 32</text>
+<rect x="150" y="126" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+<rect x="150" y="137" width="24.891832799999996" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="184.8918328" y="142" class="xs mono t-bad" text-anchor="start">17×</text>
+<text x="140" y="164" class="xs mono muted" text-anchor="end">shininess 128</text>
+<rect x="150" y="152" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+<rect x="150" y="163" width="95.1746532" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="255.1746532" y="168" class="xs mono t-bad" text-anchor="start">65×</text>
+<text x="140" y="190" class="xs mono muted" text-anchor="end">shininess 512</text>
+<rect x="150" y="178" width="2.0" height="9" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.75"/>
+<rect x="150" y="189" width="376.30594859999997" height="9" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="536.3059486" y="194" class="xs mono t-bad" text-anchor="start">257×</text>
+<rect x="150" y="212" width="26" height="9" rx="2" fill="#e05c5c" fill-opacity="0.75" stroke="#e05c5c" stroke-width="1"/>
+<text x="182" y="220" class="xs" text-anchor="start">what the engine uses: 1/π, for every exponent</text>
+<rect x="150" y="227" width="26" height="9" rx="2" fill="#5ac878" fill-opacity="0.55" stroke="#5ac878" stroke-width="1"/>
+<text x="182" y="235" class="xs" text-anchor="start">what a distribution needs: (s+2)/2π</text>
+<rect x="24" y="300" width="672" height="84" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="324" class="sm t-hi" text-anchor="middle">The ratio is (s+2)/2 exactly — no π, because both carry one and it cancels. At the default shininess of 32 that is 17×.</text>
+<text x="360.0" y="346" class="xs muted" text-anchor="middle">So this engine’s highlights have always been seventeen times dimmer than the distribution says, and every material has quietly</text>
+<text x="360.0" y="362" class="xs muted" text-anchor="middle">compensated with a specular colour larger than a real surface could have. Nothing looked wrong; the parameter absorbed it.</text>
+</svg>

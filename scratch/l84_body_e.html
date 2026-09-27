@@ -1,0 +1,525 @@
+  <h2 id="budget">12. The budget</h2>
+
+  <p>
+    Collision detection is called more often than anything else in a physics engine — a scene with
+    500 bodies has 124,750 possible pairs before a broadphase touches it — so the costs here matter
+    more than the costs in 8.3 did.
+  </p>
+
+  <p>
+    Two populations, 20,000 pairs each, because the distribution of the <em>answers</em> turns out
+    to matter more than the arithmetic. <strong>SPREAD</strong> scatters boxes through a 6 m cube,
+    where 6% overlap; <strong>CROWDED</strong> puts their centres within 0.6 m, where all of them
+    do.
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Test</th><th>ns per call</th><th>Relative</th></tr></thead>
+    <tbody>
+      <tr><td>sphere vs sphere</td><td>1.206</td><td>1.0×</td></tr>
+      <tr><td><code>bounds_of(obb)</code></td><td>1.331</td><td>1.1×</td></tr>
+      <tr><td>aabb vs aabb</td><td>2.606</td><td>2.2×</td></tr>
+      <tr><td>obb vs obb, spread</td><td>16.858</td><td>14.0×</td></tr>
+      <tr><td>obb vs obb, crowded</td><td>73.323</td><td>60.8×</td></tr>
+      <tr><td><code>overlaps()</code>, crowded</td><td>10.458</td><td>8.7×</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The ratios are the story, and there are three of them.
+  </p>
+
+  <h3>12.1 A sphere test is sixty times cheaper than the answer it approximates</h3>
+
+  <p>
+    1.206 ns against 73.323. That is the entire justification for the shape of every broadphase ever
+    written: ask the cheap conservative question first, and only ask the expensive exact one about
+    the survivors.
+  </p>
+
+  <p>
+    Measured directly on the spread population, with a bounding-sphere reject in front of
+    <code>overlaps</code>: <strong>10.090 ns → 2.202 ns, a 4.58× speedup</strong>, with both arms
+    producing identical counts. The pre-test rejected 17,325 of 20,000 pairs outright, and the
+    control that matters is that it rejected <em>none</em> of the 1,265 real overlaps — a
+    conservative filter may keep as many pairs as it likes, and may never throw away a real one.
+  </p>
+
+  <p>
+    It also <em>keeps</em> 1,410 pairs that do not overlap, each of which costs a full test. That is
+    the price of conservatism and it is the number a broadphase is tuned against, not the speedup.
+  </p>
+
+  <h3>12.2 The early exit is worth more than the arithmetic</h3>
+
+  <p>
+    The same function is 16.858 ns on spread pairs and 73.323 ns on crowded ones — <strong>4.3×,
+    from identical code</strong>. The difference is entirely how many candidates get examined before
+    the answer is known.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Axes examined</th><th>Spread population</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>55.6%</td></tr>
+      <tr><td>2</td><td>25.1%</td></tr>
+      <tr><td>3</td><td>10.6%</td></tr>
+      <tr><td>4–14</td><td>2.3%</td></tr>
+      <tr><td><strong>15 (they overlap)</strong></td><td><strong>6.4%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Mean 2.47 of 15. <strong>91% of separated pairs exit on one of the first three axes</strong>,
+    which is why the face normals are tested first and the nine cross products last: an ordering
+    decision, made from a histogram rather than from taste. Overlapping pairs always pay for all
+    fifteen, because the only way to know nothing separates two boxes is to have asked everything.
+  </p>
+
+  <h3>12.3 The square roots are 88% of the cost</h3>
+
+  <p>
+    On crowded pairs — the worst case, all fifteen axes every time —
+    <code>collide().hit()</code> is <strong>79.258 ns</strong> and <code>overlaps()</code> is
+    <strong>10.458 ns</strong>. Same answers on every pair, checked by the benchmark itself.
+    <strong>7.58×</strong>, alternated inside a single run so the ratio is a fact rather than a
+    before-and-after story.
+  </p>
+
+  <p>
+    Everything that buys is square roots and cross products: up to nine <code>sqrt</code> calls per
+    query, which exist only so that the <em>depth</em> is comparable across candidates. If you do
+    not need the depth, do not pay for it — which is exactly the split the two functions represent,
+    and exactly why a broadphase confirmation pass should call <code>overlaps</code> and a contact
+    generator should call <code>collide</code>.
+  </p>
+
+  <h2 id="notyet">13. What this does not do</h2>
+
+  <p>
+    Four honest limits, each of which is a later lesson.
+  </p>
+
+  <ul>
+    <li>
+      <strong>It does not give you a distance.</strong> When two boxes are apart, the reported gap
+      is the gap <em>on one axis</em>, which is a lower bound on the true distance and usually not
+      equal to it — two boxes offset diagonally have a gap on both <code>x</code> and
+      <code>y</code>, and the real distance is neither. The SAT never computes it because a proof of
+      separation does not need one. <strong>Lesson 8.5's GJK</strong> is the algorithm that does,
+      and this is the honest reason it exists.
+    </li>
+    <li>
+      <strong>It does not give you contact points.</strong> A normal and a depth are not enough to
+      make a box rest on a floor: a face-face contact needs <em>several</em> points to resist
+      toppling, and one point makes a crate balance on a corner and spin. <strong>Lesson 8.7</strong>
+      builds the manifold and keeps it across frames.
+    </li>
+    <li>
+      <strong>It does not scale.</strong> Every function here answers a question about <em>two</em>
+      shapes. Asking it about every pair in a scene is quadratic, and at 500 bodies that is 124,750
+      calls per step. <strong>Lesson 8.6</strong> is the broadphase that stops you asking.
+    </li>
+    <li>
+      <strong>It does not see motion.</strong> Everything here is a snapshot. A bullet that is in
+      front of a wall this frame and behind it the next never overlaps anything at any moment we
+      looked, which is tunnelling, and no amount of accuracy in a static test fixes it. Continuous
+      detection asks "when did they first touch?", and it is 8.6's other half.
+    </li>
+  </ul>
+
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/math/bounds.hpp</code></td><td>moved</td>
+          <td>The AABB, relocated from <code>gfx/</code>. Geometry belongs under
+              <code>math/</code>, and physics may not depend on rendering.</td></tr>
+      <tr><td><code>engine/include/engine/phys/shape.hpp</code></td><td>new</td>
+          <td>The three primitives, their placement in the world, and the one function that says
+              what a shape weighs.</td></tr>
+      <tr><td><code>engine/src/phys/shape.cpp</code></td><td>new</td>
+          <td>Volumes, bounds, corners, and the support function 8.5 will be written on.</td></tr>
+      <tr><td><code>engine/include/engine/phys/collide.hpp</code></td><td>new</td>
+          <td><code>separation</code>, the projection primitives, and every overlap test.</td></tr>
+      <tr><td><code>engine/src/phys/collide.cpp</code></td><td>new</td>
+          <td>The fifteen candidates, twice: normalised with a depth, and unnormalised without
+              one.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>Two new public headers, and <code>bounds.hpp</code> moved into the maths group.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/frustum.hpp</code></td><td>modified</td>
+          <td>One include line, following the move.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/shadow.hpp</code></td><td>modified</td>
+          <td>One include line, following the move.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/cascade.hpp</code></td><td>modified</td>
+          <td>One include line, following the move.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>Two more sources in the library.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>collide</code> target.</td></tr>
+      <tr><td><code>demos/collide/main.cpp</code></td><td>new</td>
+          <td>Fifteen bars against a zero line, and a key that throws nine of them away.</td></tr>
+      <tr><td><code>scratch/verify_84.cpp</code></td><td>new</td>
+          <td>Nine measured sections, and the certificate checker they are built on.</td></tr>
+      <tr><td><code>scratch/build_verify_84.sh</code></td><td>new</td>
+          <td>Compiles the harness against an optimised library, and refuses otherwise.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/bounds.hpp@@
+  @@LISTING:engine/include/engine/phys/shape.hpp@@
+  @@LISTING:engine/src/phys/shape.cpp@@
+  @@LISTING:engine/include/engine/phys/collide.hpp@@
+  @@LISTING:engine/src/phys/collide.cpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:demos/collide/main.cpp@@
+  @@LISTING:scratch/verify_84.cpp@@
+  @@LISTING:scratch/build_verify_84.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <p>
+    Nothing new in the build: two more sources in the engine library, one more demo target.
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target collide
+./build/demos/collide</code></pre>
+
+  <p>
+    On Windows with MSVC, the binary lands in a configuration subdirectory:
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target collide --config Debug
+.\build\demos\Debug\collide.exe</code></pre>
+
+  <p>
+    The harness wants an optimised library, and <code>build_verify_84.sh</code> refuses rather than
+    quietly producing numbers from a debug build — §12 quotes single-digit nanoseconds per call, and
+    every one of those calls is into <code>libengine.a</code>, where a harness's own
+    <code>-O2</code> cannot reach:
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_84.sh</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    A window with two panels. On the left, a blue box and a second box drifting slowly through it
+    and back out, green while they are apart and red while they overlap, with an amber line from the
+    second box's centre showing the minimum translation. On the right, fifteen horizontal bars
+    against a vertical zero line: grey ones stretching left (this direction found no gap) and, when
+    the boxes are apart, at least one reaching right in amber (this direction proves it). The bars
+    creep rightwards together as the boxes separate, and the box turns green at the instant the
+    first bar crosses the line.
+  </p>
+
+  <p>
+    Press <strong>[2]</strong> for the crossed planks, then <strong>[F]</strong>. The box turns red
+    while the amber bar stays firmly to the right of the line — the geometry has not changed, the
+    candidate list has.
+  </p>
+
+  <p>
+    Press <strong>[3]</strong> for a crate on a floor slab and look for the short stubs sitting
+    <em>on</em> the zero line rather than beside it: those are candidates the degeneracy guard
+    skipped, because the crate and the slab share an up axis (§10).
+  </p>
+
+  <p>
+    The harness prints nine sections. The lines to check first are the certificate counts —
+    <code>every gap re-proves in double: 173329 / 173329</code> in §A,
+    <code>every one of them re-proved in double: 5727 / 5727</code> in §D — because those are the
+    ones that would go wrong first if a sign or an index were off.
+  </p>
+
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Everything collides with everything</span>
+    <p>
+      <strong>Symptom:</strong> objects several metres apart report contacts; the scene behaves as
+      though every body were touching every other.<br>
+      <strong>Cause:</strong> the AABB test written as "overlapping on <em>some</em> axis" rather
+      than "on <em>every</em> axis" — <code>||</code> where <code>&amp;&amp;</code> was meant. It
+      reads naturally and is wrong 74.9% of the time (§7.2).<br>
+      <strong>Fix:</strong> the test is an <em>and</em> over axes and an <em>or</em> is a different
+      predicate entirely. Check against <code>collide(as_obb(a), as_obb(b))</code>, which agrees
+      bit-for-bit with a correct AABB test.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Objects are shoved apart with a visible gap between them</span>
+    <p>
+      <strong>Symptom:</strong> two long objects crossing at an angle jump away from each other
+      although you can see daylight between them.<br>
+      <strong>Cause:</strong> the six face normals only. §7.3 is this exact configuration, and §7.5
+      measures it at 4.6% of everything a face-only test calls a collision.<br>
+      <strong>Fix:</strong> the nine cross products. Print all fifteen gaps for the failing pair —
+      if exactly one is positive and it is an edge-edge candidate, this is your bug.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The contact normal is a zero vector, or a NaN appears later</span>
+    <p>
+      <strong>Symptom:</strong> a sphere sits inside a wall being pushed nowhere; or a NaN shows up
+      in the solver several functions away from anything suspicious.<br>
+      <strong>Cause:</strong> a sphere-versus-box test that stops at the clamp. When the centre is
+      inside the box the clamp returns the centre unchanged, the distance is zero, and the direction
+      is <code>0/0</code>. 8.8% of random placements in §9.2, and every tunnelled projectile.<br>
+      <strong>Fix:</strong> the nearest-face branch. And assert that the normal is unit length at the
+      point where the contact is created, not where it is consumed.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The MTV teleports objects across the level</span>
+    <p>
+      <strong>Symptom:</strong> an object that sinks into geometry is flung out sideways, sometimes
+      through the other side.<br>
+      <strong>Cause:</strong> applying the minimum translation to a deep overlap (§8.2). At half
+      buried, the shallowest escape is most of the object's own width and may be out the face it
+      never entered.<br>
+      <strong>Fix:</strong> do not let overlaps get deep — smaller steps, speculative contacts — and
+      remove residual penetration gradually rather than in one frame. Clamp the correction to a few
+      centimetres per step and let it converge.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Two crates on a floor behave differently from two crates in mid-air</span>
+    <p>
+      <strong>Symptom:</strong> stacking is jittery or objects occasionally fall through a floor,
+      while the same shapes tested in isolation are fine; a unit test suite is entirely green.<br>
+      <strong>Cause:</strong> a degenerate cross-product candidate, in a formulation that does not
+      normalise. Two objects on one floor share an up axis at every yaw, and the shared axis is never
+      <em>exactly</em> shared (§10.1).<br>
+      <strong>Fix:</strong> the epsilon on the absolute matrix if you are using the unnormalised
+      form. And note why the tests were green: on 200,000 random orientations the guard fires zero
+      times, so random test data cannot reach this bug. Test the arrangements your game actually
+      makes.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Contacts get unreliable far from the origin</span>
+    <p>
+      <strong>Symptom:</strong> physics that is solid near the centre of a large world becomes
+      jittery and imprecise at the map edges.<br>
+      <strong>Cause:</strong> §11. The centre difference is a subtraction of world-sized numbers, and
+      at 10 km a <code>float</code>'s neighbours are a millimetre apart.<br>
+      <strong>Fix:</strong> recentre the world, or keep physics in a local frame. No change to the
+      collision code helps — the information is gone before the test is called, which the
+      double-precision control demonstrates.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The depth is wrong but the boolean is right</span>
+    <p>
+      <strong>Symptom:</strong> collisions are detected correctly, but contact normals sometimes
+      point in strange directions and penetration depths are too small.<br>
+      <strong>Cause:</strong> unnormalised cross-product axes. The overlap <em>test</em> is invariant
+      to the axis's length; the <em>depth</em> is not, so an edge-edge depth comes out scaled by
+      <code>sin θ</code> and wins the minimum-depth contest it should have lost (§10.2).<br>
+      <strong>Fix:</strong> normalise the axis before comparing depths, or divide the depth by the
+      axis's length, which is the same thing done later.
+    </p>
+  </div>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <ol>
+    <li>
+      <p>
+        <strong>Check a certificate by hand.</strong> Run the harness and take §D.1's winning axis
+        and the two planks' parameters. Compute <code>|t · L|</code>, <code>r<sub>A</sub>(L)</code>
+        and <code>r<sub>B</sub>(L)</code> yourself — on paper or in Python — and confirm the
+        0.05000 m gap. Then do the same for <em>one of the losing candidates</em> and satisfy
+        yourself that its negative number is not a proof of anything.
+      </p>
+      <p>
+        <em>Hint: the whole point is that the check needs nothing but the box data and the
+        axis. If you find yourself re-implementing the search, you have answered a harder question
+        than the one asked.</em>
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Add a capsule.</strong> A capsule — a segment with a radius — is the shape every
+        character controller in every game is made of, and it is nearly free here: the closest point
+        between a point and a segment is a clamp, exactly like §9's. Add
+        <code>shape_kind::capsule</code>, then <code>collide(capsule, sphere)</code> and
+        <code>collide(capsule, capsule)</code>. <code>inertia_capsule</code> already exists from 8.3.
+      </p>
+      <p>
+        <em>Hint: capsule-versus-capsule is "closest point between two segments", then one
+        sphere test. Do not reach for the SAT — a capsule's surface is curved and the theorem's
+        candidate list is finite only for polytopes.</em>
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Measure the cost of the axis ordering.</strong> §12.2 tests face normals before
+        cross products because 91% of separated pairs exit within three axes. Reverse the order —
+        cross products first — and measure the spread population again. Then try a third ordering:
+        remember the winning axis from the previous call and test it first.
+      </p>
+      <p>
+        <em>Hint: the third one is temporal coherence and it is what 8.6 and 8.7 will do for
+        real. To measure it properly you need pairs that persist across calls, so animate one box
+        slowly rather than generating fresh random pairs.</em>
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Find the deep-overlap failure yourself.</strong> Write a loop that starts two cubes
+        concentric and moves one of them out along a diagonal in small steps, printing the MTV each
+        time. Identify the step at which the axis jumps discontinuously, and explain from §8.2 why
+        the jump is there and why no implementation choice removes it.
+      </p>
+      <p>
+        <em>Hint: the jump happens when two candidates swap which is smaller. Plot all fifteen
+        depths against the offset and it becomes obvious.</em>
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>Engine challenge: speculative margin.</strong> Give <code>collide</code> an optional
+        margin: report contact when <code>depth &gt; −margin</code> rather than
+        <code>depth &gt; 0</code>, and keep the true signed depth in the result. Then re-run §E's
+        measurement with a 5 mm margin and describe what changes — how many pairs now report
+        contact, and what fraction of them have a <em>negative</em> depth. This is the mechanism
+        8.6 uses to stop fast objects tunnelling, and doing it now is a two-line change to a
+        function you understand.
+      </p>
+      <p>
+        <em>Hint: the interesting question is what a solver should do with a contact that has
+        not happened yet. The answer — allow the objects to approach at exactly the speed that
+        closes the gap this step, and no faster — is 8.9's, and the margin is what makes it
+        possible.</em>
+      </p>
+    </li>
+  </ol>
+
+  <h2 id="recap">18. Recap &amp; next</h2>
+
+  <p>
+    The engine now knows how big things are, and can answer the question every physics engine is
+    built around.
+  </p>
+
+  <ul>
+    <li>
+      <strong>A shape is geometry and a body is dynamics</strong>, and they are separate types
+      because collision detection is a query over geometry that has no business knowing what
+      anything weighs. The one arrow between them runs from shape to inertia — a shape knows what it
+      weighs — and it runs one way.
+    </li>
+    <li>
+      <strong>The Separating Axis Theorem</strong>: two convex sets are disjoint if and only if some
+      direction's projections are disjoint. One half is a lamp and a wall; the other half needs
+      convexity, and a ball resting in a cup shows exactly what it buys.
+    </li>
+    <li>
+      <strong>Fifteen candidates</strong> for two boxes: three face normals each, and nine cross
+      products of one edge direction from each. Six is not enough, provably — two crossed planks
+      with 5 cm of daylight between them where all six face axes report overlaps up to 3.13 m — and
+      not rarely: 4.6% of everything a face-only test calls a collision, with edge-edge axes
+      supplying the contact normal on 49.8% of random overlapping pairs.
+    </li>
+    <li>
+      <strong>An answer that is a certificate.</strong> A separating axis can be re-checked in four
+      dot products by anyone, which is why every separated pair in this lesson is verified by
+      re-proving its own axis in double precision rather than by trusting a second implementation.
+    </li>
+    <li>
+      <strong>The minimum translation</strong> is the shallowest escape, points from the first
+      argument toward the second, and stops being the right answer once an object is half buried —
+      1.9 m to correct two cubes that are 10 cm out of alignment.
+    </li>
+    <li>
+      <strong>Three clamps</strong> find the closest point on a box without enumerating 27 regions,
+      because a box is a product of three intervals — and the case where the point is inside is not
+      an edge case, it is 8.8% of random placements and every tunnelled projectile.
+    </li>
+    <li>
+      <strong>The degeneracy folklore is about a formulation</strong>, not about the algorithm. The
+      normalised form cannot be broken by a garbage axis, because no direction separates overlapping
+      bodies; the unnormalised form fails 188 times in 400 without its epsilon — on two crates
+      meeting at a corner, which is a configuration random test data never produces and every scene
+      is full of.
+    </li>
+    <li>
+      <strong>The precision floor is set by where you are</strong>, not by what you are doing: a 1 mm
+      gap is 2.3% wrong at a kilometre and unresolvable at ten, because the centre difference
+      subtracts world-sized numbers.
+    </li>
+  </ul>
+
+  <p>
+    <strong>Next: 8.5 — GJK.</strong> Everything in this lesson answers <em>yes or no</em>, and §13's
+    first limit is that we cannot say <em>how far apart</em>. The next lesson takes §3.2's Minkowski
+    difference and, instead of enumerating its faces, searches it — using nothing but the
+    <code>support</code> function added in §6.3. The result works for any convex shape, gives a real
+    distance rather than a bound, and does it in a handful of iterations. It is also the reason
+    papers can assume you have it: once GJK exists, "convex" stops being a restriction and starts
+    being an interface.
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul>
+    <li>
+      <strong>Christer Ericson, <em>Real-Time Collision Detection</em>, Chapter 4 (§4.4.1) and
+      Chapter 5.</strong> The standard reference, and the source of the unnormalised OBB test in
+      §10.2. Read §4.4.1 alongside this lesson's §10.3: the epsilon he adds to the absolute matrix
+      is the one we measured at 188 failures in 400 without it.
+    </li>
+    <li>
+      <strong>Stefan Gottschalk, Ming Lin and Dinesh Manocha, “OBBTree: A Hierarchical Structure for
+      Rapid Interference Detection” (SIGGRAPH 1996).</strong> Where the fifteen-axis OBB test comes
+      from, with the derivation of why the list is complete.
+    </li>
+    <li>
+      <strong>Dirk Gregorius, “The Separating Axis Test Between Convex Polyhedra” (GDC 2013).</strong>
+      The best available treatment of what happens when boxes are not enough: the same theorem for
+      arbitrary convex hulls, including the Gauss-map pruning that keeps the edge-edge list from
+      exploding.
+    </li>
+    <li>
+      <strong>Stephen Boyd and Lieven Vandenberghe, <em>Convex Optimization</em>, §2.5.</strong> The
+      hyperplane separation theorem done properly, for anyone who found §3.1's sketch unsatisfying.
+      Free from the authors.
+    </li>
+    <li>
+      <strong>Gino van den Bergen, <em>Collision Detection in Interactive 3D Environments</em>.</strong>
+      The other standard reference, and the one to read before Lesson 8.5 — its treatment of the
+      Minkowski difference and support mappings is where GJK stops being mysterious.
+    </li>
+    <li>
+      <strong>David Goldberg, “What Every Computer Scientist Should Know About Floating-Point
+      Arithmetic” (1991).</strong> §11's background. The relevant idea is that absolute precision is
+      a function of magnitude, which is the whole of why a millimetre disappears at ten kilometres.
+    </li>
+  </ul>

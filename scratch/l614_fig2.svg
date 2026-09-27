@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f614b-t f614b-d">
+  <title id="f614b-t">Supersampling error against sample count</title>
+  <desc id="f614b-d">A plot of per-pixel RMS deviation and worst-pixel deviation against supersampling factor for a checkerboard above the Nyquist limit.</desc>
+  <defs>
+    <marker id="e-i-f614b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f614b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f614b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f614b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f614b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">A checker finer than the pixel grid: the error falls, the detail does not return</text>
+<rect x="110" y="58" width="360" height="192" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<line x1="110.0" y1="250" x2="110.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="110.0" y="270" class="xs" text-anchor="middle">1x</text>
+<line x1="230.0" y1="250" x2="230.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="230.0" y="270" class="xs" text-anchor="middle">2x</text>
+<line x1="350.0" y1="250" x2="350.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="350.0" y="270" class="xs" text-anchor="middle">4x</text>
+<line x1="470.0" y1="250" x2="470.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="470.0" y="270" class="xs" text-anchor="middle">8x</text>
+<text x="290.0" y="292" class="xs" text-anchor="middle">linear supersampling factor</text>
+<line x1="105" y1="250.0" x2="110" y2="250.0" class="grid" stroke-width="1.0"/>
+<text x="100" y="254.0" class="xs" text-anchor="end">0.00</text>
+<line x1="105" y1="162.72727272727275" x2="110" y2="162.72727272727275" class="grid" stroke-width="1.0"/>
+<text x="100" y="166.72727272727275" class="xs" text-anchor="end">0.25</text>
+<line x1="105" y1="75.45454545454547" x2="110" y2="75.45454545454547" class="grid" stroke-width="1.0"/>
+<text x="100" y="79.45454545454547" class="xs" text-anchor="end">0.50</text>
+<polyline points="110.0,75.5 230.0,75.5 350.0,206.7 470.0,238.4" fill="none" stroke="#8f918a" stroke-width="2.0" stroke-dasharray="5 3"/>
+<polyline points="110.0,75.5 230.0,190.0 350.0,222.3 470.0,241.9" fill="none" stroke="#f0961e" stroke-width="2.4"/>
+<circle cx="110.0" cy="75.5" r="3.2" fill="#f0961e"/>
+<circle cx="230.0" cy="190.0" r="3.2" fill="#f0961e"/>
+<circle cx="350.0" cy="222.3" r="3.2" fill="#f0961e"/>
+<circle cx="470.0" cy="241.9" r="3.2" fill="#f0961e"/>
+<line x1="496.0" y1="72.0" x2="518.0" y2="72.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="524" y="76" class="xs" text-anchor="start">per-pixel RMS deviation</text>
+<line x1="496.0" y1="102.0" x2="518.0" y2="102.0" stroke="#8f918a" stroke-width="2.0" fill="none"/>
+<text x="524" y="106" class="xs" text-anchor="start">worst pixel</text>
+<rect x="490" y="132" width="180" height="80" rx="4" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="580" y="152" class="xs" text-anchor="middle">THE STATISTIC MATTERS</text>
+<text x="580" y="168" class="xs" text-anchor="middle">the MEAN over the image is</text>
+<text x="580" y="182" class="xs" text-anchor="middle">already right at 1x, because</text>
+<text x="580" y="196" class="xs" text-anchor="middle">opposite errors cancel</text>
+<text x="360.0" y="338" class="xs" text-anchor="middle">A checker of period 0.37 px is far above Nyquist: its true local mean is 0.5 and a point sample returns 0 or 1</text>
+<text x="360.0" y="356" class="xs" text-anchor="middle">depending on where it lands. That is aliasing in one line. Supersampling drives the per-pixel error from 0.5000</text>
+<text x="360.0" y="374" class="xs" text-anchor="middle">to 0.0231 — but NOTHING recovers the checker, because it is not representable on this grid at any sample count.</text>
+<text x="360.0" y="392" class="xs" text-anchor="middle">The image stops LYING about being something else. That is all antialiasing ever does.</text>
+</svg>

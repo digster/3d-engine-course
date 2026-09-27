@@ -1,0 +1,68 @@
+<svg viewBox="0 0 760 440" role="img" aria-labelledby="f72f-t f72f-d">
+  <title id="f72f-t">The two extraction routes</title>
+  <desc id="f72f-d">A log plot of worst axis error against the size of the turn, for two ways of recovering a rotation's axis. The amber curve, which reads the axis off the antisymmetric part, is lowest at small angles and climbs steeply past 150 degrees to seven thousandths of a degree at 179.9. The blue curve, which reads it off the symmetric part, starts high at 30 degrees and then stays flat at about a hundred-thousandth of a degree all the way to a half turn. They cross in a shaded band from about 95 to 142 degrees, and a dashed teal line marks the 120 degree threshold in the middle of it.</desc>
+  <defs>
+    <marker id="e-i-f72f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f72f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f72f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f72f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f72f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="92" y="58" width="480" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="92" y1="279.4285714285714" x2="572" y2="279.4285714285714" class="grid" stroke-width="1.0"/>
+<text x="82" y="283.4285714285714" class="mono xs muted" text-anchor="end">1e-5</text>
+<line x1="92" y1="208.0" x2="572" y2="208.0" class="grid" stroke-width="1.0"/>
+<text x="82" y="212.0" class="mono xs muted" text-anchor="end">1e-4</text>
+<line x1="92" y1="136.57142857142856" x2="572" y2="136.57142857142856" class="grid" stroke-width="1.0"/>
+<text x="82" y="140.57142857142856" class="mono xs muted" text-anchor="end">1e-3</text>
+<line x1="92" y1="65.14285714285714" x2="572" y2="65.14285714285714" class="grid" stroke-width="1.0"/>
+<text x="82" y="69.14285714285714" class="mono xs muted" text-anchor="end">1e-2</text>
+<line x1="121.62962962962963" y1="58" x2="121.62962962962963" y2="308" class="grid" stroke-width="1.0"/>
+<text x="121.62962962962963" y="326" class="xs muted" text-anchor="middle">30°</text>
+<line x1="210.51851851851853" y1="58" x2="210.51851851851853" y2="308" class="grid" stroke-width="1.0"/>
+<text x="210.51851851851853" y="326" class="xs muted" text-anchor="middle">60°</text>
+<line x1="299.4074074074074" y1="58" x2="299.4074074074074" y2="308" class="grid" stroke-width="1.0"/>
+<text x="299.4074074074074" y="326" class="xs muted" text-anchor="middle">90°</text>
+<line x1="388.2962962962963" y1="58" x2="388.2962962962963" y2="308" class="grid" stroke-width="1.0"/>
+<text x="388.2962962962963" y="326" class="xs muted" text-anchor="middle">120°</text>
+<line x1="477.18518518518516" y1="58" x2="477.18518518518516" y2="308" class="grid" stroke-width="1.0"/>
+<text x="477.18518518518516" y="326" class="xs muted" text-anchor="middle">150°</text>
+<line x1="566.0740740740741" y1="58" x2="566.0740740740741" y2="308" class="grid" stroke-width="1.0"/>
+<text x="566.0740740740741" y="326" class="xs muted" text-anchor="middle">180°</text>
+<rect x="314.22222222222223" y="58" width="139.25925925925924" height="250" rx="0" fill="#8f918a" stroke="#8f918a" stroke-width="0.0" fill-opacity="0.1"/>
+<path d="M 121.63,262.09 L 210.52,274.56 L 299.41,277.80 L 358.67,271.99 L 388.30,271.58 L 417.93,265.79 L 477.19,258.84 L 551.26,195.82 L 565.78,76.69" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<path d="M 121.63,202.58 L 210.52,239.62 L 299.41,265.36 L 358.67,272.31 L 388.30,267.04 L 417.93,273.88 L 477.19,272.38 L 551.26,271.53 L 565.78,273.49" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<circle cx="121.6" cy="262.1" r="3.6" fill="#f0961e"/>
+<circle cx="210.5" cy="274.6" r="3.6" fill="#f0961e"/>
+<circle cx="299.4" cy="277.8" r="3.6" fill="#f0961e"/>
+<circle cx="358.7" cy="272.0" r="3.6" fill="#f0961e"/>
+<circle cx="388.3" cy="271.6" r="3.6" fill="#f0961e"/>
+<circle cx="417.9" cy="265.8" r="3.6" fill="#f0961e"/>
+<circle cx="477.2" cy="258.8" r="3.6" fill="#f0961e"/>
+<circle cx="551.3" cy="195.8" r="3.6" fill="#f0961e"/>
+<circle cx="565.8" cy="76.7" r="3.6" fill="#f0961e"/>
+<circle cx="121.6" cy="202.6" r="3.6" fill="#5082e6"/>
+<circle cx="210.5" cy="239.6" r="3.6" fill="#5082e6"/>
+<circle cx="299.4" cy="265.4" r="3.6" fill="#5082e6"/>
+<circle cx="358.7" cy="272.3" r="3.6" fill="#5082e6"/>
+<circle cx="388.3" cy="267.0" r="3.6" fill="#5082e6"/>
+<circle cx="417.9" cy="273.9" r="3.6" fill="#5082e6"/>
+<circle cx="477.2" cy="272.4" r="3.6" fill="#5082e6"/>
+<circle cx="551.3" cy="271.5" r="3.6" fill="#5082e6"/>
+<circle cx="565.8" cy="273.5" r="3.6" fill="#5082e6"/>
+<line x1="388.3" y1="44.0" x2="388.3" y2="308.0" stroke="#60ded0" stroke-width="1.6" fill="none" stroke-dasharray="5 4"/>
+<text x="388.2962962962963" y="38" class="xs" text-anchor="middle">120°</text>
+<text x="332.0" y="346" class="xs muted" text-anchor="middle">θ — the size of the turn being extracted</text>
+<rect x="586" y="62" width="158" height="132" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<line x1="594.0" y1="80.0" x2="614.0" y2="80.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="620" y="84" class="xs" text-anchor="start">R − Rᵀ</text>
+<line x1="594.0" y1="102.0" x2="614.0" y2="102.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="620" y="106" class="xs" text-anchor="start">R + Rᵀ</text>
+<text x="594" y="132" class="xs muted" text-anchor="start">worst axis error</text>
+<text x="594" y="148" class="xs muted" text-anchor="start">over 4,000 axes,</text>
+<text x="594" y="164" class="xs muted" text-anchor="start">matrices carrying</text>
+<text x="594" y="180" class="mono xs muted" text-anchor="start">1e-7 absolute</text>
+<text x="380.0" y="370" class="xs muted" text-anchor="middle">shaded: the band where the two are within 25% of each other and the winner flips from probe to probe</text>
+<text x="380.0" y="393" class="xs muted" text-anchor="middle">outside it the choice is decisive — R − Rᵀ is 6.8× better at 30°, R + Rᵀ is 569× better at 179.9°</text>
+<text x="380.0" y="420" class="xs muted" text-anchor="middle">the threshold is derived from tan(θ/2) = √3 and lands in the middle of the band, which is the best place for one to be</text>
+</svg>

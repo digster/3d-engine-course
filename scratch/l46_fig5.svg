@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="f46e-t f46e-d">
+  <title id="f46e-t">Register spaces, and which tool notices a wrong one</title>
+  <desc id="f46e-d">SDL fixes the register space per stage: vertex textures in space0 and vertex uniform buffers in space1; fragment textures in space2 and fragment uniform buffers in space3. Putting a cbuffer in the wrong space compiles to SPIR-V without complaint and produces a byte-identical JSON reflection, so the cross-check that saved Lesson 4.5 cannot see it. The disassembler shows it, and the translation to MSL refuses it outright.</desc>
+  <defs>
+    <marker id="e-i-f46e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f46e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f46e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the register space is fixed by SDL, per stage &#8212; and it is <tspan class="t-hi">not a choice</tspan></text>
+  <text x="24" y="78" class="sm">vertex</text>
+  <rect x="120" y="54" width="286" height="40" fill="#5082e6" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="132" y="72" class="xs mono t-hi">space0</text>
+  <text x="132" y="87" class="xs muted">textures, samplers, storage buffers</text>
+  <rect x="420" y="54" width="286" height="40" fill="#f0961e" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="432" y="72" class="xs mono t-hi">space1</text>
+  <text x="432" y="87" class="xs muted">uniform buffers</text>
+  <text x="24" y="140" class="sm">fragment</text>
+  <rect x="120" y="116" width="286" height="40" fill="#5082e6" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="132" y="134" class="xs mono t-hi">space2</text>
+  <text x="132" y="149" class="xs muted">textures, samplers, storage buffers</text>
+  <rect x="420" y="116" width="286" height="40" fill="#f0961e" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="432" y="134" class="xs mono t-hi">space3</text>
+  <text x="432" y="149" class="xs muted">uniform buffers</text>
+  <text x="120" y="192" class="xs muted">our mesh.vert declares b0 in space1; mesh.frag declares b0 in space3. verify_46 &#167;D reads both back out of the compiled SPIR-V.</text>
+  <rect x="24" y="212" width="672" height="132" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="232" class="sm">put the cbuffer in the wrong space and ask each tool in turn</text>
+  <text x="40" y="258" class="xs mono">glslc: HLSL &#8594; SPIR-V</text>
+  <text x="300" y="258" class="xs t-bad">accepted</text>
+  <text x="40" y="278" class="xs mono">the JSON reflection</text>
+  <text x="300" y="278" class="xs t-bad">BYTE-IDENTICAL to the correct shader</text>
+  <text x="40" y="298" class="xs mono">spirv-dis: DescriptorSet</text>
+  <text x="300" y="298" class="xs t-ok">0 instead of 3 &#8212; visible</text>
+  <text x="40" y="318" class="xs mono">shadercross: SPIR-V &#8594; MSL</text>
+  <text x="300" y="318" class="xs t-ok">REFUSED, with an exact message</text>
+  <text x="40" y="336" class="xs t-hi">so the BUILD catches it on the way to Metal and D3D &#8212; and the reflection, which saved Lesson 4.5, never can</text>
+</svg>

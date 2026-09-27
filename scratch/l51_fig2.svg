@@ -1,0 +1,98 @@
+<svg viewBox="0 0 720 478" role="img" aria-labelledby="l51f2-t l51f2-d">
+  <title id="l51f2-t">Fifteen parameters, five kinds</title>
+  <desc id="l51f2-d">The old parameter list colour-coded by kind, showing seven policy parameters and three camera values, and the eight-parameter signature that replaced it.</desc>
+  <defs>
+    <marker id="e-i-l51f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l51f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l51f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="20" y="20" class="sm"><tspan class="mono">collect_triangles</tspan> before publication: 15 parameters, at 8 call sites</text>
+<rect x="20" y="40" width="8" height="14" fill="#f0961e"/>
+<text x="34" y="51" class="xs mono">std::vector&lt;raster_triangle&gt;&amp; out</text>
+<text x="336" y="51" class="xs muted" text-anchor="end">out</text>
+<rect x="20" y="59" width="8" height="14" fill="#f0961e"/>
+<text x="34" y="70" class="xs mono">projection_scratch&amp; scratch</text>
+<text x="336" y="70" class="xs muted" text-anchor="end">out</text>
+<rect x="20" y="78" width="8" height="14" fill="#5082e6"/>
+<text x="34" y="89" class="xs mono">const scene_object* objects</text>
+<text x="336" y="89" class="xs muted" text-anchor="end">in</text>
+<rect x="20" y="97" width="8" height="14" fill="#5082e6"/>
+<text x="34" y="108" class="xs mono">int count</text>
+<text x="336" y="108" class="xs muted" text-anchor="end">in</text>
+<rect x="20" y="116" width="8" height="14" fill="#5acdd7"/>
+<text x="34" y="127" class="xs mono">const mat4&amp; view_from_world</text>
+<text x="336" y="127" class="xs muted" text-anchor="end">camera</text>
+<rect x="20" y="135" width="8" height="14" fill="#5acdd7"/>
+<text x="34" y="146" class="xs mono">const projector&amp; pr</text>
+<text x="336" y="146" class="xs muted" text-anchor="end">camera</text>
+<rect x="20" y="154" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="165" class="xs mono">trs_order order</text>
+<text x="336" y="165" class="xs muted" text-anchor="end">policy</text>
+<rect x="20" y="173" width="8" height="14" fill="#5ac878"/>
+<text x="34" y="184" class="xs mono">clip_stats&amp; stats</text>
+<text x="336" y="184" class="xs muted" text-anchor="end">stats</text>
+<rect x="20" y="192" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="203" class="xs mono">cull_choice cull</text>
+<text x="336" y="203" class="xs muted" text-anchor="end">policy</text>
+<rect x="20" y="211" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="222" class="xs mono">normal_source nsrc</text>
+<text x="336" y="222" class="xs muted" text-anchor="end">policy</text>
+<rect x="20" y="230" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="241" class="xs mono">shade_eval eval</text>
+<text x="336" y="241" class="xs muted" text-anchor="end">policy</text>
+<rect x="20" y="249" width="8" height="14" fill="#5082e6"/>
+<text x="34" y="260" class="xs mono">const lighting&amp; lights</text>
+<text x="336" y="260" class="xs muted" text-anchor="end">in</text>
+<rect x="20" y="268" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="279" class="xs mono">bool correct_normals</text>
+<text x="336" y="279" class="xs muted" text-anchor="end">policy</text>
+<rect x="20" y="287" width="8" height="14" fill="#5ac878"/>
+<text x="34" y="298" class="xs mono">normal_stats* normals_out</text>
+<text x="336" y="298" class="xs muted" text-anchor="end">stats</text>
+<rect x="20" y="306" width="8" height="14" fill="#5acdd7"/>
+<text x="34" y="317" class="xs mono">vec3 eye_world</text>
+<text x="336" y="317" class="xs muted" text-anchor="end">camera</text>
+<rect x="20" y="325" width="8" height="14" fill="#a97ae0"/>
+<text x="34" y="336" class="xs mono">specular_model spec_model</text>
+<text x="336" y="336" class="xs muted" text-anchor="end">policy</text>
+<text x="20" y="358" class="xs muted">Sixteen rows for fifteen parameters, because <tspan class="mono">objects</tspan> and <tspan class="mono">count</tspan></text>
+<text x="20" y="372" class="xs muted">are one idea spelled as two, which is its own kind of mistake.</text>
+<line x1="360" y1="30" x2="360" y2="432" class="grid" stroke-width="1"/>
+<rect x="380" y="34" width="8" height="11" fill="#f0961e"/>
+<text x="394" y="44" class="xs">out &#8212; <tspan class="muted">where the answer goes</tspan></text>
+<rect x="380" y="54" width="8" height="11" fill="#5082e6"/>
+<text x="394" y="64" class="xs">in &#8212; <tspan class="muted">what to draw</tspan></text>
+<rect x="380" y="74" width="8" height="11" fill="#5acdd7"/>
+<text x="394" y="84" class="xs">camera &#8212; <tspan class="muted">where from</tspan></text>
+<rect x="380" y="94" width="8" height="11" fill="#a97ae0"/>
+<text x="394" y="104" class="xs">policy &#8212; <tspan class="muted">how</tspan></text>
+<rect x="380" y="114" width="8" height="11" fill="#5ac878"/>
+<text x="394" y="124" class="xs">stats &#8212; <tspan class="muted">and tell me about it</tspan></text>
+<text x="380" y="164" class="xs t-hi">Seven rows are one kind: policy.</text>
+<text x="380" y="180" class="xs muted">Three more are the camera, spelled as two values a</text>
+<text x="380" y="194" class="xs muted">caller must remember to derive together.</text>
+<text x="380" y="216" class="xs">A parameter list is a design nobody was</text>
+<text x="380" y="230" class="xs">ever asked to defend.</text>
+<text x="380" y="262" class="sm">After: 8 parameters</text>
+<rect x="380" y="274" width="8" height="14" fill="#f0961e"/>
+<text x="394" y="285" class="xs mono">std::vector&lt;raster_triangle&gt;&amp; out</text>
+<rect x="380" y="293" width="8" height="14" fill="#f0961e"/>
+<text x="394" y="304" class="xs mono">projection_scratch&amp; scratch</text>
+<rect x="380" y="312" width="8" height="14" fill="#5082e6"/>
+<text x="394" y="323" class="xs mono">std::span&lt;const scene_object&gt;</text>
+<rect x="380" y="331" width="8" height="14" fill="#5acdd7"/>
+<text x="394" y="342" class="xs mono">const camera_view&amp; camera</text>
+<rect x="380" y="350" width="8" height="14" fill="#5acdd7"/>
+<text x="394" y="361" class="xs mono">const projector&amp; pr</text>
+<rect x="380" y="369" width="8" height="14" fill="#5082e6"/>
+<text x="394" y="380" class="xs mono">const lighting&amp; lights</text>
+<rect x="380" y="388" width="8" height="14" fill="#a97ae0"/>
+<text x="394" y="399" class="xs mono">const render_options&amp; opts</text>
+<rect x="380" y="407" width="8" height="14" fill="#5ac878"/>
+<text x="394" y="418" class="xs mono">collect_stats* stats = nullptr</text>
+<text x="20" y="454" class="xs t-ok">7 throwaway variables deleted along the way: <tspan class="mono">clip_stats ignored;</tspan> existed only because the out-parameter was not optional.</text>
+<text x="20" y="470" class="xs muted">Nothing was removed from the pipeline. The seven policy rows became one struct whose every default is the correct answer.</text>
+</svg>

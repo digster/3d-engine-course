@@ -1,0 +1,295 @@
+  <h2 id="twentyfour">3. A convention is not a detail: there are twenty-four</h2>
+
+  <h3>3.1 Counting them</h3>
+
+  <p>
+    A Euler convention is two choices, and the count falls out of them.
+  </p>
+
+  <p>
+    <strong>The axis sequence.</strong> You need three turns, and each consecutive pair must be
+    about <em>different</em> axes — turning about x and then about x again is just one turn about x,
+    so it buys no degree of freedom. That leaves 3 choices for the first axis, 2 for the second
+    (anything but the first), and 2 for the third (anything but the second). Three times two times
+    two is <strong>twelve</strong>. Six of them use all three axes — <code>xyz</code>,
+    <code>xzy</code>, <code>yxz</code>, <code>yzx</code>, <code>zxy</code>, <code>zyx</code> — and
+    are called <em>Tait–Bryan</em> angles, which is the family yaw-pitch-roll belongs to. The other
+    six repeat the first axis as the third — <code>xyx</code>, <code>xzx</code>, <code>yxy</code>,
+    <code>yzy</code>, <code>zxz</code>, <code>zyz</code> — and are the <em>proper Euler</em> angles,
+    which is what the classical mechanics literature usually means by the term. They are not
+    exotic; <code>zxz</code> is what orbital elements use.
+  </p>
+
+  <p>
+    <strong>The frame.</strong> Each turn is either about an axis the previous turns moved
+    (<em>intrinsic</em>) or about a fixed world axis (<em>extrinsic</em>). That is a second binary
+    choice, and twelve times two is <strong>twenty-four</strong>.
+  </p>
+
+  <p>
+    This is not our arithmetic; it is the standard enumeration, and Ken Shoemake's <em>Euler Angle
+    Conversion</em> in <em>Graphics Gems IV</em> encodes exactly these twenty-four in four bits.
+    Figure 3 measures what each one does to the same three numbers.
+  </p>
+
+  @@FIG_ORDERS@@
+
+  <p>
+    One of the twenty-four bars is zero, and it is ours. The worst is
+    <code>yzy</code> intrinsic at <strong>83.48°</strong>. The most dangerous, though, is not the
+    worst — it is <code>yzx</code> extrinsic at 16.03°, because 16° looks like a tuning problem. You
+    will spend an afternoon adjusting a value that is not wrong.
+  </p>
+
+  <h3>3.2 The identity that makes it twenty-four and not forty-eight</h3>
+
+  <p>
+    You might reasonably object that "intrinsic" and "extrinsic" ought to be genuinely different
+    machinery, and that the twelve sequences ought therefore to appear twice over as twenty-four
+    <em>distinct products</em>. They do not, and the reason is a small identity worth having.
+  </p>
+
+  <p>
+    Take an intrinsic sequence A-B-C with angles (α, β, γ). §2.1's picture says the composite is
+    <code>R<sub>A</sub>(α) R<sub>B</sub>(β) R<sub>C</sub>(γ)</code>. Now take the
+    <em>extrinsic</em> sequence C-B-A with the angles in the reversed order (γ, β, α): turn about
+    fixed C by γ, then about fixed B by β, then about fixed A by α. Extrinsic turns compose by
+    multiplying each new one on the <em>left</em>, because each acts in the world frame that is
+    already there — so the composite is <code>R<sub>A</sub>(α) R<sub>B</sub>(β) R<sub>C</sub>(γ)</code>.
+    The same product.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{intrinsic } A\text{-}B\text{-}C(\alpha,\beta,\gamma) \;=\; \text{extrinsic } C\text{-}B\text{-}A(\gamma,\beta,\alpha) \]</span>
+    <span class="eq-plain">intrinsic ABC(a, b, c) is the same rotation as extrinsic CBA(c, b, a)</span>
+  </div>
+
+  <p>
+    Ours is intrinsic <code>y-x-z</code>, so it is also extrinsic <code>z-x-y</code> read
+    <em>(roll, pitch, yaw)</em>. <code>verify_71</code> §B checks that, and gets a worst element
+    difference of exactly <code>0.000e+00</code> — not "small", zero, because it is literally the
+    same sequence of floating-point operations.
+  </p>
+
+  <p>
+    So the twenty-four are twenty-four distinct <em>interpretations of a triple</em>, not
+    twenty-four distinct families of matrix. Both statements are true and they answer different
+    questions. If you are asking "how many products are there", twelve. If you are asking "how many
+    ways can somebody hand me three numbers and be right", twenty-four, and that is the question
+    that costs you an afternoon.
+  </p>
+
+  <h3>3.3 Our convention, stated once</h3>
+
+  <div class="callout ok">
+    <span class="label">Fixed here and on the Conventions page (§8b)</span>
+    <p>
+      <strong>Intrinsic Y-X-Z, active, right-handed, radians.</strong>
+      <code>rotation_from_euler({yaw, pitch, roll})</code> is
+      <code>rotation_y(yaw) * rotation_x(pitch) * rotation_z(roll)</code>. Yaw turns about world
+      +Y; pitch about the +X the yaw carried; roll about the +Z both carried. Positive angles follow
+      the right-hand rule about their axis, which is the same rule
+      <a href="../conventions.html#rotational">Conventions §9b</a> already fixed for torque and
+      angular velocity.
+    </p>
+  </div>
+
+  <p>
+    "Active" is the fourth bit, and it is the one nobody mentions. A rotation matrix can mean "turn
+    the object" (active) or "turn the coordinate frame and leave the object alone" (passive), and
+    the two are inverses of each other. This course settled it in Module 2 without using the word:
+    <a href="../conventions.html#matrices">Conventions §6</a> says a matrix acts on column vectors
+    and <code>parent_from_local</code> carries an object's vertices into its parent's space, which
+    is the active reading. Nothing new is being decided here. It is being written down.
+  </p>
+
+  <p>
+    Two sanity checks you can do by hand, which <code>verify_71</code> §A does by machine. Our
+    forward is <strong>−Z</strong> and our right is <strong>+X</strong>. A positive yaw is
+    counter-clockwise seen from above (right-hand rule about +Y), so the nose should swing from −Z
+    toward −X — to the <em>left</em>:
+  </p>
+
+  <p class="mono">
+    yaw +90 sends forward (0,0,-1) to (-1.000, +0.000, +0.000)&nbsp;&nbsp;← left, as promised<br>
+    pitch +90 sends forward (0,0,-1) to (+0.000, +1.000, +0.000)&nbsp;&nbsp;← nose up, as promised
+  </p>
+
+  <div class="callout note">
+    <span class="label">What glTF did about all this</span>
+    <p>
+      Our importer (Lesson 6.6) reads node rotations from glTF files and has never had to worry
+      about any of the above, for one reason: <strong>glTF 2.0 stores node rotations as unit
+      quaternions</strong>, four numbers with no convention attached beyond the component order.
+      The format's designers looked at the twenty-four-way ambiguity and declined to participate. It
+      is the single strongest argument for Lesson 7.4 that exists, and it is worth noticing that the
+      argument is not about elegance or about speed — it is that a quaternion in a file means the
+      same thing to every reader, and three angles in a file do not.
+    </p>
+  </div>
+
+  <h2 id="matrix">4. The matrix, derived</h2>
+
+  <h3>4.1 The three elementary rotations</h3>
+
+  <p>
+    Lesson 2.6 built these and the reasoning is worth one sentence of recall: each is Lesson 2.5's
+    two-dimensional rotation acting in the plane of the <em>other</em> two axes, with the axis's own
+    column left alone. In written notation — rows across, which is not how <code>mat3</code> stores
+    them (<a href="02-06-mat4.html">2.6 §3.3</a>):
+  </p>
+
+  <p class="mono">
+    &nbsp;&nbsp;&nbsp;&nbsp;| 1&nbsp;&nbsp; 0&nbsp;&nbsp; 0 |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| c&nbsp;&nbsp; 0&nbsp;&nbsp; s |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| c&nbsp; −s&nbsp;&nbsp; 0 |<br>
+    Rx = | 0&nbsp;&nbsp; c&nbsp; −s |&nbsp;&nbsp;Ry = | 0&nbsp;&nbsp; 1&nbsp;&nbsp; 0 |&nbsp;&nbsp;Rz = | s&nbsp;&nbsp; c&nbsp;&nbsp; 0 |<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;| 0&nbsp;&nbsp; s&nbsp;&nbsp; c |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| −s&nbsp; 0&nbsp;&nbsp; c |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| 0&nbsp;&nbsp; 0&nbsp;&nbsp; 1 |
+  </p>
+
+  <p>
+    <code>Ry</code> is the one where the minus sign lands in the row you do not expect, and 2.6's
+    comment explains why rather than asking you to memorise it: going round the axes in the cyclic
+    order x → y → z → x, the plane y's rotation acts in is the <em>z-x</em> plane <em>in that
+    order</em>, so the "first" axis is z and the "second" is x.
+  </p>
+
+  <h3>4.2 Multiplying them out</h3>
+
+  <p>
+    Write <code>cy</code>, <code>sy</code> for cos and sin of the yaw and likewise <code>cp</code>,
+    <code>sp</code>, <code>cr</code>, <code>sr</code>. Do the inner product first, because it is the
+    one with structure worth seeing:
+  </p>
+
+  <p class="mono">
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| cr&nbsp;&nbsp;&nbsp;&nbsp; −sr&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0&nbsp;&nbsp; |<br>
+    Rx·Rz = | cp·sr&nbsp;&nbsp; cp·cr&nbsp;&nbsp; −sp |<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| sp·sr&nbsp;&nbsp; sp·cr&nbsp;&nbsp;&nbsp; cp&nbsp;&nbsp; |
+  </p>
+
+  <p>
+    Already something useful has appeared. Look at the middle row. Every entry of it carries a
+    factor of <code>cp</code> except the last, which is <code>−sp</code> on its own. Now multiply on
+    the left by <code>Ry</code>, whose middle row is <code>(0, 1, 0)</code> — so the middle row of
+    the product is the middle row of what we just computed, <em>unchanged</em>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R \;=\; \begin{bmatrix} c_yc_r + s_ys_ps_r & s_ys_pc_r - c_ys_r & s_yc_p \\ c_ps_r & c_pc_r & -s_p \\ c_ys_ps_r - s_yc_r & s_ys_r + c_ys_pc_r & c_yc_p \end{bmatrix} \]</span>
+    <span class="eq-plain">Row 0: cy*cr + sy*sp*sr,   sy*sp*cr - cy*sr,   sy*cp
+Row 1: cp*sr,             cp*cr,              -sp
+Row 2: cy*sp*sr - sy*cr,  sy*sr + cy*sp*cr,   cy*cp</span>
+  </div>
+
+  <p>
+    Nine entries, and eight of them mix at least two of the three angles. <strong>Entry (1, 2) —
+    middle row, right-hand column — is <code>−sin(pitch)</code> and nothing else.</strong> That is
+    the single most useful fact on this page. It is why §6's extraction starts by taking an arcsine
+    of that one number and not of some other one, and it is <em>not</em> a coincidence: the middle
+    axis of any Euler sequence is the one whose rotation is not conjugated by anything, so it always
+    leaves exactly one clean entry behind. Change the axis order and the clean entry moves; it does
+    not disappear.
+  </p>
+
+  <h3>4.3 The intrinsic reading, proved rather than asserted</h3>
+
+  <p>
+    §2.1 claimed that "turn about world Y, then about the X that turn moved, then about the Z both
+    moved" gives the same matrix as the plain left-to-right product. Here is why, in the one piece
+    of machinery that makes it obvious.
+  </p>
+
+  <p>
+    Suppose you have a frame <code>F</code> — a rotation carrying world axes onto the object's — and
+    you want to rotate by angle θ about <em>the object's</em> x axis, which in world coordinates is
+    the vector <code>F·x̂</code>. The trick is to do the turn where it is easy. Step into the
+    object's frame with <code>Fᵀ</code>, where its x axis <em>is</em> world x; do the elementary
+    turn <code>R<sub>x</sub>(θ)</code> there; step back out with <code>F</code>. That composite is
+    <code>F R<sub>x</sub>(θ) Fᵀ</code> — a <strong>conjugation</strong>, and it is the standard way
+    to say "the same operation, seen from somewhere else".
+  </p>
+
+  <p>
+    Now apply it to a frame that is already <code>F</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \big(F R_x(\theta) F^{\mathsf T}\big)\, F \;=\; F R_x(\theta)\, \big(F^{\mathsf T} F\big) \;=\; F R_x(\theta) \]</span>
+    <span class="eq-plain">(F * Rx * F^T) * F  =  F * Rx * (F^T * F)  =  F * Rx</span>
+  </div>
+
+  <p>
+    The step-back-out and the step-into cancel, and what is left is <strong>right-multiplication by
+    the elementary rotation</strong>. That is the whole content of "intrinsic multiplies on the
+    right", and it is why the product reads in knob order left to right. <code>verify_71</code> §A.4
+    builds the sequence the long way, one conjugation at a time, and compares:
+    worst element difference <code>2.384e-07</code>, which is float noise from doing five extra
+    matrix products.
+  </p>
+
+  <h3>4.4 A worked example, pushed through by hand</h3>
+
+  <p>
+    Take yaw&nbsp;=&nbsp;30°, pitch&nbsp;=&nbsp;40°, roll&nbsp;=&nbsp;50°. The six trig values:
+  </p>
+
+  <p class="mono">
+    cy = cos 30° = 0.866025&nbsp;&nbsp;&nbsp;&nbsp;sy = sin 30° = 0.500000<br>
+    cp = cos 40° = 0.766044&nbsp;&nbsp;&nbsp;&nbsp;sp = sin 40° = 0.642788<br>
+    cr = cos 50° = 0.642788&nbsp;&nbsp;&nbsp;&nbsp;sr = sin 50° = 0.766044
+  </p>
+
+  <p>
+    Entry (0,0) is <code>cy·cr + sy·sp·sr</code>:
+  </p>
+
+  <p class="mono">
+    0.866025 × 0.642788 = 0.556670<br>
+    0.500000 × 0.642788 × 0.766044 = 0.246202<br>
+    sum&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 0.802872
+  </p>
+
+  <p>
+    Entry (0,2) is <code>sy·cp</code> = 0.500000 × 0.766044 = <strong>0.383022</strong>, and entry
+    (1,2) is <code>−sp</code> = <strong>−0.642788</strong> — the clean one. Doing the remaining six
+    the same way gives the whole matrix, and here it is as the binary prints it, because
+    <a href="../../CLAUDE.md">§10 of this course's own rules</a> makes wrong arithmetic in a worked
+    example a correctness bug and the cheapest way to keep that promise is to never transcribe a
+    number by hand:
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_71 §A.6</strong> — yaw 30°, pitch 40°, roll 50°, written row by row:</p>
+<pre><code>      [ +0.802872  -0.456826  +0.383022 ]
+      [ +0.586824  +0.492404  -0.642788 ]
+      [ +0.105040  +0.740843  +0.663414 ]</code></pre>
+    <p>
+      Two checks you can do on it in your head. Every row and every column should have length 1:
+      row 1 is 0.586824² + 0.492404² + 0.642788² = 0.344363 + 0.242462 + 0.413176 = 1.000001.
+      And entry (1,2) should be −sin 40°, which it is, exactly. If you ever build one of these and
+      the middle-right entry is not the negative sine of your middle angle, you have transcribed the
+      wrong axis order.
+    </p>
+  </div>
+
+  <p>
+    <code>verify_71</code> §A.3 does this comparison 9,261 times — a 21×21×21 sweep across the full
+    range — against the closed form transcribed independently into the harness. Worst element
+    difference: <code>5.960e-08</code>, which is one <code>float</code> ulp at this magnitude. The
+    derivation above and the code below compute the same matrix.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — why the code does <em>not</em> contain that matrix</span>
+    <p>
+      The obvious optimisation is to write those nine entries out directly: twelve multiplies and
+      three sin/cos calls, against the fifty-four multiplies two <code>mat3</code> products cost.
+      <code>rotation_from_euler</code> does not do it, and the reason is not that the saving is
+      small. It is that <strong>the product form <em>is</em> the convention</strong>. A reader who
+      wants to know what order this engine applies its angles in can read
+      <code>rotation_y(yaw) * rotation_x(pitch) * rotation_z(roll)</code> and know. Nobody can read
+      it off nine transcribed sines — they would have to reverse-engineer it, which is exactly the
+      afternoon §3 was about. If a profile ever says the fifty-four multiplies matter, the closed
+      form is above and the test that proves the two agree is already written, so the swap is
+      fifteen minutes with a safety net. Optimise <em>then</em>, not now.
+    </p>
+  </div>

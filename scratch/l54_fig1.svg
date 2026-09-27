@@ -1,0 +1,43 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="l54f1-t l54f1-d">
+  <title id="l54f1-t">A pointer versus a handle, asked whether it is still valid</title>
+  <desc id="l54f1-d">Left: a pointer's bit pattern is identical before and after the memory it names is freed, so the program cannot tell. Right: a handle carries a generation which no longer matches the slot's, so the lookup returns nullptr.</desc>
+  <defs>
+    <marker id="e-i-l54f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l54f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l54f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l54f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l54f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One question, asked of the two things a program can hold.</text>
+<text x="24" y="48" class="xs t-hi" text-anchor="start">A POINTER  (mesh, std::span, T*)</text>
+<rect x="24" y="58" width="310" height="30" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="179" y="77" class="sm mono" text-anchor="middle">0x7ffd_9c40_0018</text>
+<text x="24" y="108" class="xs muted" text-anchor="start">before the free</text>
+<rect x="24" y="116" width="310" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="179" y="133" class="xs" text-anchor="middle">vertices — 8 positions, 36 indices</text>
+<text x="24" y="168" class="xs muted" text-anchor="start">after the free</text>
+<rect x="24" y="176" width="310" height="26" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="179" y="193" class="xs" text-anchor="middle">whatever moved in. Or nothing. Or the same bytes.</text>
+<line x1="24" y1="216" x2="334" y2="216" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="24" y="236" class="sm mono t-bad" text-anchor="start">is this still valid?</text>
+<text x="24" y="254" class="xs t-bad" text-anchor="start">THE POINTER HOLDS THE SAME BITS EITHER WAY.</text>
+<text x="24" y="270" class="xs muted" text-anchor="start">There is no test, no assertion, no flag. From the</text>
+<text x="24" y="284" class="xs muted" text-anchor="start">pointer's side, nothing happened.</text>
+<text x="386" y="48" class="xs t-hi" text-anchor="start">A HANDLE  (index + generation)</text>
+<rect x="386" y="58" width="310" height="30" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<line x1="560" y1="58" x2="560" y2="88" class="grid" stroke-width="1.2"/>
+<text x="473" y="77" class="sm mono" text-anchor="middle">generation 3</text>
+<text x="628" y="77" class="sm mono" text-anchor="middle">index 17</text>
+<text x="386" y="108" class="xs muted" text-anchor="start">slot 17 holds</text>
+<rect x="386" y="116" width="310" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="541" y="133" class="xs" text-anchor="middle">generation 3  →  the mesh you were given</text>
+<text x="386" y="168" class="xs muted" text-anchor="start">after a free and a refill</text>
+<rect x="386" y="176" width="310" height="26" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="541" y="193" class="xs" text-anchor="middle">generation 4  →  somebody else's mesh</text>
+<line x1="386" y1="216" x2="696" y2="216" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="386" y="236" class="sm mono t-ok" text-anchor="start">3 != 4  →  nullptr</text>
+<text x="386" y="254" class="xs t-ok" text-anchor="start">THE HANDLE CARRIES ITS OWN ANSWER.</text>
+<text x="386" y="270" class="xs muted" text-anchor="start">Two loads, two compares, no dereference — and the</text>
+<text x="386" y="284" class="xs muted" text-anchor="start">failure happens at the lookup, not three frames later.</text>
+<line x1="360" y1="40" x2="360" y2="296" class="grid" stroke-width="1.0"/>
+</svg>

@@ -1,0 +1,82 @@
+<svg viewBox="0 0 640 340" role="img" aria-labelledby="f3103-t f3103-d">
+  <title id="f3103-t">Two phases, two different axes</title>
+  <desc id="f3103-d">Two log-log charts. On the left, against pixel count, the fill phase rises as a straight line of slope one from 168 to 4591 microseconds while the collect phase stays flat near 62 microseconds. On the right, against triangle count at constant screen coverage, the collect phase rises steeply from 1.15 to 968 microseconds and crosses the fill phase, which climbs only from 338 to 1070. The crossing happens near one pixel per triangle.</desc>
+  <defs>
+    <marker id="e-i-f3103" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f3103" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f3103" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f3103" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+  </defs>
+  <text x="56.0" y="32.0" class="sm">Same geometry, more pixels</text>
+  <rect x="56.0" y="44.0" width="224.0" height="176.0" class="fill-soft grid" stroke-width="1"/>
+  <line x1="56.0" y1="200.1" x2="280.0" y2="200.1" class="grid" stroke-width="0.8"/>
+  <text x="51.0" y="203.1" class="xs mono muted" text-anchor="end">100</text>
+  <line x1="56.0" y1="106.2" x2="280.0" y2="106.2" class="grid" stroke-width="0.8"/>
+  <text x="51.0" y="109.2" class="xs mono muted" text-anchor="end">1000</text>
+  <text x="22.0" y="132.0" class="xs muted" transform="rotate(-90 22.0 132.0)" text-anchor="middle">microseconds</text>
+  <line x1="56.0" y1="220.0" x2="56.0" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="56.0" y="236.0" class="xs mono muted" text-anchor="middle">57k</text>
+  <line x1="142.7" y1="220.0" x2="142.7" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="142.7" y="236.0" class="xs mono muted" text-anchor="middle">230k</text>
+  <line x1="229.3" y1="220.0" x2="229.3" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="229.3" y="236.0" class="xs mono muted" text-anchor="middle">922k</text>
+  <line x1="280.0" y1="220.0" x2="280.0" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="280.0" y="236.0" class="xs mono muted" text-anchor="middle">2.1M</text>
+  <text x="168.0" y="252.0" class="xs muted" text-anchor="middle">pixels on screen</text>
+  <polyline points="56.0,219.8 142.7,220.0 193.3,218.3 229.3,218.6 280.0,218.5" fill="none" stroke="#ebc864" stroke-width="2.2"/>
+  <circle cx="56.0" cy="219.8" r="2.6" fill="#ebc864"/>
+  <circle cx="142.7" cy="220.0" r="2.6" fill="#ebc864"/>
+  <circle cx="193.3" cy="218.3" r="2.6" fill="#ebc864"/>
+  <circle cx="229.3" cy="218.6" r="2.6" fill="#ebc864"/>
+  <circle cx="280.0" cy="218.5" r="2.6" fill="#ebc864"/>
+  <text x="276.0" y="210.5" class="xs mono z-collect" text-anchor="end">collect</text>
+  <polyline points="56.0,179.1 142.7,129.9 193.3,98.8 229.3,76.8 280.0,44.0" fill="none" stroke="#eb786e" stroke-width="2.2"/>
+  <circle cx="56.0" cy="179.1" r="2.6" fill="#eb786e"/>
+  <circle cx="142.7" cy="129.9" r="2.6" fill="#eb786e"/>
+  <circle cx="193.3" cy="98.8" r="2.6" fill="#eb786e"/>
+  <circle cx="229.3" cy="76.8" r="2.6" fill="#eb786e"/>
+  <circle cx="280.0" cy="44.0" r="2.6" fill="#eb786e"/>
+  <text x="276.0" y="36.0" class="xs mono z-fill" text-anchor="end">fill</text>
+  <text x="388.0" y="32.0" class="sm">Same pixels, more triangles</text>
+  <rect x="388.0" y="44.0" width="224.0" height="176.0" class="fill-soft grid" stroke-width="1"/>
+  <line x1="388.0" y1="164.3" x2="612.0" y2="164.3" class="grid" stroke-width="0.8"/>
+  <text x="383.0" y="167.3" class="xs mono muted" text-anchor="end">10</text>
+  <line x1="388.0" y1="105.0" x2="612.0" y2="105.0" class="grid" stroke-width="0.8"/>
+  <text x="383.0" y="108.0" class="xs mono muted" text-anchor="end">100</text>
+  <line x1="388.0" y1="45.7" x2="612.0" y2="45.7" class="grid" stroke-width="0.8"/>
+  <text x="383.0" y="48.7" class="xs mono muted" text-anchor="end">1000</text>
+  <text x="354.0" y="132.0" class="xs muted" transform="rotate(-90 354.0 132.0)" text-anchor="middle">microseconds</text>
+  <line x1="388.0" y1="220.0" x2="388.0" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="388.0" y="236.0" class="xs mono muted" text-anchor="middle">36</text>
+  <line x1="477.6" y1="220.0" x2="477.6" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="477.6" y="236.0" class="xs mono muted" text-anchor="middle">576</text>
+  <line x1="567.2" y1="220.0" x2="567.2" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="567.2" y="236.0" class="xs mono muted" text-anchor="middle">9k</text>
+  <line x1="612.0" y1="220.0" x2="612.0" y2="224.0" class="ink-soft" stroke-width="1"/>
+  <text x="612.0" y="236.0" class="xs mono muted" text-anchor="middle">37k</text>
+  <text x="500.0" y="252.0" class="xs muted" text-anchor="middle">triangles submitted</text>
+  <polyline points="388.0,220.0 432.8,186.2 477.6,151.3 522.4,116.7 567.2,81.9 612.0,46.6" fill="none" stroke="#ebc864" stroke-width="2.2"/>
+  <circle cx="388.0" cy="220.0" r="2.6" fill="#ebc864"/>
+  <circle cx="432.8" cy="186.2" r="2.6" fill="#ebc864"/>
+  <circle cx="477.6" cy="151.3" r="2.6" fill="#ebc864"/>
+  <circle cx="522.4" cy="116.7" r="2.6" fill="#ebc864"/>
+  <circle cx="567.2" cy="81.9" r="2.6" fill="#ebc864"/>
+  <circle cx="612.0" cy="46.6" r="2.6" fill="#ebc864"/>
+  <text x="393.0" y="235.0" class="xs mono z-collect">collect</text>
+  <polyline points="388.0,73.6 432.8,64.4 477.6,63.1 522.4,61.0 567.2,55.8 612.0,44.0" fill="none" stroke="#eb786e" stroke-width="2.2"/>
+  <circle cx="388.0" cy="73.6" r="2.6" fill="#eb786e"/>
+  <circle cx="432.8" cy="64.4" r="2.6" fill="#eb786e"/>
+  <circle cx="477.6" cy="63.1" r="2.6" fill="#eb786e"/>
+  <circle cx="522.4" cy="61.0" r="2.6" fill="#eb786e"/>
+  <circle cx="567.2" cy="55.8" r="2.6" fill="#eb786e"/>
+  <circle cx="612.0" cy="44.0" r="2.6" fill="#eb786e"/>
+  <text x="393.0" y="88.6" class="xs mono z-fill">fill</text>
+  <text x="16" y="272" class="sm">Left: <tspan class="mono">collect</tspan> is FLAT and <tspan class="mono">fill</tspan> rises with slope 1 &#8212; it is paid per pixel.</text>
+  <text x="16" y="290" class="sm">Right: they CROSS. Past about 1 pixel per triangle the vertex stage is the expensive one.</text>
+  <text x="16" y="310" class="sm muted">The crossing is the only place on either chart where "optimise the fill" stops being the right advice, and</text>
+  <text x="16" y="326" class="sm muted">nothing about the renderer changed to get there &#8212; only how finely the same object was cut up.</text>
+</svg>

@@ -1,0 +1,502 @@
+  <h2 id="mirrors">7. Reflections, rotors, and where <code>θ/2</code> comes from</h2>
+
+  <p>
+    Open any quaternion reference. Within two screens you will meet this:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ q = \cos\tfrac{\theta}{2} + \sin\tfrac{\theta}{2}\,\mathbf{n} \]</span>
+    <span class="eq-plain">q = cos(theta/2) + sin(theta/2) n</span>
+  </div>
+
+  <p>
+    and almost always with no explanation of the halving beyond "because the sandwich product
+    applies it twice". Which is true, and is the kind of answer that tells you <em>that</em>
+    rather than <em>why</em>: it explains the factor of two by pointing at a formula whose form is
+    itself unexplained.
+  </p>
+
+  <p>
+    Lesson 7.2 already put two half-angles on the page and deliberately declined to say why. Its
+    §8.3 found that an axis error of <code>φ</code> costs <code>2 sin(θ/2)·φ</code> of orientation
+    error, and its §8.4 derived the threshold between two extraction routes from
+    <code>tan(θ/2) = √3</code>. Two half-angle quantities, arrived at for unrelated reasons, in a
+    lesson that never mentions quaternions. That was a debt, and this section collects it.
+  </p>
+
+  <p>
+    <strong>The halving has nothing to do with quaternions.</strong> It is a fact about rotations
+    and reflections that is fully visible in the plane, and by the end of this section you will be
+    able to check it with a protractor.
+  </p>
+
+  <h3>7.1 A mirror is a conjugate, wrapped in two rotations</h3>
+
+  <p>
+    Start with the easiest possible mirror: the real axis. Reflecting a point in the real axis
+    flips the sign of its imaginary part and leaves the real part alone. That is
+    <code>conjugate</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \overline{a + bi} = a - bi \]</span>
+    <span class="eq-plain">conj(a + bi) = a - bi</span>
+  </div>
+
+  <p>
+    Now every other mirror is that one in disguise, and the disguise is a rotation. To reflect in
+    the line through the origin along the unit direction <code>m</code>: turn the whole plane so
+    that <code>m</code> lands on the real axis, reflect in the real axis, then turn it back. Three
+    steps, left to right, and each one is a multiplication we already have:
+  </p>
+
+<pre><code>turn the mirror onto the real axis      conj(m) · v
+reflect in the real axis                conj( conj(m) · v )  =  m · conj(v)
+turn the mirror back                    m · ( m · conj(v) )  =  m² · conj(v)</code></pre>
+
+  <p>
+    The middle line uses <code>conj(ab) = conj(a)·conj(b)</code>, which is one line to check from
+    the multiplication rule, and <code>conj(conj(m)) = m</code>, which is obvious. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{reflect in the line along } m: \qquad v \;\longmapsto\; m^2\,\bar{v} \]</span>
+    <span class="eq-plain">reflect v in the line along m:  v -> m^2 conj(v)</span>
+  </div>
+
+  <p>
+    <strong>Stop at the <code>m²</code>.</strong> That is the whole lesson of this section
+    arriving early, and it is easy to read past. To build a mirror at angle <code>α</code> you
+    hand over <code>m = e^{iα}</code>, and the arithmetic <em>squares it for you</em>. The object
+    you supply carries half the angle the operation uses. Nothing was halved on purpose; the
+    formula came out that way because a reflection is a rotation performed on either side of a
+    conjugation, and the two rotations are the same one.
+  </p>
+
+  <p>
+    A quick sanity check, because a formula with a square in it deserves one. Take
+    <code>m = 1</code> — the real axis itself, <code>α = 0</code>. Then <code>m² v̄ = v̄</code>,
+    which is reflection in the real axis. Take <code>m = i</code> — the imaginary axis,
+    <code>α = 90°</code>. Then <code>m² = −1</code> and the map is <code>v ↦ −v̄</code>, which
+    sends <code>a + bi</code> to <code>−a + bi</code>: the real part flips, the imaginary part does
+    not. Reflection in the imaginary axis. Both correct.
+  </p>
+
+  <p>
+    The engine spells it exactly as derived, and the harness checks it against the route
+    <code>vec2</code> already had — <code>reflect(v, n)</code> from Lesson 1.7, which takes the
+    mirror's <em>normal</em> rather than its direction, so the mirror has to be turned a quarter
+    circle first:
+  </p>
+
+<pre><code class="lang-cpp">[[nodiscard]] constexpr vec2 reflect_in_line(vec2 v, complex mirror)
+{
+    return vec2_from_complex(mirror * mirror * conjugate(complex_from_vec2(v)));
+}</code></pre>
+
+  <pre><code>E. TWO MIRRORS MAKE A TURN OF TWICE THE ANGLE BETWEEN THEM
+   m^2 conj(v) vs reflect(v, perpendicular(m)), 4,000 cases:
+     worst  1.475e-06</code></pre>
+
+  <p>
+    Two routes to one answer is a check; one route is a hope. These two share no code at all —
+    one is complex multiplication, the other is <code>v − 2(v·n)n</code> — so their agreement to
+    <code>1.5e−06</code> is evidence about the derivation rather than about a shared bug.
+  </p>
+
+  <h3>7.2 Two mirrors make a rotation of twice the angle between them</h3>
+
+  <p>
+    Now compose. Reflect in the mirror along <code>m₀</code>, then reflect the result in the
+    mirror along <code>m₁</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v \;\longmapsto\; m_1^2\,\overline{\left(m_0^2\,\bar{v}\right)} \;=\; m_1^2\,\overline{m_0}^{\,2}\,v \;=\; \left(m_1 \overline{m_0}\right)^2 v \]</span>
+    <span class="eq-plain">v -> m1^2 conj(m0^2 conj(v)) = m1^2 conj(m0)^2 v = (m1 conj(m0))^2 v</span>
+  </div>
+
+  <p>
+    The conjugate of a product is the product of the conjugates, and the conjugate of a conjugate
+    is the original, so the two bars cancel and everything collects into a single square. Write
+    <code>R = m₁ · conj(m₀)</code> and the composite is simply <code>v ↦ R² v</code> — a
+    multiplication by a single complex number, which by §4 is a rotation.
+  </p>
+
+  <p>
+    <strong>Two reflections make a rotation.</strong> That is worth pausing on for its own sake: a
+    reflection reverses the plane's orientation — it turns a clockwise triangle into an
+    anticlockwise one — and doing it twice puts the orientation back. Two flips make a turn.
+  </p>
+
+  <p>
+    Now the angle. With <code>m₀ = e^{iα}</code> and <code>m₁ = e^{iβ}</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R = e^{i\beta}\,\overline{e^{i\alpha}} = e^{i(\beta - \alpha)}, \qquad R^2 = e^{2i(\beta-\alpha)} \]</span>
+    <span class="eq-plain">R = exp(i b) conj(exp(i a)) = exp(i(b - a)), so R^2 = exp(2i(b - a))</span>
+  </div>
+
+  <p>
+    So <strong>if the two mirrors are <code>φ</code> apart, the composite is a rotation by
+    <code>2φ</code></strong>, and the object built from the two mirrors — <code>R</code> — carries
+    <code>φ</code>, which is <em>half</em> the angle of the rotation it generates.
+  </p>
+
+  <p>
+    That object has a name. It is a <strong>rotor</strong>, and it is what a quaternion is.
+  </p>
+
+  <h3>7.3 A worked example, walked round by hand</h3>
+
+  <p>
+    Mirrors at <code>α = 20°</code> and <code>β = 50°</code>, so they are 30° apart. Probe point
+    at angle 0°, say <code>v = (1.25, 0)</code>.
+  </p>
+
+  <p>
+    <strong>The first reflection.</strong> Reflecting a point in a mirror at angle <code>α</code>
+    takes a point at angle <code>φ</code> to a point at angle <code>2α − φ</code> — that is what
+    <code>m² v̄</code> says, since <code>v̄</code> has argument <code>−φ</code> and
+    <code>m²</code> has argument <code>2α</code>. So <code>0°</code> goes to
+    <code>2(20) − 0 = 40°</code>.
+  </p>
+
+  <p>
+    <strong>The second.</strong> <code>40°</code> goes to <code>2(50) − 40 = 60°</code>.
+  </p>
+
+  <p>
+    The probe started at 0° and ended at 60°. The mirrors are 30° apart. Figure 5 is that
+    construction; the gold arrow is the rotor at 30°, sitting exactly halfway round the journey
+    the teal arrow made.
+  </p>
+
+  @@FIG_MIRRORS@@
+
+  <p>
+    And swept over four thousand random mirror pairs, against two independent predictions —
+    a rotation built directly from <code>2(β − α)</code>, and the rotor applied via
+    <code>apply_rotor</code>:
+  </p>
+
+  <pre><code>   0.000 deg  -[mirror 20]-&gt;  40.000 deg  -[mirror 50]-&gt;  60.000 deg
+  [PASS] E.2  the worked example lands on 60 degrees
+   rotor 30.000 deg;  the rotation it generates 60.000 deg
+  [PASS] E.3  the rotor carries half the angle
+   4,000 mirror pairs:  vs rotation by 2(b-a)  3.844e-06
+                        vs apply_rotor       1.450e-06
+  [PASS] E.4  two mirrors phi apart rotate by 2 phi
+  [PASS] E.5  apply_rotor is that rotation</code></pre>
+
+  <p>
+    Figure 6 is the same construction running, with the program's own readout beside it. Hold
+    <kbd>Up</kbd> in that mode and watch the two arrows: the gold rotor moves at exactly half the
+    rate of the teal answer, forever, because that is not a tuning of the demo but the content of
+    <code>R² </code>.
+  </p>
+
+  @@FIG_MIRRORS_RENDER@@
+
+  <h3>7.4 The control, and the first non-commuting thing in this course</h3>
+
+  <p>
+    <code>E.4</code>'s <code>3.8e−06</code> would also be produced by a pair of bugs that made
+    both sides the identity. So the harness asks a question whose answer distinguishes the claim
+    from its degenerate case: <strong>what if the mirrors are used in the other order?</strong>
+  </p>
+
+  <pre><code>   CONTROL: the other order gives -60.000 deg, not 60.000 deg
+  [PASS] E.6  CONTROL: reflections do not commute; order reverses</code></pre>
+
+  <p>
+    Reflect in <code>m₁</code> first and you get <code>R = m₀ conj(m₁) = e^{i(α−β)}</code>, which
+    is the inverse rotor, so the composite is the rotation by <code>−2φ</code>. The two orders
+    give opposite answers, and only coincide when the mirrors coincide.
+  </p>
+
+  <p>
+    This is worth more than a control. <strong>Complex multiplication commutes; composition of
+    reflections does not.</strong> Both statements are about the same algebra, and they are
+    compatible because a reflection is not a multiplication — it is a multiplication
+    <em>and a conjugation</em>, and conjugation is what breaks the symmetry:
+    <code>m₁²·conj(m₀² v̄)</code> is not <code>m₀²·conj(m₁² v̄)</code> because the bar falls on a
+    different factor.
+  </p>
+
+  <p>
+    Remember this when §12 argues that the three-dimensional algebra cannot commute. The
+    non-commutativity is not a defect introduced by adding dimensions. It is already here, in the
+    plane, in the operation rotations are <em>made of</em>.
+  </p>
+
+  <h3>7.5 The double cover, before you have met a quaternion</h3>
+
+  <p>
+    Every quaternion library has a footnote saying that <code>q</code> and <code>−q</code> are the
+    same rotation, and it is usually presented as a curiosity of the four-dimensional case.
+    It is not. It is a consequence of §7.2, and it is visible here.
+  </p>
+
+  <p>
+    The rotation a rotor generates is <code>R²</code>. And <code>(−R)² = R²</code> — the same four
+    products of the same four floats, with two sign flips that cancel. So <code>R</code> and
+    <code>−R</code> generate the <em>same rotation</em>, exactly, not approximately.
+  </p>
+
+  <pre><code>   rotors 30.000 deg and -150.000 deg generate the SAME rotation
+  [PASS] E.7  two rotors per rotation, and they agree exactly</code></pre>
+
+  <p>
+    And it has a geometric reading, which is the part that makes it stop being strange.
+    <code>−R</code> is <code>R</code> with an extra half-turn, which corresponds to a
+    <em>different pair of mirrors</em> — rotate both mirrors by 90° and they are still 30° apart,
+    so they still generate a 60° rotation, but the rotor built from them is the negative of the
+    first. <strong>The rotation remembers the angle between the mirrors; it does not remember
+    which mirrors.</strong> Two rotors per rotation, exactly, and for a reason you can draw.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the plane lets you dodge this, and space does not</span>
+    <p>
+      In two dimensions you can ignore rotors entirely. A rotation is <code>z</code>, you apply it
+      as <code>z·v</code>, and the map from unit complex numbers to plane rotations is a perfect
+      one-to-one correspondence with no double cover anywhere. Rotors only appear if you insist on
+      building rotations out of reflections, which in the plane you need not.
+    </p>
+    <p>
+      In three dimensions there is <strong>no one-sided form to dodge into</strong> — §12 proves
+      there is no multiplication on <code>ℝ³</code> to write <code>q·v</code> with. Rotations must
+      be built from reflections, so the half-angle is not optional, and the double cover comes
+      with it. Every quaternion footnote you have ever read is this paragraph.
+    </p>
+  </div>
+
+  <h2 id="implementation">8. Implementation: the type</h2>
+
+  <p>
+    Everything above is now written down in one new header. We will build it in the order the
+    lesson derived it, and the only decisions left are naming ones — which, in a file whose entire
+    job is to make an identification believable, turn out to matter.
+  </p>
+
+  <h3>8.1 The type, and why it is called <code>complex</code></h3>
+
+<pre><code class="lang-cpp">struct complex
+{
+    float re{1.0f};   ///&lt; the real part — also the x coordinate, also cos θ for a unit z
+    float im{0.0f};   ///&lt; the imaginary part — also the y coordinate, also sin θ
+
+    [[nodiscard]] static constexpr complex identity() { return {}; }
+    [[nodiscard]] static constexpr complex i() { return {0.0f, 1.0f}; }
+};</code></pre>
+
+  <p>
+    <code>rot2</code> would be a perfectly good name and the engine would read slightly better for
+    it. It is the wrong name <em>here</em>, because the one thing this lesson has to establish is
+    that the number and the rotation are the same object, and a rotation-flavoured name asks the
+    reader to accept that identification on faith instead of watching it happen. The name also
+    keeps the file honest: every operation in it is ordinary complex arithmetic, checkable against
+    any algebra textbook, and nothing was bent to make it geometric.
+  </p>
+
+  <p>
+    It defaults to <code>1 + 0i</code> — the number that multiplies by doing nothing, which is
+    also the rotation by zero — for the same reason <code>mat2</code> defaults to the identity: a
+    default-constructed transformation that silently collapsed the plane would be a poor kind of
+    surprise.
+  </p>
+
+  <p>
+    <code>complex::i()</code> exists because the single most useful thing to be able to type while
+    reading this file is <code>i()</code>, and because it makes §3's check one line of a test
+    rather than a paragraph of a comment.
+  </p>
+
+  <h3>8.2 The product, and the three readings of one function</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] constexpr complex operator*(complex z, complex w)
+{
+    return {z.re * w.re - z.im * w.im,
+            z.re * w.im + z.im * w.re};
+}
+
+[[nodiscard]] constexpr vec2 operator*(complex z, vec2 v)
+{
+    return vec2_from_complex(z * complex_from_vec2(v));
+}</code></pre>
+
+  <p>
+    The second of those is <strong>the same arithmetic as the first</strong>, and that is not a
+    shortcut — it is the lesson. A rotation composed with a rotation and a rotation applied to a
+    point are not two operations that happen to resemble each other; in this representation they
+    are one function called with the operands read two ways. Compare <code>mat2</code>, where
+    <code>m * v</code> and <code>m * n</code> are genuinely different code with different costs.
+  </p>
+
+  <p>
+    <code>vec2_from_complex</code> and <code>complex_from_vec2</code> are reinterpretations rather
+    than conversions: no arithmetic happens and both compile to nothing. They exist so a call site
+    can <em>say</em> which reading it means, which is worth two function calls that cost zero
+    instructions.
+  </p>
+
+  <h3>8.3 Conjugate, modulus, inverse</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] constexpr complex conjugate(complex z) { return {z.re, -z.im}; }
+
+[[nodiscard]] constexpr float length_squared(complex z) { return z.re * z.re + z.im * z.im; }
+
+[[nodiscard]] inline complex inverse(complex z)
+{
+    const float len_sq = length_squared(z);
+    if (len_sq &lt;= 0.0f) { return complex::identity(); }
+    return conjugate(z) / len_sq;
+}</code></pre>
+
+  <p>
+    <code>length_squared</code> is <code>|z|²</code>, which is <code>z · conj(z)</code> with the
+    imaginary part guaranteed zero. It is named to match <code>vec2</code>'s because it is the
+    same number — the squared distance from the origin to the point <code>(re, im)</code>.
+  </p>
+
+  <p>
+    It is also <strong>multiplicative</strong>: <code>|zw|² = |z|²|w|²</code>, which is §4's first
+    claim. That one line is why unit complex numbers are closed under multiplication — compose two
+    rotations and you get a rotation, with no renormalisation step and no drift beyond rounding.
+    Contrast a <code>mat3</code>, where "is still a rotation" is a property of nine numbers that
+    the multiplication does not preserve.
+  </p>
+
+  <p>
+    <strong>For a unit <code>z</code> the inverse is just the conjugate</strong>, because the
+    division is by 1. Undoing a rotation costs one sign flip. Code that keeps its rotations
+    normalised should call <code>conjugate</code> and say so, rather than pay for a
+    <code>length_squared</code> and a divide it knows are 1.
+  </p>
+
+  <h3>8.4 The cheap renormalise, and the test that would have passed a broken one</h3>
+
+  <p>
+    Drift is small but it is not zero (§9 measures it), so a rotation that is stepped incrementally
+    wants tidying. The expensive way is <code>normalised</code>: a <code>length_squared</code>, a
+    <code>sqrt</code> and a divide. The cheap way is one line of algebra.
+  </p>
+
+  <p>
+    If <code>|z|² = 1 + ε</code> for small <code>ε</code>, the factor we want is
+    <code>1/√(1+ε)</code>, and the first two terms of its expansion are <code>1 − ε/2</code>.
+    Substituting <code>ε = |z|² − 1</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ 1 - \tfrac{\varepsilon}{2} \;=\; 1 - \tfrac{|z|^2 - 1}{2} \;=\; \tfrac{3 - |z|^2}{2} \]</span>
+    <span class="eq-plain">1 - eps/2 = 1 - (|z|^2 - 1)/2 = (3 - |z|^2)/2</span>
+  </div>
+
+<pre><code class="lang-cpp">[[nodiscard]] constexpr complex renormalised_fast(complex z)
+{
+    return z * (0.5f * (3.0f - length_squared(z)));
+}</code></pre>
+
+  <p>
+    One subtract and three multiplies. No square root, no divide, and — being a truncated series —
+    an error of order <code>ε²</code>. Handed a drift of <code>1e−3</code> it leaves
+    <code>1.5e−06</code>; handed <code>1e−4</code> it leaves <code>6e−08</code>, which is below a
+    <code>float</code>'s resolution at 1. The measured table is in §9.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The check this file shipped first, and why it was wrong</span>
+    <p>
+      The obvious way to show the approximation falling apart far from unit length is to watch
+      <code>|z|</code>. The harness did exactly that, and reported that at <code>|z| = 2</code> the
+      function works <em>perfectly</em>: the result has modulus 1.000000, better than at any other
+      input in the table.
+    </p>
+    <p>
+      It does. At <code>|z| = 2</code> the factor is <code>(3 − 4)/2 = −0.5</code>, which scales a
+      length-2 number to length exactly 1 — and multiplies it by a negative number, which
+      <strong>turns it 180°</strong>. The function returns a unit complex number representing
+      completely the wrong rotation, and a test that looked only at the modulus certified it.
+    </p>
+    <p>
+      <strong>A rotation is not its modulus.</strong> The check now asks about the rotation, and
+      the table in §9 prints both columns so that the disagreement between them is on the page
+      rather than in a paragraph.
+    </p>
+  </div>
+
+  <h3>8.5 Angles in and out, and one deliberate difference from 7.2</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline complex complex_from_angle(float radians)
+{
+    return {std::cos(radians), std::sin(radians)};
+}
+
+[[nodiscard]] inline float angle_from_complex(complex z)
+{
+    return std::atan2(z.im, z.re);
+}
+
+[[nodiscard]] inline float angle_between(complex a, complex b)
+{
+    return angle_from_complex(conjugate(a) * b);
+}</code></pre>
+
+  <p>
+    <strong><code>complex_from_angle</code> is the only trigonometry in the entire file</strong>,
+    and noticing that is the point of the whole design. Trig appears exactly at the boundary where
+    a human angle enters or leaves; everything in between — composing, inverting, interpolating,
+    applying, reflecting — is arithmetic. Lesson 7.2 measured 82% of a <code>rotation_slerp</code>
+    call going on trigonometry it could not avoid. Here there is none to avoid.
+  </p>
+
+  <p>
+    <code>angle_between</code> is the plane's twin of <code>angle_between_rotations</code> from
+    <code>math/rotation.hpp</code>, and it is deliberately <em>not</em> an overload of it, because
+    it differs in a way that matters: <strong>this one is signed.</strong>
+  </p>
+
+  <p>
+    That difference is real rather than an inconsistency. The plane has an orientation, so "30°
+    clockwise" and "30° anticlockwise" are different rotations and one number can say which. Space
+    does not: a rotation of space is a turn about an axis, and negating both the axis and the
+    angle gives the same rotation, so the angle alone carries no sign to report. 7.2's function
+    returns <code>[0, π]</code> for that reason and this one returns <code>(−π, π]</code>.
+  </p>
+
+  <h3>8.6 The rest of the file</h3>
+
+  <p>
+    <code>complex_pow_unit(z, t)</code> is "do <code>t</code> of the turn <code>z</code>
+    performs" — <code>complex_from_angle(t · arg z)</code> — and it is the function
+    <code>complex_slerp</code> is built out of, so it is deferred to §10 where that argument
+    happens. <code>reflect_in_line</code>, <code>rotor_from_mirrors</code> and
+    <code>apply_rotor</code> are §7's three lines, written down.
+    <code>mat2_from_complex</code> and <code>complex_from_mat2</code> are §5's bridge.
+  </p>
+
+  <p>
+    That is the whole header: one struct, no state, no allocation, nothing virtual, and — because
+    every function is <code>inline</code> in a header — nothing to link. §14's build line for the
+    harness has no <code>-l</code> on it at all, which says what this representation costs a
+    program more plainly than a paragraph could.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Written to be read as a diff against <code>quat.hpp</code></span>
+    <p>
+      Lesson 7.4 builds quaternions, and it builds them by analogy with this header, function for
+      function: <code>conjugate</code>, <code>length_squared</code>, <code>normalised</code>,
+      <code>inverse</code>, <code>operator*</code>, <code>renormalised_fast</code>,
+      <code>complex_slerp</code> — each has a quaternion twin whose body is the same idea with one
+      more imaginary unit and one crucial loss.
+    </p>
+    <p>
+      The names and shapes above were chosen with that mapping in mind, so that the harder file
+      can be read as a diff against the easier one. If a name in this header looks slightly more
+      formal than a two-float type needs, that is why.
+    </p>
+  </div>

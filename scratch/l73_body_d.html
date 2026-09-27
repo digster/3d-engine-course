@@ -1,0 +1,664 @@
+  <h2 id="cost">9. What it costs, measured</h2>
+
+  <p>
+    §5.2 claimed four advantages and one wash. Here they are, measured rather than argued.
+  </p>
+
+  @@FIG_COST@@
+
+  <pre><code>D. COMPOSITION: WHAT IT COSTS AND WHAT IT DRIFTS
+   compose, 10240000 operations each, best of three:
+     complex * complex         0.883 ns
+     mat2 * mat2               1.221 ns   (1.38x)
+     add angles, then trig     3.736 ns   (4.23x)
+  [PASS] D.1  the complex product is the cheapest of the three
+   apply to a point:
+     complex * vec2            0.596 ns
+     mat2 * vec2               0.590 ns   (ratio 0.99)
+  [PASS] D.2  applying costs the same either way (within 15%)
+   after 1000000 composed rotations:
+     complex:  |z|-1 +1.907e-06,  as a defect 3.934e-06
+     mat2:     defect 2.420e-05   (ratio 6.15x)
+  [PASS] D.3  both drift, and the matrix drifts further</code></pre>
+
+  <p>
+    <strong>Composing is 1.88× cheaper</strong>, which is close to what the operation counts
+    predict — four multiplies and two adds against eight and four — and for once the prediction
+    survives, because there is no transcendental anywhere to swamp it. (Lesson 7.2's warning that
+    the multiply count predicts nothing applies when a <code>sin</code> is present; here none is.)
+  </p>
+
+  <p>
+    <strong>The third row is the one people reach for first and it is the worst.</strong> "Just
+    store the angle" is a tempting answer to §1: composing is then a single <code>float</code>
+    addition, which is free. The trouble is that you cannot <em>use</em> an angle — every
+    application needs a <code>cos</code> and a <code>sin</code> — so the fair unit of work is
+    "compose and be ready to apply", and measured that way it is 6.45× the complex product. An
+    angle is a good thing to type and a bad thing to compute with.
+  </p>
+
+  <p>
+    <strong>The second panel is the honest one.</strong> Applying a rotation to a point costs
+    1.05× — a wash, and the 5% is register traffic rather than arithmetic, since both routes are
+    the same four multiplies and the same two adds. A representation can be strictly better at
+    keeping and combining rotations and not one instruction better at using them. Say this out
+    loud whenever someone claims quaternions are faster: they are faster to <em>store</em>,
+    <em>compose</em> and <em>interpolate</em>, and Lesson 7.4 will measure that applying one to a
+    vector is <em>slower</em> than a matrix, which is exactly why a renderer converts to matrices
+    before it draws.
+  </p>
+
+  <h3>9.1 Drift, and asking both the same question</h3>
+
+  <p>
+    A million composed rotations is a plausible amount for a long-lived object in a simulation,
+    and both representations arrive somewhere that is no longer quite a rotation. Comparing them
+    needs care, because "how big is the modulus error" and "how non-orthonormal is the matrix" are
+    not comparable numbers. So the harness converts the complex result to a <code>mat2</code> and
+    asks <em>both</em> the same question: <code>max |MᵀM − I|</code>.
+  </p>
+
+  <p>
+    <code>2.42e−05</code> against <code>3.93e−06</code>: the matrix has drifted
+    <strong>6.15× further</strong>. Which is what you would expect from a redundant
+    representation — four numbers holding one degree of freedom have three directions to wander
+    in, and the complex number has one.
+  </p>
+
+  <p>
+    Neither number is alarming on its own. What differs is what it costs to fix. A
+    <code>mat2</code> that has drifted needs Gram–Schmidt: normalise the first column, subtract
+    its projection from the second, normalise that. A <code>complex</code> needs §8.4's four
+    arithmetic operations. Here is that function characterised across five decades of drift, with
+    both columns printed for the reason §8.4 gives:
+  </p>
+
+  <pre><code>   renormalised_fast, by modulus and by rotation:
+     |z|-1 in      out
+     9.5e-07 -&gt; 0.000e+00   rotation moved    0.000 deg  (ok)
+     1.0e-04 -&gt; 5.960e-08   rotation moved    0.000 deg  (ok)
+     1.0e-03 -&gt; 1.490e-06   rotation moved    0.000 deg  (ok)
+     1.0e-02 -&gt; 1.504e-04   rotation moved    0.000 deg  (ok)
+     1.0e-01 -&gt; 1.550e-02   rotation moved    0.000 deg  (ok)
+     1.0e+00 -&gt; 0.000e+00   rotation moved  180.000 deg  (BROKEN)</code></pre>
+
+  <p>
+    Read the residual column down the first five rows and the <code>ε²</code> behaviour is
+    plain: <code>1e−3</code> of drift leaves <code>1.5e−06</code>, and <code>1e−2</code> leaves
+    <code>1.5e−04</code> — a hundred times the input, squared, each time. That is a Taylor series
+    behaving exactly as advertised.
+  </p>
+
+  <p>
+    And then the last row, where the modulus column reads <code>0.000e+00</code> — a perfect
+    score — while the rotation is <strong>180° wrong</strong>. The function is doing precisely
+    what a truncated series about <code>|z|² = 1</code> should do when handed
+    <code>|z|² = 4</code>, and the only thing that went wrong was the test. This row is printed on
+    the page rather than described in a comment because it is the clearest example this course has
+    of a measurement that passes while the thing it measures is broken: <strong>choose the
+    quantity your check looks at before you choose the threshold.</strong>
+  </p>
+
+  <div class="callout note">
+    <span class="label">A timing discipline note: the warm-up</span>
+    <p>
+      Lesson 7.2's rules — consume the whole result, vary the input with the repetition counter,
+      best of three, and divide by the operation count to see if the answer is physically possible
+      — are all obeyed here and all earned their place there. This lesson added one more.
+    </p>
+    <p>
+      Without a warm-up pass, the <em>first</em> measurement a freshly-built binary takes reads
+      15–30% slow: cold instruction cache, cold branch predictors, first-touch page faults on the
+      input arrays. Across five runs, <code>complex * complex</code> reported 0.820 ns once and
+      0.610–0.628 ns four times, and the odd one out was always the first. Since
+      <code>time_ns</code> takes the <em>minimum</em> of three attempts, one cold attempt out of
+      three is harmless — but the first row of the first section is one cold attempt out of one.
+      One untimed call before the timed ones, and every run now lands in the same band.
+    </p>
+  </div>
+
+  <h2 id="interpolation">10. Interpolation: the path and the schedule</h2>
+
+  <p>
+    This is 7.2 §10's fourth requirement, and it is the one a rotation matrix cannot meet at all.
+    Average two rotation matrices entrywise and you get something that is not a rotation. Average
+    two unit complex numbers and you get something inside the disc, which is one divide away from
+    being a rotation on the arc between them. That difference is the whole section.
+  </p>
+
+  <p>
+    Lesson 7.1 taught us to separate two questions that are easy to run together. Does a blend take
+    the right <strong>path</strong> — the geodesic, the shortest arc? And does it travel that path
+    on the right <strong>schedule</strong> — at constant speed? Three answers are possible, and
+    the plane exhibits all three cleanly:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Blend</th><th>Path</th><th>Schedule</th><th>Where we met it</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Euler lerp</td><td>wrong</td><td>wrong</td>
+          <td>Lesson 7.1: +14% to +209% of excess turning</td></tr>
+      <tr><td><code>complex_nlerp</code></td><td><strong>right</strong></td><td>wrong</td>
+          <td>this section, and the reason it needs its own row</td></tr>
+      <tr><td><code>complex_slerp</code></td><td><strong>right</strong></td><td><strong>right</strong></td>
+          <td>this section; Lesson 7.2 built the <code>mat3</code> version</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The middle row is the one people get wrong in both directions. Some treat nlerp as a cheap
+    approximation that drifts off course; others as a free lunch. It is neither, and by the end of
+    this section there is a closed form saying exactly what it costs.
+  </p>
+
+  <h3>10.1 Slerp, in three lines</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline complex complex_slerp(complex a, complex b, float t)
+{
+    return a * complex_pow_unit(conjugate(a) * b, t);
+}</code></pre>
+
+  <p>
+    Read it aloud: <em>undo <code>a</code>, take <code>t</code> of the difference, redo
+    <code>a</code>.</em> <code>conjugate(a) * b</code> is the single rotation carrying
+    <code>a</code> onto <code>b</code> — apply the inverse of <code>a</code> and then
+    <code>b</code>. <code>complex_pow_unit(·, t)</code> is a fraction of it. Multiplying back onto
+    <code>a</code> starts the journey where it should start.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathrm{slerp}(a, b, t) \;=\; a\,(a^{-1}b)^{t} \]</span>
+    <span class="eq-plain">slerp(a, b, t) = a (a^-1 b)^t</span>
+  </div>
+
+  <p>
+    <strong>That formula is not specific to the plane and not specific to complex numbers.</strong>
+    It is the definition of a geodesic on any group where those three operations exist. Lesson
+    7.5's quaternion slerp is this function with <code>quat</code> substituted for
+    <code>complex</code>; Lesson 7.2's <code>rotation_slerp</code>, written for <code>mat3</code>
+    in what looks like an entirely different notation, turns out on inspection to be the same
+    three steps — undo, scale the difference, redo.
+  </p>
+
+  <p>
+    The angle covered by time <code>t</code> is <code>t · angle_between(a, b)</code> by
+    construction, which is linear in <code>t</code>, which is what constant angular speed means.
+    Measured over two thousand steps of an arc of 145°:
+  </p>
+
+  <pre><code>F. SLERP, NLERP, AND THE DIFFERENCE BETWEEN A PATH AND A SCHEDULE
+   arc 145.000 deg, 2000 steps:
+     slerp  path 145.0001 deg   speed 1.000501   excess  +0.00%
+  [PASS] F.1  slerp travels exactly the arc
+  [PASS] F.2  slerp's speed is constant to within 1e-3</code></pre>
+
+  <h3>10.2 Nlerp travels the right path — and here is why it cannot do otherwise</h3>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline complex complex_nlerp(complex a, complex b, float t)
+{
+    return normalised(complex{a.re + (b.re - a.re) * t,
+                              a.im + (b.im - a.im) * t});
+}</code></pre>
+
+  <p>
+    Two lerps and a normalise. No <code>atan2</code>, no <code>sin</code>, no <code>cos</code>.
+    And the first surprise is that it does not wander off course at all:
+  </p>
+
+  <pre><code>     nlerp  path 145.0001 deg   speed 11.050107   excess +0.00%
+  [PASS] F.3  nlerp wastes no turning (excess below 0.01%)
+  [PASS] F.4  nlerp's speed is NOT constant</code></pre>
+
+  <p>
+    <strong>0.00% excess turning</strong>, the same number 7.2's geodesic reported. The reason is
+    structural rather than lucky. The straight segment between two points of the circle stays
+    inside the disc, and every point of it — except the origin, if the endpoints are antipodal —
+    has an argument strictly between the two endpoints' arguments. Normalising changes the modulus
+    and never the argument. So the normalised chord <em>is</em> the arc, point for point:
+    <strong>nlerp's path is exactly the geodesic, and it could not be anything else.</strong>
+  </p>
+
+  <p>
+    A blend that cannot leave the shortest path sounds like it has nothing left to get wrong. It
+    has one thing.
+  </p>
+
+  <h3>10.3 The schedule, derived</h3>
+
+  <p>
+    Put the endpoints symmetrically about the real axis, which costs nothing and makes the algebra
+    transparent: <code>a = e^{−iΩ/2}</code>, <code>b = e^{+iΩ/2}</code>, arc <code>Ω</code>. Let
+    <code>u = 2t − 1</code>, which runs from <code>−1</code> to <code>+1</code> as <code>t</code>
+    runs from 0 to 1. The lerp is:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ p(t) = (1-t)a + tb = \cos\tfrac{\Omega}{2} \;+\; i\,u\,\sin\tfrac{\Omega}{2} \]</span>
+    <span class="eq-plain">p(t) = (1-t)a + t b = cos(Omega/2) + i u sin(Omega/2)</span>
+  </div>
+
+  <p>
+    The real part does not depend on <code>t</code> at all — the chord is a vertical line, which
+    is obvious once you see it and is the reason this choice of endpoints was worth making. The
+    angle is therefore:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \varphi(t) = \arctan\!\left(u \tan\tfrac{\Omega}{2}\right) \]</span>
+    <span class="eq-plain">phi(t) = arctan(u tan(Omega/2)),  where u = 2t - 1</span>
+  </div>
+
+  <p>
+    Differentiate, remembering <code>du/dt = 2</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{d\varphi}{dt} = \frac{2\tan\frac{\Omega}{2}}{1 + u^2\tan^2\frac{\Omega}{2}} \]</span>
+    <span class="eq-plain">dphi/dt = 2 tan(Omega/2) / (1 + u^2 tan^2(Omega/2))</span>
+  </div>
+
+  <p>
+    That is largest when <code>u = 0</code> — the midpoint — and smallest at
+    <code>u = ±1</code> — the ends. Evaluating both:
+  </p>
+
+  <ul>
+    <li>midpoint: <code>dφ/dt = 2 tan(Ω/2)</code></li>
+    <li>ends: <code>dφ/dt = 2 tan(Ω/2)·cos²(Ω/2) = 2 sin(Ω/2)cos(Ω/2) = sin Ω</code></li>
+  </ul>
+
+  <p>
+    And the ratio between them collapses beautifully:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{\text{fastest}}{\text{slowest}} = \frac{2\tan\frac{\Omega}{2}}{\sin\Omega} = \frac{2\sin\frac{\Omega}{2}/\cos\frac{\Omega}{2}}{2\sin\frac{\Omega}{2}\cos\frac{\Omega}{2}} = \sec^2\tfrac{\Omega}{2} \]</span>
+    <span class="eq-plain">fastest / slowest = 2 tan(Omega/2) / sin(Omega) = sec^2(Omega/2)</span>
+  </div>
+
+  <p>
+    <strong>Nlerp's speed varies by exactly <code>sec²(Ω/2)</code> over the blend.</strong> At an
+    arc of 90° that is <code>sec²(45°) = 2</code> — the middle of the turn happens at twice the
+    rate of the ends. At 179° it is <code>sec²(89.5°) ≈ 13,131</code>.
+  </p>
+
+  <p>
+    And since <code>dφ/dt</code> is positive everywhere, <code>φ</code> is monotonic, so the total
+    turning is exactly <code>Ω</code> — which is §10.2's zero excess, falling out of the same
+    derivative that produced the speed ratio.
+  </p>
+
+  <p>
+    A derivation deserves a measurement, and at seven arcs it gets one — note the last row, where
+    the two agree to two parts in ten thousand at a ratio of thirteen thousand:
+  </p>
+
+  <pre><code>   nlerp speed ratio vs sec^2(Omega/2):
+      Omega      measured        sec^2   relative
+       10.0 deg        1.010        1.008   2.32e-03
+       30.0 deg        1.074        1.072   1.86e-03
+       60.0 deg        1.334        1.333   8.38e-04
+       90.0 deg        2.002        2.000   1.17e-03
+      120.0 deg        4.002        4.000   4.67e-04
+      150.0 deg       14.943       14.928   9.86e-04
+      179.0 deg    13134.350    13131.480   2.19e-04
+  [PASS] F.5  the sec^2(Omega/2) closed form holds across the range</code></pre>
+
+  <p>
+    Figure 8 is the plane demo showing the same thing without a single number: sixteen tick marks
+    at equally spaced values of <code>t</code>, teal for slerp outside the circle and amber for
+    nlerp inside it. The teal ticks are evenly spaced. The amber ticks crowd at both ends and open
+    out through the middle — <em>on the same arc</em>.
+  </p>
+
+  @@FIG_BLEND_RENDER@@
+
+  <p>
+    The two arrows in that render are at <code>t = 0.24</code>, which is not an arbitrary choice:
+    for a 90° arc the worst disagreement between the two blends occurs at <code>t = 0.2386</code>,
+    and near enough the same place for other arcs. The amber craft is 21° behind the teal one, and
+    it catches up by arriving at the same place at the same moment, which is exactly the property
+    that makes this failure mode easy to miss in a review and obvious in motion.
+  </p>
+
+  <h3>10.4 So which should you use?</h3>
+
+  <p>
+    The number an animation programmer actually needs is not the speed ratio, it is how wrong the
+    cheap blend is <em>in degrees</em> at a given moment. Figure 9's right-hand panel is that, and
+    it turns the choice into a threshold on the arc rather than a preference between two
+    functions.
+  </p>
+
+  @@FIG_SCHEDULE@@
+
+  <pre><code>   worst orientation gap between nlerp and slerp at the same t:
+     Omega   10.0 deg   gap   0.0049 deg   (0.05% of the arc)
+     Omega   30.0 deg   gap   0.1337 deg   (0.45% of the arc)
+     Omega   60.0 deg   gap   1.1170 deg   (1.86% of the arc)
+     Omega   90.0 deg   gap   4.0746 deg   (4.53% of the arc)
+     Omega  120.0 deg   gap  10.9483 deg   (9.12% of the arc)
+     Omega  150.0 deg   gap  26.3424 deg   (17.56% of the arc)
+     Omega  179.0 deg   gap  76.6512 deg   (42.82% of the arc)</code></pre>
+
+  <p>
+    Under 60° of arc the cheap blend is wrong by about a degree, nobody will ever see it, and the
+    <code>atan2</code>/<code>sin</code>/<code>cos</code> that slerp spends are pure waste. At 150°
+    it is wrong by 26° and the motion visibly lurches through its middle. <strong>Animation
+    blending between adjacent keyframes lives entirely in the first regime</strong> — consecutive
+    poses of a walk cycle are a few degrees apart — which is why a great deal of shipped animation
+    code uses nlerp and is right to. A camera snapping to face the other way lives in the second.
+  </p>
+
+  <h3>10.5 Two controls, and why this section needed them</h3>
+
+  <pre><code>   worst orientation gap between nlerp and slerp at the same t:
+     Omega   10.0 deg   gap   0.0049 deg   (0.05% of the arc)
+     Omega   30.0 deg   gap   0.1337 deg   (0.45% of the arc)
+     Omega   60.0 deg   gap   1.1170 deg   (1.86% of the arc)
+     Omega   90.0 deg   gap   4.0746 deg   (4.53% of the arc)
+     Omega  120.0 deg   gap  10.9483 deg   (9.12% of the arc)
+     Omega  150.0 deg   gap  26.3424 deg   (17.56% of the arc)
+     Omega  179.0 deg   gap  76.6512 deg   (42.82% of the arc)
+   CONTROL: the single angle lerped travels 145.0003 deg
+  [PASS] F.6  CONTROL: one angle lerped is already a geodesic
+   CONTROL: the long way round travels 215.0000 deg (+48.3%)
+  [PASS] F.7  CONTROL: the long way round is exactly 360 - Omega
+  [PASS] F.8  CONTROL: no path can have negative excess</code></pre>
+
+  <p>
+    The first control is Lesson 7.1's own discovery, arriving here as a warning. In the plane a
+    rotation has one parameter, so lerping "the angles" <em>is</em> lerping the angle, which is
+    already the geodesic — which is exactly why 7.1's first attempt to measure Euler-lerp waste
+    reported nothing and had to be redone in three angles. <strong>An instrument that reports
+    0.00% has to be shown reporting something else, or the zero is not information.</strong>
+  </p>
+
+  <p>
+    So the second control walks the long way round the circle — the same endpoints, the other
+    arc — and the instrument reports 215.0° against the 145.0° shortest path, which is exactly
+    <code>360 − Ω</code>. That check is written against the exact answer rather than a threshold,
+    and that is a small lesson of its own: the first draft asked for "more than 50% excess" and
+    got 48.3%, which is the right answer failing an arbitrary bar.
+  </p>
+
+  <p>
+    <code>F.8</code> is the cheapest check on this page and it caught a real bug. The first draft
+    of the excess-turning calculation compared a total in radians against a span in degrees and
+    reported <strong>−98.25% excess turning</strong> — a journey shorter than the shortest
+    journey, which is not a thing a path can be. A percentage that cannot physically be negative
+    deserves an assertion saying so.
+  </p>
+
+  <h2 id="circle">11. A circle without trigonometry</h2>
+
+  <p>
+    There is a classic optimisation that this representation makes available, and measuring it
+    turns out to be more interesting than applying it.
+  </p>
+
+  <p>
+    To generate <code>n</code> points evenly spaced round a circle, the obvious way is a
+    <code>cos</code> and a <code>sin</code> per point. The engine does exactly that in
+    <code>debug_lines::sphere</code> (Lesson 5.11), which draws three great circles of
+    <code>segments</code> points each. The alternative is to compute the step once and then
+    <em>multiply</em>:
+  </p>
+
+<pre><code class="lang-cpp">const complex step = complex_from_angle(2.0f * k_pi / static_cast<float>(n));
+complex z = complex::identity();
+for (int k = 0; k &lt; n; ++k)
+{
+    use(z.re, z.im);
+    z = z * step;                 // four multiplies, two adds — and no trigonometry
+}</code></pre>
+
+  <p>
+    Two transcendentals per point become one complex multiply per point, with the trig paid once
+    for the whole ring. The operation count says that should be five or six times faster. It is
+    not.
+  </p>
+
+  @@FIG_RECURRENCE@@
+
+  <pre><code>G. GENERATING A CIRCLE: TWO TRANSCENDENTALS, OR ONE MULTIPLY
+   4096 points per circle, 400 circles, best of three:
+     cos + sin per point       1.913 ns   independent
+     one complex multiply      1.502 ns   (1.27x)   serial chain
+     four chains interleaved   0.502 ns   (3.81x)   chain broken
+     (D.1's INDEPENDENT complex product: 4-6x a cos+sin pair)
+  [PASS] G.1  the recurrence is faster than two transcendentals
+  [PASS] G.2  most of its advantage is eaten by the chain</code></pre>
+
+  <p>
+    <strong>1.21×.</strong> A famous optimisation, measured, buys twenty per cent — and the third
+    row says why. <code>z = z * step</code> is a <em>serial dependency chain</em>: each multiply
+    must wait for the previous one to produce its result, so the loop measures instruction
+    <strong>latency</strong> and the machine's ability to run several multiplies at once is
+    useless. The trig loop has no such chain — every point is computed independently from its own
+    index — so it measures <strong>throughput</strong>, and a modern core will have four or five
+    sines in flight simultaneously.
+  </p>
+
+  <p>
+    Run four circles at once, interleaving four independent chains, and the recurrence gets the
+    same freedom: 0.526 ns, <strong>3.52×</strong>. The optimisation is real. It was hiding behind
+    a dependency chain, and no amount of counting multiplies would have found that.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Folklore has a shelf life</span>
+    <p>
+      "Replace the trigonometry with a recurrence" is advice from an era when a <code>sin</code>
+      cost a hundred cycles and was implemented in a loop. On the machine these numbers came from,
+      a <code>float</code> <code>sin</code> and <code>cos</code> pair costs about 1.85 ns of
+      <em>throughput</em>, which at this clock is a handful of cycles — because it is a short
+      polynomial after a range reduction, and polynomials pipeline.
+    </p>
+    <p>
+      The advice is not wrong. It is worth 3.5× if you break the chain and 1.2× if you do not, and
+      in 1995 it was worth thirty. <strong>Inherited performance advice is a hypothesis, and the
+      harness is how you test it.</strong>
+    </p>
+  </div>
+
+  <h3>11.1 What it costs in accuracy, which is the real question</h3>
+
+  <p>
+    The recurrence multiplies its own rounding error by itself, <code>n</code> times over. The trig
+    route does not: every point is computed from its own index, so errors do not accumulate. So
+    the interesting measurement is not speed but how long the recurrence stays usable — walked
+    against a double-precision reference at four lengths, with and without §8.4's cheap
+    renormalise:
+  </p>
+
+  <pre><code>   vs a double-precision walk:  angle error (deg)     |z| - 1
+        points       plain    tidied      plain    tidied
+           64   9.82e-06  1.74e-06   3.58e-07  0.00e+00
+         4096   9.10e-05  1.37e-05   6.77e-05  5.96e-08
+       262144   2.83e-04  2.41e-03   7.57e-05  5.96e-08
+     16777216   7.17e-01  1.28e+00   3.70e-03  5.96e-08
+   at 48 segments (the debug sphere) the error is 1.366e-05 deg
+  [PASS] G.3  at debug-draw sizes the error is under 1e-4 deg</code></pre>
+
+  <p>
+    Two things in that table are worth more than the headline.
+  </p>
+
+  <p>
+    <strong>The renormalise does exactly what it promises and nothing else.</strong> The
+    <code>|z|−1</code> columns show it working perfectly: the plain walk drifts to
+    <code>3.7e−03</code> over 16.7 million steps while the tidied one never leaves
+    <code>6e−08</code>. That is the whole of its job, and it does it for four arithmetic
+    operations.
+  </p>
+
+  <p>
+    <strong>And it does nothing whatever for the angle — past a quarter of a million steps it
+    makes the angle worse.</strong> At <code>n = 16,777,216</code> the tidied walk is off by 1.28°
+    against the plain walk's 0.72°. The reason is that <code>renormalised_fast</code> scales both
+    components by one factor, which cannot change an argument in exact arithmetic but perturbs it
+    slightly in <code>float</code> — so it is an extra rounding operation per step, contributing
+    error to the one quantity it cannot correct. <strong>Renormalising controls the modulus. The
+    phase is on its own.</strong>
+  </p>
+
+  <p>
+    At the size the engine actually draws circles — 48 segments — the recurrence is wrong by
+    <code>1.4e−05</code> degrees, which at any plausible screen scale is four orders of magnitude
+    below one pixel. The plane demo therefore draws its circles this way, and says so in a comment.
+    Whether <code>debug_lines::sphere</code> should is Exercise 7.3.5, and the honest answer
+    involves a number this section has already given you.
+  </p>
+
+  <h2 id="forced">12. Where the plane runs out, and what that predicts</h2>
+
+  <p>
+    Everything above works because the plane's points can be multiplied. Rotations, reflections,
+    interpolation, the lot — all of it is the one multiplication rule, read differently. So the
+    obvious plan for three dimensions is to find the three-dimensional version of complex numbers
+    and repeat.
+  </p>
+
+  <p>
+    <strong>There isn't one.</strong> Not "nobody has found one" — there cannot be one, and the
+    proof is four lines you can check.
+  </p>
+
+  <h3>12.1 The argument that ended Hamilton's thirteen years</h3>
+
+  <p>
+    Suppose a three-dimensional number system spanned by <code>1</code>, <code>i</code> and
+    <code>j</code>, with <code>i² = j² = −1</code> by analogy with the plane, and with an
+    associative product. Since the space is spanned by those three, the product <code>ij</code>
+    must be one of its own elements:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ ij = a + bi + cj, \qquad a, b, c \in \mathbb{R} \]</span>
+    <span class="eq-plain">ij = a + b i + c j, with a, b, c real</span>
+  </div>
+
+  <p>
+    Multiply both sides on the left by <code>i</code>. On the left-hand side, associativity gives
+    <code>i(ij) = (ii)j = −j</code>. On the right-hand side, expand and use
+    <code>i² = −1</code> and <code>ij = a + bi + cj</code> again:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ i(a + bi + cj) = ai + bi^2 + c(ij) = (-b + ca) + (a + cb)i + c^2 j \]</span>
+    <span class="eq-plain">i(a + b i + c j) = a i + b i^2 + c(i j) = (-b + c a) + (a + c b) i + c^2 j</span>
+  </div>
+
+  <p>
+    The two sides must agree component by component. Look only at the coefficient of
+    <code>j</code>: the left-hand side has <code>−1</code> and the right-hand side has
+    <code>c²</code>. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ c^2 = -1, \qquad c \in \mathbb{R} \]</span>
+    <span class="eq-plain">c^2 = -1, with c real</span>
+  </div>
+
+  <p>
+    And there is no such <code>c</code>. The assumption fails: <code>ij</code> cannot lie in the
+    span of <code>1</code>, <code>i</code> and <code>j</code>. <strong>A fourth basis element is
+    forced</strong> — not chosen for elegance, not adopted because it turned out convenient.
+    Forced, by three lines of algebra, in a space that has no room for the answer.
+  </p>
+
+  @@FIG_FORCED@@
+
+  <p>
+    That is the wall Hamilton spent from 1830 to 1843 walking into, trying every way he could
+    think of to multiply triples. What he eventually realised — famously, on a bridge in Dublin,
+    where he cut the relations into the stonework — was that you need four components
+    <em>and</em> you have to give up commutativity, because the next thing the algebra forces is
+    <code>ij = −ji</code>.
+  </p>
+
+  <p>
+    A symbolic argument cannot be "measured", so the harness does the honest alternative: it
+    searches. If some real <code>c</code> did satisfy <code>c² = −1</code>, a fine enough sweep
+    would show a residual heading towards zero. It does not:
+  </p>
+
+  <pre><code>   searching c in [-20, 20] for c^2 = -1:
+     best residual 1.0000 at c = 0.000
+  [PASS] H.3  no real c has c^2 = -1: the 4th dimension is forced</code></pre>
+
+  <p>
+    The residual bottoms out at exactly 1, which is <code>|c² + 1|</code> at <code>c = 0</code>,
+    and rises in both directions. Not evidence of a proof — a proof does not need evidence — but a
+    demonstration that the obstruction is <em>hard</em> rather than a matter of looking harder.
+  </p>
+
+  <h3>12.2 The thing the plane could never have warned us about</h3>
+
+  <p>
+    Every quaternion text writes a rotation as a <strong>sandwich</strong>:
+    <code>v ↦ q v q⁻¹</code>. It is natural to try that here, where we have everything the formula
+    needs, and see what it does.
+  </p>
+
+  <p>
+    It does nothing. For any complex <code>z</code> and any <code>v</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ z\,v\,\bar{z} = z\,\bar{z}\,v = |z|^2 v \]</span>
+    <span class="eq-plain">z v conj(z) = z conj(z) v = |z|^2 v</span>
+  </div>
+
+  <p>
+    — because multiplication commutes, so the <code>z</code> and the <code>z̄</code> slide
+    together and annihilate into a real number. A unit <code>z</code> sandwiching anything returns
+    it unchanged.
+  </p>
+
+  <pre><code>H. WHERE THE PLANE RUNS OUT
+   z v conj(z) vs v, 4,000 cases:  worst deviation 9.611e-07
+  [PASS] H.1  the two-sided form is the identity in the plane
+   CONTROL: z v z turns by 2 theta, to 4.098e-05 deg
+  [PASS] H.2  CONTROL: the same factor twice rotates by 2 theta</code></pre>
+
+  <p>
+    <strong>That is not a curiosity — it is the reason.</strong> In the plane the working two-sided
+    form is <code>z v z</code>, the <em>un</em>-conjugated one, which is §7's rotor applied twice
+    and turns by <code>2θ</code>. The conjugated sandwich is useless here precisely
+    <em>because</em> the algebra commutes.
+  </p>
+
+  <p>
+    In three dimensions it is the other way round, and for the same reason read backwards.
+    Multiplication will not commute, so <code>q v q̄</code> no longer collapses; and the conjugate
+    is needed — rather than <code>q v q</code> — because it is what keeps the result inside the
+    three-dimensional subspace the vectors live in. The plane cannot show you that, because the
+    plane has nothing outside the vectors to fall into.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Four predictions for Lesson 7.4, stated now so they can be checked then</span>
+    <ol>
+      <li><strong>Four components.</strong> §12.1 forces the fourth basis element; a rotation of
+          space has three degrees of freedom, so one constraint — unit length — will tie them
+          together.</li>
+      <li><strong>The product will not commute</strong>, because rotations of space do not
+          (§2), and because the algebra that describes them has to reflect that.</li>
+      <li><strong>A half-angle: <code>cos(θ/2)</code> and <code>sin(θ/2)n</code></strong>, because
+          a rotation is built from two reflections and the object built from two mirrors carries
+          the angle between them, which is half the turn (§7.2).</li>
+      <li><strong>A double cover</strong>, <code>q</code> and <code>−q</code> being the same
+          rotation, because <code>(−q)</code> generates the same rotation that <code>q</code>
+          does for the same reason <code>(−R)² = R²</code> here (§7.5).</li>
+    </ol>
+    <p>
+      None of those is a quaternion fact. All four are visible in the plane, and Lesson 7.4's job
+      is to carry them up a dimension and pay the one price — commutativity — that the trip costs.
+    </p>
+  </div>

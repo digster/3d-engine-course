@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 378" role="img" aria-labelledby="l53f6-t l53f6-d">
+  <title id="l53f6-t">The report shape, converged on three times</title>
+  <desc id="l53f6-d">Three side-by-side field lists — obj_report, gpu_report and image_report — each beginning with a status enum, continuing with diagnostic facts, and ending with a bool ok().</desc>
+  <defs>
+    <marker id="e-i-l53f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l53f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l53f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l53f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Three subsystems, arrived at independently, the same shape</text>
+<rect x="20" y="46" width="210" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="125" y="66" class="xs mono t-inv" text-anchor="middle">obj_report   (3.5)</text>
+<text x="28" y="92" class="xs mono t-hi" text-anchor="start">obj_status status</text>
+<text x="28" y="112" class="xs mono muted" text-anchor="start">int line</text>
+<text x="28" y="132" class="xs mono muted" text-anchor="start">positions / uvs / normals</text>
+<text x="28" y="152" class="xs mono muted" text-anchor="start">faces / ngons</text>
+<text x="28" y="172" class="xs mono muted" text-anchor="start">vertices / triangles</text>
+<text x="28" y="192" class="xs mono muted" text-anchor="start">split_vertices</text>
+<text x="28" y="212" class="xs mono t-hi" text-anchor="start">bool ok()</text>
+<rect x="250" y="46" width="210" height="30" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="355" y="66" class="xs mono t-inv" text-anchor="middle">gpu_report   (4.2)</text>
+<text x="258" y="92" class="xs mono t-hi" text-anchor="start">gpu_status status</text>
+<text x="258" y="112" class="xs mono muted" text-anchor="start">const char* driver</text>
+<text x="258" y="132" class="xs mono muted" text-anchor="start">asked / granted formats</text>
+<text x="258" y="152" class="xs mono muted" text-anchor="start">swapchain_format</text>
+<text x="258" y="172" class="xs mono muted" text-anchor="start">present modes</text>
+<text x="258" y="192" class="xs mono muted" text-anchor="start">frames_in_flight</text>
+<text x="258" y="212" class="xs mono t-hi" text-anchor="start">bool ok()</text>
+<rect x="480" y="46" width="210" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="585" y="66" class="xs mono t-inv" text-anchor="middle">image_report   (5.3)</text>
+<text x="488" y="92" class="xs mono t-hi" text-anchor="start">image_status status</text>
+<text x="488" y="112" class="xs mono muted" text-anchor="start">int width, height</text>
+<text x="488" y="132" class="xs mono muted" text-anchor="start">source_channels</text>
+<text x="488" y="152" class="xs mono muted" text-anchor="start">size_t bytes</text>
+<text x="488" y="172" class="xs mono muted" text-anchor="start">size_t file_bytes</text>
+<text x="488" y="212" class="xs mono t-hi" text-anchor="start">bool ok()</text>
+<line x1="20" y1="242" x2="700" y2="242" class="grid" stroke-width="1"/>
+<text x="20" y="262" class="xs t-hi" text-anchor="start">A STATUS that names the failure, the FACTS you ask for next, and an ok().</text>
+<text x="20" y="276" class="xs muted" text-anchor="start">The first two were written a module apart by nobody trying to match the other.</text>
+<text x="20" y="290" class="xs muted" text-anchor="start"></text>
+<text x="20" y="304" class="xs" text-anchor="start">So 5.3 does not invent an error type. It NAMES the one the engine kept</text>
+<text x="20" y="318" class="xs muted" text-anchor="start">reinventing, and converts the third case — which was the odd one out, a bare</text>
+<text x="20" y="332" class="xs muted" text-anchor="start">image_status with the interesting numbers thrown away.</text>
+<text x="20" y="346" class="xs muted" text-anchor="start">(std::expected is C++23; a hand-rolled result&lt;T&gt; is exercise 9.5, with the</text>
+<text x="20" y="360" class="xs muted" text-anchor="start">argument for why the codebase does not need one yet.)</text>
+</svg>

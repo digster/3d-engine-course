@@ -1,0 +1,57 @@
+<svg viewBox="0 0 760 372" role="img" aria-labelledby="f77g-t f77g-d">
+  <title id="f77g-t">Chain length under the two blends</title>
+  <desc id="f77g-d">Chain length plotted against the per-joint difference between two poses. The pose blend holds at exactly five units; the matrix blend falls along the sum of cosines of half the accumulated angle.</desc>
+  <defs>
+    <marker id="e-i-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-teal-f77g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60c4ce"/></marker></defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">what a matrix blend costs, against what it should cost</text>
+<text x="380.0" y="47" class="xs muted" text-anchor="middle">a six-joint chain, five bones of one unit, blended half and half</text>
+<rect x="78.0" y="78.0" width="372.0" height="206.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<path d="M 104.00,116.83 L 107.56,116.85 L 111.11,116.91 L 114.67,117.00 L 118.22,117.13 L 121.78,117.29 L 125.33,117.49 L 128.89,117.73 L 132.44,118.00 L 136.00,118.32 L 139.56,118.66 L 143.11,119.05 L 146.67,119.46 L 150.22,119.92 L 153.78,120.41 L 157.33,120.94 L 160.89,121.50 L 164.44,122.10 L 168.00,122.73 L 171.56,123.40 L 175.11,124.11 L 178.67,124.85 L 182.22,125.62 L 185.78,126.43 L 189.33,127.28 L 192.89,128.15 L 196.44,129.06 L 200.00,130.01 L 203.56,130.99 L 207.11,132.00 L 210.67,133.05 L 214.22,134.13 L 217.78,135.24 L 221.33,136.39 L 224.89,137.56 L 228.44,138.77 L 232.00,140.01 L 235.56,141.28 L 239.11,142.59 L 242.67,143.92 L 246.22,145.29 L 249.78,146.68 L 253.33,148.11 L 256.89,149.56 L 260.44,151.05 L 264.00,152.56 L 267.56,154.10 L 271.11,155.67 L 274.67,157.27 L 278.22,158.89 L 281.78,160.55 L 285.33,162.23 L 288.89,163.93 L 292.44,165.67 L 296.00,167.42 L 299.56,169.21 L 303.11,171.02 L 306.67,172.85 L 310.22,174.71 L 313.78,176.59 L 317.33,178.49 L 320.89,180.42 L 324.44,182.37 L 328.00,184.34 L 331.56,186.34 L 335.11,188.35 L 338.67,190.39 L 342.22,192.45 L 345.78,194.52 L 349.33,196.62 L 352.89,198.73 L 356.44,200.87 L 360.00,203.02 L 363.56,205.19 L 367.11,207.37 L 370.67,209.58 L 374.22,211.79 L 377.78,214.03 L 381.33,216.28 L 384.89,218.54 L 388.44,220.82 L 392.00,223.12 L 395.56,225.42 L 399.11,227.74 L 402.67,230.07 L 406.22,232.41 L 409.78,234.77 L 413.33,237.13 L 416.89,239.51 L 420.44,241.89 L 424.00,244.29" fill="none" stroke="#8f918a" stroke-width="3.4" stroke-dasharray="2 5"/>
+<path d="M 104.00,116.83 L 139.56,116.83 L 175.11,116.83 L 246.22,116.83 L 317.33,116.83 L 424.00,116.83" fill="none" stroke="#60c4ce" stroke-width="1.4"/>
+<circle cx="104.00" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="104.00" cy="116.83" r="3.2" fill="#ec7a8c"/>
+<circle cx="139.56" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="139.56" cy="118.66" r="3.2" fill="#ec7a8c"/>
+<circle cx="175.11" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="175.11" cy="124.11" r="3.2" fill="#ec7a8c"/>
+<circle cx="246.22" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="246.22" cy="145.29" r="3.2" fill="#ec7a8c"/>
+<circle cx="317.33" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="317.33" cy="178.49" r="3.2" fill="#ec7a8c"/>
+<circle cx="424.00" cy="116.83" r="3.2" fill="#60c4ce"/>
+<circle cx="424.00" cy="244.29" r="3.2" fill="#ec7a8c"/>
+<path d="M 104.00,116.83 L 139.56,118.66 L 175.11,124.11 L 246.22,145.29 L 317.33,178.49 L 424.00,244.29" fill="none" stroke="#ec7a8c" stroke-width="1.4"/>
+<text x="70.0" y="249.16666666666666" class="xs mono" text-anchor="end">3.0</text>
+<text x="70.0" y="217.08333333333331" class="xs mono" text-anchor="end">3.5</text>
+<text x="70.0" y="185.0" class="xs mono" text-anchor="end">4.0</text>
+<text x="70.0" y="152.91666666666666" class="xs mono" text-anchor="end">4.5</text>
+<text x="70.0" y="120.83333333333331" class="xs mono" text-anchor="end">5.0</text>
+<text x="104.0" y="300.0" class="xs mono" text-anchor="middle">0°</text>
+<text x="175.11111111111111" y="300.0" class="xs mono" text-anchor="middle">10°</text>
+<text x="246.22222222222223" y="300.0" class="xs mono" text-anchor="middle">20°</text>
+<text x="317.33333333333337" y="300.0" class="xs mono" text-anchor="middle">30°</text>
+<text x="424.0" y="300.0" class="xs mono" text-anchor="middle">45°</text>
+<text x="264.0" y="318.0" class="xs muted" text-anchor="middle">per-joint difference between the poses</text>
+<text x="70.0" y="72.0" class="xs muted" text-anchor="end">chain length</text>
+<text x="317.33333333333337" y="104.83333333333331" class="xs" text-anchor="middle">blend the poses</text>
+<text x="196.44444444444446" y="225.91666666666666" class="xs" text-anchor="middle">blend the matrices</text>
+<text x="494.0" y="84.0" class="xs" text-anchor="start">why that curve</text>
+<text x="494.0" y="122.0" class="xs muted" text-anchor="start">Bone k runs from joint k−1 to joint k, so its</text>
+<text x="494.0" y="138.0" class="xs muted" text-anchor="start">direction is joint k−1’s own axis. The two poses</text>
+<text x="494.0" y="154.0" class="xs muted" text-anchor="start">turn that joint by (k−1)·δ, and a matrix blend</text>
+<text x="494.0" y="170.0" class="xs muted" text-anchor="start">averages the two joint POSITIONS — so the bone</text>
+<text x="494.0" y="186.0" class="xs muted" text-anchor="start">becomes the average of two unit vectors (k−1)·δ</text>
+<text x="494.0" y="202.0" class="xs muted" text-anchor="start">apart, which is cos of half of it.</text>
+<text x="494.0" y="218.0" class="xs muted" text-anchor="start"></text>
+<text x="494.0" y="234.0" class="xs mono" text-anchor="start">    ∑ cos((k−1)·δ / 2),  k = 1 … 5</text>
+<text x="494.0" y="250.0" class="xs muted" text-anchor="start"></text>
+<text x="494.0" y="266.0" class="xs mono" text-anchor="start">measured against that: 4.768e-07</text>
+<text x="494.0" y="282.0" class="xs mono" text-anchor="start">pose route, worst bone error: 2.980e-07</text>
+<text x="380.0" y="350" class="xs muted" text-anchor="middle">the error grows down the chain, so it is worst at hands and feet — which is where props are attached.</text>
+</svg>

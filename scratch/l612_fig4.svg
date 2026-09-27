@@ -1,0 +1,61 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="f612e-t f612e-d">
+  <title id="f612e-t">Per-channel against luminance-only tonemapping</title>
+  <desc id="f612e-d">The same bright orange through both variants, with the resulting channel values and the red-to-blue ratio of each.</desc>
+  <defs>
+    <marker id="e-i-f612e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f612e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f612e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f612e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f612e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Two ways to apply a curve to a colour, and they disagree</text>
+<text x="150" y="52" class="xs" text-anchor="middle">the colour (8.0, 2.0, 0.4)</text>
+<rect x="60" y="72.0" width="44" height="86.0" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="60" y="72.0" width="44" height="86.0" rx="2" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="82" y="174" class="xs" text-anchor="middle">R</text>
+<text x="82" y="190" class="xs" text-anchor="middle">8.000</text>
+<rect x="122" y="136.5" width="44" height="21.5" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="122" y="136.5" width="44" height="21.5" rx="2" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="144" y="174" class="xs" text-anchor="middle">G</text>
+<text x="144" y="190" class="xs" text-anchor="middle">2.000</text>
+<rect x="184" y="153.7" width="44" height="4.3" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="184" y="153.7" width="44" height="4.3" rx="2" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="206" y="174" class="xs" text-anchor="middle">B</text>
+<text x="206" y="190" class="xs" text-anchor="middle">0.400</text>
+<text x="150" y="214" class="xs" text-anchor="middle">red:blue = 20</text>
+<text x="375" y="52" class="xs" text-anchor="middle">PER CHANNEL</text>
+<rect x="285" y="81.5546" width="44" height="76.4454" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="285" y="81.5546" width="44" height="76.4454" rx="2" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="307" y="174" class="xs" text-anchor="middle">R</text>
+<text x="307" y="190" class="xs" text-anchor="middle">0.889</text>
+<rect x="347" y="100.66380000000001" width="44" height="57.3362" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="347" y="100.66380000000001" width="44" height="57.3362" rx="2" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="369" y="174" class="xs" text-anchor="middle">G</text>
+<text x="369" y="190" class="xs" text-anchor="middle">0.667</text>
+<rect x="409" y="133.4298" width="44" height="24.5702" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="409" y="133.4298" width="44" height="24.5702" rx="2" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="431" y="174" class="xs" text-anchor="middle">B</text>
+<text x="431" y="190" class="xs" text-anchor="middle">0.286</text>
+<text x="375" y="214" class="xs" text-anchor="middle">red:blue = 3.11 — desaturated</text>
+<text x="600" y="52" class="xs" text-anchor="middle">LUMINANCE ONLY</text>
+<rect x="510" y="75.31099999999999" width="44" height="82.68900000000001" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="510" y="75.31099999999999" width="44" height="82.68900000000001" rx="2" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="532" y="174" class="xs" text-anchor="middle">R</text>
+<text x="532" y="190" class="xs" text-anchor="middle">1.923</text>
+<rect x="572" y="137.3256" width="44" height="20.6744" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="572" y="137.3256" width="44" height="20.6744" rx="2" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="594" y="174" class="xs" text-anchor="middle">G</text>
+<text x="594" y="190" class="xs" text-anchor="middle">0.481</text>
+<rect x="634" y="153.8634" width="44" height="4.1366" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="634" y="153.8634" width="44" height="4.1366" rx="2" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="656" y="174" class="xs" text-anchor="middle">B</text>
+<text x="656" y="190" class="xs" text-anchor="middle">0.096</text>
+<text x="600" y="214" class="xs" text-anchor="middle">red:blue = 20 — hue exact</text>
+<line x1="510.0" y1="72.0" x2="642.0" y2="72.0" stroke="#f0961e" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<text x="660" y="76" class="xs" text-anchor="start">1.0</text>
+<line x1="60" y1="244" x2="660" y2="244" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="268" class="xs" text-anchor="middle">Per-channel compresses the big channel more than the small one, so a bright colour moves TOWARD WHITE as it brightens —</text>
+<text x="360.0" y="288" class="xs" text-anchor="middle">which is what film does. Luminance-only preserves the hue exactly, and can leave a channel ABOVE 1 for the encode to clip:</text>
+<text x="360.0" y="308" class="xs" text-anchor="middle">a pure blue of (0, 0, 8) sails through the curve and arrives at 5.071, because blue's luminance weight is only 0.0722.</text>
+<text x="360.0" y="328" class="xs" text-anchor="middle">So it preserves the hue right up to the point where it does not — at a threshold nobody chose.</text>
+</svg>

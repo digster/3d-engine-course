@@ -1,0 +1,325 @@
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The theory</h2>
+
+  <h3 id="t-ss">3.1 Supersampling, and what it costs</h3>
+
+  <p>
+    The direct implementation of "a pixel is an area" is to sample that area more densely: render at
+    <code>N</code> times the linear resolution and average each <code>N×N</code> block down.
+  </p>
+
+  <p>
+    Note what changes and what does not. The camera does not move, the projection matrix is
+    identical, the triangles are the same triangles. <strong>Only the viewport scales.</strong> That
+    is what makes supersampling the honest baseline — it is the same rendering, sampled more
+    densely — and it is also why it costs <code>N²</code>: every fragment is shaded.
+  </p>
+
+  <h3 id="t-resolve">3.2 The resolve, and a mistake making its fourth appearance</h3>
+
+  <p>
+    Averaging the samples is one line, and it is the line this course has now got wrong in four
+    different contexts. <code>framebuffer</code> holds sRGB-encoded bytes. Averaging bytes averages
+    <em>codes</em>, and codes are not quantities of light — the transfer function exists precisely
+    because they are not.
+  </p>
+
+  @@FIG_RESOLVE@@
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> A pixel exactly half covered: two white sub-samples, two
+      black.
+    </p>
+    <div class="eq-plain">the correct answer:  half the light is 0.5 linear
+                     sRGB(0.5) = 1.055 × 0.5^(1/2.4) − 0.055 = 0.7354
+                     × 255 = code 188
+
+averaging bytes:     (255 + 255 + 0 + 0) / 4 = code 127
+                     which is a linear 0.2122</div>
+    <p>
+      So the wrong resolve delivers <strong>21.2%</strong> of the light instead of 50%. The symptom
+      is specific and usually misdiagnosed: antialiased edges come out <em>too dark</em>, every
+      silhouette grows a thin dark outline, and the usual guess is that edges are being composited
+      with the background twice.
+    </p>
+  </div>
+
+  <p>
+    This is Lesson 6.1's rule arriving after 6.10's mip chains and 6.11's compositing, and it will
+    keep arriving — because every new way of <em>averaging</em> is a new opportunity to average the
+    wrong quantity.
+  </p>
+
+  <h3 id="t-lobe">3.3 How wide is a specular lobe?</h3>
+
+  <p>
+    Now the shading half, which needs one number nobody usually computes: the angular width of a
+    GGX highlight.
+  </p>
+
+  <p>
+    The GGX normal distribution, from Lesson 6.3, is
+  </p>
+
+  <div class="eq">\[ D(\theta) = \frac{\alpha^{2}}{\pi\left(\cos^{2}\theta\,(\alpha^{2}-1) + 1\right)^{2}} \]</div>
+  <div class="eq-plain">D(t) = α² / (π (cos²t (α² − 1) + 1)²)</div>
+
+  <p>
+    At <code>t = 0</code> the bracket is <code>α²</code>, so <code>D(0) = 1/(πα²)</code>. Ask where
+    it falls to half of that. Writing <code>d</code> for the bracket:
+  </p>
+
+  <div class="eq">\[ \frac{D(\theta)}{D(0)} = \frac{\alpha^{4}}{d^{2}} = \frac{1}{2} \quad\Longrightarrow\quad d = \sqrt{2}\,\alpha^{2} \]</div>
+  <div class="eq-plain">α⁴ / d² = 1/2    →    d = √2 α²</div>
+
+  <p>Substitute the definition of <code>d</code> and solve for the angle:</p>
+
+  <div class="eq">\[ \cos^{2}\theta = \frac{1 - \sqrt{2}\,\alpha^{2}}{1 - \alpha^{2}} \quad\Longrightarrow\quad \sin\theta = \alpha\sqrt{\frac{\sqrt{2}-1}{1-\alpha^{2}}} \]</div>
+  <div class="eq-plain">sin t = α √((√2 − 1) / (1 − α²))</div>
+
+  <p>
+    Three lines, no fitting, and exact at every roughness rather than to leading order. For small
+    <code>α</code> it reduces to
+  </p>
+
+  <div class="eq">\[ \theta \approx \alpha\sqrt{\sqrt{2}-1} = 0.6436\,\alpha \]</div>
+  <div class="eq-plain">t ≈ 0.6436 α</div>
+
+  <div class="callout">
+    <p>
+      <strong>Which corrects a piece of folklore by 55%.</strong> "The lobe is about α wide" is the
+      standard hand-wave. The coefficient is <code>√(√2−1) = 0.6436</code>, so the folklore
+      overstates the width by a factor of 1.55. <code>verify_614</code> §A checks the closed form
+      against a bisection of the real NDF — two independent routes to one number — and they agree to
+      <strong>1.6 × 10⁻⁸</strong> across roughness 0.02 to 0.90.
+    </p>
+  </div>
+
+  <p>
+    One more thing before we use it: this is the <strong>half-vector</strong> lobe. The lobe you
+    <em>see</em> — the image of the light in the surface — is twice as wide, because rotating the
+    half-vector by <code>t</code> rotates the mirror direction by <code>2t</code>. Which of the two
+    you want depends on whether you are asking about the surface or about its reflection.
+  </p>
+
+  <h3 id="t-crossover">3.4 Where the sparkle begins</h3>
+
+  <p>
+    A pixel does not see one normal. It sees every normal on the patch of surface it covers. So the
+    question "is this highlight adequately sampled?" becomes:
+  </p>
+
+  <p class="lede">
+    Is the lobe wider than the range of normals inside one pixel?
+  </p>
+
+  <p>
+    Both sides of that are now computable. The left is §3.3. For the right, take a closed surface: a
+    sphere's normal sweeps a full quarter turn from the centre of its silhouette to the rim, so if
+    it is <code>R</code> pixels in radius, the average turn per pixel is <code>(π/2)/R</code>.
+  </p>
+
+  @@FIG_CROSSOVER@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A sphere 40 px in radius: the normal turns 0.039270 rad per pixel.</p>
+    <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>roughness</th><th>lobe half-width</th><th>lobe / turn</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>0.50</td><td>0.166950</td><td>4.251</td><td>resolved</td></tr>
+        <tr><td>0.30</td><td>0.058192</td><td>1.482</td><td>resolved</td></tr>
+        <tr><td>0.20</td><td>0.025767</td><td>0.656</td><td><strong>aliases</strong></td></tr>
+        <tr><td>0.10</td><td>0.006436</td><td>0.164</td><td><strong>aliases</strong></td></tr>
+        <tr><td>0.05</td><td>0.001609</td><td>0.041</td><td><strong>aliases</strong></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>
+      Bisecting for the crossover gives <strong>roughness 0.2468</strong>. At roughness 0.05 the
+      lobe is <em>twenty-four times narrower</em> than the pixel's worth of normal variation — which
+      is why the highlight does not merely shimmer, it appears and vanishes.
+    </p>
+  </div>
+
+  <h3 id="t-msaa">3.5 Why MSAA cannot reach it</h3>
+
+  <p>
+    Now the two halves meet. MSAA evaluates coverage and depth at several positions inside each
+    pixel, and runs the fragment shader <strong>once</strong> per primitive per pixel, replicating
+    that one result to every covered sample.
+  </p>
+
+  <p>
+    On a pixel that straddles a silhouette, that is exactly right and very cheap: the samples differ
+    in <em>whether they are covered</em>, which is what MSAA measures. On a pixel in the interior of
+    a surface, every sample belongs to the same primitive — so MSAA's answer is, identically, the
+    single-sample answer.
+  </p>
+
+  @@FIG_MSAA@@
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> An interior pixel on a curved metal, shaded once (MSAA) and
+      four times (SSAA), from <code>verify_614</code> §F.
+    </p>
+    <div class="eq-plain">roughness   MSAA (1 shade)   SSAA (4 shades)    ratio
+     0.50             5.99              5.97    1.003x
+     0.20           191.66            181.98    1.053x
+     0.10           406.28           1288.18    0.315x
+     0.05            52.02          15587.65    0.003x</div>
+    <p>
+      At roughness 0.50 they agree to three parts in a thousand. At 0.05 they differ by a factor of
+      <strong>300</strong>. That gap is the shading aliasing, precisely, and no sample-count setting
+      on an MSAA target touches it.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <p>
+      <strong>And a resolve does not rescue a firefly either.</strong> Lesson 6.13's 55,917, caught
+      by one sample of four, resolves to 13,979 — still <strong>2,192×</strong> above ACES's lid of
+      6.3774. Averaging in linear light divides by at most 4, and the lid is 8,769× below. That is
+      6.13's clamp argument arriving from a completely different direction, and it is why the two
+      lessons need each other.
+    </p>
+  </div>
+
+  <h3 id="t-filter">3.6 Filtering the distribution instead</h3>
+
+  <p>
+    If the problem is that the lobe is too narrow for the pixel, the fix is not more samples. It is
+    to <strong>widen the lobe</strong> until it is no narrower than the normal variation the pixel
+    has to integrate over.
+  </p>
+
+  <p>
+    That is the same move as a mip chain: prefilter the thing being undersampled, at the frequency
+    the grid can actually represent. Here is the derivable core.
+  </p>
+
+  <p>
+    A pixel sees a <em>distribution</em> of surface normals, spread over its footprint with some
+    variance <code>σ²</code>. The reflectance it should report is therefore the surface's own NDF
+    <strong>convolved</strong> with that spread. And convolution adds variances:
+  </p>
+
+  <div class="eq">\[ \alpha'^{2} = \alpha^{2} + 2\sigma^{2} \]</div>
+  <div class="eq-plain">α'² = α² + 2σ²</div>
+
+  <p>
+    with <code>σ²</code> estimated from the normal's screen-space derivatives. On the GPU those are
+    free — fragments are shaded in 2×2 quads (Lesson 4.1) precisely so a neighbour is always
+    available to subtract, so <code>ddx(n)</code> and <code>ddy(n)</code> are one instruction each.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>What is derived here and what is not.</strong> The convolution argument is real: a
+      pixel integrates over a footprint, and convolving distributions adds their variances. The
+      <em>factor of 2</em>, the screen-space width <code>σ² = 1/2π</code>, and the clamp
+      <code>κ = 0.18</code> come from Tokuyoshi and Kaplanyan's 2019 paper and are <strong>fits</strong>.
+    </p>
+    <p>
+      And one step deserves to be flagged rather than glossed: "α behaves as a standard deviation"
+      is an approximation doing real work, because GGX's variance is in fact <em>infinite</em> — its
+      tails are heavy enough that the second moment diverges. That is the same heavy tail Lesson
+      6.13 exploited to make bloom look like real glare. It is a good approximation here and it is
+      not a theorem, so we measure whether it helps rather than assuming it.
+    </p>
+  </div>
+
+  <p>
+    The clamp is load-bearing rather than defensive. At a silhouette the normal sweeps most of a
+    hemisphere inside one pixel, so without a ceiling a chrome bumper would be filtered to fully
+    rough exactly at its own edge — the technique would produce a new artefact in the act of curing
+    an old one.
+  </p>
+
+  <!-- =================================================================
+       4 — WHAT ANTIALIASING ACTUALLY OPTIMISES
+       ================================================================= -->
+  <h2 id="stability"><span class="num">4</span>What antialiasing actually optimises</h2>
+
+  <p>
+    Here is the measurement this lesson exists for, and it did not come out the way I expected.
+  </p>
+
+  <p>
+    Take a curved metal, sweep the sample point across one pixel's worth of normal variation, and at
+    each phase compare three numbers: the naive single sample, the same sample with a filtered NDF,
+    and brute-force ground truth — the BRDF integrated over that pixel's own footprint with 256
+    samples.
+  </p>
+
+  @@FIG_STABILITY@@
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>roughness</th><th>filtered to</th><th>naive RMS error</th><th>filtered RMS error</th>
+          <th>naive swing</th><th>filtered swing</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.30</td><td>0.3087</td><td>2.8%</td><td>8.1%</td><td>1.1×</td><td>1.1×</td></tr>
+      <tr><td>0.20</td><td>0.2254</td><td>10.5%</td><td>28.5%</td><td>1.6×</td><td>1.3×</td></tr>
+      <tr><td>0.10</td><td>0.1814</td><td>81.3%</td><td>77.5%</td><td>24.0×</td><td>1.9×</td></tr>
+      <tr><td>0.05</td><td>0.1773</td><td>230.1%</td><td>94.7%</td><td><strong>3996.5×</strong></td><td><strong>2.0×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Read the two right-hand columns against the two middle ones, because they disagree.</p>
+
+  <p>
+    On <strong>accuracy</strong>, the filter is nearly useless. At roughness 0.05 it improves the
+    per-pixel RMS error by 2.4× — and it still leaves 94.7%. At roughness 0.30 and 0.20 it makes the
+    error <em>three times worse</em>.
+  </p>
+
+  <p>
+    On <strong>stability</strong>, it is transformative. The swing — the ratio between the brightest
+    and dimmest value a pixel takes as the camera pans by less than one pixel — falls from 3,996.5×
+    to 2.0×. That is a factor of <strong>2,034</strong>.
+  </p>
+
+  <p class="lede">
+    Antialiasing does not make a pixel correct. It makes it stable.
+  </p>
+
+  <p>
+    And once stated, it is obvious in hindsight. The artefact was never "this pixel has the wrong
+    value" — a still frame with a slightly wrong specular pixel looks fine, and nobody files a bug.
+    The artefact is "this pixel changes violently when nothing in the scene did". Aliasing is not an
+    error in magnitude; it is an error that is <em>discontinuous in the parameters</em>, so it
+    converts smooth camera motion into flashing.
+  </p>
+
+  <p>
+    Which means the question to ask of any antialiasing technique is not "how accurate is it". It is:
+  </p>
+
+  <p class="lede">
+    What frequencies does it remove, and can the grid carry what is left?
+  </p>
+
+  <p>
+    Both halves of this lesson answer that question the same way. Supersampling removes the
+    high-frequency content of <em>coverage</em> by integrating over the pixel's area. NDF filtering
+    removes the high-frequency content of the <em>lighting</em> by widening the lobe. Both discard
+    real information. Both are correct.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And this is 6.13's trade in a different currency.</strong> That lesson had more
+      <em>range</em> than the display could carry, and spent <em>area</em> to encode it. This one has
+      more <em>detail</em> than the sample grid can carry, and spends <em>sharpness</em> to buy
+      stability. In both, the pixel grid is the thing that cannot be enlarged, and in both the fix is
+      to convert the surplus into a currency the grid does have.
+    </p>
+  </div>

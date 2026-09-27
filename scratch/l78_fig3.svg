@@ -1,0 +1,105 @@
+<svg viewBox="0 0 900 430" role="img" aria-labelledby="l78f3-t l78f3-d">
+  <title id="l78f3-t">Peak and RMS against voice count, with N and sqrt(N) reference lines</title>
+  <desc id="l78f3-d">On log-log axes the RMS of N uncorrelated voices lies exactly on sqrt(N) while the peak lies above it and well below N. A control mixing the same voice N times lands exactly on N. A table shows the peak of 16 voices rising from 6.98x to 10.46x as the observation window grows from 10 ms to 8 s.</desc>
+  <defs>
+    <marker id="e-i-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-red-l78f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="62" y="56" width="420" height="280" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">growth against voice count, both axes log2</text>
+<line x1="62.0" y1="56" x2="62.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="352" class="xs mono" text-anchor="middle">1</text>
+<line x1="132.0" y1="56" x2="132.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="132.0" y="352" class="xs mono" text-anchor="middle">2</text>
+<line x1="202.0" y1="56" x2="202.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="202.0" y="352" class="xs mono" text-anchor="middle">4</text>
+<line x1="272.0" y1="56" x2="272.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="272.0" y="352" class="xs mono" text-anchor="middle">8</text>
+<line x1="342.0" y1="56" x2="342.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="342.0" y="352" class="xs mono" text-anchor="middle">16</text>
+<line x1="412.0" y1="56" x2="412.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="412.0" y="352" class="xs mono" text-anchor="middle">32</text>
+<line x1="482.0" y1="56" x2="482.0" y2="336" class="grid" stroke-width="1.0"/>
+<text x="482.0" y="352" class="xs mono" text-anchor="middle">64</text>
+<line x1="62" y1="336.0" x2="482" y2="336.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="340.0" class="xs muted" text-anchor="end">1x</text>
+<line x1="62" y1="289.3333333333333" x2="482" y2="289.3333333333333" class="grid" stroke-width="1.0"/>
+<text x="54" y="293.3333333333333" class="xs muted" text-anchor="end">2x</text>
+<line x1="62" y1="242.66666666666669" x2="482" y2="242.66666666666669" class="grid" stroke-width="1.0"/>
+<text x="54" y="246.66666666666669" class="xs muted" text-anchor="end">4x</text>
+<line x1="62" y1="196.0" x2="482" y2="196.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="200.0" class="xs muted" text-anchor="end">8x</text>
+<line x1="62" y1="149.33333333333334" x2="482" y2="149.33333333333334" class="grid" stroke-width="1.0"/>
+<text x="54" y="153.33333333333334" class="xs muted" text-anchor="end">16x</text>
+<line x1="62" y1="102.66666666666666" x2="482" y2="102.66666666666666" class="grid" stroke-width="1.0"/>
+<text x="54" y="106.66666666666666" class="xs muted" text-anchor="end">32x</text>
+<line x1="62" y1="56.0" x2="482" y2="56.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="60.0" class="xs muted" text-anchor="end">64x</text>
+<text x="272.0" y="372" class="xs muted" text-anchor="middle">voices mixed</text>
+<path d="M 62.00,336.00 L 482.00,56.00" fill="none" stroke="#8f918a" stroke-width="4.0" stroke-dasharray="8 5"/>
+<path d="M 62.00,336.00 L 482.00,196.00" fill="none" stroke="#8f918a" stroke-width="4.0" stroke-dasharray="8 5"/>
+<text x="374.1602133046108" y="87.64335557192308" class="xs mono muted" text-anchor="middle">N</text>
+<text x="405.4823416925963" y="259.8274832766894" class="xs mono muted" text-anchor="middle">sqrt(N)</text>
+<path d="M 62.00,336.00 L 132.00,289.33 L 202.00,250.70 L 272.00,215.26 L 342.00,198.75 L 412.00,165.31 L 482.00,145.65" fill="none" stroke="#f0961e" stroke-width="1.8"/>
+<path d="M 62.00,335.70 L 132.00,312.38 L 202.00,289.03 L 272.00,265.72 L 342.00,242.36 L 412.00,219.88 L 482.00,195.84" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<circle cx="62.0" cy="336.0" r="3" fill="#f0961e"/>
+<circle cx="62.0" cy="335.7" r="3" fill="#5082e6"/>
+<circle cx="132.0" cy="289.3" r="3" fill="#f0961e"/>
+<circle cx="132.0" cy="312.4" r="3" fill="#5082e6"/>
+<circle cx="202.0" cy="250.7" r="3" fill="#f0961e"/>
+<circle cx="202.0" cy="289.0" r="3" fill="#5082e6"/>
+<circle cx="272.0" cy="215.3" r="3" fill="#f0961e"/>
+<circle cx="272.0" cy="265.7" r="3" fill="#5082e6"/>
+<circle cx="342.0" cy="198.7" r="3" fill="#f0961e"/>
+<circle cx="342.0" cy="242.4" r="3" fill="#5082e6"/>
+<circle cx="412.0" cy="165.3" r="3" fill="#f0961e"/>
+<circle cx="412.0" cy="219.9" r="3" fill="#5082e6"/>
+<circle cx="482.0" cy="145.6" r="3" fill="#f0961e"/>
+<circle cx="482.0" cy="195.8" r="3" fill="#5082e6"/>
+<path d="M 62.00,336.00 L 132.00,289.33 L 202.00,242.67 L 272.00,196.00 L 342.00,149.33" fill="none" stroke="#e05c5c" stroke-width="1.6" stroke-dasharray="6 3"/>
+<circle cx="62.0" cy="336.0" r="2.6" fill="#e05c5c"/>
+<circle cx="132.0" cy="289.3" r="2.6" fill="#e05c5c"/>
+<circle cx="202.0" cy="242.7" r="2.6" fill="#e05c5c"/>
+<circle cx="272.0" cy="196.0" r="2.6" fill="#e05c5c"/>
+<circle cx="342.0" cy="149.3" r="2.6" fill="#e05c5c"/>
+<line x1="62.0" y1="386.0" x2="84.0" y2="386.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="92" y="390" class="xs" text-anchor="start">rms of N uncorrelated voices - lands on sqrt(N) exactly</text>
+<line x1="62.0" y1="404.0" x2="84.0" y2="404.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="92" y="408" class="xs" text-anchor="start">peak of the same mix - above sqrt(N), well below N</text>
+<line x1="62.0" y1="422.0" x2="84.0" y2="422.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="92" y="426" class="xs" text-anchor="start">CONTROL: the SAME voice N times - lands on N, exactly</text>
+<text x="528" y="48" class="xs muted" text-anchor="start">16 voices, and the peak grows with the window</text>
+<text x="528" y="68" class="xs muted" text-anchor="start">listened for</text>
+<text x="782" y="68" class="xs muted" text-anchor="end">peak / a</text>
+<line x1="528" y1="76.0" x2="788" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="528" y="93.0" class="xs" text-anchor="start">0.01 s</text>
+<text x="782" y="93.0" class="xs mono" text-anchor="end">6.98x</text>
+<text x="528" y="110.0" class="xs" text-anchor="start">0.1 s</text>
+<text x="782" y="110.0" class="xs mono" text-anchor="end">8.45x</text>
+<text x="528" y="127.0" class="xs" text-anchor="start">1 s</text>
+<text x="782" y="127.0" class="xs mono" text-anchor="end">10.09x</text>
+<text x="528" y="144.0" class="xs" text-anchor="start">8 s</text>
+<text x="782" y="144.0" class="xs mono" text-anchor="end">10.46x</text>
+<text x="528" y="176.5" class="xs" text-anchor="start">The rms is a property of the signals.</text>
+<text x="528" y="193.5" class="xs muted" text-anchor="start">The peak is the largest coincidence that</text>
+<text x="528" y="209.5" class="xs muted" text-anchor="start">happened to occur, and a longer window</text>
+<text x="528" y="225.5" class="xs t-hi" text-anchor="start">holds more chances. Headroom is a BET.</text>
+<text x="528" y="262.5" class="xs muted" text-anchor="start">headroom for 16</text>
+<text x="772" y="262.5" class="xs muted" text-anchor="end">gain</text>
+<text x="882" y="262.5" class="xs muted" text-anchor="end"></text>
+<line x1="528" y1="270.5" x2="888" y2="270.5" class="grid" stroke-width="1.0"/>
+<text x="528" y="287.5" class="xs" text-anchor="start">1 / N</text>
+<text x="772" y="287.5" class="xs mono" text-anchor="end">0.0625</text>
+<text x="882" y="287.5" class="xs mono" text-anchor="end">-24.08 dB</text>
+<text x="528" y="304.5" class="xs" text-anchor="start">1 / sqrt(N)</text>
+<text x="772" y="304.5" class="xs mono" text-anchor="end">0.2500</text>
+<text x="882" y="304.5" class="xs mono" text-anchor="end">-12.04 dB</text>
+<text x="528" y="321.5" class="xs" text-anchor="start">none</text>
+<text x="772" y="321.5" class="xs mono" text-anchor="end">1.0000</text>
+<text x="882" y="321.5" class="xs mono" text-anchor="end">33 clipped</text>
+</svg>

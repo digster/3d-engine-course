@@ -1,0 +1,630 @@
+  <!-- =================================================================
+       10 — INSTANCING
+       ================================================================= -->
+  <h2 id="instancing"><span class="num">10</span>Instanced submission</h2>
+
+  <p>
+    Culling turns a draw list into a <em>set</em>: the survivors. An instanced draw wants exactly
+    that — a set of things differing only in where they are. The two compose directly, and that
+    composition is why they share a lesson:
+  </p>
+
+  <p class="eq-plain">
+    draw list → <em>cull</em> → visible indices → <em>batch</em> → runs → one draw each
+  </p>
+
+  <p>
+    The mechanism has existed since Lesson 4.5. <code>pipeline_desc::instance_buffer</code>,
+    <code>gpu_mesh::draw(pass, instances)</code>, an instance-rate vertex binding — all built,
+    demonstrated on a ring of seven tori, and then fed by nothing for eleven lessons.
+    <code>demos/sandbox</code> still carries a hand-rolled 28-byte <code>gpu_instance</code> struct
+    whose only job is to prove the API works. This lesson is the engine learning to <em>produce</em>
+    instances rather than to display them.
+  </p>
+
+  <h3>10.1 The constraint is stricter than "same mesh"</h3>
+
+  <p>
+    One instanced draw issues one <code>SDL_DrawGPUIndexedPrimitives</code> with one pipeline, one
+    set of bound textures and one set of pushed uniforms. Everything that is not per-instance vertex
+    data is therefore shared by every instance in the batch. So a batch key is not the mesh. It is
+  </p>
+
+  @@FIG_BATCH@@
+
+  <p>
+    …and the material is 32 bytes of floats that two objects do not match on by accident.
+    <code>batch_key</code> spells the whole tuple out rather than hashing it, for a reason that shows
+    up the moment you use it: a batch that did not form is a <em>question</em> — "which of these five
+    did they differ on?" — and a 64-bit hash cannot answer it. <code>batch_report</code> counts the
+    splits per field, in the order a content author can act on them.
+  </p>
+
+  <p>
+    Point it at this engine's own demo scene and the answer is bracing:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §I</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">hand-built scene: 12 items -&gt; 12 batches (1.00 per draw), largest 1
+  split by: mesh=11 texture=0 style=0 material=0
+forest scene:     400 items -&gt; 1 batches (400.00 per draw), largest 400
+after culling:    200 items -&gt; 1 batches, largest 200</code></pre>
+  </figure>
+
+  <p>
+    <strong>Twelve objects, twelve batches, a saving of exactly zero</strong> — and every split is on
+    the mesh. That is the correct answer, and it is in the lesson rather than a claim that instancing
+    helps, because it says the true thing: <strong>instancing is a content decision before it is a
+    renderer one.</strong> A forest instances beautifully because somebody authored one tree and
+    placed it four hundred times. A hand-built scene of a dozen distinct props instances not at all,
+    and no amount of renderer work changes that.
+  </p>
+
+  <p>
+    The third line is the composition working: culling the forest to 200 survivors still yields one
+    batch. Culling narrows the set; it does not fragment it.
+  </p>
+
+  <h3>10.2 The bytes do not move. The calls do.</h3>
+
+  <p>
+    <code>gpu_instance</code> is <strong>112 bytes — exactly <code>sizeof(object_uniforms)</code></strong>,
+    and a <code>static_assert</code> keeps it that way. It carries the same <code>mat4</code> and the
+    same three padded normal columns, because the vertex shader needs the same things whichever road
+    they arrive by.
+  </p>
+
+  <p>
+    So instancing a hundred objects does not reduce the per-object bytes crossing the bus by one
+    byte. What it removes is a hundred <code>SDL_PushGPUVertexUniformData</code> calls, a hundred
+    vertex-buffer binds and ninety-nine draw calls. <strong>Instancing saves submission, and
+    submission is a CPU cost.</strong> "Instancing saves bandwidth" is a very common and very wrong
+    summary.
+  </p>
+
+  <p>The measured accounting, from §K's sixteen cubes:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §K</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">uniform road: 16 draws, 1 pipeline binds, 3152 uniform bytes
+instanced:     1 draws, 1 pipeline binds,  640 uniform bytes
+uniform bytes 3152 -&gt; 640, but 1792 instance bytes were uploaded instead: 3152 vs 2432 total</code></pre>
+  </figure>
+
+  <p>
+    Work it through. Per-frame blocks (camera, lighting, cascades) are 592 bytes either way. The
+    uniform road then pushes 112 + 48 per object, sixteen times: 2,560 bytes. The instanced road
+    uploads 16 × 112 = 1,792 instance bytes and pushes the 48-byte material <em>once</em>.
+  </p>
+
+  <p class="eq-plain">
+    3152 − 2432 = <strong>720 = 15 × 48</strong>. The entire byte saving is fifteen material blocks
+    that did not need pushing. The 112-byte matrix block did not shrink by a single byte; it changed
+    road.
+  </p>
+
+  <h3>10.3 What refuses to batch, and why that is correctness</h3>
+
+  <p>
+    <code>batch_instances</code> never merges blended draws. Lesson 6.11 established that
+    <code>over</code> is not commutative, so the back-to-front order <code>order_draws</code>
+    produced is part of the picture; sorting by mesh would destroy it, and an instanced draw has no
+    way to express "these hundred copies, in this order, interleaved with those". They come back as
+    single-instance batches in the caller's original relative order, and §I checks that ordering
+    survives rather than assuming it.
+  </p>
+
+  <p>
+    Note also what the sort comparator does: it compares <em>pointers</em>. That makes the grouping
+    non-deterministic across runs, since allocation addresses move. For opaque geometry that is
+    harmless — the z-buffer resolves visibility per pixel and does not care what order the draws
+    arrived in, which is Lesson 3.1's property being cashed in one more time. It would be
+    unacceptable for anything order-dependent, which is exactly why blended draws never reach the
+    comparator.
+  </p>
+
+  <!-- =================================================================
+       11 — THE GPU
+       ================================================================= -->
+  <h2 id="gpu"><span class="num">11</span>The tenth pipeline</h2>
+
+  <p>
+    <code>scene_instanced.vert.hlsl</code> computes the same four outputs as
+    <code>scene.vert.hlsl</code> from the same inputs. The difference is where
+    <code>world_from_model</code> and the normal matrix come from: a constant buffer there, seven
+    vertex attributes here.
+  </p>
+
+  <p>
+    <strong>There is no instanced fragment shader.</strong> <code>scene.frag.hlsl</code> is bound
+    unchanged beside it, because instancing is a question about the vertex stage and the fragment
+    stage never asked. Every Module 6 feature — Cook–Torrance (6.4), normal mapping (6.7), cascaded
+    shadows (6.9), alpha modes (6.11), image-based lighting (6.15) — arrives for free, neither ported
+    nor duplicated. The <code>Output</code> struct is field-for-field and semantic-for-semantic
+    identical to <code>scene.vert</code>'s, because it has to be: SDL validates the stage interface
+    at pipeline creation, so a mismatch is a clean failure rather than a wrong picture.
+  </p>
+
+  <h3>11.1 A 4×4 is four attributes, and the transpose is real</h3>
+
+  <p>
+    A vertex attribute carries at most four components in every backend SDL_GPU targets, so a matrix
+    cannot be one. It arrives as four <code>float4</code> at consecutive locations and the shader
+    reassembles it — and which way round matters:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">shaders/scene_instanced.vert.hlsl</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-hlsl">const float4x4 world_from_model =
+    transpose(float4x4(input.world_c0, input.world_c1, input.world_c2, input.world_c3));</code></pre>
+  </figure>
+
+  <p>
+    <code>float4x4(a, b, c, d)</code> builds from four <em>rows</em>. Our attributes are
+    <em>columns</em> — <code>engine::mat4</code>'s members are literally named <code>c0</code>…
+    <code>c3</code> and its storage is column-major (conventions §3). So the constructor produces
+    the transpose of what we want, and we say so and transpose it back. The alternative — quietly
+    reordering the attributes until the picture looks right — also works, and leaves the next reader
+    unable to tell a convention from a coincidence. The <code>transpose</code> is free: the compiler
+    folds it into the following <code>mul</code>.
+  </p>
+
+  <h3>11.2 Eleven attributes, and a cap that had never been reached</h3>
+
+  <p>
+    The instanced pipeline declares four attributes from <code>gpu_mesh::describe</code> (position,
+    normal, uv, tangent) at locations 0–3, and seven from <code>describe_instances</code> at 4–10.
+    Eleven. <code>pipeline_desc</code> held an array of eight.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_pipeline.cpp</span><span class="tag">before</span></figcaption>
+<pre><code class="lang-cpp">if (attribute_count_ &gt;= k_max_attributes) { return *this; }</code></pre>
+  </figure>
+
+  <p>
+    Attributes past the eighth were <strong>dropped silently</strong>. No error, no log line, no
+    assertion — the ninth, tenth and eleventh simply were not there, and the vertex shader would have
+    read undefined values for the last three rows of its matrices.
+  </p>
+
+  <p>
+    What caught it was Lesson 4.5's <code>check_layout</code>, which compares the declared attributes
+    against the shader's reflected inputs and reports <code>missing</code>. That is the entire
+    argument for that function's existence, arriving eleven lessons later: <strong>a limit that has
+    never been reached cannot tell you it is wrong.</strong> Nothing in Modules 4 or 5, and nothing
+    in eight lessons of Module 6, had ever declared a ninth attribute.
+  </p>
+
+  <p>
+    The cap is now 16 and the function asserts before refusing, so the next program to overflow it
+    finds out at the call site. The refusal stays for release builds: a missing attribute is a wrong
+    picture, a buffer overrun is worse.
+  </p>
+
+  <h3>11.3 One new pipeline, not nine</h3>
+
+  <p>
+    <code>gpu_scene_renderer</code> has held <code>k_styles × k_blends = 9</code> pipelines since
+    Lesson 6.11, and that header's comment already named where this ends: "Add MSAA (6.14) and it is
+    18. Add a depth-only variant and 27. Nobody enumerates that; they build the state, hash it, and
+    create on miss."
+  </p>
+
+  <p>
+    Instancing is a third axis, and crossing it in would make eighteen. We build <strong>one</strong>
+    — solid, opaque — and say plainly what is unavailable. That is not laziness dressed as restraint:
+    a wireframe instanced draw is a debugging nicety, and a <em>blended</em> instanced draw is
+    something <code>batch_instances</code> refuses to produce anyway for the ordering reasons in
+    §10.3. So one of the two gaps is a rule rather than a shortcut. The general answer is Module 9's
+    pipeline cache.
+  </p>
+
+  <p>
+    Failure to create it is logged and <em>not</em> fatal. A device that cannot build this pipeline
+    can still draw the whole scene through <code>render</code>; losing instancing costs draw calls,
+    not pixels, and returning <code>false</code> would turn an optimisation into a hard requirement.
+  </p>
+
+  <h3>11.4 The prologue, extracted rather than copied</h3>
+
+  <p>
+    <code>render_batched</code> needs every one of the ninety lines that precede <code>render</code>'s
+    loop — the per-frame uniform pushes, the cascade fallback, the shadow and environment fallback
+    resolution — and none of the loop itself. Copying them would have produced two copies of one
+    rule, which this engine has already paid for twice (Lesson 5.1's four hand-transcribed harnesses;
+    6.15's two spellings of an ARGB packing).
+  </p>
+
+  <p>
+    So they became <code>begin_frame</code>, returning a <code>frame_setup</code>. The split is
+    exactly at "does this change within a frame?" — the same line Lesson 4.6 drew for uniform blocks:
+    <strong>data grouped by rate of change</strong>, not by what it describes. And because the
+    prologue now has one implementation, the two paths cannot drift.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>Adding a member to that class found three that were missing.</strong>
+      <code>destroy()</code> had never been taught about <code>black_cube_</code>,
+      <code>black_lut_</code> or <code>cube_sampler_</code>, all added in Lesson 6.15. It is not a
+      leak — they are RAII members whose destructors run, and each <code>create_*</code> destroys
+      first — but after <code>destroy()</code> the object reported <code>valid() == false</code>
+      while holding three live GPU objects, so "destroyed" and "empty" had quietly stopped meaning
+      the same thing. It was found by <em>adding a member and reading the list</em>, which is the
+      only way a teardown function is ever checked. An argument for having few members, and, in
+      Module 9, for an arena that makes teardown one operation instead of eight.
+    </p>
+  </div>
+
+  <h3>11.5 One buffer, many batches, addressed by offset</h3>
+
+  <p>
+    Each batch binds the <em>same</em> instance buffer at a different byte offset:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_scene.cpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">SDL_GPUBufferBinding instance_binding{};
+instance_binding.buffer = instances;
+instance_binding.offset =
+    static_cast&lt;Uint32&gt;(batch.first) * static_cast&lt;Uint32&gt;(sizeof(gpu_instance));
+SDL_BindGPUVertexBuffers(pass, 1, &amp;instance_binding, 1);</code></pre>
+  </figure>
+
+  <p>
+    <code>first</code> is an index into the instance array, so the byte offset is
+    <code>first × sizeof(gpu_instance)</code>, and the hardware's instance index counts from zero
+    inside the binding. A separate buffer per batch would also work and would cost an allocation per
+    batch per frame; this costs a different value in an existing field.
+  </p>
+
+  <h3>11.6 The proof: the same picture, the other way round</h3>
+
+  <p>
+    §9 established that the golden cannot see any of this. So the instanced path needed its own
+    correctness instrument, and the claim it tests is strong: for a scene of identical opaque
+    objects, <code>render</code> and <code>render_batched</code> must produce <strong>bit-identical
+    pixels</strong>. Not close — identical. They run the same fragment shader over the same geometry
+    with the same matrices, and neither road changes a float.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_616 §K</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">driver: metal
+[PASS] …including the TENTH, from eleven vertex attributes
+[PASS] sixteen identical cubes become ONE batch
+0 of 76800 channels differ, worst by 0
+(949 of 19200 pixels carry geometry — the instrument CAN see a difference)
+[PASS] the frame actually contains the cubes
+[PASS] BIT-IDENTICAL: a uniform push and a vertex attribute deliver the same matrix
+[PASS] sixteen draw calls became ONE</code></pre>
+  </figure>
+
+  <p>
+    Note the middle line, and note that it is a check rather than a comment. The first run of this
+    section reported <code>0 of 76800 channels differ</code> over two <em>black</em> images and
+    happily declared success — because <code>cube_mesh()</code> carries no normals, every surface was
+    lit by <code>albedo × ambient</code> alone, and the brightest pixel in the frame was 10 against a
+    background of 5. Lesson 4.8 had already found that a vertex shader cannot invent a face normal
+    and added <code>with_normals</code> for exactly this; the fix was one line. But the <em>reason it
+    was caught</em> is that the section counts lit pixels before believing a null difference.
+  </p>
+
+  <!-- =================================================================
+       12 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">12</span>Complete code listings</h2>
+
+  <p>
+    Six files in full. The remaining changes — <code>bounds.hpp</code>'s sphere,
+    <code>gpu_pipeline</code>'s cap and assertion, <code>gpu_scene</code>'s tenth pipeline,
+    <code>begin_frame</code>, <code>render_batched</code> and the <code>destroy()</code> fix, and the
+    two <code>CMakeLists.txt</code> entries — are quoted in full at the point where they are argued
+    for, above and below.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/frustum.hpp@@
+  @@LISTING:engine/src/gfx/frustum.cpp@@
+  @@LISTING:engine/include/engine/gfx/instancing.hpp@@
+  @@LISTING:engine/src/gfx/instancing.cpp@@
+  @@LISTING:shaders/scene_instanced.vert.hlsl@@
+
+  <p>
+    And the additions to <code>bounds.hpp</code>, which redeem 6.8's promise:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/bounds.hpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">struct sphere
+{
+    vec3 centre{};
+    float radius = -1.0f;   ///&lt; NEGATIVE means empty, matching `aabb`'s inside-out
+
+    [[nodiscard]] bool empty() const { return radius &lt; 0.0f; }
+};
+
+[[nodiscard]] inline aabb bounds_of(std::span&lt;const vec3&gt; points)
+{
+    aabb box;
+    for (const vec3&amp; p : points) { box.expand(p); }
+    return box;
+}
+
+[[nodiscard]] inline sphere bounding_sphere(const aabb&amp; box)
+{
+    if (box.empty()) { return {}; }
+    return {box.centre(), box.radius()};
+}</code></pre>
+  </figure>
+
+  <p>And the two build-system entries:</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/CMakeLists.txt</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cmake">    src/gfx/frustum.cpp
+    src/gfx/instancing.cpp</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">CMakeLists.txt</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cmake"># Lesson 6.16 — the instanced scene. A VERTEX shader and no fragment shader,
+# which is the clearest statement of what instancing is.
+add_hlsl_shader(scene_instanced.vert vertex)</code></pre>
+  </figure>
+
+  @@LISTING:scratch/verify_616.cpp@@
+
+  <!-- =================================================================
+       13 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">13</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+ENGINE_CFLAGS="-O2" sh scratch/build_verify_616.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC, from a Developer Prompt)</span><span class="tag">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <p>
+      <strong>Build with optimisation before quoting §G or §H.</strong> Both are timing sections, and
+      the whole point of each is which of two loops is faster; an unoptimised build measures the
+      debug bookkeeping instead. The script defaults to <code>-O0</code> deliberately, so that
+      running it the lazy way gives obviously-wrong numbers rather than plausibly-wrong ones.
+    </p>
+  </div>
+
+  <h3>Expected result</h3>
+
+  <p>
+    <strong>60 checks, 0 failures.</strong> §A's four zeros for the eye's distance to the side
+    planes. §B tracing the far plane's error out of the culler and into
+    <code>perspective()</code>. §C's worked example reproducing every number in §3.4. §D's three
+    implementations agreeing on 50,000 boxes. §E's 316 false positives and zero false rejects. §F's
+    2.41× worst-case box inflation. §G finding the sphere pre-test slower in both regimes. §H
+    predicting a 0.2446% break-even and then bracketing it. §I's twelve-into-twelve and
+    four-hundred-into-one. §J's null result, with the instrument checked. §K's bit-identical frame.
+  </p>
+
+  <p>
+    If you have no GPU device, §K prints <code>no GPU device on this machine; §K skipped</code> and
+    the other ten sections still run — 47 of the 60 checks are CPU-only.
+  </p>
+
+  <!-- =================================================================
+       14 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">14</span>Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>The entire scene disappears the moment culling is switched on.</dt>
+    <dd>
+      <strong>Symptom:</strong> a black frame, or just the skybox.
+      <strong>Cause:</strong> a sign error in the row combination — almost always putting the scale
+      on the wrong row, so <code>r₃ − r₀</code> becomes <code>r₀ − r₃</code> and the plane's normal
+      points outward. <strong>Diagnosis:</strong> print the signed distance of the camera's
+      <em>target</em> to all six planes. It must be positive for all six. If left and right report
+      exactly opposite values, that is the tell.
+    </dd>
+
+    <dt>Culling works, but never rejects anything behind the camera.</dt>
+    <dd>
+      <strong>Cause:</strong> the OpenGL near plane. You wrote <code>r₂ + r₃</code>, which is correct
+      for a <code>−w ≤ z ≤ w</code> depth range and wrong for SDL_GPU's <code>0 ≤ z ≤ w</code>.
+      <strong>Diagnosis:</strong> <code>signed_distance(near, eye)</code> must be <code>−near</code>.
+      If it is roughly <code>−far</code>, this is it.
+    </dd>
+
+    <dt>Objects pop out of view at the edge of the screen.</dt>
+    <dd>
+      <strong>Cause:</strong> comparing a sphere's centre distance against <code>0</code> instead of
+      <code>−radius</code>. <strong>Diagnosis:</strong> the popping happens exactly when the object's
+      centre crosses the frame edge, not when its silhouette does.
+    </dd>
+
+    <dt>Instanced objects are all drawn on top of each other at the origin.</dt>
+    <dd>
+      <strong>Cause:</strong> the instance buffer was written into a different command buffer from
+      the one that draws from it, or was not written at all this frame — so the shader reads whatever
+      the buffer last held, or zeros. <strong>Fix:</strong> record the
+      <code>gpu_stream_buffer::write</code> into the same command buffer, before the render pass
+      begins.
+    </dd>
+
+    <dt>Instanced objects are sheared, or rotate about the wrong axis.</dt>
+    <dd>
+      <strong>Cause:</strong> the matrix was reassembled from rows when the attributes are columns,
+      or vice versa. <strong>Diagnosis:</strong> a pure translation still works (the translation
+      lands in the last row instead of the last column, so objects move along the wrong axis), while
+      any rotation shears. <strong>Fix:</strong> the <code>transpose</code> in §11.1.
+    </dd>
+
+    <dt>A pipeline draws nothing, and validation says nothing either.</dt>
+    <dd>
+      <strong>Cause:</strong> more vertex attributes than <code>pipeline_desc</code> holds, silently
+      dropped — before this lesson, anything past the eighth. <strong>Diagnosis:</strong> run
+      <code>check_layout</code> against the shader's reflection JSON and look for
+      <code>missing</code>. As of this lesson it also asserts at the call site.
+    </dd>
+
+    <dt><code>expand({1, 2, 3})</code> will not compile.</dt>
+    <dd>
+      <strong>Cause:</strong> <code>aabb::expand</code> is overloaded on <code>vec3</code> and
+      <code>const aabb&amp;</code>, and brace elision makes <code>{1, 2, 3}</code> a candidate for
+      <em>both</em> — an <code>aabb</code> whose first member is initialised from three floats.
+      <strong>Fix:</strong> write <code>expand(vec3{1, 2, 3})</code>. Every existing call site
+      happened to pass a named variable, which is why this has never come up before.
+    </dd>
+
+    <dt><code>std::vector&lt;int&gt; v(std::size_t(n));</code> declares a function.</dt>
+    <dd>
+      <strong>The most vexing parse.</strong> <code>std::size_t(n)</code> reads as a parameter named
+      <code>n</code>, so <code>v</code> becomes a function returning a vector — and the error appears
+      forty lines later, at the first use, as an impossible conversion.
+      <strong>Fix:</strong> <code>static_cast&lt;std::size_t&gt;(n)</code>. Braces also work but
+      change the meaning to a one-element vector.
+    </dd>
+  </dl>
+
+  <!-- =================================================================
+       15 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">15</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <strong>6.16.1 — The eight corners, the slow way.</strong> Implement the naive test from §5
+      (reject only when all eight corners are outside one plane) and run it against
+      <code>intersects</code> over §D's 50,000 boxes. <em>Prove they agree on every box</em> — not by
+      running it, but on paper, in one sentence — and then measure how much the eight-corner version
+      costs.
+      <details><summary>Hint</summary>"All eight corners are outside plane P" and "the positive
+      vertex is outside plane P" are the same statement, because the positive vertex is by
+      construction the corner with the largest <code>n · c</code>. If the largest is negative, all
+      eight are. So the two tests are identical in outcome and differ only by a factor of eight in
+      dot products — which is the honest reason to prefer one: not that it is more correct, but that
+      it does one eighth of the work for the same answer.</details>
+    </li>
+    <li>
+      <strong>6.16.2 — An OpenGL near plane.</strong> Change <code>k_near_z</code>'s extraction to
+      <code>r₂ + r₃</code> and run §A. Which checks fail, and which still pass? Then predict, before
+      running §H, what happens to the measured cull rate.
+    </li>
+    <li>
+      <strong>6.16.3 — Reversed-Z and the far plane.</strong> §4 claims that <code>A + 1</code> does
+      not cancel under a reversed-Z projection. Build one (swap near and far in
+      <code>perspective</code>), extract its planes, and measure the far plane's error. Does the
+      claim hold? What happens to the <em>near</em> plane's error?
+    </li>
+    <li>
+      <strong>6.16.4 — Cull to the shadow frustum.</strong> Lesson 6.8 renders every object into the
+      shadow map. Its light camera is an orthographic projection, so <code>frustum_of</code> works on
+      it unchanged. Wire it up and measure how many objects the shadow pass was drawing for nothing.
+      <details><summary>Hint</summary>Careful: an object outside the <em>view</em> frustum may still
+      cast a shadow into it. The correct volume is not the view frustum.</details>
+    </li>
+    <li>
+      <strong>6.16.5 — Where does <code>collect_triangles</code> want the cull?</strong> Wiring the
+      culler into <code>collect_triangles</code> as a default would move the golden — §9 says it
+      cannot, because nothing is ever off screen, but the demo's scene viewport is a 172×97
+      rectangle inside a 320×180 framebuffer, and the software rasterizer clips to the
+      <em>framebuffer</em>. Construct a scene where those two facts combine to make a correct cull
+      change the picture, and say which of the two behaviours is the bug.
+    </li>
+    <li>
+      <strong>6.16.6 — A better sphere.</strong> Implement Welzl's algorithm for the minimal
+      enclosing sphere of a mesh's vertices and use it instead of <code>bounding_sphere</code>. Does
+      the pre-test now pay? Measure with §G, not with intuition.
+    </li>
+    <li>
+      <strong>6.16.7 — A hierarchy.</strong> §5 reports that 25,859 of 45,512 kept boxes were
+      <em>wholly</em> inside. Build a two-level grid over the draw list, classify each cell, and
+      accept whole cells on an <code>inside</code>. Predict the saving from that ratio before you
+      measure it.
+    </li>
+    <li>
+      <strong>6.16.8 — A material handle.</strong> <code>batch_key</code> compares 32 bytes of
+      material with <code>memcmp</code>. Give <code>material_uniforms</code> a handle and compare one
+      pointer. Measure the batching pass on a 10,000-object scene both ways — and then say what the
+      handle costs elsewhere.
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       16 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">16</span>Recap &amp; next</h2>
+
+  <p>The engine gained two things, and they compose:</p>
+
+  <ul>
+    <li><strong>It knows what it cannot see.</strong> Six planes, extracted from the matrix the
+        renderer actually uses so they cannot drift from it, tested against per-object boxes at 58 ns
+        each. Conservative in two directions, both measured, and wrong only in the direction that is
+        allowed.</li>
+    <li><strong>It submits what is left in fewer calls.</strong> A visible set becomes runs sharing a
+        batch key; each run becomes one instanced draw reading its matrices from a vertex buffer
+        instead of a constant buffer. Sixteen draws became one, and the picture came back
+        bit-identical.</li>
+  </ul>
+
+  <p>Four things are worth carrying forward beyond the technique:</p>
+
+  <ol>
+    <li><strong>Derive from what the system already knows.</strong> The planes come from
+        <code>clip_from_world</code> rather than from a camera, so there is no second copy of the
+        truth to fall out of step.</li>
+    <li><strong>Verify against facts, not against a reference.</strong> The eye is the apex; four
+        zeros follow. And four zeros were not enough, because the bug we actually made would have
+        passed them.</li>
+    <li><strong>Sweep the axis the effect depends on.</strong> Six confident data points along the
+        wrong axis look exactly like a measurement.</li>
+    <li><strong>Know which instruments are blind to your change.</strong> The golden did not move,
+        and that meant nothing at all.</li>
+  </ol>
+
+  <p>
+    <strong>Next, Lesson 6.17 — A Frame Graph.</strong> Module 6 has accumulated passes: a shadow
+    pass, a cascade loop, the scene pass, the bloom chain's downsamples and upsamples, the tonemap
+    resolve, the skybox. Each was wired in by hand where it was built, and each knows the names of
+    the targets it reads and writes. That is eight passes with hand-managed dependencies between
+    them, and this lesson just added a ninth path through the scene pass. The frame graph is what
+    turns "the renderer runs these in this order because that is the order they were written in" into
+    a structure that can say <em>why</em> — and can then notice that two targets never overlap in
+    time and share the memory.
+  </p>
+
+  <!-- =================================================================
+       17 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">17</span>Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Gribb &amp; Hartmann, <em>Fast Extraction of Viewing Frustum Planes from the
+        World-View-Projection Matrix</em></strong> (2001). The original note, and the source of every
+        <code>r₂ + r₃</code> near plane on the internet. Read it for the derivation; translate the
+        depth range yourself.</li>
+    <li><strong>Akenine-Möller, Haines &amp; Hoffman, <em>Real-Time Rendering</em> (4th ed.),
+        chapter 22</strong> — "Intersection Test Methods". The positive/negative vertex trick,
+        the false-positive case, and the full menu of tighter tests.</li>
+    <li><strong>Same book, chapter 19</strong> — "Acceleration Algorithms". Where the hierarchy from
+        Exercise 7 goes, and what it buys.</li>
+    <li><strong>Ericson, <em>Real-Time Collision Detection</em>, chapter 4</strong> — bounding
+        volumes, including Welzl's minimal-sphere algorithm (Exercise 6) and a careful treatment of
+        when a cheap pre-test pays.</li>
+    <li><strong>SDL3 wiki: <code>SDL_GPUVertexInputRate</code>,
+        <code>SDL_GPUVertexBufferDescription</code>, <code>SDL_BindGPUVertexBuffers</code></strong>
+        — the instancing half, and the <code>offset</code> field §11.5 leans on.</li>
+    <li><strong>Goldberg, <em>What Every Computer Scientist Should Know About Floating-Point
+        Arithmetic</em></strong> (1991), on cancellation — the mechanism §4 traced into
+        <code>perspective()</code>.</li>
+  </ul>

@@ -1,0 +1,422 @@
+  <h2 id="gravity">5. Gravity, and the round trip that is not exact</h2>
+
+  <p>
+    Gravity is a force like any other, and it is the one force in this lesson that is
+    <em>proportional to the mass it acts on</em>:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{F}_{\text{gravity}} = m\,\mathbf{g}
+    \qquad\Longrightarrow\qquad
+    \mathbf{a} = \frac{m\,\mathbf{g}}{m} = \mathbf{g}
+    \]
+  </div>
+  <p class="eq-plain">
+    The force of gravity is the mass times g, so the acceleration it produces is g, with the mass
+    cancelling out entirely.
+  </p>
+
+  <p>
+    This is §2's hammer and feather written down, and it is the whole of why Galileo needed a tower.
+    It also presents the engine with a small, genuinely interesting decision, because there are two
+    correct places to put it.
+  </p>
+
+  <h3>5.1 Two arrangements of the same physics</h3>
+
+  @@FIG_ROUTES@@
+
+  <p>
+    <strong>Weight is a force, so put it in the accumulator.</strong> This is the honest reading of
+    the physics and it is what the first draft of this engine did. A kitchen scale under a crate
+    reads a force; the crate's weight is one of the things pushing on it; so <code>step</code> adds
+    <code>m·g·gravity_scale</code> alongside whatever the caller contributed, and divides the sum by
+    the mass at the end like everything else. One code path, and `force` contains everything acting
+    on the body.
+  </p>
+
+  <p>
+    <strong>Or: the mass was always going to cancel, so decline to compute it.</strong> Divide the
+    accumulator by the mass, then <em>add</em> <code>g·gravity_scale</code> to the acceleration that
+    comes out. This is what Box2D does, in the same place, for the same reason.
+  </p>
+
+  <p>
+    Figure 4 puts the two side by side as the three steps each one actually performs. Both are
+    correct. They differ in two things, and it took a measurement to find out which of the two
+    mattered.
+  </p>
+
+  <h3>5.2 The cost: a divide the body does not have the number for</h3>
+
+  <p>
+    The body stores <code>1/m</code>, for all three of §4's reasons. The weight needs <code>m</code>.
+    So the first arrangement contains, on the hot path, once per body per step, a
+    <strong>floating-point divide</strong> — <code>gravity * (gravity_scale / inv_mass)</code> — that
+    exists solely to undo the storage decision two lines later.
+  </p>
+
+  <p>
+    §11 times it. The two arrangements are otherwise identical loops over the same table, timed
+    alternately one rep each so that both see the same thermal state, and the ratio across three runs
+    of the binary is <strong>0.845, 0.848, 0.847</strong>. The divide is
+    <strong>15% of the entire per-body update</strong> — which is more than 8.1 measured for a whole
+    semi-implicit Euler step (0.963 ns). A line that computes a number in order to cancel it out
+    costs more than the physics.
+  </p>
+
+  <h3>5.3 …and the exactness, which was the surprise</h3>
+
+  <p>
+    The other difference is whether it is even the same answer. The first arrangement computes
+    <code>(g · (1/w)) · w</code> where <code>w</code> is the stored inverse mass, which involves a
+    reciprocal, a multiply and a multiply — three roundings where the second arrangement has none,
+    because <code>g</code> goes in untouched.
+  </p>
+
+  <p>
+    The first version of this section tested seven hand-picked masses — 0.001, 0.1, 1, 7, 100, 1000
+    and 10<sup>6</sup> kg — and every single one recovered <code>−9.810000420</code> exactly, which
+    is the correctly-rounded <code>float</code> value of −9.81. That looked like a proof and was
+    nothing of the kind, because those are the masses a person picks, and a person picks powers of
+    ten. So the harness sweeps a million of them instead, log-uniform from one gram to a thousand
+    tonnes:
+  </p>
+
+<pre><code class="lang-text">  C.1  a = (g / inv_mass) * inv_mass, against g = -9.81
+       1000001 masses from 1 g to 1000 t
+       inexact 159937 (15.9937%)   worst 9.537e-07 at 0.001 kg
+       one ulp of g is 9.537e-07, so that is 1.00 ulp</code></pre>
+
+  <div class="callout">
+    <p>
+      <strong>Sixteen per cent of masses do not survive the round trip</strong>, and the seven that
+      were tried all did. The first failing mass is not exotic either — the sweep reaches it at
+      <strong>1.000145 kg</strong>. This is the clearest example in the course so far of test data
+      chosen by a human being agreeing with the code by construction.
+    </p>
+  </div>
+
+  <h3>5.4 Does one ulp matter? Two answers, and they disagree</h3>
+
+  <p>
+    A single ulp of an acceleration sounds like nothing, so the harness drops that 1.000145 kg body
+    beside a 1 kg one and watches the velocities for ten seconds. Through the force route:
+  </p>
+
+<pre><code class="lang-text">  C.2  the FORCE route: 1 kg against 1.000145 kg
+      steps        v(1 kg)        v(odd)     apart
+          1      -0.163500     -0.163500  1.490e-08
+         60      -9.809996     -9.809995  9.537e-07
+        600     -98.099884    -98.099884  0.000e+00
+       one ulp of v after one step is 1.490e-08
+
+  C.3  the ACCELERATION route, through body_world
+      steps        v(1 kg)        v(odd)     apart
+          1      -0.163500     -0.163500  0.000e+00
+         60      -9.809996     -9.809996  0.000e+00
+        600     -98.099884    -98.099884  0.000e+00
+
+  C.4  CONTROL same mass, force route: identical  yes</code></pre>
+
+  <p>
+    Read the <code>apart</code> column carefully, because it does something more interesting than
+    growing. After one step the two bodies differ by <code>1.490e−08</code>, which is exactly one ulp
+    of the velocity at that magnitude. After sixty steps they differ by one ulp of the larger
+    velocity. After six hundred they are <strong>identical again</strong>. The error does not
+    accumulate; it <em>wanders</em>, because each accumulation rounds and the rounding sometimes
+    absorbs it and sometimes does not.
+  </p>
+
+  <p>
+    So: does it matter? For a falling crate, no, and it is important to say so plainly rather than
+    manufacture alarm — you could not measure this difference with any instrument in the game. For
+    anything that requires <strong>bit-identical</strong> results it is fatal, and the list of those
+    is longer than it looks: a replay that has to play back the same way, a lockstep multiplayer
+    session where two machines must not diverge, and the golden-image tests this course has been
+    running since Module 4. Two identical crates of different mass must fall identically, and through
+    the force route they do not.
+  </p>
+
+  <p>
+    C.4 is the control that makes any of that mean anything: the same mass through the same route,
+    twice, must be identical, and is — so C.2's divergence is a fact about the mass rather than about
+    the code path being nondeterministic.
+  </p>
+
+  <p>
+    Two findings, one cheaper and one more correct, both pointing the same way. <strong>The engine
+    adds gravity as an acceleration, after the division.</strong> What that costs is worth naming
+    rather than hiding, and §12 names it: <code>rigid_body::force</code> no longer contains the
+    body's weight, so a tool drawing force arrows draws every push on a body <em>except</em> the one
+    that is always there. That is a one-line problem with a one-line answer
+    (<code>mass_of(b) * world.gravity()</code>) and it is the right side of the trade.
+  </p>
+
+  <h3>5.5 A sanity check against the closed form</h3>
+
+  <p>
+    Neither route should be graded against the other, so C.5 puts both against the answer from
+    first-year mechanics. Ten seconds of free fall from rest is <code>½gt²</code> = 490.5 m, and the
+    simulation reports 491.318207 m. The difference is 0.8175 m, and it is not this lesson's — it is
+    <strong>8.1's</strong>, the <code>½·a·h·t</code> overshoot that semi-implicit Euler has under
+    constant acceleration. Plug the numbers in: <code>0.5 × 9.81 × (1/60) × 10 = 0.8175</code>.
+    Exactly.
+  </p>
+
+  <h2 id="damping">6. Damping is not drag</h2>
+
+  <p>
+    Every engine ships a per-body knob that bleeds off speed, and every engine gets asked why it does
+    not behave like air. The answer is a genuinely sharp distinction, and this engine puts the two
+    functions next to each other in the header so it is one line of reading rather than an afternoon.
+  </p>
+
+  <h3>6.1 The two models, written down</h3>
+
+  <p>
+    <strong>Velocity damping</strong> multiplies the velocity by a factor every step. 8.1 derived the
+    correct form of it — the exact solution of <code>dv/dt = −kv</code>, which is
+    <code>v ×= exp(−kh)</code>, frame-rate independent and incapable of reversing the velocity the way
+    <code>v ×= (1 − kh)</code> does past <code>kh = 1</code>. Under gravity it settles where the
+    losses balance the gain:
+  </p>
+
+  <div class="eq">
+    \[
+    g = k\,v_{\infty} \qquad\Longrightarrow\qquad v_{\infty} = \frac{g}{k}
+    \]
+  </div>
+
+  <p>
+    <strong>There is no mass in that equation</strong>, and there never was one, because
+    <code>k</code> was defined as acting on the velocity directly.
+  </p>
+
+  <p>
+    <strong>A drag force</strong> is a force: <code>F = −b·v</code>, pushed through the accumulator
+    like anything else, which means <code>step</code> divides it by the mass on the way past. Its
+    balance is between two <em>forces</em>:
+  </p>
+
+  <div class="eq">
+    \[
+    m\,g = b\,v_{\infty} \qquad\Longrightarrow\qquad v_{\infty} = \frac{m\,g}{b}
+    \]
+  </div>
+  <p class="eq-plain">
+    Under velocity damping the terminal speed is g over k, with no mass in it. Under a drag force it
+    is mass times g over b, directly proportional to the mass.
+  </p>
+
+  <p>
+    That is the entire difference, and it is the difference between a feather and a cannonball. A
+    cannonball is not more aerodynamic than a feather; it has more mass for the same air to work
+    against, so the air has proportionally less effect, so it falls faster.
+  </p>
+
+  <h3>6.2 The measurement, and a prediction that was wrong on purpose</h3>
+
+  @@FIG_RESIST@@
+
+<pre><code class="lang-text">  DAMPING  v *= exp(-k h),  k = 0.5 /s
+      mass       v_terminal    g/k    discrete
+       0.10 kg    19.5383 m/s  19.6200    19.5384
+       1.00 kg    19.5383 m/s  19.6200    19.5384
+     100.00 kg    19.5383 m/s  19.6200    19.5384
+
+  DRAG FORCE  F = -b v,  b = 0.5 N.s/m
+      mass       v_terminal   predicted    run for
+       0.10 kg     1.9607 m/s     1.9620       1.4 s
+       1.00 kg    19.6026 m/s    19.6200      14.0 s
+     100.00 kg  1960.1298 m/s  1962.0001    1400.0 s</code></pre>
+
+  <p>
+    A thousandfold range of mass produces <strong>one number</strong> under damping and
+    <strong>a thousandfold range</strong> under drag, which is figure 5 in a sentence. But look at
+    the <code>g/k</code> column: it says 19.6200 and the simulation says 19.5383, a 0.42%
+    disagreement that is far too consistent to be noise. A harness that printed only the continuous
+    formula would have sent somebody looking for a bug in <code>apply_drag</code>.
+  </p>
+
+  <p>
+    There is no bug. <code>g/k</code> is the terminal speed of the <em>continuous</em> system, and we
+    are not running the continuous system. Our step applies gravity and then damps, so the velocity
+    the loop settles on is the fixed point of that particular pair of lines:
+  </p>
+
+  <div class="eq">
+    \[
+    (v + g h)\,e^{-kh} = v
+    \qquad\Longrightarrow\qquad
+    v_{\infty}^{\text{discrete}} = \frac{g\,h\,e^{-kh}}{1 - e^{-kh}}
+    \]
+  </div>
+
+  <p>
+    At 60 Hz with <code>k = 0.5</code> that evaluates to <strong>19.5384</strong>, against a measured
+    <strong>19.5383</strong>. It tends to <code>g/k</code> as <code>h → 0</code>, which is the sense
+    in which the continuous formula is right, and it is 0.42% below it at the step size we actually
+    run. <strong>Print the discrete prediction next to the continuous one whenever they differ by
+    more than the thing you are trying to measure</strong>, or the constant offset will be read as an
+    error.
+  </p>
+
+  <p>
+    The drag rows carry their own honesty: each is run for <em>seven time constants</em>, and the
+    durations differ by a factor of a thousand, because <code>τ = m/b</code> is 0.2 s for the light
+    body and 200 s for the heavy one. That is the other half of the finding — a heavy body does not
+    merely end up faster, it takes proportionally longer to get there — and it is why the drag panel
+    of figure 5 has one curve levelling off almost immediately and one still climbing off the top.
+  </p>
+
+  <p>
+    The control is D.3, and it is written against the “what if everything is fine” question: with
+    neither damping nor drag there should be <em>no</em> terminal speed at all, and after sixty
+    seconds the body is doing 588.62 m/s and still accelerating. <code>g·t</code> is 588.60. If that
+    row had reported something finite and stable, every row above it would have been suspect.
+  </p>
+
+  <h3>6.3 So why does the engine ship the wrong one?</h3>
+
+  <p>
+    Because nine times in ten, what gameplay wants is not air. It wants “bleed off speed so this
+    feels controllable”, or “stop this thing vibrating”, and those are stability and feel controls
+    with no physical content whatsoever. A designer tuning a <code>damping</code> of 0.4 on a camera
+    boom is not modelling anything and should not have to think about the boom's mass.
+  </p>
+
+  <p>
+    So the field exists, and it is called <code>damping</code> rather than <code>drag</code>, and the
+    two terminal-speed functions sit adjacent in the header with their formulas in the doc comments.
+    When you want the physics, it is one line at the call site:
+  </p>
+
+<pre><code class="lang-cpp">add_force(b, b.state.velocity * -drag_coefficient);</code></pre>
+
+  <p>
+    …and the mass does its job, because that line goes into the accumulator and the accumulator gets
+    divided.
+  </p>
+
+  <h2 id="impulse">7. An impulse has no <code>h</code> in it</h2>
+
+  <p>
+    A force acts over time. Integrate one over the interval it acts for and you get an
+    <strong>impulse</strong>, which is a change in momentum:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{J} = \int \mathbf{F}\,dt = \Delta(m\mathbf{v}) = m\,\Delta\mathbf{v}
+    \qquad\Longrightarrow\qquad
+    \Delta\mathbf{v} = \mathbf{J}\cdot\frac{1}{m}
+    \]
+  </div>
+  <p class="eq-plain">
+    An impulse is a force integrated over time, which equals the change in momentum; so the change in
+    velocity it produces is the impulse times the inverse mass.
+  </p>
+
+  <p>
+    Read the right-hand side and notice what is <em>absent</em>: there is no <code>h</code> anywhere.
+    That absence is the entire reason <code>add_impulse</code> is a separate entry point rather than
+    a convenience wrapper.
+  </p>
+
+  <h3>7.1 Why a jump is not a force</h3>
+
+  <p>
+    Some things really do act over a duration you know: a rocket burns for three seconds, a conveyor
+    belt pushes continuously, a magnet pulls while you are inside it. Those are forces, and the
+    accumulator is the right home for them.
+  </p>
+
+  <p>
+    Other things act over a duration <em>nobody knows</em>, and shorter than one step. A bat hits a
+    ball. A bullet lands. A character jumps. The contact between bat and ball lasts perhaps a
+    millisecond; at 60 Hz that is a sixteenth of a step, and the question “what force was it?” has no
+    useful answer. What is well-defined, and what the gameplay programmer actually knows, is the
+    total change in momentum.
+  </p>
+
+  <p>
+    Write the jump as a force anyway — <code>add_force(b, up * F)</code> for one step, which is the
+    natural-looking thing to type — and the velocity you get is <code>F·h/m</code>. There is an
+    <code>h</code> in it. Tune <code>F</code> until the jump feels right on your 60 Hz monitor, ship
+    it, and every player on a different refresh rate gets a different game.
+  </p>
+
+  <h3>7.2 The measurement: four monitors, one jump</h3>
+
+  <p>
+    A 70 kg character wants to reach 1.00 m. That needs a takeoff speed of
+    <code>√(2gH) = 4.4294 m/s</code>, so an impulse of <code>J = m·v₀ = 310.06 N·s</code>, or —
+    tuned at 60 Hz — a one-step force of <code>J/h = 18,604 N</code>. Both are then run at four
+    common refresh rates:
+  </p>
+
+  @@FIG_JUMP@@
+
+<pre><code class="lang-text">     rate    impulse peak    force peak
+      30 Hz      0.9275 m       3.8528 m
+      60 Hz      0.9632 m       0.9632 m
+     120 Hz      0.9816 m       0.2408 m
+     144 Hz      0.9846 m       0.1672 m
+
+  E.1  impulse spread  6.16%   (0.9275 to 0.9846 m)
+  E.2  force   spread  2204%  = 23.0x   (0.1672 to 3.8528 m)</code></pre>
+
+  <p>
+    Figure 6 draws both columns on the same logarithmic height axis, which is the only way to get
+    them into one picture. At 30 Hz the character clears <strong>3.85 m</strong>; at 144 Hz they
+    manage
+    <strong>16.7 cm</strong>. That is not a subtle regression — it is a different game, and it is
+    twenty-three times over. The scaling is exactly what the algebra said: <code>Δv ∝ h</code> and
+    height goes as <code>v²</code>, so height goes as <code>h²</code>, and halving the frame time
+    quarters the jump. 0.9632 ÷ 4 = 0.2408, which is the 120 Hz row to the digit.
+  </p>
+
+  <h3>7.3 The impulse column is not flat either, and that is somebody else's fault</h3>
+
+  <p>
+    6.16% is small next to 2204%, but it is not zero, and a lesson that waved at it would be doing
+    the thing this course exists not to do. Where does it come from?
+  </p>
+
+<pre><code class="lang-text">  E.3  the impulse column is not flat, and the residue is
+       8.1's: peak = v0^2/2g - v0*h/2
+     rate    predicted      measured
+      30 Hz    0.926176 m    0.927527 m
+      60 Hz    0.963088 m    0.963201 m
+     120 Hz    0.981544 m    0.981596 m
+     144 Hz    0.984620 m    0.984625 m</code></pre>
+
+  <p>
+    It is 8.1's, not this lesson's. Semi-implicit Euler subtracts <code>g·h</code> from the velocity
+    <em>before</em> moving the position, so the body spends each step travelling slightly slower than
+    the continuous solution would have it, and the peak falls short by exactly
+    <code>v₀h/2</code>. Predicted and measured agree to four decimal places at every rate. The
+    impulse removed the <em>first-order</em> rate dependence and left the second-order one, which is
+    a term you can write down, correct for if you care, and shrink by raising the rate.
+  </p>
+
+  <p>
+    E.4 is the control, and it took two attempts. The idea is to apply the same total impulse as a
+    force spread over however many whole steps fit, which should recover the impulse behaviour
+    because that is what an impulse is. The first version held the force for
+    <code>round(rate/60)</code> steps and reported a third bug — at 144 Hz, two steps is 13.9 ms
+    rather than 16.7, so the control was measuring how evenly 60 divides into the refresh rate. With
+    the force rescaled to the duration it is actually held for, the spread drops to the same order as
+    the impulse column's. <strong>A control with a bug in it does not fail loudly; it produces a
+    third number and invites you to explain it.</strong>
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Every contact response in 8.9 and every constraint in 8.10 is an impulse</strong>, and
+      this is why. A collision does not last a step; pretending it does makes the bounce depend on
+      the frame rate, which is the same bug as the jump, arriving somewhere much harder to see.
+    </p>
+  </div>

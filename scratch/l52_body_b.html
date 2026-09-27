@@ -1,0 +1,1236 @@
+  @@FIG_LAYERS@@
+
+  <div class="callout note">
+    <span class="label">The rule that keeps this from becoming two engines</span>
+    <p>
+      <strong><code>engine::app</code> is implemented <em>on</em> <code>engine::platform</code>,
+      never beside it.</strong> Every service the framework offers is reachable from the library
+      path, and nothing in <code>app.cpp</code> does anything a hand-written <code>main()</code>
+      could not. The moment that stops being true, the framework has begun growing a private
+      engine inside itself and the library path has quietly become second-class — which is how a
+      "convenience wrapper" ends up being the only supported way to use a system.
+    </p>
+    <p>
+      §5 measures this rather than promising it: <code>verify_52</code> renders six frames down
+      each path and compares the framebuffers byte for byte.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-platform">4.1 &nbsp; <code>platform</code> — the library half</h3>
+
+  <p>
+    We build the library half first, because the framework half is going to be written in terms of
+    it. Start with the configuration, since it decides everything else.
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/platform/platform.hpp — the config</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">struct app_config
+{
+    const char* title = "engine";
+
+    int window_width = 1280;
+    int window_height = 720;
+    bool resizable = true;
+
+    surface draw_to = surface::renderer;
+
+    int fb_width = 0;
+    int fb_height = 0;
+    bool fb_nearest = true;
+
+    bool vsync = true;
+
+    float fixed_hz = 60.0f;
+    int max_steps_per_frame = 8;
+    float max_frame_seconds = 0.25f;
+
+    SDL_InitFlags extra_subsystems = 0;
+};</code></pre>
+  </figure>
+
+  <p>
+    Every default there is the answer a demo would have written anyway, which is Lesson 5.1 §3.1's
+    rule ("make every default the correct answer") applied to a struct instead of a parameter list.
+    Combined with C++20's designated initialisers, a call site says only the things this program
+    has an opinion about:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/pong/main.cpp — the whole of Pong's configuration</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">return {.title = "Pong — Lesson 1.8",
+        .fb_width = static_cast&lt;int&gt;(game::court::width),
+        .fb_height = static_cast&lt;int&gt;(game::court::height)};</code></pre>
+  </figure>
+
+  <p>
+    Three lines to replace seventeen SDL calls. Note also what Pong is <em>not</em> saying: the
+    window is 1280×720 and resizable, the framebuffer scales with nearest-neighbour, vsync is on,
+    the simulation runs at 60 Hz and the clock clamps at a quarter of a second. Those were all
+    true of Pong before; they were just written out longhand in a file that also had a game in it.
+  </p>
+
+  <p>
+    One field deserves a note, because its first draft was worse. <code>extra_subsystems</code>
+    started life as <code>SDL_InitFlags subsystems = SDL_INIT_VIDEO</code> — the flags you want,
+    with a sensible default. That is wrong in a way worth naming: a headless run must not ask for
+    video, so the class would have had to <em>subtract</em> a flag the caller had explicitly set,
+    which is a class quietly overruling its configuration. Renaming it to "extra" makes video the
+    surface's business and the field's meaning honest — <em>and what else</em>. Module 7's audio
+    goes there.
+  </p>
+
+  <h3 id="impl-surface">4.2 &nbsp; <code>surface</code>: a constraint made structural</h3>
+
+  <p>
+    Now <code>start()</code>. Read it as the ladder from Figure 3, with the surface deciding how
+    far up it climbs:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/platform.cpp — the climb</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">SDL_InitFlags flags = cfg.extra_subsystems;
+if (cfg.draw_to != surface::headless) { flags |= SDL_INIT_VIDEO; }
+
+if (!SDL_Init(flags)) { /* log, return false */ }
+started_ = true;
+
+if (cfg.draw_to != surface::headless)
+{
+    window_ = SDL_CreateWindow(cfg.title, cfg.window_width, cfg.window_height, window_flags);
+    if (window_ == nullptr) { /* log */ stop(); return false; }
+}
+
+if (cfg.draw_to == surface::renderer)
+{
+    renderer_ = SDL_CreateRenderer(window_, nullptr);
+    if (renderer_ == nullptr) { /* log */ stop(); return false; }
+    if (!set_vsync(cfg.vsync)) { /* log, and carry on unsynchronised */ }
+}</code></pre>
+  </figure>
+
+  <p>
+    Three things about that are deliberate.
+  </p>
+
+  <p>
+    <strong>Every failure calls <code>stop()</code> and returns false.</strong> Not a
+    <code>goto cleanup</code>, not four bespoke unwind sequences — one function that destroys
+    whatever exists, guarded per handle, and is safe to call on a platform that has barely
+    started. That is why <code>stop()</code> is written the way it is, and why it is also what the
+    destructor calls. A caller never has to clean up after a failed <code>start()</code>.
+  </p>
+
+  <p>
+    <strong>The renderer branch is the one that matters, and it matters by
+    <em>omission</em>.</strong> Under <code>surface::gpu</code> that block does not run, and the
+    single line not executed is what lets <code>sandbox</code> create an SDL_GPU device at all.
+    Lesson 4.2's rule used to be a comment above an <code>if</code>; it is now the difference
+    between two enum values, and — this is the part that makes it structural rather than
+    documented — the choice must be made in the config, before <code>start()</code> is called,
+    which is the only moment at which it can still be made.
+  </p>
+
+  <p>
+    <strong>Video is implied, not requested.</strong> On a build server
+    <code>SDL_Init(SDL_INIT_VIDEO)</code> <em>fails</em>. The old <code>sandbox --shot</code> path
+    called it first and then never used it, so the characterization test that Lesson 5.1 built
+    specifically so a refactor could be checked automatically could not actually run anywhere
+    automatic. That was not a bug anybody noticed, because the machine it was written on has a
+    display. <code>verify_52</code> §B pins it now:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">scratch/verify_52 §B</span></figcaption>
+    <pre><code class="lang-bash">=== B. The headless surface does not touch video ===
+  [PASS] headless start
+  [PASS] SDL_INIT_VIDEO is NOT initialised (WasInit = 0x00000000)
+  [PASS] surface::renderer DOES initialise video (WasInit = 0x00000020)</code></pre>
+  </figure>
+
+  <h3 id="impl-app">4.3 &nbsp; The frame, and the one seam</h3>
+
+  <p>
+    The rest of <code>platform</code> is the frame, split into the pieces a loop needs:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/platform.cpp — the frame</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">void platform::begin_frame()
+{
+    clock_.tick();
+    input_.update();
+    steps_.begin_frame(clock_.dt());
+}</code></pre>
+  </figure>
+
+  <p>
+    Three lines, and the ordering inside them is Lesson 1.2's contract and Lesson 1.3's. Putting
+    them here does not make them <em>more</em> correct — it makes them correct <em>once</em>.
+    A demo can no longer sample input before the drain, or read <code>dt()</code> from a clock it
+    forgot to tick, because those calls are no longer written in the demo.
+  </p>
+
+  <p>
+    Then the seam. This is the single most load-bearing design decision in the file:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/platform.cpp — one implementation, two ways in</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">void platform::handle(const SDL_Event&amp; event)
+{
+    input_.feed_event(event);
+    switch (event.type)
+    {
+    case SDL_EVENT_QUIT:                  /* … */ running_ = false; break;
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED: /* if it is OUR window */ break;
+    default: break;
+    }
+}
+
+void platform::pump()
+{
+    SDL_Event event;
+    while (SDL_PollEvent(&amp;event)) { handle(event); }
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>handle()</code> takes one event and knows nothing about where it came from. In the
+    library path, <code>pump()</code> — or your own drain, if you have per-event business —
+    feeds it from <code>SDL_PollEvent</code>. In the framework path, <code>SDL_AppEvent</code>
+    feeds it. <strong>One implementation, two ways in</strong>, and that is precisely what makes
+    the two arrangements the same engine rather than two.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Never call <code>pump()</code> from a callback</span>
+    <p>
+      Under <code>SDL_MAIN_USE_CALLBACKS</code>, SDL pumps and dispatches the queue itself.
+      Calling <code>SDL_PollEvent</code> from inside <code>SDL_AppEvent</code> or
+      <code>SDL_AppIterate</code> means racing SDL for the same events: you would consume some of
+      them, SDL would deliver the rest, and input would go intermittently missing in a way that
+      looks like a hardware fault. The header says so, and so does <code>pump()</code>'s doc
+      comment.
+    </p>
+  </div>
+
+  <p>
+    Finally, presentation is deliberately two calls rather than one:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">the split, and why</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">plat.blit_framebuffer();   // OUR work: lock, copy row by row, unlock, clear, draw
+// … a HUD may be drawn here, over the render …
+plat.present();            // SDL_RenderPresent — blocks until the display is ready</code></pre>
+  </figure>
+
+  <p>
+    Lesson 3.10 needed that split to make the frame budget honest: on a vsynced frame
+    <code>SDL_RenderPresent</code> blocks, and a profiler bar that is 90% "waiting for the
+    monitor" says nothing about your renderer. It turns out the same split is exactly the gap a
+    HUD wants — after our pixels are on the screen, before the screen is shown. One seam, two
+    reasons, which is usually the sign of a seam in the right place.
+  </p>
+
+  <h3 id="impl-macro">4.4 &nbsp; <code>app</code>, <code>app_runner</code> and <code>ENGINE_MAIN</code></h3>
+
+  <p>
+    Now the framework half, which after all that is small. <code>engine::app</code> is a base
+    class with seven virtuals — one per phase of Figure 2 — and one of them is pure:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/platform/app.hpp — the hooks</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] virtual app_config configure(int argc, char* argv[]);
+[[nodiscard]] virtual bool on_start();
+virtual void on_event(const SDL_Event&amp; event);
+virtual void on_fixed_step(float h);
+virtual void on_frame(float alpha) = 0;
+virtual void on_overlay();
+virtual void on_stop();</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — virtual functions, and the destructor that must be one</span>
+    <p>
+      A <code>virtual</code> function is a call that is resolved by the <em>object's</em> type
+      rather than the pointer's. <code>app_runner</code> holds an <code>app*</code> and calls
+      <code>on_frame</code>; the object is really a <code>pong_app</code>, so
+      <code>pong_app::on_frame</code> runs. That indirection is the entire mechanism by which "the
+      engine calls you" is possible without the engine knowing your type.
+    </p>
+    <p>
+      <code>= 0</code> makes <code>on_frame</code> <em>pure</em>: <code>app</code> cannot be
+      instantiated, and a subclass that does not override it will not compile. That is the right
+      shape here — a program that draws nothing is not a program — while every other hook has a
+      default that does the right nothing.
+    </p>
+    <p>
+      And <code>virtual ~app() = default;</code> is not optional. <code>app_runner::quit</code>
+      destroys the instance through an <code>app*</code>. If the destructor were not virtual, only
+      <code>app</code>'s part would run — the derived class's members would never be destroyed,
+      silently, with no diagnostic. A base class with virtual functions and a non-virtual
+      destructor is one of the few C++ mistakes that leaks by design.
+    </p>
+  </div>
+
+  <p>
+    The four callbacks themselves live in <code>app_runner</code>, a struct of four static
+    functions. And <code>iterate</code> is the payoff of the whole lesson — read it against
+    Lesson 1.4's loop:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/app.cpp — Lesson 1.4's loop, minus the <code>while</code></span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">sys.begin_frame();
+
+while (sys.next_step())
+{
+    self-&gt;on_fixed_step(sys.steps().h());
+}
+
+self-&gt;on_frame(sys.steps().alpha());
+
+sys.blit_framebuffer();
+self-&gt;on_overlay();
+sys.present();</code></pre>
+  </figure>
+
+  <p>
+    Nine lines. That is the entire framework. Everything else in the file is guards, ownership and
+    logging.
+  </p>
+
+  <p>
+    Two of those guards are worth a sentence because they are <em>not</em> redundant.
+    <code>iterate</code> checks <code>running()</code> both before and after the frame. The check
+    at the top declines to <em>start</em> a frame after a quit has been requested. The check at
+    the bottom refuses to <em>abandon</em> one — a quit requested during a frame still lets the
+    frame finish, which is exactly what <code>--shot</code> depends on: draw, write the file,
+    <em>then</em> exit.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The top guard was found by the harness, not by design</span>
+    <p>
+      Honest history: <code>iterate</code> originally had only the bottom check, and
+      <code>verify_52</code> §D failed on the assertion that no further frame is drawn after
+      <code>request_quit()</code>. SDL's own loop happens to guard this — it reads its result atom
+      before calling iterate — so the gap would never have appeared in a running program. But a
+      callback should be <em>total</em>: safe to call at any moment, including one SDL would not
+      have chosen. That property is what lets a test drive the four functions directly, which is
+      how §D works at all.
+    </p>
+  </div>
+
+  <p>
+    Last, the macro. It contains no logic — four one-line forwards — and that is on purpose:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/include/engine/platform/main.hpp — the whole entry point</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">#define ENGINE_MAIN(AppType)                                                    \
+    SDL_AppResult SDLCALL SDL_AppInit(void** appstate, int argc, char* argv[])  \
+    {                                                                           \
+        return ::engine::app_runner::init(appstate,                             \
+                                          std::make_unique&lt;AppType&gt;(),          \
+                                          argc, argv);                          \
+    }                                                                           \
+    /* … iterate, event, quit, each one line … */</code></pre>
+  </figure>
+
+  <p>
+    A macro is code the debugger struggles to step through and the compiler reports odd line
+    numbers for, so the only thing worth putting in one is the part that genuinely cannot be a
+    function — here, the four fixed C symbol names SDL is going to look up. Everything else is an
+    ordinary function in an ordinary <code>.cpp</code>, breakpointable and testable. That is not
+    fastidiousness: it is why <code>verify_52</code> can call <code>app_runner::init</code>
+    directly, with no entry point and no window, and drive a whole program's lifecycle from a test.
+  </p>
+
+  <h3 id="impl-hello">4.5 &nbsp; <code>hello_cube</code>, rewritten</h3>
+
+  <p>
+    Now the payoff. <code>hello_cube</code> is the same cube it was in Lesson 5.1 — the acceptance
+    test for the public API, 160 lines of code with every symbol from <code>&lt;engine/…&gt;</code>.
+    Rewritten on <code>engine::app</code> it loses its <code>main</code>, its
+    <code>SDL_Init</code>, its window, its renderer, its streaming texture, its
+    <code>present()</code> helper, its event drain, its <code>while (running)</code>, its
+    teardown, and its hand-rolled PPM writer.
+  </p>
+
+  <p>
+    The interesting override is <code>configure</code>, because it is where a flag can still
+    change the kind of program this is:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/hello_cube/main.cpp — the surface, chosen from argv</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] engine::app_config configure(int argc, char* argv[]) override
+{
+    for (int i = 1; i &lt; argc; ++i)
+    {
+        if (SDL_strcmp(argv[i], "--shot") == 0 &amp;&amp; i + 1 &lt; argc) { shot_path_ = argv[++i]; }
+    }
+
+    return {.title = "hello_cube — built on engine::engine",
+            .draw_to = (shot_path_ != nullptr) ? engine::surface::headless
+                                               : engine::surface::renderer,
+            .fb_width = k_width,
+            .fb_height = k_height};
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>configure</code> runs before SDL exists — that is the whole reason it takes
+    <code>argv</code> rather than <code>on_start</code> doing the parsing. By the time
+    <code>on_start</code> runs, the window either exists or does not, and no flag can change it.
+  </p>
+
+  <p>
+    And the <code>--shot</code> path is now four lines at the bottom of <code>on_frame</code>:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/hello_cube/main.cpp — one frame, then stop</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">if (shot_path_ != nullptr)
+{
+    SDL_Log("hello_cube: %d triangles", static_cast&lt;int&gt;(triangles_.size()));
+    request_quit(engine::save_ppm(fb(), shot_path_));
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>request_quit</code> takes a <code>bool success</code>, so a failed write becomes a
+    non-zero exit code — passing <code>save_ppm</code>'s result straight in is the whole of the
+    error handling. And because the quit is honoured at the <em>end</em> of the frame, the file is
+    already written when the program stops.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Verified: the picture did not move</span>
+    <p>
+      A rewrite that touches the entry point, the loop, the presentation path and the file writer
+      is exactly where a silent one-pixel change hides. So the claim was checked rather than
+      assumed: the pre-lesson binary and the post-lesson binary were each asked for a shot, and
+      the two 172,815-byte PPMs are <strong>byte-identical</strong>.
+    </p>
+  </div>
+
+  <h3 id="impl-pong">4.6 &nbsp; <code>pong</code>, extracted</h3>
+
+  <p>
+    And here is the thing the lesson exists for. Pong leaves <code>sandbox</code> and becomes
+    <code>demos/pong/main.cpp</code>: <strong>87 lines of code</strong>, five overrides, zero SDL
+    lifecycle calls.
+  </p>
+
+  <p>
+    Two of those overrides are worth reading, because they are the practical form of §3.3's rule
+    about edges and levels.
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/pong/main.cpp — edges belong to the event</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">void on_event(const SDL_Event&amp; event) override
+{
+    if (event.type != SDL_EVENT_KEY_DOWN || event.key.repeat) { return; }
+
+    switch (event.key.scancode)
+    {
+    case SDL_SCANCODE_ESCAPE: request_quit(); break;
+    case SDL_SCANCODE_C:      two_player_ = !two_player_; /* … */ break;
+    case SDL_SCANCODE_K:      /* … toggle the collision rule … */ break;
+    default: break;
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    Note <code>event.key.repeat</code>. Holding a key produces a stream of key-down events with
+    <code>repeat = true</code>, and ignoring those is how you get one toggle per physical press —
+    without maintaining an edge table of your own. That information exists only on the event;
+    <code>input::key_pressed()</code> gives you the edge but not the reason. Which is a fair
+    summary of when the event hook earns its place.
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/pong/main.cpp — levels belong to the step</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">void on_fixed_step(float h) override
+{
+    game::intent wanted;
+    wanted.right_is_ai = !two_player_;
+    if (in().key_down(SDL_SCANCODE_W)) { wanted.left -= 1.0f; }
+    if (in().key_down(SDL_SCANCODE_S)) { wanted.left += 1.0f; }
+    /* … */
+
+    previous_ = current_;
+    game::step(current_, wanted, h);
+
+    if (current_.teleported) { previous_ = current_; }
+}</code></pre>
+  </figure>
+
+  <p>
+    Reading the keyboard <em>inside</em> the step loop looks careless and is not. Lesson 1.2 made
+    <code>input</code> frame-coherent: the snapshot is published once per frame and does not change
+    until the next <code>update()</code>. So on the frame that takes two steps, both steps see the
+    same keyboard — which is what you want, and is why this needs no "read the intent once before
+    the loop" dance. The frame-coherence guarantee is being <em>used</em>, not worked around.
+  </p>
+
+  <p>
+    The last line is Lesson 1.4's rule about teleports: after a point is scored the ball jumps to
+    the centre, and a renderer asked to draw 40% of the way between "past the paddle" and "at the
+    centre" draws a smear across the whole court. It moved from <code>sandbox</code> unchanged.
+  </p>
+
+  <h3 id="impl-sandbox">4.7 &nbsp; <code>sandbox</code>, which keeps its loop</h3>
+
+  <p>
+    Now the decision that will look, at first glance, like the lesson losing its nerve.
+  </p>
+
+  <p>
+    <code>sandbox</code> adopts <code>engine::platform</code>. Its forty lines of start-up and
+    four teardown paths become one object; its texture upload becomes
+    <code>blit_framebuffer()</code>; <code>SDL_Init</code>, <code>SDL_CreateWindow</code>,
+    <code>SDL_CreateRenderer</code>, <code>SDL_CreateTexture</code> and every matching
+    <code>Destroy</code> are gone. Thirty-one lifecycle calls become three.
+  </p>
+
+  <p>
+    It does <strong>not</strong> adopt <code>engine::app</code>. It keeps <code>main()</code> and
+    it keeps <code>while (plat.running())</code>. Here is the argument, and it is not "we ran out
+    of time":
+  </p>
+
+  <ul>
+    <li><strong>It runs three incompatible loops and picks between them at runtime.</strong>
+        <code>run_gpu_scene</code>, <code>run_gpu_probe</code> and the software demo are three
+        different programs with three different loops, chosen by a command-line flag. Expressing
+        that as one <code>app</code> subclass means a class whose every hook opens with a
+        three-way branch — the framework fighting the program rather than carrying it.</li>
+    <li><strong>It is the instrument.</strong> Every measured claim in Modules 2 through 4 was
+        taken with this binary. An instrument should have its control flow visible in front of
+        you, not distributed across seven overrides and a base class.</li>
+    <li><strong>Somebody has to prove the library path still works.</strong> If every program in
+        the repository used <code>app</code>, then <code>platform</code>'s standalone usability
+        would be a claim nobody tests. <code>sandbox</code> is that test, and it runs on every
+        build.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">The general rule</span>
+    <p>
+      <strong>A framework you built is still a framework, and the question "should this program
+      use it?" does not get a free pass because you own it.</strong> The pressure to make
+      everything adopt the new thing is strong and mostly vanity: a codebase where every program
+      uses the framework <em>looks</em> more finished. What it actually means is that the layer
+      underneath has no independent users, and a layer with no independent users drifts into being
+      an implementation detail of the layer above it — at which point you no longer have two
+      layers, you have one with a confusing internal split.
+    </p>
+  </div>
+
+  <p>
+    The one-line version, for deciding this on your own code: <em>use the framework when your
+    program wants <strong>a</strong> loop; write your own when your program wants
+    <strong>this</strong> loop.</em>
+  </p>
+
+  <h3 id="impl-ppm">4.8 &nbsp; A small promotion: <code>save_ppm</code></h3>
+
+  <p>
+    One more thing came out of the demos. Both <code>hello_cube</code> and
+    <code>demo_scene.cpp</code> had hand-rolled the same PPM writer, so it moves into
+    <code>engine/gfx/image.hpp</code> beside <code>load_image</code>. It is fifteen lines, and the
+    only interesting part is why the format is PPM rather than PNG when
+    <code>stb_image_write</code> is one <code>#define</code> away:
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why a test artifact should be a dumb format</span>
+    <p>
+      PPM is an ASCII header followed by raw RGB bytes. No compression, no filter modes, no
+      metadata, no timestamp. Two runs that drew the same picture produce byte-identical files,
+      so <code>cmp</code> is a valid renderer test. A PNG of the same picture may differ in bytes
+      for reasons that have nothing to do with pixels — encoder version, filter heuristics — which
+      takes the cheapest possible check away exactly when you need it. Every <code>--shot</code>
+      in this repository, and the golden image Lesson 5.1's refactor was verified against, is a
+      PPM for this reason.
+    </p>
+  </div>
+
+  <p>
+    It writes one buffered row at a time rather than one <code>SDL_WriteIO</code> per pixel: at
+    320×180 that is 180 crossings of an I/O boundary instead of 57,600, and the rule generalises —
+    a boundary is expensive per <em>crossing</em>, not per byte.
+  </p>
+
+  <!-- =================================================================
+       5 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">5</span>What It Cost, and What It Bought</h2>
+
+  <p>
+    A lesson that adds a layer owes you a number. Figure 6 is the one that matters, produced by
+    <code>scratch/measure_52.py</code> so it can be re-derived rather than trusted.
+  </p>
+
+  @@FIG_BOILERPLATE@@
+
+  <p>
+    The definition of "lifecycle call" is written down in the script rather than left to a feeling
+    about which lines look like ceremony: <code>SDL_Init</code>, <code>SDL_Quit</code>, the three
+    <code>Create</code>/<code>Destroy</code> pairs, <code>SetRenderVSync</code>,
+    <code>SetTextureScaleMode</code>, <code>Lock</code>/<code>UnlockTexture</code>,
+    <code>PollEvent</code>, <code>RenderClear</code>/<code>Texture</code>/<code>Present</code>,
+    <code>SetAppMetadata</code>, <code>GetVersion</code>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Measured by <code>python3 scratch/measure_52.py</code>. "Code" counts lines that are
+             neither blank nor a whole-line comment.</caption>
+    <thead>
+      <tr><th>File</th><th>Lines</th><th>Code</th><th>Lifecycle SDL calls</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>hello_cube/main.cpp</code> before</td><td>235</td><td>160</td><td>17</td></tr>
+      <tr><td><code>hello_cube/main.cpp</code> after</td><td>171</td><td><strong>96</strong></td><td><strong>0</strong></td></tr>
+      <tr><td><code>pong/main.cpp</code> (new)</td><td>167</td><td>87</td><td>0</td></tr>
+      <tr><td><code>sandbox/main.cpp</code> before</td><td>5,727</td><td>3,780</td><td>31</td></tr>
+      <tr><td><code>sandbox/main.cpp</code> after</td><td>5,625</td><td>3,655</td><td><strong>3</strong></td></tr>
+      <tr><td colspan="3"><strong>Across the three demos</strong></td><td><strong>48 → 3</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The three that remain are all <code>SDL_PollEvent</code>, all in <code>sandbox</code>, one per
+    loop, and they are there because <code>sandbox</code> keeps its loops on purpose.
+  </p>
+
+  <p>
+    And the cost, stated plainly, because a layer is never free:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>File</th><th>Lines</th><th>Code</th></tr></thead>
+    <tbody>
+      <tr><td><code>platform/platform.hpp</code></td><td>336</td><td>82</td></tr>
+      <tr><td><code>platform/platform.cpp</code></td><td>302</td><td>192</td></tr>
+      <tr><td><code>platform/app.hpp</code></td><td>193</td><td>43</td></tr>
+      <tr><td><code>platform/app.cpp</code></td><td>196</td><td>84</td></tr>
+      <tr><td><code>platform/main.hpp</code></td><td>106</td><td>27</td></tr>
+      <tr><td><strong>total</strong></td><td><strong>1,133</strong></td><td><strong>428</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    428 lines of code to remove 45 call sites. On a pure line count that is a poor trade, and it
+    would be dishonest to present it as anything else. The trade is not about lines. It is that
+    those 45 call sites were <em>forty-five opportunities to get the order wrong</em>, spread
+    across files that will keep being copied, and they are now one implementation with a
+    verification harness pointed at it. And the thing that made the arithmetic worth doing is not
+    in either table: <strong>Pong exists as a program</strong>, and the next demo will too.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The acceptance tests, all green</span>
+    <ul>
+      <li><code>sandbox --shot</code> — 7 frames, 1,209,616 bytes, hash <code>905BF27E</code>:
+          <strong>byte-identical</strong> to Lesson 5.1's golden.</li>
+      <li><code>hello_cube --shot</code> — 172,815 bytes, <strong>byte-identical</strong> across
+          the rewrite.</li>
+      <li><code>sandbox --trace</code> — still prints the frame's command stream and still
+          cross-checks: <code>3 draw(s) / 560 uniform bytes … AGREE</code>.</li>
+      <li><code>verify_45</code> … <code>verify_50</code> — all still ALL PASS.</li>
+      <li><code>verify_52</code> — 66 checks, 0 failures.</li>
+      <li>At least one demo under 200 lines: <code>pong</code> at 167, <code>hello_cube</code> at
+          171.</li>
+    </ul>
+  </div>
+
+  <h3 id="cost-residue">5.1 &nbsp; What is still on the wrong side</h3>
+
+  <p>
+    Lesson 5.1 ended with a list of things it had not fixed, on the grounds that a refactor lesson
+    ending "and now it is clean" is lying. The same applies here.
+  </p>
+
+  <ul>
+    <li><strong><code>sandbox</code> is still 5,625 lines.</strong> Pong left; four demos remain
+        welded together. The mechanism to separate them now exists and the argument for doing so
+        is unchanged — but each extraction is a real piece of work, and doing four of them in one
+        lesson would have buried the layer that makes them possible. Expect them to leave one at a
+        time as later lessons need them.</li>
+    <li><strong>No window-resize handling.</strong> The platform creates a resizable window and
+        then ignores <code>SDL_EVENT_WINDOW_RESIZED</code>. Today that is harmless — the
+        framebuffer is scaled to fit by the renderer — but the GPU path will care, and
+        <code>on_event</code> is where it will be handled.</li>
+    <li><strong>The GPU surface gives you a window and wishes you luck.</strong>
+        <code>surface::gpu</code> stops at the window; creating the device, the swapchain and the
+        present target is still the program's job. That is honest for now, and it is the seam
+        where a future <code>gpu_app</code> would sit.</li>
+    <li><strong>Nothing here is thread-aware.</strong> SDL's own documentation notes that
+        <code>SDL_AppEvent</code> may be called concurrently with <code>SDL_AppIterate</code> for
+        events pushed from other threads. We have no other threads yet, so the hazard is
+        theoretical — and Module 9's job system is where it stops being theoretical.</li>
+  </ul>
+
+  <!-- =================================================================
+       6 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">6</span>Complete Code Listings</h2>
+
+  <p>
+    Every file created or modified this lesson, whole. The manifest first:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/platform/platform.hpp</code></td><td><span class="badge new">new</span></td><td>The library half: lifecycle, surfaces, the frame's pieces</td></tr>
+      <tr><td><code>engine/src/platform/platform.cpp</code></td><td><span class="badge new">new</span></td><td>The ladder up, and its mirror down</td></tr>
+      <tr><td><code>engine/include/engine/platform/app.hpp</code></td><td><span class="badge new">new</span></td><td>The framework half: seven hooks and four callbacks</td></tr>
+      <tr><td><code>engine/src/platform/app.cpp</code></td><td><span class="badge new">new</span></td><td>Lesson 1.4's loop minus the <code>while</code>, and the ownership handoff</td></tr>
+      <tr><td><code>engine/include/engine/platform/main.hpp</code></td><td><span class="badge new">new</span></td><td><code>ENGINE_MAIN</code>. One TU per program, and no <code>main</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/image.hpp</code></td><td><span class="badge mod">modified</span></td><td>Declares <code>save_ppm</code></td></tr>
+      <tr><td><code>engine/src/gfx/image.cpp</code></td><td><span class="badge mod">modified</span></td><td>…and implements it</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td><span class="badge mod">modified</span></td><td>The umbrella gains the platform — but not <code>main.hpp</code></td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td><span class="badge mod">modified</span></td><td>Two new sources; a note on the one header that is not one</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td><span class="badge mod">modified</span></td><td>The <code>pong</code> target</td></tr>
+      <tr><td><code>demos/hello_cube/main.cpp</code></td><td><span class="badge mod">modified</span></td><td>Rewritten on <code>engine::app</code></td></tr>
+      <tr><td><code>demos/pong/main.cpp</code></td><td><span class="badge new">new</span></td><td>Lesson 1.8's game, as its own program</td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td><span class="badge mod">modified</span></td><td>Adopts <code>platform</code>; keeps its loop; loses Pong</td></tr>
+      <tr><td><code>scratch/verify_52.cpp</code></td><td><span class="badge new">new</span></td><td>66 checks over the whole layer</td></tr>
+      <tr><td><code>scratch/measure_52.py</code></td><td><span class="badge new">new</span></td><td>Every number in §5</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>6.1 &nbsp; The platform layer</h3>
+
+  @@LISTING:engine/include/engine/platform/platform.hpp@@
+  @@LISTING:engine/src/platform/platform.cpp@@
+  @@LISTING:engine/include/engine/platform/app.hpp@@
+  @@LISTING:engine/src/platform/app.cpp@@
+  @@LISTING:engine/include/engine/platform/main.hpp@@
+
+  <h3>6.2 &nbsp; The engine's small changes</h3>
+
+  @@LISTING:engine/include/engine/gfx/image.hpp@@
+  @@LISTING:engine/src/gfx/image.cpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:demos/CMakeLists.txt@@
+
+  <h3>6.3 &nbsp; The demos</h3>
+
+  @@LISTING:demos/hello_cube/main.cpp@@
+  @@LISTING:demos/pong/main.cpp@@
+
+  <p>
+    <code>demos/sandbox/main.cpp</code> is 5,625 lines and its changes this lesson are confined to
+    three regions: the include list, the start-up block in <code>main()</code>, and the five
+    places in the loop that now call the platform. Reproducing the whole file would add nine
+    thousand lines to this page for a diff you can read in one screen, so — as in Lesson 5.1's
+    move table — here is the change itself, exactly:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/sandbox/main.cpp — the start-up block, in full</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">    engine::platform plat;
+
+    if (shot_path != nullptr)
+    {
+        if (!plat.start({.title = "sandbox — reference shot",
+                         .draw_to = engine::surface::headless}))
+        {
+            return 1;
+        }
+        return demo::write_reference_shot(shot_path);
+    }
+
+    const bool gpu_program = want_gpu || (which_program == program::scene);
+
+    if (!plat.start({.title = gpu_program ? "Engine — Module 4"
+                                          : "Engine — the software reference",
+                     .draw_to = gpu_program ? engine::surface::gpu
+                                            : engine::surface::renderer,
+                     .fb_width = gpu_program ? 0 : k_fb_width,
+                     .fb_height = gpu_program ? 0 : k_fb_height}))
+    {
+        return 1;
+    }
+
+    SDL_Window* const window = plat.window();
+
+    if (gpu_program)
+    {
+        return (which_program == program::scene)
+            ? run_gpu_scene(window, trace_and_exit)
+            : run_gpu_probe(window);
+    }
+
+    SDL_Renderer* const renderer = plat.renderer();
+
+    // Borrowed references, so the four thousand lines below read exactly as they
+    // did. The platform owns these; this is a name, not a copy.
+    engine::framebuffer&amp; fb = plat.fb();
+    engine::clock&amp; clk = plat.time();
+    engine::input&amp; in = plat.in();
+    engine::fixed_step&amp; stepper = plat.steps();</code></pre>
+  </figure>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">demos/sandbox/main.cpp — the five changes inside the loop</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">// 1. the loop condition
+while (plat.running())
+
+// 2. the drain — handle() replaces feed_event and the two quit cases
+SDL_Event event;
+while (SDL_PollEvent(&amp;event)) { plat.handle(event); }
+
+// 3. clock, input and accumulator, in one call in the right order
+plat.begin_frame();
+if (in.key_pressed(SDL_SCANCODE_ESCAPE)) { plat.request_quit(); }
+
+// 4. vsync, which the platform now remembers
+if (in.key_pressed(SDL_SCANCODE_V) &amp;&amp; !plat.set_vsync(!plat.vsync()))
+{
+    SDL_Log("vsync toggle refused: %s", SDL_GetError());
+}
+
+// 5. presentation, split so the profiler can still see the two halves
+{
+    const engine::scope_timer z{prof, engine::zone::present};
+    plat.blit_framebuffer();
+}
+// … the HUD, several hundred lines of it …
+prof.end_frame();
+plat.present();
+
+// …and at the bottom of main(), where four SDL_Destroy calls used to be: nothing.</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       7 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">7</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j8</code></pre>
+  </figure>
+
+  <p>
+    Four targets build: <code>engine</code>, <code>demo_common</code>, and the three executables.
+    On Windows the binaries land in <code>build\demos\Debug\</code>; everywhere else in
+    <code>build/demos/</code>.
+  </p>
+
+  <h3 id="build-expect">7.1 &nbsp; What you should see</h3>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the new program</span></figcaption>
+    <pre><code class="lang-bash">./build/demos/pong</code></pre>
+  </figure>
+
+  <p>
+    A 320×180 court scaled up to fill a 1280×720 window: two paddles, a ball, a dashed centre
+    line, and a HUD line reading <code>PONG 0 - 0 collision: swept rally 0 fps 60.0</code>.
+    <code>[W]</code> and <code>[S]</code> move the left paddle; the right one is driven by the AI
+    until you press <code>[C]</code>. <code>[K]</code> switches between the swept and naive
+    collision rules — hold a rally going until the ball is fast, then press it, and watch the ball
+    pass straight through a paddle. <code>[Esc]</code> quits.
+  </p>
+
+  <p>
+    The first log line is worth looking at, because it is the platform announcing which rung of
+    Figure 3's ladder it climbed:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">stdout</span></figcaption>
+    <pre><code class="lang-bash">platform: SDL 3.4.12, surface=renderer
+Pong — [W]/[S] move  [C] two-player  [K] collision rule  [Esc] quit</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the same program, three ways</span></figcaption>
+    <pre><code class="lang-bash">./build/demos/hello_cube                    # a window: surface=renderer
+./build/demos/hello_cube --shot cube.ppm    # one frame to disk: surface=headless
+./build/demos/sandbox --shot golden.ppm     # 7 frames, no display needed at all</code></pre>
+  </figure>
+
+  <p>
+    That middle line is the one to try over SSH, or in a container, or anywhere without a display.
+    It works now; before this lesson it did not.
+  </p>
+
+  <h3 id="build-verify">7.2 &nbsp; Verifying</h3>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the harness</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_52.sh</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">expected tail</span></figcaption>
+    <pre><code class="lang-bash">=== G. The golden, from outside the sandbox ===
+  [PASS] a headless platform, exactly as `sandbox --shot` uses
+  [PASS] write_reference_shot returned 0
+  [PASS] 1209616 bytes, golden is 1209616
+  [PASS] BYTE-IDENTICAL to Lesson 5.1's reference
+=== H. save_ppm ===
+  [PASS] save_ppm reports success
+  [PASS] 35 bytes = an 11-byte header + 4*2*3 pixel bytes
+  [PASS] the header is exactly "P6\n4 2\n255\n"
+  [PASS] the first pixel is R=255 G=128 B=64 — RGB order, alpha dropped
+  [PASS] an unwritable path reports failure rather than pretending
+
+66 checks, 0 failure(s) — ALL PASS</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">and the numbers in §5</span></figcaption>
+    <pre><code class="lang-bash">python3 scratch/measure_52.py</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       8 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">8</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">1 · <code>duplicate symbol _main</code></span>
+    <p><strong>Symptom.</strong> The link fails with <code>duplicate symbol _main</code> or
+       <code>_SDL_main</code>, naming two of your own object files.</p>
+    <p><strong>Cause.</strong> <code>&lt;engine/platform/main.hpp&gt;</code> is included in two
+       translation units. It emits a real, non-<code>inline</code> definition of
+       <code>SDL_main</code> and of the platform entry point, so two inclusions are two
+       definitions.</p>
+    <p><strong>Fix.</strong> Include it in exactly one <code>.cpp</code> per program — the one
+       with <code>ENGINE_MAIN</code> at the bottom. Every other file includes
+       <code>&lt;engine/platform/app.hpp&gt;</code>, which has no entry point in it.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">2 · The same error, from a <code>main()</code> you did write</span>
+    <p><strong>Symptom.</strong> <code>duplicate symbol</code> again, but you are certain the
+       header is included once.</p>
+    <p><strong>Cause.</strong> The file also defines <code>main()</code>. <code>SDL_main.h</code>
+       ends with <code>#define main SDL_main</code>, so your <code>main</code> is renamed to
+       <code>SDL_main</code> and collides with the one the header just emitted.</p>
+    <p><strong>Fix.</strong> Delete it. Under <code>ENGINE_MAIN</code> your program has no
+       <code>main</code>; that is the arrangement. If you want a <code>main</code>, use
+       <code>engine::platform</code> directly and do not include <code>main.hpp</code> at all.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">3 · The window opens and closes instantly, exit code 0</span>
+    <p><strong>Symptom.</strong> A flash, and the process is gone. No error printed.</p>
+    <p><strong>Cause.</strong> Almost always <code>on_start()</code> returning <code>false</code>
+       — often by falling off the end of an <code>if</code> chain, since it returns
+       <code>bool</code> and <code>false</code> is a legitimate answer. Look for
+       <code>app: on_start() failed</code> in the log.</p>
+    <p><strong>Fix.</strong> Return <code>true</code>. And note that <code>on_stop()</code> still
+       ran, so a partially built program did get to clean up — which is why the contract is "runs
+       whenever <code>on_start</code> ran, whatever it returned".</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">4 · Input works, but sometimes misses keys</span>
+    <p><strong>Symptom.</strong> Under the callback path, occasional dropped keypresses; the
+       longer the frame, the worse it gets.</p>
+    <p><strong>Cause.</strong> Something in your code is calling <code>SDL_PollEvent</code> —
+       directly, or through <code>platform::pump()</code> — from inside a callback. SDL already
+       pumps and dispatches the queue; your poll steals events that would have been delivered to
+       <code>on_event</code>.</p>
+    <p><strong>Fix.</strong> Never poll inside a callback. If you need to see raw events, override
+       <code>on_event</code>; it is handed every one.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">5 · A key press fires twice</span>
+    <p><strong>Symptom.</strong> One tap on the fire button spawns two bullets, intermittently.</p>
+    <p><strong>Cause.</strong> An edge query inside <code>on_fixed_step</code>. §3.3.1's table:
+       a frame can take two steps, and <code>key_pressed()</code> is true for the whole
+       <em>frame</em>, so both steps see it.</p>
+    <p><strong>Fix.</strong> Edges in <code>on_event</code> or <code>on_frame</code>; levels
+       (<code>key_down</code>) in <code>on_fixed_step</code>. If a step genuinely must consume an
+       edge, latch it in <code>on_event</code> and clear the latch in the step that used it.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">6 · <code>SDL_CreateGPUDevice</code> fails with a message about the window</span>
+    <p><strong>Symptom.</strong> The GPU path dies at device creation, having worked yesterday.</p>
+    <p><strong>Cause.</strong> The config said <code>surface::renderer</code>. That creates an
+       <code>SDL_Renderer</code>, which claims the window, and a claimed window cannot host an
+       SDL_GPU device (Lesson 4.2).</p>
+    <p><strong>Fix.</strong> <code>surface::gpu</code>. And note the fix has to be in
+       <code>configure()</code> — by the time <code>on_start()</code> runs it is too late, which
+       is exactly why the choice lives in the config.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">7 · <code>--shot</code> works locally, hangs or fails in CI</span>
+    <p><strong>Symptom.</strong> <code>SDL_Init failed: No available video device</code>, or a
+       silent hang.</p>
+    <p><strong>Cause.</strong> A surface that asks for video on a machine with no display.</p>
+    <p><strong>Fix.</strong> <code>surface::headless</code>, chosen in <code>configure()</code>
+       from the same flag that turns on the shot. Check the first log line: it prints
+       <code>surface=</code> and the answer.</p>
+  </div>
+
+  <!-- =================================================================
+       9 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">9</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>9.1 — Prove the ODR rule to yourself.</strong> Add a second
+         <code>.cpp</code> to the <code>pong</code> target that includes
+         <code>&lt;engine/platform/main.hpp&gt;</code> and does nothing else. Build it. Read the
+         error carefully and identify <em>which</em> symbols are duplicated and which object files
+         they came from. Then change the include to <code>app.hpp</code> and confirm it links.</p>
+      <details><summary>Hint</summary>
+        <p>Two symbols are duplicated, not one, and neither is <code>SDL_AppInit</code>. Use
+           <code>nm -g build/demos/CMakeFiles/pong.dir/*.o | grep " T "</code> (or
+           <code>dumpbin /symbols</code>) to see them.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p><code>SDL_main</code> and <code>main</code> (or <code>WinMain</code>). Both come from
+           <code>SDL_main_impl.h</code>, which <code>SDL_main.h</code> includes at its end when
+           <code>SDL_MAIN_USE_CALLBACKS</code> is defined. The four <code>SDL_App*</code> functions
+           are <em>not</em> duplicated, because <code>ENGINE_MAIN</code> is only in one file — a
+           useful demonstration that the rule is about the header, not about the macro.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.2 — Make the step count visible.</strong> Add a counter to
+         <code>pong_app</code> that records how many times <code>on_fixed_step</code> ran this
+         frame, and print it in <code>on_overlay</code> alongside the fps. Run it, then hold a key
+         that makes the frame expensive (or add an <code>SDL_Delay(30)</code> to
+         <code>on_frame</code>) and watch the number move.</p>
+      <details><summary>Hint</summary>
+        <p>Reset the counter at the top of <code>on_frame</code>, not at the top of
+           <code>on_fixed_step</code> — by the time a step runs, the frame's steps are already
+           under way. Or read <code>steps().steps_this_frame()</code>, which
+           <code>fixed_step</code> has been maintaining since Lesson 1.4.</p>
+      </details>
+      <details><summary>Solution</summary>
+        <p><code>steps().steps_this_frame()</code> in <code>on_overlay</code> is the whole answer;
+           the exercise is really about noticing that <code>fixed_step</code> already tracked it.
+           At vsynced 60 Hz you will see a steady 1 with occasional 0s and 2s — exactly §3.3.1's
+           table. With a 30 ms delay you will see a steady 2, and if you push past 133 ms you will
+           see the step cap bite and <code>dropped_seconds()</code> go non-zero.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.3 — A second surface for <code>hello_cube</code>.</strong> Add a
+         <code>--frames N</code> flag that runs headless for N frames and reports the average
+         frame time, without opening a window. This is a micro-benchmark, and the point is that
+         the app layer makes one nearly free.</p>
+      <details><summary>Hint</summary>
+        <p>Parse it in <code>configure</code> beside <code>--shot</code>. Count in
+           <code>on_frame</code> and <code>request_quit()</code> when you reach N. For the timing,
+           <code>time().elapsed()</code> gives you seconds since the platform started.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Roughly six lines. The thing to notice while writing it: with no vsync and no display,
+           <code>SDL_AppIterate</code> is called as fast as the CPU allows, so this measures your
+           renderer rather than your monitor — which is the whole reason a headless surface is
+           useful for more than screenshots. Compare the number against the
+           <code>fill</code> figure the sandbox's Lesson 3.10 budget reports.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.4 — Handle a resize.</strong> §5.1 lists window resizing as unfinished. Add it:
+         override <code>on_event</code> in <code>hello_cube</code>, catch
+         <code>SDL_EVENT_WINDOW_RESIZED</code>, and log the new size. Then decide — and write down
+         — what the engine <em>should</em> do about it: reallocate the framebuffer to match, keep
+         it fixed and let the renderer scale, or something else.</p>
+      <details><summary>Hint</summary>
+        <p>The event carries the new size in <code>event.window.data1</code> and
+           <code>data2</code>. Before you write any reallocation, ask what breaks: the projector's
+           aspect ratio is baked in at construction, and so is the depth buffer's size.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>There is no single right answer, which is why this is the open one. Reallocating on
+           every resize event means a 230 KB allocation per mouse-move during a drag; a real
+           engine debounces, or reallocates only on the <em>final</em> size. Keeping the
+           framebuffer fixed (what we do today) costs nothing and is correct for a
+           deliberately-low-resolution renderer, but would be wrong for the GPU path, where the
+           swapchain really does change size. Write down which you chose and why — that note is
+           the actual deliverable, and Module 6's render targets will make you glad you have
+           it.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.5 — The engine challenge: a third arrangement.</strong> Some engines offer a
+         third shape — a <code>run()</code> function you call, which owns the loop but returns
+         when the program ends:</p>
+      <figure class="listing nofold">
+        <figcaption><span class="path">a third arrangement</span>
+                    <span class="lang" data-lang="cpp">C++</span></figcaption>
+        <pre><code class="lang-cpp">int main(int argc, char* argv[])
+{
+    my_app app;
+    return engine::run(app, argc, argv);   // returns when the app quits
+}</code></pre>
+      </figure>
+      <p>Implement <code>engine::run</code> in terms of <code>platform</code> — it is about
+         fifteen lines — and then argue, in a comment, whether it should exist. Which platforms
+         does it work on? What does it buy over <code>ENGINE_MAIN</code>, and what does it cost?</p>
+      <details><summary>Hint</summary>
+        <p>Write it as <code>configure</code>, <code>start</code>, <code>on_start</code>, then the
+           same <code>while</code> body as <code>app_runner::iterate</code>, then
+           <code>on_stop</code>. You will find you can call <code>app_runner::iterate</code>
+           itself, which is a hint about how thin the difference really is.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>It works everywhere <code>main</code> works — and nowhere <code>main</code> does not,
+           which is the answer to "which platforms": a browser is exactly the case it fails, and
+           that is the case <code>ENGINE_MAIN</code> exists for. What it buys is a program that
+           has a visible <code>main</code> and can do work before and after the loop (parse a
+           config file, write a report), and an <code>app</code> that is a local rather than a
+           heap allocation handed to C — so §3.5's whole ownership dance disappears.</p>
+        <p>A defensible conclusion either way. Ours: not yet. Three arrangements need three sets
+           of documentation and three things to keep working, and the case for the third is
+           "slightly nicer on desktop" — real, but not yet worth a third supported path. Revisit
+           when something actually needs work done after the loop ends.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       10 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">10</span>Recap &amp; Next</h2>
+
+  <p>The engine gained:</p>
+
+  <ul>
+    <li><strong>A platform layer</strong> that owns SDL's lifecycle — initialise, window,
+        renderer, streaming texture, and the mirror image on the way down — with one
+        <code>stop()</code> that every failure path and the destructor both use.</li>
+    <li><strong>Three surfaces</strong>, which turn Lesson 4.2's "a window is claimed by one or
+        the other" from a comment into an enum chosen before anything exists — and add
+        <code>headless</code>, which makes a machine with no display a valid place to run the
+        engine.</li>
+    <li><strong>An application layer</strong> on top of it: seven hooks, four SDL callbacks, and a
+        macro with no logic in it. Lesson 1.4's loop, with the <code>while</code> handed to SDL.</li>
+    <li><strong>A second executable that is a game.</strong> Pong is a program now.</li>
+  </ul>
+
+  <p>And you gained a distinction that is going to keep coming up:</p>
+
+  <div class="callout ok">
+    <span class="label">The through-line</span>
+    <p>
+      <strong>Inverting control does not change what must be true about a frame. It changes who is
+      responsible for making it true.</strong> Lesson 1.2's ordering contract still holds under the
+      callbacks — SDL enforces it now, in three lines of
+      <code>SDL_main_callbacks.c</code> we went and read. When a guarantee moves out of your code,
+      the correct response is never to assume it survived; it is to find the code that now provides
+      it.
+    </p>
+  </div>
+
+  <p>
+    <strong>Next:</strong> we have been logging with <code>SDL_Log</code> since Lesson 0.5, and
+    <code>platform::start()</code> alone has six calls to it — some of which report a fatal error
+    and some of which report a curiosity, at the same volume, to the same place. Lesson 5.3 fixes
+    that: levels, categories, an assertion macro that survives a release build in the form we
+    actually want, and — the part that takes a whole lesson to argue rather than to write — a
+    coherent error-handling strategy for an engine core that has no exceptions.
+  </p>
+
+  <p>
+    That last one has been accumulating debts since Lesson 3.5. <code>image_status</code>,
+    <code>gpu_status</code>, <code>bool</code> plus a log line, and now
+    <code>app_config</code>'s "returns false and has already logged" are four different answers to
+    the same question, all of them defensible in isolation and none of them the same. It is time
+    to pick one.
+  </p>
+
+  <!-- =================================================================
+       11 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">11</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>SDL3, <code>SDL_main.h</code> and <code>SDL_init.h</code></strong> — the primary
+        source for everything in §3.2. They are in your build tree at
+        <code>build/_deps/sdl3-src/include/SDL3/</code>; read the comment block above
+        <code>SDL_MAIN_USE_CALLBACKS</code> and then follow <code>SDL_main_impl.h</code> to see
+        what the macro actually generates.</li>
+    <li><strong>SDL3, <code>src/main/SDL_main_callbacks.c</code></strong> — forty lines, and the
+        authority on the ordering guarantee in §3.3. Worth reading in full precisely because it
+        is short: this is what "SDL pumps the queue between iterations" means concretely.</li>
+    <li><strong>SDL3 wiki, "Main callbacks in SDL3"</strong> —
+        <a href="https://wiki.libsdl.org/SDL3/README-main-functions">wiki.libsdl.org/SDL3/README-main-functions</a>.
+        The narrative version, including the Emscripten and iOS reasoning we summarised in §2.1.</li>
+    <li><strong>Martin Fowler, "InversionOfControl" (2005)</strong> —
+        <a href="https://martinfowler.com/bliki/InversionOfControl.html">martinfowler.com/bliki/InversionOfControl.html</a>.
+        Two pages, and the origin of the "a framework calls you" formulation. Fowler is careful
+        about a distinction we glossed: inversion of control is a property of a <em>relationship</em>,
+        not of a library.</li>
+    <li><strong>Ralph Johnson &amp; Brian Foote, "Designing Reusable Classes" (1988)</strong> —
+        where the Hollywood Principle ("don't call us, we'll call you") was written down, and still
+        the clearest statement of why a framework's hooks are a design and not a convenience.</li>
+    <li><strong>Emscripten, <code>emscripten_set_main_loop</code></strong> —
+        <a href="https://emscripten.org/docs/porting/emscripten-runtime-environment.html">emscripten.org</a>,
+        "Emscripten runtime environment". The concrete version of §2.1's browser argument: read
+        the section titled "Browser main loop" to see exactly what a <code>while (true)</code>
+        does to a page.</li>
+    <li><strong>Casey Muratori, <em>Handmade Hero</em>, days 001–024</strong> — builds the same
+        platform-layer question from the opposite direction, on Win32, with a much stronger
+        insistence on hiding the platform behind a thin interface. Worth watching precisely
+        because it reaches a different conclusion from §2.3 for reasons it states clearly.</li>
+    <li><strong>Jason Gregory, <em>Game Engine Architecture</em>, 3rd ed., §1.6 and §7.1</strong> —
+        the "runtime engine architecture" layer diagram, and the chapter on the game loop and
+        real-time simulation. §7.5.2's treatment of multiplatform loop ownership is the textbook
+        version of today's fork.</li>
+  </ul>

@@ -1,0 +1,35 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l64f2-t l64f2-d">
+  <title id="l64f2-t">The half-vector Jacobian, derived from a double angle</title>
+  <desc id="l64f2-d">A microfacet normal h tilted by theta from the fixed direction v reflects v into a direction l at exactly 2 theta. Working in spherical coordinates centred on v, the solid angle around l is therefore stretched relative to the solid angle around h by 2 sin(2 theta) over sin(theta), which the double-angle identity turns into 4 cos theta, that is 4 times v dot h.</desc>
+  <defs>
+    <marker id="e-i-l64f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l64f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l64f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l64f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l64f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="400" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">Tilt the mirror by θ, and the ray turns by 2θ</text>
+<line x1="40" y1="300" x2="460" y2="300" class="ink" stroke-width="1.6"/>
+<line x1="250" y1="300" x2="250" y2="110" class="ink" stroke-width="1.8" marker-end="url(#e-i-l64f2)"/>
+<text x="258" y="104" class="sm" text-anchor="start">v  (fixed)</text>
+<line x1="250" y1="300" x2="296.7883556069515" y2="171.45004947648775" stroke="#5ac878" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-g-l64f2)"/>
+<text x="307.45938407871233" y="136.1316397079674" class="sm" text-anchor="middle">h</text>
+<line x1="250" y1="300" x2="372.12964584044244" y2="154.4515558073942" stroke="#e05c5c" stroke-width="1.9" marker-end="url(#e-b-l64f2)"/>
+<text x="396.27097325354634" y="137.59857805877667" class="sm" text-anchor="start">l</text>
+<path d="M 250 238 A 62 62 0 0 1 271.21 241.74" class="grid" fill="none" stroke-width="1.2"/>
+<text x="263.8918542133544" y="225.21537975902336" class="sm" text-anchor="middle">θ</text>
+<path d="M 250 204 A 96 96 0 0 1 311.71 226.46" class="grid" fill="none" stroke-width="1.2"/>
+<text x="307.0" y="205.273103968574" class="sm" text-anchor="middle">2θ</text>
+<rect x="470" y="62" width="232" height="250" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="586" y="86" class="sm" text-anchor="middle">the whole derivation</text>
+<text x="586" y="112" class="sm" text-anchor="middle">θ_out  =  2 θ_h</text>
+<text x="586" y="160" class="xs" text-anchor="middle">dω_out  =  sin(2θ) · 2 dθ dφ</text>
+<text x="586" y="182" class="xs" text-anchor="middle">dω_h    =  sin(θ) · dθ dφ</text>
+<text x="586" y="226" class="xs" text-anchor="middle">ratio  =  2 sin2θ / sinθ</text>
+<text x="586" y="248" class="sm" text-anchor="middle">        =  4 cos θ</text>
+<text x="586" y="274" class="sm" text-anchor="middle">        =  4 (v·h)</text>
+<rect x="470" y="322" width="232" height="54" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="586" y="342" class="xs" text-anchor="middle">measured: 1.42e-03 worst</text>
+<text x="586" y="360" class="xs" text-anchor="middle">over sixteen configurations</text>
+</svg>

@@ -1,0 +1,263 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-12-ragdolls.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.12 — Ragdolls: Joints on a Skeleton</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="../index.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">9.1 — Multithreading: Data Hazards and Safety Rules (not yet written)</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.13</div>
+    <h1>A Character Controller</h1>
+    <p class="deck">
+      Twelve lessons built a simulation that is <em>correct</em>, and the player's character is the one
+      body in a game for which that is the problem. A rigid capsule on 8.10's solver, rotation locked,
+      friction 0.6, stands on a 30° ramp and hangs on a wall mid-jump at any stick speed above
+      <strong>27&nbsp;cm/s</strong> — one friction coefficient, two wishes. It slides <strong>2.91&nbsp;m</strong>
+      after the stick is released, climbs a 20&nbsp;cm ledge only at 8&nbsp;m/s, and passes through a
+      10&nbsp;cm wall half the time at 42&nbsp;m/s. So the character leaves the simulation. It becomes a
+      capsule with a position and no mass that asks the world one question, <em>how far can I move before
+      I touch something?</em>, and answers it with a <strong>cast</strong>. A cast is Newton's method on a
+      convex distance, and it cannot overshoot because each step stops at a separating plane. That holds
+      only if the step is taken from GJK's certified <em>lower</em> bound: stepped from its
+      <code>distance</code>, 377 of 6,049 casts finished inside the skin. Everything else is policy, and
+      each policy has a number. Clip the <em>original</em> motion against every surface, or walk back and
+      forth in an obtuse corner at <strong>58&nbsp;cm/s</strong>. A round bottom climbs a
+      <strong>90.8&nbsp;mm</strong> curb for free and stands <strong>219&nbsp;mm</strong> past an edge. A
+      step-up must carry the capsule up to <strong>90.8&nbsp;mm</strong> across before it lands on a ledge,
+      and with the curb it climbs <strong>0.39&nbsp;m</strong> when told 0.30. A rider carried by velocity
+      spirals off a turntable at <strong>e<sup>πωh</sup></strong> per revolution. A kinematic proxy,
+      steered and never teleported, lets the character push a crate at its own speed. Teleported, the
+      proxy sinks <strong>138&nbsp;mm</strong> into the crate, or walks straight through it once it is
+      asleep. The controller tunnels through nothing at any speed up to 10,000&nbsp;m/s. Module 8 ends
+      here.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-08-pong.html">1.8 — Checkpoint: Pong</a>,
+          <a href="08-05-gjk.html">8.5 — GJK: Convex Distance from a Support Function</a>,
+          <a href="08-06-epa.html">8.6 — EPA: Penetration Depth</a>,
+          <a href="08-10-sequential-impulses.html">8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping</a>,
+          <a href="08-12-ragdolls.html">8.12 — Ragdolls: Joints on a Skeleton</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/cast.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/cast.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/character.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/character.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/convex.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/character/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_813.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_813.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine has a <strong>character controller</strong>. It casts, slides, walks slopes, stands
+            on edges, snaps down, steps up and rides moving platforms, and it pushes props through a
+            steered proxy. Its one query is a <strong>shape cast</strong> any gameplay code can use.
+            <strong>Module 8 is complete</strong>, with eleven measured sections, <strong>85 checks</strong>,
+            and eight claims the measurements refused.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say, with numbers, why a player's character must not be a rigid body. Each failure is Newton
+          being right about something the design wants to be false.</li>
+      <li>…derive conservative advancement twice: as Newton's method on a convex distance, which says
+          how fast it converges, and as a separating plane moving under a translation, which says why
+          it is safe. Then say which of GJK's two bounds it has to be stepped from.</li>
+      <li>…write collide-and-slide, and explain why the rest of a move is clipped from the
+          <em>original</em> motion and not from what was left.</li>
+      <li>…decide what a slope is by its normal, lay a step along walkable ground, and predict the
+          creep, the skip and the curb a capsule's round bottom produces.</li>
+      <li>…build a step-up and a ground snap that work on a round bottom, and derive the least
+          forward move each needs.</li>
+      <li>…carry a character on a moving body without drift, and couple it to the solver through a
+          proxy that has exactly one owner.</li>
+      <li>…price a controller per move, and name what it does not do.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a character that obeys Newton</a></li>
+      <li><a href="#intuition">Building intuition: a question, not a body</a></li>
+      <li><a href="#cast">The one query: a cast is Newton's method</a></li>
+      <li><a href="#slide">Collide and slide</a></li>
+      <li><a href="#slopes">Slopes</a></li>
+      <li><a href="#ground">Ground, and the round bottom</a></li>
+      <li><a href="#snap">Snapping to the ground</a></li>
+      <li><a href="#step">Stepping up</a></li>
+      <li><a href="#tunnel">Tunnelling, revisited</a></li>
+      <li><a href="#carry">Standing on things that move</a></li>
+      <li><a href="#proxy">One owner: pushing, and being pushed</a></li>
+      <li><a href="#bill">The bill</a></li>
+      <li><a href="#implementation">Writing it</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next — and Module 8's project tree</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a character that obeys Newton</h2>
+
+  <p>
+    Every lesson in this module has made something more physically correct. Bodies keep their
+    momentum (8.2), spin the way their mass is spread (8.3), meet at the right points (8.7), push each
+    other exactly as hard as they must (8.9), settle into stacks (8.10), and hang from joints (8.11). A
+    ragdoll falls down a staircase the way a body would, because nothing about it is authored (8.12).
+    The obvious next step is to make the player's character one more body of the same kind: a capsule
+    standing upright, which is what 8.5 said a capsule was <em>for</em>, with its rotation locked so
+    that it cannot tip over. The stick sets its velocity, and the solver does the rest.
+  </p>
+
+  <p>
+    So build it, on exactly 8.10's solver: a dynamic capsule 1.8&nbsp;m tall and 0.3&nbsp;m in radius,
+    80&nbsp;kg, a zero inverse inertia (every engine's "freeze rotation" box), friction 0.6. Then ask it
+    for the five things any designer asks of a character, and measure what it does. §A of this lesson's
+    harness does exactly that, and Figure&nbsp;1 is the result.
+  </p>
+
+  <p>
+    <strong>Stand on a 30° ramp.</strong> At <code>μ&nbsp;=&nbsp;0.5</code> it slides 1.98&nbsp;m in
+    two seconds, against a predicted 1.97 from <code>g(sin&nbsp;α&nbsp;−&nbsp;μ&nbsp;cos&nbsp;α)</code>.
+    That is correct: 8.9 measured the critical slope at <code>atan(μ)</code>, 26.6°, and 30° is steeper.
+    Raise <code>μ</code> to 0.6 (<code>tan&nbsp;30°&nbsp;=&nbsp;0.577</code>) and it holds.
+  </p>
+
+  <p>
+    <strong>Jump at a wall and keep pushing into it.</strong> Now <code>μ&nbsp;=&nbsp;0.6</code> is the
+    problem, because the capsule <em>hangs there</em>. Each step the stick sets its horizontal velocity
+    to <code>v_push</code> and the contact cancels it, so the normal impulse is <code>m·v_push</code>.
+    Coulomb friction may then hold up to <code>μ·m·v_push</code> of vertical momentum, and gravity only
+    adds <code>m·g·h</code> a step. The capsule hangs whenever
+    <code>μ·v_push&nbsp;≥&nbsp;g·h</code>: a stick speed of <code>g·h/μ</code>, 0.2725&nbsp;m/s at 60&nbsp;Hz.
+    The harness bisects it at 0.2757. Any character pushing into a wall at walking pace sticks to it.
+    Setting <code>μ</code> to zero fixes the wall (it falls at exactly −9.81&nbsp;m/s after one second)
+    and breaks the ramp. Friction is <em>one number for a pair of materials</em>, and the design wants
+    two: grip on the floor, none on the wall. The same material is floor at one angle and wall at
+    another, so no material table can hold both.
+  </p>
+
+  <p>
+    <strong>Let go of the stick at 6&nbsp;m/s.</strong> It slides 2.91&nbsp;m. The continuous
+    <code>v²/(2μg)</code> is 3.06&nbsp;m, and the sum of semi-implicit Euler's steps, taken from where the
+    stick let go, is 2.9098&nbsp;m to four decimals. Momentum is conserved, and the design wants a
+    stop.
+  </p>
+
+  <p>
+    <strong>Walk into a ledge.</strong> The round bottom meets a ledge's edge with a tilted normal, and
+    the solver turns part of the stick into lift. How much depends on how hard the capsule is driven.
+    A 10&nbsp;cm ledge goes up at 1&nbsp;m/s but not at 0.5. A 20&nbsp;cm ledge goes up at 8&nbsp;m/s and
+    at nothing slower, and 30&nbsp;cm never does. Whether a staircase can be climbed depends on
+    <em>speed</em>, which no level designer can work with.
+  </p>
+
+  <p>
+    <strong>Dash into a wall.</strong> 8.10 §6 measured that a body arriving at a surface is first
+    sampled up to one step's travel deep, uniformly. At 42&nbsp;m/s a step is 0.7&nbsp;m, and a
+    10&nbsp;cm wall is passed exactly half the time (§9 derives the odds and measures them).
+  </p>
+
+  @@FIG_NEWTON@@
+
+  <p>
+    None of those red cells is a bug in 8.10's solver; each is the solver being <em>right</em>. A
+    physics engine exists to conserve momentum, to make friction one number, and to answer questions
+    about instants, and those are the three properties the design needs to be false. The fix is not a
+    better solver. It is to <strong>take the character out of the simulation entirely</strong>, and that
+    is the rest of the lesson.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: a question, not a body</h2>
+
+  <p>
+    A controller does not <em>simulate</em> a character. It keeps a position and, every step, asks the
+    world one question: <em>if this capsule moved by <code>d</code>, how far would it get before it came
+    within a centimetre of something, and what would it be touching?</em> That question has a name,
+    a <strong>shape cast</strong> (a sweep), and a precise answer: a fraction <code>t</code> of the move,
+    a surface normal, and a body. Everything else a controller does is <em>policy</em>, a decision about
+    what to do with the answer.
+  </p>
+
+  <ul>
+    <li>If it hit a <strong>wall</strong>, keep the part of the move that runs along the wall
+        (<em>collide and slide</em>, §4).</li>
+    <li>If it hit <strong>ground</strong>, which is a normal within 45° of up, lay the move along it
+        rather than stopping; and never let a steeper surface lift the character (<em>slopes</em>, §5).</li>
+    <li>After the move, look a little way down. If there is ground, the character is
+        <strong>grounded</strong>, and its normal and its body are worth keeping (§6).</li>
+    <li>If it was grounded last step and the ground has dropped away, <strong>snap</strong> down onto it
+        rather than stepping off into the air (§7).</li>
+    <li>If a wall is shorter than a stair, <strong>step up</strong> it: up, across, down (§8).</li>
+    <li>If the ground is moving, <strong>move with it</strong>, by exactly what it did (§10).</li>
+  </ul>
+
+  <p>
+    Figure&nbsp;2 is that list as <code>move_character</code> runs it: five stages, each labelled with the
+    section that measures it, over the one query they all share. The move is cut into a sideways pass
+    and a vertical pass because walls and floors want opposite treatment. A wall should stop a sideways
+    move and never a fall. A floor should stop a fall and never a sideways move. Doing both in one
+    collide-and-slide is the classic way a character ends up creeping downhill while standing still,
+    and §5 measures the creep at <code>g·h·sin&nbsp;α</code>.
+  </p>
+
+  @@FIG_PIPELINE@@
+
+  <p>
+    <strong>Who owns what.</strong> 8.12's rule was that every body has exactly one owner at a time.
+    The controller owns the character's position, and the solver owns every other body. The two have
+    to meet, or the character would walk through crates and crates would fall through the character,
+    and they meet through a <strong>proxy</strong>. The proxy is a kinematic capsule in the
+    <code>body_world</code>, placed where the character is and <em>steered</em> there by velocity, the
+    chord of 8.12, never teleported. To the solver it is an infinitely heavy moving body. A crate it
+    walks into is pushed at the speed the character is really moving, and keeps that speed when the
+    character stops. Light dynamic bodies (40&nbsp;kg or less) are <em>pushable</em>: the controller's
+    sideways moves ignore them, and the proxy shoves them. Heavier ones are walls. §11 measures what
+    teleporting the proxy does instead, and it is worse than the obvious answer.
+  </p>
+
+  <p>
+    <strong>When.</strong> Each fixed step runs in three parts, in this order. Steer the proxy to where the
+    controller left the character. Run the physics step. Then move the character against the world as
+    the step left it. Running the controller <em>after</em> the step means it sees every crate and
+    platform where it now is. It also means the one thing it cannot see in the world, how far the
+    platform under it just travelled, is exactly readable from that platform's velocity and the
+    integrator that moved it (§10).
+  </p>
+
+  <p>
+    <strong>Design, not Newton.</strong> The displacement handed to <code>move_character</code> is the
+    game's, and so is everything that produces it: acceleration curves, air control, and the rule that a
+    grounded character does not fall. A jump is the clearest example. A designer names a height, not a
+    force, and the launch speed is arithmetic: <code>v₀&nbsp;=&nbsp;√(2gH)</code>. Asked for 1.20&nbsp;m,
+    though, the character rises <strong>1.1599&nbsp;m</strong>. Semi-implicit Euler (8.1) moves each step
+    at the velocity it <em>ends</em> with, so the first step already moves at <code>v₀&nbsp;−&nbsp;g·h</code>,
+    and the apex is the discrete sum <code>v₀²/2g&nbsp;−&nbsp;v₀h/2&nbsp;=&nbsp;1.1596</code>. Four
+    centimetres is not a physics error. It is a design parameter measured in the units the integrator
+    actually works in, and a game that cares aims for the height the steps give.
+  </p>

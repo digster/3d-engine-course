@@ -2942,3 +2942,16 @@ Produced Lesson 8.13 — A Character Controller (Module 8, 13 of 13). **Module 8
 (A read-only audit of the 96 published lessons, the engine and the authoring tooling; no course
 content changed. The findings, and the order proposed for acting on them, are in
 `memory/2026-09-26.md`.)
+
+---
+
+## 2026-09-26 — Planning the review's fixes, then implementing them
+
+> Let's make a plan to work on your suggestions. Ask me for any clarifications if required.
+
+(Answers given in planning: new engine capabilities go in as **b-lessons in their home modules**;
+fill **all four gaps** — local lights and shadows, physics scene queries, glTF skins and clips,
+compute shaders; **split** STATE.md/LEARNINGS.md into compact heads plus verbatim archives;
+**re-estimate published hours**. The plan is `~/.claude/plans/let-s-make-a-plan-cozy-feigenbaum.md`.)
+
+> implement the plan.

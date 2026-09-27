@@ -1,0 +1,57 @@
+<svg viewBox="0 0 900 350" role="img" aria-labelledby="l83f3-t l83f3-d">
+  <title id="l83f3-t">Why the textbook form of the inertia tensor fails on a long thin body</title>
+  <desc id="l83f3-d">A logarithmic number line shows the two quantities involved for a sample a thousand metres along x and a millimetre along y: the squared length and the squared x component are both one million, and the answer they are supposed to differ by is one millionth. In float the subtraction returns exactly zero, a hundred percent wrong, where the cross-product-matrix form returns the exact value.</desc>
+  <defs>
+    <marker id="e-i-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-amber-l83f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="40" y="74" width="400" height="150" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="40" y="32" class="xs muted" text-anchor="start">a sample at r = (1000, 0.001, 0) — a plank, a rail, a sword</text>
+<text x="40" y="50" class="xs muted" text-anchor="start">Ixx / m is y² + z² = 1e−06. Both expressions say so on paper.</text>
+<line x1="66.0" y1="126.0" x2="414.0" y2="126.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<line x1="112.4" y1="121" x2="112.4" y2="131" class="grid" stroke-width="1.0"/>
+<text x="112.4" y="146" class="xs muted" text-anchor="middle">1e-6</text>
+<line x1="182.0" y1="121" x2="182.0" y2="131" class="grid" stroke-width="1.0"/>
+<text x="182.0" y="146" class="xs muted" text-anchor="middle">1e-3</text>
+<line x1="251.6" y1="121" x2="251.6" y2="131" class="grid" stroke-width="1.0"/>
+<text x="251.6" y="146" class="xs muted" text-anchor="middle">1e0</text>
+<line x1="321.2" y1="121" x2="321.2" y2="131" class="grid" stroke-width="1.0"/>
+<text x="321.2" y="146" class="xs muted" text-anchor="middle">1e3</text>
+<line x1="390.8" y1="121" x2="390.8" y2="131" class="grid" stroke-width="1.0"/>
+<text x="390.8" y="146" class="xs muted" text-anchor="middle">1e6</text>
+<line x1="390.80" y1="114.00" x2="390.80" y2="124.00" stroke="#e05c5c" stroke-width="1.8" marker-end="url(#e-red-l83f3)"/>
+<text x="382.8" y="110" class="xs mono" text-anchor="end">|r|² and x² — both 1e6</text>
+<line x1="112.40" y1="160.00" x2="112.40" y2="168.00" stroke="#ebc860" stroke-width="1.8" marker-end="url(#e-amber-l83f3)"/>
+<text x="112.4" y="182" class="xs mono" text-anchor="middle">the answer — 1e−06</text>
+<text x="40" y="250" class="xs muted" text-anchor="start">A float has 24 bits of significand. At 1e6 the gap between representable numbers is 0.0625, so</text>
+<text x="40" y="266" class="xs t-hi" text-anchor="start">the 1e−06 is not merely rounded away — it was never in the sum.</text>
+<text x="486" y="86" class="xs muted" text-anchor="start">Ixx / m, in float</text>
+<text x="780" y="86" class="xs muted" text-anchor="end">value</text>
+<text x="868" y="86" class="xs muted" text-anchor="end"></text>
+<line x1="486" y1="94.0" x2="874" y2="94.0" class="grid" stroke-width="1.0"/>
+<text x="486" y="111.0" class="xs" text-anchor="start">|r|² · 1 − r ⊗ r</text>
+<text x="780" y="111.0" class="xs mono" text-anchor="end">0.000000e+00</text>
+<text x="868" y="111.0" class="xs mono" text-anchor="end">100% wrong</text>
+<text x="486" y="128.0" class="xs" text-anchor="start">−[r]ₓ [r]ₓ</text>
+<text x="780" y="128.0" class="xs mono" text-anchor="end">1.000000e-06</text>
+<text x="868" y="128.0" class="xs mono" text-anchor="end">exact</text>
+<text x="486" y="145.0" class="xs" text-anchor="start">the true value</text>
+<text x="780" y="145.0" class="xs mono" text-anchor="end">1.000000e-06</text>
+<text x="868" y="145.0" class="xs mono" text-anchor="end"></text>
+<text x="486" y="179.5" class="xs muted" text-anchor="start">The two are the same algebra. They are not the same</text>
+<text x="486" y="195.5" class="xs muted" text-anchor="start">arithmetic: the derived form builds a sum of three</text>
+<text x="486" y="211.5" class="xs muted" text-anchor="start">squares and then subtracts one of them straight off</text>
+<text x="486" y="227.5" class="xs muted" text-anchor="start">again, which is catastrophic cancellation in the</text>
+<text x="486" y="243.5" class="xs muted" text-anchor="start">textbook sense. The cross-product-matrix form never</text>
+<text x="486" y="259.5" class="xs muted" text-anchor="start">forms the sum at all — its diagonal is y² + z².</text>
+<text x="486" y="275.5" class="xs muted" text-anchor="start"></text>
+<text x="486" y="291.5" class="xs muted" text-anchor="start">The consequence is not academic. A zero principal</text>
+<text x="486" y="307.5" class="xs muted" text-anchor="start">moment is a SINGULAR tensor, which inverse_inertia</text>
+<text x="486" y="323.5" class="xs muted" text-anchor="start">refuses, which is a body that silently will not spin</text>
+<text x="486" y="339.5" class="xs t-hi" text-anchor="start">about its own length.</text>
+</svg>

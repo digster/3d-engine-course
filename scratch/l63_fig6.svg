@@ -1,0 +1,54 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l63f6-t l63f6-d">
+  <title id="l63f6-t">The microfacet model's energy budget</title>
+  <desc id="l63f6-d">Directional-hemispherical reflectance of the specular microfacet BRDF with Fresnel set to 1, against roughness. It never exceeds 1, but falls to 0.3069 at full roughness because single-scattering theory loses the light that would have bounced a second time.</desc>
+  <defs>
+    <marker id="e-i-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l63f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">6.2’s energy test, unchanged, pointed at the new machinery. The shape of the answer is completely different.</text>
+<text x="150" y="60" class="xs muted" text-anchor="start">R(v) for D·G / (4 n·l n·v), with F = 1:</text>
+<line x1="470.0" y1="70" x2="470.0" y2="228" class="hi" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="476.0" y="60" class="xs t-hi" text-anchor="start">1.0</text>
+<text x="140" y="92" class="xs mono muted" text-anchor="end">roughness 0.22</text>
+<rect x="150" y="78" width="319.232" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="150" y="90" width="312.8" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="469.232" y="78" width="0.7679999999999865" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="496.0" y="94" class="xs mono" text-anchor="start">0.9976</text>
+<text x="552.0" y="94" class="xs mono muted" text-anchor="start">loses 0%</text>
+<text x="140" y="122" class="xs mono muted" text-anchor="end">roughness 0.50</text>
+<rect x="150" y="108" width="293.056" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="150" y="120" width="268.576" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="443.056" y="108" width="26.944000000000017" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="496.0" y="124" class="xs mono" text-anchor="start">0.9158</text>
+<text x="552.0" y="124" class="xs mono muted" text-anchor="start">loses 8%</text>
+<text x="140" y="152" class="xs mono muted" text-anchor="end">roughness 0.71</text>
+<rect x="150" y="138" width="218.81599999999997" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="150" y="150" width="243.2" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="368.816" y="138" width="101.18400000000001" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="496.0" y="154" class="xs mono" text-anchor="start">0.6838</text>
+<text x="552.0" y="154" class="xs mono t-bad" text-anchor="start">loses 32%</text>
+<text x="140" y="182" class="xs mono muted" text-anchor="end">roughness 0.87</text>
+<rect x="150" y="168" width="146.784" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="150" y="180" width="215.104" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="296.784" y="168" width="173.216" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="496.0" y="184" class="xs mono" text-anchor="start">0.4587</text>
+<text x="552.0" y="184" class="xs mono t-bad" text-anchor="start">loses 54%</text>
+<text x="140" y="212" class="xs mono muted" text-anchor="end">roughness 1.00</text>
+<rect x="150" y="198" width="98.208" height="10" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="150" y="210" width="188.99200000000002" height="10" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="248.208" y="198" width="221.79200000000003" height="10" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="496.0" y="214" class="xs mono" text-anchor="start">0.3069</text>
+<text x="552.0" y="214" class="xs mono t-bad" text-anchor="start">loses 69%</text>
+<rect x="150" y="238" width="26" height="9" rx="2" fill="#5082e6" fill-opacity="0.55" stroke="#5082e6" stroke-width="1"/>
+<text x="182" y="246" class="xs" text-anchor="start">eye at 0°</text>
+<rect x="268" y="238" width="26" height="9" rx="2" fill="#5ac878" fill-opacity="0.45" stroke="#5ac878" stroke-width="1"/>
+<text x="300" y="246" class="xs" text-anchor="start">eye at 75°</text>
+<rect x="24" y="302" width="672" height="102" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="324" class="sm t-hi" text-anchor="middle">It NEVER exceeds 1 — unlike Blinn-Phong, which was over at every shininess. That is what the machinery bought.</text>
+<text x="360.0" y="346" class="xs muted" text-anchor="middle">But look at the other end. A fully rough surface returns only 0.3069 of what arrives, and that is not rounding: this is SINGLE-scattering</text>
+<text x="360.0" y="362" class="xs muted" text-anchor="middle">microfacet theory, which lets a facet bounce light once and then forgets it. The missing 69% hit a second facet on the way out.</text>
+<text x="360.0" y="382" class="xs t-hi" text-anchor="middle">Rough metal rendered this way is visibly too dark, and multiple-scattering compensation is the standard fix — named in §9, not built.</text>
+</svg>

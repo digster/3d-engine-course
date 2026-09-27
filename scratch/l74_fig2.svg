@@ -1,0 +1,33 @@
+<svg viewBox="0 0 760 414" role="img" aria-labelledby="f74b-t f74b-d">
+  <title id="f74b-t">The quaternion product contains the dot and cross products</title>
+  <desc id="f74b-d">The expansion of the quaternion product written out in three stages. First, distributing w1 plus v1 times w2 plus v2 into four terms. Second, the product of two pure quaternions equals minus their dot product plus their cross product, highlighted. Third, the collected result. Below, the difference between the two orders is shown to be exactly twice the cross product, with a worked example using the quaternions two one minus one three and minus one two zero one giving minus seven two six one and minus seven four minus four minus three, whose difference is zero minus two ten four.</desc>
+  <defs>
+    <marker id="e-i-f74b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="40" class="sm" text-anchor="middle">one multiplication, two famous halves</text>
+<text x="236" y="78" class="sm mono" text-anchor="end">(w₁ + v₁)(w₂ + v₂)</text>
+<text x="248" y="78" class="sm mono" text-anchor="middle">=</text>
+<text x="262" y="78" class="sm mono" text-anchor="start">w₁w₂  +  w₁v₂  +  v₁w₂  +  v₁v₂</text>
+<text x="236" y="130" class="sm mono" text-anchor="end">v₁v₂</text>
+<text x="248" y="130" class="sm mono" text-anchor="middle">=</text>
+<text x="262" y="130" class="sm mono t-hi" text-anchor="start">−(v₁ · v₂)  +  (v₁ × v₂)</text>
+<text x="236" y="182" class="sm mono" text-anchor="end">q p</text>
+<text x="248" y="182" class="sm mono" text-anchor="middle">=</text>
+<text x="262" y="182" class="sm mono" text-anchor="start">( w₁w₂ − v₁·v₂ ,   w₁v₂ + w₂v₁ + v₁×v₂ )</text>
+<text x="262" y="206" class="xs muted" text-anchor="start">the dot product and the cross product are INSIDE the</text>
+<text x="262" y="222" class="xs muted" text-anchor="start">quaternion product. Gibbs and Heaviside took them out.</text>
+<line x1="40" y1="248" x2="720" y2="248" class="grid" stroke-width="1.0"/>
+<text x="40" y="272" class="xs muted" text-anchor="start">swap the operands and exactly one term changes sign:</text>
+<text x="40" y="298" class="sm mono t-hi" text-anchor="start">q p − p q  =  ( 0 ,  2 (v₁ × v₂) )</text>
+<text x="430" y="272" class="xs muted" text-anchor="start">worked, by hand:</text>
+<text x="430" y="294" class="xs mono" text-anchor="start">q = (2, 1, −1, 3)   p = (−1, 2, 0, 1)</text>
+<text x="430" y="312" class="xs mono" text-anchor="start">q p = (−7,  2,  6,  1)</text>
+<text x="430" y="328" class="xs mono" text-anchor="start">p q = (−7,  4, −4, −3)</text>
+<text x="430" y="346" class="xs mono t-hi" text-anchor="start">difference = (0, −2, 10, 4) = 2 v₁×v₂</text>
+<text x="380.0" y="382" class="xs muted" text-anchor="middle">Three sentences, one fact: quaternions do not commute, the cross product is antisymmetric, and</text>
+<text x="380.0" y="400" class="xs muted" text-anchor="middle">rotations of space do not commute. The price the fourth dimension charges is the cross product's sign.</text>
+</svg>

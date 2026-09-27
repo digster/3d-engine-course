@@ -1,0 +1,56 @@
+<svg viewBox="0 0 900 450" role="img" aria-labelledby="l86f4-t l86f4-d">
+  <title id="l86f4-t">The terminal simplex GJK hands to EPA, by arrangement, over 50,000 overlapping pairs each.</title>
+  <desc id="l86f4-d">Six stacked bars. Crates standing on the same floor are almost entirely flat triangles with no four-point simplex at all, so a textbook EPA refuses 100 percent of them. Tilting one crate by one degree drops the refusal rate to 0.40 percent. Free orientations, a ball in a crate, a capsule against a crate and two hulls are all between 0.41 and 2.61 percent.</desc>
+  <defs>
+    <marker id="e-i-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-red-l86f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Every description of EPA opens “start from the tetrahedron GJK left”. Here is what GJK leaves.</text>
+<text x="236" y="62" class="xs muted" text-anchor="start">terminal simplex:</text>
+<line x1="324.0" y1="58.0" x2="340.0" y2="58.0" stroke="#8f918a" stroke-width="4.0" fill="none"/>
+<text x="346" y="62" class="xs muted" text-anchor="start">1 point</text>
+<line x1="456.0" y1="58.0" x2="472.0" y2="58.0" stroke="#9b7ede" stroke-width="4.0" fill="none"/>
+<text x="478" y="62" class="xs muted" text-anchor="start">2 points</text>
+<line x1="588.0" y1="58.0" x2="604.0" y2="58.0" stroke="#e05c5c" stroke-width="4.0" fill="none"/>
+<text x="610" y="62" class="xs muted" text-anchor="start">3 — a flat triangle</text>
+<line x1="720.0" y1="58.0" x2="736.0" y2="58.0" stroke="#5ac878" stroke-width="4.0" fill="none"/>
+<text x="742" y="62" class="xs muted" text-anchor="start">4, with volume</text>
+<text x="226" y="89" class="xs" text-anchor="end">crates on a floor</text>
+<rect x="236.0" y="76" width="0.4116" height="18" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="236.4116" y="76" width="419.5884" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="89" class="xs mono" text-anchor="start">100.00% refused by a textbook EPA</text>
+<text x="226" y="129" class="xs" text-anchor="end">…one tilted 1°</text>
+<rect x="236.0084" y="116" width="1.6548" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="237.6632" y="116" width="418.3368" height="18" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="129" class="xs mono" text-anchor="start">0.40% refused by a textbook EPA</text>
+<text x="226" y="169" class="xs" text-anchor="end">free orientations</text>
+<rect x="236.2436" y="156" width="6.342" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="242.5856" y="156" width="413.4144" height="18" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="169" class="xs mono" text-anchor="start">1.57% refused by a textbook EPA</text>
+<text x="226" y="209" class="xs" text-anchor="end">ball in a crate</text>
+<rect x="236.0" y="196" width="0.5292" height="18" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="236.5292" y="196" width="10.4328" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="246.962" y="196" width="409.038" height="18" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="209" class="xs mono" text-anchor="start">2.61% refused by a textbook EPA</text>
+<text x="226" y="249" class="xs" text-anchor="end">capsule vs crate</text>
+<rect x="236.0" y="236" width="0.546" height="18" rx="1" fill="#9b7ede" stroke="#9b7ede" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="236.546" y="236" width="8.6688" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="245.2148" y="236" width="410.7852" height="18" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="249" class="xs mono" text-anchor="start">2.19% refused by a textbook EPA</text>
+<text x="226" y="289" class="xs" text-anchor="end">hull vs hull</text>
+<rect x="236.0" y="276" width="1.7136" height="18" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<rect x="237.7136" y="276" width="418.2864" height="18" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="668" y="289" class="xs mono" text-anchor="start">0.41% refused by a textbook EPA</text>
+<line x1="20" y1="334" x2="880" y2="334" class="grid" stroke-width="1.0"/>
+<text x="20" y="356" class="sm t-hi" text-anchor="start">Two crates standing on the same floor produce a 4-point simplex ZERO times in 50,000 — and a flat TRIANGLE 49,951 times.</text>
+<text x="20" y="376" class="xs" text-anchor="start">Not a flat tetrahedron, which is what the literature warns about: `reduce_simplex` discards any vertex the closest point does not use, and</text>
+<text x="20" y="392" class="xs" text-anchor="start">three points in a plane already span it. Tilt one crate by a single degree and 49,802 tetrahedra appear.</text>
+<text x="20" y="416" class="xs muted" text-anchor="start">This is 8.5 §9's finding from the other side: a shared up axis puts y = 0 on every difference vertex the search visits, so the simplex is</text>
+<text x="20" y="432" class="xs muted" text-anchor="start">trapped in a plane. The SET is three-dimensional; the SEARCH never leaves its equator. Building the starting polytope is therefore on the critical</text>
+<text x="20" y="448" class="xs muted" text-anchor="start">path, not the error path.</text>
+</svg>

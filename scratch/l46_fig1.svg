@@ -1,0 +1,32 @@
+<svg viewBox="0 0 720 366" role="img" aria-labelledby="f46a-t f46a-d">
+  <title id="f46a-t">Three rates of change in one frame</title>
+  <desc id="f46a-d">Vertex data is written 8,575 times a frame, instance data seven times, and the camera once. The vertex buffer solved the first two rates in Lesson 4.5. The third needs a different mechanism, because putting a view-projection matrix in either buffer would mean writing the same sixteen floats thousands of times.</desc>
+  <defs>
+    <marker id="e-i-f46a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f46a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f46a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the same frame, three kinds of data, three rates of change</text>
+  <text x="24" y="72" class="sm t-hi">per VERTEX</text>
+  <text x="24" y="86" class="xs mono muted">slot 0</text>
+  <text x="24" y="100" class="xs muted">position, normal, uv</text>
+  <rect x="168.0" y="56" width="342.0" height="26" fill="#5082e6" fill-opacity="0.78" stroke="none"/>
+  <text x="520.0" y="74" class="xs mono">1,225 &#215; 7 = 8,575 times a frame</text>
+  <text x="24" y="150" class="sm t-hi">per INSTANCE</text>
+  <text x="24" y="164" class="xs mono muted">slot 1</text>
+  <text x="24" y="178" class="xs muted">offset, scale, spin, tint</text>
+  <rect x="168.0" y="134" width="130.8" height="26" fill="#a97ae0" fill-opacity="0.78" stroke="none"/>
+  <text x="308.8" y="152" class="xs mono">7 times a frame</text>
+  <text x="24" y="228" class="sm t-hi">per FRAME</text>
+  <text x="24" y="242" class="xs mono muted">a push</text>
+  <text x="24" y="256" class="xs muted">the camera, the lamp</text>
+  <rect x="168.0" y="212" width="73.0" height="26" fill="#f0961e" fill-opacity="0.78" stroke="none"/>
+  <text x="251.0" y="230" class="xs mono"><tspan class="t-hi">once</tspan></text>
+  <text x="168.0" y="292" class="xs muted">written per frame &#8212; logarithmic, because the three span four orders of magnitude</text>
+  <rect x="24" y="296" width="672" height="56" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="318" class="sm">a camera in the vertex buffer would be the same sixteen floats, <tspan class="t-hi">1,225 times per instance</tspan></text>
+  <text x="40" y="338" class="xs muted">and in the instance buffer, seven times &#8212; still wrong, because the camera is not a property of an instance</text>
+</svg>

@@ -1,0 +1,32 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="f611b-t f611b-d">
+  <title id="f611b-t">The over operator</title>
+  <desc id="f611b-d">A pixel divided into a source fraction and a destination fraction, with the worked composite of white over black at half coverage.</desc>
+  <defs>
+    <marker id="e-i-f611b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f611b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f611b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f611b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f611b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">`over` is an area-weighted average, which is why it is a lerp</text>
+<rect x="70" y="60" width="150" height="150" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<rect x="70" y="60" width="90.0" height="150" rx="0" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<rect x="70" y="60" width="150" height="150" rx="2" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="115.0" y="139.0" class="xs" text-anchor="middle">src</text>
+<text x="190.0" y="139.0" class="xs" text-anchor="middle">dst</text>
+<text x="145.0" y="232" class="xs" text-anchor="middle">one pixel</text>
+<text x="115.0" y="50" class="xs" text-anchor="middle">a = 0.6</text>
+<text x="190.0" y="50" class="xs" text-anchor="middle">1 - a = 0.4</text>
+<text x="290" y="86" class="sm" text-anchor="start">result = src x a  +  dst x (1 - a)</text>
+<text x="290" y="110" class="xs" text-anchor="start">…and both operands must be LIGHT, not stored codes,</text>
+<text x="290" y="128" class="xs" text-anchor="start">because an average of encoded values is not an</text>
+<text x="290" y="146" class="xs" text-anchor="start">average of what they encode (Lesson 1.6, for the</text>
+<text x="290" y="164" class="xs" text-anchor="start">fourth time — and this time it is a whole feature).</text>
+<line x1="290" y1="184" x2="680" y2="184" class="grid" stroke-width="1.0"/>
+<text x="290" y="206" class="xs" text-anchor="start">white over black, a = 0.5:</text>
+<text x="298" y="228" class="xs" text-anchor="start">in light   1.0 x 0.5 + 0.0 x 0.5  =  0.5</text>
+<text x="298" y="246" class="xs" text-anchor="start">stored     code 188   &lt;- half the light</text>
+<text x="298" y="270" class="xs" text-anchor="start">the byte lerp gives code 128, which emits 0.2159</text>
+<text x="298" y="288" class="xs" text-anchor="start">—  42.9% of the light the composite should have</text>
+<text x="360.0" y="316" class="xs" text-anchor="middle">the two integers, again: half the LIGHT is code 188; half the CODE is code 128</text>
+</svg>

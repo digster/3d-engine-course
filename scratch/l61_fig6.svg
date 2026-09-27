@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l61f6-t l61f6-d">
+  <title id="l61f6-t">The same shader output written to three different targets</title>
+  <desc id="l61f6-d">Linear 0.5 leaving the fragment shader is stored as code 128 in a UNORM target, 188 in an _SRGB target, and 188 in a UNORM target when the shader encodes. Only the last two are correct.</desc>
+  <defs>
+    <marker id="e-i-l61f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l61f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l61f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l61f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l61f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One fragment shader, one quad, one quantity of light — and three places to put it.</text>
+<rect x="270" y="48" width="180" height="26" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.24"/>
+<text x="360" y="65" class="xs mono" text-anchor="middle">lit = 0.5 (light)</text>
+<text x="360" y="90" class="xs muted" text-anchor="middle">scene.frag.hlsl returns this</text>
+<line x1="360" y1="104" x2="130" y2="130" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l61f6)"/>
+<rect x="30" y="136" width="200" height="26" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="130" y="153" class="xs mono" text-anchor="middle">UNORM target</text>
+<text x="130" y="176" class="xs mono" text-anchor="middle">encode_output = 0</text>
+<rect x="90" y="190" width="80" height="40" fill="rgb(128,128,128)" stroke="none"/>
+<text x="130" y="248" class="xs mono" text-anchor="middle">stored code 128</text>
+<text x="130" y="268" class="xs muted" text-anchor="middle">the value verbatim. The display</text>
+<text x="130" y="284" class="xs muted" text-anchor="middle">reads it as a CODE.</text>
+<text x="130" y="306" class="xs t-bad" text-anchor="middle">WRONG</text>
+<line x1="360" y1="104" x2="358" y2="130" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l61f6)"/>
+<rect x="258" y="136" width="200" height="26" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="358" y="153" class="xs mono" text-anchor="middle">_SRGB target</text>
+<text x="358" y="176" class="xs mono" text-anchor="middle">encode_output = 0</text>
+<rect x="318" y="190" width="80" height="40" fill="rgb(188,188,188)" stroke="none"/>
+<text x="358" y="248" class="xs mono" text-anchor="middle">stored code 188</text>
+<text x="358" y="268" class="xs muted" text-anchor="middle">the hardware applies the curve</text>
+<text x="358" y="284" class="xs muted" text-anchor="middle">during the write. Free, exact.</text>
+<text x="358" y="306" class="xs t-ok" text-anchor="middle">RIGHT</text>
+<line x1="360" y1="104" x2="586" y2="130" class="ink-soft" stroke-width="1.1" marker-end="url(#e-s-l61f6)"/>
+<rect x="486" y="136" width="200" height="26" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="586" y="153" class="xs mono" text-anchor="middle">UNORM target</text>
+<text x="586" y="176" class="xs mono" text-anchor="middle">encode_output = 1</text>
+<rect x="546" y="190" width="80" height="40" fill="rgb(188,188,188)" stroke="none"/>
+<text x="586" y="248" class="xs mono" text-anchor="middle">stored code 188</text>
+<text x="586" y="268" class="xs muted" text-anchor="middle">the shader applies it itself.</text>
+<text x="586" y="284" class="xs muted" text-anchor="middle">The fallback, when SDR is all</text>
+<text x="586" y="306" class="xs t-ok" text-anchor="middle">RIGHT*</text>
+<line x1="24" y1="326" x2="696" y2="326" class="grid" stroke-width="1.2"/>
+<text x="24" y="348" class="xs t-hi" text-anchor="start">* THE TWO RIGHT ANSWERS ARE NOT EQUALLY RIGHT.</text>
+<text x="24" y="366" class="xs muted" text-anchor="start">Hardware blending happens AFTER the fragment shader. Encode in the shader and the blender adds codes instead of light —</text>
+<text x="24" y="382" class="xs muted" text-anchor="start">correct for opaque geometry, wrong the moment anything is transparent. Prefer the swapchain; keep the fallback.</text>
+</svg>

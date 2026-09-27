@@ -1,0 +1,73 @@
+<svg viewBox="0 0 720 430" role="img" aria-labelledby="l511f6-t l511f6-d">
+  <title id="l511f6-t">Three ways to withhold the mouse, compared on the frame the block lifts</title>
+  <desc id="l511f6-d">The cursor travels from 100 to 160 over three blocked frames and on to 170. Reporting zero gives a delta of 170 on the release frame; freezing the position gives 70; the virtual cursor gives 10, which is one frame of real movement.</desc>
+  <defs>
+    <marker id="e-i-l511f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l511f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l511f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l511f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l511f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">You cannot mask a DELTA by masking one endpoint of it. The numbers are the ones verify_511 §E asserts.</text>
+<text x="190" y="58" class="xs muted" text-anchor="middle">f0</text>
+<text x="190" y="78" class="xs mono" text-anchor="middle">100</text>
+<text x="278" y="58" class="xs muted" text-anchor="middle">f1</text>
+<text x="278" y="78" class="xs mono" text-anchor="middle">120</text>
+<rect x="244" y="86" width="68" height="12" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="366" y="58" class="xs muted" text-anchor="middle">f2</text>
+<text x="366" y="78" class="xs mono" text-anchor="middle">145</text>
+<rect x="332" y="86" width="68" height="12" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="454" y="58" class="xs muted" text-anchor="middle">f3</text>
+<text x="454" y="78" class="xs mono" text-anchor="middle">160</text>
+<rect x="420" y="86" width="68" height="12" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="542" y="58" class="xs muted" text-anchor="middle">f4</text>
+<text x="542" y="78" class="xs mono" text-anchor="middle">170</text>
+<text x="630" y="58" class="xs muted" text-anchor="middle">f5</text>
+<text x="630" y="78" class="xs mono" text-anchor="middle">175</text>
+<text x="178" y="78" class="xs muted" text-anchor="end">real cursor x</text>
+<text x="366" y="108" class="xs muted" text-anchor="middle">UI owns the mouse</text>
+<text x="178" y="144" class="xs mono" text-anchor="end">report 0 while blocked</text>
+<rect x="248" y="128" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="278" y="144" class="xs mono" text-anchor="middle">+0</text>
+<rect x="336" y="128" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="366" y="144" class="xs mono" text-anchor="middle">+0</text>
+<rect x="424" y="128" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="454" y="144" class="xs mono" text-anchor="middle">+0</text>
+<rect x="512" y="128" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="542" y="144" class="xs mono" text-anchor="middle">+170</text>
+<rect x="600" y="128" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="630" y="144" class="xs mono" text-anchor="middle">+5</text>
+<text x="658" y="144" class="xs muted" text-anchor="start"></text>
+<text x="30" y="170" class="xs muted" text-anchor="start">   the whole screen, in one frame</text>
+<text x="178" y="218" class="xs mono" text-anchor="end">freeze the last position</text>
+<rect x="248" y="202" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="278" y="218" class="xs mono" text-anchor="middle">+0</text>
+<rect x="336" y="202" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="366" y="218" class="xs mono" text-anchor="middle">+0</text>
+<rect x="424" y="202" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="454" y="218" class="xs mono" text-anchor="middle">+0</text>
+<rect x="512" y="202" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="542" y="218" class="xs mono" text-anchor="middle">+70</text>
+<rect x="600" y="202" width="60" height="22" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="630" y="218" class="xs mono" text-anchor="middle">+5</text>
+<text x="658" y="218" class="xs muted" text-anchor="start"></text>
+<text x="30" y="244" class="xs muted" text-anchor="start">   the whole excursion — this is the one that ships</text>
+<text x="178" y="292" class="xs mono" text-anchor="end">virtual cursor (ours)</text>
+<rect x="248" y="276" width="60" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="278" y="292" class="xs mono" text-anchor="middle">+0</text>
+<rect x="336" y="276" width="60" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="366" y="292" class="xs mono" text-anchor="middle">+0</text>
+<rect x="424" y="276" width="60" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="454" y="292" class="xs mono" text-anchor="middle">+0</text>
+<rect x="512" y="276" width="60" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="542" y="292" class="xs mono" text-anchor="middle">+10</text>
+<rect x="600" y="276" width="60" height="22" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="630" y="292" class="xs mono" text-anchor="middle">+5</text>
+<text x="658" y="292" class="xs muted" text-anchor="start"></text>
+<text x="30" y="318" class="xs muted" text-anchor="start">   one frame of real movement. Correct at both boundaries.</text>
+<line x1="30" y1="336" x2="690" y2="336" class="grid" stroke-width="1.2"/>
+<text x="30" y="358" class="xs mono" text-anchor="start">reported = real − offset,   and offset += (real − real_previous) on every blocked frame.</text>
+<text x="30" y="380" class="xs muted" text-anchor="start">While blocked the reported position stops dead, so the delta is exactly zero. The offset stops GROWING the</text>
+<text x="30" y="396" class="xs muted" text-anchor="start">instant the block lifts, so the next difference is one frame's real movement, not the whole excursion.</text>
+<text x="30" y="412" class="xs muted" text-anchor="start">The cursor stays 60 px behind forever, and is permanently right about how far it moved.</text>
+</svg>

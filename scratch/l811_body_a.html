@@ -1,0 +1,347 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-10-sequential-impulses.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-12-ragdolls.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.12 — Ragdolls: Joints on a Skeleton</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.11</div>
+    <h1>Constraints and Joints: Hinge and Ball-Socket</h1>
+    <p class="deck">
+      Lesson 8.10's solver holds a stack of crates up and cannot hold a lamp up. A contact may
+      push and may not pull, and a lamp on a chain is nothing <em>but</em> pulling. This lesson
+      takes 8.9's three lines — a relative velocity along a direction, divided by an effective
+      mass, clamped — and writes them once, for any question of that shape, as a
+      <strong>Jacobian row</strong>: twelve numbers saying which combination of two bodies'
+      velocities a constraint cares about, and two bounds saying what it is allowed to do about
+      it. A contact normal turns out to be exactly such a row, checked to
+      <strong>1.9&nbsp;×&nbsp;10⁻⁷</strong> on two hundred real contacts — and the general form
+      turns out to be <strong>27% faster</strong> than the hand-written one, which refused the
+      prediction this lesson was handed. Then the new constraints, each a choice of rows and
+      bounds: a <strong>rod</strong>, a <strong>rope</strong> (a contact turned inside out, which
+      lets go at exactly the height a rod starts to push), a <strong>ball-socket</strong> solved
+      as one 3×3 block that is exact where three rows leave up to 92% of the error, and a
+      <strong>hinge</strong> with a <strong>limit</strong> and a <strong>motor</strong>. Along the
+      way the measurements refused three more claims, and each refusal was the better lesson.
+      A joint solved at the velocity level drifts outward along a tangent, by a Pythagorean
+      recurrence that tracks the simulation to 1.7&nbsp;×&nbsp;10⁻⁷, and loses
+      <strong>ρ·(ω·h)²</strong> of its energy every step. Baumgarte, which 8.10 showed throwing
+      crates out of floors, turns out to <em>conserve</em> a turning joint's energy — and to leave
+      0.35&nbsp;J of spin in a limb pulled back into its socket. And one number kept arriving,
+      three times, in three different costumes: the parallel-axis ratio
+      <strong>ρ&nbsp;=&nbsp;m·d²&nbsp;/&nbsp;(I<sub>cm</sub>&nbsp;+&nbsp;m·d²)</strong>. It sets a
+      swinging body's period, the energy a velocity joint loses, and the rate at which a hinge
+      limit converges against its pin — 0.7481 per sweep for a door, measured to four figures,
+      which is why a door with no restitution still bounces off its stop.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="08-03-angular-dynamics.html">8.3 — Angular Dynamics: Torque and the Inertia Tensor</a>,
+          <a href="08-09-impulse-response.html">8.9 — Impulse Response: Restitution and Friction</a>,
+          <a href="08-10-sequential-impulses.html">8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/constraint.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/constraint.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/solver.hpp</code>,
+            <code>engine/src/phys/solver.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/joints/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_811.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_811.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine has <strong>joints</strong>: rods, ropes, ball-sockets and hinges with limits
+            and motors, solved in the same loop as contacts, grouped into the same islands and put
+            to sleep by the same rule. A door hangs within 0.0001° of true on its hinge; a 1&nbsp;m
+            box swings at 1.645967&nbsp;s against a predicted 1.646241; a twelve-plank bridge
+            carries crates. Eleven measured sections, <strong>58 checks</strong>, every one with a
+            control — four of which refused the claim the section was written to make.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…write any constraint as a Jacobian row, derive why its impulse is <code>Jᵀλ</code>, and
+          compute its effective mass <code>1/(J M⁻¹ Jᵀ)</code> by hand.</li>
+      <li>…show that a contact normal is a Jacobian row, and say precisely what the general form
+          costs in memory and buys in time.</li>
+      <li>…build a rod, a rope, a ball-socket and a hinge out of rows, and a limit and a motor out
+          of bounds.</li>
+      <li>…explain why a velocity-level joint drifts, predict the drift and the energy it loses in
+          closed form, and recognise both in a running simulation.</li>
+      <li>…choose a position correction for joints, and state what each choice costs in energy.</li>
+      <li>…solve coupled equality rows as a block, and predict how fast the same rows converge
+          when solved one at a time.</li>
+      <li>…predict a physical pendulum's period at any amplitude, and use it as a test of an
+          engine.</li>
+      <li>…implement speculative limits, and predict how fast a limit converges against the pin
+          it shares a body with.</li>
+      <li>…build a motor, predict its spin-up and stall, and explain why friction was a motor all
+          along.</li>
+      <li>…put joints into islands and sleeping without breaking either, and say what a chain
+          with a heavy end weight will do to the solver.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a solver that cannot pull</a></li>
+      <li><a href="#jacobian">Building intuition: a constraint is a question about velocity</a></li>
+      <li><a href="#contact-row">A contact is a row</a></li>
+      <li><a href="#ropes">Rods and ropes</a></li>
+      <li><a href="#drift">Why a joint drifts</a></li>
+      <li><a href="#correcting">Correcting a joint, and what Baumgarte does to one</a></li>
+      <li><a href="#block">The ball-socket, and the block</a></li>
+      <li><a href="#pendulum">The pendulum, and the parallel axis</a></li>
+      <li><a href="#hinge">The hinge</a></li>
+      <li><a href="#limits">Limits: a contact that is always detected</a></li>
+      <li><a href="#motors">Motors, and what friction was all along</a></li>
+      <li><a href="#islands">Islands, sleeping and joints</a></li>
+      <li><a href="#implementation">Writing it</a></li>
+      <li><a href="#leaves">What joints leave behind</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a solver that cannot pull</h2>
+
+  <p>
+    Here is where Lesson 8.10 left the engine. It can drop a crate on a floor and have it land,
+    stop, settle at the slop and go to sleep. It can stack five crates and hold them, partition a
+    yard of towers into islands, and stop paying for any of them once they are still. Every part
+    of that is built on one operation, which 8.9 wrote in three lines and 8.10 wrapped in a loop:
+    take the relative velocity of two bodies at a point, along a direction; divide the error by an
+    effective mass to get an impulse; and <em>clamp the accumulated impulse at zero</em>, because
+    a contact may push and may not pull.
+  </p>
+
+  <p>
+    Now hang a lamp from the ceiling. There is no contact between the lamp and the ceiling — they
+    are not touching — and if there were one it would be no use, because what holds a lamp up is a
+    pull. The same is true of a door on its hinges, a trailer on its hitch, a pendulum, a chain, and
+    every limb of the ragdoll 8.12 is going to build. None of it can be said to this solver.
+  </p>
+
+  <p>
+    There are three obvious things to try, and each fails in a way that is worth knowing:
+  </p>
+
+  <ol>
+    <li>
+      <strong>A spring.</strong> Pull the lamp toward the ceiling with a force proportional to how
+      far it has sagged. That is a penalty method, and 8.9 §1 already priced it: the stiffness you
+      need to hold a small error is a stiffness whose oscillation demands a frame rate you do not
+      have, and a spring tuned to hold a resting lamp still lets a swinging one stretch by
+      centimetres. Nothing about joints makes that argument weaker.
+    </li>
+    <li>
+      <strong>A teleport.</strong> After every step, move the lamp back to where the chain says it
+      must be. The position is then right and the velocity is not: gravity keeps adding to it, the
+      teleport never removes any, and a lamp corrected that way is falling faster every frame while
+      appearing to stand still. (Correct the velocity from the displacement and you have invented
+      position-based dynamics, which is a real and good method — and a different engine from this
+      one.)
+    </li>
+    <li>
+      <strong>A contact with the clamp taken off.</strong> This one works, and it is the whole of
+      the lesson. 8.9's normal solve with <code>max(0, …)</code> deleted is an impulse that may
+      push or pull along a direction, and pointed along a rod it holds a rod. What it does not do on
+      its own is hold a door: a door needs <em>five</em> things held at once — its hinge pin in
+      three directions, and its axis in two — and the harness in §9 measures what happens to a door
+      given only the first three. It falls over, <strong>176°</strong>, in five seconds.
+    </li>
+  </ol>
+
+  <p>
+    So the job is to take 8.9's normal solve, find out which parts of it were about contacts and
+    which were about constraints in general, and write the general part once. That is a Jacobian
+    row, and the rest of this lesson is choosing rows.
+  </p>
+
+  <h2 id="jacobian">2. Building intuition: a constraint is a question about velocity</h2>
+
+  <p>
+    Start from what a joint <em>is</em>, stated as geometry. A ball-and-socket says: the point on
+    the lamp that is screwed to the chain, and the point on the chain it is screwed to, are the same
+    point. Write that as a function of where the two bodies are:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ C(x_a, q_a, x_b, q_b) \;=\; p_b - p_a \;=\; (x_b + R_b\,\ell_b) - (x_a + R_a\,\ell_a) \;=\; 0 \]</span>
+    <span class="eq-plain">C = p_b - p_a = (x_b + R_b l_b) - (x_a + R_a l_a) = 0, with l the anchor in each body's own frame</span>
+  </div>
+
+  <p>
+    Here <code>x</code> is a body's centre, <code>R</code> its orientation as a matrix, and
+    <code>ℓ</code> the anchor point in the body's own frame — the place the screw goes, which does
+    not move relative to the body. A rod says the <em>distance</em> between two such points is
+    <code>L</code>. A contact says the separation along the normal is at least zero. Every
+    constraint in this lesson is a function <code>C</code> of the bodies' positions and
+    orientations that the solver must keep at zero (an <strong>equality</strong>) or keep
+    non-negative (an <strong>inequality</strong>).
+  </p>
+
+  <p>
+    But the solver does not move positions. It changes velocities, and positions change because
+    velocities are not zero. So the useful question is not "what is <code>C</code>" but "how fast is
+    <code>C</code> changing, given the velocities the bodies have right now". Differentiate:
+    <code>ẋ</code> is the velocity <code>v</code>, and the derivative of <code>R ℓ</code> is
+    <code>ω × (R ℓ)</code>, which is the lever arm <code>r</code> swept round by the angular
+    velocity — the same <code>v + ω × r</code> that 8.2 called <code>point_velocity</code>. So
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \dot C \;=\; (v_b + \omega_b \times r_b) - (v_a + \omega_a \times r_a) \]</span>
+    <span class="eq-plain">dC/dt = (v_b + w_b x r_b) - (v_a + w_a x r_a)</span>
+  </div>
+
+  <p>
+    and the thing to notice is that this is <strong>linear</strong> in the twelve numbers
+    <code>V = (v_a, ω_a, v_b, ω_b)</code>. Double every velocity and <code>Ċ</code> doubles. A
+    linear function of twelve numbers is a row of twelve coefficients, and that row has a name:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \dot C \;=\; J\,V, \qquad J = \bigl[\;\text{linear}_a \;\big|\; \text{angular}_a \;\big|\; \text{linear}_b \;\big|\; \text{angular}_b\;\bigr] \]</span>
+    <span class="eq-plain">dC/dt = J V, with J a row of twelve numbers in four blocks of three</span>
+  </div>
+
+  <p>
+    The <strong>Jacobian</strong>. For a scalar constraint — one number that must be zero — it is one
+    row of twelve; for the ball-socket's three-component <code>C</code> it is three rows. To read off
+    a row, take one component of <code>Ċ</code> along a direction <code>d</code> and turn each cross
+    product round with the scalar triple product, <code>d · (ω × r) = (r × d) · ω</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ d\cdot\dot C \;=\; (-d)\cdot v_a \;+\; (-\,r_a \times d)\cdot\omega_a \;+\; d\cdot v_b \;+\; (r_b \times d)\cdot\omega_b \]</span>
+    <span class="eq-plain">d . dC/dt = (-d).v_a + (-(r_a x d)).w_a + d.v_b + (r_b x d).w_b</span>
+  </div>
+
+  <p>
+    so the row that constrains two material points along a direction <code>d</code> is
+    <code>J = [−d, −(r_a × d), d, r_b × d]</code>. Hold on to that shape; it is going to be a contact
+    normal, a rod, a rope and each axis of a ball-socket, and they will differ only in which
+    <code>d</code> they use and what they are allowed to do.
+  </p>
+
+  <h3>The impulse is Jᵀλ, and that is not a choice</h3>
+
+  <p>
+    Now the solver has to push. It could apply any combination of impulses to the two bodies — a
+    twelve-number vector <code>P</code> — so why should the answer be one number? Because of a
+    property every real joint has: <strong>an ideal constraint does no work on any motion it
+    allows</strong>. A hinge pin does not slow a door that is turning about the pin; a rod does not
+    slow a pendulum that is swinging on its arc. The motions a constraint allows are exactly the
+    <code>V</code> with <code>J·V = 0</code>, and the work an impulse does on a motion is
+    <code>P·V</code>. So <code>P</code> must satisfy <code>P·V = 0</code> for every <code>V</code>
+    with <code>J·V = 0</code>. The vectors orthogonal to everything orthogonal to <code>J</code> are
+    the multiples of <code>J</code> — that is the whole of the linear algebra — and so
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ P \;=\; J^{\mathsf T}\lambda \]</span>
+    <span class="eq-plain">P = J^T * lambda: the impulse points along the row, and lambda is one scalar</span>
+  </div>
+
+  <p>
+    An entire constraint's response is one scalar, <code>λ</code>, in a direction the row already
+    names. For a contact that was obvious — the impulse is along the normal, at the contact point —
+    and now it is a theorem.
+  </p>
+
+  <h3>The effective mass is 1/(J M⁻¹ Jᵀ)</h3>
+
+  <p>
+    Apply <code>P = Jᵀλ</code> and each body's velocity changes by <code>M⁻¹P</code>, where
+    <code>M⁻¹</code> is the block-diagonal inverse mass: <code>1/m_a</code> on <code>v_a</code>,
+    the world inverse inertia tensor <code>I_a⁻¹</code> on <code>ω_a</code>, and the same for
+    <code>b</code>. So the rate <code>J·V</code> changes by
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \Delta(J V) \;=\; J\,M^{-1} J^{\mathsf T}\,\lambda \qquad\Longrightarrow\qquad \lambda \;=\; \frac{\text{target} - J V}{J\,M^{-1} J^{\mathsf T}} \]</span>
+    <span class="eq-plain">change in JV = (J M^-1 J^T) lambda, so lambda = (target - JV) / (J M^-1 J^T)</span>
+  </div>
+
+  <p>
+    <code>J M⁻¹ Jᵀ</code> is a 1×1 matrix — a number — and for the point row it expands to
+    <code>1/m_a + 1/m_b + (r_a×d)·I_a⁻¹(r_a×d) + (r_b×d)·I_b⁻¹(r_b×d)</code>. That is 8.9's
+    <code>effective_mass</code> exactly. 8.9's header called the scalar effective mass "the reason
+    it is a scalar is the whole trick"; the trick, seen from here, is that a one-row Jacobian makes
+    <code>J M⁻¹ Jᵀ</code> one by one. §7 will meet a three-row Jacobian, where it is a 3×3 matrix and
+    the trick stops being free.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> A 10&nbsp;kg crate of half-extent 0.25&nbsp;m rests
+    on a fixed floor, and we take the contact at one bottom corner. The floor is body
+    <code>a</code>, so its <code>1/m</code> and <code>I⁻¹</code> are zero and only
+    <code>b</code>'s halves matter. The normal is <code>n = (0, 1, 0)</code> and the lever arm is
+    <code>r_b = (0.25, −0.25, 0.25)</code>, so <code>r_b × n = (−0.25, 0, 0.25)</code>, of squared
+    length 0.125. A cube's inertia about any axis through its centre is
+    <code>m·(0.5² + 0.5²)/12 = 0.4167 kg·m²</code>, so <code>I⁻¹</code> is 2.4 times the identity and
+    <code>J M⁻¹ Jᵀ = 1/10 + 2.4 × 0.125 = 0.1 + 0.3 = 0.4</code>. The contact's effective mass is
+    <code>1/0.4 = 2.5 kg</code> — a quarter of the crate. Three quarters of a push at a corner goes
+    into turning the crate rather than lifting it, and that is the same 0.3 against 0.1 that 8.10 §2
+    found coupling the four points of one manifold.
+  </p>
+
+  <h3>What a constraint is allowed to do is two numbers</h3>
+
+  <p>
+    Solving a row is then 8.9's three lines with the contact taken out: measure <code>J·V</code>,
+    compute the <code>λ</code> that would move it onto its target, add it to the accumulated impulse,
+    <strong>clamp the accumulated impulse into the row's bounds</strong>, and apply whatever change
+    that leaves. Everything that distinguishes one kind of constraint from another is in the row's
+    direction and in those bounds:
+  </p>
+
+  <ul>
+    <li>A <strong>contact</strong> may push and not pull: <code>[0, ∞)</code>.</li>
+    <li>A <strong>rod</strong> may do either: <code>(−∞, ∞)</code> — a contact with the clamp taken off.</li>
+    <li>A <strong>rope</strong> may pull and not push: the contact's row with its direction reversed, so
+        <code>[0, ∞)</code> again, measured the other way.</li>
+    <li>A <strong>motor</strong> may push or pull up to a limit it has the torque for: <code>[−τh, τh]</code>,
+        with a target that is its speed rather than zero.</li>
+    <li>And <strong>friction</strong>, which 8.9 wrote as a clip to <code>μ</code> times the normal
+        impulse, is a motor whose target speed is zero.</li>
+  </ul>
+
+  @@FIG_ROW@@
+
+  <p>
+    Figure 1 is the plan for the rest of the lesson. §3 checks that the first row in its table is
+    really 8.9's contact, number for number. §4 builds the next three. §7 and §9 build the ball-socket
+    and the hinge. §10 and §11 are the last two rows. And in between, three sections are about what
+    happens when you solve any of these at the velocity level and then move the bodies — because a
+    row keeps <code>Ċ</code> at its target and says nothing at all about <code>C</code>, and §5 is
+    about what that costs.
+  </p>

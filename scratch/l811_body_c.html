@@ -1,0 +1,335 @@
+  <h2 id="correcting">6. Correcting a joint, and what Baumgarte does to one</h2>
+
+  <p>
+    A joint that drifts needs a position correction, and 8.10 built two. Both compute a bias
+    velocity <code>−β·C/h</code> — "remove a fraction β of the error this step" — and differ only in
+    which velocity it is applied to. <strong>Baumgarte</strong> adds it to the target of the ordinary
+    velocity solve, so the body gains a real velocity; <strong>split impulse</strong> drives a shadow
+    velocity that moves the position at the end of the step and is then thrown away. 8.10 §7 measured
+    Baumgarte throwing a crate spawned 200&nbsp;mm inside a floor 99&nbsp;mm into the air, and
+    settled on split impulse as the default. This section set out to show the same failure on a
+    joint.
+  </p>
+
+  <p>
+    First the part that is the same. Each step removes a fraction β of the error and the motion adds
+    a drift δ, so the error obeys <code>e_{n+1} = (1 − β)·e_n + δ</code>, whose fixed point is where
+    what is removed equals what is added:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ e^{*} \;=\; (1-\beta)\,e^{*} + \delta \qquad\Longrightarrow\qquad e^{*} \;=\; \frac{\delta}{\beta} \]</span>
+    <span class="eq-plain">e* = (1 - beta) e* + delta, so e* = delta / beta</span>
+  </div>
+
+  <p>
+    A turning joint does not sit at zero error under either correction; it sits stretched by five
+    times its per-step drift at β&nbsp;=&nbsp;0.2. §5's rod again, with the corrections on:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§D — the rod spun at 5 m/s, after 1 s, under each correction</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     correction      stretch at 1 s     delta/beta     |v| at 1 s    energy per step
+     none                163.9531 mm       0.0000 mm      4.3039 m/s     0.00386  (w h)^2 0.00380
+     Baumgarte            16.5538 mm      16.5268 mm      4.9226 m/s     0.00000  (w h)^2 0.00651
+     split impulse        12.4993 mm      12.2235 mm      4.2241 m/s     0.00488  (w h)^2 0.00483</code></pre>
+  </div>
+
+  <p>
+    The stretch lands on <code>δ/β</code> under both: 16.55&nbsp;mm against 16.53 predicted, 12.50
+    against 12.22. So far, so expected. The last column is the one that refused the section. Without
+    a correction the rod loses <code>(ω·h)²</code> of its energy per step, exactly §5's projection.
+    Under split impulse it loses <code>(ω·h)²</code> per step too — 0.00488 against 0.00483 — because
+    split impulse moves the bob back onto the circle without touching its velocity, and the
+    projection happens anyway. <strong>Under Baumgarte the rod loses nothing.</strong> A second in,
+    it is still turning at 4.92&nbsp;m/s where split impulse has let it fall to 4.22.
+  </p>
+
+  <p>
+    The reason is Figure 5's picture, and it is the kind of result a derivation would not have gone
+    looking for. At the steady state Baumgarte's bias is a <em>real</em> inward velocity of
+    <code>β·e*/h = δ/h</code>. Next step the rod has turned through <code>ω·h</code>, so a fraction
+    <code>ω·h</code> of that inward velocity now lies along the new tangent:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{\delta}{h}\cdot\omega h \;=\; \frac{v^2 h}{2r}\cdot\frac{v h}{r} \;=\; v\,\frac{(\omega h)^2}{2} \]</span>
+    <span class="eq-plain">(delta/h)(w h) = v (w h)^2 / 2</span>
+  </div>
+
+  <p>
+    which is precisely the speed the projection removes, since <code>v·(1 − cos ωh) ≈ v(ωh)²/2</code>.
+    Baumgarte adds energy — 8.10 was right about that — and on a joint that is turning, it adds it
+    exactly where the velocity projection takes it away. The stretch <code>δ/β</code> is, in effect,
+    the joint storing the centripetal term a velocity-level constraint leaves out, and feeding it
+    back one step late.
+  </p>
+
+  @@FIG_BAUMGARTE@@
+
+  <h3>And the dislocated limb</h3>
+
+  <p>
+    So is Baumgarte the better correction for joints? Not on the evidence of the other half of this
+    section. 8.10's crate left the floor because a <em>contact</em> stops acting once the overlap is
+    gone, and the body keeps the last bias velocity it was given. A joint never stops acting, so the
+    bias should decay with the error — and along the joint's constrained directions it does. The
+    question is the directions a joint leaves <em>free</em>. The fixture is a limb spawned out of its
+    socket, which a ragdoll does every time an animation hands it a pose the joints disagree with:
+    a 0.5&nbsp;m, 10&nbsp;kg cube, gravity off, held by a ball-socket at one corner from an anchor
+    0.2&nbsp;m away.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§D — a cube pulled back into a corner socket, after 3 s</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     correction       anchor gap      kinetic energy     spin
+     none              0.20000 m         0.000000 J    0.000 rad/s
+     Baumgarte         0.00009 m         0.349951 J    0.553 rad/s
+     split impulse     0.00000 m         0.000000 J    0.000 rad/s
+  CONTROL, the socket at the cube's CENTRE instead (r = 0):
+     none              0.20000 m         0.000000 J    0.000 rad/s
+     Baumgarte         0.00000 m         0.000000 J    0.000 rad/s
+     split impulse     0.00000 m         0.000000 J    0.000 rad/s</code></pre>
+  </div>
+
+  <p>
+    Baumgarte's pull on the corner is a real impulse applied off the centre of mass, so it spins the
+    cube, and a ball-socket has no row that resists spin. The energy lands in the free degrees of
+    freedom and stays there: <strong>0.35&nbsp;J</strong> of rotation the cube was never given, forever,
+    because nothing damps a ball-socket. Split impulse closes the same gap with a velocity it throws
+    away and leaves the cube exactly at rest. The control puts the socket through the centre: no
+    lever arm, nothing to spin, and Baumgarte leaves nothing behind either — which is the
+    confirmation that the energy went into the free directions and not into the constrained one.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So the two corrections fail differently, and the engine has to choose.</strong> Split
+      impulse adds no energy to anything and costs every turning joint <code>ρ(ωh)²</code> per step.
+      Baumgarte conserves a turning joint's energy and invents energy in any joint that is pulled
+      apart. A joint that loses energy reads on screen as damping; a joint that invents it reads as a
+      limb twitching on a body lying still, which is the bug report every ragdoll system receives.
+      The default stays split impulse, for joints and contacts alike, and §8 puts a number on what
+      that costs a pendulum. Letting joints choose their own correction is §18's second exercise.
+    </p>
+  </div>
+
+  <h2 id="block">7. The ball-socket, and the block</h2>
+
+  <p>
+    A ball-socket holds two anchor points together: <code>C = p_b − p_a = 0</code>, three
+    components, three rows. Each is the point row of §2 along one world axis,
+    <code>J_k = [−e_k, −(r_a × e_k), e_k, r_b × e_k]</code> — a ball-socket is literally three
+    contacts along x, y and z with their clamps removed. Solve them one after another and it works.
+    It also leaves something behind, for a reason 8.10 §2 already met on a crate's four contact
+    points: the rows are <em>coupled</em>. An impulse along x at an anchor off the centre of mass
+    spins the body, and the spin moves the anchor in y and z, so solving the x row disturbs the
+    other two.
+  </p>
+
+  <p>
+    Stack the three rows and <code>J M⁻¹ Jᵀ</code> stops being a number. It is a 3×3 matrix, and
+    expanding it with 8.3's cross-product matrix <code>[r]ₓ</code> (the matrix whose action is
+    <code>v ↦ r × v</code>) gives
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ K \;=\; J M^{-1} J^{\mathsf T} \;=\; \Bigl(\tfrac{1}{m_a} + \tfrac{1}{m_b}\Bigr)\,\mathbf 1 \;-\; [r_a]_\times\, I_a^{-1}\, [r_a]_\times \;-\; [r_b]_\times\, I_b^{-1}\, [r_b]_\times \]</span>
+    <span class="eq-plain">K = (1/m_a + 1/m_b) 1 - [r_a]x Ia^-1 [r_a]x - [r_b]x Ib^-1 [r_b]x</span>
+  </div>
+
+  <p>
+    The first term is diagonal: a push through the centre of mass moves the anchor along the push
+    and nowhere else. The other two are not, and their off-diagonal entries are exactly the coupling.
+    Solving the rows one at a time is Gauss–Seidel on <code>K·λ = −Ċ</code>, and Gauss–Seidel's error
+    after each sweep is multiplied by a fixed matrix whose largest eigenvalue — its <em>spectral
+    radius</em> — is computable from <code>K</code> alone, without running anything. Solving it
+    <em>as a block</em> is one matrix inverse at prepare time and one matrix–vector product per
+    visit:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \lambda \;=\; K^{-1}\,\bigl(\text{bias} - \dot C\bigr) \]</span>
+    <span class="eq-plain">lambda = K^-1 (bias - dC/dt), a vector impulse applied at the two anchors</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> §2's crate on a fixed anchor at its corner, <code>r_b = (0.25, −0.25, 0.25)</code>,
+    <code>1/m = 0.1</code>, <code>I⁻¹ = 2.4·1</code>. For a multiple of the identity,
+    <code>−[r]ₓ(c·1)[r]ₓ = c·(|r|²·1 − r rᵀ)</code>, the identity 8.3 §4 checked the inertia tensor
+    with. With <code>|r|² = 0.1875</code> the diagonal of <code>K</code> is
+    <code>0.1 + 2.4 × (0.1875 − 0.0625) = 0.4</code> — each axis alone is §2's 2.5&nbsp;kg contact — and
+    the off-diagonals are <code>−2.4 × r_i r_j = ±0.15</code>. A diagonal of 0.4 against
+    off-diagonals of 0.15 is strong coupling: the Gauss–Seidel iteration matrix of that
+    <code>K</code> has a spectral radius of <strong>0.568</strong>, so three rows solved in turn
+    leave 57% of the error after each visit — about eight visits to reach 1%, where the block needs
+    one. A cube hung by its corner is close to the worst case: the thousand random sockets below
+    never exceed 0.574.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — one random socket, visit by visit</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     visit       rows           ratio        block
+         1     6.948e-01       0.0000     1.192e-07
+         2     1.533e-01       0.2207     1.490e-08
+         3     3.535e-02       0.2306     0.000e+00
+         4     8.207e-03       0.2322     0.000e+00
+         5     1.908e-03       0.2325     0.000e+00
+         6     4.437e-04       0.2325     0.000e+00
+         7     1.031e-04       0.2325     0.000e+00
+         8     2.391e-05       0.2318     0.000e+00
+         9     5.487e-06       0.2295     0.000e+00
+        10     1.289e-06       0.2349     0.000e+00
+     measured contraction (geometric mean, visits 4..10)   0.2323
+     spectral radius of K's Gauss-Seidel matrix            0.2325</code></pre>
+  </div>
+
+  <p>
+    The rows contract at <strong>0.2323</strong> per visit against a spectral radius computed from
+    <code>K</code> of <strong>0.2325</strong>: the convergence of a Gauss–Seidel solve is a property of
+    its effective-mass matrix, and can be predicted before a single impulse is applied. The block is
+    at 1.2&nbsp;×&nbsp;10⁻⁷ after one visit and exactly zero after three. Over a thousand random
+    sockets — random box, mass, pose, corner and velocity — one visit of the block leaves at worst
+    <strong>5.9&nbsp;×&nbsp;10⁻⁷</strong> of the violation it started with; one visit of the rows
+    leaves up to <strong>92%</strong> of it, with a median radius of 0.443 and a worst of 0.574.
+  </p>
+
+  @@FIG_BLOCK@@
+
+  <p>
+    Two further measurements decide what ships. The block is <strong>cheaper</strong> as well as
+    exact — 10.8&nbsp;ns a visit against 23.1, and 58&nbsp;ns to prepare against 65, because one 3×3
+    inverse is less work than three row preparations and one matrix–vector product is less than
+    three row solves. And the control: put the socket through the body's centre of mass,
+    <code>r = 0</code>, and <code>K</code> is <code>1/m</code> times the identity. Nothing couples,
+    Gauss–Seidel's radius is zero, and the rows are exact in one visit too (9.7&nbsp;×&nbsp;10⁻⁸). The
+    coupling lives in the lever arms, and so does everything the block is for.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A block is affordable here and not for contacts, and the reason is the clamp.</strong>
+      The three rows of a socket are equalities: <code>λ</code> may be any vector, so the block is a
+      linear solve. A manifold's four normal rows are inequalities, each <code>λ ≥ 0</code>, so a
+      block of them is a small linear complementarity problem — Box2D solves the two-point case by
+      enumerating its four sign patterns, and nobody ships the four-point one. That is 8.10's open
+      question about block solvers, answered for the case where the answer is easy. The engine
+      solves a socket's point as a 3×3 block and a hinge's two alignment rows as a 2×2 one, and keeps
+      the switch (<code>joint_config::block_solve</code>) so that this section can measure the
+      difference.
+    </p>
+  </div>
+
+  <p>
+    And the honest limit of the block: it makes each <em>joint</em> exact and does nothing for a
+    <em>chain</em> of them. On a twelve-link chain released from horizontal, eight sweeps leave a
+    worst anchor gap of 94&nbsp;mm with the block against 102 with rows. A sweep still carries
+    information across one joint at a time, which is 8.10's tower lying on its side, and §14's
+    subject.
+  </p>
+
+  <h2 id="pendulum">8. The pendulum, and the parallel axis</h2>
+
+  <p>
+    A physical pendulum is the best test an engine's joints can be given, because its period has a
+    closed form that contains the mass, the inertia tensor, the joint and gravity, and gets every one
+    of them wrong in a different, recognisable way. Hang a 0.2&nbsp;×&nbsp;1.0&nbsp;×&nbsp;0.2&nbsp;m,
+    2&nbsp;kg box from a ball-socket at the middle of its top face, so its centre is
+    <code>d = 0.5 m</code> below the pin. A point mass at the same distance would swing with
+    <code>T = 2π√(d/g)</code>. A body swings about the pin, so its inertia is the inertia
+    <em>about the pin</em>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ T \;=\; 2\pi\sqrt{\frac{I_{\text{pivot}}}{m\,g\,d}}, \qquad I_{\text{pivot}} \;=\; I_{\text{cm}} + m\,d^2 \]</span>
+    <span class="eq-plain">T = 2 pi sqrt(I_pivot / (m g d)), I_pivot = I_cm + m d^2</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> About the swing axis the box's inertia is
+    <code>m·(w² + h²)/12 = 2 × (0.04 + 1.0)/12 = 0.173333 kg·m²</code>. The parallel-axis term adds
+    <code>m·d² = 2 × 0.25 = 0.5</code>, so <code>I_pivot = 0.673333</code>. Then
+    <code>T = 2π√(0.673333 / (2 × 9.81 × 0.5)) = 2π × 0.261990 = 1.646116 s</code>. The point-mass
+    formula gives <code>2π√(0.5/9.81) = 1.418503 s</code>: <strong>13.8% short</strong>, at every
+    amplitude, because it is missing the box's own inertia about its centre.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§F — 2° amplitude, twenty swings, and the step dependence</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">  MEASURED, 2 degree amplitude, 60 Hz, twenty swings:
+     period           1.645967 s
+     predicted        1.646241 s    (the body's, at 2 degrees)
+     error            -1.66e-04       against the body
+                      +16.04%        against the point mass
+
+     rate        period           error        ratio to the next
+       30 Hz   1.645139 s   -6.695e-04      4.02
+       60 Hz   1.645967 s   -1.664e-04      4.00
+      120 Hz   1.646173 s   -4.156e-05      3.98
+      240 Hz   1.646224 s   -1.044e-05</code></pre>
+  </div>
+
+  <p>
+    1.645967&nbsp;s against 1.646241 — and each halving of the step divides the error by 4.02, 4.00,
+    3.98: second order in <code>h</code>, which is the period error of a symplectic integrator
+    (8.1 §5), with the joint adding nothing of its own. The reference is the period <em>at two
+    degrees</em>, not the small-swing limit, and that choice was forced by the first draft: against
+    the limit, the "error" at 240&nbsp;Hz came out <strong>+6.6&nbsp;×&nbsp;10⁻⁵</strong> and refused to
+    shrink further. Two degrees is not zero. A finite swing is slower than an infinitesimal one by an
+    amount with a closed form, and an error that will not converge is almost always a reference that
+    is wrong.
+  </p>
+
+  <h3>A large swing, and the loveliest formula in the lesson</h3>
+
+  <p>
+    The exact period at amplitude <code>θ₀</code> is the small-swing period times
+    <code>(2/π)·K(sin θ₀/2)</code>, where <code>K</code> is the complete elliptic integral of the first
+    kind — a function most people meet once and look up forever after. It has a much better form.
+    Gauss showed that <code>K(k) = π / (2·AGM(1, √(1 − k²)))</code>, where AGM is the
+    <strong>arithmetic–geometric mean</strong>: replace two numbers by their arithmetic and geometric
+    means, repeatedly, and they converge — quadratically — to a common value. With
+    <code>k = sin(θ₀/2)</code>, <code>√(1 − k²) = cos(θ₀/2)</code>, and the π's cancel:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ T(\theta_0) \;=\; \frac{T_0}{\operatorname{AGM}\bigl(1,\ \cos(\theta_0/2)\bigr)} \]</span>
+    <span class="eq-plain">T(theta0) = T0 / AGM(1, cos(theta0/2))</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> At 90°: <code>cos 45° = 0.707107</code>. The means are
+    <code>(0.853553, 0.840896)</code>, then <code>(0.847225, 0.847201)</code>, then equal to six
+    figures at <code>0.847213</code>. So a 90° swing takes <code>1/0.847213 = 1.180341</code> times as
+    long as a small one: <code>1.646116 × 1.180341 = 1.942977 s</code>. <code>pendulum_period_at</code>
+    is those dozen lines.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§F — the first period from rest, at 3840 Hz; and the energy kept at 60 Hz</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     amplitude   predicted     measured     error       60 Hz: split   Baumgarte
+        10 deg   1.649255 s   1.649255 s   +4.81e-08      98.07%      98.42%
+        30 deg   1.674773 s   1.674763 s   -5.75e-06      94.71%      97.71%
+        60 deg   1.766582 s   1.766389 s   -1.09e-04      85.53%      95.38%
+        90 deg   1.942977 s   1.941790 s   -6.11e-04      75.45%      92.03%
+       120 deg   2.259920 s   2.254017 s   -2.61e-03      67.33%      88.37%</code></pre>
+  </div>
+
+  @@FIG_PENDULUM@@
+
+  <p>
+    The formula holds to 2.6&nbsp;×&nbsp;10⁻³ at every amplitude up to 120°, timed at 3840&nbsp;Hz so
+    that the swing is not losing energy while it is being timed. And the last two columns are §6's
+    finding on a real joint, with a number on it. At 60&nbsp;Hz a 90° swing keeps
+    <strong>75.4%</strong> of its energy per period under split impulse — §5's <code>ρ(ωh)²</code>,
+    for a joint turning at up to 5.4&nbsp;rad/s — and <strong>92.0%</strong> under Baumgarte. A
+    pendulum in this engine visibly damps, faster the harder it swings, and that is the price of the
+    default §6 chose. It is a price worth knowing exactly, because a player will notice a lamp that
+    comes to rest in four swings, and the knobs that change it are the correction, the step, and —
+    by far the most effective — §14's sub-steps.
+  </p>

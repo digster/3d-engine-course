@@ -1,0 +1,401 @@
+  <h2 id="margin">9. The margin</h2>
+
+  <p>
+    <code>gjk.hpp</code> promised, three lessons ago, that this one would want a margin. Here it is,
+    and it has two uses that are worth keeping apart.
+  </p>
+
+  <p>
+    <strong>Speculation.</strong> A pair a micron short of touching produces no manifold at all —
+    8.7's <code>manifold_status::none</code>. A solver that wants to stop a collision
+    <em>before</em> it happens, rather than after, has to be told about pairs that have not happened
+    yet, and the broadphase is where that decision is cheapest to make. 8.9 owns the question of how
+    much speculation is right; this lesson provides the knob.
+  </p>
+
+  <p>
+    <strong>Hysteresis.</strong> A proxy fattened by more than one frame's motion need not be
+    reinserted on a frame in which its body barely moved, which is the door to an incremental
+    broadphase. This grid rebuilds from scratch every frame and does not use the margin that way —
+    §11 says why.
+  </p>
+
+  <p>
+    What does it cost? The naive guess is “the ratio of the volumes”, and the right answer is a
+    little larger and comes from the geometry rather than from the boxes.
+  </p>
+
+  @@FIG_MARGIN@@
+
+  <p>
+    Two boxes A and B overlap exactly when the difference of their centres lies inside a box of
+    extent <code>e_a + e_b</code> — their <strong>Minkowski sum</strong>, which is the same object
+    8.5 and 8.6 spent two lessons inside, seen from the other direction. Fattening each box by
+    <em>m</em> adds <code>2m</code> to its own extent, so it adds <code>4m</code> to the sum, and in
+    a dilute scene the number of pairs follows the volume of the capture region:
+  </p>
+
+  <div class="eq">
+    \[
+    \frac{P(m)}{P(0)} \;\approx\; \left(\frac{E + 4m}{E}\right)^{3},
+    \qquad E = e_a + e_b
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the pair count scales as the cube of the fattened summed extent over the unfattened one.
+  </p>
+
+  <p>
+    Work one through. The harness's scene has a mean summed extent of 2.912 m. At a 25 cm margin the
+    prediction is <code>(2.912 + 1.0)/2.912 = 1.3434</code>, cubed, = <strong>2.425</strong>.
+    Measured: 1,918 pairs against 833, a ratio of <strong>2.303</strong>. Within 5%, and the whole
+    sweep is within 12% at every margin from a centimetre to half a metre:
+  </p>
+
+  <pre><code class="lang-text">  margin    pairs   ratio  predicted  contains
+       m                              margin 0
+    0.00      833   1.000      1.000  yes
+    0.01      879   1.055      1.042  yes
+    0.05     1005   1.206      1.221  yes
+    0.10     1186   1.424      1.471  yes
+    0.25     1918   2.303      2.425  yes
+    0.50     3770   4.526      4.800  yes</code></pre>
+
+  <p>
+    Read the last column too, because it is the one 8.9 will rely on. At every margin the reported
+    set <em>contains</em> the unfattened set: a margin never loses a pair, which is the conservative
+    direction and the reason a margin is safe to add and unsafe to remove.
+  </p>
+
+  <p>
+    And read the second column as a warning. Half a metre of margin on 1.5 m crates costs
+    <strong>4.5× the pairs</strong>, every one of which becomes a narrow-phase call. A margin is not
+    free insurance; it is 432 ns of insurance per extra pair, and the cube means its price climbs
+    faster than the intuition that sets it.
+  </p>
+
+  <h2 id="teapot">10. The teapot in the stadium</h2>
+
+  <p>
+    Every spatial structure has an input it is bad at, and a uniform grid's is not exotic. It is the
+    floor.
+  </p>
+
+  <p>
+    The name comes from ray tracing, where the classic failure of a uniform grid is a scene
+    containing a detailed teapot and an enormous stadium: choose a cell that suits the teapot and
+    the stadium claims millions of them, choose one that suits the stadium and the teapot is
+    entirely inside a single cell. A physics scene has exactly the same shape, with a ground plate
+    playing the stadium.
+  </p>
+
+  @@FIG_TEAPOT@@
+
+  <p>
+    A 200 × 0.2 × 200 metre plate at a one-metre cell occupies 201 × 2 × 201 =
+    <strong>80,802 cells</strong>. Two thousand crates in the same scene occupy 30,225 entries
+    between them. So one proxy — the floor — wants nearly <em>three times</em> as many insertions as
+    the entire rest of the scene, and it is alone in almost every one of them, because the crates are
+    piled in one region and the plate covers everything.
+  </p>
+
+  <pre><code class="lang-text">        scene            entries   pairs    ms   big
+  crates only             30225    1090  0.316     0
+  + plate, guard off     111027    1127  1.150     0
+  + plate, guard on       30225    1127  0.324     1</code></pre>
+
+  <p>
+    Adding one object multiplies the work by 3.7, and the cliff is cubic in the reciprocal of the
+    cell size:
+  </p>
+
+  <pre><code class="lang-text">  cells the 200 x 0.2 x 200 m plate wants:
+    cell  4.00 m                              5202
+    cell  2.00 m                             20402
+    cell  1.00 m                             80802
+    cell  0.50 m                            321602
+    cell  0.25 m                           1283202</code></pre>
+
+  <p>
+    A uniform grid has <em>no structural answer</em> to this. That is not a shortcoming of this
+    implementation; it is the definition of a uniform grid, which is that every cell is the same
+    size, and an object far larger than the cell will always claim an enormous number of them. The
+    structural answers are hierarchical — a BVH, an octree, a two-level grid — and this engine is not
+    going to build one in this lesson.
+  </p>
+
+  <h3>10.1 A guard is a diagnosis, not a cure</h3>
+
+  <p>
+    What the grid can do is <strong>notice</strong>. Past <code>max_cells_per_proxy</code>, a proxy
+    stops being gridded at all and goes on an oversized list, which is tested against everything by
+    brute force.
+  </p>
+
+  <p>
+    Read that carefully, because it is the contract again. The oversized proxy is not dropped, not
+    clamped, not approximated — it is tested against <em>every other proxy</em>, which is the most
+    conservative thing available. The pair sets with the guard on and off are compared exactly, and
+    they are equal: the guard changes the cost and not the answer.
+  </p>
+
+  <p>
+    The cost is linear in <code>(number of oversized proxies) × n</code>, which is fine for the one
+    floor and one terrain chunk a real scene has, and is a disaster if half the scene trips it:
+  </p>
+
+  <pre><code class="lang-text">  the guard's own limit: k big proxies, 2000 crates
+      k    oversized pairs      ms
+      1            1       37   0.256
+      4            4      670   0.242
+     16           16     4207   0.319
+     64           64     6647   0.421
+    256          256     6647   0.791</code></pre>
+
+  <p>
+    At <em>k</em> = 1 the guard is free. At <em>k</em> = 256 it is most of the broadphase, and the
+    last two rows find no additional pairs at all for the extra cost. What that table is really
+    saying is: <em>when this number gets large, the grid is telling you to use a tree.</em> A guard
+    that turns a catastrophe into a linear cost is worth having precisely because it converts an
+    invisible performance cliff into a number you can watch — <code>broadphase_stats::oversized</code>
+    is in the demo's panel for that reason.
+  </p>
+
+  <h2 id="budget">11. The budget, and the crossover</h2>
+
+  <p>
+    Two measurements to finish, and the first is the uncomfortable one.
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    An AABB overlap test is six comparisons on data already in registers. A grid build touches every
+    proxy twice, chases a hash table, writes an entry array and walks it again. So there is a scene
+    size below which the quadratic <em>wins</em>, and it is not as small as you would guess:
+  </p>
+
+  <pre><code class="lang-text">      n     brute      grid   winner
+      8     0.00 us     0.21 us   brute
+     16     0.04 us     0.50 us   brute
+     24     0.12 us     0.62 us   brute
+     32     0.29 us     0.96 us   brute
+     48     0.71 us     1.42 us   brute
+     64     1.17 us     2.08 us   brute
+     96     3.29 us     2.71 us   grid
+    128     5.00 us     4.00 us   grid
+    192    17.83 us     5.58 us   grid
+    256    36.54 us     9.08 us   grid</code></pre>
+
+  <p>
+    <strong>Around a hundred bodies.</strong> Below that, shipping this whole stage is a net loss —
+    slower, more code, more state, and one more thing that can be wrong. The crossover lands on 96
+    or 128 depending on the run, because the two are within twenty per cent of each other either
+    side of it; read it as “about a hundred” rather than as a threshold.
+  </p>
+
+  <p>
+    This is worth knowing because almost nobody measures it. A broadphase is the kind of thing that
+    gets added early, on principle, to a project that will never have two hundred dynamic bodies —
+    and it makes that project slower while looking like diligence.
+  </p>
+
+  <p>
+    Above the crossover the two curves separate and never come back. From §2's table:
+    <strong>17.4× at 512</strong> bodies, 61.4× at 2,048, <strong>137.7× at 8,192</strong>, and every one
+    of those measurements comes with the two pair sets checked equal.
+  </p>
+
+  <h3>11.1 The frame</h3>
+
+  <pre><code class="lang-text">  2000 proxies, 983 candidate pairs
+    broadphase                             0.091 ms  (17.7%)
+    narrow phase on what it found          0.426 ms  (82.3%)
+    narrow phase on ALL pairs, implied     843.6 ms
+
+  allocations over 2000 rebuilds               0</code></pre>
+
+  <p>
+    Half a millisecond for collision detection on two thousand bodies, of which the broadphase is
+    under a fifth. The implied 844 ms is what the same narrow phase would cost on all 1,999,000
+    pairs — fifty frames of budget, for one frame.
+  </p>
+
+  <p>
+    And the last line is a claim about a structure that is rebuilt from scratch sixty times a second.
+    Every vector inside <code>uniform_grid</code> is <code>clear()</code>ed rather than
+    reconstructed, and <code>clear</code> on a vector of trivially destructible elements keeps the
+    capacity — so after the first few frames the grid never asks the allocator for anything. That is
+    checked with a counting <code>operator new</code> rather than asserted, because an allocation
+    per frame is exactly the kind of cost that hides from a timing measurement: the allocator is fast
+    when it is warm, and the pause arrives later, in somebody else's profile.
+  </p>
+
+  <h2 id="implementation">12. Writing it: four linear passes</h2>
+
+  <p>
+    Everything above is decided. What remains is the loop, and it is shorter than the argument.
+  </p>
+
+  <h3>12.1 What goes in</h3>
+
+  <p>
+    Six floats and an index:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/phys/broadphase.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct proxy
+{
+    aabb box{};
+    std::uint32_t index = 0;
+};
+
+struct broadphase_pair
+{
+    std::uint32_t a = 0;
+    std::uint32_t b = 0;
+};</code></pre>
+  </figure>
+
+  <p>
+    Not a shape, not a body, not a pointer to either — and that is deliberate rather than minimal.
+    The stage whose entire value is being cheap is the stage that must not be able to look inside
+    anything. Give it a <code>rigid_body*</code> and within two lessons somebody will dereference it,
+    and the broadphase will have a dependency on the solver.
+  </p>
+
+  <p>
+    <code>index</code> is whatever the caller uses to name a body — an ECS entity index, a slot in an
+    array, the index half of a 5.4 handle. The grid never dereferences it. It copies it into a pair
+    and compares two of them for order.
+  </p>
+
+  <div class="callout">
+    <span class="label">a &lt; b is a contract, not tidiness</span>
+    <p>
+      8.7's <code>pair_key(a, b)</code> is order-<em>independent</em>; its manifold is not. Generate
+      a manifold for <code>(7, 3)</code> on one frame and <code>(3, 7)</code> on the next and the
+      normal reverses, the reference face moves to the other shape, and every warm start on that
+      pair is lost — a stack that mysteriously will not settle, three lessons downstream from the
+      line that caused it. Sorting the pair <em>here</em>, once, at the only place pairs are made,
+      is the cheapest possible place to fix that.
+    </p>
+  </div>
+
+  <h3>12.2 Pass 1: classify</h3>
+
+  <p>
+    Fatten each box by the margin, compute its cell range, and count the cells it wants. A proxy past
+    <code>max_cells_per_proxy</code> goes on the oversized list — <em>and still goes into
+    <code>boxes_</code></em>, because the oversized list is tested against every proxy including the
+    other oversized ones, and dropping it here would be the one thing the contract forbids.
+  </p>
+
+  <h3>12.3 Passes 2 and 3: a counting sort</h3>
+
+  <p>
+    Here is the piece worth reading twice, because the obvious data structure is wrong.
+  </p>
+
+  <p>
+    The obvious structure is a <code>vector</code> per bucket — a hash map from cell to a list of
+    proxies. It allocates once per occupied cell, scatters the grid across the heap, and makes the
+    pair loop chase a pointer per cell.
+  </p>
+
+  <p>
+    Instead: walk every proxy's cell range once and only <em>count</em> how many entries land in each
+    bucket; prefix-sum the counts into offsets; then walk the ranges a second time and
+    <em>scatter</em> each entry into its slot. That is a counting sort, and what comes out is one
+    contiguous array in which every bucket's members are adjacent, with <code>starts_[b]</code> and
+    <code>starts_[b+1]</code> bracketing bucket <em>b</em>.
+  </p>
+
+  <p>
+    Two cheap passes over contiguous memory beat one pass that allocates, every time — and the
+    repeated triple loop that looks wasteful is the cheapest part of either.
+  </p>
+
+  <h3>12.4 Pass 4: the pairs</h3>
+
+  <p>
+    For each bucket, every pair of entries inside it, filtered by three tests in an order chosen by
+    cost:
+  </p>
+
+  <ol>
+    <li><strong>Same cell?</strong> Two entries in one bucket may be from unrelated cells that
+        happened to hash together. Rejecting is safe: if the two proxies really do share a cell,
+        that cell's own bucket will produce them.</li>
+    <li><strong>Is this the owner cell?</strong> §6's rule. Three <code>max</code> calls, and the
+        duplicates are gone.</li>
+    <li><strong>Do the boxes actually overlap?</strong> Sharing a cell means being within a cell of
+        each other, which is not the same thing. Six comparisons to avoid a 432 ns narrow-phase
+        call.</li>
+  </ol>
+
+  <p>
+    Each rejection is counted separately in <code>broadphase_stats</code>, which is what lets the
+    demo show you <em>why</em> a candidate died rather than only how many did.
+  </p>
+
+  <h3>12.5 Why rebuilt, and not updated</h3>
+
+  <p>
+    An incremental grid — moving only the proxies that changed cell — sounds strictly better and is
+    not. It needs a per-proxy record of which cells it is in; removal is the expensive operation in
+    every open-addressing scheme; and in a physics scene most proxies move most frames anyway. A
+    rebuild is two linear passes over contiguous memory with no removals, no tombstones and no
+    pointer chasing, and it is O(n) rather than O(n log n).
+  </p>
+
+  <p>
+    It is the same argument 8.7's <code>manifold_cache</code> makes one lesson earlier, in the same
+    words: a structure that is thrown away every frame never rots.
+  </p>
+
+  <h2 id="notyet">13. What this does not do</h2>
+
+  <p>
+    Five things, named rather than discovered.
+  </p>
+
+  <p>
+    <strong>It does not handle the teapot.</strong> §10's guard turns a cubic explosion into a linear
+    cost and reports the count; it does not make a uniform grid good at non-uniform scenes, because
+    nothing can. The answer is a hierarchy, and Module 9's optimisation lessons are where a
+    two-level grid or a BVH would go.
+  </p>
+
+  <p>
+    <strong>It does not exploit frame coherence.</strong> Everything is rebuilt. Sweep and prune
+    exists precisely because a sorted list barely changes between frames, and there is a real
+    measurement to be made about which wins on a scene that is mostly asleep. 8.10 adds sleeping, at
+    which point that measurement becomes worth taking.
+  </p>
+
+  <p>
+    <strong>It does not distinguish static from dynamic.</strong> Every real engine does: static
+    geometry goes into a structure built once, dynamic bodies into one rebuilt per frame, and the
+    static–static pairs are never generated at all. This grid generates them and then rejects them
+    on the AABB test, which is correct and wasteful. Exercise 4.
+  </p>
+
+  <p>
+    <strong>It does not filter by layer.</strong> A real scene wants bullets not to collide with
+    bullets and triggers not to collide with each other, and a broadphase is the cheapest place to
+    enforce that — a bitmask per proxy, tested before the AABB. It is genuinely two lines, and it is
+    not here because 8.9's solver has not yet defined what a layer means.
+  </p>
+
+  <p>
+    <strong>And it does not consume its own margin.</strong> <code>margin</code> exists, is measured,
+    and defaults to zero, because the decision about how far ahead to speculate belongs to the
+    solver that will act on it. That is 8.9.
+  </p>

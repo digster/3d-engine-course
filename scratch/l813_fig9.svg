@@ -1,0 +1,71 @@
+<svg viewBox="0 0 980 442" role="img" aria-labelledby="h9-t h9-d">
+  <title id="h9-t">The step-up: up, across, down, and the least forward move that lands</title>
+  <desc id="h9-d">Left: a capsule at a 40 cm riser rising, moving across by f, and dropping onto the edge with a walkable normal; f must be at least (r + skin)(1 - sin 45) = 90.8 mm. Right: a table of the least f found by bisection at three risers against the prediction, and the staircase, tallest-ledge and steep-slope results.</desc>
+  <defs>
+    <marker id="e-i-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-amber-h9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">Up, across, down — and how far across</text>
+<line x1="30" y1="340" x2="440.0" y2="340" class="ink-soft" stroke-width="1.4"/>
+<path d="M 195.00,340.00 L 427.50,340.00 L 427.50,240.00 L 195.00,240.00 Z" fill="#8f918a" fill-opacity="0.25" stroke="#8f918a" stroke-width="1.2"/>
+<circle cx="117.5" cy="262.5" r="77.5" fill="none" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="25.00" y1="262.50" x2="25.00" y2="150.00" stroke="#8f918a" stroke-width="1.4" marker-end="url(#e-grey-h9)"/>
+<text x="19.0" y="206.25" class="xs" text-anchor="end">up</text>
+<circle cx="117.5" cy="150.0" r="77.5" fill="none" stroke="#8f918a" stroke-width="1.0" stroke-dasharray="2 3"/>
+<line x1="117.50" y1="62.50" x2="140.20" y2="62.50" stroke="#f0961e" stroke-width="2.0" marker-end="url(#e-amber-h9)"/>
+<text x="128.8496122290213" y="54.5" class="xs" text-anchor="middle">f</text>
+<circle cx="140.2" cy="185.2" r="77.5" fill="none" stroke="#5ac878" stroke-width="1.8"/>
+<line x1="195.00" y1="240.00" x2="140.20" y2="185.20" stroke="#5082e6" stroke-width="1.5" marker-end="url(#e-blue-h9)"/>
+<circle cx="195.0" cy="240.0" r="3.4" fill="#5082e6"/>
+<text x="315.0" y="290.0" class="xs mono" text-anchor="middle">riser 0.40 m</text>
+<text x="26" y="370" class="xs" text-anchor="start">At the riser the centre is up to r + skin short of the edge;</text>
+<text x="26" y="385" class="xs" text-anchor="start">it must land within (r + skin)·sin θ of it to be walkable.</text>
+<text x="26" y="400" class="xs mono" text-anchor="start">So the step carries it at least (r + skin)(1 − sin θ) = 90.8 mm</text>
+<text x="26" y="415" class="xs" text-anchor="start">across — a lurch, on the frame the step is taken.</text>
+<text x="560" y="30" class="sm" text-anchor="start">Measured</text>
+<text x="560" y="50" class="xs muted" text-anchor="start">the least f that lands walkable, by bisection, m</text>
+<text x="560" y="70" class="xs muted" text-anchor="start">riser</text>
+<text x="724" y="70" class="xs muted" text-anchor="end">short of edge</text>
+<text x="814" y="70" class="xs muted" text-anchor="end">least f</text>
+<text x="944" y="70" class="xs muted" text-anchor="end">short − (r+s)·sin θ</text>
+<line x1="560" y1="78.0" x2="950" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="560" y="95.0" class="xs" text-anchor="start">0.15 m</text>
+<text x="724" y="95.0" class="xs mono" text-anchor="end">0.26553</text>
+<text x="814" y="95.0" class="xs mono" text-anchor="end">0.04615</text>
+<text x="944" y="95.0" class="xs mono" text-anchor="end">0.04632</text>
+<text x="560" y="112.0" class="xs" text-anchor="start">0.25 m</text>
+<text x="724" y="112.0" class="xs mono" text-anchor="end">0.30414</text>
+<text x="814" y="112.0" class="xs mono" text-anchor="end">0.08467</text>
+<text x="944" y="112.0" class="xs mono" text-anchor="end">0.08494</text>
+<text x="560" y="129.0" class="xs" text-anchor="start">0.40 m</text>
+<text x="724" y="129.0" class="xs mono" text-anchor="end">0.31000</text>
+<text x="814" y="129.0" class="xs mono" text-anchor="end">0.09089</text>
+<text x="944" y="129.0" class="xs mono" text-anchor="end">0.09080</text>
+<text x="560" y="179.5" class="xs muted" text-anchor="start"></text>
+<text x="944" y="179.5" class="xs muted" text-anchor="end"></text>
+<line x1="560" y1="187.5" x2="950" y2="187.5" class="grid" stroke-width="1.0"/>
+<text x="560" y="204.5" class="xs" text-anchor="start">eight 18 cm stairs at 2 m/s</text>
+<text x="944" y="204.5" class="xs mono" text-anchor="end">8 step-ups, 0 in the air</text>
+<text x="560" y="221.5" class="xs" text-anchor="start">  at the top after</text>
+<text x="944" y="221.5" class="xs mono" text-anchor="end">1.267 s</text>
+<text x="560" y="238.5" class="xs" text-anchor="start">  worst extra forward</text>
+<text x="944" y="238.5" class="xs mono" text-anchor="end">75.9 mm ≤ 90.8</text>
+<text x="560" y="255.5" class="xs" text-anchor="start">tallest ledge, step_height 0.30</text>
+<text x="944" y="255.5" class="xs mono" text-anchor="end">0.39092 m</text>
+<text x="560" y="272.5" class="xs" text-anchor="start">  = step_height + free curb</text>
+<text x="944" y="272.5" class="xs mono" text-anchor="end">0.39080 m</text>
+<text x="560" y="289.5" class="xs" text-anchor="start">into a 60° slope</text>
+<text x="944" y="289.5" class="xs mono" text-anchor="end">0 steps taken</text>
+<text x="560" y="314.0" class="xs muted" text-anchor="start">The step-up and the round bottom ADD: after rising</text>
+<text x="560" y="329.0" class="xs muted" text-anchor="start">step_height the capsule rolls over whatever of the ledge</text>
+<text x="560" y="344.0" class="xs muted" text-anchor="start">is left, exactly as it rolls over a curb. And a step that</text>
+<text x="560" y="359.0" class="xs muted" text-anchor="start">lands on a steep slope is refused, or a staircase of tiny</text>
+<text x="560" y="374.0" class="xs muted" text-anchor="start">steps would climb anything.</text>
+</svg>

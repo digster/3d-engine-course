@@ -1,0 +1,51 @@
+<svg viewBox="0 0 760 376" role="img" aria-labelledby="f77j-t f77j-d">
+  <title id="f77j-t">The cost of a clip in bytes and in nanoseconds</title>
+  <desc id="f77j-d">Bar charts of four storage layouts and five sampling timings, showing that a per-channel layout only pays once channels are elided and that a cursor beats a binary search by more on a longer track.</desc>
+  <defs>
+    <marker id="e-i-f77j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">what a second of motion weighs, and what reading it costs</text>
+<rect x="48.0" y="76.0" width="330.0" height="178.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="213.0" y="54.0" class="xs" text-anchor="middle">23 joints, 31 frames, one second</text>
+<rect x="58.0" y="98.0" width="153.84615384615384" height="15.13" rx="2" fill="#9e84e8" stroke="#9e84e8" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="58.0" y="91.0" class="xs muted" text-anchor="start">pose array, 40 B/joint</text>
+<text x="215.84615384615384" y="110.13" class="xs mono" text-anchor="start">28,520 B</text>
+<rect x="58.0" y="142.5" width="200.0" height="15.13" rx="2" fill="#ec7a8c" stroke="#ec7a8c" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="58.0" y="135.5" class="xs muted" text-anchor="start">per-channel, every key</text>
+<text x="262.0" y="154.63" class="xs mono" text-anchor="start">37,076 B</text>
+<rect x="58.0" y="187.0" width="20.04531233142734" height="15.13" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="58.0" y="180.0" class="xs muted" text-anchor="start">per-channel, reduced</text>
+<text x="82.04531233142734" y="199.13" class="xs mono" text-anchor="start">3,716 B</text>
+<rect x="58.0" y="231.5" width="28.978314812816915" height="15.13" rx="2" fill="#92c894" stroke="#92c894" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="58.0" y="224.5" class="xs muted" text-anchor="start">  + std::vector headers</text>
+<text x="90.97831481281692" y="243.63" class="xs mono" text-anchor="start">5,372 B</text>
+<text x="213.0" y="276.0" class="xs muted" text-anchor="middle">the per-channel layout is 30% BIGGER than a pose</text>
+<text x="213.0" y="292.0" class="xs muted" text-anchor="middle">array until something is elided — every key</text>
+<text x="213.0" y="308.0" class="xs muted" text-anchor="middle">carries its own time. Then it is 7.7× smaller.</text>
+<rect x="426.0" y="76.0" width="330.0" height="178.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="591.0" y="54.0" class="xs" text-anchor="middle">microseconds per frame, 23 joints</text>
+<rect x="436.0" y="98.0" width="32.91925465838509" height="10.68" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="436.0" y="89.0" class="xs muted" text-anchor="start">sample, cursor</text>
+<text x="472.9192546583851" y="105.68" class="xs mono" text-anchor="start">0.159</text>
+<rect x="436.0" y="133.6" width="70.60041407867496" height="10.68" rx="2" fill="#ec7a8c" stroke="#ec7a8c" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="436.0" y="124.6" class="xs muted" text-anchor="start">sample, binary</text>
+<text x="510.60041407867493" y="141.28" class="xs mono" text-anchor="start">0.341</text>
+<rect x="436.0" y="169.2" width="49.68944099378882" height="10.68" rx="2" fill="#9e84e8" stroke="#9e84e8" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="436.0" y="160.2" class="xs muted" text-anchor="start">compose + palette</text>
+<text x="489.6894409937888" y="176.88" class="xs mono" text-anchor="start">0.240</text>
+<rect x="436.0" y="204.8" width="35.61076604554865" height="10.68" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="436.0" y="195.8" class="xs muted" text-anchor="start">sample, cursor, 301 keys</text>
+<text x="475.61076604554864" y="212.48000000000002" class="xs mono" text-anchor="start">0.172</text>
+<rect x="436.0" y="240.4" width="200.0" height="10.68" rx="2" fill="#ec7a8c" stroke="#ec7a8c" stroke-width="1.0" fill-opacity="0.85"/>
+<text x="436.0" y="231.4" class="xs muted" text-anchor="start">sample, binary, 301 keys</text>
+<text x="640.0" y="248.08" class="xs mono" text-anchor="start">0.966</text>
+<text x="591.0" y="276.0" class="xs muted" text-anchor="middle">sampling is two thirds of what composing and</text>
+<text x="591.0" y="292.0" class="xs muted" text-anchor="middle">building the palette cost — not free, and not</text>
+<text x="591.0" y="308.0" class="xs muted" text-anchor="middle">where a frame goes. Both are noise beside skinning.</text>
+<text x="380.0" y="350" class="xs muted" text-anchor="middle">at production scale — 100 joints, 30 seconds of this density — 3.60 MB of pose array against 0.48 MB of clip.</text>
+<text x="380.0" y="366" class="xs muted" text-anchor="middle">And std::fmod is not constant time: 3.798 ns on a wrapped clock against 7.726 after it has run to 6,666 seconds.</text>
+</svg>

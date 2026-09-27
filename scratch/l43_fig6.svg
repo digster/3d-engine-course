@@ -1,0 +1,40 @@
+<svg viewBox="0 0 720 300" role="img" aria-labelledby="l43f6-t l43f6-d">
+  <title id="l43f6-t">The entry point is renamed on the way to MSL</title>
+  <desc id="l43f6-d">Three boxes left to right. The HLSL declares a function called main; the SPIR-V still calls it main; the MSL calls it main0, because main is a reserved identifier in Metal Shading Language and SPIRV-Cross renames it. Below, three measured trials of SDL_CreateGPUShader: the name main0 created a shader, while main and a nonsense name were both refused. The mistake is caught at creation, with a message, rather than at the first draw.</desc>
+  <defs>
+    <marker id="e-i-l43f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l43f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l43f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">the name of your entry point, through the toolchain</text>
+<rect x="30.0" y="82.0" width="168.0" height="56.0" rx="5" fill="#5ac878" opacity="0.18" stroke="#5ac878" stroke-width="1.6"/>
+<text x="114.0" y="106.0" class="xs mono" text-anchor="middle">.hlsl</text>
+<text x="114.0" y="124.0" class="xs mono" text-anchor="middle">entry: main</text>
+<line x1="206.0" y1="110.0" x2="268.0" y2="110.0" class="ink-soft" stroke-width="1.6" marker-end="url(#e-s-l43f6)"/>
+<rect x="276.0" y="82.0" width="168.0" height="56.0" rx="5" fill="#5acdd7" opacity="0.18" stroke="#5acdd7" stroke-width="1.6"/>
+<text x="360.0" y="106.0" class="xs mono" text-anchor="middle">.spv</text>
+<text x="360.0" y="124.0" class="xs mono" text-anchor="middle">entry: main</text>
+<line x1="452.0" y1="110.0" x2="514.0" y2="110.0" class="ink-soft" stroke-width="1.6" marker-end="url(#e-s-l43f6)"/>
+<rect x="522.0" y="82.0" width="168.0" height="56.0" rx="5" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.6"/>
+<text x="606.0" y="106.0" class="xs mono" text-anchor="middle">.msl</text>
+<text x="606.0" y="124.0" class="xs mono t-hi" text-anchor="middle">entry: main0</text>
+<text x="606.0" y="158.0" class="xs t-hi" text-anchor="middle">renamed &#8212; `main` is reserved in MSL</text>
+<text x="30" y="200.0" class="xs">What SDL_CreateGPUShader does with each name, measured:</text>
+<rect x="36" y="214.0" width="12" height="12" rx="3" fill="#5ac878" opacity="0.85"/>
+<text x="58" y="226.0" class="xs mono">"main0"</text>
+<text x="240" y="226.0" class="xs mono">&#8594;</text>
+<text x="272" y="226.0" class="xs mono">created</text>
+<rect x="36" y="240.0" width="12" height="12" rx="3" fill="#eb786e" opacity="0.85"/>
+<text x="58" y="252.0" class="xs mono">"main"</text>
+<text x="240" y="252.0" class="xs mono">&#8594;</text>
+<text x="272" y="252.0" class="xs mono t-hi">REFUSED</text>
+<rect x="36" y="266.0" width="12" height="12" rx="3" fill="#eb786e" opacity="0.85"/>
+<text x="58" y="278.0" class="xs mono">"not_a_function"</text>
+<text x="240" y="278.0" class="xs mono">&#8594;</text>
+<text x="272" y="278.0" class="xs mono t-hi">REFUSED</text>
+<text x="360" y="252.0" class="xs">A good failure: it is caught at creation,</text>
+<text x="360" y="270.0" class="xs">with a message, rather than at the first draw.</text>
+</svg>

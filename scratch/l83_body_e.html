@@ -1,0 +1,523 @@
+  <h2 id="budget">12. The budget</h2>
+
+  <p>
+    8.2 measured a whole body update at a couple of nanoseconds. The angular half is considerably
+    more than a couple, and the first version of this section did not find that out because it was
+    measuring the wrong thing.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The first draft of §12 measured a <code>memcpy</code>.</strong> Each arm was written as
+      <code>body_world w = seed; … w.step(h)</code>, so that both arms would start from identical
+      state — a reasonable instinct, and it put a 557 KB copy of the pool <em>inside</em> the timed
+      region. Every arm reported 34–58 ns/body against 8.2's 1–2, every ratio came out near 1, and
+      the conclusion would have been "the angular half is free". Each arm gets its own world now,
+      built once, and the timed body is a single <code>step</code>.
+    </p>
+  </div>
+
+  <h3>12.1 Where the time actually went</h3>
+
+  <p>
+    With that fixed, the step came out at <strong>33.793 ns/body</strong> — twenty times 8.2's, which
+    is a lot for an update whose physics is one matrix-vector product and an integrator step.
+    Breaking it down piece by piece found that most of it was not physics:
+  </p>
+
+  <ul>
+    <li><code>mat3_from_quat</code>, 7.843 ns — and the step was calling it <strong>twice</strong>,
+        once inside <code>world_inverse_inertia</code> and once twenty lines later inside
+        <code>angular_momentum</code>, on the same quaternion.</li>
+    <li><code>angular_momentum</code>, 13.418 ns — <strong>40% of the whole step</strong>, for a
+        diagnostic that is computed whether or not anybody reads it, and which carried a 3×3 inverse
+        because the body stored only the inverse tensor.</li>
+    <li>The rest — the sandwich, the integrator, the report — accounting for the remainder.</li>
+  </ul>
+
+  <p>
+    Two changes followed, and both are visible in the listings. The forward tensor is now
+    <em>stored</em> beside its inverse, which removes the 3×3 inverse from the report and from the
+    gyroscopic term. And the step builds its rotation matrix once and uses it for both, which is why
+    <code>step</code> spells the sandwich out rather than calling <code>world_inverse_inertia</code>.
+  </p>
+
+  <p>
+    The hoist is measurable on its own, inside one run, which is what makes it a fact rather than a
+    before-and-after story:
+  </p>
+
+<pre><code class="lang-text">  I.3  mat3_from_quat, built twice or hoisted
+       twice    14.577 ns/body
+       hoisted  11.139 ns/body
+       ratio hoisted/twice 0.764
+
+  I.4  R I^-1 R^T rebuilt    8.545 ns/body
+       read from a cache     0.621 ns/body
+       ratio cached/rebuilt 0.073</code></pre>
+
+  <p>
+    Together the two changes took the step from <strong>33.793 to 18.778 ns/body</strong>, a factor
+    of 1.80, with no change to a single number this lesson reports. That is the whole of §12's
+    optimisation: it is not clever, it is noticing that a rotation matrix was being built twice.
+  </p>
+
+  <h3>12.2 What the choices cost</h3>
+
+<pre><code class="lang-text">I  THE BUDGET
+------------------------------------------------------------------
+  sizeof(rigid_body) = 172 bytes  (3 cache lines)
+  8.2 measured 60; the angular half added 112 — an
+  orientation, an angular velocity, a torque, and TWO
+  nine-float tensors, which I.2 is the reason for.
+
+  I.1  the orientation rule, 4096 bodies
+       linearised   19.450 ns/body  (min 18.921)
+       exponential  22.736 ns/body  (min 22.156)
+       ratio b/a    1.169
+
+  I.2  the gyroscopic term, implicit — two skew
+       products, a Jacobian and a 3x3 inverse
+       off  19.053 ns/body   on  33.793 ns/body
+       ratio on/off 1.774
+       explicit instead: 33.061 ns/body, ratio 0.982 —
+       the cheap one is the one that diverges (G.5)
+
+       ...and the MOMENTUM formulation, which carries two
+       extra rotation matrices and a half step:
+       implicit 33.813   momentum 54.331   ratio 1.607
+
+  I.5  CONTROL two identical arms: ratio 1.000</code></pre>
+
+  <p>
+    Three things to read out of that.
+  </p>
+
+  <p>
+    <strong>The exponential map costs 17%</strong> of the angular half, for an attitude error four
+    orders of magnitude smaller. Whether that is worth it depends entirely on what the body is doing:
+    for gravel it is not, for a spinning object the player is watching it obviously is, and for a
+    camera or a vehicle it is not close. Hence a switch.
+  </p>
+
+  <p>
+    <strong>The accurate gyroscopic mode is also the expensive one</strong>, at 2.85× the angular
+    half — and this is not what 8.2 found about gravity, where the exact arrangement also turned out
+    to be the cheap one. Two lessons, two optimisation questions, opposite answers. What the 2.85×
+    buys is figure 9: three orders of magnitude of conservation. Whether to pay it is a per-body
+    decision, which is why it is a per-body field.
+  </p>
+
+  <p>
+    <strong>And 172 bytes is now three cache lines</strong>, from 8.2's one. That is the number to
+    watch when 8.6's broadphase starts walking thousands of bodies: 5.5's ECS lessons argued that a
+    struct which outgrows a cache line starts paying for fields the loop does not touch, and this one
+    has just tripled. Nothing in this lesson has enough bodies for it to matter; 8.10's solver
+    will.
+  </p>
+
+  <h2 id="notyet">13. What this does not do</h2>
+
+  <p>
+    The engine can turn. Six things it deliberately cannot, each of which is somebody's later
+    lesson or somebody's standing debt.
+  </p>
+
+  <p>
+    <strong>No centre-of-mass offset.</strong> A body's centre of mass <em>is</em> its
+    <code>state.position</code>, always. <code>inertia_assembly</code> computes where a compound body
+    balances so that you can place it there, rather than carrying an offset through every subsequent
+    calculation. That is a real restriction — an authored mesh whose origin is at its feet needs its
+    inertia and its position reconciled by the caller — and it removes an offset from every line of
+    8.9's solver, which is what it was traded for.
+  </p>
+
+  <p>
+    <strong>No diagonalisation.</strong> Every closed form here is diagonal because its shape is
+    symmetric, but a compound body's tensor generally is not, and this engine never finds its
+    principal axes. Doing so is an eigenvalue problem on a symmetric 3×3 — Jacobi's method, about
+    fifty lines — and it is genuinely out of scope here rather than hard. What it would buy is the
+    ability to store three floats instead of nine, which is what Bullet does. Exercise 4, and Golub
+    &amp; Van Loan §8.5 if you want it done properly.
+  </p>
+
+  <p>
+    <strong><code>L</code> is not stored</strong>, so the momentum formulation's conservation is as
+    good as a round trip through two rotation matrices, which is §9.4's counterintuitive column.
+    Fixing it means adding <code>angular_momentum</code> to the struct and converting at every solver
+    iteration. Named here so that it is a decision rather than an omission.
+  </p>
+
+  <p>
+    <strong>No angular tunnelling protection.</strong> <code>max_spin</code> measures how fast the
+    fastest body is turning, which is the rotational twin of <code>max_travel</code>, and nothing
+    does anything about it. A body turning more than about a radian per step cannot have its contacts
+    tracked frame to frame, because the features that were touching are on the other side by the time
+    the next test runs. 8.8's manifold persistence is where that comes due.
+  </p>
+
+  <p>
+    <strong>No collision, still.</strong> Four lessons away. The <code>spin</code> demo has no floor
+    and no gravity, which is the experiment rather than a missing feature — every claim in it is
+    about a body with nothing acting on it.
+  </p>
+
+  <p>
+    <strong>And the gyroscopic default is <code>off</code></strong>, which means that out of the box
+    this engine's bodies do not tumble. That is what Bullet and PhysX both ship (⚠ VERIFY the exact
+    spellings against the headers: Bullet's <code>BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY</code>
+    flag on <code>btRigidBody</code>, and PhysX's
+    <code>PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES</code>, both opt-in), and it is a defensible
+    default — but it means the most interesting thing in this lesson is something you have to ask
+    for.
+  </p>
+
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <!-- WRAPPED IN .tbl-scroll, as 8.2's is and for the same reason. A path inside
+       <code> cannot wrap, so at 390 px the longest one — still
+       engine/include/engine/phys/rigid_body.hpp — forces the whole PAGE to
+       scroll horizontally. check-page.js reports it as pageScrollsX, and it is
+       the one layout failure that is completely invisible at desktop width:
+       green at 1280, red at 390, both times. Run BOTH. -->
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/math/mat3.hpp</code></td><td>modified</td>
+          <td>A matrix as a <em>quantity</em>: arithmetic, the outer product, the cross-product
+              matrix, trace and an asymmetry probe.</td></tr>
+      <tr><td><code>engine/include/engine/phys/integrate.hpp</code></td><td>modified</td>
+          <td><code>spin_rule</code> and <code>advance_orientation</code> — the integrator 8.1 said
+              would arrive in 8.3.</td></tr>
+      <tr><td><code>engine/src/phys/integrate.cpp</code></td><td>modified</td>
+          <td>The two predictions §7 measures against.</td></tr>
+      <tr><td><code>engine/include/engine/phys/inertia.hpp</code></td><td>new</td>
+          <td>Equation (1), six shapes, the parallel-axis theorem, the basis change, and the four
+              tests every real tensor passes.</td></tr>
+      <tr><td><code>engine/src/phys/inertia.cpp</code></td><td>new</td>
+          <td>…evaluated, including the well-conditioned form §4.4 arrived at.</td></tr>
+      <tr><td><code>engine/include/engine/phys/rigid_body.hpp</code></td><td>modified</td>
+          <td>Orientation, angular velocity, torque, two tensors, four gyroscopic modes, and the
+              functions 8.9 is written against.</td></tr>
+      <tr><td><code>engine/src/phys/rigid_body.cpp</code></td><td>modified</td>
+          <td>The angular half of the step, and the hoist §12 measured.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One line — and the second lesson running that the lint did not have to find it.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>A third source in <code>phys/</code>, and the dependency direction 8.2 promised.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>spin</code> target.</td></tr>
+      <tr><td><code>demos/spin/main.cpp</code></td><td>new</td>
+          <td>A box that flips end over end with nothing touching it, and a key that stops it.</td></tr>
+      <tr><td><code>scratch/verify_83.cpp</code></td><td>new</td>
+          <td>Nine sections, sixteen controls, every number on this page.</td></tr>
+      <tr><td><code>scratch/build_verify_83.sh</code></td><td>new</td>
+          <td>…and the refusal to measure an unoptimised <code>libengine.a</code>.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/mat3.hpp@@
+
+  @@LISTING:engine/include/engine/phys/integrate.hpp@@
+
+  @@LISTING:engine/src/phys/integrate.cpp@@
+
+  @@LISTING:engine/include/engine/phys/inertia.hpp@@
+
+  @@LISTING:engine/src/phys/inertia.cpp@@
+
+  @@LISTING:engine/include/engine/phys/rigid_body.hpp@@
+
+  @@LISTING:engine/src/phys/rigid_body.cpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:demos/spin/main.cpp@@
+
+  @@LISTING:scratch/verify_83.cpp@@
+
+  @@LISTING:scratch/build_verify_83.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <p>
+    Nothing new in the build: one more source in the engine library, one more demo target.
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target spin
+./build/demos/spin</code></pre>
+
+  <p>
+    On Windows with MSVC, the binary lands in a configuration subdirectory:
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target spin --config Debug
+.\build\demos\Debug\spin.exe</code></pre>
+
+  <p>
+    The harness wants an optimised library, and <code>build_verify_83.sh</code> refuses rather than
+    quietly producing numbers from a debug build — 7.6 measured what ignoring that costs at
+    <strong>18.1×</strong> on the library side:
+  </p>
+
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_83.sh</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    A window, 960 × 540, split into two panels. On the left, a wireframe box drawn in parallel
+    projection with its three body axes in red, green and blue, and one amber line that
+    <em>does not move</em> — that is the angular momentum. On the right, the three components of the
+    angular velocity <strong>in body axes</strong>, plotted against twelve seconds of simulated time
+    and wrapping round.
+  </p>
+
+  <p>
+    On a fresh start the box is spinning about its intermediate axis at 10 rad/s, in the momentum
+    formulation. Within three seconds the green trace — the spin axis — drops through zero to its
+    negative, while the red and blue ones spike and subside. The box on the left visibly turns over.
+    Then it does it again, and again, every 2.67 seconds, forever.
+  </p>
+
+  <p>
+    Press <kbd>G</kbd> to cycle the gyroscopic mode. On <strong>off</strong> the green trace becomes
+    a flat line and the box spins like a badly animated prop — that is what most engines ship.
+    <strong>Explicit</strong> flips and speeds up, and at 30 Hz (four presses of <kbd>Down</kbd>)
+    it comes apart entirely. <strong>Implicit</strong> flips and visibly slows down. Watch the
+    <code>|L| drift</code> readout in the panel rather than the picture: it is the number that tells
+    you which of the four you are looking at.
+  </p>
+
+  <p>
+    Press <kbd>1</kbd>, <kbd>2</kbd> and <kbd>3</kbd> to move the spin to each axis in turn. Two of
+    the three are perfectly steady. <kbd>E</kbd> switches the orientation update between linearised
+    and exponential; at the default 240 Hz the difference is invisible, which is the honest answer,
+    and pressing <kbd>Down</kbd> a few times first makes it obvious.
+  </p>
+
+  <p>
+    And <code>--shot</code> renders a frame headlessly and exits, which is how this page's figure 10
+    was made:
+  </p>
+
+<pre><code class="lang-bash">./build/demos/spin --t 11.9 --shot out.ppm --mode 3 --axis 1 --rate 240</code></pre>
+
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <p>
+    <strong>Symptom: a body will not rotate about its own long axis, however much torque you
+    apply.</strong> Cause: an inertia tensor built with the derived form
+    <code>|r|² 1 − r ⊗ r</code> on a long thin body, where catastrophic cancellation returns an exact
+    zero for the small principal moment (§4.4). Fix: build the diagonal from the terms that belong in
+    it. Diagnosis: print <code>inspect_inertia(...).diagonal</code> and look for a zero where you
+    expected a small number. <code>inverse_inertia</code>'s relative test catches the near-singular
+    cases, and it catching them is the signal.
+  </p>
+
+  <p>
+    <strong>Symptom: a tumble that looks plausible and is wrong, with no error anywhere.</strong>
+    Cause: <code>Rᵀ I R</code> where <code>R I Rᵀ</code> was meant. It is symmetric, has the same
+    trace, the same determinant and the same principal moments, and passes every test
+    <code>inspect_inertia</code> can run (§6.2). Fix: read the sandwich right to left and check that
+    the <em>first</em> thing applied to <code>ω</code> carries it <em>into</em> body axes. Diagnosis:
+    put the body at a generic orientation — never a right angle, which passes either way — and check
+    that the world <code>Ixx</code> matches the body moment you expect.
+  </p>
+
+  <p>
+    <strong>Symptom: a body shears, then flattens, then disappears.</strong> Cause: an orientation
+    integrated without renormalising. The linearised update inflates <code>|q|</code> by
+    <code>(|ω|h)²/8</code> per step, 23% in a second at 10 rad/s, and
+    <code>mat3_from_quat</code> on a non-unit quaternion produces a matrix with a scale in it (§7.3).
+    Fix: <code>advance_orientation</code> renormalises; if you are writing <code>orientation</code>
+    from outside the step, normalise it yourself. Diagnosis: <code>step_report::max_unit_error</code>
+    exists exactly for this and reads about 1e−7 when everything is well.
+  </p>
+
+  <p>
+    <strong>Symptom: the rotation is right for a body at the origin facing forward and drifts for any
+    other.</strong> Cause: an angular velocity used on the wrong side of the quaternion product — a
+    body-space <code>ω</code> composed as though it were world-space, or vice versa. Both produce
+    unit quaternions and smooth motion; they differ by 57.6° after one second in §7's F.5. Fix: world
+    space multiplies from the left, body space from the right. Diagnosis: the bug vanishes when the
+    body starts at the identity orientation, which is a strong tell and is why it survives testing.
+  </p>
+
+  <p>
+    <strong>Symptom: a torque-free body slowly speeds up until the simulation is unusable.</strong>
+    Cause: an explicitly integrated gyroscopic term (§9.1). Fix: <code>implicit_term</code> or
+    <code>momentum</code>. Diagnosis: plot <code>|L|</code> on a body with no torque on it. It must be
+    flat, and a rising <code>|L|</code> means the integrator is inventing angular momentum — there is
+    nothing else it can mean.
+  </p>
+
+  <p>
+    <strong>Symptom: a compound body's tensor is far too small and nothing complains.</strong> Cause:
+    parts added without shifting them to the common centre of mass (§5.2) — 15.3× too small on the
+    dumbbell, and it passes every validity test. Fix: <code>inertia_assembly</code>. Diagnosis:
+    compare against a hand estimate of the dominant parallel-axis term, <code>m d²</code>, which for
+    a spread-out assembly is usually most of the answer.
+  </p>
+
+  <p>
+    <strong>Symptom: a measurement of a perturbation oscillates instead of growing, and a fitted rate
+    is 20% low.</strong> Cause: measuring <code>ω</code> in world space when Euler's equations are
+    body-frame equations (§10.1's callout). Fix: <code>transpose(mat3_from_quat(q)) * ω</code>.
+    Diagnosis: the oscillation is at the <em>spin</em> rate, which is a strong tell — a perturbation
+    has no reason to know about it.
+  </p>
+
+  <p>
+    <strong>Symptom: a benchmark says the angular half is free.</strong> Cause: a copy of the body
+    pool inside the timed region (§12's callout). Fix: build the state once, outside. Diagnosis: the
+    control arm. Two identical arms that come out at ratio 1.000 while every real comparison
+    <em>also</em> comes out near 1.000 is the shape of a benchmark measuring something both arms have
+    in common.
+  </p>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <p>
+    <strong>1. The hollow box.</strong> Add <code>inertia_hollow_box</code> — a box of six thin
+    plates rather than a solid volume, which is what a crate actually is. Build it with
+    <code>inertia_assembly</code> from six rectangular plates, using the plate's own tensor
+    (<code>m(w² + h²)/12</code> about its normal, and the perpendicular-axis theorem for the other
+    two) plus the parallel-axis shift to each face. Check it against
+    <code>inertia_of_points</code> sampling only the surface. <em>Hint: for a thin plate in the
+    <code>xz</code> plane, <code>Iy = Ix + Iz</code> exactly — that is the perpendicular-axis
+    theorem, and it is the equality case of the triangle inequality
+    <code>inspect_inertia</code> checks.</em>
+  </p>
+
+  <p>
+    <strong>2. The wheel that does not slip.</strong> Write a demo with a single body on which
+    <code>point_velocity</code> at the lowest point is exactly zero, given a forward velocity
+    <code>v</code> and a radius <code>R</code>. Derive the angular velocity that makes it so before
+    you write it, then verify the contact patch's speed numerically at several points around the rim.
+    <em>Hint: the answer is <code>ω = v/R</code> about the correct axis, and getting the sign right
+    the first time is the exercise.</em>
+  </p>
+
+  <p>
+    <strong>3. The reaction wheel.</strong> Give a body a second, small body embedded in it, and spin
+    the small one with <code>add_torque</code>. The big one must counter-rotate, and the total
+    angular momentum of the pair must not change. Measure it. <em>Hint: this is how a satellite
+    points itself with no fuel, and it is Newton's third law applied to torques — apply the equal and
+    opposite torque to the carrier.</em>
+  </p>
+
+  <p>
+    <strong>4. (Engine challenge) Principal axes.</strong> Implement <code>diagonalise(mat3)</code>
+    for a symmetric matrix using the cyclic Jacobi method: repeatedly find the largest off-diagonal
+    element and apply the 2×2 rotation that zeroes it, accumulating the rotations. Return the three
+    principal moments and the rotation to principal axes. Then use it to store a body's inertia as
+    three floats and a quaternion, as Bullet does, and measure what that saves against §12's numbers.
+    <em>Solution sketch: each sweep drives the sum of squared off-diagonal elements down by the
+    element you zeroed, so it converges quadratically; six to ten sweeps is plenty for a 3×3 in
+    float. Golub &amp; Van Loan §8.5 has it done properly, including the rotation angle that avoids
+    cancellation.</em>
+  </p>
+
+  <p>
+    <strong>5. (Engine challenge) Store the momentum.</strong> Add <code>vec3 angular_momentum</code>
+    to <code>rigid_body</code> as a stored field, make the <code>momentum</code> mode use it instead
+    of rebuilding <code>L</code> each step, and re-run §9's G.5 table. The third column should stop
+    getting worse with a finer step and become flat at the float noise floor. Then find out what it
+    cost: every place that writes <code>angular_velocity</code> — <code>add_impulse_at</code>,
+    <code>add_angular_impulse</code>, damping, and every solver iteration in 8.10 — now has to write
+    both, or convert. <em>That</em> is the trade the engine declined, and doing it is the only way to
+    see its real size.
+  </p>
+
+  <h2 id="recap">18. Recap &amp; next</h2>
+
+  <p>
+    The engine can turn. A <code>rigid_body</code> carries an orientation, an angular velocity, a
+    torque accumulator and an inertia tensor; <code>add_force_at</code> is the first function in
+    eighty-six lessons that can make something tumble; and <code>inertia.hpp</code> knows what six
+    shapes weigh, how to carry a tensor to a new point and how to carry it into a new basis.
+  </p>
+
+  <p>
+    The ideas worth keeping, in the order they arrived:
+  </p>
+
+  <ul>
+    <li><strong>Resistance to turning is a tensor</strong>, because the two cross products in
+        <code>L = Σ m r × (ω × r)</code> do not cancel into a scalar. The outer product is where a
+        cross product becomes a matrix, and that is the step the whole derivation turns on.</li>
+    <li><strong>A derivation tells you what to compute, not how.</strong>
+        <code>|r|² 1 − r ⊗ r</code> returns exactly zero for a plank in <code>float</code>, and
+        <code>−[r]ₓ[r]ₓ</code> — the same algebra — returns the right answer and is faster.</li>
+    <li><strong>A tensor is about a point and in a basis.</strong> The parallel-axis theorem moves
+        the point and only works from the centre of mass; <code>R I Rᵀ</code> changes the basis and
+        has a plausible wrong twin that passes every structural test there is.</li>
+    <li><strong>An orientation is not a vector</strong>, so it does not integrate by addition. The
+        update that replaces it inflates the quaternion by <code>(ωh)²/8</code> and turns short by
+        <code>(ωh)²/12</code>, both predictable before measurement.</li>
+    <li><strong><code>L</code> is conserved and <code>ω</code> is not</strong>, which is a fact about
+        <code>I_world</code> changing rather than about anything acting on the body — and the
+        reachable range of <code>|ω|</code> is derivable by hand, because both conserved quantities
+        are linear in <code>Lᵢ²</code>.</li>
+    <li><strong>The gyroscopic term is the price of a state variable.</strong> Store the momentum and
+        it vanishes from the equations — and conserving the right quantity is still not enough,
+        because the body can do the wrong thing with it.</li>
+    <li><strong>Two of a body's three principal axes are stable and one is not</strong>, which is
+        decided by nothing more than the ordering of three numbers, and is why a thrown book flips.</li>
+  </ul>
+
+  <p>
+    And the measurement worth remembering is §12's, because it is the shape of most real
+    optimisations: the step was twenty times slower than 8.2's, and the largest single cause was a
+    rotation matrix being built twice on the same quaternion, twenty lines apart, in two functions
+    that were each perfectly reasonable on their own.
+  </p>
+
+  <p>
+    <strong>Next</strong> is Lesson 8.4, and the module turns a corner. Everything from 8.1 to here
+    has been about a single body moving on its own; from 8.4 onward, bodies start to notice each
+    other. It opens with the cheapest questions — does this sphere overlap that one, does this
+    axis-aligned box overlap that one — and then the Separating Axis Theorem, which answers it for
+    boxes that are not axis-aligned and is one of the most useful ideas in the module. The
+    <code>point_velocity</code> and <code>add_impulse_at</code> we built today are what 8.9 will
+    apply the answers with.
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul>
+    <li><strong>Baraff, <em>Physically Based Modeling: Rigid Body Simulation</em></strong> (SIGGRAPH
+        course notes, freely available) — the canonical derivation of everything in §4 through §9,
+        and notably the one that uses the momentum formulation of §9.3 as its primary state. Read
+        parts I and II; the numbered equations map almost one-to-one onto
+        <code>inertia.hpp</code>.</li>
+    <li><strong>Catto, <em>Numerical Methods</em> and <em>Soft Constraints</em></strong> (GDC) — the
+        practical side of §9, including why engines integrate the way they do and what they give up.
+        Catto's Box2D writings are the clearest explanation anywhere of the gap between a correct
+        integrator and a shippable one.</li>
+    <li><strong>Goldstein, <em>Classical Mechanics</em>, chapter 5</strong> — the inertia tensor,
+        principal axes, Euler's equations and the Poinsot construction, which is the geometric
+        picture behind figure 8. Heavier than this lesson and worth it if you want the tumble in
+        full.</li>
+    <li><strong>Golub &amp; Van Loan, <em>Matrix Computations</em>, §8.5</strong> — the symmetric
+        eigenvalue problem, for exercise 4.</li>
+    <li><strong>Higham, <em>Accuracy and Stability of Numerical Algorithms</em>, chapter 1</strong> —
+        catastrophic cancellation, which is §4.4's subject, done properly and with a great deal more
+        rigour than one worked example.</li>
+    <li><strong>Terzopoulos/Witkin's and Bullet's source</strong> — specifically
+        <code>btRigidBody::computeGyroscopicImpulseImplicit_Body</code>, which is §9.2's Newton step
+        as a shipping engine writes it (⚠ VERIFY the exact spelling against the current headers).</li>
+    <li><strong>"Dzhanibekov effect"</strong> — the original orbital footage is thirty seconds long
+        and worth watching once, because a wing-nut flipping in free fall is more convincing than any
+        amount of §10.</li>
+  </ul>

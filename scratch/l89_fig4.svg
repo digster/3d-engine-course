@@ -1,0 +1,92 @@
+<svg viewBox="0 0 980 500" role="img" aria-labelledby="f89d-t f89d-d">
+  <title id="f89d-t">Restitution applied to a velocity that already contains gravity</title>
+  <desc id="f89d-d">Left: ten bounce heights on a logarithmic axis. The closed form e to the power 2n times the first peak is drawn as a dashed line; a run with the restitution bias set tracks it down to a millimetre, while a run without the bias climbs away from it and flattens out. Right: a table of the predicted and measured terminal bounce speeds at three restitutions, which agree exactly at 0.5 and 0.8, and an explanation of the fixed point e times g times h over one minus e that the uncorrected bounce converges to.</desc>
+  <defs>
+    <marker id="e-i-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-f89d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<rect x="66" y="64" width="470" height="280" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="66" y="32" class="sm" text-anchor="start">Ten bounces, against the closed form e²ⁿ·h₀</text>
+<text x="66" y="50" class="xs muted" text-anchor="start">e = 0.80, 60 Hz. The purple line is arithmetic, not a simulation.</text>
+<line x1="66" y1="331.05962417370006" x2="536" y2="331.05962417370006" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="335.05962417370006" class="xs muted" text-anchor="end">0.01 m</text>
+<line x1="66" y1="197.52981208685003" x2="536" y2="197.52981208685003" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="201.52981208685003" class="xs muted" text-anchor="end">0.1 m</text>
+<line x1="66" y1="64.0" x2="536" y2="64.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="68.0" class="xs muted" text-anchor="end">1 m</text>
+<text x="80.0" y="362" class="xs muted" text-anchor="middle">0</text>
+<text x="129.4736842105263" y="362" class="xs muted" text-anchor="middle">1</text>
+<text x="178.94736842105263" y="362" class="xs muted" text-anchor="middle">2</text>
+<text x="228.42105263157896" y="362" class="xs muted" text-anchor="middle">3</text>
+<text x="277.89473684210526" y="362" class="xs muted" text-anchor="middle">4</text>
+<text x="327.36842105263156" y="362" class="xs muted" text-anchor="middle">5</text>
+<text x="376.8421052631579" y="362" class="xs muted" text-anchor="middle">6</text>
+<text x="426.3157894736842" y="362" class="xs muted" text-anchor="middle">7</text>
+<text x="475.7894736842105" y="362" class="xs muted" text-anchor="middle">8</text>
+<text x="525.2631578947369" y="362" class="xs muted" text-anchor="middle">9</text>
+<text x="301.0" y="382" class="xs muted" text-anchor="middle">bounce number</text>
+<path d="M 80.00,76.91 L 129.47,102.79 L 178.95,128.68 L 228.42,154.56 L 277.89,180.44 L 327.37,206.32 L 376.84,232.20 L 426.32,258.08 L 475.79,283.96 L 525.26,309.83" fill="none" stroke="#9b7ede" stroke-width="2.4" stroke-dasharray="6 4"/>
+<path d="M 80.00,73.09 L 129.47,95.36 L 178.95,117.38 L 228.42,138.27 L 277.89,157.21 L 327.37,173.29 L 376.84,190.60 L 426.32,202.84 L 475.79,217.11 L 525.26,230.65" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<path d="M 80.00,76.91 L 129.47,102.88 L 178.95,131.21 L 228.42,158.24 L 277.89,184.71 L 327.37,212.06 L 376.84,239.19 L 426.32,269.30 L 475.79,291.98 L 525.26,321.95" fill="none" stroke="#5ac878" stroke-width="2.0"/>
+<circle cx="80.0" cy="73.1" r="2.8" fill="#e05c5c"/>
+<circle cx="129.5" cy="95.4" r="2.8" fill="#e05c5c"/>
+<circle cx="178.9" cy="117.4" r="2.8" fill="#e05c5c"/>
+<circle cx="228.4" cy="138.3" r="2.8" fill="#e05c5c"/>
+<circle cx="277.9" cy="157.2" r="2.8" fill="#e05c5c"/>
+<circle cx="327.4" cy="173.3" r="2.8" fill="#e05c5c"/>
+<circle cx="376.8" cy="190.6" r="2.8" fill="#e05c5c"/>
+<circle cx="426.3" cy="202.8" r="2.8" fill="#e05c5c"/>
+<circle cx="475.8" cy="217.1" r="2.8" fill="#e05c5c"/>
+<circle cx="525.3" cy="230.6" r="2.8" fill="#e05c5c"/>
+<circle cx="80.0" cy="76.9" r="2.8" fill="#5ac878"/>
+<circle cx="129.5" cy="102.9" r="2.8" fill="#5ac878"/>
+<circle cx="178.9" cy="131.2" r="2.8" fill="#5ac878"/>
+<circle cx="228.4" cy="158.2" r="2.8" fill="#5ac878"/>
+<circle cx="277.9" cy="184.7" r="2.8" fill="#5ac878"/>
+<circle cx="327.4" cy="212.1" r="2.8" fill="#5ac878"/>
+<circle cx="376.8" cy="239.2" r="2.8" fill="#5ac878"/>
+<circle cx="426.3" cy="269.3" r="2.8" fill="#5ac878"/>
+<circle cx="475.8" cy="292.0" r="2.8" fill="#5ac878"/>
+<circle cx="525.3" cy="322.0" r="2.8" fill="#5ac878"/>
+<line x1="66.0" y1="398.0" x2="86.0" y2="398.0" stroke="#9b7ede" stroke-width="2.4" fill="none"/>
+<text x="94" y="402" class="xs" text-anchor="start">e²ⁿ·h₀ — the closed form</text>
+<line x1="66.0" y1="415.0" x2="86.0" y2="415.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="94" y="419" class="xs" text-anchor="start">restitution_bias set</text>
+<line x1="66.0" y1="432.0" x2="86.0" y2="432.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="94" y="436" class="xs" text-anchor="start">bias left at zero</text>
+<text x="590" y="32" class="sm" text-anchor="start">Where the uncorrected bounce is GOING</text>
+<text x="590" y="62" class="xs muted" text-anchor="start">e</text>
+<text x="764" y="62" class="xs muted" text-anchor="end">predicted</text>
+<text x="874" y="62" class="xs muted" text-anchor="end">measured</text>
+<text x="964" y="62" class="xs muted" text-anchor="end">hop mm</text>
+<line x1="590" y1="70.0" x2="970" y2="70.0" class="grid" stroke-width="1.0"/>
+<text x="590" y="87.0" class="xs" text-anchor="start">0.50</text>
+<text x="764" y="87.0" class="xs mono" text-anchor="end">0.1635</text>
+<text x="874" y="87.0" class="xs mono" text-anchor="end">0.1635</text>
+<text x="964" y="87.0" class="xs mono" text-anchor="end">1.4</text>
+<text x="590" y="104.0" class="xs" text-anchor="start">0.80</text>
+<text x="764" y="104.0" class="xs mono" text-anchor="end">0.6540</text>
+<text x="874" y="104.0" class="xs mono" text-anchor="end">0.6540</text>
+<text x="964" y="104.0" class="xs mono" text-anchor="end">21.8</text>
+<text x="590" y="121.0" class="xs" text-anchor="start">0.95</text>
+<text x="764" y="121.0" class="xs mono" text-anchor="end">3.1065</text>
+<text x="874" y="121.0" class="xs mono" text-anchor="end">3.3759</text>
+<text x="964" y="121.0" class="xs mono" text-anchor="end">580.9</text>
+<text x="590" y="174" class="xs" text-anchor="start">A semi-implicit step applies gravity BEFORE the</text>
+<text x="590" y="190" class="xs" text-anchor="start">solver looks at the contact, so the approach speed</text>
+<text x="590" y="206" class="xs" text-anchor="start">is already too large by g·h = 16.35 cm/s.</text>
+<text x="590" y="222" class="xs" text-anchor="start">Restitution returns e times a speed that includes</text>
+<text x="590" y="238" class="xs" text-anchor="start">it, every bounce, and the error does not shrink as</text>
+<text x="590" y="254" class="xs" text-anchor="start">the bounce does.</text>
+<text x="590" y="284" class="xs muted" text-anchor="start">So the bounce has a FIXED POINT: v = e·(v + g·h)</text>
+<text x="590" y="300" class="xs muted" text-anchor="start">solves to e·g·h/(1 − e). The ball stops decaying</text>
+<text x="590" y="316" class="xs muted" text-anchor="start">and hops forever — 2.2 cm at e = 0.8, and 58 cm at</text>
+<text x="590" y="332" class="xs muted" text-anchor="start">e = 0.95, which no restitution threshold will</text>
+<text x="590" y="348" class="xs muted" text-anchor="start">hide. Subtracting the bias removes it exactly.</text>
+<text x="66" y="478" class="xs muted" text-anchor="start">§6 and harness §D. The predicted and measured terminal speeds agree to 1.000 at e = 0.5 and e = 0.8; the 0.95 row has not finished converging in the thirty seconds it was given.</text>
+</svg>

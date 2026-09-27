@@ -1,0 +1,618 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-03-logging-and-errors.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.3 — Logging, Assertions, and Errors Without Exceptions</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-05-asset-system.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.5 — The Asset System v1</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.4</div>
+    <h1>Handles: Generational Indices</h1>
+    <p class="deck">
+      Every resource in this engine is passed around as a pointer, a reference, or a
+      <code>std::span</code>, and that works for exactly one reason: <strong>nothing is ever
+      destroyed.</strong> Three different files say so in their own comments, each admitting the
+      same thing — that they are correct by accident of lifetime rather than by design. Next
+      lesson's asset system can unload, and the moment it can, every one of those pointers
+      becomes a question nobody can answer. Today we replace them with two integers that
+      <em>can</em> answer it, derive the design from the three ways a reference goes wrong, and
+      find out what it costs — in bytes, in nanoseconds, and in one honest failure the design
+      buys down rather than eliminates.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-12-wireframe-mesh.html">2.12 — Wireframe Meshes</a>,
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="04-08-porting-the-scene.html">4.8 — Porting the Scene</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor</a>,
+          <a href="05-03-logging-and-errors.html">5.3 — Logging, Assertions, and Errors</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/core/handle.hpp</code>,
+            <code>engine/include/engine/core/pool.hpp</code>,
+            <code>engine/include/engine/gfx/mesh.hpp</code>,
+            <code>engine/src/gfx/mesh.cpp</code>,
+            <code>engine/include/engine/gfx/scene.hpp</code>,
+            <code>engine/include/engine/gfx/soft_renderer.hpp</code>,
+            <code>engine/src/gfx/soft_renderer.cpp</code>,
+            <code>demos/common/demo_scene.hpp</code>, <code>demos/common/demo_scene.cpp</code>,
+            <code>demos/hello_cube/main.cpp</code>, <code>demos/sandbox/main.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Geometry is owned in <strong>one place</strong> and referred to by a four-byte
+            handle. A stale reference is <strong>detected and counted</strong> instead of
+            dereferenced; the storage may move, grow and compact underneath it. Golden still
+            byte-identical.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the three distinct ways a reference into a container goes wrong, and say which
+          designs survive which.</li>
+      <li>…explain why replacing a pointer with a bare index fixes one failure and makes another
+          one <em>worse</em>.</li>
+      <li>…derive the generation counter from the ABA problem rather than being told about
+          it.</li>
+      <li>…choose a bit budget for a handle with arithmetic instead of a shrug, and state what
+          the chosen budget does <em>not</em> protect you from.</li>
+      <li>…implement a generational pool with dense storage, O(1) removal by swap-and-patch, and
+          an occupancy flag that costs nothing.</li>
+      <li>…use a phantom template parameter to make two handle types uninterchangeable at
+          compile time.</li>
+      <li>…state the one rule that keeps a handle-based API honest — <em>resolve late, use
+          immediately, never store</em> — and recognise the code that breaks it.</li>
+      <li>…argue what handles buy beyond safety: relocatable storage, trivial serialization, and
+          a reference small enough to put in a component.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-ticket">The cloakroom ticket</a></li>
+          <li><a href="#intuition-question">The question a pointer cannot answer</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-failures">Three failures, in order</a></li>
+          <li><a href="#theory-index">The index alone, and why it is worse</a></li>
+          <li><a href="#theory-generation">The generation, derived</a></li>
+          <li><a href="#theory-budget">The bit budget, with numbers</a></li>
+          <li><a href="#theory-typed">Typed handles, for free</a></li>
+          <li><a href="#theory-buys">What it buys that is not safety</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-handle">The handle</a></li>
+          <li><a href="#impl-anatomy">The pool: three arrays</a></li>
+          <li><a href="#impl-insert">insert, and the free list</a></li>
+          <li><a href="#impl-remove">remove: swap and patch</a></li>
+          <li><a href="#impl-resolve">contains, get, and the one rule</a></li>
+          <li><a href="#impl-mesh">Converting the mesh subsystem</a></li>
+          <li><a href="#impl-renderer">The renderer resolves at the boundary</a></li>
+          <li><a href="#impl-cache">Five tests become two</a></li>
+        </ol>
+      </li>
+      <li><a href="#cost">What It Cost, and What It Bought</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    This engine already knows what is wrong with it. Not in a design document — in its own
+    source, in three separate files, written by us at three different times, each admitting the
+    same thing without quite naming it.
+  </p>
+
+  <p>
+    Here is <code>hello_cube</code>, our smallest program, explaining why one of its members is a
+    member:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/hello_cube/main.cpp — before this lesson</span></figcaption>
+    <pre><code class="lang-cpp">// `cube_` owns those arrays and `view()` hands out a non-owning `mesh`
+// that borrows them — so the data must outlive every frame that uses it,
+// which is why it is a member and not a local.
+cube_ = engine::with_normals(engine::cube_mesh(), engine::normal_style::flat);
+object_.geometry = cube_.view();</code></pre>
+  </figure>
+
+  <p>
+    Read the second clause again: <em>the data must outlive every frame that uses it.</em> That
+    is not a design. It is a promise, enforced by nothing, checked by nobody, and true only for
+    as long as this file stays ninety-six lines long. Nothing in the type system knows about it.
+    Move that line into a helper function one afternoon and the program is broken in a way that
+    compiles cleanly, runs, and usually looks fine.
+  </p>
+
+  <p>
+    Here is the demo's model loader, which goes further and names the hazard outright:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.hpp — before this lesson</span></figcaption>
+    <pre><code class="lang-cpp">/// **`data` owns the arrays and `view()` borrows them**, which is the hazard this
+/// type exists to make obvious. Reloading on [L] clears the vectors, so any `mesh`
+/// taken before the reload now points at freed memory. The demo is safe because
+/// `build_scene` runs after key handling and re-takes the view every frame — but
+/// "safe because of the order two things happen in" is exactly the kind of safety
+/// Module 5's handles replace with something a compiler can check.</code></pre>
+  </figure>
+
+  <p>
+    And here is Lesson 4.8's mesh cache, which is the most damning of the three, because it
+    contains a workaround rather than a comment:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/sandbox/main.cpp — before this lesson</span></figcaption>
+    <pre><code class="lang-cpp">// The pointer AND the vertex count AND the style, because a
+// `std::vector` that was rebuilt in place keeps its address and
+// changes its contents. That is precisely the bug a handle exists to
+// make impossible, and the check below is the shabby version of one.
+if (slots_[i].key == key
+    && slots_[i].style == style
+    && slots_[i].cpu.vertices.size() >= m.vertices.size()
+    && slots_[i].source_vertices == m.vertices.size()
+    && slots_[i].source_indices == m.indices.size())</code></pre>
+  </figure>
+
+  <p>
+    Five comparisons to answer one question — <em>is this the same mesh I saw last frame?</em> —
+    and four of them exist only because the first one cannot be trusted. An address is not an
+    identity. It is a location, and locations get reused.
+  </p>
+
+  <p>
+    Every one of these three has survived so far because of a single fact that will not hold much
+    longer: <strong>nothing in this engine is ever destroyed.</strong> The cube is a member of
+    <code>main</code>'s app object. The built-in shapes are <code>inline constexpr</code> arrays
+    with program lifetime. The floor and the loaded model are locals of a function that runs
+    until the window closes. There is no unload, no eviction, no level change, and no streaming.
+    A dangling pointer needs something to be freed, and nothing is.
+  </p>
+
+  <p>
+    Lesson 5.5 builds the asset system. An asset system that cannot unload is a lookup table with
+    a grand name, so it will unload — and the instant it does, every borrowed pointer in this
+    codebase becomes a question:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The question</span>
+    <p><strong>Is this still valid?</strong> A pointer cannot answer it. Not by being careful,
+       not with an assertion, not with a debugger. A pointer to freed memory holds exactly the
+       same bits it held when the memory was alive, and those bits will happily name whatever
+       moved in afterwards. From the pointer's side, <em>nothing happened.</em></p>
+  </div>
+
+  <p>
+    So we need a reference that can answer. This lesson builds it, converts one subsystem to it
+    end to end, and proves the conversion changed nothing observable — the same discipline
+    Lessons 5.1, 5.2 and 5.3 each used, and for the same reason: a refactor's whole claim is that
+    nothing changed, and a claim with no way to fail is not a claim.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-ticket"><span class="num">2.1</span>The cloakroom ticket</h3>
+
+  <p>
+    You hand your coat to a theatre cloakroom and get a small numbered ticket. The ticket is not
+    your coat. It is not a description of your coat, and it does not get bigger if your coat is a
+    parka. It is a number, and it works because the cloakroom keeps a peg for every number.
+  </p>
+
+  <p>
+    Notice what the ticket lets the cloakroom do that a "here is exactly where I hung it" note
+    would not. The attendant can move your coat to a different peg, shuffle everything to make
+    room for a coach party, or rebuild the entire rail during the interval — and your ticket is
+    still correct, because it names a <em>relationship</em> the cloakroom maintains rather than a
+    <em>location</em> you were told about once.
+  </p>
+
+  <p>
+    Now the part that turns this from a nice analogy into an engineering design. Suppose you lose
+    your ticket, someone finds it, collects your coat, and later a different customer is handed
+    the same numbered ticket for peg 17. You find your old ticket in a pocket and present it. A
+    naive cloakroom hands you a stranger's coat with complete confidence — the number is valid,
+    peg 17 has something on it, everything checks out.
+  </p>
+
+  <p>
+    A real cloakroom does not have this problem, because a real ticket has two things printed on
+    it: a peg number and something identifying <em>this visit</em> — a date, a colour for the
+    day, a serial. The attendant checks both. Peg 17 currently holds visit 4; your ticket says
+    visit 3; you are politely told that your coat is not here. <strong>That second number is the
+    entire idea of this lesson</strong>, and everything below is the same thought expressed in
+    thirty-two bits.
+  </p>
+
+  <h3 id="intuition-question"><span class="num">2.2</span>The question a pointer cannot answer</h3>
+
+  <p>
+    Figure 1 puts the two side by side and asks each of them the only question that matters.
+  </p>
+
+@@FIG_QUESTION@@
+
+  <p>
+    The asymmetry is total, and it is worth being precise about <em>why</em>, because "pointers
+    are dangerous" is folklore and this is not. A pointer is a value whose meaning depends on a
+    fact that is not stored anywhere in it: whether the allocation it names is still the
+    allocation it was created against. That fact lives in the allocator, in the container, in the
+    program's control flow — everywhere except in the sixty-four bits you are holding. So the
+    check you would like to write cannot be written, because the value you would check is not
+    there to check.
+  </p>
+
+  <p>
+    A handle stores that fact. Not the whole fact — it stores a <em>fingerprint</em> of it, a
+    small number that changes whenever the answer changes. And a small number that changes is all
+    a check needs.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-failures"><span class="num">3.1</span>Three failures, in order</h3>
+
+  <p>
+    We are going to derive the design rather than be handed it, and the way to derive it is to
+    enumerate what can go wrong. There are exactly three ways a reference into a container stops
+    meaning what it meant, and they are genuinely different from one another — different causes,
+    different symptoms, different fixes.
+  </p>
+
+  <p>
+    <strong>Failure 1 — dangling.</strong> The object was destroyed. The memory it occupied has
+    been returned to the allocator, or the vector holding it was cleared. This is the one
+    everybody knows. Its symptom is the friendliest of the three: reading freed memory often
+    crashes, and a crash is a bug that reports itself. Often, though, is not always — freed
+    memory frequently still contains the old bytes, so the program reads correct-looking data and
+    works fine until the day something else is allocated there.
+  </p>
+
+  <p>
+    <strong>Failure 2 — aliasing.</strong> The object was destroyed <em>and something else took
+    its place.</em> The memory is live, well-formed, and belongs to a different object of the
+    same type. There is no crash to hope for. The program reads a perfectly valid mesh — just
+    not yours. In concurrent programming this pattern has a name, the <strong>ABA problem</strong>:
+    you look at a location, it says A; you look again, it says A; and in between it went A → B →
+    A, so both observations were true and your conclusion was false.
+  </p>
+
+  <p>
+    <strong>Failure 3 — relocation.</strong> Nothing was destroyed at all. The container grew,
+    reallocated, and moved every element to a new address. Your pointer names memory that is no
+    longer part of the container. This one is peculiarly nasty because <em>nobody did anything
+    wrong</em>: appending to a <code>std::vector</code> is not a suspicious act, and the code that
+    invalidated your pointer may be in a different file written by a different person for an
+    unrelated reason.
+  </p>
+
+  <p>
+    Figure 2 is the whole derivation in one picture: three failures down the side, three
+    candidate designs across the top.
+  </p>
+
+@@FIG_FAILURES@@
+
+  <h3 id="theory-index"><span class="num">3.2</span>The index alone, and why it is worse</h3>
+
+  <p>
+    The obvious first move is to stop storing an address and store a position instead. Keep the
+    meshes in one array; a reference becomes "element 17". This is a real improvement and it is
+    where a lot of code stops.
+  </p>
+
+  <p>
+    Look at what it fixes. <strong>Relocation is gone entirely.</strong> The vector can grow,
+    reallocate and move every byte it owns; element 17 is still element 17, because an index
+    names a position in a sequence rather than a location in memory. That is a genuine and
+    permanent win, and it is the reason indices show up in engine code long before generations
+    do.
+  </p>
+
+  <p>
+    Look at what it does to dangling. Element 17 of an array with 12 elements is out of range,
+    which a bounds check catches, so the <em>easy half</em> of dangling becomes detectable. Good.
+  </p>
+
+  <p>
+    Now look at aliasing, and here is the turn. Before, an aliased pointer at least had a chance
+    of pointing at freed memory and crashing. With an index, there is no memory to be freed and
+    nothing to crash: slot 17 was emptied, slot 17 was refilled, and your index now names a live,
+    valid, well-formed object that has nothing to do with what you asked for. <strong>A bare
+    index makes failure 2 strictly worse</strong>, by converting a probable crash into a
+    guaranteed silent wrong answer.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why this matters more than it sounds</span>
+    <p>This is not a theoretical concern in an engine. Slot reuse is not an unlucky accident —
+       it is the <em>design</em>. Pools recycle slots deliberately, because recycling is what
+       makes them cheap. So the aliasing case is the common case: unload a level, load the next
+       one, and every slot in the pool is reused within a second. Any scheme that relies on slots
+       not being reused has picked a fight with its own container.</p>
+  </div>
+
+  <h3 id="theory-generation"><span class="num">3.3</span>The generation, derived</h3>
+
+  <p>
+    So the index is right and incomplete. It answers <em>where</em>, and we need one more piece
+    of information: <em>which occupant</em>. The cloakroom's answer was a second number that
+    changes with each visit; ours is the same, and it needs exactly two properties.
+  </p>
+
+  <ol>
+    <li><strong>It must change whenever the occupant changes.</strong> Otherwise it does not
+        distinguish occupants, which is its only job.</li>
+    <li><strong>It must be storable in the handle and in the slot.</strong> Otherwise there is
+        nothing to compare.</li>
+  </ol>
+
+  <p>
+    The smallest thing satisfying both is a counter. Give every slot a counter that starts at one
+    and increments each time the slot is vacated. A handle records the counter's value at the
+    moment it was issued. Resolution compares the two:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \text{valid}(h) \;=\; \big(h_{\text{index}} &lt; N\big) \;\wedge\; \text{occupied}\big(h_{\text{index}}\big) \;\wedge\; \big(h_{\text{gen}} = \text{gen}[h_{\text{index}}]\big) \]</span>
+    <span class="eq-plain">valid(h) = (index &lt; slot count) AND (slot is occupied) AND (handle generation == slot generation)</span>
+  </div>
+
+  <p>
+    Three tests, and each rejects one of the three failures. Let us push a real sequence through
+    it by hand, because the mechanism is small enough that seeing every number removes all doubt.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">A worked sequence of pool operations, showing the slot's
+             generation, the handle issued, and what an older handle resolves to.</caption>
+    <thead>
+      <tr><th>Operation</th><th>slot 0 generation</th><th>handle issued</th>
+          <th><code>get(first)</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>insert(torus)</code></td><td>1</td><td><code>first</code> = gen&nbsp;1, idx&nbsp;0</td><td>the torus ✓</td></tr>
+      <tr><td><code>remove(first)</code></td><td><strong>2</strong></td><td>—</td><td><strong>nullptr</strong> — 1 ≠ 2</td></tr>
+      <tr><td><code>insert(cube)</code></td><td>2</td><td><code>second</code> = gen&nbsp;2, idx&nbsp;0</td><td><strong>nullptr</strong> — 1 ≠ 2</td></tr>
+      <tr><td><code>remove(second)</code></td><td><strong>3</strong></td><td>—</td><td><strong>nullptr</strong> — 1 ≠ 3</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Note row three, which is the entire point of the design. The slot is live. The index is in
+    range. A bare index would have returned the cube with total confidence. The generation
+    mismatch is the only thing standing between you and somebody else's geometry.
+  </p>
+
+  <p>
+    Note also <em>when</em> the counter is incremented: on <strong>removal</strong>, not on
+    insertion. That is the detail that makes the scheme work with no extra state. Bump on removal
+    and a freed slot immediately holds a generation that no outstanding handle carries, so the
+    interval during which the slot is empty is already covered — and the next insertion can hand
+    out the bumped value unchanged. Bump on insertion instead and there is a window, between the
+    free and the next allocation, in which the old handle still matches; you would need a
+    separate "is this occupied" flag to cover it, and a flag you have to remember to check is a
+    bug waiting for a hurried afternoon.
+  </p>
+
+  <h3 id="theory-budget"><span class="num">3.4</span>The bit budget, with numbers</h3>
+
+  <p>
+    Two numbers in one handle means splitting a word, and how you split it is a real design
+    decision with a real trade. Do the arithmetic; do not pick by feel.
+  </p>
+
+@@FIG_BITS@@
+
+  <p>
+    We take <strong>32 bits, split 20 index / 12 generation</strong>. Twenty bits of index gives
+    1,048,576 slots, which is more meshes than any scene this course will build and more entities
+    than the ECS in Lesson 5.8 will ever hold; something else in the engine breaks long before a
+    million of anything. Twelve bits of generation gives values 0 to 4,095, of which we
+    <strong>reserve zero</strong>, leaving 4,095 usable.
+  </p>
+
+  <p>
+    Reserving zero is not a rounding error, it is a feature that costs one value and buys
+    something you would otherwise write code for. A live slot's generation is never zero, so a
+    handle whose generation field is zero can never match anything — which means an all-bits-zero
+    handle is the null handle. And <em>that</em> means a value-initialised member, a
+    default-constructed <code>std::vector&lt;handle&gt;</code>, and a struct zeroed by
+    <code>memset</code> are all full of nulls without a line of code or a constructor call.
+  </p>
+
+  <p>
+    Now the uncomfortable question: is 4,095 enough? A slot's generation repeats after 4,095
+    removals <em>of that same slot</em>, and when it repeats, an old handle from the first cycle
+    starts resolving again — to the wrong object. So compute the time, at plausible rates:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Time until one slot's generation repeats, at four recycle
+             rates.</caption>
+    <thead>
+      <tr><th>That one slot is recycled…</th><th>Generations per second</th>
+          <th>Time until it repeats</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>once per frame at 60&nbsp;Hz</td><td>60</td><td>68 seconds</td></tr>
+      <tr><td>a hundred times a second</td><td>100</td><td>41 seconds</td></tr>
+      <tr><td>once a second</td><td>1</td><td>68 minutes</td></tr>
+      <tr><td>once per level load</td><td>0.01</td><td>4.7 days</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Sixty-eight seconds sounds alarming until you notice what has to happen for it to hurt: a
+    handle must be <em>held, unused, across 4,095 recycles of its own slot</em> and then
+    dereferenced. Holding a reference to an asset you never touch for a minute while that exact
+    asset slot churns every frame is not a shape real code takes. For assets — meshes, textures,
+    sounds, loaded at level boundaries and counted in hundreds — twelve bits is enormous.
+  </p>
+
+  <p>
+    For <em>entities</em> in a game spawning and killing thousands of bullets a second it is
+    worth thinking about, and there are two mitigations, neither of which we need today but both
+    of which you should know:
+  </p>
+
+  <ul>
+    <li><strong>A FIFO free list instead of LIFO.</strong> We reuse the most recently freed slot,
+        which is warmest in cache — and which concentrates every recycle on one or two slots.
+        Reuse the <em>oldest</em> freed slot instead and the churn spreads across every slot in
+        the pool, multiplying the time-to-wrap by the number of slots. That is the standard fix,
+        and it costs one data structure change.</li>
+    <li><strong>Sixty-four bits, split 32/32.</strong> Wrap-around becomes unreachable in any
+        program that will ever run. It also doubles the size of every handle in every component
+        of every entity, which in Lesson 5.8's ECS is a real number of cache lines for a hazard
+        we can measure.</li>
+  </ul>
+
+  <p>
+    We take the 32-bit split, and — this is the part that turns an assumption into an engineering
+    decision — the pool <strong>counts its wraps</strong>. If <code>generation_wraps()</code>
+    ever leaves zero, the assumption has been falsified by the program itself and there are two
+    known fixes on the shelf. An assumption nobody measures is a bug with a long fuse.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Not an invention</span>
+    <p>This exact split — 20 bits of index, 12 of version, in one 32-bit word — is
+       <a href="https://github.com/skypjack/entt">EnTT</a>'s default entity layout, and EnTT is
+       the most widely used C++ ECS there is. Bitsquid's engine used a 32-bit id with a similar
+       division. When your arithmetic lands where several independent teams landed, that is worth
+       knowing; when it lands somewhere else, that is worth explaining.</p>
+  </div>
+
+  <h3 id="theory-typed"><span class="num">3.5</span>Typed handles, for free</h3>
+
+  <p>
+    A handle is an integer. Integers are interchangeable, and interchangeable references to
+    different kinds of thing are a mistake generator: pass a texture handle where a mesh handle
+    was wanted and the lookup will succeed — different pool, same integer, and the pool has no
+    idea it was asked the wrong question.
+  </p>
+
+  <p>
+    The fix costs nothing at runtime. Make the handle a template whose parameter is never
+    stored:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the phantom parameter, in miniature</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename T&gt;
+struct handle { std::uint32_t bits = 0; };
+
+using mesh_handle = handle&lt;mesh_data&gt;;
+using texture_handle = handle&lt;texture&gt;;   // a DIFFERENT type, same 4 bytes</code></pre>
+  </figure>
+
+  <p>
+    <code>T</code> appears nowhere in the layout. <code>sizeof(handle&lt;anything&gt;)</code> is
+    4, the two types are trivially copyable, and — a genuinely useful side effect —
+    <code>T</code> may be <em>incomplete</em>, so a header can declare
+    <code>handle&lt;material&gt;</code> without ever seeing what a material is. What the parameter
+    buys is that the compiler refuses to convert one to the other, so a whole category of mistake
+    becomes a compile error rather than a wrong picture.
+  </p>
+
+  <p>
+    This is the same argument Lesson 5.1 made about <code>engine::engine</code>: a distinction
+    the compiler can see costs nothing and catches the mistake before it can run. It is worth
+    naming the pattern, because you will meet it again — a type that exists only to be different
+    from another type is one of the cheapest tools C++ gives you.
+  </p>
+
+  <h3 id="theory-buys"><span class="num">3.6</span>What it buys that is not safety</h3>
+
+  <p>
+    If safety were the only benefit, handles would be a defensive measure — the kind of thing you
+    argue about in code review and skip when you are busy. They are not. Three of the payoffs
+    have nothing to do with correctness, and each one is load-bearing for a later module.
+  </p>
+
+  <p>
+    <strong>Storage becomes relocatable.</strong> Nothing outside the pool holds an address, so
+    the pool may reallocate, reorder, defragment or compact whenever it likes. Every design
+    option that a raw pointer forbids is now open. Our pool exercises this on <em>every single
+    removal</em>, and does it deliberately: §4.4's swap-and-patch moves a live object to a new
+    address while a handle to it keeps working, which is the only real proof that a handle is not
+    just a pointer wearing a costume.
+  </p>
+
+  <p>
+    <strong>Serialization becomes trivial.</strong> A handle is a 32-bit integer with no
+    relationship to any address. Write it, read it, done — no pointer fixups, no relocation
+    tables, no "which base address was this file saved against". Module 9's scene format is a
+    tractable problem largely because of this; a scene graph full of raw pointers is a serious
+    exercise in graph surgery, and a scene graph full of handles is a memcpy.
+  </p>
+
+  <p>
+    <strong>It is small enough to put in a component.</strong> Four bytes, trivially copyable, no
+    lifetime relationship to anything. That is exactly the shape a component in Lesson 5.8's ECS
+    must have — and we can quantify it right now, before the ECS exists.
+    <code>engine::scene_object</code> held a <code>mesh</code>, which is four
+    <code>std::span</code>s: eight pointers, <strong>64 bytes</strong>. It now holds four. The
+    struct went from 160 bytes to 96, from two and a half cache lines per object to one and a
+    half, and Lesson 5.6 is entirely about why that sentence is a performance statement and not a
+    tidiness one.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And the cost, stated plainly</span>
+    <p>A handle is meaningless without its pool. A pointer carries its own context; a handle
+       carries half of one, and the other half has to be reachable at the point of use. So
+       <code>collect_triangles</code> grows a parameter — the pool — and so does every other
+       function that draws a <code>scene_object</code>. That is a real API cost, it is paid at
+       every call site, and §4.7 argues why we pay it in the open rather than hiding it behind a
+       global.</p>
+  </div>

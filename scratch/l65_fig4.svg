@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 382" role="img" aria-labelledby="l65f4-t l65f4-d">
+  <title id="l65f4-t">The cost of copying a material into every entity</title>
+  <desc id="l65f4-d">Ninety-six ring drones cycle through six tints, so there are six materials and ninety-six references to them. Storing a material in each entity costs 3456 bytes; storing a handle each and pooling the six costs 600, a 5.8 times reduction. The stronger argument is not the bytes: with copies, changing the drones' finish means finding every entity that carries it, and with handles it is a single write.</desc>
+  <defs>
+    <marker id="e-i-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l65f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="382" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="28" class="lg" text-anchor="middle">What the pool is actually for</text>
+<text x="360.0" y="50" class="sm" text-anchor="middle">96 ring drones, 6 distinct materials</text>
+<line x1="150.0" y1="70" x2="150.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="150.0" y="212" class="xs" text-anchor="middle">0</text>
+<line x1="255.0" y1="70" x2="255.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="255.0" y="212" class="xs" text-anchor="middle">864</text>
+<line x1="360.0" y1="70" x2="360.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="360.0" y="212" class="xs" text-anchor="middle">1728</text>
+<line x1="465.0" y1="70" x2="465.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="465.0" y="212" class="xs" text-anchor="middle">2592</text>
+<line x1="570.0" y1="70" x2="570.0" y2="196" class="grid" stroke-width="0.8" stroke-dasharray="2 4"/>
+<text x="570.0" y="212" class="xs" text-anchor="middle">3456</text>
+<text x="360.0" y="230" class="xs" text-anchor="middle">bytes of material component</text>
+<text x="136" y="104" class="xs" text-anchor="end">a material each</text>
+<rect x="150" y="88" width="420.0" height="30" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="580.0" y="108" class="sm" text-anchor="start">3456 B</text>
+<text x="158" y="133" class="xs" text-anchor="start">96 x 36 B</text>
+<text x="136" y="166" class="xs" text-anchor="end">a handle each</text>
+<rect x="150" y="150" width="72.91666666666667" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="232.91666666666669" y="170" class="sm" text-anchor="start">600 B</text>
+<text x="158" y="195" class="xs" text-anchor="start">96 x 4 B  +  6 x 36 B</text>
+<rect x="60" y="252" width="600" height="108" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="276" class="sm" text-anchor="middle">5.8x smaller — and that is the SIDE EFFECT.</text>
+<line x1="120" y1="290" x2="600" y2="290" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="312" class="xs" text-anchor="middle">With copies, “make the drones rougher” is a loop over the registry</text>
+<text x="360.0" y="332" class="xs" text-anchor="middle">that has to find every entity carrying that appearance.</text>
+<text x="360.0" y="352" class="sm" text-anchor="middle">With handles it is ONE WRITE.</text>
+</svg>

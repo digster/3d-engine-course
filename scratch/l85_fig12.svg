@@ -1,0 +1,258 @@
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="l85f12-t l85f12-d">
+  <title id="l85f12-t">GJK's cost against the SAT's on boxes, and how a hull's support scales with its vertex count.</title>
+  <desc id="l85f12-d">Left, four horizontal bars: the SAT's boolean test at 8.4 ns, its full test at 49.5 ns, GJK's boolean at 73.2 ns and GJK's distance at 114.7 ns. Right, a line of support-function cost against hull vertex count from 8 to 128 vertices, straight, from 3.9 ns to 51.5 ns.</desc>
+  <defs>
+    <marker id="e-i-l85f12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">What it costs, and what the cost is made of.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+2
+0
+"
+ 
+y
+=
+"
+5
+4
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+2
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+5
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="32" y="72" class="xs muted" text-anchor="start">ns per pair, 20,000 box pairs</text>
+<text x="170" y="113" class="xs" text-anchor="end">overlaps (SAT, bool)</text>
+<rect x="180" y="100" width="15.4" height="18" fill="#8f918a" fill-opacity="0.85"/>
+<text x="203.43374816983894" y="113" class="xs mono" text-anchor="start">8.4</text>
+<text x="170" y="153" class="xs" text-anchor="end">collide (SAT, MTV)</text>
+<rect x="180" y="140" width="90.6" height="18" fill="#8f918a" fill-opacity="0.85"/>
+<text x="278.550878477306" y="153" class="xs mono" text-anchor="start">49.5</text>
+<text x="170" y="193" class="xs" text-anchor="end">gjk_intersects (bool)</text>
+<rect x="180" y="180" width="134.0" height="18" fill="#5082e6" fill-opacity="0.85"/>
+<text x="322.00988286969255" y="193" class="xs mono" text-anchor="start">73.2</text>
+<text x="170" y="233" class="xs" text-anchor="end">gjk_distance (metres)</text>
+<rect x="180" y="220" width="210.0" height="18" fill="#f0961e" fill-opacity="0.85"/>
+<text x="398.0" y="233" class="xs mono" text-anchor="start">114.7</text>
+<text x="230.0" y="288" class="xs muted" text-anchor="middle">GJK is slower on boxes, and it should be</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+6
+4
+"
+ 
+y
+=
+"
+5
+4
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+3
+0
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+5
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="476" y="72" class="xs muted" text-anchor="start">a hull's support, by vertex count</text>
+<line x1="516" y1="260.0" x2="736" y2="260.0" class="grid" stroke-width="1.0"/>
+<text x="508" y="264.0" class="xs mono muted" text-anchor="end">0</text>
+<line x1="516" y1="231.40335392762577" x2="736" y2="231.40335392762577" class="grid" stroke-width="1.0"/>
+<text x="508" y="235.40335392762577" class="xs mono muted" text-anchor="end">10</text>
+<line x1="516" y1="202.80670785525155" x2="736" y2="202.80670785525155" class="grid" stroke-width="1.0"/>
+<text x="508" y="206.80670785525155" class="xs mono muted" text-anchor="end">20</text>
+<line x1="516" y1="174.21006178287735" x2="736" y2="174.21006178287735" class="grid" stroke-width="1.0"/>
+<text x="508" y="178.21006178287735" class="xs mono muted" text-anchor="end">30</text>
+<line x1="516" y1="145.6134157105031" x2="736" y2="145.6134157105031" class="grid" stroke-width="1.0"/>
+<text x="508" y="149.6134157105031" class="xs mono muted" text-anchor="end">40</text>
+<line x1="516" y1="117.01676963812886" x2="736" y2="117.01676963812886" class="grid" stroke-width="1.0"/>
+<text x="508" y="121.01676963812886" class="xs mono muted" text-anchor="end">50</text>
+<text x="529.75" y="276" class="xs mono muted" text-anchor="middle">8</text>
+<text x="571.0" y="276" class="xs mono muted" text-anchor="middle">32</text>
+<text x="626.0" y="276" class="xs mono muted" text-anchor="middle">64</text>
+<text x="736.0" y="276" class="xs mono muted" text-anchor="middle">128</text>
+<path d="M 529.75,248.74 L 543.50,238.43 L 571.00,218.77 L 626.00,185.95 L 736.00,112.73" fill="none" stroke="#5082e6" stroke-width="2.4"/>
+<circle cx="529.8" cy="248.7" r="3.0" fill="#5082e6"/>
+<circle cx="543.5" cy="238.4" r="3.0" fill="#5082e6"/>
+<circle cx="571.0" cy="218.8" r="3.0" fill="#5082e6"/>
+<circle cx="626.0" cy="185.9" r="3.0" fill="#5082e6"/>
+<circle cx="736.0" cy="112.7" r="3.0" fill="#5082e6"/>
+<text x="614.0" y="292" class="xs muted" text-anchor="middle">vertices</text>
+<text x="478" y="92" class="xs muted" text-anchor="start">ns</text>
+<text x="750" y="92" class="xs t-hi" text-anchor="end">linear in n</text>
+<text x="20" y="326" class="xs" text-anchor="start">And the function pointer costs nothing: 1.908 ns direct against 1.906 ns through `convex::support`, with the two arms</text>
+<text x="20" y="342" class="xs" text-anchor="start">agreeing bit for bit. One target per query is a branch the predictor learns immediately — 6.17's finding, at a hotter call site.</text>
+<text x="20" y="362" class="xs t-hi" text-anchor="start">What GJK buys is the metres and the generality, not the speed, which is why an engine keeps both tests.</text>
+</svg>

@@ -1,0 +1,123 @@
+<svg viewBox="0 0 980 579.5" role="img" aria-labelledby="h1-t h1-d">
+  <title id="h1-t">Five things a designer asks of a character, and what a rigid capsule does with them</title>
+  <desc id="h1-d">Left: a capsule pushed into a wall in mid-air, with the stick, friction and gravity drawn as arrows, and a table of its vertical speed after one second for four stick speeds — zero above 0.27 m/s. Middle: a grid of stick speed against ledge height saying whether the rigid capsule got up. Right: a table of five design requests, the rigid capsule's result in red and the controller's in green.</desc>
+  <defs>
+    <marker id="e-i-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">A rigid capsule, pushed into a wall mid-air</text>
+<rect x="250" y="54" width="26" height="246" rx="0" class="fill-soft grid" stroke-width="1.2"/>
+<text x="263" y="316" class="xs muted" text-anchor="middle">wall, μ = 0.6</text>
+<path d="M 182.00,124.00 L 182.00,216.00 A 34.00 34.00 0 0 0 250.00,216.00 L 250.00,124.00 A 34.00 34.00 0 0 0 182.00,124.00 Z" fill="#e05c5c" fill-opacity="0.08" stroke="#e05c5c" stroke-width="1.6"/>
+<line x1="106.00" y1="170.00" x2="176.00" y2="170.00" stroke="#8f918a" stroke-width="1.6" marker-end="url(#e-grey-h1)"/>
+<text x="106" y="162" class="xs" text-anchor="start">stick: v_push</text>
+<line x1="248.00" y1="206.00" x2="248.00" y2="126.00" stroke="#e05c5c" stroke-width="2.2" marker-end="url(#e-red-h1)"/>
+<text x="242" y="78" class="xs" text-anchor="end">friction ≤ μ·m·v_push</text>
+<line x1="216.00" y1="260.00" x2="216.00" y2="298.00" stroke="#5082e6" stroke-width="1.8" marker-end="url(#e-blue-h1)"/>
+<text x="224" y="298" class="xs" text-anchor="start">gravity: m·g·h a step</text>
+<text x="26" y="344" class="xs" text-anchor="start">Each step the contact cancels v_push, so its</text>
+<text x="26" y="359" class="xs" text-anchor="start">normal impulse is m·v_push; friction may hold</text>
+<text x="26" y="374" class="xs" text-anchor="start">μ·m·v_push of vertical momentum against g's</text>
+<text x="26" y="389" class="xs" text-anchor="start">m·g·h. It HANGS once μ·v_push ≥ g·h.</text>
+<text x="26" y="420" class="xs muted" text-anchor="start">measured, m/s</text>
+<text x="26" y="440" class="xs muted" text-anchor="start">stick into the wall</text>
+<text x="280" y="440" class="xs muted" text-anchor="end">v_y after 1 s</text>
+<line x1="26" y1="448.0" x2="286" y2="448.0" class="grid" stroke-width="1.0"/>
+<text x="26" y="465.0" class="xs" text-anchor="start">3.0 m/s</text>
+<text x="280" y="465.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="26" y="482.0" class="xs" text-anchor="start">1.0 m/s</text>
+<text x="280" y="482.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="26" y="499.0" class="xs" text-anchor="start">0.5 m/s</text>
+<text x="280" y="499.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="26" y="516.0" class="xs" text-anchor="start">0.2 m/s</text>
+<text x="280" y="516.0" class="xs mono" text-anchor="end">-2.7300</text>
+<text x="26" y="533.0" class="xs" text-anchor="start">μ = 0 instead</text>
+<text x="280" y="533.0" class="xs mono" text-anchor="end">-9.8100</text>
+<text x="26" y="555.5" class="xs mono" text-anchor="start">threshold: 0.2757 m/s measured, g·h/μ = 0.2725</text>
+<text x="318" y="30" class="sm" text-anchor="start">Walking into a ledge, stick held, 3 s</text>
+<text x="396.0" y="70" class="xs mono" text-anchor="middle">0.5</text>
+<text x="432.0" y="70" class="xs mono" text-anchor="middle">1</text>
+<text x="468.0" y="70" class="xs mono" text-anchor="middle">2</text>
+<text x="504.0" y="70" class="xs mono" text-anchor="middle">3</text>
+<text x="540.0" y="70" class="xs mono" text-anchor="middle">5</text>
+<text x="576.0" y="70" class="xs mono" text-anchor="middle">8</text>
+<text x="486" y="54" class="xs muted" text-anchor="middle">stick speed, m/s</text>
+<text x="368" y="98" class="xs mono" text-anchor="end">10 cm</text>
+<rect x="380" y="82" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="396.0" y="98" class="xs" text-anchor="middle">no</text>
+<rect x="416" y="82" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="432.0" y="98" class="xs" text-anchor="middle">up</text>
+<rect x="452" y="82" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="468.0" y="98" class="xs" text-anchor="middle">up</text>
+<rect x="488" y="82" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="504.0" y="98" class="xs" text-anchor="middle">up</text>
+<rect x="524" y="82" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="540.0" y="98" class="xs" text-anchor="middle">up</text>
+<rect x="560" y="82" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="576.0" y="98" class="xs" text-anchor="middle">up</text>
+<text x="368" y="126" class="xs mono" text-anchor="end">20 cm</text>
+<rect x="380" y="110" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="396.0" y="126" class="xs" text-anchor="middle">no</text>
+<rect x="416" y="110" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="432.0" y="126" class="xs" text-anchor="middle">no</text>
+<rect x="452" y="110" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="468.0" y="126" class="xs" text-anchor="middle">no</text>
+<rect x="488" y="110" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="504.0" y="126" class="xs" text-anchor="middle">no</text>
+<rect x="524" y="110" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="540.0" y="126" class="xs" text-anchor="middle">no</text>
+<rect x="560" y="110" width="32" height="24" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="576.0" y="126" class="xs" text-anchor="middle">up</text>
+<text x="368" y="154" class="xs mono" text-anchor="end">30 cm</text>
+<rect x="380" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="396.0" y="154" class="xs" text-anchor="middle">no</text>
+<rect x="416" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="432.0" y="154" class="xs" text-anchor="middle">no</text>
+<rect x="452" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="468.0" y="154" class="xs" text-anchor="middle">no</text>
+<rect x="488" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="504.0" y="154" class="xs" text-anchor="middle">no</text>
+<rect x="524" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="540.0" y="154" class="xs" text-anchor="middle">no</text>
+<rect x="560" y="138" width="32" height="24" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.35"/>
+<text x="576.0" y="154" class="xs" text-anchor="middle">no</text>
+<text x="318" y="190" class="xs muted" text-anchor="start">Whether a ledge can be climbed depends on how</text>
+<text x="318" y="205" class="xs muted" text-anchor="start">hard the capsule is driven into it: the round</text>
+<text x="318" y="220" class="xs muted" text-anchor="start">bottom meets the edge with a tilted normal,</text>
+<text x="318" y="235" class="xs muted" text-anchor="start">and the solver turns part of the stick into</text>
+<text x="318" y="250" class="xs muted" text-anchor="start">lift. 20 cm goes up at 8 m/s and at nothing</text>
+<text x="318" y="265" class="xs muted" text-anchor="start">slower; the controller climbs all three at</text>
+<text x="318" y="280" class="xs muted" text-anchor="start">every speed (§8).</text>
+<text x="616" y="30" class="sm" text-anchor="start">What the design asks, and what each gives</text>
+<text x="616" y="70" class="xs muted" text-anchor="start">the design</text>
+<text x="874" y="70" class="xs muted" text-anchor="end">rigid capsule</text>
+<text x="964" y="70" class="xs muted" text-anchor="end">controller</text>
+<line x1="616" y1="78.0" x2="970" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="616" y="95.0" class="xs" text-anchor="start">stand on a 30° ramp, μ 0.5</text>
+<text x="874" y="95.0" class="xs mono t-bad" text-anchor="end">slides 1.98 m in 2 s</text>
+<text x="964" y="95.0" class="xs mono t-ok" text-anchor="end">0.0000 m</text>
+<text x="616" y="112.0" class="xs" text-anchor="start">release the stick at 6 m/s</text>
+<text x="874" y="112.0" class="xs mono t-bad" text-anchor="end">slides 2.91 m</text>
+<text x="964" y="112.0" class="xs mono t-ok" text-anchor="end">stops: 0 m</text>
+<text x="616" y="129.0" class="xs" text-anchor="start">jump at a wall, push into it</text>
+<text x="874" y="129.0" class="xs mono t-bad" text-anchor="end">hangs: v_y = 0</text>
+<text x="964" y="129.0" class="xs mono t-ok" text-anchor="end">falls: −9.81</text>
+<text x="616" y="146.0" class="xs" text-anchor="start">walk into a 20 cm ledge</text>
+<text x="874" y="146.0" class="xs mono t-bad" text-anchor="end">only at 8 m/s</text>
+<text x="964" y="146.0" class="xs mono t-ok" text-anchor="end">every speed</text>
+<text x="616" y="163.0" class="xs" text-anchor="start">dash at 42 m/s into 10 cm</text>
+<text x="874" y="163.0" class="xs mono t-bad" text-anchor="end">through: 50%</text>
+<text x="964" y="163.0" class="xs mono t-ok" text-anchor="end">never</text>
+<text x="616" y="193.5" class="xs muted" text-anchor="start">Every red cell is Newton being right. Friction is</text>
+<text x="616" y="208.5" class="xs muted" text-anchor="start">one number for a pair of materials and the design</text>
+<text x="616" y="223.5" class="xs muted" text-anchor="start">wants two; momentum is conserved and the design</text>
+<text x="616" y="238.5" class="xs muted" text-anchor="start">wants a stop; a step is sampled at instants and a</text>
+<text x="616" y="253.5" class="xs muted" text-anchor="start">wall can fall between two of them. None of it is a</text>
+<text x="616" y="268.5" class="xs muted" text-anchor="start">bug in 8.10's solver.</text>
+</svg>

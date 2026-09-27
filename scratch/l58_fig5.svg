@@ -1,0 +1,106 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l58f5-t l58f5-d">
+  <title id="l58f5-t">A view leading with the biggest pool compared with the smallest</title>
+  <desc id="l58f5-d">Two strips of candidate entities: sixty when the walk leads with the position pool, twelve when it leads with the label pool, with the same six matches in each.</desc>
+  <defs>
+    <marker id="e-i-l58f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l58f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l58f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l58f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l58f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">view&lt;position, velocity, label&gt; over the same 60 entities, walked two ways. Both answers are correct.</text>
+<text x="24" y="48" class="xs t-bad" text-anchor="start">LEADING WITH THE BIGGEST POOL — walk every position, test the rest.</text>
+<text x="112" y="75" class="xs mono muted" text-anchor="end">position (60)</text>
+<rect x="120.0" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="129.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="138.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="148.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="157.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="166.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="176.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="185.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="194.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="204.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="213.3" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="222.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="232.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="241.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="250.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="260.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="269.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="278.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="288.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="297.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="306.7" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="316.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="325.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="334.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="344.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="353.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="362.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="372.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="381.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="390.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="400.0" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="409.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="418.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="428.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="437.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="446.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="456.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="465.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="474.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="484.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="493.3" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="502.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="512.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="521.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="530.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="540.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="549.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="558.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="568.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="577.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="586.7" y="60" width="7.8" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="596.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="605.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="614.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="624.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="633.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="642.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="652.0" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="661.3" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="670.7" y="60" width="7.8" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<text x="24" y="100" class="xs muted" text-anchor="start">60 candidates. 54 of them cost a sparse read into the velocity pool and a rejection. 6 survive.</text>
+<line x1="24" y1="122" x2="696" y2="122" class="grid" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="24" y="146" class="xs t-ok" text-anchor="start">LEADING WITH THE SMALLEST POOL — rule 3, and it is one comparison in the constructor.</text>
+<text x="112" y="173" class="xs mono muted" text-anchor="end">label (12)</text>
+<rect x="120.0" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="166.7" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="213.3" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="260.0" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="306.7" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="353.3" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="400.0" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="446.7" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="493.3" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="540.0" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<rect x="586.7" y="158" width="45.2" height="22" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.6" fill-opacity="0.55"/>
+<rect x="633.3" y="158" width="45.2" height="22" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.6" fill-opacity="0.1"/>
+<text x="24" y="198" class="xs muted" text-anchor="start">12 candidates. 6 rejections instead of 54, for the same six answers — a fifth of the walk.</text>
+<line x1="24" y1="220" x2="696" y2="220" class="grid" stroke-width="1.2"/>
+<text x="24" y="242" class="xs t-hi" text-anchor="start">THE LOOP, and every part of it is a consequence of what a sparse set is:</text>
+<rect x="60" y="262" width="380" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="70" y="277" class="xs mono" text-anchor="start">walk the LEAD pool’s dense entity array</text>
+<line x1="444" y1="273" x2="468" y2="273" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f5)"/>
+<text x="474" y="277" class="xs muted" text-anchor="start">sequential; this is the array itself</text>
+<rect x="60" y="304" width="380" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="70" y="319" class="xs mono" text-anchor="start">for each other pool: sparse[e] != none  and  dense[at] == e</text>
+<line x1="444" y1="315" x2="468" y2="315" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f5)"/>
+<text x="474" y="319" class="xs muted" text-anchor="start">one array read, then one compare</text>
+<rect x="60" y="346" width="380" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="70" y="361" class="xs mono" text-anchor="start">fetch: lead is data[i]; the rest are data[sparse[e]]</text>
+<line x1="444" y1="357" x2="468" y2="357" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l58f5)"/>
+<text x="474" y="361" class="xs muted" text-anchor="start">the lead needs NO redirect — i is the loop counter</text>
+<text x="24" y="392" class="xs t-hi" text-anchor="start">Measured in Lesson 5.7 at one-in-four selectivity and 100,000 entities: 1.73× leading big, 1.46× leading small.</text>
+</svg>

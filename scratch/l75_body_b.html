@@ -1,0 +1,346 @@
+  <h2 id="power">3. The power of a unit quaternion</h2>
+
+  <p>
+    The formula needs <code>(a⁻¹b)ᵗ</code>, so before anything else we need to know what it means to
+    raise a rotation to a real power. It means exactly what you would hope: <strong>do a fraction of
+    it</strong>. Raise a quarter-turn to the power <code>0.5</code> and you get an eighth-turn; to
+    the power <code>2</code> and you get a half-turn; to the power <code>−1</code> and you get the
+    quarter-turn backwards.
+  </p>
+
+  <p>
+    Deriving it is one line, because 7.4 already did the work. A unit quaternion
+    <em>is</em> its axis and its angle:
+  </p>
+
+  <div class="eq">\[ q \;=\; \cos(\theta/2) + \sin(\theta/2)\,\hat n
+      \qquad\Longrightarrow\qquad
+      q^{t} \;=\; \cos(t\theta/2) + \sin(t\theta/2)\,\hat n \]</div>
+
+  <p class="eq-plain">
+    Same axis, <code>t</code> times the angle. There is nothing to prove — scaling a rotation means
+    scaling its angle, and that is the definition. The work is all in <em>extraction</em>: getting
+    <code>θ/2</code> and <code>n̂</code> back out of four floats, and putting them back in.
+  </p>
+
+  <h3>3.1 Reading the angle: <code>atan2</code>, not <code>acos</code></h3>
+
+  <p>
+    The scalar part is <code>cos(θ/2)</code>, so the obvious move is
+    <code>θ/2 = acos(w)</code>. Do not do it. This course has now met the reason three times — in a
+    metric (7.1 §6.4), in an extraction (7.2 §7.3), and in a <em>test</em> that printed
+    <code>0.000e+00</code> in every row because of it (7.4 §G.3) — and it is about to meet it a
+    fourth time in §7.3 of this lesson, inside the engine.
+  </p>
+
+  <p>
+    The cosine is flat at its maximum. Near <code>Ω = 0</code>,
+  </p>
+
+  <div class="eq">\[ \cos\Omega \;=\; 1 - \tfrac{\Omega^2}{2} + \dots
+      \qquad\text{while}\qquad
+      \sin\Omega \;=\; \Omega - \tfrac{\Omega^3}{6} + \dots \]</div>
+
+  <p>
+    The first is <em>quadratic</em> in the angle and the second is <em>linear</em>. A small angle
+    barely moves the cosine, so by the time you have stored it in a <code>float</code> most of it is
+    gone; the same angle moves the sine proportionally, so it survives. The vector part's length
+    <em>is</em> <code>sin(θ/2)</code>, sitting right there in the other three floats, so:
+  </p>
+
+  <div class="eq">\[ \theta/2 \;=\; \operatorname{atan2}\big(|v|,\;w\big) \]</div>
+
+  <p>
+    which is accurate at both ends, is quadrant-correct — so <code>θ</code> comes back in
+    <code>[0, 2π)</code> rather than <code>[0, π]</code>, which 7.4 §9.2 argued is information
+    rather than inconsistency — and costs a square root the <code>acos</code> route was going to pay
+    anyway to get the axis.
+  </p>
+
+  <h3>3.2 The division the plane did not have</h3>
+
+  <p>
+    Lesson 7.3's <code>complex_pow_unit</code> is two trig calls and no division, because in the
+    plane the axis is the same axis every time and there is nothing to recover. Here there is:
+    <code>n̂ = v / |v|</code>, and <code>|v| = sin(θ/2)</code> goes to zero as the rotation goes to
+    nothing. That is exactly where an animation system spends most of its time.
+  </p>
+
+  <p>
+    So look at what the code actually computes. The new vector part is
+  </p>
+
+  <div class="eq">\[ \sin(t\theta/2)\;\hat n
+      \;=\; \frac{\sin(t\theta/2)}{|v|}\; v
+      \;=\; \frac{\sin(t\theta/2)}{\sin(\theta/2)}\; v \]</div>
+
+  <p class="eq-plain">
+    The factor is a ratio of two sines of proportional angles, and as <code>θ → 0</code> it tends to
+    <strong><code>t</code></strong> — because <code>sin x → x</code>. It is finite. It is, moreover,
+    exactly the right answer: a tiny rotation scaled by <code>t</code> is <code>t</code> times as
+    tiny about the same axis.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">So there is no epsilon, no branch, and no "if the angle is small, lerp instead"</span>
+    <p>
+      That last one is in a great deal of shipped code and it is a patch over a problem this form
+      does not have. The expression is <em>continuous through the identity</em>. §7.4 measures it
+      down to an arc of <code>0</code> — literally zero, the identity blended with itself — and the
+      error is <code>0.0000e+00</code>, while the formula every textbook prints returns
+      <code>NaN</code> for every arc below <strong>0.0279°</strong>.
+    </p>
+  </div>
+
+  <p>
+    There <em>is</em> one guard, and it is for a different case: <code>|v| = 0</code> exactly. Two
+    inputs do that. <code>q = 1</code> is the identity, <code>θ = 0</code>, and every axis is
+    correct — so the identity is the answer for every <code>t</code> and the guard returns it.
+    <code>q = −1</code> is a <em>full turn about something nobody recorded</em>; <code>q^t</code>
+    should be a turn of <code>2πt</code> about an axis that does not exist, there is no continuous
+    answer, and the guard returns the identity as a placeholder on exactly the same terms as
+    <code>normalised(vec3{})</code>. §4.2 shows why <code>quat_slerp</code> can never reach it.
+  </p>
+
+  <h3>3.3 A worked example, by hand</h3>
+
+  <p>
+    Take a quarter-turn about <code>+y</code> and halve it. The quaternion is
+    <code>cos45° + sin45°·ŷ</code>, so
+  </p>
+
+  <div class="eq">\[ q \;=\; (0.7071,\; 0,\; 0.7071,\; 0) \]</div>
+
+  <p>
+    Now push it through the code, in order:
+  </p>
+
+  <ul>
+    <li><code>|v| = √(0² + 0.7071² + 0²) = 0.7071</code>.</li>
+    <li><code>θ/2 = atan2(0.7071, 0.7071) = 45° = 0.7854</code> rad. So <code>θ = 90°</code>, which
+        is the turn we started with — the extraction is working.</li>
+    <li><code>t = 0.5</code>, so the scaled half-angle is <code>22.5° = 0.3927</code> rad.</li>
+    <li><code>cos(22.5°) = 0.9239</code>, <code>sin(22.5°) = 0.3827</code>.</li>
+    <li>The ratio is <code>0.3827 / 0.7071 = 0.5412</code>, and
+        <code>v · 0.5412 = (0, 0.3827, 0)</code>.</li>
+  </ul>
+
+  <div class="eq">\[ q^{0.5} \;=\; (0.9239,\; 0,\; 0.3827,\; 0) \]</div>
+
+  <p class="eq-plain">
+    Which is <code>cos(22.5°) + sin(22.5°)·ŷ</code> — a <strong>45° turn about <code>+y</code></strong>,
+    half of the 90° we started with. Note that <code>0.9239</code> is <em>not</em> halfway between
+    <code>0.7071</code> and <code>1</code> (that would be <code>0.8536</code>). Halving the angle is
+    not halving the cosine, which is the whole reason this function exists rather than a lerp.
+  </p>
+
+  <h2 id="slerp">4. Implementation: slerp, in three lines</h2>
+
+  <p>
+    With the power in hand the interpolation is the formula, transcribed:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline quat quat_slerp(quat a, quat b, float t)
+{
+    return a * quat_pow_unit(conjugate(a) * nearest(a, b), t);
+}</code></pre>
+
+  <p>
+    Read right to left, as always: <code>nearest(a, b)</code> picks which of the two names for
+    <code>b</code> to aim at (§6 — it is the only thing here the plane did not need);
+    <code>conjugate(a)</code> is <code>a⁻¹</code> because <code>a</code> is unit;
+    the product is the single turn from one to the other; the power takes <code>t</code> of it; and
+    multiplying by <code>a</code> on the left starts the journey where it should start.
+  </p>
+
+  <h3>4.1 Constant speed, and one line that never moves</h3>
+
+  <p>
+    Two properties fall out of the shape of that expression rather than needing proof, which is the
+    nicest kind of correctness argument.
+  </p>
+
+  <p>
+    <strong>The speed is constant.</strong> The only thing in the whole expression that depends on
+    <code>t</code> is the angle inside <code>quat_pow_unit</code>, and that angle is
+    <code>t</code> times a constant. So the turn accumulated by time <code>t</code> is
+    <code>t·Ω_total</code>, linear in <code>t</code>, by construction. Measured over 1,001 steps of
+    a 179.05° blend, the worst deviation from <code>t·arc</code> is <strong>4.159e−07</strong>
+    radians.
+  </p>
+
+  <p>
+    <strong>The axis never moves.</strong> <code>quat_pow_unit</code> scales an angle and leaves
+    <code>v</code>'s <em>direction</em> alone, so the difference quaternion's axis is the same line
+    at every <code>t</code>. That is the teal line Lesson 7.2's <kbd>B</kbd> mode draws and the
+    thing to watch during a blend: the geodesic ghost rotates rigidly about one fixed line for the
+    entire journey, and the Euler ghost does not.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The axis measurement that had to be read twice</span>
+    <p>
+      The harness first reported the axis wandering by <strong>2.027e−05</strong> over the blend,
+      which is twenty times float resolution and looked like a bug. It is not: the whole of it is at
+      <code>t &lt; 0.05</code>, where the accumulated turn is under 9° and
+      <code>n̂ = v/sin(θ/2)</code> is dividing by something small. Restricted to
+      <code>t ≥ 0.05</code> the wobble is <strong>6.546e−07</strong>.
+    </p>
+    <p>
+      And the wobble is harmless for a reason Lesson 7.2 §8 already derived and put a formula on: an
+      axis error of <code>φ</code> on a turn of <code>θ</code> moves the pose by
+      <code>2·sin(θ/2)·φ</code>, which <strong>vanishes exactly where the axis becomes
+      unrecoverable</strong>. Multiply the measured error by that factor at each step and the worst
+      orientation cost over the whole blend is <strong>2.309e−07</strong> radians. The harness
+      prints all three columns, because "the axis is noisy" and "the pose is wrong" are different
+      claims and only one of them is true.
+    </p>
+  </div>
+
+  <h3>4.2 Not clamped, and unreachable cases</h3>
+
+  <p>
+    <code>t</code> outside <code>[0, 1]</code> extrapolates along the same great circle, which is
+    occasionally exactly what a caller wants — an overshooting ease-out, a one-frame prediction —
+    and is never what it wants by accident. Clamping here would make the useful case impossible and
+    hide the accidental one. The engine's convention since <code>lerp</code> in Lesson 1.6 is that
+    the caller owns its parameter.
+  </p>
+
+  <p>
+    And note what <code>nearest</code> buys besides the short arc: after it, the difference
+    quaternion <code>conj(a)·b</code> has a non-negative scalar part, so its half-angle is at most
+    90° and <strong><code>quat_pow_unit</code>'s two axis-free inputs are both unreachable from
+    <code>quat_slerp</code></strong>. <code>q = −1</code> needs a scalar part of −1, which
+    <code>nearest</code> has just excluded. The guard exists for direct callers only.
+  </p>
+
+  <h2 id="nlerp">5. The right road on the wrong schedule</h2>
+
+  <p>
+    There is a cheaper thing you can do with two quaternions and a number, and unlike the matrix
+    version it is not nonsense. Lerp the four components and normalise:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline quat quat_nlerp(quat a, quat b, float t)
+{
+    const quat to = nearest(a, b);
+    return normalised(quat{a.w + (to.w - a.w) * t,
+                           a.v + (to.v - a.v) * t});
+}</code></pre>
+
+  <p>
+    No trigonometry, no <code>atan2</code>, one reciprocal square root. Measured at
+    <strong>4.763 ns</strong> against slerp's <strong>16.288 ns</strong> — <strong>3.42× cheaper</strong>.
+    And it is used everywhere, and it is <em>mostly</em> right, and the two halves of "mostly" need
+    separating with some care because the folklore gets both of them wrong in opposite directions.
+  </p>
+
+  <h3>5.1 The path is exactly the geodesic</h3>
+
+  <p>
+    This is the half that surprises people, and Lesson 7.3 proved it in the plane with an argument
+    that never mentions dimension — so it carries here unchanged and this lesson's job is to
+    <em>check</em> it rather than re-derive it.
+  </p>
+
+  <p>
+    The straight chord from <code>a</code> to <code>b</code> lies in the two-dimensional plane
+    spanned by those two points and the origin. Normalising a point moves it along its own radius,
+    and a radius through a point of that plane <em>stays in that plane</em>. So every point
+    <code>quat_nlerp</code> returns lies on the intersection of that plane with the unit sphere —
+    which is the great circle through <code>a</code> and <code>b</code>. It is the same curve
+    <code>quat_slerp</code> walks. It cannot be anything else.
+  </p>
+
+  @@FIG_ARC_CHORD@@
+
+  <p>
+    Measured two ways. The departure from the <code>a</code>–<code>b</code> plane over 501 samples
+    is <strong>1.605e−07</strong>; and the total turning along the path, summed over 4,096 steps
+    against the separation of the endpoints, is <strong>−0.00% of excess</strong> — the identical
+    number slerp scores, on the same pair, with the same instrument, where Euler interpolation
+    scores <strong>+14.10%</strong>.
+  </p>
+
+  <h3>5.2 The schedule is not</h3>
+
+  <p>
+    Look again at figure 2's gold chord. The eleven dots on it are equally spaced — that is what
+    lerping does. Project them radially onto the circle and they are <em>not</em>: they crowd
+    together at both ends and spread out through the middle.
+  </p>
+
+  <p>
+    The geometry is the whole explanation. A step along the chord near the middle of the arc is
+    nearly perpendicular to the radius, so almost all of it turns into angle. A step near either end
+    is angled away, so part of it goes into <em>length</em> — which normalising then throws away.
+    Equal steps along a chord subtend unequal angles at the centre.
+  </p>
+
+  <h3>5.3 Putting a closed form on it</h3>
+
+  <p>
+    Set up coordinates in the plane of the arc, with <code>a</code> at angle <code>0</code> and
+    <code>b</code> at angle <code>Ω</code>. The lerped point is
+    <code>(1−t)·a + t·b</code>, and its angle from <code>a</code> is the argument of that vector:
+  </p>
+
+  <div class="eq">\[ \varphi(t) \;=\;
+      \arctan\!\left(\frac{t\,\sin\Omega}{(1-t) + t\,\cos\Omega}\right) \]</div>
+
+  <p>
+    Differentiate and the algebra collapses (Lesson 7.3 §10.3 does it in full). What comes out is
+    that <code>φ'(t)</code> is largest at the midpoint and smallest at the two ends, and the
+    <em>ratio</em> between those extremes is
+  </p>
+
+  <div class="eq">\[ \frac{\varphi'(1/2)}{\varphi'(0)} \;=\; \sec^2(\Omega/2) \]</div>
+
+  <p class="eq-plain">
+    <strong>nlerp moves fastest through the middle of the arc, by exactly
+    <code>sec²(Ω/2)</code>.</strong> At <code>Ω = 45°</code> that is 1.17; at <code>Ω = 90°</code> it
+    is exactly <strong>2</strong>; at <code>Ω = 179°</code> it is 13,131.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And <code>Ω</code> is not <code>θ</code> — this is where a quaternion differs from the plane</span>
+    <p>
+      In Lesson 7.3 the angle between two unit complex numbers <em>was</em> the rotation between the
+      two poses. Here it is <strong>half</strong> of it, because <code>q = cos(θ/2) + sin(θ/2)n̂</code>
+      — the sphere arc is <code>Ω = θ/2</code>. So every number 7.3 quoted has to be re-indexed
+      before it can be used, and the harness re-measures rather than re-quoting. A rotation arc of
+      150° is a <em>sphere</em> arc of 75°, and the schedule error that matters is measured back in
+      degrees of pose, which doubles it again.
+    </p>
+  </div>
+
+  <h3>5.4 The number to design with</h3>
+
+  <p>
+    A speed ratio is hard to act on. What a caller wants is: <em>if I use the cheap one, how wrong
+    is the picture?</em> That is the gap in pose, at the same <code>t</code>, at the worst
+    <code>t</code> — and it is what §7 measures.
+  </p>
+
+  @@FIG_SCHEDULE@@
+
+  <p>
+    The measured points sit on the derived curve. Read them as a rule of thumb:
+  </p>
+
+  <ul>
+    <li>Under about <strong>60°</strong> of arc, nlerp is within a quarter of a degree. A 30 Hz
+        animation clip's adjacent keyframes are far below that. <strong>Use nlerp; it is 3.42×
+        cheaper and the difference is not visible.</strong></li>
+    <li>Between 60° and 120°, it is a judgement — up to 2.2° of lag through the middle of the turn,
+        which reads as a slight lurch on something the eye is tracking.</li>
+    <li>Over 120°, and for anything a designer chose rather than a clip recorded — a turret
+        swinging to a new target, a ragdoll snapping to a pose — <strong>use slerp</strong>. At 150°
+        of arc the lag is 4.5°.</li>
+  </ul>
+
+  <p>
+    The harness turns that into one threshold: nlerp stays within half a degree of slerp up to an
+    arc of <strong>73.50°</strong>. That is a number you can put in a comment beside a call.
+  </p>

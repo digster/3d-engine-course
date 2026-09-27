@@ -1,0 +1,398 @@
+  <!-- =================================================================
+       4 — HANDLES
+       ================================================================= -->
+  <h2 id="handles"><span class="num">4</span>Handles, Pointers, and the Step Between</h2>
+
+  <p>
+    One field in that struct is doing something the old code did not, and it is the one worth the
+    most argument: <code>albedo_map</code> is a <strong>handle</strong>, where the engine has always
+    used a <code>const texture*</code>.
+  </p>
+
+  <p>
+    Here is what it replaces. <code>fill_style</code> has held this since Lesson 3.9:
+  </p>
+
+  <pre><code class="lang-cpp">struct texture_binding
+{
+    const texture* image = nullptr;
+    sampler samp{};
+};</code></pre>
+
+  <p>
+    …and the sandbox's comment beside it made the case for the pointer, honestly and, at the time,
+    correctly:
+  </p>
+
+  <blockquote>
+    <p>"<code>texture_binding</code> holds a non-owning pointer, and <code>textures</code> lives for
+       the whole program, so there is nothing here that can dangle."</p>
+  </blockquote>
+
+  <p>
+    Read that argument carefully, because <strong>it is an argument about this demo rather than
+    about the type</strong>. It is true. It is also unavailable to anyone else: it depends on a
+    container that happens never to grow, owned by a function that happens to outlive every user.
+    A material is going to be stored in scenes, copied into components, and — from Lesson 6.6 —
+    loaded from files. None of those can make that argument.
+  </p>
+
+  @@FIG_HANDLE@@
+
+  <p>
+    So the material stores a handle. But a handle is the wrong thing to have in a fill loop: it is
+    an index and a generation, and resolving it costs a bounds check and a compare. Lesson 5.4
+    measured that cost precisely so we would not have to guess about it — and <em>per pixel</em> is
+    exactly where you cannot afford it.
+  </p>
+
+  <p>
+    Both facts are true at once, which is why the answer is neither one type nor the other but a
+    <strong>named step between them</strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the resolve</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline texture_binding bind_albedo(const material&amp; m,
+                                                 const texture_pool&amp; textures)
+{
+    return {textures.get(m.albedo_map), m.samp};
+}</code></pre>
+  </figure>
+
+  <p>Four lines, and the whole architecture is in the shape of them:</p>
+
+  <ul>
+    <li>a <strong>handle</strong> is how you STORE a reference — durable, checkable, four bytes,
+        safe across a reallocation, cheap to copy into a component or a file;</li>
+    <li>a <strong>pointer</strong> is how you USE one in an inner loop — one dereference, no
+        lookup, no branch;</li>
+    <li>and the <strong>resolve</strong> happens <em>once per draw</em>, between the two.</li>
+  </ul>
+
+  <p>
+    Getting that boundary wrong is a real cost in either direction, and it is worth naming both
+    failures because they look nothing alike. Store pointers and the scene dangles the first time a
+    pool grows — a crash, or worse, silently wrong pixels. Resolve inside the loop and you have
+    added a bounds check and a generation compare to every pixel, for a value that could not have
+    changed between two pixels of the same triangle.
+  </p>
+
+  <h3><span class="num">4.1</span>The case a pointer cannot express</h3>
+
+  <p>
+    There is a third state, and it is the one that makes handles worth the trouble. A handle can be
+    perfectly well-formed and name something that <em>no longer exists</em> — Lesson 5.4's
+    distinction between <code>valid()</code> and <code>contains()</code>. A pointer has no way to
+    be asked.
+  </p>
+
+  <p><code>verify_65</code> §C exercises all three states, and the middle one is the demonstration:</p>
+
+  <pre><code class="lang-text">[PASS] a live handle resolves to a bound binding (8x8)
+[PASS] after 64 more insertions the SAME handle still resolves — pointer was
+       0x928c03500, is now 0x928c16000. A raw pointer stored in a material would
+       have had to be right about which of those it was
+[PASS] a STALE handle resolves to an unbound binding, not to freed memory</code></pre>
+
+  <p>
+    <strong>The pool moved.</strong> Sixty-four insertions reallocated it, the storage is at a
+    different address, and the handle did not care — because it names a <em>slot</em> rather than an
+    address. Any pointer taken before that growth is now pointing at freed memory, and nothing about
+    it would say so.
+  </p>
+
+  <p>
+    And a stale handle resolves to <em>nothing</em>: <code>bind_albedo</code> returns an unbound
+    binding, and the surface falls back to its tint — exactly what it would have done with no image
+    at all. That is not a special case bolted on; it is the same code path as "this material has no
+    texture", which is why there is no error handling in those four lines.
+  </p>
+
+  <!-- =================================================================
+       5 — DERIVED
+       ================================================================= -->
+  <h2 id="derived"><span class="num">5</span>One Field, One Answer</h2>
+
+  <p>
+    Look at what the material does <em>not</em> have. Here is the GPU's material block, which
+    Lesson 4.8 wrote and 6.4 re-laid-out:
+  </p>
+
+  <pre><code class="lang-cpp">struct material_uniforms
+{
+    vec3  albedo;
+    float roughness;
+    float metallic;
+    float f0;
+    float textured;   // &lt;- 0 = use `albedo`, 1 = sample the bound texture
+    float pad0;
+};</code></pre>
+
+  <p>
+    <code>textured</code> is a flag. Beside it, in <code>gpu_draw_item</code>, sits a
+    <code>SDL_GPUTexture*</code> chosen somewhere else entirely. <strong>Two fields, two opinions,
+    and nothing keeping them in agreement.</strong>
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The two ways that goes wrong</span>
+    <p><code>textured = 1</code> with no image bound: the shader samples an unbound slot and gets
+       the sampler's debug magenta.</p>
+    <p><code>textured = 0</code> with an image bound: the surface silently ignores its own texture
+       and draws flat.</p>
+    <p>Neither fails at the point of the mistake. Both render <em>something plausible</em>, which
+       is the failure mode this course keeps running into and keeps naming.</p>
+  </div>
+
+  <p>
+    The material has one field, and the flag is <strong>derived</strong> from it:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] bool textured() const { return albedo_map.valid(); }</code></pre>
+
+  <p>
+    That is not a convenience accessor. It is the removal of a state the program could previously
+    represent and should never have been able to. <strong>There is no longer any way to say
+    "textured, but with no image"</strong> — and a bug you cannot express is better than a bug you
+    detect.
+  </p>
+
+  <p>
+    The GPU still needs the flag as a number, of course. So one function computes it, in one place:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/gpu_uniform.hpp</span>
+      <span class="tag modified">the one packing site</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline material_uniforms uniforms_of(const material&amp; m)
+{
+    const linear_rgb albedo = to_linear(m.tint);
+    return {.albedo = vec3{albedo.r, albedo.g, albedo.b},
+            .roughness = m.surface.roughness,
+            .metallic = m.surface.metallic,
+            .f0 = m.surface.f0,
+            .textured = m.textured() ? 1.0f : 0.0f,
+            .pad0 = 0.0f};
+}</code></pre>
+  </figure>
+
+  <p>
+    Before this lesson that block was assembled by hand at three sites — the sandbox,
+    <code>verify_48</code> and <code>verify_49</code> — five assignments each, each free to get the
+    fifth one wrong. Now there is one, and it derives.
+  </p>
+
+  <div class="callout">
+    <span class="label">A trap this lesson walked into, and what it cost to notice</span>
+    <p>Replacing the sandbox's hand-assembly with <code>uniforms_of(obj.mat)</code> compiled
+       cleanly and was <strong>wrong</strong>. The sandbox chooses its floor texture from a keypress
+       and a scene test, and never wrote that decision onto the material — so the derived flag would
+       have been 0 while a texture was bound, and every GPU texture would have vanished.</p>
+    <p>The fix is the lesson rather than a patch: the decision now lands <em>on the material</em>,
+       and everything downstream reads it from there. Writing the flag separately, next to a pointer
+       chosen separately, is precisely the pair of opinions this section exists to collapse — and I
+       nearly re-created it while removing it.</p>
+  </div>
+
+  <!-- =================================================================
+       6 — SHARING
+       ================================================================= -->
+  <h2 id="sharing"><span class="num">6</span>When a Pool Earns Its Place</h2>
+
+  <p>
+    A "material system" implies more than a struct. It implies materials having identity — being
+    stored somewhere, shared, referred to. So: a pool, <code>material_handle</code>, the same
+    machinery Lesson 5.4 built for meshes and 5.5 for images.
+  </p>
+
+  <p>
+    But <strong>a pool is not automatically right</strong>, and it is worth being able to say when
+    it is. <code>scene_object</code> holds its material <em>by value</em>. It has exactly one; a
+    handle would add a lookup to save nothing.
+  </p>
+
+  <p>
+    The swarm is the other case. Look at what it actually builds:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>entities</th><th>distinct materials</th><th>why</th></tr></thead>
+    <tbody>
+      <tr><td>96 ring drones</td><td><strong>6</strong></td><td><code>tint_for(i)</code> cycles six colours; all share roughness 0.53</td></tr>
+      <tr><td>32 moons</td><td>1</td><td>identical</td></tr>
+      <tr><td>sparks</td><td>1</td><td>identical</td></tr>
+      <tr><td>the sun</td><td>1</td><td>the one genuinely unique material</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@FIG_SHARING@@
+
+  <p>
+    Ninety-six entities, six materials. Storing a copy in each stores the same thirty-six bytes
+    sixteen times over — <strong>3,456 bytes against 600</strong>, a 5.8× reduction on that
+    component, measured in <code>verify_65</code> §E.
+  </p>
+
+  <p>
+    And then the argument that actually matters, which is not about bytes at all:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">What sharing buys</span>
+    <p>With copies, <em>"make the drones rougher"</em> is a loop over the registry that has to find
+       every entity carrying that appearance and hope none was missed.</p>
+    <p>With handles it is <strong>one write</strong>. <code>verify_65</code> §E does exactly that
+       and checks all ninety-six users see it.</p>
+  </div>
+
+  <p>
+    So the rule that decides between a value and a handle is <strong>about sharing, not about
+    size</strong>. That is worth stating plainly because "use handles for big things" is the folk
+    version and it gets this case backwards: a material is small, and the handle is still right —
+    because ninety-six things point at six.
+  </p>
+
+  <!-- =================================================================
+       7 — CLOSED
+       ================================================================= -->
+  <h2 id="closed"><span class="num">7</span>The Field That Was Not a Material After All</h2>
+
+  <p>
+    One field looked like it belonged in the material and does not, and finding that out was the
+    most useful thing building the type did.
+  </p>
+
+  <p>
+    <code>scene_object::closed</code> has carried this comment since Lesson 3.4:
+  </p>
+
+  <blockquote>
+    <p>"In a real engine this lives on the <strong>material</strong>, because cull mode is pipeline
+       state and pipeline state is what a material <em>is</em> (Module 6)."</p>
+  </blockquote>
+
+  <p>
+    It is Module 6, and that sentence is <strong>wrong twice over</strong>.
+  </p>
+
+  <p>
+    <strong>First</strong>, by §3: a material is explicitly <em>not</em> pipeline state. That was
+    the whole line we just drew. Cull mode belongs to the pipeline object, and a material that
+    carried it could not be a uniform.
+  </p>
+
+  <p>
+    <strong>Second</strong>, and more interestingly: <code>closed</code> is not cull mode anyway. It
+    is a claim about the <em>geometry</em> — a cube is closed whatever colour you paint it — and the
+    engine already computes it, from the mesh, without asking anyone:
+  </p>
+
+  <pre><code class="lang-cpp">// mesh.hpp, since Lesson 3.4 — on the REPORT, not on the mesh
+[[nodiscard]] bool closed() const
+{
+    return boundary_edges == 0 &amp;&amp; nonmanifold_edges == 0 &amp;&amp; triangles &gt; 0;
+}</code></pre>
+
+  @@FIG_CLOSED@@
+
+  <p>
+    So there are two different questions wearing one name, and separating them is the fix:
+  </p>
+
+  <ul>
+    <li><strong>The fact</strong> belongs to the mesh: <em>is this surface closed?</em>
+        <code>validate()</code> counts the edges and answers it.</li>
+    <li><strong>The decision</strong> belongs to the caller: <em>should we cull its back faces?</em>
+        Usually yes when closed — but a closed mesh may still be drawn two-sided on purpose, to look
+        inside it or to debug a winding.</li>
+  </ul>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">the rule, in one place</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] constexpr cull_mode cull_of(bool mesh_is_closed,
+                                          bool want_two_sided = false)
+{
+    return (mesh_is_closed &amp;&amp; !want_two_sided) ? cull_mode::back : cull_mode::none;
+}</code></pre>
+  </figure>
+
+  <p>
+    Two arguments, because there are two questions. Culling is only <em>valid</em> on closed
+    geometry, and that constraint now lives in exactly one function instead of being re-remembered
+    at every call site.
+  </p>
+
+  <div class="callout">
+    <span class="label">Worth noticing about the comment</span>
+    <p>It was written in 3.4, repeated the reasoning for three modules, and was wrong the whole
+       time — and nothing caught it, because <strong>a comment predicting a future design cannot be
+       tested.</strong> It was only building the thing it predicted that showed it up.</p>
+    <p>That is not an argument against writing such comments; 3.7's identical prediction about the
+       material was exactly right and is why this lesson exists. It is an argument for
+       <em>re-reading them when you arrive</em>, rather than treating them as instructions.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — THE HEADER
+       ================================================================= -->
+  <h2 id="header"><span class="num">8</span>Where cull_mode Lives, and an Argument I Had to Withdraw</h2>
+
+  <p>
+    <code>cull_of</code> returns a <code>cull_mode</code>, which lives in <code>raster.hpp</code> —
+    a 700-line header holding the whole software rasterizer. Should <code>material.hpp</code>
+    include it?
+  </p>
+
+  <p>
+    Lesson 5.1 already answered this, in <code>projector.hpp</code>, and stated the rule:
+    <strong>a type two components share is a header, not a section of whichever one happened to
+    define it first.</strong> Two components now share <code>cull_mode</code>, so it gets
+    <code>gfx/cull.hpp</code>: thirty lines, one enum.
+  </p>
+
+  <p>
+    That is the whole justification, and this section exists because I did not think it was enough.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The claim I wrote, and the measurement that killed it</span>
+    <p>The comment I first wrote said the split was about <em>compile time</em>: <code>raster.hpp</code>
+       is 700 lines, Lesson 5.1 measured it at <strong>0.97 s</strong> for everyone who includes it,
+       and pulling that in for a three-value enum is indefensible. Quantitative, concrete,
+       persuasive.</p>
+    <p>Then I measured it on the machine actually doing the build:</p>
+    <pre><code class="lang-text">cull.hpp        0.038 s
+raster.hpp      0.258 s
+material.hpp    0.261 s   &lt;- already, via texture.hpp</code></pre>
+    <p><strong>The marginal saving is approximately zero.</strong> <code>material.hpp</code>
+       already costs more than <code>raster.hpp</code>, because <code>texture.hpp</code> dominates
+       both.</p>
+  </div>
+
+  <p>
+    Two things went wrong there, and the second is the more embarrassing.
+  </p>
+
+  <p>
+    The 0.97 s was measured three modules ago, on a different build, in a different state — and
+    Lesson 5.1's own note says, in capitals, <strong>"THE RATIO IS WHAT TRAVELS, NOT THE
+    SECONDS."</strong> I read past the caveat to the number I wanted. A recorded warning does not
+    protect you if the figure beside it is more useful.
+  </p>
+
+  <p>
+    And the deeper mistake: <strong>the physical-design rule never needed a performance argument.</strong>
+    "Two components share the type, so it gets a header" stands entirely on its own. Reaching for a
+    second, quantitative justification felt like making the case stronger, and it was the only part
+    of the case that was false.
+  </p>
+
+  <p>
+    The split ships. The reason it ships is the rule. And <code>cull.hpp</code> does cost 0.038 s,
+    which is the one figure in that comment measured before it was written down.
+  </p>

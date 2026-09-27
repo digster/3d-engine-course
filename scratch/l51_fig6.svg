@@ -1,0 +1,33 @@
+<svg viewBox="0 0 720 366" role="img" aria-labelledby="l51f6-t l51f6-d">
+  <title id="l51f6-t">What is still on the wrong side</title>
+  <desc id="l51f6-d">Four leftovers of the refactor, each with why it is wrong and which later lesson resolves it.</desc>
+  <defs>
+    <marker id="e-i-l51f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l51f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l51f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="20" y="20" class="sm">Four things the boundary did NOT sort out, and when each is paid</text>
+<rect x="20" y="40" width="6" height="52" fill="#f0961e"/>
+<text x="36" y="54" class="sm">cull_choice is applied twice</text>
+<text x="36" y="72" class="xs muted">collect_triangles reads one of its four values; draw_triangles applies the rest</text>
+<text x="36" y="88" class="xs t-hi">paid in 6.5, the material system</text>
+<rect x="20" y="104" width="6" height="52" fill="#a97ae0"/>
+<text x="36" y="118" class="sm">SDL is in the public API</text>
+<text x="36" y="136" class="xs muted">framebuffer says Uint32; gpu_device takes an SDL_Window*. The vocabulary is adopted</text>
+<text x="36" y="152" class="xs t-hi">paid in 5.2, the platform layer</text>
+<rect x="20" y="168" width="6" height="52" fill="#eb786e"/>
+<text x="36" y="182" class="sm">render_options ships the demo&#8217;s teaching switches</text>
+<text x="36" y="200" class="xs muted">trs_order::tsr exists so a lesson can show a bug. A shipping engine has no such enum</text>
+<text x="36" y="216" class="xs t-hi">paid in an exercise, and honestly never</text>
+<rect x="20" y="232" width="6" height="52" fill="#5082e6"/>
+<text x="36" y="246" class="sm">the sandbox is still 5,721 lines</text>
+<text x="36" y="264" class="xs muted">splitting it needs an application layer to split it INTO</text>
+<text x="36" y="280" class="xs t-hi">paid in 5.2, who owns the loop</text>
+<line x1="20" y1="300" x2="700" y2="300" class="grid" stroke-width="1"/>
+<text x="20" y="322" class="sm t-hi">A refactor lesson that ends &#8220;and now it is clean&#8221; is lying to you.</text>
+<text x="20" y="340" class="xs muted">The first pass draws the line. Which side each thing belongs on is argued for the rest of the module</text>
+<text x="20" y="354" class="xs muted">&#8212; and two of these four are argued by code that does not exist yet.</text>
+</svg>

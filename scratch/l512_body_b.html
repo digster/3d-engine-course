@@ -1,0 +1,548 @@
+  <h2 id="umbrella">3. Finding one: the table of contents that was not one</h2>
+
+  <p>
+    Before writing a line of the game, I did what a newcomer does: I opened
+    <code>engine/include/engine/engine.hpp</code>, because its first line says
+    <em>“the whole public API, in one include”</em> and its comment goes on to say something
+    stronger and more useful:
+  </p>
+
+  <blockquote>
+    <p>
+      It is also a <strong>TABLE OF CONTENTS</strong>: this file is the shortest complete statement
+      of what the engine offers, and the fastest way to see whether something is public is to look
+      for it here.
+    </p>
+  </blockquote>
+
+  <p>
+    That is a testable claim, so let us test it. Count the <code>.hpp</code> files under
+    <code>engine/include/engine/</code> — <em>other than <code>engine.hpp</code> itself</em>, which
+    is the set it could possibly list — then count the <code>#include</code> lines in
+    <code>engine.hpp</code>, and compare.
+  </p>
+
+  @@FIG_UMBRELLA@@
+
+  <p>
+    <strong>Forty of fifty-five.</strong> One of the fifteen absences is correct and documented —
+    <code>platform/main.hpp</code> defines a program's entry point, and an umbrella whose selling
+    point is “include everything, it is harmless” must not be a way to acquire a <code>main</code>
+    by accident. The other fourteen are not absences with reasons. They are the entire ECS, the
+    entire asset system, handles, pools, the logger, the assertion macros, the benchmark harness
+    and the action map: <em>very nearly everything Module 5 built</em>.
+  </p>
+
+  <p>
+    The file's own history is the whole explanation, and you can read it with one command:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">git log --oneline -- engine/include/engine/engine.hpp</code></pre>
+  </figure>
+
+  <p>
+    Three commits. Lesson 5.1 created it. Lesson 5.2 added <code>platform/</code> and
+    <code>app/</code>. Lesson 5.11 added <code>debug_lines</code> and <code>debug_ui</code>. Lessons
+    5.3, 5.4, 5.5, 5.6, 5.8, 5.9 and 5.10 shipped fourteen public headers between them and touched
+    this file zero times.
+  </p>
+
+  <p>
+    Notice that this is not carelessness in the ordinary sense — 5.2 and 5.11 <em>did</em> remember.
+    It is a rule kept by memory, and a rule kept by memory is kept about half the time. Which is
+    precisely the thing Lesson 5.1 said out loud when it moved the boundary into the include path:
+    <strong>enforced by the include path, not by the style guide.</strong> We applied that reasoning
+    to one rule and not to the one three lines below it.
+  </p>
+
+  <h3>3.1 Why it rotted: the file has no consumer</h3>
+
+  <p>
+    Here is the mechanism, and it is worth more than the bug. Search the repository for anything that
+    includes <code>&lt;engine/engine.hpp&gt;</code>:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">grep -rl "engine/engine.hpp" --include="*.cpp" --include="*.hpp" demos/ engine/
+# engine/include/engine/engine.hpp     (itself, and nothing else)</code></pre>
+  </figure>
+
+  <p>
+    Nothing. Not one demo, not one engine source. Every program in this repository includes what it
+    uses, because that is what the umbrella's own comment advises for anything built more than a
+    few hundred times. <strong>So the file is never compiled, and a header that is never compiled
+    cannot be kept correct by being used.</strong> It can only be kept correct by being checked.
+  </p>
+
+  <p>
+    That gives the fix a shape. Adding the fourteen missing lines takes a minute and buys nothing
+    durable, because the next lesson to add a header will forget for the same reason the last seven
+    did. What is worth building is the check, and it belongs where a new header is <em>noticed</em>
+    — at configure time, in <code>engine/CMakeLists.txt</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">file(GLOB_RECURSE engine_public_headers
+     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+     CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/*/*.hpp")
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/engine/engine.hpp"
+     engine_umbrella_lines REGEX "^#include &lt;engine/")</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <p class="label">A glob used as a lint, not as a source list</p>
+    <p>
+      Every CMake guide tells you not to <code>file(GLOB)</code>, and every one of them is talking
+      about globbing <em>sources</em>: adding a new <code>.cpp</code> does not re-trigger CMake, so
+      the build silently omits it and you get a link error you cannot explain. That objection does
+      not transfer here. A stale glob in a <em>lint</em> can only fail to notice a header added
+      since the last configure — it can never drop a translation unit, never change a flag, and
+      never break a build. Weigh that against what it replaces: a silent wrong answer that stood for
+      thirteen lessons. <code>CONFIGURE_DEPENDS</code> asks the generator to re-glob on each build,
+      which most generators honour and none are required to; it is belt and braces, not the argument.
+    </p>
+  </div>
+
+  <p>
+    The comparison itself has one trap in it, and the first draft fell in. Grepping the whole file
+    for the header's name passes on headers that are only <em>mentioned in a comment</em> — and the
+    single documented exception, <code>platform/main.hpp</code>, is named in prose precisely to say
+    that it is absent. A check that reads its own excuse as compliance is worse than no check, so
+    the match is anchored to a whole <code>#include</code> line.
+  </p>
+
+  <h3>3.2 The measurement, which comes out the other way round</h3>
+
+  <p>
+    Completing the umbrella makes it bigger, and bigger means slower. So before doing it, the
+    obvious prediction: the umbrella is the expensive way to include the engine, the explicit list
+    is the cheap way, and completing the umbrella widens the gap. Lesson 5.1 measured header costs
+    on this project rather than asserting them; let us do the same here. One translation unit,
+    compiled with <code>c++ -std=c++20 -c</code>, best of five.
+  </p>
+
+  @@FIG_COMPILE@@
+
+  <p>
+    The prediction is wrong, and it is wrong in an informative direction. <strong>The umbrella as
+    shipped (0.28 s) was <em>cheaper</em> than including exactly what the game uses (0.37 s)</strong>
+    — because the fourteen headers it was missing are the templated ones. <code>registry.hpp</code>,
+    <code>view.hpp</code>, <code>pool.hpp</code>, <code>asset_store.hpp</code> and
+    <code>actions.hpp</code> are where this engine's compile time actually lives, and an umbrella
+    that omits them is not cheap, it is <em>incomplete</em>, and the two look identical on a
+    stopwatch.
+  </p>
+
+  <div class="worked">
+    <p class="label">Worked: what completing it costs</p>
+    <p class="mono">
+      umbrella, as shipped (40 headers)&nbsp;&nbsp;&nbsp;0.28 s<br>
+      umbrella, completed (55 headers)&nbsp;&nbsp;&nbsp;&nbsp;0.39 s<br>
+      <br>
+      change&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(0.39 &minus; 0.28) / 0.28 = +39.3%<br>
+      against explicit&nbsp;&nbsp;(0.39 &minus; 0.37) / 0.37 = &nbsp;+5.4%<br>
+      <br>
+      baseline (an empty file)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.01 s
+    </p>
+    <p>
+      So the corrected umbrella costs 39% more than the broken one and 5.4% more than including what
+      you use. <strong>The honest headline is that the one-translation-unit cost of an umbrella is
+      not the reason to avoid it.</strong> The reason is the one Lesson 5.1 measured and this
+      lesson does not re-measure: with explicit includes, editing <code>gpu_scene.hpp</code>
+      recompiles the files that use the GPU scene; with an umbrella it recompiles everything. That
+      is a property of the <em>dependency graph</em>, and it does not show up in a single-file
+      benchmark at all.
+    </p>
+  </div>
+
+  <p>
+    Both facts go in the header's comment, because a reader who finds only the first number will
+    conclude the umbrella is fine and a reader who finds only the second will conclude it is a
+    disaster.
+  </p>
+
+  <h2 id="bridge">4. Finding two: a promise Module 5 made and did not keep</h2>
+
+  <p>
+    Now the eleventh row of §2's table. The game has entities; the renderer draws
+    <code>scene_object</code>s; what connects them?
+  </p>
+
+  <p>
+    Nothing public. <code>collect_triangles</code> takes
+    <code>std::span&lt;const scene_object&gt;</code>, and a <code>scene_object</code> is a struct
+    with a <code>transform</code> in it — not an entity, not a component, not a registry. So the
+    game must walk the registry itself and build the span. That loop already exists, once, in
+    <code>ecs_swarm</code>, and it is twenty lines. Writing it a second time is the obvious move and
+    the wrong one, because of what those twenty lines <em>contain</em>.
+  </p>
+
+  <p>
+    Open <code>gfx/scene.hpp</code> and read its opening paragraph, which has been there since
+    Lesson 5.1:
+  </p>
+
+  <blockquote>
+    <p>
+      It is deliberately <strong>NOT</strong> the final answer. <strong>Module 5's ECS replaces the
+      struct with components</strong>, and Module 6 pulls the surface fields out into a material.
+      Both of those are named in the comments below where the seams already show.
+    </p>
+  </blockquote>
+
+  <p>
+    Module 5 is this module. It built the ECS in 5.8 and the hierarchy in 5.9, and it never took the
+    second step — so the seam the comment points at is still open, and the twenty lines in
+    <code>ecs_swarm</code> are what fills it by hand. This lesson is Module 5's last, so it is the
+    last chance for that sentence to be true.
+  </p>
+
+  <h3>4.1 Hoisting at two callers, against our own rule</h3>
+
+  <p>
+    There is a complication, and it deserves to be argued rather than waved past. This engine's own
+    stated rule — written twice, in <code>scene.hpp</code> — is that <em>a type invented before
+    three callers have asked for one is a guess</em>. We have two: <code>ecs_swarm</code>, and the
+    game about to be written. Hoisting now breaks our rule.
+  </p>
+
+  <p>
+    The reason to do it anyway is not “two is close to three”. It is that <strong>what is duplicated
+    is not an idiom, it is a known-broken workaround</strong>. Here are the four lines at the heart
+    of <code>ecs_swarm</code>'s <code>render_system</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/ecs_swarm/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">.xform = {.position = engine::translation_of(w.matrix),
+          .rotation = engine::linear_of(w.matrix),
+          .scale    = {1.0f, 1.0f, 1.0f}},</code></pre>
+  </figure>
+
+  <p>
+    The hierarchy produced a <code>mat4</code>; <code>scene_object</code> wants a
+    <code>transform</code>; and a <code>transform</code> has no field for “a general linear map”. So
+    the whole 3 × 3 linear part is dropped into the field called <code>rotation</code> and the scale
+    is set to 1. It works — exactly, as §4.2 proves — and it works only because that field happens
+    to be a bare <code>mat3</code> with no orthonormality requirement. <code>ecs_swarm</code>'s own
+    comment says so, and predicts the end of it:
+  </p>
+
+  <blockquote>
+    <p>
+      It abuses the fact that the field is named <code>rotation</code> and typed <code>mat3</code>,
+      which is precisely why it is a bridge and not a design. <strong>Module 6 gives the renderer a
+      matrix directly and this function loses its last four lines.</strong>
+    </p>
+  </blockquote>
+
+  <p>
+    A stable idiom repeated twice is a coincidence. <strong>A workaround repeated twice is two
+    places to fix on the day somebody finally changes <code>scene_object</code></strong> — and one
+    of those two places is inside a demo, which nobody thinks of as engine code and nobody greps
+    when they change an engine type. That is the argument, and it is narrow: we are hoisting a
+    <em>conversion</em>, not inventing a <em>type</em>. <code>renderable</code> is not speculative
+    either — it is <code>scene_object</code> with the placement removed, and
+    <code>scene_object</code> has existed since Lesson 3.1.
+  </p>
+
+  <h3>4.2 The conversion is exact, and that has to be checked</h3>
+
+  <p>
+    “It works exactly” is the sort of claim that is either true to the bit or quietly false by a
+    thousandth. Let us derive why it is the former, and then measure it.
+  </p>
+
+  <p>
+    <code>parent_from_local</code> builds a <code>mat4</code> from a <code>transform</code> by
+    scaling each basis column and putting the position in the fourth:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ M \;=\; \begin{bmatrix} s_x\,\mathbf{r}_0 & s_y\,\mathbf{r}_1 & s_z\,\mathbf{r}_2 & \mathbf{p} \\ 0 & 0 & 0 & 1 \end{bmatrix} \;=\; \begin{bmatrix} R\,S & \mathbf{p} \\ \mathbf{0}^{\!\top} & 1 \end{bmatrix} \]</span>
+    <span class="eq-plain">M = [ R*S | p ; 0 0 0 1 ], where S = diag(sx, sy, sz)</span>
+  </div>
+
+  <p>
+    Reading that backwards is the question: given <em>M</em>, find a <code>transform</code> that
+    reproduces it. The obvious route — decompose <em>RS</em> into a rotation and a scale — is a
+    polar decomposition, it is iterative, it is lossy, and it fails outright on a shear. The route
+    the code takes is to notice that the equation has an easier solution if you stop insisting that
+    <em>R</em> be a rotation. Put <em>S</em> = <em>I</em> and let <em>R</em> absorb everything:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R' \;=\; \text{linear}(M), \qquad S' \;=\; I, \qquad \mathbf{p}' \;=\; \text{translation}(M) \quad\Longrightarrow\quad R'S' \;=\; R'\;=\;\text{linear}(M) \]</span>
+    <span class="eq-plain">R' = linear(M), S' = I, p' = translation(M)  =&gt;  R'*S' = linear(M), exactly</span>
+  </div>
+
+  <p>
+    No arithmetic is performed at all. The nine numbers are copied, the three are copied, and the
+    multiply by <em>I</em> that <code>parent_from_local</code> performs on the way back is a
+    multiply by one. That is why the round trip is exact in the strongest sense available: not
+    “within <code>1e-6</code>”, but <em>zero</em>.
+  </p>
+
+  <div class="worked">
+    <p class="label">Worked: one transform, out and back</p>
+    <p>
+      Take a deliberately awkward one — a non-uniform scale, three rotations, an off-axis position:
+    </p>
+    <p class="mono">
+      position = (1.25, &minus;3.5, 7.75)<br>
+      rotation = Ry(0.7) · Rx(&minus;0.31) · Rz(1.9)<br>
+      scale&nbsp;&nbsp;&nbsp; = (2.5, 0.125, 1.75)
+    </p>
+    <p>
+      Resolve it through the hierarchy, collect it, and recompose the result. <code>verify_512</code>
+      §B compares all sixteen elements:
+    </p>
+    <p class="mono">
+      ok&nbsp;&nbsp; max |element difference| = 0 (expected exactly 0)<br>
+      ok&nbsp;&nbsp; CONTROL: a 1.0 nudge is reported as 1 (must be &gt; 0.5)
+    </p>
+    <p>
+      The control is not decoration. “The difference is zero” is also what you get from comparing
+      something with itself, from comparing two empty matrices, or from a comparison function that
+      returns zero. Perturbing one element by 1.0 and requiring the same code to report it is what
+      makes the first line mean something.
+    </p>
+  </div>
+
+  <h2 id="where">5. Where the new header goes, and what it may include</h2>
+
+  <p>
+    Two decisions, and both are physical design rather than taste.
+  </p>
+
+  <h3>5.1 Should the <em>engine</em> define a component at all?</h3>
+
+  <p>
+    Publishing a <em>system</em> is uncontroversial. Publishing a <em>component</em> is a real
+    commitment: every program that wants this loop must store its mesh handle in the engine's
+    struct rather than its own, and an engine that publishes components is taking a position on how
+    a game is laid out. Some engines do (Unity's <code>MeshRenderer</code>); some deliberately do
+    not (EnTT ships a registry and no components at all).
+  </p>
+
+  <p>
+    The precedent is already set, and by this same module. <code>ecs/hierarchy.hpp</code> defines
+    <code>parent</code> and <code>world_transform</code>, and it had to, for a reason that is
+    mechanical rather than philosophical: <code>hierarchy::resolve</code> cannot be written against
+    “whatever component you happen to call parent”. A system the engine owns must name the data it
+    reads or it cannot be compiled. That gives a rule you can apply:
+  </p>
+
+  <div class="callout ok">
+    <p class="label">The rule</p>
+    <p>
+      <strong>The engine defines a component when, and only when, an engine system reads it.
+      Everything else is the game's.</strong>
+    </p>
+  </div>
+
+  <p>
+    So <code>renderable</code> is the engine's, and <code>rover</code>, <code>collectible</code>,
+    <code>spinner</code>, <code>bobber</code>, <code>carousel</code> and <code>pillar</code> are
+    not — nothing under <code>engine/</code> will ever look at them, and nothing in the game had to
+    ask permission to invent them.
+  </p>
+
+  <h3>5.2 <code>gfx/</code> or <code>ecs/</code>?</h3>
+
+  <p>
+    The struct holds a <code>mesh_handle</code> and the function takes a <code>registry</code>, so
+    it touches both. Put it under <code>ecs/</code> and every program that includes the ECS compiles
+    <code>mesh.hpp</code>, <code>light.hpp</code> and their transitive closure — to store a
+    component that no simulation code will ever read. Put it under <code>gfx/</code> and graphics
+    knows about entities while entities know nothing about graphics.
+  </p>
+
+  <p>
+    The deciding principle is the direction of the arrow: a dependency should point towards the more
+    general and the more stable. A registry has no opinion about meshes and a great deal of future
+    code — Module 8's physics, a save system, an editor — wants entities and will never want a
+    <code>mesh_handle</code>. So: <code>engine/gfx/renderable.hpp</code>, and the ECS stays clean.
+  </p>
+
+  <h3>5.3 And the registry is named, not included</h3>
+
+  <p>
+    Lesson 5.11's rule was that a header's include list <em>is</em> its interface. This header names
+    <code>ecs::registry</code> in one signature and never dereferences it, which is exactly the case
+    a forward declaration covers:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/renderable.hpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// Named, not included. `collect_renderables` takes a reference, and a
+// reference to an incomplete type is legal C++.
+namespace engine::ecs { class registry; }</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <p class="label">C++ in place: incomplete types</p>
+    <p>
+      A declaration like <code>class registry;</code> introduces the <em>name</em> of a type without
+      its definition. You may then form pointers and references to it, declare functions that take
+      and return them, and nothing more — you cannot create one, call a member, take
+      <code>sizeof</code>, or inherit from it, because none of those can be answered without the
+      layout. That is the whole trade: a reference parameter needs only a name, so the definition can
+      stay in the <code>.cpp</code>. <code>gpu_scene.hpp</code> already does this for
+      <code>instance_batch</code>, and says why in a comment.
+    </p>
+  </div>
+
+  <p>
+    The cost of getting this wrong is not hypothetical. §3.2 measured the templated ECS headers as
+    the expensive half of this engine's public surface; every file that merely <em>stores</em> a
+    <code>renderable</code> would pay for them.
+  </p>
+
+  @@FIG_BRIDGE@@
+
+  <h2 id="boom">6. The camera boom, and an assertion that hangs</h2>
+
+  <p>
+    Lesson 5.9 made the camera an entity, and one consequence is so convenient it is easy to take
+    the wrong lesson from it: <strong>parent the camera to the player and you have a follow camera,
+    for free, with no system and no code.</strong> It rides along because riding along is what
+    “my placement is relative to my parent” means.
+  </p>
+
+  <p>
+    It is also wrong, and specifically so. The rover leans into its turns — a cosmetic roll of up to
+    22°, which looks good on a car and is poison to a camera. A camera parented straight to the
+    rover inherits the entire basis, roll included, so the <em>horizon</em> see-saws. Viewers do not
+    read that as the car leaning; they read it as the world tilting, because the camera is the
+    viewer's inner ear. And there is a second inheritance that is worse than cosmetic: the rover is
+    a scaled box, 0.60 × 0.44 × 0.84 metres, so a camera parented to it inherits a
+    <em>non-uniform scale</em>.
+  </p>
+
+  <p>
+    The fix is not a special case in the renderer and not a “camera follow” system. It is one more
+    link in the chain — a <em>boom</em>, an entity with a transform and no components of its own,
+    whose only job is to be a place where the two unwanted factors can be cancelled.
+  </p>
+
+  @@FIG_BOOM@@
+
+  <p>
+    Now the algebra, which is short and has exactly one trap in it. The rover's world basis is its
+    heading <em>H</em>, times its roll <em>R<sub>z</sub></em>(bank), times its scale <em>S</em>. We
+    want the boom's world basis to be <em>H</em> alone. Since
+    <code>world(boom) = world(rover) · local(boom)</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ L \;=\; \bigl(H\,R_z(\beta)\,S\bigr)^{-1} H \;=\; S^{-1} R_z(-\beta)\,H^{-1} H \;=\; S^{-1} R_z(-\beta) \]</span>
+    <span class="eq-plain">L = (H * Rz(bank) * S)^-1 * H = S^-1 * Rz(-bank) * H^-1 * H = S^-1 * Rz(-bank)</span>
+  </div>
+
+  <p>
+    <strong>The inverse of a product reverses the order of its factors</strong>, so the unscale
+    comes first and the unroll second. Read that sentence again, because the English description of
+    what we are doing — “undo the roll, then undo the scale” — produces
+    <em>R<sub>z</sub></em>(&minus;β)·<em>S</em><sup>&minus;1</sup>, which is the other one. And a
+    rotation and a non-uniform scale do not commute, so the two are genuinely different matrices.
+  </p>
+
+  <div class="worked">
+    <p class="label">Worked: why the wrong order is not a small error</p>
+    <p>
+      Take the rover's actual scale <em>S</em> = diag(0.60, 0.44, 0.84) and a bank of 0.31 rad
+      (17.8°). Consider what each candidate does to the boom's <em>x</em> axis, (1, 0, 0):
+    </p>
+    <p class="mono">
+      S⁻¹ · Rz(&minus;β) · (1,0,0) &nbsp;= S⁻¹ · (0.9523, &minus;0.3051, 0)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (1.5872, &minus;0.6934, 0)<br>
+      <br>
+      Rz(&minus;β) · S⁻¹ · (1,0,0) &nbsp;= Rz(&minus;β) · (1.6667, 0, 0)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= (1.5872, &minus;0.5085, 0)
+    </p>
+    <p>
+      The <em>x</em> components agree to four decimal places and the <em>y</em> components differ by
+      36%. That is what makes this bug expensive: the result is close enough to look like a tuning
+      problem. And the first version of this file shipped the second one.
+    </p>
+  </div>
+
+  <h3>6.1 What actually happened when it was wrong</h3>
+
+  <p>
+    The program did not draw a tilted horizon. It <strong>hung</strong>, in a headless
+    <code>--shot</code> run, for ever, with no output at all — and that is a more instructive
+    failure than the wrong picture would have been.
+  </p>
+
+  <p>
+    Lesson 5.9's <code>view_from_camera</code> asserts its input is rigid, because a view matrix is
+    the <em>inverse</em> of a camera's placement and the fast inverse it uses
+    (<code>rigid_inverse</code>) is only an inverse when the basis is orthonormal. The boom with its
+    factors swapped leaves a basis that is neither, so the assertion is entirely correct and fires
+    on the first frame. What happens next is the part nobody had met yet:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell — sampling the hung process</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">1538 SDL_AppIterate  (in collector) + 24                    main.cpp:1058
+  1538 engine::app_runner::iterate(void*)                    app.cpp:147
+    1538 collector_app::on_frame(float)                      main.cpp:508
+      1538 engine::ecs::view_from_camera(...)                camera.hpp:144</code></pre>
+  </figure>
+
+  <p>
+    Lesson 5.3 shipped <code>SDL_assert</code> and made a point of the fact that it expands to a
+    <code>while</code> loop so that its <kbd>RETRY</kbd> option genuinely re-tests the condition.
+    That is exactly right at a desk with a dialog box in front of you. In a headless run on a build
+    server, with no display to put a dialog on and no terminal to prompt at, the handler's default
+    answer keeps arriving and the loop keeps retrying a condition that cannot change. <strong>The
+    assertion that would have taken one second to diagnose interactively became a hang with no
+    message.</strong>
+  </p>
+
+  <div class="callout warn">
+    <p class="label">The general shape of this</p>
+    <p>
+      An assertion is a <em>developer-facing</em> control flow, and <code>--shot</code> is the one
+      configuration in this repository that has no developer in front of it. That is not a reason to
+      remove the assertion — it caught a real bug on the first run, which is precisely its job — but
+      it is a reason to know the failure mode before you meet it at three in the morning on CI.
+      Lesson 5.12 does not change SDL's handler; it reports the behaviour, and
+      <a href="#exercises">Exercise 5</a> installs a handler that aborts instead of retrying when
+      there is no video subsystem.
+    </p>
+  </div>
+
+  <p>
+    The fix is one line, and <code>verify_512</code> §E keeps it fixed by building all three chains
+    — right order, wrong order, and no boom at all — and asserting the rigidity of each. Note the
+    third: without a control that also fails, “the wrong order is not rigid” would be equally
+    consistent with the boom doing nothing whatsoever.
+  </p>

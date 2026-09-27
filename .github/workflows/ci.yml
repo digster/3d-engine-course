@@ -1,0 +1,119 @@
+# CI v1 — "cross-platform from day one", measured instead of claimed.
+#
+# Until 2026-09-26 every build and every check in this course had run on one
+# machine: macOS, Apple Clang, Metal. The course promises Windows, Linux and
+# macOS with MSVC, GCC and Clang (master prompt §4), and nothing had ever tested
+# two of the three platforms or two of the three compilers.
+#
+# This first version BUILDS on all four toolchains and runs the authoring checks.
+# It deliberately does not pass -Werror yet: the first runs exist to MEASURE the
+# cross-platform debt (each job publishes a warning count and the build log).
+# Module 9's planned hardening lesson turns warnings into errors and adds shader
+# compilation with DXC, so DXIL is produced for the first time.
+#
+# Shaders are skipped here: no runner ships SDL_shadercross, and
+# cmake/Shaders.cmake then warns and compiles every C++ target without them —
+# the same experience a student has before installing the shader toolchain.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false          # one platform's failure must not hide another's
+      matrix:
+        include:
+          - { name: linux-gcc,   os: ubuntu-24.04, cc: gcc,   cxx: g++ }
+          - { name: linux-clang, os: ubuntu-24.04, cc: clang, cxx: clang++ }
+          - { name: windows-msvc, os: windows-2022 }
+          - { name: macos-clang, os: macos-14 }
+    steps:
+      - uses: actions/checkout@v4
+
+      # SDL3 refuses to configure on Linux without X11 or Wayland development
+      # headers ("SDL could not find X11 or Wayland development libraries").
+      # This is SDL's own documented list, trimmed to what a desktop build needs.
+      - name: Install SDL3 build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libpulse-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libudev-dev
+
+      - name: Configure
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      # tee + PIPESTATUS: keep the full log for the warning count below while
+      # still failing the step on a compile ERROR.
+      - name: Build
+        shell: bash
+        run: |
+          cmake --build build --config RelWithDebInfo --parallel 4 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
+
+      # Only OUR warnings: engine/ and demos/. Third-party code is included as
+      # SYSTEM headers (cpp-style.html §9), so its warnings should not appear at
+      # all — if they do, that is worth seeing too, but it is not counted here.
+      - name: Count warnings in engine/ and demos/
+        if: always()
+        shell: bash
+        run: |
+          grep -E '(engine|demos)[/\\][^ ]*[:(][0-9]+.*warning' build.log | sort -u > warnings.txt || true
+          count=$(wc -l < warnings.txt | tr -d ' ')
+          {
+            echo "### ${{ matrix.name }}: ${count} warning(s) in engine/ and demos/"
+            echo '```'
+            head -n 50 warnings.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.name }}
+          path: |
+            build.log
+            warnings.txt
+
+  # The course's own consistency checks. Full history is required:
+  # check-continuity.py reads every "Add Lesson" commit.
+  docs:
+    name: authoring checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Checker unit tests
+        run: python3 -m unittest discover docs/_template/tests
+      - name: Curriculum (index, totals, badges, nav, links, STATE)
+        run: python3 docs/_template/check-curriculum.py
+      - name: Builders (every page rebuilds byte-identically from tracked files)
+        run: python3 docs/_template/check-builders.py
+      - name: Continuity (the pages reproduce the engine)
+        run: python3 docs/_template/check-continuity.py

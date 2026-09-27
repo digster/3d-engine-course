@@ -1,0 +1,78 @@
+<svg viewBox="0 0 980 422" role="img" aria-labelledby="g4-t g4-d">
+  <title id="g4-t">The twist row's axis, and the error of the obvious ones</title>
+  <desc id="g4-d">Left: the cone axis, the bone, and the twist row's axis — the half-way vector scaled by 1/cos(phi/2) — with the formula for the twist rate and the bound on the bone row's error. Right: on a log axis, the worst relative error of three candidate rows in seven swing bins: the half-way row near 1e-3 everywhere, the bone and cone-axis rows above 1 beyond a degree of swing.</desc>
+  <defs>
+    <marker id="e-i-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-grey-g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">What the twist's rate is about</text>
+<line x1="170.00" y1="70.00" x2="170.00" y2="190.00" stroke="#8f918a" stroke-width="1.9" marker-end="url(#e-grey-g4)"/>
+<text x="178.0" y="204.0" class="xs" text-anchor="start">a₁ (t)</text>
+<line x1="170.00" y1="70.00" x2="288.18" y2="90.84" stroke="#5082e6" stroke-width="1.9" marker-end="url(#e-blue-g4)"/>
+<text x="296.176930361465" y="104.83778132003165" class="xs" text-anchor="start">b₁ (c)</text>
+<line x1="170.00" y1="70.00" x2="270.69" y2="190.00" stroke="#5ac878" stroke-width="1.9" marker-end="url(#e-green-g4)"/>
+<text x="278.6919557412736" y="204.0" class="xs" text-anchor="start">(a₁ + b₁)/(1 + a₁·b₁)</text>
+<text x="26" y="226" class="xs" text-anchor="start">The swing's own angular velocity is 2h × ḣ — perpendicular to</text>
+<text x="26" y="241" class="xs" text-anchor="start">h, so it has no component along a₁ + b₁. Every other bit of the</text>
+<text x="26" y="256" class="xs" text-anchor="start">relative spin along that axis is twist:</text>
+<text x="26" y="286" class="xs mono" text-anchor="start">dθ/dt = (ω_b − ω_a) · (a₁ + b₁) / (1 + a₁·b₁)</text>
+<text x="26" y="316" class="xs" text-anchor="start">the half-way axis over cos(φ/2). A row about the bone is wrong</text>
+<text x="26" y="331" class="xs" text-anchor="start">by −(ω⊥ · a₁)/(1 + cos φ): at most |ω⊥|·tan(φ/2) — measured to</text>
+<text x="26" y="346" class="xs" text-anchor="start">1.0045 of that bound.</text>
+<text x="490" y="30" class="sm" text-anchor="start">40,000 random joints: row J·V against dθ/dt, by swing</text>
+<rect x="520" y="58" width="420" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="520" y1="288.0" x2="940" y2="288.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="292.0" class="xs mono" text-anchor="end">0.0001</text>
+<line x1="520" y1="242.0" x2="940" y2="242.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="246.0" class="xs mono" text-anchor="end">0.001</text>
+<line x1="520" y1="196.0" x2="940" y2="196.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="200.0" class="xs mono" text-anchor="end">0.01</text>
+<line x1="520" y1="150.0" x2="940" y2="150.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="154.0" class="xs mono" text-anchor="end">0.1</text>
+<line x1="520" y1="104.0" x2="940" y2="104.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="108.0" class="xs mono" text-anchor="end">1</text>
+<line x1="520" y1="58.0" x2="940" y2="58.0" class="grid" stroke-width="0.6"/>
+<text x="514" y="62.0" class="xs mono" text-anchor="end">10</text>
+<rect x="528.4" y="251.23033472513524" width="11.2" height="36.769665274864764" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="541.6" y="172.33080337762684" width="11.2" height="115.66919662237316" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="554.8" y="172.33080337762684" width="11.2" height="115.66919662237316" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="550.0" y="304" class="xs mono" text-anchor="middle">0–1</text>
+<rect x="588.4" y="242.10013828569663" width="11.2" height="45.89986171430337" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="601.6" y="94.11718298980588" width="11.2" height="193.88281701019412" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="614.8" y="92.70641728054912" width="11.2" height="195.29358271945088" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="610.0" y="304" class="xs mono" text-anchor="middle">1–30</text>
+<rect x="648.4" y="242.54680934765582" width="11.2" height="45.453190652344176" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="661.6" y="85.06549352569141" width="11.2" height="202.9345064743086" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="674.8" y="83.50220664941452" width="11.2" height="204.49779335058548" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="670.0" y="304" class="xs mono" text-anchor="middle">30–60</text>
+<rect x="708.4" y="237.22502883602598" width="11.2" height="50.774971163974016" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="721.6" y="75.76327619370082" width="11.2" height="212.23672380629918" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="734.8" y="75.71472806247581" width="11.2" height="212.2852719375242" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="730.0" y="304" class="xs mono" text-anchor="middle">60–90</text>
+<rect x="768.4" y="234.57707189719116" width="11.2" height="53.42292810280884" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="781.6" y="71.29569652621731" width="11.2" height="216.7043034737827" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="794.8" y="70.60806491442779" width="11.2" height="217.39193508557221" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="790.0" y="304" class="xs mono" text-anchor="middle">90–120</text>
+<rect x="828.4" y="220.18605185249226" width="11.2" height="67.81394814750774" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="841.6" y="69.72655958722535" width="11.2" height="218.27344041277465" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="854.8" y="67.67928724043645" width="11.2" height="220.32071275956355" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="850.0" y="304" class="xs mono" text-anchor="middle">120–150</text>
+<rect x="888.4" y="206.91678606853793" width="11.2" height="81.08321393146207" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="901.6" y="71.9676061182667" width="11.2" height="216.0323938817333" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.7"/>
+<rect x="914.8" y="69.29997655729309" width="11.2" height="218.7000234427069" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="0.8" fill-opacity="0.7"/>
+<text x="910.0" y="304" class="xs mono" text-anchor="middle">150–175</text>
+<text x="730.0" y="320" class="xs muted" text-anchor="middle">swing (degrees)</text>
+<line x1="520.0" y1="338.0" x2="540.0" y2="338.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="548" y="342" class="xs" text-anchor="start">half-way / cos(φ/2) — the engine's row: float-difference resolution</text>
+<line x1="520.0" y1="355.0" x2="540.0" y2="355.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="548" y="359" class="xs" text-anchor="start">about the bone, b₁</text>
+<line x1="520.0" y1="372.0" x2="540.0" y2="372.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="548" y="376" class="xs" text-anchor="start">about the cone's axis, a₁</text>
+<text x="548" y="393" class="xs muted" text-anchor="start">worst |row − rate| / max(1, |rate|); at exactly zero swing all three agree to 9.5e-07</text>
+</svg>

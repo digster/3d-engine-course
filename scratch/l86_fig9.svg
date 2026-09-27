@@ -1,0 +1,97 @@
+<svg viewBox="0 0 900 450" role="img" aria-labelledby="l86f9-t l86f9-d">
+  <title id="l86f9-t">Mean EPA expansions against tolerance for five shape pairs.</title>
+  <desc id="l86f9-d">A line chart with tolerance from 1e-2 to 1e-6 on the horizontal axis. Box against box is flat at about 10 expansions and hull against hull flat at about 8: both are polytopes and terminate exactly. Capsule and sphere against a box climb gently. Sphere against sphere climbs steeply from 28.6 to the 60-expansion cap, because a ball has no faces to reach.</desc>
+  <defs>
+    <marker id="e-i-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-l86f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Mean expansions as the tolerance tightens — and the odd one out has swapped places.</text>
+<rect x="150" y="76" width="420" height="210" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="150" y1="271.0" x2="570" y2="271.0" class="grid" stroke-width="1.0"/>
+<text x="142" y="275.0" class="xs muted" text-anchor="end">10</text>
+<line x1="150" y1="233.5" x2="570" y2="233.5" class="grid" stroke-width="1.0"/>
+<text x="142" y="237.5" class="xs muted" text-anchor="end">20</text>
+<line x1="150" y1="196.0" x2="570" y2="196.0" class="grid" stroke-width="1.0"/>
+<text x="142" y="200.0" class="xs muted" text-anchor="end">30</text>
+<line x1="150" y1="158.5" x2="570" y2="158.5" class="grid" stroke-width="1.0"/>
+<text x="142" y="162.5" class="xs muted" text-anchor="end">40</text>
+<line x1="150" y1="121.0" x2="570" y2="121.0" class="grid" stroke-width="1.0"/>
+<text x="142" y="125.0" class="xs muted" text-anchor="end">50</text>
+<line x1="150" y1="83.5" x2="570" y2="83.5" class="grid" stroke-width="1.0"/>
+<text x="142" y="87.5" class="xs muted" text-anchor="end">60</text>
+<text x="142" y="68" class="xs muted" text-anchor="end">expansions</text>
+<line x1="150.0" y1="76" x2="150.0" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="150.0" y="302" class="xs muted" text-anchor="middle">1e−2</text>
+<line x1="255.0" y1="76" x2="255.0" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="255.0" y="302" class="xs muted" text-anchor="middle">1e−3</text>
+<line x1="360.0" y1="76" x2="360.0" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="360.0" y="302" class="xs muted" text-anchor="middle">1e−4</text>
+<line x1="465.0" y1="76" x2="465.0" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="465.0" y="302" class="xs muted" text-anchor="middle">1e−5</text>
+<line x1="570.0" y1="76" x2="570.0" y2="286" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<text x="570.0" y="302" class="xs muted" text-anchor="middle">1e−6</text>
+<line x1="150.0" y1="271.8" x2="255.0" y2="270.7" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<line x1="255.0" y1="270.7" x2="360.0" y2="270.6" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<line x1="360.0" y1="270.6" x2="465.0" y2="270.6" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<line x1="465.0" y1="270.6" x2="570.0" y2="270.6" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<circle cx="150.0" cy="271.8" r="2.6" fill="#5082e6"/>
+<circle cx="255.0" cy="270.7" r="2.6" fill="#5082e6"/>
+<circle cx="360.0" cy="270.6" r="2.6" fill="#5082e6"/>
+<circle cx="465.0" cy="270.6" r="2.6" fill="#5082e6"/>
+<circle cx="570.0" cy="270.6" r="2.6" fill="#5082e6"/>
+<line x1="150.0" y1="278.8" x2="255.0" y2="277.2" stroke="#8f918a" stroke-width="2.0" fill="none"/>
+<line x1="255.0" y1="277.2" x2="360.0" y2="277.0" stroke="#8f918a" stroke-width="2.0" fill="none"/>
+<line x1="360.0" y1="277.0" x2="465.0" y2="277.0" stroke="#8f918a" stroke-width="2.0" fill="none"/>
+<line x1="465.0" y1="277.0" x2="570.0" y2="277.0" stroke="#8f918a" stroke-width="2.0" fill="none"/>
+<circle cx="150.0" cy="278.8" r="2.6" fill="#8f918a"/>
+<circle cx="255.0" cy="277.2" r="2.6" fill="#8f918a"/>
+<circle cx="360.0" cy="277.0" r="2.6" fill="#8f918a"/>
+<circle cx="465.0" cy="277.0" r="2.6" fill="#8f918a"/>
+<circle cx="570.0" cy="277.0" r="2.6" fill="#8f918a"/>
+<line x1="150.0" y1="275.6" x2="255.0" y2="269.7" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<line x1="255.0" y1="269.7" x2="360.0" y2="264.6" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<line x1="360.0" y1="264.6" x2="465.0" y2="261.7" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<line x1="465.0" y1="261.7" x2="570.0" y2="259.1" stroke="#f0961e" stroke-width="2.0" fill="none"/>
+<circle cx="150.0" cy="275.6" r="2.6" fill="#f0961e"/>
+<circle cx="255.0" cy="269.7" r="2.6" fill="#f0961e"/>
+<circle cx="360.0" cy="264.6" r="2.6" fill="#f0961e"/>
+<circle cx="465.0" cy="261.7" r="2.6" fill="#f0961e"/>
+<circle cx="570.0" cy="259.1" r="2.6" fill="#f0961e"/>
+<line x1="150.0" y1="269.4" x2="255.0" y2="261.1" stroke="#9b7ede" stroke-width="2.0" fill="none"/>
+<line x1="255.0" y1="261.1" x2="360.0" y2="256.3" stroke="#9b7ede" stroke-width="2.0" fill="none"/>
+<line x1="360.0" y1="256.3" x2="465.0" y2="254.8" stroke="#9b7ede" stroke-width="2.0" fill="none"/>
+<line x1="465.0" y1="254.8" x2="570.0" y2="251.6" stroke="#9b7ede" stroke-width="2.0" fill="none"/>
+<circle cx="150.0" cy="269.4" r="2.6" fill="#9b7ede"/>
+<circle cx="255.0" cy="261.1" r="2.6" fill="#9b7ede"/>
+<circle cx="360.0" cy="256.3" r="2.6" fill="#9b7ede"/>
+<circle cx="465.0" cy="254.8" r="2.6" fill="#9b7ede"/>
+<circle cx="570.0" cy="251.6" r="2.6" fill="#9b7ede"/>
+<line x1="150.0" y1="201.1" x2="255.0" y2="156.4" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<line x1="255.0" y1="156.4" x2="360.0" y2="115.8" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<line x1="360.0" y1="115.8" x2="465.0" y2="83.5" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<line x1="465.0" y1="83.5" x2="570.0" y2="83.5" stroke="#e05c5c" stroke-width="2.0" fill="none"/>
+<circle cx="150.0" cy="201.1" r="2.6" fill="#e05c5c"/>
+<circle cx="255.0" cy="156.4" r="2.6" fill="#e05c5c"/>
+<circle cx="360.0" cy="115.8" r="2.6" fill="#e05c5c"/>
+<circle cx="465.0" cy="83.5" r="2.6" fill="#e05c5c"/>
+<circle cx="570.0" cy="83.5" r="2.6" fill="#e05c5c"/>
+<text x="586" y="83.5" class="xs" text-anchor="start">sphere/sphere</text>
+<text x="586" y="251.6125" class="xs" text-anchor="start">sphere vs box</text>
+<line x1="572.0" y1="259.1" x2="582.0" y2="263.6" stroke="#f0961e" stroke-width="0.9" fill="none" stroke-dasharray="2 2"/>
+<text x="586" y="267.6125" class="xs" text-anchor="start">capsule vs box</text>
+<line x1="572.0" y1="270.6" x2="582.0" y2="279.6" stroke="#5082e6" stroke-width="0.9" fill="none" stroke-dasharray="2 2"/>
+<text x="586" y="283.6125" class="xs" text-anchor="start">box vs box</text>
+<line x1="572.0" y1="277.0" x2="582.0" y2="295.6" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="2 2"/>
+<text x="586" y="299.6125" class="xs" text-anchor="start">hull vs hull</text>
+<line x1="20" y1="330" x2="880" y2="330" class="grid" stroke-width="1.0"/>
+<text x="20" y="354" class="sm t-hi" text-anchor="start">8.5 ran this table for GJK and found the SPHERE flat at ONE iteration. Here it is the worst row — 28.6 rising to the cap.</text>
+<text x="20" y="376" class="xs" text-anchor="start">Same shape, same support function, opposite behaviour. GJK walks TO a ball's surface, and the nearest point of a ball to an outside point is on</text>
+<text x="20" y="392" class="xs" text-anchor="start">the line to its centre, so the first support call lands on the answer. EPA has to COVER that surface with flat triangles, and no finite number of</text>
+<text x="20" y="408" class="xs" text-anchor="start">them is ever exact. A box and a hull are polytopes: their vertex sets are finite, so the expansion finishes and the tolerance is never what stopped it.</text>
+<text x="20" y="430" class="xs muted" text-anchor="start">Which is why 8.4 ships `collide(sphere, sphere)` as one subtraction, and why an engine keeps it.</text>
+</svg>

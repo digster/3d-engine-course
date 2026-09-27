@@ -1,0 +1,28 @@
+<svg viewBox="0 0 900 320" role="img" aria-labelledby="l84f6-t l84f6-d">
+  <title id="l84f6-t">The minimum translation vector, and its limit</title>
+  <desc id="l84f6-d">A shallow overlap where the MTV is a sensible correction, and a deep one where the shallowest escape is nearly two metres.</desc>
+  <defs>
+    <marker id="e-i-l84f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="320" class="fill-bg" stroke="none"/>
+<text x="210" y="46" class="sm" text-anchor="middle">a shallow overlap</text>
+<text x="210" y="62" class="xs muted" text-anchor="middle">depth 0.5000 m, on A's x face</text>
+<rect x="148.0" y="108.0" width="124.0" height="124.0" rx="3" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<rect x="241.0" y="95.6" width="124.0" height="124.0" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<line x1="303.00" y1="157.60" x2="334.00" y2="157.60" stroke="#f0961e" stroke-width="2.2" marker-end="url(#e-mtv-l84f6)"/>
+<text x="318.5" y="143.6" class="xs mono t-hi" text-anchor="middle">0.50 m</text>
+<text x="210" y="266.0" class="xs muted" text-anchor="middle">it entered travelling down and left;</text>
+<text x="210" y="280.0" class="xs muted" text-anchor="middle">the shortest way out is straight right</text>
+<text x="640" y="46" class="sm" text-anchor="middle">a deep one</text>
+<text x="640" y="62" class="xs muted" text-anchor="middle">depth 1.9000 m, on the same face</text>
+<rect x="578.0" y="108.0" width="124.0" height="124.0" rx="3" fill="none" stroke="#5082e6" stroke-width="1.6"/>
+<rect x="584.2" y="104.9" width="124.0" height="124.0" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<line x1="646.20" y1="166.90" x2="764.00" y2="166.90" stroke="#f0961e" stroke-width="2.2" marker-end="url(#e-deep-l84f6)"/>
+<text x="705.1" y="92.0" class="xs mono t-hi" text-anchor="middle">1.90 m</text>
+<text x="640" y="266.0" class="xs muted" text-anchor="middle">the boxes are 10 cm apart and the</text>
+<text x="640" y="280.0" class="xs muted" text-anchor="middle">correction is nearly two metres</text>
+</svg>

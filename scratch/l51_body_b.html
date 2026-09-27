@@ -1,0 +1,982 @@
+
+  <!-- =================================================================
+       4 — REFACTORING WITH A NET
+       ================================================================= -->
+  <h2 id="method"><span class="num">4</span>Refactoring With a Net</h2>
+
+  <p>
+    Everything above is about <em>what</em> to build. This section is about how to get there
+    without breaking anything, and it is the part most refactoring advice skips.
+  </p>
+
+  <h3 id="method-char">4.1 &nbsp; The characterization test</h3>
+
+  <p>
+    A refactor makes exactly one claim: <strong>the observable behaviour is unchanged</strong>.
+    That is a falsifiable claim, which means it is only worth anything if something can falsify
+    it. If the only check is "I looked at the window and it seemed fine", the claim is not a claim.
+    It is a hope with a commit message.
+  </p>
+
+  <p>
+    So the first act of this lesson — before a single file moves — is to build the thing that
+    could prove it wrong. A <em>characterization test</em>: not a test of what the code
+    <em>should</em> do, but a record of what it <em>does</em>, pinned so precisely that any change
+    shows up as a difference.
+  </p>
+
+  <p>
+    Ours is a flag on the demo. <code>--shot PATH</code> renders a fixed set of frames from fixed
+    inputs and writes them to one binary PPM, then exits. Everything that could vary — the time,
+    the camera, the light's angle, every mode — is a constant inside the function, so the only
+    remaining thing that can change the output is the code:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the pinning, in demos/common/demo_scene.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">constexpr float k_shot_t = 1.234f;          // not clk.now()
+constexpr float k_shot_shininess = 32.0f;   // not k_shininess[shininess_step]
+constexpr int k_shot_floor_cells = 4;       // not floor_cells, which [T] changes
+constexpr float k_shot_light_elev = 0.70f;  // not light_azimuth, which [A]/[D] move</code></pre>
+  </figure>
+
+  <p>
+    Seven frames, one per scene the demo can build, each driven through every stage that was about
+    to cross the boundary: <code>build_scene</code> → <code>collect_triangles</code> → cull/sort →
+    <code>draw_triangles</code>, with <code>draw_world</code>'s grid overlay on top so the line and
+    clip paths are covered too. Run it on the pre-refactor binary and you get a golden file:
+    1,209,600 bytes, hash <code>905BF27E</code>.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>The seventh frame exists because the first six were not enough, and the way we found
+      out is the reusable part.</strong> The first version had six frames, and all six reported
+      <code>straddle = 0</code> in the log — meaning no triangle in any of them crossed the near
+      plane, meaning <em>Lesson 3.3's clipper was never called</em>. Several hundred lines of code
+      about to be moved, with no coverage at all.
+    </p>
+    <p>
+      A characterization test that does not reach a branch cannot pin it. Frame&nbsp;6 puts the
+      camera at ankle height on the ground plane: 32 triangles in, <strong>8 straddling</strong>,
+      36 out. Read your instrument's own counters and ask them what you missed.
+    </p>
+  </div>
+
+  @@FIG_METHOD@@
+
+  <h3 id="method-two">4.2 &nbsp; Move without changing; change without moving</h3>
+
+  <p>
+    There are two different jobs in this lesson. One is <em>relocation</em>: 2,425 lines leave
+    <code>main.cpp</code> for six new files in two new directories. The other is
+    <em>redesign</em>: fifteen parameters become eight. Both are risky, and they are risky in
+    completely different ways — relocation breaks on a missing include or a namespace slip,
+    redesign breaks on a mis-ordered argument.
+  </p>
+
+  <p>
+    Doing them in one edit means that when the picture changes you have two suspects and no way to
+    separate them. So: <strong>move first, verify, then redesign, verify again.</strong> Two
+    passes, two checks, and each check answers a question the other cannot.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The two verifications</caption>
+    <thead><tr><th>step</th><th>what changed</th><th>what the golden said</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>2,425 lines moved; 57 files renamed; every include respelled</td>
+          <td class="mono t-ok">byte-identical</td></tr>
+      <tr><td>2</td><td><code>collect_triangles</code> redesigned; 8 call sites rewritten</td>
+          <td class="mono t-ok">byte-identical</td></tr>
+      <tr><td>3</td><td><code>verify_50</code> renders it by <em>linking</em>, not copying</td>
+          <td class="mono t-ok">byte-identical</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That third row is the one this lesson was for. <code>verify_50</code> shares no source file
+    with the demo, includes only public headers, links <code>engine</code> and
+    <code>demo_common</code>, and produces the sandbox's picture down to the byte:
+    <strong>1,209,616 bytes compared, 0 differ</strong>. Four harnesses transcribed the scene; the
+    fifth links it.
+  </p>
+
+  <!-- =================================================================
+       5 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">5</span>Implementation</h2>
+
+  <h3 id="impl-shape">5.1 &nbsp; The shape, and the three properties that draw the line</h3>
+
+  <p>Start with the directories, because everything else is a consequence of them:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the tree, after</span>
+      <span class="lang" data-lang="text">tree</span>
+    </figcaption>
+    <pre><code class="lang-text">engine/
+  CMakeLists.txt
+  include/engine/          &lt;- PUBLIC. The whole API, and nothing else.
+    engine.hpp             umbrella
+    core/    clock.hpp fixed_step.hpp input.hpp profile.hpp
+    gfx/     framebuffer.hpp raster.hpp scene.hpp soft_renderer.hpp
+             projector.hpp debug_draw.hpp gpu_*.hpp …
+    math/    vec2.hpp vec3.hpp vec4.hpp mat2.hpp mat3.hpp mat4.hpp transform.hpp
+  src/                     &lt;- PRIVATE. Nobody outside sees this path.
+    core/    clock.cpp fixed_step.cpp input.cpp profile.cpp
+    gfx/     framebuffer.cpp raster.cpp soft_renderer.cpp debug_draw.cpp …
+
+demos/
+  CMakeLists.txt
+  common/    demo_scene.{hpp,cpp}  pong.{hpp,cpp}     &lt;- content, shared
+  sandbox/   main.cpp                                 &lt;- Lessons 1.8 - 4.9
+  hello_cube/main.cpp                                 &lt;- the acceptance test
+
+tools/                     &lt;- Module 9. Not yet.</code></pre>
+  </figure>
+
+  <p>
+    Now the three lines that make it real. This is the load-bearing part of the entire lesson:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt — the boundary</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">target_include_directories(engine
+    PUBLIC  include     # everyone who links us gets this…
+    PRIVATE src)        # …and nobody but us gets this</code></pre>
+  </figure>
+
+  <p>
+    <code>include/</code> contains exactly one thing: a directory called <code>engine</code>. So
+    from outside, the only spellings that resolve are
+    <code>&lt;engine/gfx/raster.hpp&gt;</code> and its siblings — and
+    <code>#include "gfx/raster.hpp"</code>, which every file in this repository used until today,
+    resolves to nothing at all. The <code>engine/</code> prefix is not decoration; it is what
+    makes the public path unambiguous and un-collidable with anybody else's <code>gfx/</code>.
+  </p>
+
+  <p>Two more, each earning its keep:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt — the alias, and the dependencies</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">add_library(engine::engine ALIAS engine)
+
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})</code></pre>
+  </figure>
+
+  <p>
+    The alias is not cosmetic. A name with a double colon in it cannot be mistaken for a file: ask
+    to link <code>engine::engine</code> and, if no such target exists, CMake stops at configure
+    time with <em>target not found</em>. Ask to link plain <code>engine</code> with no such target
+    and CMake cheerfully passes <code>-lengine</code> to the linker, and you find out much later,
+    in a different language, from a different tool. Every library worth using exports a namespaced
+    alias; <code>SDL3::SDL3</code> is one; now so are we.
+  </p>
+
+  <h3 id="impl-decide">5.2 &nbsp; Deciding, file by file</h3>
+
+  <p>
+    Fifty-seven files moved wholesale — <code>src/gfx/raster.hpp</code> to
+    <code>engine/include/engine/gfx/raster.hpp</code>, and so on. Those were easy: they were
+    already engine code sitting in an engine-shaped tree, which is why Module 0 chose that shape.
+    The interesting work was the 7,789-line file that was not.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Where each part of main.cpp went, and why</caption>
+    <thead><tr><th>what</th><th>where it went</th><th>the reason, in one line</th></tr></thead>
+    <tbody>
+      <tr><td><code>near_mode</code>, <code>projector</code>, <code>screen_point</code>,
+              <code>to_pixel</code>, <code>screen_from_clip</code></td>
+          <td class="mono">engine/gfx/projector.hpp</td>
+          <td>two components need it, so it is a header</td></tr>
+      <tr><td><code>trs_order</code>, <code>model_matrix</code>, <code>scene_object</code></td>
+          <td class="mono">engine/gfx/scene.hpp</td>
+          <td><em>both</em> renderers consume it</td></tr>
+      <tr><td><code>raster_triangle</code>, the stats, <code>projection_scratch</code>,
+              <code>collect_triangles</code>, <code>sort_back_to_front</code>,
+              <code>draw_triangles</code></td>
+          <td class="mono">engine/gfx/soft_renderer.{hpp,cpp}</td>
+          <td>it is the renderer</td></tr>
+      <tr><td><code>line3</code>, <code>draw_mesh</code>, <code>draw_axes3</code>,
+              <code>show_depth</code>, <code>count_differences</code></td>
+          <td class="mono">engine/gfx/debug_draw.{hpp,cpp}</td>
+          <td>every engine ships debug draw; 5.10 grows this one</td></tr>
+      <tr><td><code>build_scene</code>, the floor, the model loading, the textures,
+              <code>orbit_camera</code>, <code>write_reference_shot</code></td>
+          <td class="mono">demos/common/demo_scene.{hpp,cpp}</td>
+          <td>content — no other game wants our icosahedron</td></tr>
+      <tr><td><code>pong.{hpp,cpp}</code></td>
+          <td class="mono">demos/common/</td>
+          <td>it is a game, and it was in <code>src/</code></td></tr>
+      <tr><td><code>next_cull</code>, <code>next_eval</code>, <code>next_near</code>,
+              <code>is_degenerate</code>, the HUD labels</td>
+          <td class="mono">demos/sandbox/main.cpp</td>
+          <td>they are about a keyboard</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>demos/common/</code> deserves a word, because it looks suspiciously like a second engine.
+    It is a static library so that several programs — the sandbox, and any harness — can share the
+    content instead of copying it, which is the whole grievance this lesson opened with. What keeps
+    it honest is one rule: <strong>nothing in <code>demos/common/</code> may be needed by a shipped
+    game.</strong> The moment something is, it is not demo content; it is an engine feature nobody
+    has named yet.
+  </p>
+
+  <h3 id="impl-headers">5.3 &nbsp; Four new headers, and why each exists</h3>
+
+  <p>
+    <code>scene.hpp</code> is the one with the most interesting argument behind it. Lesson 4.8
+    rendered the same scene two ways, CPU and GPU, in a split view — and "the same scene" was
+    two code paths kept in step by hand. Making <code>scene_object</code> the engine's type, that
+    both renderers consume, is what turns that promise into a structure. <code>verify_50</code>
+    checks the sharp end of it: given one <code>scene_object</code>, the model matrix the CPU
+    pipeline builds and the one the GPU draw item carries are bit-identical. If they ever diverged
+    you would see one object in two places and neither renderer would look wrong on its own.
+  </p>
+
+  <p>
+    <code>debug_draw.hpp</code> is a grouping by <em>purpose</em> rather than by shape. A
+    wireframe, an axis triad, a depth-buffer visualisation and a pixel-difference count have
+    nothing in common as code; they have everything in common as intent. All of them exist so a
+    human can see inside the renderer, all of them ship disabled, and all of them are budgeted
+    separately (Lesson 3.10's <code>zone::overlay</code>). Debug code is a component, not a
+    leftover — and Lesson 5.10 turns this header into a real debug-draw system with a command
+    queue behind it.
+  </p>
+
+  <h3 id="impl-collision">5.4 &nbsp; A name collision the split created</h3>
+
+  <p>
+    The demo content went into <code>namespace demo</code>. The sandbox already had this:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/sandbox/main.cpp — before</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">namespace {
+enum class demo { scene, basis, triangles, lines, pong };   // which one [Tab] is showing
+}</code></pre>
+  </figure>
+
+  <p>
+    An enum in an anonymous namespace hides a namespace of the same name, so
+    <code>demo::build_scene</code> would not compile — the compiler would look inside the enum and
+    find no such enumerator. The fix is to rename the vaguer of the two names, which is the enum;
+    it is <code>screen</code> now. Twenty call sites, five minutes, no behaviour change.
+  </p>
+
+  <p>
+    It is a trivial problem and it is in this lesson for one reason: <strong>names only collide
+    once they can see each other.</strong> Everything in that file had been living in a private
+    namespace where no name it chose could ever conflict with anything, and the day it acquired
+    neighbours, it acquired the possibility of a clash. The same is true of every symbol the engine
+    now exports. That is what a namespace is <em>for</em>, and it is why the engine's is called
+    <code>engine</code> and not something shorter.
+  </p>
+
+  <h3 id="impl-redesign">5.5 &nbsp; The redesign, with the net still attached</h3>
+
+  <p>Three small types, and then the signature falls out:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/soft_renderer.hpp — the new surface</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct camera_view
+{
+    mat4 view_from_world;   ///&lt; world -&gt; view (Lesson 2.9's look_at)
+    vec3 eye_world;         ///&lt; the eye's position, in world space
+};
+
+struct render_options
+{
+    trs_order compose = trs_order::trs;                  ///&lt; 2.8 — T*R*S
+    cull_choice cull = cull_choice::none;                ///&lt; 3.4
+    normal_source normals = normal_source::vertex;       ///&lt; 3.6
+    shade_eval shading = shade_eval::gouraud;            ///&lt; 3.6 / 3.8
+    specular_model specular = specular_model::blinn;     ///&lt; 3.7
+    bool correct_normal_matrix = true;                   ///&lt; 3.6 — inverse transpose
+};
+
+struct collect_stats
+{
+    clip_stats clip;        ///&lt; what the near plane did (3.3)
+    normal_stats normals;   ///&lt; what the normals did (3.6)
+};
+
+void collect_triangles(std::vector&lt;raster_triangle&gt;&amp; out, projection_scratch&amp; scratch,
+                       std::span&lt;const scene_object&gt; objects,
+                       const camera_view&amp; camera, const projector&amp; pr,
+                       const lighting&amp; lights, const render_options&amp; opts,
+                       collect_stats* stats = nullptr);</code></pre>
+  </figure>
+
+  <p>
+    <code>std::span</code> is the C++20 answer to the <code>(pointer, count)</code> pair, and it is
+    worth a sentence in its own right. A span is a non-owning view — a pointer and a length, no
+    allocation, no ownership — so it costs exactly what the two parameters cost and cannot be
+    passed inconsistently. It also accepts an array, a <code>std::vector</code>, or
+    <code>{&amp;one_object, 1}</code> without the caller thinking about it, which turned out to
+    matter: two of our eight call sites draw a single object.
+  </p>
+
+  <p>
+    At the call site, the payoff is the comparison renders. The sandbox draws the scene, then draws
+    it again with one setting changed and counts the pixels that differ — that is how Lessons 3.4,
+    3.6 and 3.7 make their claims. Before, each of those was a fifteen-argument call that had to
+    match the real one in fourteen places and differ in one. Now:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/sandbox/main.cpp — a comparison render</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">engine::render_options other_normals = opts;          // copy the real settings
+other_normals.correct_normal_matrix = !correct_normals;   // change exactly one
+engine::collect_triangles(compare_tris, scratch, objects, camera, pr,
+                          lights, other_normals);</code></pre>
+  </figure>
+
+  <p>
+    The reference render can no longer differ from the real one in a field somebody forgot. That is
+    not a tidier call; it is a class of bug that has stopped being possible.
+  </p>
+
+  <p>
+    Then run the golden. Byte-identical, second time.
+  </p>
+
+  <h3 id="impl-hello">5.6 &nbsp; <code>hello_cube</code> — the acceptance test</h3>
+
+  <p>
+    A library you can only use from inside is not a library. So the second executable exists purely
+    to ask the question from the outside: 160 lines of code, every symbol from
+    <code>&lt;engine/…&gt;</code>, a lit cube spinning.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">demos/hello_cube/main.cpp — the render, entire</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">fb.clear(engine::pack_argb(12, 14, 20));
+depth.clear();
+
+// Six of render_options' seven fields keep their defaults, and the defaults are
+// the correct answers — so this call says only the one thing this program has an
+// opinion about.
+const engine::render_options opts{.cull = engine::cull_choice::back};
+engine::collect_triangles(triangles, scratch, {&amp;object, 1}, {view, eye},
+                          pr, lights, opts);
+
+const engine::fill_style style{.shade = engine::shading::vertex_colour,
+                               .cull = engine::cull_mode::back,
+                               .eye = eye};
+engine::draw_triangles(fb, &amp;depth, triangles, false, style);</code></pre>
+  </figure>
+
+  <p>
+    Notice what is <em>absent</em>. No triangle, no edge function, no barycentric weight, no
+    perspective divide, no clip plane. Every one of those is something we built by hand and can
+    explain in detail, and none of them appears here, because that is what the engine is for. The
+    sandbox demo — whose entire job is to show you the insides — is a terrible advertisement for
+    the API. This file is the honest one.
+  </p>
+
+  <p>
+    It also takes <code>--shot PATH</code>: one frame, no window, straight to a PPM. Eight lines,
+    and the same argument Lesson 4.9 made for <code>--trace</code> — a program that can only be
+    checked by a human looking at a window cannot be checked by a build server. It reports
+    <strong>12 triangles, 2,760 pixels painted</strong>, which is how this lesson knows the picture
+    below is the picture you will get.
+  </p>
+
+  <h3 id="impl-harness">5.7 &nbsp; And the harnesses got shorter</h3>
+
+  <p>
+    The concrete test of whether any of this was worth doing: is a harness simpler now? Lesson
+    4.9's build script had to list every engine translation unit by hand, because there was no
+    library to link, and it grew by a line every time the engine gained a file:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/build_verify_49.sh — before, and after</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash"># before — eighteen source files, by hand
+c++ -std=c++20 -O2 -Wall -Wextra \
+    -I src -I build/_deps/sdl3-src/include -I build/_deps/stb-src \
+    scratch/verify_49.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp src/gfx/gpu_buffer.cpp \
+    src/gfx/gpu_pipeline.cpp src/gfx/gpu_mesh.cpp src/gfx/gpu_present.cpp \
+    src/gfx/gpu_texture.cpp src/gfx/gpu_scene.cpp src/gfx/gpu_debug.cpp src/gfx/image.cpp \
+    src/gfx/framebuffer.cpp src/gfx/raster.cpp src/gfx/colour.cpp \
+    src/gfx/depth_buffer.cpp src/gfx/texture.cpp src/gfx/mesh.cpp \
+    src/gfx/obj.cpp src/gfx/clip.cpp \
+    -L build/_deps/sdl3-build -lSDL3 ...
+
+# after — one include directory, one archive
+c++ -std=c++20 -O2 -Wall -Wextra \
+    -I engine/include -I build/_deps/sdl3-src/include \
+    scratch/verify_49.cpp build/engine/libengine.a \
+    -L build/_deps/sdl3-build -lSDL3 ...</code></pre>
+  </figure>
+
+  <p>
+    All five earlier harnesses were rebuilt against the new layout and re-run: <code>verify_45</code>
+    through <code>verify_49</code>, all <code>ALL PASS</code>. The cost was 68 include directives
+    respelled across them, which is real work and is counted in §6.
+  </p>
+
+  <!-- =================================================================
+       6 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">6</span>What It Cost</h2>
+
+  <p>
+    Refactors are usually written up as pure gain, which is how people end up doing them at the
+    wrong time. Here is the bill.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The costs of the split</caption>
+    <thead><tr><th>cost</th><th>size</th><th>is it permanent?</th></tr></thead>
+    <tbody>
+      <tr><td>68 include directives respelled in the harnesses, ~90 more in the tree</td>
+          <td class="mono">one afternoon</td><td>no — one-time</td></tr>
+      <tr><td>Every reference to moved code now needs <code>engine::</code> or
+              <code>demo::</code></td>
+          <td class="mono">~400 sites</td><td>yes, and it is the point</td></tr>
+      <tr><td>Three <code>CMakeLists.txt</code> instead of one, plus a helpers module</td>
+          <td class="mono">+227 lines of build</td><td>yes</td></tr>
+      <tr><td>Configure time</td><td class="mono">≈ 0.5 s, unchanged</td><td>negligible here</td></tr>
+      <tr><td>A second place to put things, and an argument about which</td>
+          <td class="mono">every new file</td><td>yes</td></tr>
+      <tr><td>The executable is <code>sandbox</code>, not <code>engine</code></td>
+          <td class="mono">every prior lesson's run command</td><td>yes</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The <code>engine::</code> and <code>demo::</code> prefixes are worth defending rather than
+    apologising for. They are noise in the sense that they are more characters; they are signal in
+    the sense that <strong>every one of them marks a place where the old file was pretending two
+    different things were one thing</strong>. Read down the sandbox now and you can see the seam
+    the whole lesson is about, in the source, without a diagram.
+  </p>
+
+  <p>
+    And the honest counterweight, all measured:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The gains from the split</caption>
+    <thead><tr><th>gain</th><th>measured</th></tr></thead>
+    <tbody>
+      <tr><td><code>main.cpp</code></td><td class="mono">7,789 → 5,721 lines (27% smaller)</td></tr>
+      <tr><td>…and its compile time, at <code>-O2</code></td><td class="mono">1.30 s → 0.82 s (37% less)</td></tr>
+      <tr><td>A harness can link the scene instead of copying it</td><td class="mono">4 copies → 0</td></tr>
+      <tr><td>Public API, enumerated and checkable</td><td class="mono">37 headers, all self-sufficient</td></tr>
+      <tr><td>Third-party dependency contained</td><td class="mono">stb: 1 TU, 0 demos</td></tr>
+      <tr><td>Incremental cost of a private change</td><td class="mono">0.42 s vs 0.97 s for a public one</td></tr>
+      <tr><td>The claim that nothing changed</td><td class="mono">0 bytes differ, twice</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- =================================================================
+       7 — RESIDUE
+       ================================================================= -->
+  <h2 id="residue"><span class="num">7</span>What Is Still on the Wrong Side</h2>
+
+  <p>
+    A refactor lesson that ends "and now it is clean" is lying to you. Four things are still on the
+    wrong side of the line, we knew about all four while writing it, and each is left for a
+    specific reason.
+  </p>
+
+  @@FIG_RESIDUE@@
+
+  <p>
+    The first is a genuine design defect and it is worth understanding. <code>cull_choice</code>
+    appears in <code>render_options</code>, and <code>collect_triangles</code> reads exactly one of
+    its four values — <code>back_by_forward</code>, Lesson 3.4's deliberately wrong facing test,
+    which has to be applied before the perspective divide. The other three are applied by
+    <code>draw_triangles</code> through <code>fill_style::cull</code>. So the cull mode is
+    specified in two places and a caller who sets only one gets a picture that is right by
+    accident.
+  </p>
+
+  <p>
+    <code>verify_50</code> pins this rather than papering over it, and the check reads oddly on
+    purpose:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_50.cpp — a check that asserts a defect</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">engine::render_options back_cull; back_cull.cull = engine::cull_choice::back;
+const int inert = differing(render_one(demo::scene_kind::cycle, {}),
+                            render_one(demo::scene_kind::cycle, back_cull));
+check(inert == 0, "cull_choice::back is applied by draw_triangles, not collect_triangles");</code></pre>
+  </figure>
+
+  <p>
+    A test that asserts current behaviour <em>is</em> the current behaviour, even when the current
+    behaviour is wrong, is not a mistake. It is how you stop a known defect from quietly becoming
+    two defects, and it is a note to whoever fixes it that the fix will need to change this line.
+    The real repair is a material system, where cull mode is pipeline state because pipeline state
+    is what a material is — and that is Lesson 6.5.
+  </p>
+
+  <p>
+    The third row is the uncomfortable one. <code>render_options</code> ships
+    <code>trs_order::tsr</code> and <code>correct_normal_matrix = false</code>: switches that exist
+    so a lesson can show a bug on a keypress. No shipping engine would export them, and we
+    export them because this engine's job includes being read. It is a real cost of the course's
+    own design, it is stated rather than hidden, and Exercise 5.1.4 is the way out for anybody who
+    wants it.
+  </p>
+
+  <!-- =================================================================
+       8 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete Code Listings</h2>
+
+  <div class="callout note">
+    <p>
+      <strong>One deviation from this course's zero-placeholder rule, stated openly.</strong>
+      Fifty-seven files moved without their contents changing except in two mechanical ways: the
+      path comment on line 1, and the include spelling. Listing all fifty-seven in full would add
+      well over a megabyte of near-identical text to this page and hide the fifteen files that
+      actually changed.
+    </p>
+    <p>
+      So instead: the move table below, and the exact transformation, which is reproducible in one
+      command. Run it and your files match the repository's byte for byte.
+    </p>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the move, and the include rewrite</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">mkdir -p engine/include/engine/{core,gfx,math} engine/src/{core,gfx}
+mkdir -p demos/{common,sandbox,hello_cube}
+
+for d in core gfx math; do
+  for f in src/$d/*.hpp; do git mv "$f" "engine/include/engine/$d/$(basename $f)"; done
+done
+for d in core gfx; do
+  for f in src/$d/*.cpp; do git mv "$f" "engine/src/$d/$(basename $f)"; done
+done
+git mv src/game/pong.hpp demos/common/pong.hpp
+git mv src/game/pong.cpp demos/common/pong.cpp
+git mv src/main.cpp      demos/sandbox/main.cpp
+
+# "core/x.hpp" | "gfx/x.hpp" | "math/x.hpp"  ->  &lt;engine/core/x.hpp&gt; etc.
+grep -rl '#include "' engine demos | xargs sed -i '' -E \
+  's|#include "(core\|gfx\|math)/([a-z0-9_]+\.hpp)"|#include &lt;engine/\1/\2&gt;|'</code></pre>
+  </figure>
+
+  <p>
+    Everything below is a file that genuinely changed, in full, with zero placeholders.
+  </p>
+
+  <h3>8.1 &nbsp; The build</h3>
+@@LISTING:CMakeLists.txt@@
+@@LISTING:cmake/EngineHelpers.cmake@@
+@@LISTING:cmake/Shaders.cmake@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/CMakeLists.txt@@
+
+  <h3>8.2 &nbsp; The engine's new public headers</h3>
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/include/engine/gfx/projector.hpp@@
+@@LISTING:engine/include/engine/gfx/scene.hpp@@
+@@LISTING:engine/include/engine/gfx/soft_renderer.hpp@@
+@@LISTING:engine/include/engine/gfx/debug_draw.hpp@@
+
+  <h3>8.3 &nbsp; …and their implementations</h3>
+@@LISTING:engine/src/gfx/soft_renderer.cpp@@
+@@LISTING:engine/src/gfx/debug_draw.cpp@@
+
+  <h3>8.4 &nbsp; The demos</h3>
+@@LISTING:demos/common/demo_scene.hpp@@
+@@LISTING:demos/common/demo_scene.cpp@@
+@@LISTING:demos/hello_cube/main.cpp@@
+@@LISTING:demos/sandbox/main.cpp@@
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">9</span>Build &amp; Run</h2>
+
+  <div class="callout warn">
+    <p>
+      <strong>The paths changed, and so did the executable's name.</strong> Through Lesson 4.9 the
+      program was <code>build/engine</code>. That name now belongs to the library — to the thing it
+      links — which was exactly the confusion the old name was papering over. It is
+      <code>build/demos/sandbox</code> from here on.
+    </p>
+  </div>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">rm -rf build                      # the layout changed; start the cache clean
+cmake -S . -B build
+cmake --build build -j8
+
+./build/demos/sandbox                        # Lesson 4.8's GPU scene
+./build/demos/sandbox --software             # the five CPU demos, on [Tab]
+./build/demos/sandbox --probe                # Lessons 4.2-4.7's instrument
+./build/demos/sandbox --shot scratch/x.ppm   # NEW: seven pinned frames, no window
+./build/demos/hello_cube                     # NEW: the acceptance test
+./build/demos/hello_cube --shot cube.ppm     # NEW: one frame, no window</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">rmdir /s /q build
+cmake -S . -B build
+cmake --build build --config Debug
+
+.\build\demos\Debug\sandbox.exe
+.\build\demos\Debug\hello_cube.exe</code></pre>
+  </figure>
+
+  <p><strong>Expected result.</strong> Three things, in order:</p>
+
+  <p>
+    <em>One.</em> The build produces four targets where there was one:
+    <code>libengine.a</code> (1,201 KB), <code>libdemo_common.a</code>, <code>sandbox</code> and
+    <code>hello_cube</code>. Nothing about the first two is runnable, and that is the point.
+  </p>
+
+  <p>
+    <em>Two.</em> <code>./build/demos/sandbox --software</code> looks <strong>exactly</strong> as
+    it did at the end of Lesson 4.9. Every key still does what it did, every HUD number still
+    reads what it read, the frame budget still shows the same zones. If anything at all is
+    different, something is wrong — that is the whole claim of the lesson.
+  </p>
+
+  <p>
+    <em>Three.</em> <code>./build/demos/hello_cube</code> opens a window with an amber cube
+    turning about its y axis, its three visible faces at three distinct brightnesses because a
+    directional light is falling on them from up and to the left. It is 160 lines and it never
+    mentions a triangle.
+  </p>
+
+  @@FIG_CUBE@@
+
+  <p>Then check the claim rather than believing it:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">verifying the refactor</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">./build/demos/sandbox --shot scratch/after.ppm
+cmp scratch/golden_pre.ppm scratch/after.ppm &amp;&amp; echo "the move changed nothing"
+
+sh scratch/build_verify_50.sh          # 15 checks, 0 failures
+for n in 45 46 47 48 49; do sh scratch/build_verify_$n.sh | tail -1; done</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">stdout, abridged</span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">A. the reference shot, rendered by a program that is not the demo
+  [PASS] write_reference_shot() succeeded
+  [PASS] the PRE-REFACTOR golden was found
+     1209616 bytes compared, 0 differ
+  [PASS] BYTE-IDENTICAL to the picture the pre-refactor binary made
+B. render_options{} == every correct value, written out
+  [PASS] defaults reproduce the correct settings exactly
+C. each option actually reaches the pipeline
+     compose = T*S*R (2.8's bug)                     335 px differ
+     correct_normal_matrix = false (3.6's bug)       454 px differ
+     normals = face, per-pixel (3.6)                1212 px differ
+     shading = flat (3.8)                            165 px differ
+     specular = phong (3.7)                          170 px differ
+     cull = back_by_forward (3.4's wrong test)      1177 px differ
+     normals = face, on a mesh with no normals         0 px differ  (expected: 0, fell_back=132)
+     cull = back, in collect only                      0 px differ  (expected: 0)
+D. both renderers describe a scene the same way
+  [PASS] GPU item and CPU pipeline build the SAME model matrix from one scene_object
+E. the harness itself
+     transcribed copies of build_scene in this file: 0
+15 checks, 0 failures — ALL PASS</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <p>
+      <strong>Section C found two of its own probes to be worthless, and both are instructive.</strong>
+      <code>correct_normal_matrix = false</code> reported <em>0 px</em> on the stock scene, because
+      Lesson 4.8's theorem still holds: a box's model-space normals <em>are</em> its axes, a
+      diagonal scale sends an axis to a multiple of itself, and <code>normalize()</code> throws the
+      length away — so the bug is invisible on crates by construction. The probe needed a squashed
+      icosahedron, which is not a box and is non-uniformly scaled; then it reports 454 px.
+    </p>
+    <p>
+      And <code>normals = face</code> reported 0 px because the stock scene's meshes carry no
+      vertex normals at all, so both settings fall back to the face normal —
+      <code>fell_back = 132</code> says so, which is why that counter exists. The probe was wrong
+      twice, not the code. <strong>A measurement taken on content that cannot express the effect is
+      not a measurement.</strong>
+    </p>
+  </div>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> <code>fatal error: 'engine/gfx/raster.hpp' file not found</code>,
+      from a demo, after everything looks correctly placed.</p>
+    <p><strong>Cause.</strong> The include directory was declared <code>PRIVATE</code> on the
+      library, so it never propagated to anything that links it. This is the single most common
+      CMake mistake in this shape of project, and it fails at the consumer rather than at the
+      library, which sends people looking in the wrong file.</p>
+    <p><strong>Fix.</strong> <code>target_include_directories(engine PUBLIC include)</code>. Read
+      the keyword as "who else gets this", not as "how visible is this".</p>
+  </div>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> Undefined symbols at link time for functions that plainly exist,
+      often <code>engine::collect_triangles</code> or similar.</p>
+    <p><strong>Cause.</strong> The <code>.cpp</code> was added to the tree but not to the
+      <code>add_library</code> source list. We list every source by hand — CMake will glob for you,
+      and you should not let it, because a glob is evaluated at configure time and a new file is
+      silently ignored until someone reconfigures.</p>
+    <p><strong>Fix.</strong> Add the line. The one-line cost is the price of a build that never
+      lies about what it contains.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> <code>error: redefinition of default argument</code> in a
+      <code>.cpp</code> the moment a function's declaration moves to a header.</p>
+    <p><strong>Cause.</strong> A default argument may be specified once per scope. When the
+      function lived only in a <code>.cpp</code> the default lived on the definition; now that
+      there is a declaration, the default belongs there and the definition must not repeat it.</p>
+    <p><strong>Fix.</strong> Defaults on the declaration, never on the definition. This bit us on
+      <code>draw_triangles</code> within minutes of the split.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> A previously fine name no longer compiles:
+      <code>no member named 'build_scene' in namespace 'demo'</code>.</p>
+    <p><strong>Cause.</strong> Something else in a nearer scope is called <code>demo</code> — for
+      us, an <code>enum class demo</code> in an anonymous namespace, which hides the namespace
+      entirely.</p>
+    <p><strong>Fix.</strong> Rename the nearer, vaguer one. And expect this: names that were
+      private for four modules have never had to be distinct from anything.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> The refactor "works" but a comparison render in the demo now shows
+      a difference that was not there before.</p>
+    <p><strong>Cause.</strong> Almost always a gathered options struct copied from the wrong
+      baseline — <code>render_options{}</code> where the code meant <code>opts</code>. The
+      defaults are all correct, so the reference render silently becomes a render of the
+      <em>correct</em> settings rather than of the <em>current</em> ones, and the difference count
+      turns into something else entirely.</p>
+    <p><strong>Fix.</strong> Comparison renders copy <code>opts</code> and change one field. If a
+      call site writes <code>{}</code>, that must be a deliberate statement that this render is the
+      reference.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <p><strong>Symptom.</strong> Everything builds, the golden matches, and a week later a
+      colleague's build fails on a header you did not touch.</p>
+    <p><strong>Cause.</strong> A header that is not self-sufficient — it compiled for you only
+      because of what came before it in your translation unit.</p>
+    <p><strong>Fix.</strong> Check them all, mechanically. It is a four-line loop that compiles
+      each public header alone, and it should live in CI:
+      <code>for h in engine/include/engine/**/*.hpp; do echo "#include &lt;$h&gt;" | c++ -fsyntax-only -x c++ -; done</code>.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>5.1.1 — Break the boundary on purpose.</strong> Add
+        <code>#include "gfx/raster.hpp"</code> to the top of <code>demos/hello_cube/main.cpp</code>
+        and build. Read the error. Now add <code>engine/src</code> to
+        <code>hello_cube</code>'s include directories and build again. Then remove both and write
+        two sentences on what the second build proved about the strength of the boundary.</p>
+      <p class="hint"><strong>Hint / answer.</strong> It compiles. The boundary is exactly as
+        strong as the CMake file, which is to say: strong against accident, and no defence at all
+        against intent. That is the correct amount. An architecture that tries to defeat a
+        determined colleague ends up defeating everybody.</p>
+    </li>
+
+    <li>
+      <p><strong>5.1.2 — Find a header that is not self-sufficient.</strong> Pick any public
+        header, delete one of its <code>#include</code> lines, and confirm the whole build still
+        succeeds. Then compile that header alone and watch it fail. Add the four-line
+        self-sufficiency check from §10 to a script and run it on every header.</p>
+      <p class="hint"><strong>Hint.</strong> Delete <code>&lt;engine/math/mat3.hpp&gt;</code> from
+        <code>scene.hpp</code>. Everything builds, because every current consumer includes
+        <code>mat4.hpp</code> first and that drags <code>mat3.hpp</code> in. The bomb goes off for
+        the person who writes the first consumer that does not.</p>
+    </li>
+
+    <li>
+      <p><strong>5.1.3 — Give the harness its own reason to exist.</strong> Extend
+        <code>verify_50</code> §D: build a full <code>gpu_draw_item</code> from a
+        <code>scene_object</code> and check that its <code>normal_from_model</code> matches the
+        matrix <code>collect_triangles</code> uses, for a non-uniformly scaled object. Then break
+        it deliberately by using the model matrix instead of its inverse transpose, and confirm the
+        check fails.</p>
+      <p class="hint"><strong>Hint.</strong> Use the squashed icosahedron from §C. On a box it will
+        pass with the wrong matrix, for the reason in the callout above — which is itself worth
+        putting in a comment.</p>
+    </li>
+
+    <li>
+      <p><strong>5.1.4 — Take the teaching switches out of the public API.</strong> Design a way to
+        keep the demos' failure modes without exporting them. Two approaches worth trying: a
+        separate header <code>&lt;engine/gfx/soft_renderer_teaching.hpp&gt;</code> that the demos
+        include and a game would not; or a compile-time flag that removes the wrong branches
+        entirely. Implement one, measure what it costs in code size and in the readability of
+        <code>collect_triangles</code>, and write down which you would ship.</p>
+      <p class="hint"><strong>Solution sketch.</strong> The separate header cannot work as stated —
+        the wrong branches are <em>inside</em> <code>collect_triangles</code>, so the enum has to
+        be visible to it. The honest options are a policy parameter (a template or a callback,
+        paid for at every call) or <code>#ifdef ENGINE_TEACHING</code> around the enum values and
+        their branches. The second is ugly and is what real engines actually do with their debug
+        modes. Discovering that the obvious answer does not work is the exercise.</p>
+    </li>
+
+    <li>
+      <p><strong>5.1.5 — Make the boundary a test.</strong> Add a CMake target that is
+        <em>expected to fail</em> to compile: a source file using the old include spelling, built
+        with <code>add_test</code> and <code>WILL_FAIL</code>. Now the boundary is checked by
+        <code>ctest</code> rather than by this lesson's prose.</p>
+      <p class="hint"><strong>Hint.</strong> <code>add_executable(boundary_probe EXCLUDE_FROM_ALL
+        …)</code> plus <code>add_test(NAME boundary COMMAND ${CMAKE_COMMAND} --build . --target
+        boundary_probe)</code> and <code>set_tests_properties(boundary PROPERTIES WILL_FAIL
+        TRUE)</code>. A test that must fail is a strange thing to write and exactly right here.</p>
+    </li>
+
+    <li>
+      <p><strong>5.1.6 — Attack the real compile cost.</strong> §3.5 found that SDL contributes
+        nearly 73,000 preprocessed lines to a file that uses one <code>Uint32</code>. Replace that
+        include in <code>framebuffer.hpp</code> with <code>&lt;cstdint&gt;</code> and
+        <code>std::uint32_t</code>, and measure the preprocessed line count again. Then decide
+        whether to keep it, and defend the decision either way.</p>
+      <p class="hint"><strong>Hint.</strong> The measurement is easy and the decision is not.
+        <code>Uint32</code> is SDL's spelling and the rest of the engine is full of it; a
+        framebuffer that speaks <code>std::uint32_t</code> while its neighbours speak
+        <code>Uint32</code> buys compile time and spends consistency. This is a real tradeoff and
+        engines land on both sides of it.</p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; Next</h2>
+
+  <p>The engine gained the thing that makes it an engine: an outside.</p>
+
+  <ul>
+    <li><code>engine/</code> is a static library with <strong>37 public headers</strong> under
+        <code>engine/include/engine/</code> and its sources private. The boundary is the include
+        path, and a demo using the old spelling does not compile.</li>
+    <li><code>demos/</code> holds three targets that link it: the sandbox, a shared content
+        library, and a 160-line acceptance test that proves the API can be used from outside.</li>
+    <li>The CPU render pipeline, the scene description, the projector and debug draw all moved out
+        of <code>main.cpp</code> and into the engine — 1,325 lines that were never the demo's.</li>
+    <li><code>collect_triangles</code> was <em>designed</em>, because publishing it forced the
+        question: 15 parameters became 8, seven throwaway variables disappeared, and every default
+        is now the correct answer.</li>
+    <li>The whole thing is verified twice against a characterization test written before any of it
+        started: <strong>0 bytes differ</strong>, from the demo and from a harness that links
+        rather than copies.</li>
+  </ul>
+
+  <p>
+    And one thing did not get fixed on purpose. <code>demos/sandbox/main.cpp</code> is still 5,721
+    lines, because splitting it needs somewhere to split it <em>into</em>: every one of those
+    demos would be its own small executable if there were an application layer to hang a loop on.
+    Which is the next question, and it is a bigger one than it looks —
+    <strong>who owns the loop?</strong> Does your program call the engine, or does the engine call
+    your program? That single decision shapes the whole API, and every engine you have heard of
+    has an opinion about it.
+  </p>
+
+  <p><strong>Next: <a href="../index.html">5.2 — The Platform and Application Layer</a>.</strong></p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>John Lakos, <em>Large-Scale C++ Software Design</em></strong> — the origin of
+        "physical design" as a discipline, and still the deepest treatment of why a header is an
+        engineering decision. Chapters 3 and 4 are the ones this lesson leans on.</li>
+    <li><strong>Michael Feathers, <em>Working Effectively with Legacy Code</em></strong> — where
+        "characterization test" comes from, and the best argument you will read for pinning
+        behaviour before you touch it.</li>
+    <li><strong>Martin Fowler, <em>Refactoring</em></strong>, 2nd ed. — in particular the insistence
+        that a refactoring changes structure and never behaviour, and that the two must not be
+        mixed in one step.</li>
+    <li><strong>Craig Scott, <em>Professional CMake: A Practical Guide</em></strong> — the chapters
+        on target properties and PUBLIC/PRIVATE/INTERFACE usage requirements. If you take one thing
+        from it, take the idea that modern CMake is about describing targets, not about setting
+        variables.</li>
+    <li><strong>Titus Winters et al., <em>Software Engineering at Google</em></strong>, ch. 1 — the
+        distinction between programming and software engineering as "programming integrated over
+        time", which is the whole reason an API is a promise.</li>
+    <li><strong>Casey Muratori, <em>Handmade Hero</em></strong>, days 21–25 — a live, unedited
+        treatment of the platform/engine boundary in a real codebase, and useful precisely because
+        it shows the decisions being made rather than presented.</li>
+    <li><strong>The SDL3 headers</strong>, <code>SDL3/SDL.h</code> — read it as an artifact: an
+        umbrella header shipped by a library that cares about compile time, which is the counter-
+        example to the received wisdom in §3.5.</li>
+  </ul>

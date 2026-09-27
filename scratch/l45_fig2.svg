@@ -1,0 +1,93 @@
+<svg viewBox="0 0 720 460" role="img" aria-labelledby="f45b-t f45b-d">
+  <title id="f45b-t">The vertex layout, declared three times and joined by location</title>
+  <desc id="f45b-d">The HLSL declaration, the JSON reflection derived from it, and the C++ pipeline description, side by side. Only the location number connects them. Below, six layouts: SDL refuses exactly one — the one whose shader input nothing supplies — and our own check_layout catches three of the five mistakes.</desc>
+  <defs>
+    <marker id="e-i-f45b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f45b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f45b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the same six inputs, written three times &#8212; joined only by <tspan class="t-hi">location</tspan></text>
+  <rect x="24" y="36" width="226" height="216" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="32" y="52" class="xs mono t-hi">shaders/mesh.vert.hlsl</text>
+  <text x="32" y="64" class="xs muted">you write this</text>
+  <rect x="286" y="36" width="158" height="216" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="294" y="52" class="xs mono t-hi">mesh.vert.json</text>
+  <text x="294" y="64" class="xs muted">shadercross writes this</text>
+  <rect x="466" y="36" width="230" height="216" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="474" y="52" class="xs mono t-hi">src/gfx/gpu_mesh.cpp</text>
+  <text x="474" y="64" class="xs muted">you write this too</text>
+  <rect x="26" y="73" width="668" height="24" fill="#5082e6" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="88" class="xs mono">float3 position :</text>
+  <text x="242" y="88" class="xs mono t-hi" text-anchor="end">TEXCOORD0</text>
+  <text x="294" y="88" class="xs mono">"float3"</text>
+  <text x="436" y="88" class="xs mono t-hi" text-anchor="end">loc 0</text>
+  <text x="474" y="88" class="xs mono">FLOAT3 @ 0</text>
+  <line x1="248" y1="84" x2="288" y2="84" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="84" x2="470" y2="84" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <rect x="26" y="100" width="668" height="24" fill="#5ac878" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="115" class="xs mono">float3 normal :</text>
+  <text x="242" y="115" class="xs mono t-hi" text-anchor="end">TEXCOORD1</text>
+  <text x="294" y="115" class="xs mono">"float3"</text>
+  <text x="436" y="115" class="xs mono t-hi" text-anchor="end">loc 1</text>
+  <text x="474" y="115" class="xs mono">FLOAT3 @12</text>
+  <line x1="248" y1="111" x2="288" y2="111" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="111" x2="470" y2="111" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <rect x="26" y="127" width="668" height="24" fill="#f0961e" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="142" class="xs mono">float2 uv :</text>
+  <text x="242" y="142" class="xs mono t-hi" text-anchor="end">TEXCOORD2</text>
+  <text x="294" y="142" class="xs mono">"float2"</text>
+  <text x="436" y="142" class="xs mono t-hi" text-anchor="end">loc 2</text>
+  <text x="474" y="142" class="xs mono">FLOAT2 @24</text>
+  <line x1="248" y1="138" x2="288" y2="138" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="138" x2="470" y2="138" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <rect x="26" y="154" width="668" height="24" fill="#a97ae0" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="169" class="xs mono">float4 placement :</text>
+  <text x="242" y="169" class="xs mono t-hi" text-anchor="end">TEXCOORD3</text>
+  <text x="294" y="169" class="xs mono">"float4"</text>
+  <text x="436" y="169" class="xs mono t-hi" text-anchor="end">loc 3</text>
+  <text x="474" y="169" class="xs mono">FLOAT4 @ 0</text>
+  <line x1="248" y1="165" x2="288" y2="165" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="165" x2="470" y2="165" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <rect x="26" y="181" width="668" height="24" fill="#a97ae0" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="196" class="xs mono">float2 spin :</text>
+  <text x="242" y="196" class="xs mono t-hi" text-anchor="end">TEXCOORD4</text>
+  <text x="294" y="196" class="xs mono">"float2"</text>
+  <text x="436" y="196" class="xs mono t-hi" text-anchor="end">loc 4</text>
+  <text x="474" y="196" class="xs mono">FLOAT2 @16</text>
+  <line x1="248" y1="192" x2="288" y2="192" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="192" x2="470" y2="192" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <rect x="26" y="208" width="668" height="24" fill="#a97ae0" fill-opacity="0.09" stroke="none"/>
+  <text x="32" y="223" class="xs mono">float4 tint :</text>
+  <text x="242" y="223" class="xs mono t-hi" text-anchor="end">TEXCOORD5</text>
+  <text x="294" y="223" class="xs mono">"float4"</text>
+  <text x="436" y="223" class="xs mono t-hi" text-anchor="end">loc 5</text>
+  <text x="474" y="223" class="xs mono">UBYTE4_NORM @24</text>
+  <line x1="248" y1="219" x2="288" y2="219" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <line x1="442" y1="219" x2="470" y2="219" class="ink-soft" stroke-width="0.75" stroke-dasharray="2 2"/>
+  <text x="360" y="268" class="xs muted" text-anchor="middle">slot 0 &#8212; per vertex, pitch 32 &#160;&#160;|&#160;&#160; slot 1 &#8212; per instance, pitch 28</text>
+  <rect x="24" y="292" width="672" height="152" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="310" class="sm">six layouts, and which of the two possible checks notices</text>
+  <text x="470" y="328" class="xs muted" text-anchor="middle">check_layout</text>
+  <text x="614" y="328" class="xs muted" text-anchor="middle">pipeline creation</text>
+  <text x="40" y="348" class="xs">correct</text>
+  <text x="470" y="348" class="xs muted" text-anchor="middle">&#8212;</text>
+  <text x="614" y="348" class="xs muted" text-anchor="middle">&#8212;</text>
+  <text x="40" y="364" class="xs">pitch four bytes SHORT</text>
+  <text x="470" y="364" class="xs t-ok" text-anchor="middle">CAUGHT</text>
+  <text x="614" y="364" class="xs t-bad" text-anchor="middle">created</text>
+  <text x="40" y="380" class="xs">pitch four bytes LONG</text>
+  <text x="470" y="380" class="xs t-bad" text-anchor="middle">silent</text>
+  <text x="614" y="380" class="xs t-bad" text-anchor="middle">created</text>
+  <text x="40" y="396" class="xs">position/normal offsets SWAPPED</text>
+  <text x="470" y="396" class="xs t-bad" text-anchor="middle">silent</text>
+  <text x="614" y="396" class="xs t-bad" text-anchor="middle">created</text>
+  <text x="40" y="412" class="xs">the uv attribute MISSING</text>
+  <text x="470" y="412" class="xs t-ok" text-anchor="middle">CAUGHT</text>
+  <text x="614" y="412" class="xs t-ok" text-anchor="middle">REFUSED</text>
+  <text x="40" y="428" class="xs">an attribute the shader never declares</text>
+  <text x="470" y="428" class="xs t-ok" text-anchor="middle">CAUGHT</text>
+  <text x="614" y="428" class="xs t-bad" text-anchor="middle">created</text>
+</svg>

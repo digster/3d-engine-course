@@ -1,0 +1,361 @@
+  <h2 id="exponential">6. The exponential map, and the rotation vector</h2>
+
+  <p>
+    There is a second road to Rodrigues' formula. It is longer, it needs one idea we have not used
+    before, and it is worth the detour for two reasons: it explains a spelling you will meet in
+    every physics paper, and it produces a representation with <strong>three</strong> numbers
+    instead of four and no constraint to maintain — the one Module 8 will integrate rigid bodies
+    with.
+  </p>
+
+  <h3 id="exponential-series">6.1 Turning a little, many times</h3>
+
+  <p>
+    Start from angular velocity rather than from angle. Suppose a body spins about the unit axis
+    <code>n</code> at one radian per second. Over a very small time <code>dt</code>, the velocity
+    of the point at <code>v</code> is <code>n × v</code> — that is what the cross product
+    <em>means</em> for rotation, and Lesson 7.1 §9b of the Conventions page fixed it. So over that
+    small step, <code>v</code> moves to <code>v + (n × v) dt</code>, which in matrix terms is
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v \;\mapsto\; \big(I + [\mathbf{n}]_\times \,dt\big)\,v \]</span>
+    <span class="eq-plain">v -> (I + [n]_x dt) v</span>
+  </div>
+
+  <p>
+    That is not a rotation — it is a rotation's first-order approximation, and applied once it
+    makes the vector slightly too long. But apply it <code>N</code> times with
+    <code>dt = θ/N</code> and let <code>N</code> grow:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R(\mathbf{n}, \theta) \;=\; \lim_{N\to\infty}\Big(I + \tfrac{\theta}{N}[\mathbf{n}]_\times\Big)^{\!N} \;=\; \exp\!\big(\theta\,[\mathbf{n}]_\times\big) \]</span>
+    <span class="eq-plain">R(n, theta) = limit as N grows of (I + (theta/N)[n]_x)^N = exp(theta [n]_x)</span>
+  </div>
+
+  <p>
+    The limit on the left is the definition of <code>e<sup>x</sup></code> you met for numbers,
+    applied to a matrix. So <strong>a rotation is the exponential of an antisymmetric
+    matrix</strong>, and the name "exponential map" is not a metaphor.
+  </p>
+
+  <p>
+    Now expand the exponential as a series, and watch it collapse. The only fact needed is what
+    happens when you cross with <code>n</code> twice. Crossing with <code>n</code> kills the
+    along-axis part and rotates the rest by 90° in the plane; do it again and you have rotated by
+    180° in the plane, which is a negation of the perpendicular part:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ [\mathbf{n}]_\times^2 = \mathbf{n}\mathbf{n}^{\mathsf T} - I, \qquad\text{and therefore}\qquad [\mathbf{n}]_\times^3 = -[\mathbf{n}]_\times \]</span>
+    <span class="eq-plain">[n]_x squared = n n^T - I, and [n]_x cubed = -[n]_x</span>
+  </div>
+
+  <p>
+    The second identity is the one that does the work: <strong>every third power brings you back to
+    where you started with a minus sign</strong>, so the infinite series only ever contains two
+    distinct matrices, <code>[n]ₓ</code> and <code>[n]ₓ²</code>. Group the terms by which one they
+    carry, and the odd powers assemble into <code>sin θ</code> and the even ones (past the first)
+    into <code>1 − cos θ</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \exp\big(\theta[\mathbf{n}]_\times\big) = I + \Big(\theta - \tfrac{\theta^3}{3!} + \cdots\Big)[\mathbf{n}]_\times + \Big(\tfrac{\theta^2}{2!} - \tfrac{\theta^4}{4!} + \cdots\Big)[\mathbf{n}]_\times^2 = I + \sin\theta\,[\mathbf{n}]_\times + (1-\cos\theta)[\mathbf{n}]_\times^2 \]</span>
+    <span class="eq-plain">exp(theta [n]_x) = I + sin(theta) [n]_x + (1 - cos(theta)) [n]_x^2</span>
+  </div>
+
+  <p>
+    Substitute <code>[n]ₓ² = n nᵀ − I</code> and it is §5.3's closed form, term for term. Two
+    completely different arguments — one a picture of a disc, one a power series — land on the same
+    nine numbers. That is the kind of agreement worth noticing.
+  </p>
+
+  <h3 id="exponential-vector">6.2 Three numbers, no constraint, no hole at the identity</h3>
+
+  <p>
+    Look at what the exponential takes as input: <code>θ[n]ₓ</code>, a single antisymmetric matrix,
+    which has exactly three independent entries. Those three numbers are the vector
+    <code>r = θn</code> — the <strong>rotation vector</strong>, whose <em>direction</em> is the
+    axis and whose <em>length</em> is the angle.
+  </p>
+
+  <p>
+    This is a better-behaved object than the <code>(n, θ)</code> pair, and the reason is the
+    representation's first ambiguity from §3. <code>(n, 0)</code> is the identity for every
+    <code>n</code>, so the pair has an entire sphere's worth of spellings for one rotation — a
+    genuine defect, a pinch point in the parameterisation. The rotation vector has
+    <code>r = 0</code> and nothing else. <strong>The hole at the identity closes.</strong>
+  </p>
+
+  <p>
+    Rewrite Rodrigues in terms of <code>r</code> by substituting <code>n = r/θ</code>, and the
+    angle survives only inside two coefficients:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{v}' = \mathbf{v} + \frac{\sin\theta}{\theta}\,(\mathbf{r}\times\mathbf{v}) + \frac{1-\cos\theta}{\theta^2}\,\big(\mathbf{r}\times(\mathbf{r}\times\mathbf{v})\big), \qquad \theta = |\mathbf{r}| \]</span>
+    <span class="eq-plain">v' = v + (sin(theta)/theta)(r x v) + ((1 - cos(theta))/theta^2)(r x (r x v)), where theta = |r|</span>
+  </div>
+
+  <p>
+    Both coefficients are finite at <code>θ = 0</code> — <code>sin θ/θ → 1</code> and
+    <code>(1 − cos θ)/θ² → 1/2</code> — so this expression has <em>no singularity at the
+    identity at all</em>, only a removable 0/0 at the single point where <code>θ</code> is exactly
+    zero. That is the formula the engine implements, and it is why
+    <code>rotation_from_rotation_vector</code> needs no special case for a small turn.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">It does not remove every hole, only that one</span>
+    <p>
+      The rotation vector is only <em>unique</em> on the ball <code>|r| ≤ π</code>, because turning
+      by <code>θ + 2π</code> is turning by <code>θ</code>. And on the ball's <em>surface</em>,
+      <code>r</code> and <code>−r</code> are the same rotation — §3's half-turn ambiguity, arriving
+      by another route. So the rotation space is a solid ball with antipodal surface points glued
+      together, which is a genuinely strange shape and is exactly why rotation is hard. What the
+      rotation vector fixes is the pinch at the centre. The seam on the surface is still there, and
+      Lesson 7.4 will meet it again as the quaternion double cover.
+    </p>
+  </div>
+
+  <div class="worked">
+    <p><strong>verify_72 §D.1–D.2</strong> — <code>exp</code> and <code>log</code> invert each
+      other, and <code>exp</code> is smooth through the identity where axis-angle is not:</p>
+<pre><code>50,000 exp(log(R)) round trips: worst 3.192e-05°
+
+exp through the identity, against the first-order I + [r]x:
+         |r|     max element diff      is a rotation
+       1e-02            4.548e-05          1.521e-09
+       1e-04            2.034e-09          7.091e-12
+       1e-06            1.990e-13          3.690e-14
+       1e-08            0.000e+00          1.506e-17</code></pre>
+    <p>
+      The middle column is the gap between the exponential and its own first-order approximation,
+      and it shrinks as <code>θ²</code> — 4.5e-05 at <code>θ</code> = 1e-02, 2.0e-09 at 1e-04,
+      which is a factor of 10<sup>4</sup> for a factor of 10² in <code>θ</code>, exactly as a
+      squared term should. The right column is <code>max|RᵀR − I|</code>: the result stays a
+      rotation to seventeen decimal places at <code>|r| = 1e-08</code>, where the axis-angle pair
+      would be normalising a vector of length 1e-08 and getting whatever the noise said.
+    </p>
+  </div>
+
+  <h3 id="exponential-cancel">6.3 One cancellation that turns out not to matter, and why to
+      measure anyway</h3>
+
+  <p>
+    Lesson 7.1 found the same numerical bug three times: a quantity that should be small, computed
+    by subtracting two nearly-equal numbers near 1.0, destroyed before it reached the caller. The
+    coefficient <code>(1 − cos θ)/θ²</code> above has exactly that shape. At <code>θ = 1e-4</code>
+    a <code>float</code> cannot represent <code>1 − cos θ ≈ 5e-9</code> as a difference from 1.0
+    at all, and the expression returns zero instead of one half.
+  </p>
+
+  <p>
+    So the engine spells it the other way, using the half-angle identity
+    <code>1 − cos θ = 2sin²(θ/2)</code>, which never subtracts anything:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{1-\cos\theta}{\theta^2} \;=\; \frac{2\sin^2(\theta/2)}{\theta^2} \;=\; \frac{1}{2}\left(\frac{\sin(\theta/2)}{\theta/2}\right)^{\!2} \]</span>
+    <span class="eq-plain">(1 - cos(theta))/theta^2 = 2 sin^2(theta/2)/theta^2 = 0.5 * (sin(theta/2)/(theta/2))^2</span>
+  </div>
+
+  <p>
+    That is the right habit. <strong>But here is the finding, and it is the opposite of 7.1's:
+    measured, it makes essentially no difference, and the reason it makes no difference is worth
+    more than the fix.</strong>
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §D.3</strong> — the coefficient is destroyed and the matrix is not:</p>
+<pre><code>         |r|  coefficient rel err worst matrix element err
+       1e-01            2.386e-06              5.588e-09
+       1e-02            1.743e-04              3.492e-09
+       1e-03            4.633e-02              5.960e-08
+       1e-04            1.000e+00              2.034e-09
+       1e-05            1.000e+00              2.024e-11
+       1e-06            1.000e+00              1.990e-13</code></pre>
+    <p>
+      The middle column reaches <strong>1.000</strong> — the literal spelling returns zero where
+      the answer is one half, a 100% error. The right column never exceeds
+      <strong>6e-08</strong>, which is one <code>float</code> ULP at 1.0.
+    </p>
+  </div>
+
+  <p>
+    The explanation is in the multiplication. That coefficient scales
+    <code>r × (r × v)</code>, whose magnitude is <code>θ²|v|</code>. The coefficient's
+    <em>absolute</em> error is about <code>ε/θ²</code>, because <code>ε</code> of absolute error in
+    <code>1 − cos θ</code> divided by <code>θ²</code> is <code>ε/θ²</code>. Multiply the two and
+    the <code>θ²</code> cancels exactly: the term's contribution to the matrix is wrong by
+    <code>ε</code>, one ULP, at every angle.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The transferable rule, and it is not "always use the half-angle form"</span>
+    <p>
+      7.1's rule was: <em>if a formula's job is to report something near zero, look at what it
+      computes just before it returns and ask whether that is ever small.</em> This section adds
+      the other half. <strong>Ask what happens to the damaged quantity on its way to the output.</strong>
+      In 7.1 the damaged quantity <em>was</em> the output, so the damage was the answer. Here it is
+      multiplied by something that shrinks at precisely the rate the error grows, and the product
+      is clean. The way to tell the two apart is not to recognise the pattern — the pattern is
+      identical — it is to measure the number that reaches the caller.
+    </p>
+    <p>
+      We keep the half-angle spelling anyway. It costs one extra multiply, it is not harder to
+      read, and "this is fine because the error cancels downstream" is a property of the current
+      call sites rather than of the function.
+    </p>
+  </div>
+
+  <h2 id="forward">7. Implementation: building a rotation</h2>
+
+  <p>
+    Two new headers. <code>math/rotation.hpp</code> holds what is true of a rotation whatever you
+    store it as, and <code>math/axis_angle.hpp</code> holds this representation.
+  </p>
+
+  <h3 id="forward-move">7.1 A file moves, because it finally has a reason to</h3>
+
+  <p>
+    Lesson 7.1 put <code>angle_between_rotations</code> in <code>math/euler.hpp</code> and its own
+    doc comment said that was wrong:
+  </p>
+
+<pre><code class="lang-cpp">/// **This function is not about Euler angles and it knows it.** It is here
+/// because Lesson 7.1 is the first thing that needs it... Lesson 7.2 builds
+/// axis-angle, at which point the θ below stops being an implementation detail
+/// and becomes half of a representation — and *that* is the lesson that should
+/// move this function and rename the file it lives in. Moving it now, to a
+/// `rotation.hpp` with one function in it, would be building a cupboard for a
+/// thing we own one of.</code></pre>
+
+  <p>
+    That moment is now. The metric is about to be used by two representations rather than one, so
+    it belongs above both of them. <code>math/rotation.hpp</code> is created,
+    <code>angle_between_rotations</code> and its by-trace twin move into it, and
+    <code>math/euler.hpp</code> <strong>includes</strong> the new header so that not one call site
+    has to change. That last part is not politeness. A refactor that makes its callers edit is a
+    refactor that will keep being postponed, and this one had already been postponed once by
+    design.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A cupboard for one thing</span>
+    <p>
+      The rule 7.1 wrote down and 7.2 is now executing: <strong>a header earns its existence when a
+      second inhabitant justifies the shelf.</strong> A <code>rotation.hpp</code> created in 7.1
+      would have held one function and would have been indistinguishable from premature
+      organisation. Created now, it holds the thing both <code>euler.hpp</code> and
+      <code>axis_angle.hpp</code> need, and the dependency arrows point the right way.
+    </p>
+  </div>
+
+  <h3 id="forward-rodrigues">7.2 Rodrigues, in code</h3>
+
+  <p>
+    The vector form is the formula with the names changed, and nothing else:
+  </p>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline vec3 rotate_about_axis(vec3 v, vec3 unit_axis, float angle)
+{
+    const float c = std::cos(angle);
+    const float s = std::sin(angle);
+    return v * c + cross(unit_axis, v) * s + unit_axis * (dot(unit_axis, v) * (1.0f - c));
+}</code></pre>
+
+  <p>
+    Three terms, in the order §5.1 derived them. A reader who has the picture can check this line
+    against the picture, which is the entire argument for writing it this way.
+  </p>
+
+  <p>
+    And the matrix is Lesson 2.5's definition, applied:
+  </p>
+
+<pre><code class="lang-cpp">[[nodiscard]] inline mat3 rotation_from_axis_angle(axis_angle r)
+{
+    return mat3{rotate_about_axis(vec3{1.0f, 0.0f, 0.0f}, r.axis, r.angle),
+                rotate_about_axis(vec3{0.0f, 1.0f, 0.0f}, r.axis, r.angle),
+                rotate_about_axis(vec3{0.0f, 0.0f, 1.0f}, r.axis, r.angle)};
+}</code></pre>
+
+  <p>
+    Column 0 is where <code>x̂</code> goes, column 1 where <code>ŷ</code> goes, column 2 where
+    <code>ẑ</code> goes, and <code>mat3</code> stores columns (Lesson 2.6 §3.3), so there is no
+    rearrangement at all. This is the same function body a student could write from the figure.
+  </p>
+
+  <h3 id="forward-unit">7.3 Why the axis is not normalised for you</h3>
+
+  <p>
+    <code>rotation_from_axis_angle</code> requires <code>r.axis</code> to be unit and does not
+    enforce it. That is a decision, not an omission, and it is worth defending because the obvious
+    alternative — a quiet <code>normalised()</code> inside the struct or the function — is what
+    most libraries do.
+  </p>
+
+  <p>
+    A non-unit axis does not produce a slightly wrong rotation. Look at the three terms: the cross
+    product scales with <code>|n|</code> and the projection term scales with <code>|n|²</code>, so
+    the result <em>shears</em> — it is not a rotation at all, and everything downstream that
+    assumes <code>RᵀR = I</code> is now quietly wrong. Silently fixing that at the bottom of the
+    stack hides a real mistake at the top of it.
+  </p>
+
+  <p>
+    And there is a better answer available to the caller who has a non-unit direction in hand — the
+    output of a <code>cross</code>, say. What they actually have is a <strong>rotation
+    vector</strong>: a direction whose length means something. <code>§6.2</code>'s
+    <code>rotation_from_rotation_vector</code> takes exactly that, has no unit requirement to
+    violate, and is the function they wanted. The API's shape says so.
+  </p>
+
+  <h3 id="forward-cost">7.4 What the readable spelling costs, measured twice</h3>
+
+  <p>
+    The basis-vector form does about three times the arithmetic of the transcribed closed form: it
+    computes three cross products and three dot products where the closed form computes nine
+    entries directly. So it should be three times slower. Count the multiplies and that is the
+    prediction.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §B.5</strong> — four spellings, best of three passes each:</p>
+<pre><code>closed form, nine transcribed entries      3.47 ns
+basis-vector form (what ships)            5.47 ns   1.58x
+basis-vector form, sin/cos hand-hoisted   5.39 ns   1.55x
+one sin + one cos, alone                  2.10 ns   (61% of the closed form)</code></pre>
+  </div>
+
+  <p>
+    <strong>1.58×, not 3×</strong>, and the fourth row says why: a <code>sin</code> and a
+    <code>cos</code> cost 2.10 ns between them, which is <em>most of the closed form's entire
+    runtime</em>. Both spellings pay that in full, exactly once. The arithmetic they differ in is a
+    minority share of a cost they share, so the multiply count predicts nothing. That is a general
+    lesson about profiling anything containing a transcendental, and it is the reason "count the
+    operations" has been unreliable advice since about 1995.
+  </p>
+
+  <p>
+    The third row is the interesting one. Calling <code>rotate_about_axis</code> three times asks
+    for the sine and cosine three times over, which looks obviously wasteful — so the hoisted
+    variant, sharing one <code>sin</code>/<code>cos</code> pair across the three columns, was
+    written, measured, and <strong>reverted</strong>. Not because it lost. Because it could not be
+    shown to win: it came out 1.5% faster here and 3% <em>slower</em> in a standalone harness with
+    the same four spellings, which is to say identical. <code>sin</code> and <code>cos</code> are
+    pure functions, so common-subexpression elimination hoists them whether or not you ask, and
+    what remains is a difference in how well a lambda folds against literal basis vectors — which
+    does not survive a change of surrounding code.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule that came out of it</span>
+    <p>
+      <strong>An optimisation whose sign flips between measurements is not an optimisation</strong>,
+      and paying for it in readability is a straight loss. The version that ships is the one a
+      reader can check against Figure 3.
+    </p>
+  </div>

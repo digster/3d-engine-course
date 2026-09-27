@@ -1,0 +1,229 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-11-constraints-and-joints.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.11 — Constraints and Joints: Hinge and Ball-Socket</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-13-character-controller.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.13 — A Character Controller</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.12</div>
+    <h1>Ragdolls: Joints on a Skeleton</h1>
+    <p class="deck">
+      Module 7 gave the engine a character that moves because a clip says so; Module 8 gave it bodies
+      that move because Newton says so. A ragdoll is the one object that has to be both, one after
+      the other. This lesson turns 7.7's 23-joint humanoid into eleven capsules — Dempster's segment
+      masses, four hinges, six sockets with a <strong>swing cone</strong> and a
+      <strong>twist range</strong> — and hands a jogging character to the solver in mid-stride and
+      back. The angles come first, and they are a <strong>swing–twist split</strong>, not Euler
+      angles: Euler's sensitivity reaches <strong>609.9</strong> at an arm raised forward, where
+      swing–twist reads <strong>1.55</strong>. The swing's row is exact; the obvious twist row is not.
+      The twist's rate is the <em>half-way</em> axis over <code>cos(φ/2)</code>, and a row about the
+      bone is wrong by the rate at which the swing's plane turns — which, integrated round a loop, is
+      the loop's solid angle: <strong>Codman's paradox</strong>, reproduced to three decimals. Then
+      the character. The handoff keeps its momentum exactly — <strong>204.40&nbsp;kg·m/s</strong> —
+      because a steered body's velocity <em>is</em> the chord its integrator inverts; the return
+      blends from the pose read off the bodies, realigned over the pelvis, and moves no bone by more
+      than <strong>0.06&nbsp;mm</strong>. And the ragdoll found two bugs the module had shipped: a
+      violated hinge limit was <strong>never repaired</strong> under split impulse, because 8.11's
+      position pass let the far stop cancel the near one; and a moving kinematic body
+      <strong>never woke</strong> anything it touched, so an animated character ran straight through a
+      crate that had fallen asleep. Both are fixed, and 8.10's and 8.11's harnesses still agree with
+      their own pages everywhere but one table.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="07-04-quaternions.html">7.4 — Quaternions, Derived</a>,
+          <a href="07-06-skeletal-animation.html">7.6 — Skeletal Animation: The Skinning Math</a>,
+          <a href="08-10-sequential-impulses.html">8.10 — Sequential Impulses: Warm Starting, Islands, and Sleeping</a>,
+          <a href="08-11-constraints-and-joints.html">8.11 — Constraints and Joints: Hinge and Ball-Socket</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/ragdoll.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/ragdoll.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/constraint.hpp</code>,
+            <code>engine/src/phys/constraint.cpp</code>,
+            <code>engine/include/engine/phys/solver.hpp</code>,
+            <code>engine/src/phys/solver.cpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/ragdoll/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_812.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_812.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine has <strong>ragdolls</strong>: a skeleton becomes a tree of capsules with swing
+            cones, twist ranges and hinges; a kinematic character is steered onto its clip by velocity,
+            handed to the solver with its momentum, and handed back without a jump. Two engine bugs
+            fixed, eleven measured sections, <strong>68 checks</strong> — and five claims the
+            measurements refused.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…split a rotation into a swing and a twist, derive the split from two mirrors, and say
+          exactly where it and Euler angles each break.</li>
+      <li>…write a swing cone as a one-sided angular row, and prove its rate is exact.</li>
+      <li>…derive the twist's rate — the half-way axis over <code>cos(φ/2)</code> — and predict what a
+          row about the bone gets wrong, including Codman's paradox.</li>
+      <li>…build a ragdoll from a skeleton: parts, passengers, masses from anthropometric tables,
+          joints authored at the bind pose, and a self-collision rule you can defend.</li>
+      <li>…hand a character from animation to physics and back without a pop, a slide or a stolen
+          momentum, and say why steering by velocity makes the handoff one assignment.</li>
+      <li>…recognise the ragdoll's own failures — a limb crushed under the chest, a joint opened
+          under a hanging load, a ragdoll that settles and will not sleep — and price each fix.</li>
+      <li>…find an engine bug with a probe rather than a test, and correct a shipped lesson's code
+          without rewriting the page that shipped it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a character that cannot fall</a></li>
+      <li><a href="#intuition">Building intuition: a skeleton with mass, and one owner at a time</a></li>
+      <li><a href="#swing-twist">Swing and twist</a></li>
+      <li><a href="#cone">The swing cone is a limit like any other</a></li>
+      <li><a href="#twist">The twist row, and Codman's paradox</a></li>
+      <li><a href="#mass">A skeleton with mass</a></li>
+      <li><a href="#bug">The first fall, and a bug 8.11 shipped</a></li>
+      <li><a href="#sweeps">What eight sweeps do to a ragdoll</a></li>
+      <li><a href="#handoff">Handing a character to the solver</a></li>
+      <li><a href="#disagree">When the animation disagrees with the joints</a></li>
+      <li><a href="#return">Handing it back</a></li>
+      <li><a href="#fight">A return the physics does not fight</a></li>
+      <li><a href="#bill">Settling, sleeping, and the bill</a></li>
+      <li><a href="#implementation">Writing it</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a character that cannot fall</h2>
+
+  <p>
+    Put 7.7's walking character on a ledge and walk it off. Nothing happens. It walks on air, at a
+    constant height, until the clip loops — because nothing in the animation system knows what a
+    ledge is, or gravity, or that a foot has to be on something. A clip is a function from time to
+    pose (7.7's sentence), and that is its strength: it plays back exactly what an animator made. It
+    is also why a game character hit by a truck plays a canned "hit" animation that ends with it
+    lying in the same position on a staircase as on a flat floor.
+  </p>
+
+  <p>
+    Module 8 has built the opposite kind of object. A body under 8.11's joints falls, swings, hangs
+    and piles up, because the solver computes where it goes; nobody authored the pose it lands in.
+    What a ragdoll wants is both, in sequence: the clip while the character is in control, the
+    solver the moment it is not — tripped, shot, knocked off the ledge — and the clip again when it
+    gets up. That turns out to be three problems, and only the first is the one the lesson title
+    promises:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Joints that behave like a body's.</strong> 8.11's ball-socket lets a limb go anywhere
+      — a shoulder that swings the arm through the chest, or twists it round a full turn. A hinge
+      is right for an elbow and a knee; a shoulder, a hip, the neck and the waist need a ball-socket
+      with two limits: how far the limb may <em>swing</em> away from a rest direction, and how far it
+      may <em>twist</em> about itself. Writing those limits needs two angles, and choosing the angles
+      is most of §3 to §5.
+    </li>
+    <li>
+      <strong>A handoff that does not pop.</strong> At the instant the clip lets go, the bodies have
+      to be where the animation put them and moving the way it was moving them. Get the position wrong
+      and the character teleports; get the velocity wrong and it stops dead in mid-stride and then
+      crumples like a puppet with its strings cut. §9 measures both.
+    </li>
+    <li>
+      <strong>A return the physics does not fight.</strong> Getting up means the clip owns the bodies
+      again, starting from wherever they landed. The tempting implementation leaves the bodies
+      dynamic and writes the animated pose into them every frame — 8.11 §1's teleport, now as a real
+      design — and §12 measures what the solver does to a body whose velocity no longer describes its
+      motion.
+    </li>
+  </ol>
+
+  <p>
+    And, as every lesson in this module has found, the first real use of the solver on a new kind of
+    object measures things nobody planned to. This one found two bugs that earlier lessons shipped,
+    and five claims its own sections were written to make that the measurements refused. Each is
+    told where it happened.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: a skeleton with mass, and one owner at a time</h2>
+
+  <p>
+    Start from what a ragdoll <em>is</em>. 7.6's skeleton is a tree of frames: each joint has a
+    parent and a local transform, and composing down the tree gives every joint's place in the
+    character's model space. A ragdoll is that tree with mass. Some of the joints — not all of them —
+    get a rigid body: a capsule, a mass and an inertia tensor, bolted to the joint's frame. Those are
+    the <strong>parts</strong>. Each part is joined to its nearest ancestor part by one of 8.11's
+    joints, anchored at the skeleton joint the part follows, so a shoulder joint sits at the
+    shoulder.
+  </p>
+
+  <p>
+    Why not every joint? Because 7.7's humanoid has a clavicle, a hand, a foot and a toe on each
+    side, three spine joints and a head, and giving each of those a body would make a hand a 0.48&nbsp;kg
+    body hinged to a 1.3&nbsp;kg forearm — ratios the solver would pay for (§8) for motion nobody would
+    see. So eleven parts, the classic ragdoll: pelvis, torso, head, two upper arms, two forearms (with
+    the hand's mass folded in), two thighs and two shins (with the foot's). The other twelve joints
+    are <strong>passengers</strong>: each rides on the nearest part above it, at whatever local
+    transform the clip last gave it, so a ragdoll's hand stays at the end of its forearm and its
+    toes stay on its foot while the solver owns the limb.
+  </p>
+
+  @@FIG_PARTS@@
+
+  <p>
+    Figure 1 also shows the second idea, which is the one that keeps the code small: <strong>every
+    body has exactly one owner at a time</strong>, and the owner is who writes its velocity. While
+    the character is animated the clip owns the bodies. They are <em>kinematic</em> — no mass, moved
+    only by their own velocity, 8.2's kind of body for a lift — and each step the ragdoll sets that
+    velocity to whatever lands the body exactly on the animated pose at the end of the step. They
+    still collide, so a jogging character pushes crates, at the speed its limbs really move. While
+    the character is simulated the solver owns them: they are dynamic, their joints are in the
+    solver, and the pose the skinning code draws is read back off them.
+  </p>
+
+  <p>
+    With that rule the two handoffs are nearly nothing. Animation to physics is <code>simulate()</code>:
+    give each body its mass back. Its velocity is already right, because the ragdoll has been
+    steering it — and §9 shows that for this engine's integrator "already right" is exact, not an
+    approximation. Physics to animation is <code>animate()</code>: take the mass away and start
+    steering again, toward a pose that <em>begins</em> where the bodies lie and blends to the clip.
+    The alternative — two systems writing the same body — is what §12 is about.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> The masses come from Dempster's cadaver measurements
+    as tabulated by Winter (Table 4.1): pelvis 0.142 of body mass, thorax and abdomen 0.355, head and
+    neck 0.081, upper arm 0.028, forearm and hand 0.022, thigh 0.100, leg and foot 0.061. For an
+    80&nbsp;kg person that is 11.36&nbsp;kg of pelvis, 28.40 of torso, 6.48 of head, 2.24 per upper arm,
+    1.76 per forearm, 8.00 per thigh and 4.88 per shin — and the fractions sum to exactly
+    1.000 (0.142 + 0.355 + 0.081 + 2 × (0.028 + 0.022 + 0.100 + 0.061)). The heaviest part is the
+    torso and the lightest the forearm, <strong>16.1 : 1</strong>. Hold on to that number: 8.11 §14
+    measured what a 10:1 chain does to eight sweeps.
+  </p>

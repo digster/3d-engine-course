@@ -1,0 +1,38 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="l44f6-t l44f6-d">
+  <title id="l44f6-t">One frame, three operations, every pixel accounted for</title>
+  <desc id="l44f6-d">Three boxes left to right: a render pass that clears, a blit that puts the software rasterizer's picture on top, and a second render pass that loads what is there and draws the triangle over it. Below, a stacked bar dividing the finished image into 22,364 cleared pixels, 22,364 pixels of the software picture, and 20,808 pixels of triangle — 65,536 in total, which is 256 squared exactly.</desc>
+  <defs>
+    <marker id="e-i-l44f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l44f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l44f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">one frame of <tspan class="mono">engine --gpu</tspan>, and where every pixel came from</text>
+<rect x="30.0" y="76.0" width="196.0" height="74.0" rx="5" fill="#7a7a72" opacity="0.18" stroke="#7a7a72" stroke-width="1.6"/>
+<text x="128.0" y="98.0" class="xs mono" text-anchor="middle">render pass 1</text>
+<text x="128.0" y="116.0" class="xs" text-anchor="middle">CLEAR the swapchain</text>
+<text x="128.0" y="136.0" class="xs mono muted" text-anchor="middle">22,364 px survive</text>
+<line x1="232.0" y1="113.0" x2="250.0" y2="113.0" class="ink-soft" stroke-width="1.6" marker-end="url(#e-s-l44f6)"/>
+<rect x="256.0" y="76.0" width="196.0" height="74.0" rx="5" fill="#5ac878" opacity="0.18" stroke="#5ac878" stroke-width="1.6"/>
+<text x="354.0" y="98.0" class="xs mono" text-anchor="middle">blit</text>
+<text x="354.0" y="116.0" class="xs" text-anchor="middle">the software framebuffer, on top</text>
+<text x="354.0" y="136.0" class="xs mono muted" text-anchor="middle">22,364 px survive</text>
+<line x1="458.0" y1="113.0" x2="476.0" y2="113.0" class="ink-soft" stroke-width="1.6" marker-end="url(#e-s-l44f6)"/>
+<rect x="482.0" y="76.0" width="196.0" height="74.0" rx="5" fill="#5082e6" opacity="0.18" stroke="#5082e6" stroke-width="1.6"/>
+<text x="580.0" y="98.0" class="xs mono" text-anchor="middle">render pass 2</text>
+<text x="580.0" y="116.0" class="xs" text-anchor="middle">LOAD, then draw the triangle</text>
+<text x="580.0" y="136.0" class="xs mono muted" text-anchor="middle">20,808 px</text>
+<rect x="30.0" y="200.0" width="225.2" height="34" fill="#7a7a72" opacity="0.85"/>
+<text x="142.6" y="222.0" class="xs t-inv" text-anchor="middle">22,364</text>
+<text x="142.6" y="250.0" class="xs" text-anchor="middle">cleared, untouched</text>
+<rect x="255.2" y="200.0" width="225.2" height="34" fill="#5ac878" opacity="0.85"/>
+<text x="367.8" y="222.0" class="xs t-inv" text-anchor="middle">22,364</text>
+<text x="367.8" y="250.0" class="xs" text-anchor="middle">software picture</text>
+<rect x="480.4" y="200.0" width="209.6" height="34" fill="#5082e6" opacity="0.85"/>
+<text x="585.2" y="222.0" class="xs t-inv" text-anchor="middle">20,808</text>
+<text x="585.2" y="250.0" class="xs" text-anchor="middle">the triangle</text>
+<text x="30.0" y="282.0" class="xs">65,536 pixels, which is 256&#178; exactly &#8212; <tspan class="t-hi">every pixel accounted for by exactly one step</tspan>. Checked offscreen,</text>
+<text x="30.0" y="300.0" class="xs">because a window cannot be asked what it contains and a screenshot proves less than a count.</text>
+</svg>

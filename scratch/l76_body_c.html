@@ -1,0 +1,244 @@
+  <h2 id="skeleton">5. Implementation: the skeleton and the palette</h2>
+
+  <p>
+    A new directory, and the argument is the one <code>asset/</code> made in 5.5 and
+    <code>ui/</code> made in 5.11: <strong>animation is not a graphics subsystem.</strong> Nothing in
+    these two files mentions a framebuffer, a pipeline or a colour — they compose transforms and
+    deform arrays — and a character keeps moving when nobody is looking at it. So
+    <code>engine/include/engine/anim/</code>, and Lesson 7.7's clip sampling lands beside it.
+  </p>
+
+  <p>
+    A joint is smaller than you expect, because most of what people imagine a joint holds is either
+    derived or belongs to a pose:
+  </p>
+
+  <pre><code class="lang-cpp">struct joint
+{
+    // resting placement, in the PARENT's space
+    transform local_bind{};
+
+    // MUST be less than this joint's own index
+    joint_index parent = k_no_parent;
+
+    // diagnostic, and not optional in practice
+    std::string name;
+};</code></pre>
+
+  <p>
+    No child list — derivable, and a second source of truth that has to be kept in step with the
+    first, which is the argument <code>ecs::parent</code> makes in 5.9. No world matrix — that is a
+    property of a <em>pose</em>, and a skeleton is static data shared by every character wearing it.
+    And no inverse bind matrix, which lives in the skeleton's own parallel array because it is
+    <em>derived</em>: a field an editor could hand-write is a field that can disagree with the bind
+    pose beside it.
+  </p>
+
+  <pre><code class="lang-cpp">struct skeleton
+{
+    // parent-before-child, always
+    std::vector&lt;joint&gt; joints;
+
+    // the inverse bind matrices
+    std::vector&lt;mat4&gt; joint_from_model;
+};</code></pre>
+
+  <p>
+    <code>joint_index</code> is 16 bits, which is a decision made by the <em>consumer</em> rather
+    than by the skeleton: <code>skin_influence</code> stores four of them per vertex, so a
+    million-vertex character costs 8 MB at 16 bits and 16 MB at 32. Real rigs run to a few hundred
+    joints and a film-grade one with facial controls reaches low thousands, so the ceiling of 65,534
+    sits three orders above the need — which is the right place for a ceiling.
+  </p>
+
+  <h3 id="bake-impl">5.1 Baking, in ten lines</h3>
+
+  <p>
+    §4's derivation, typed:
+  </p>
+
+  <pre><code class="lang-cpp">void bake_inverse_binds(skeleton&amp; sk)
+{
+    const std::size_t n = sk.joints.size();
+    sk.joint_from_model.assign(n, mat4::identity());
+
+    for (std::size_t j = 0; j &lt; n; ++j)
+    {
+        const joint&amp; jt = sk.joints[j];
+        const mat4 local = local_from_parent(jt.local_bind);
+        const joint_index p = jt.parent;
+
+        const bool root = (p == k_no_parent)
+                       || (static_cast&lt;std::size_t&gt;(p) &gt;= j);
+
+        sk.joint_from_model[j] =
+            root ? local : local * sk.joint_from_model[p];
+    }
+}</code></pre>
+
+  <p>
+    The <code>p &gt;= j</code> in the test is not paranoia about a condition <code>validate</code>
+    already reports. It is what keeps this loop from reading an entry that has not been written yet
+    — a parent later in the array would otherwise contribute an identity that looks plausible and
+    is not, and a loop that reads its own uninitialised output is worse than one that produces a
+    wrong answer loudly.
+  </p>
+
+  <p>
+    Composing a pose is the same shape, with the multiplication on the other side:
+  </p>
+
+  <pre><code class="lang-cpp">const mat4 m = parent_from_local(local);
+model_from_joint[j] =
+    (p == k_no_parent) ? m : model_from_joint[p] * m;</code></pre>
+
+  <p>
+    …which is Lesson 5.9's composition rule with the level-order machinery deleted, because the
+    array <em>is</em> the order.
+  </p>
+
+  <h3 id="palette">5.2 The palette, and what it is not for</h3>
+
+  <p>
+    One matrix product per joint:
+  </p>
+
+  <pre><code class="lang-cpp">palette[j] = model_from_joint[j] * sk.joint_from_model[j];</code></pre>
+
+  <p>
+    The two steps are kept apart — <code>compose_pose</code> then <code>build_palette</code> —
+    because they answer different questions and have different consumers, and this is the place to
+    say which is which. <strong>You attach props with <code>model_from_joint</code>, and never with
+    the palette.</strong> A sword in a hand socket is a rigid object with its own vertices in its own
+    space, which is exactly the case Lesson 5.9 already handles: parent it to the hand and let the
+    hierarchy compose. Multiplying a sword by a <em>skinning</em> matrix would be asking "where did
+    this model-space point of the character move to", which is a question about the character's skin
+    and has nothing to say about the sword.
+  </p>
+
+  <p>
+    That array is also, exactly, what a GPU skinning path uploads: a uniform or storage buffer of
+    one matrix per joint, with the vertex shader doing the same weighted sum. Nothing above this
+    line changes when the skinning moves to the GPU, which is why the CPU version is not throwaway
+    work. §10 measures what that upload is worth.
+  </p>
+
+  <h3 id="the-bug">5.3 The bug that asks a question with no answer</h3>
+
+  <p>
+    The demo makes the classic mistake reachable with one key, because the substitution is one word:
+  </p>
+
+  <pre><code class="lang-cpp">// [N] — the posed joint matrices, and no inverse binds.
+const std::vector&lt;mat4&gt;&amp; use =
+    use_inverse_binds_ ? palette_ : posed_;</code></pre>
+
+  @@FIG_NO_BIND@@
+
+  <p>
+    Worth being precise about why this is not a small error. It is not that the mesh ends up in the
+    wrong place by a correctable amount; it is that <code>model_from_joint</code> was handed a point
+    expressed in the wrong space, so the product has no geometric meaning at all. Every vertex is
+    displaced by roughly wherever its joint is standing, which on a limb means the tip is thrown
+    several times the limb's own length. The harness measures the worst vertex displacement at
+    <strong>4.4366 units on a tube 5.00 units long</strong>, and that number is a lower bound on the
+    absurdity rather than a description of it.
+  </p>
+
+  <h2 id="weights">6. The weights, and the law they obey</h2>
+
+  <p>
+    Four influences per vertex, and four is a hardware number rather than an artistic one. It is the
+    width of a GPU vector register, so four indices pack into one attribute and four weights into
+    one <code>float4</code>, and the shader's blend is four multiply-adds with no loop and no
+    branch. Engines that allow eight do it as two such attributes and pay for it everywhere.
+  </p>
+
+  <p>
+    It is also enough. A vertex genuinely influenced by five joints is nearly always a weighting
+    mistake or a rig that wants another joint; the standard import step keeps the four largest
+    weights and renormalises, and the error that introduces is bounded by the fifth weight, which on
+    real content is a couple of percent.
+  </p>
+
+  <pre><code class="lang-cpp">struct skin_influence
+{
+    joint_index joints[k_max_influences]{0, 0, 0, 0};
+    float weights[k_max_influences]{1.0f, 0.0f, 0.0f, 0.0f};
+};</code></pre>
+
+  <div class="callout warn">
+    <span class="label">A zero weight must still carry a valid joint index</span>
+    <p>
+      The index is read before the weight is applied — that is what makes the inner loop
+      straight-line code a compiler can vectorise — so garbage in an unused slot is an
+      out-of-bounds read on the hottest path in the frame. Defaulting all four to joint 0 makes it
+      safe by construction. This is the classic skinning crash, and it fires on exactly one asset:
+      the one whose exporter padded the unused slots with <code>0xFFFF</code>.
+      <code>skin_report::padded_indices</code> counts them, separately from
+      <code>out_of_range</code>, because only the second changes the picture and only the first is a
+      latent crash.
+    </p>
+  </div>
+
+  @@FIG_WEIGHTS@@
+
+  <h3 id="sum-to-one">6.1 Why the weights must sum to one — and what it looks like when they do not</h3>
+
+  <p>
+    "Normalise your weights" is usually offered as tidiness. It is not: it is a consequence of the
+    palette matrices being <strong>affine</strong> rather than merely linear.
+  </p>
+
+  <p>
+    Write a palette matrix as a linear part and an offset, <code>S_i v = A_i v + t_i</code>. Then
+  </p>
+
+  <div class="eq">\[ \sum_i w_i S_i v \;=\; \Big(\sum_i w_i A_i\Big) v \;+\; \sum_i w_i t_i \]</div>
+
+  <p>
+    The offsets are blended too. Now take the bind pose, where every <code>S_i</code> is the
+    identity — <code>A_i = I</code>, <code>t_i = 0</code> — and let the weights sum to
+    <code>s</code> instead of 1:
+  </p>
+
+  <div class="eq">\[ \sum_i w_i \, I \, v \;=\; s\,v \]</div>
+
+  <p class="eq-plain">
+    …the vertex lands at s times its distance from the model origin.
+  </p>
+
+  <p>
+    <strong>Every vertex is scaled toward the model's origin</strong>, which is usually somewhere
+    between the character's feet. A weight sum of 0.9 gives you a character 10% smaller and sunk
+    into the floor, and it reads as a scale bug. It is a weighting bug.
+  </p>
+
+  <p>
+    The harness scales all 208 of the fixture's weights by 0.9 and checks that prediction to float
+    resolution:
+  </p>
+
+  <pre>   weights x0.9: unnormalised 208 of 208, worst sum 0.9000
+  [PASS] E.1  validate sees every one of them
+   worst gap from the prediction 0.9*v        5.218e-07
+   worst vertex displacement                  0.5012 units</pre>
+
+  <p>
+    Check the displacement by hand: the tube's most distant vertex is at the far ring, radius 0.35
+    and five units up, so its distance from the origin is
+    <code>√(0.35² + 5²) = 5.0122</code>, and a tenth of that is <strong>0.5012</strong>. The
+    measurement is the arithmetic, which is the point of making the prediction first.
+  </p>
+
+  <p>
+    <code>normalise_weights</code> is the repair and it is deliberately an <em>import-time</em> one.
+    It is a divide per vertex; doing it inside the skinning loop would pay, every frame forever, for
+    a property the data could simply have. It also repairs two other things while it is there: a
+    weight naming a joint the palette does not contain is zeroed and its index clamped, so the hot
+    loop needs no bounds check; and a vertex with no weight at all is given full weight on its first
+    joint. That last one matters because the alternative is visible and baffling —
+    <strong>a vertex weighted to nothing collapses to the model origin</strong>, drawing a spike
+    halfway across the character while its geometry and its triangles are all perfectly fine.
+    <code>validate</code> counts it first, so the repair is not a secret.
+  </p>

@@ -1,0 +1,245 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l85f3-t l85f3-d">
+  <title id="l85f3-t">The support function: a direction in, the farthest point out — and the sum rule that makes a capsule two terms.</title>
+  <desc id="l85f3-d">Left, a convex polygon with three directions drawn; each picks out one vertex and a dashed supporting line through it, with the note that the set is the intersection of every half-plane containing it. Right, a capsule drawn as a segment inflated by a radius, with its support point built as the sum of the segment's support and the ball's.</desc>
+  <defs>
+    <marker id="e-i-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-purple-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-amber-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-blue-l85f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">One function, and it determines the set completely.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+8
+"
+ 
+y
+=
+"
+4
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+2
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+1
+6
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+7
+2
+"
+ 
+y
+=
+"
+4
+6
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+2
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+3
+1
+6
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="18" y="64" class="xs muted" text-anchor="start">1 · a direction in, a point out</text>
+<text x="482" y="64" class="xs muted" text-anchor="start">2 · and a Minkowski sum adds its operands' supports</text>
+<path d="M 123.60,253.80 L 216.60,272.40 L 278.60,210.40 L 260.00,136.00 L 173.20,117.40 L 111.20,173.20 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<line x1="232.3" y1="84.0" x2="287.7" y2="188.0" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<line x1="220.59" y1="156.96" x2="276.42" y2="127.27" stroke="#f0961e" stroke-width="1.8" marker-end="url(#e-amber-l85f3)"/>
+<circle cx="260.0" cy="136.0" r="3.6" fill="#f0961e"/>
+<text x="290.65594042406195" y="123.69994734007388" class="xs t-hi" text-anchor="middle">d₁</text>
+<line x1="121.2" y1="145.1" x2="225.2" y2="89.7" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<line x1="194.16" y1="156.81" x2="164.47" y2="100.98" stroke="#f0961e" stroke-width="1.8" marker-end="url(#e-amber-l85f3)"/>
+<circle cx="173.2" cy="117.4" r="3.6" fill="#f0961e"/>
+<text x="156.89994734007388" y="90.74405957593805" class="xs t-hi" text-anchor="middle">d₂</text>
+<line x1="170.0" y1="290.1" x2="77.2" y2="217.5" stroke="#8f918a" stroke-width="1.0" fill="none" stroke-dasharray="4 4"/>
+<line x1="151.08" y1="218.62" x2="112.15" y2="268.46" stroke="#f0961e" stroke-width="1.8" marker-end="url(#e-amber-l85f3)"/>
+<circle cx="123.6" cy="253.8" r="3.6" fill="#f0961e"/>
+<text x="102.22423357669315" y="285.1597333652254" class="xs t-hi" text-anchor="middle">d₃</text>
+<text x="218.0" y="322" class="xs muted" text-anchor="middle">a convex set is the intersection of every half-plane containing it</text>
+<text x="218.0" y="340" class="xs muted" text-anchor="middle">and `support` names the boundary of each one</text>
+<line x1="672.0" y1="270.0" x2="672.0" y2="146.0" stroke="#5082e6" stroke-width="2.2" fill="none"/>
+<path d="M 637.9 270.0 A 34.1 34.1 0 0 0 706.1 270.0 L 706.1 146.0 A 34.1 34.1 0 0 0 637.9 146.0 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<line x1="672.00" y1="208.00" x2="672.00" y2="146.00" stroke="#5082e6" stroke-width="2.0" marker-end="url(#e-blue-l85f3)"/>
+<line x1="672.00" y1="146.00" x2="700.27" y2="126.93" stroke="#f0961e" stroke-width="2.0" marker-end="url(#e-amber-l85f3)"/>
+<circle cx="700.3" cy="126.9" r="3.6" fill="#f0961e"/>
+<text x="626.0" y="173.9" class="xs t-hi" text-anchor="end">±h·axis</text>
+<text x="714.2701812241269" y="130.93152199164751" class="xs t-hi" text-anchor="start">r·normalise(d)</text>
+<line x1="715.69" y1="116.53" x2="749.10" y2="94.00" stroke="#9b7ede" stroke-width="1.6" marker-end="url(#e-purple-l85f3)"/>
+<text x="755.1004942476188" y="87.99505997722054" class="xs t-hi" text-anchor="start">d</text>
+<text x="682.0" y="322" class="sm t-hi" text-anchor="middle">support_{X⊕Y}(d) = support_X(d) + support_Y(d)</text>
+<text x="682.0" y="340" class="xs muted" text-anchor="middle">because maximising dot(x+y, d) maximises each term separately</text>
+</svg>

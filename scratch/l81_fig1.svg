@@ -1,0 +1,47 @@
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="l81f1-t l81f1-d">
+  <title id="l81f1-t">One Euler step drawn as a tangent line, with the gap to the true curve</title>
+  <desc id="l81f1-d">A curve with visible curvature, the tangent at one point extended by a step h, and the amber gap between where the tangent lands and where the curve actually goes. Beside it the Taylor expansion with the dropped terms named.</desc>
+  <defs>
+    <marker id="e-i-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-l81f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<rect x="62" y="52" width="400" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="36" class="xs muted" text-anchor="start">a quantity and its slope, over one step</text>
+<path d="M 62.00,69.61 L 65.33,69.62 L 68.67,69.65 L 72.00,69.71 L 75.33,69.78 L 78.67,69.88 L 82.00,70.01 L 85.33,70.15 L 88.67,70.32 L 92.00,70.51 L 95.33,70.72 L 98.67,70.95 L 102.00,71.21 L 105.33,71.49 L 108.67,71.78 L 112.00,72.11 L 115.33,72.45 L 118.67,72.82 L 122.00,73.20 L 125.33,73.61 L 128.67,74.04 L 132.00,74.50 L 135.33,74.97 L 138.67,75.47 L 142.00,75.98 L 145.33,76.52 L 148.67,77.08 L 152.00,77.67 L 155.33,78.27 L 158.67,78.89 L 162.00,79.54 L 165.33,80.20 L 168.67,80.89 L 172.00,81.60 L 175.33,82.33 L 178.67,83.08 L 182.00,83.85 L 185.33,84.64 L 188.67,85.45 L 192.00,86.28 L 195.33,87.13 L 198.67,88.00 L 202.00,88.90 L 205.33,89.81 L 208.67,90.74 L 212.00,91.69 L 215.33,92.66 L 218.67,93.65 L 222.00,94.66 L 225.33,95.68 L 228.67,96.73 L 232.00,97.80 L 235.33,98.88 L 238.67,99.98 L 242.00,101.11 L 245.33,102.25 L 248.67,103.40 L 252.00,104.58 L 255.33,105.77 L 258.67,106.98 L 262.00,108.21 L 265.33,109.46 L 268.67,110.72 L 272.00,112.00 L 275.33,113.30 L 278.67,114.62 L 282.00,115.95 L 285.33,117.29 L 288.67,118.66 L 292.00,120.04 L 295.33,121.43 L 298.67,122.84 L 302.00,124.27 L 305.33,125.71 L 308.67,127.17 L 312.00,128.64 L 315.33,130.13 L 318.67,131.63 L 322.00,133.15 L 325.33,134.68 L 328.67,136.22 L 332.00,137.78 L 335.33,139.35 L 338.67,140.94 L 342.00,142.54 L 345.33,144.15 L 348.67,145.77 L 352.00,147.41 L 355.33,149.06 L 358.67,150.72 L 362.00,152.40 L 365.33,154.08 L 368.67,155.78 L 372.00,157.49 L 375.33,159.21 L 378.67,160.94 L 382.00,162.68 L 385.33,164.43 L 388.67,166.20 L 392.00,167.97 L 395.33,169.75 L 398.67,171.54 L 402.00,173.34 L 405.33,175.15 L 408.67,176.97 L 412.00,178.80 L 415.33,180.64 L 418.67,182.48 L 422.00,184.34 L 425.33,186.20 L 428.67,188.06 L 432.00,189.94 L 435.33,191.82 L 438.67,193.71 L 442.00,195.61 L 445.33,197.51 L 448.67,199.42 L 452.00,201.33 L 455.33,203.25 L 458.67,205.17 L 462.00,207.10" fill="none" stroke="#969eaf" stroke-width="2.2"/>
+<line x1="136.1" y1="75.1" x2="387.9" y2="112.1" stroke="#e05c5c" stroke-width="2.2" fill="none"/>
+<circle cx="136.1" cy="75.1" r="4" fill="#969eaf"/>
+<circle cx="387.9" cy="112.1" r="4" fill="#e05c5c"/>
+<circle cx="387.9" cy="165.8" r="4" fill="#969eaf"/>
+<line x1="387.9" y1="112.1" x2="387.9" y2="165.8" stroke="#f0961e" stroke-width="2.0" fill="none" stroke-dasharray="4 3"/>
+<text x="397.925925925926" y="142.95288928082067" class="xs mono" text-anchor="start">the error</text>
+<line x1="136.1" y1="316.0" x2="387.9" y2="316.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<line x1="136.1" y1="312.0" x2="136.1" y2="320.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<line x1="387.9" y1="312.0" x2="387.9" y2="320.0" stroke="#8f918a" stroke-width="1.2" fill="none"/>
+<text x="262.0" y="332" class="sm mono" text-anchor="middle">h</text>
+<text x="130.07407407407408" y="93.07879899460482" class="xs muted" text-anchor="middle">where you are</text>
+<text x="397.925925925926" y="169.8034997490181" class="xs muted" text-anchor="start">where it went</text>
+<text x="274.5925925925926" y="78.44171289451492" class="xs mono t-bad" text-anchor="middle">where Euler put it</text>
+<text x="540" y="44" class="sm" text-anchor="start">The exact answer, written out:</text>
+<text x="540" y="68" class="sm mono t-hi" text-anchor="start">x(t+h) = x + h·v + (h²/2)·a + (h³/6)·ȧ + …</text>
+<text x="540" y="96" class="xs muted" text-anchor="start">Euler keeps the first two terms and drops</text>
+<text x="540" y="112" class="xs muted" text-anchor="start">the rest. What it drops is dominated by</text>
+<text x="540" y="128" class="xs muted" text-anchor="start">(h²/2)·a — curvature — which is the amber gap.</text>
+<text x="540" y="168" class="xs muted" text-anchor="start">error, by the term that is dropped</text>
+<text x="844" y="168" class="xs muted" text-anchor="end"></text>
+<line x1="540" y1="176.0" x2="850" y2="176.0" class="grid" stroke-width="1.0"/>
+<text x="540" y="193.0" class="xs" text-anchor="start">local, one step</text>
+<text x="844" y="193.0" class="xs mono" text-anchor="end">O(h²)</text>
+<text x="540" y="210.0" class="xs" text-anchor="start">steps in time T</text>
+<text x="844" y="210.0" class="xs mono" text-anchor="end">T/h</text>
+<text x="540" y="227.0" class="xs" text-anchor="start">global, after T</text>
+<text x="844" y="227.0" class="xs mono" text-anchor="end">O(h)</text>
+<text x="540" y="255.5" class="xs muted" text-anchor="start">One factor of h is paid back by taking</text>
+<text x="540" y="271.5" class="xs muted" text-anchor="start">more steps. That is ALL that “first order”</text>
+<text x="540" y="287.5" class="xs muted" text-anchor="start">means, and figure 2 is why it is not the</text>
+<text x="540" y="303.5" class="xs muted" text-anchor="start">number that decides whether a game works.</text>
+</svg>

@@ -1,0 +1,423 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-01-linear-and-srgb.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.1 — Linear and sRGB: The Gamma Lesson</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-03-microfacet-theory.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.3 — Microfacet Theory</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.2</div>
+    <h1>Radiometry-Lite: What a BRDF Is</h1>
+    <p class="deck">
+      Lesson 6.1 settled what the numbers leaving the renderer <em>mean</em> at the output stage.
+      This one asks what they are on the way there — and the honest answer, today, is that nobody
+      knows, because <code>shade()</code> multiplies an albedo by a light and calls the product
+      "the light leaving the surface" without a single unit anywhere in the sentence. We fix that,
+      and the fix has a sting in it: <strong>there has been a π hiding inside the light's
+      <code>intensity</code> field since Lesson 3.6</strong>, unlabelled, doing exactly the job the
+      Lambert BRDF's π is supposed to do. Moving it into the open changes 154,240 floating-point
+      results and <strong>not one pixel</strong> — and that empty diff is the proof, not the
+      anticlimax.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-06-normals-and-lambert.html">3.6 — Normals and Lambert Shading</a>,
+          <a href="03-07-specular-blinn-phong.html">3.7 — Specular Highlights</a>,
+          <a href="04-08-porting-the-scene.html">4.8 — Porting the Scene to the GPU</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/light.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>demos/common/demo_scene.cpp</code>, <code>demos/sandbox/main.cpp</code>,
+            <code>demos/ecs_swarm/main.cpp</code>, <code>demos/hello_cube/main.cpp</code>,
+            <code>scratch/verify_62.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A shading equation whose three factors are three separate physical claims, each with a
+            unit and each independently checkable — and a numerical energy-conservation harness that
+            every BRDF for the rest of the course will be run through. 32 checks green; the
+            reference render byte-identical for the <strong>thirteenth</strong> lesson, which this
+            time is a measurement rather than a survival.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the four radiometric quantities, give each its unit, and say which one a pixel
+          holds and why it has to be that one.</li>
+      <li>…define a steradian from the geometry of a sphere, and say why the hemisphere's
+          <em>cosine-weighted</em> measure is π rather than 2π.</li>
+      <li>…show that radiance is invariant along a ray, from the two <em>1/d²</em> factors that
+          cancel — and say what that buys a renderer.</li>
+      <li>…re-derive Lambert's cosine law as a statement about <em>projected area</em>, and put the
+          cosine on the light's side of the equation where it belongs.</li>
+      <li>…state what a BRDF is as a ratio, give its unit, and explain why a value above 1 invents
+          no energy.</li>
+      <li>…<strong>derive</strong> the π in <code>albedo/π</code> by integrating a constant BRDF
+          over the hemisphere, rather than quoting it.</li>
+      <li>…compute a BRDF's directional-hemispherical reflectance numerically, and use it to decide
+          whether a model conserves energy — as a number, not an opinion.</li>
+      <li>…find a hidden normalisation constant in a renderer you did not write, by asking what
+          value makes a white surface render white.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#quantities">Four Words for Light</a>
+        <ol>
+          <li><a href="#q-three">Flux, irradiance, radiance</a></li>
+          <li><a href="#q-steradian">The steradian, from the geometry</a></li>
+          <li><a href="#q-invariance">Why a pixel holds radiance</a></li>
+        </ol>
+      </li>
+      <li><a href="#cosine">The Cosine, Re-derived</a></li>
+      <li><a href="#brdf">What a BRDF Is</a>
+        <ol>
+          <li><a href="#brdf-ratio">A ratio, per steradian</a></li>
+          <li><a href="#brdf-pi">Deriving the π</a></li>
+          <li><a href="#brdf-directional">One light, and the integral collapses</a></li>
+          <li><a href="#brdf-ambient">The ambient term, where the π cancels</a></li>
+        </ol>
+      </li>
+      <li><a href="#hiding">Where the π Was Hiding</a>
+        <ol>
+          <li><a href="#hiding-audit">The algebra, and what <code>intensity</code> meant</a></li>
+          <li><a href="#hiding-exposure">π as an exposure, derived</a></li>
+          <li><a href="#hiding-rename">Why the field had to be renamed</a></li>
+        </ol>
+      </li>
+      <li><a href="#energy">Energy Conservation as a Number</a>
+        <ol>
+          <li><a href="#energy-r">Directional-hemispherical reflectance</a></li>
+          <li><a href="#energy-lobe">What the highlight actually costs</a></li>
+        </ol>
+      </li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#measured">What Changed on Screen</a></li>
+      <li><a href="#notdone">What This Lesson Does Not Do</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is the line the engine has been shading with since Lesson 3.7. It is in
+    <code>light.hpp</code>, it is correct, and it is about to be a problem:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/light.hpp — before this lesson</span></figcaption>
+<pre><code class="lang-cpp">const float ir = lights.key.colour.r * lights.key.intensity * n_dot_l;
+// …
+return {albedo.r * (ir + lights.ambient.r) + surface.colour.r * ir * spec, /* … */};</code></pre>
+  </figure>
+
+  <p>
+    Now answer three questions about it.
+  </p>
+
+  <p>
+    <strong>What are the units of the returned value?</strong> It is called "the light leaving the
+    surface", which is not a unit. <strong>What are the units of <code>intensity</code>?</strong>
+    The field's own documentation says a light's "brightness", which is not a unit either.
+    <strong>Is this shading model energy-conserving?</strong> There is no way to even <em>ask</em>
+    that question of the code above, because energy conservation is a statement about a ratio of
+    two physical quantities and this expression contains none.
+  </p>
+
+  <p>
+    You might reasonably think this is pedantry. It is not, and the rest of Module 6 is the proof.
+    Every remaining lesson in this module is about replacing the guess in that return statement
+    with something better — microfacets in 6.3, Cook–Torrance in 6.4, image-based lighting in
+    6.15 — and <em>every one of those is a claim about how much of the arriving light leaves in a
+    given direction</em>. You cannot check such a claim against an expression that does not know
+    what arriving light is.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And there is something concrete hiding in there</span>
+    <p>By the end of §5 you will be able to show that <code>intensity</code> was never a free
+       parameter. It was an <em>irradiance divided by π</em> — the exact constant the Lambert BRDF
+       is supposed to carry, sitting on the wrong side of the multiplication with no name and no
+       comment, since Lesson 3.6. This is not an unusual bug. It is the single most common thing
+       to find when you first put units on a renderer someone else wrote, including your own from
+       six months ago.</p>
+  </div>
+
+  <p>
+    So this lesson buys three things. A <strong>vocabulary</strong>: four words for light, each
+    with a unit, which is what lets the rest of the module be precise. A <strong>definition</strong>
+    of a BRDF as a ratio, which is what makes "is this model physically plausible?" a question with
+    an answer. And a <strong>test</strong> — a numerical integral over the hemisphere — that every
+    BRDF from here on gets run through, starting with the one the engine already ships, which turns
+    out to fail it in a way worth knowing about.
+  </p>
+
+  <p>
+    Almost nothing on screen changes. That is deliberate, and §8 makes the case that it is the
+    strongest possible outcome rather than a disappointing one.
+  </p>
+
+  <!-- =================================================================
+       2 — FOUR WORDS FOR LIGHT
+       ================================================================= -->
+  <h2 id="quantities"><span class="num">2</span>Four Words for Light</h2>
+
+  <p>
+    Radiometry has a reputation for being a wall of Greek letters guarding three ideas. The
+    reputation is deserved, and the way through it is to notice that the quantities are built from
+    one another by division, in a chain, and that each division is answering a question the
+    previous quantity could not.
+  </p>
+
+  <h3 id="q-three">2.1 Flux, irradiance, radiance</h3>
+
+  <p>
+    Start with a lamp. The most obvious thing to measure about it is <strong>how much light it
+    puts out in total</strong> — every photon, in every direction, added up. That is
+    <strong>radiant flux</strong>, written Φ, and its unit is the watt, because light is energy and
+    flux is energy per second. A 40-watt bulb is a statement about flux.
+  </p>
+
+  <p>
+    Flux is useless for shading, and for a reason worth stating plainly: <em>it is a property of
+    the lamp, and shading is a question about a surface</em>. A surface does not care how much
+    light the lamp emits; it cares how much lands on it. So divide by area. How much flux arrives
+    per square metre of surface is <strong>irradiance</strong>, written E, unit W/m². That is a
+    property of the surface's situation rather than of the lamp, which is progress.
+  </p>
+
+  <p>
+    Irradiance is <em>also</em> not enough, and this is where most people's intuition stalls, so
+    here is the failure that makes the next division necessary. Consider a white wall lit by a
+    window. Every square centimetre of that wall has some irradiance — light from the window lands
+    on it. Now put your eye somewhere and ask what colour you see. The wall sends light in every
+    direction; your eye catches an extremely narrow slice of those directions. Irradiance has
+    already thrown away which direction the light came from and which direction it leaves in, and
+    those are exactly the two things shading is about.
+  </p>
+
+  <p>
+    So divide again, this time by <strong>solid angle</strong> — the amount of "directional space"
+    a bundle of rays occupies. What you get is <strong>radiance</strong>, written L, unit
+    W/(m²·sr): the light travelling in one direction, through one square metre of surface measured
+    perpendicular to that direction, per steradian of directional spread.
+  </p>
+
+  @@FIG_QUANTITIES@@
+
+  <p>
+    Four words, then, and the fourth — <strong>radiant intensity</strong>, W/sr, flux per solid
+    angle without the area division — is the one this course will barely use, because it describes
+    point sources rather than surfaces. It is named here only so that when you meet it in a paper
+    you know it is not radiance with a typo.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — the chain, with numbers</span>
+    <p>A lamp emits <strong>12 W</strong>. All of it falls on a patch of floor <strong>3 m²</strong>
+       in area. The irradiance there is</p>
+    <p class="mono">E = Φ / A = 12 / 3 = 4 W/m²</p>
+    <p>Now suppose that light all arrives through a cone of <strong>0.25 sr</strong> — a skylight,
+       say, rather than the whole sky. The radiance along that cone is</p>
+    <p class="mono">L = E / ω = 4 / 0.25 = 16 W/(m²·sr)</p>
+    <p>Note what happened to the number: <em>narrowing</em> the cone made the radiance
+       <em>larger</em>, with no more light involved. Radiance is a density in direction, and
+       densities go up when you squeeze. Hold onto that; it is the same fact that lets a BRDF
+       exceed 1 in §4.1. (This chain is asserted in <code>verify_62</code> §A, with these
+       numbers.)</p>
+  </div>
+
+  <h3 id="q-steradian">2.2 The steradian, from the geometry</h3>
+
+  <p>
+    A steradian is to a sphere what a radian is to a circle, and if that sentence has ever felt
+    like a definition rather than a restatement, here is the geometry it comes from.
+  </p>
+
+  <p>
+    An angle in the plane is measured by taking a unit circle around the vertex and asking how much
+    <em>arc</em> the angle cuts off. The whole circle has circumference 2π, so a full turn is 2π
+    radians. Nothing more mysterious than that. In three dimensions, take a unit
+    <em>sphere</em> around the vertex and ask how much <em>area</em> the cone of directions cuts
+    off. The whole sphere has area 4π, so all of directional space is 4π steradians, and a
+    hemisphere is 2π.
+  </p>
+
+  <p>
+    Two consequences we need immediately. First, the differential element. Parameterise a direction
+    by its polar angle θ from the normal and its azimuth φ around it. A small patch on the unit
+    sphere spans <em>dθ</em> in one direction and, because a circle of constant θ has radius
+    sin θ, only <em>sin θ · dφ</em> in the other. So
+  </p>
+
+  <div class="eq">
+    \[ d\omega = \sin\theta \, d\theta \, d\varphi \]
+  </div>
+
+  <p class="eq-plain">
+    In prose, so this survives the CDN being unreachable: the solid-angle element is sine theta,
+    times d-theta, times d-phi. The sine is there because the circles of constant θ shrink toward
+    the pole; it is the same factor that makes lines of longitude converge at the north pole.
+  </p>
+
+  <p>
+    Second — and this is the one that matters for the π — <strong>light-transport integrals are
+    almost never over plain solid angle</strong>. They are over solid angle weighted by cos θ,
+    because of §3's projected-area argument. And the cosine-weighted hemisphere does not measure
+    2π. It measures π:
+  </p>
+
+  <div class="eq">
+    \[ \int_{\Omega} \cos\theta \, d\omega
+       = \int_{0}^{2\pi}\!\!\int_{0}^{\pi/2} \cos\theta \sin\theta \, d\theta \, d\varphi
+       = 2\pi \cdot \tfrac{1}{2} = \pi \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: integrating cos θ over the hemisphere gives 2π (from the φ integral) times one half
+    (from the θ integral of sin θ cos θ), which is π. <code>verify_62</code> §A computes this
+    numerically and gets 3.1415939 on a 1024×2048 grid.
+  </p>
+
+  <p>
+    Keep that number. It is not a coincidence that it is π and it is not a coincidence that the
+    Lambert BRDF has a π in it; §4.2 shows they are the same π, arriving by the same route, and
+    Figure 5 draws the disc whose area it is.
+  </p>
+
+  <h3 id="q-invariance">2.3 Why a pixel holds radiance</h3>
+
+  <p>
+    Of the three quantities, exactly one can be stored in a pixel, and the reason is a small
+    miracle of cancellation that is worth doing slowly, because it is <em>the</em> justification for
+    the entire architecture of a renderer.
+  </p>
+
+  <p>
+    Put a small emitter of area <em>A</em> in front of a receiver, a distance <em>d</em> away, both
+    facing each other. Move the receiver twice as far and ask what happens to what it measures.
+  </p>
+
+  <p>
+    The <strong>irradiance</strong> falls by four. That is the inverse-square law, and it is not
+    mysterious either: the same flux is now spread over a sphere with four times the area. But the
+    <strong>solid angle</strong> the emitter subtends at the receiver <em>also</em> falls by four —
+    it is A/d², and d has doubled. Radiance is irradiance divided by solid angle, so the two
+    factors of four cancel exactly and the radiance is unchanged.
+  </p>
+
+  @@FIG_INVARIANCE@@
+
+  <p>
+    That is <strong>radiance invariance along a ray</strong>, and here is what it buys. It means
+    that "the radiance arriving at this pixel from that direction" equals "the radiance leaving
+    that surface toward this pixel", with no distance term anywhere. A ray carries its own answer.
+    Store irradiance in your framebuffer instead and every single shading operation would need to
+    know how far away things are, and every compositing operation would be wrong.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The nine-tenths picture</span>
+    <p>Radiance is invariant <em>in a vacuum, or near enough</em>. Participating media — fog,
+       smoke, atmosphere, skin, milk — absorb and scatter along the ray, and there radiance does
+       change with distance. That is volumetric rendering, it is a large subject, and this course
+       does not reach it. Everything in Module 6 assumes empty space between surfaces, which is
+       the standard assumption of real-time rendering and is why fog in games is a hack applied
+       afterwards rather than a consequence of the lighting model.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE COSINE, RE-DERIVED
+       ================================================================= -->
+  <h2 id="cosine"><span class="num">3</span>The Cosine, Re-derived</h2>
+
+  <p>
+    Lesson 3.6 derived Lambert's cosine law from a spreading beam and left it there. This is the
+    spiral's second turn, and it goes one step further in a direction that turns out to matter a
+    great deal for how the code is <em>organised</em>: the cosine is a fact about
+    <strong>projected area</strong>, and therefore it belongs to the <em>light</em>, not to the
+    surface's material.
+  </p>
+
+  <p>
+    Take a beam with a fixed cross-section — a square metre of sunlight, say — and let it strike a
+    surface. If the surface faces the beam square-on, that square metre of light lands on a square
+    metre of surface. Tilt the surface by θ and the same beam now lands on a patch that is
+    <em>stretched</em> in one direction, by exactly 1/cos θ. Same light, more surface, so each
+    square metre gets less: a factor of cos θ less.
+  </p>
+
+  @@FIG_PROJECTED@@
+
+  <div class="worked">
+    <span class="label">Worked example — sixty degrees, both ways round</span>
+    <p>Tilt the surface to θ = 60°. The beam's footprint stretches by</p>
+    <p class="mono">1 / cos 60° = 1 / 0.5 = 2.0000</p>
+    <p>so the patch has <strong>twice the area</strong> and each square metre of it receives
+       <strong>half</strong> the power. Now compute the same thing from the vectors, which is what
+       the code does. With the surface normal <strong>n</strong> = (0, cos 60°, sin 60°) =
+       (0, 0.5000, 0.8660) and the beam arriving straight down so that the direction toward the
+       light is <strong>l</strong> = (0, 1, 0):</p>
+    <p class="mono">dot(n, l) = 0×0 + 0.5000×1 + 0.8660×0 = 0.5000</p>
+    <p>The two routes agree, and they are not the same computation: one measured an area with a
+       cross product, the other took a dot product of two unit vectors. <code>verify_62</code> §B
+       runs both over a range of angles and reports agreement to 1e−6 — deliberately computing the
+       area from actual vertices, so the check owes nothing to the formula it is checking.</p>
+  </div>
+
+  <p>
+    So far this is Lesson 3.6 with better arithmetic. Here is the part that is new, and it is a
+    statement about where code goes rather than about geometry:
+  </p>
+
+  <div class="callout note">
+    <span class="label">The cosine is on the light's side</span>
+    <p>Nothing in the argument above mentioned what the surface is <em>made of</em>. A beam
+       striking chalk at 60° and a beam striking chrome at 60° both deliver half the power per
+       square metre. The cosine describes <strong>how much light arrives</strong>; what the
+       surface does with it afterwards is a completely separate question, and it is the question
+       a BRDF answers.</p>
+    <p>Which is why <code>albedo * n_dot_l</code>, written as one expression the way every
+       introduction writes it, is a small act of vandalism. It fuses two independent facts into a
+       product, and the fusion is precisely why the π has nowhere natural to live and ends up
+       inside the light. Lesson 6.2's whole implementation is the un-fusing.</p>
+  </div>
+
+  <p>
+    In the engine this shows up as a new function on the light rather than a new function on the
+    material — <code>directional_light::irradiance_on(normal)</code>, which returns
+    <em>E<sub>⊥</sub> · cos θ</em> and nothing else. It computes what the old code computed. Its
+    value is that it names it.
+  </p>

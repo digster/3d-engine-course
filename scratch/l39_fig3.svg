@@ -1,0 +1,39 @@
+<svg viewBox="0 0 600 296" role="img" aria-labelledby="f393-t f393-d">
+  <title id="f393-t">Bilinear interpolation as two lerps then one</title>
+  <desc id="f393-d">Four texel centres at the corners of a square. Two interpolations along the u axis produce a point on the top edge and a point on the bottom edge; a third interpolation between those two, along v, produces the sample. The four printed weights are 0.2470, 0.4030, 0.1330 and 0.2170, and they sum to 1.</desc>
+  <defs>
+    <marker id="e-i-f393" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f393" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f393" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f393" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+  </defs>
+<rect x="132.0" y="62.0" width="150.0" height="150.0" class="fill-soft" stroke="var(--dia-grid)" stroke-width="1"/>
+<line x1="132.0" y1="62.0" x2="282.0" y2="62.0" class="ink-soft" stroke-width="1.4"/>
+<line x1="132.0" y1="212.0" x2="282.0" y2="212.0" class="ink-soft" stroke-width="1.4"/>
+<line x1="225.0" y1="62.0" x2="225.0" y2="212.0" class="hi" stroke-width="1.8"/>
+<circle cx="132.0" cy="62.0" r="7" fill="#4a5570" stroke="var(--dia-ink)" stroke-width="1"/>
+<circle cx="282.0" cy="62.0" r="7" fill="#e2ded2" stroke="var(--dia-ink)" stroke-width="1"/>
+<circle cx="132.0" cy="212.0" r="7" fill="#c2bdae" stroke="var(--dia-ink)" stroke-width="1"/>
+<circle cx="282.0" cy="212.0" r="7" fill="#8d93a6" stroke="var(--dia-ink)" stroke-width="1"/>
+<text x="120.0" y="50.0" class="xs mono" text-anchor="end">c00  w = 0.2470</text>
+<text x="294.0" y="50.0" class="xs mono">c10  w = 0.4030</text>
+<text x="120.0" y="234.0" class="xs mono" text-anchor="end">c01  w = 0.1330</text>
+<text x="294.0" y="234.0" class="xs mono">c11  w = 0.2170</text>
+<circle cx="225.0" cy="62.0" r="4.5" fill="var(--dia-ink-soft)"/>
+<circle cx="225.0" cy="212.0" r="4.5" fill="var(--dia-ink-soft)"/>
+<text x="235.0" y="78.0" class="xs mono muted">lerp(c00, c10, tu)</text>
+<text x="235.0" y="204.0" class="xs mono muted">lerp(c01, c11, tu)</text>
+<circle cx="225.0" cy="114.5" r="5.5" fill="var(--dia-hi)" stroke="var(--dia-bg)" stroke-width="1.4"/>
+<text x="237.0" y="118.5" class="xs mono t-hi">the sample</text>
+<line x1="132.0" y1="252.0" x2="225.0" y2="252.0" class="ink" stroke-width="1" marker-start="url(#e-i-f393)" marker-end="url(#e-i-f393)"/>
+<text x="178.5" y="268.0" class="xs mono" text-anchor="middle">tu = 0.62</text>
+<line x1="90.0" y1="62.0" x2="90.0" y2="114.5" class="ink" stroke-width="1" marker-start="url(#e-i-f393)" marker-end="url(#e-i-f393)"/>
+<text x="84.0" y="92.2" class="xs mono" text-anchor="end">tv = 0.35</text>
+<text x="16" y="30" class="sm">two lerps along u, then one along v</text>
+<text x="294.0" y="163.0" class="xs mono t-hi">&#8592; the v lerp</text>
+<text x="16" y="268.0" class="xs mono muted">sum = 1.0000</text>
+</svg>

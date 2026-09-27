@@ -1,0 +1,98 @@
+<svg viewBox="0 0 980 382" role="img" aria-labelledby="h8-t h8-d">
+  <title id="h8-t">Snapping: skipping down a slope, flying off a crest, and rolling off a stair</title>
+  <desc id="h8-d">Left: a table of frames in the air walking down a 30-degree slope at seven speeds, moved flat against laid along the slope, with the predicted skip speed of 2.36 m/s. Middle: time in the air past a crest at five speeds without the snap, against a projectile over the incline, and none with it. Right: a capsule resting on a stair edge rolling off it sideways and dropping to the tread below.</desc>
+  <defs>
+    <marker id="e-i-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">Down a 30° slope, moved flat, gravity to catch up</text>
+<text x="26" y="50" class="xs muted" text-anchor="start">frames of 60 in the air</text>
+<text x="26" y="70" class="xs muted" text-anchor="start">speed</text>
+<text x="204" y="70" class="xs muted" text-anchor="end">flat + gravity</text>
+<text x="294" y="70" class="xs muted" text-anchor="end">laid on it</text>
+<line x1="26" y1="78.0" x2="300" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="26" y="95.0" class="xs" text-anchor="start">0.50 m/s</text>
+<text x="204" y="95.0" class="xs mono" text-anchor="end">0</text>
+<text x="294" y="95.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="112.0" class="xs" text-anchor="start">1.00 m/s</text>
+<text x="204" y="112.0" class="xs mono" text-anchor="end">0</text>
+<text x="294" y="112.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="129.0" class="xs" text-anchor="start">2.00 m/s</text>
+<text x="204" y="129.0" class="xs mono" text-anchor="end">0</text>
+<text x="294" y="129.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="146.0" class="xs" text-anchor="start">2.30 m/s</text>
+<text x="204" y="146.0" class="xs mono t-bad" text-anchor="end">42</text>
+<text x="294" y="146.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="163.0" class="xs" text-anchor="start">2.45 m/s</text>
+<text x="204" y="163.0" class="xs mono t-bad" text-anchor="end">57</text>
+<text x="294" y="163.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="180.0" class="xs" text-anchor="start">3.00 m/s</text>
+<text x="204" y="180.0" class="xs mono t-bad" text-anchor="end">57</text>
+<text x="294" y="180.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="197.0" class="xs" text-anchor="start">6.00 m/s</text>
+<text x="204" y="197.0" class="xs mono t-bad" text-anchor="end">59</text>
+<text x="294" y="197.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="26" y="225.5" class="xs" text-anchor="start">The ground drops v·h·tan α a step; one step of</text>
+<text x="26" y="240.5" class="xs" text-anchor="start">gravity drops g·h², and the ground probe reaches</text>
+<text x="26" y="255.5" class="xs" text-anchor="start">2 skins more. It skips above</text>
+<text x="26" y="270.5" class="xs mono" text-anchor="start">(g·h² + 2·skin)/(h·tan α) = 2.3617 m/s,</text>
+<text x="26" y="285.5" class="xs mono" text-anchor="start">and with no probe at all above 0.2832.</text>
+<text x="26" y="300.5" class="xs" text-anchor="start">Laid along the slope, it never leaves it.</text>
+<text x="340" y="30" class="sm" text-anchor="start">Over a crest: the round bottom rolls, then flies</text>
+<text x="340" y="50" class="xs muted" text-anchor="start">time in the air past a crest onto 30°</text>
+<text x="340" y="70" class="xs muted" text-anchor="start">m/s</text>
+<text x="466" y="70" class="xs muted" text-anchor="end">no snap</text>
+<text x="556" y="70" class="xs muted" text-anchor="end">projectile</text>
+<text x="612" y="70" class="xs muted" text-anchor="end">snap</text>
+<line x1="340" y1="78.0" x2="618" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="340" y="95.0" class="xs" text-anchor="start">3.0</text>
+<text x="466" y="95.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="556" y="95.0" class="xs mono" text-anchor="end">0.353 s</text>
+<text x="612" y="95.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="340" y="112.0" class="xs" text-anchor="start">6.0</text>
+<text x="466" y="112.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="556" y="112.0" class="xs mono" text-anchor="end">0.706 s</text>
+<text x="612" y="112.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="340" y="129.0" class="xs" text-anchor="start">7.5</text>
+<text x="466" y="129.0" class="xs mono t-bad" text-anchor="end">0.833 s</text>
+<text x="556" y="129.0" class="xs mono" text-anchor="end">0.883 s</text>
+<text x="612" y="129.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="340" y="146.0" class="xs" text-anchor="start">10.0</text>
+<text x="466" y="146.0" class="xs mono t-bad" text-anchor="end">1.133 s</text>
+<text x="556" y="146.0" class="xs mono" text-anchor="end">1.177 s</text>
+<text x="612" y="146.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="340" y="163.0" class="xs" text-anchor="start">14.0</text>
+<text x="466" y="163.0" class="xs mono t-bad" text-anchor="end">1.617 s</text>
+<text x="556" y="163.0" class="xs mono" text-anchor="end">1.648 s</text>
+<text x="612" y="163.0" class="xs mono t-ok" text-anchor="end">0</text>
+<text x="340" y="191.5" class="xs" text-anchor="start">While one step's travel keeps the drop to the edge</text>
+<text x="340" y="206.5" class="xs" text-anchor="start">within the probe's reach, the capsule rolls over it:</text>
+<text x="340" y="221.5" class="xs mono" text-anchor="start">v·h ≤ √((r+s)² − (r+s−reach)²) = 0.1165 m,</text>
+<text x="340" y="236.5" class="xs mono" text-anchor="start">v &lt; 6.990 m/s. Faster, it flies 2v·tan α/g.</text>
+<text x="340" y="251.5" class="xs" text-anchor="start">The snap catches every one of them.</text>
+<text x="690" y="30" class="sm" text-anchor="start">Off a stair edge: roll, then drop</text>
+<path d="M 698.00,168.00 L 770.00,168.00 L 770.00,150.00 L 698.00,150.00 Z" fill="#8f918a" fill-opacity="0.25" stroke="#8f918a" stroke-width="1.2"/>
+<path d="M 770.00,200.40 L 914.00,200.40 L 914.00,182.40 L 770.00,182.40 Z" fill="#8f918a" fill-opacity="0.25" stroke="#8f918a" stroke-width="1.2"/>
+<circle cx="814.0" cy="115.6" r="55.8" fill="none" stroke="#e05c5c" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="813.97" y1="115.65" x2="826.52" y2="115.65" stroke="#5ac878" stroke-width="1.8" marker-end="url(#e-green-h8)"/>
+<circle cx="826.5" cy="126.6" r="55.8" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<line x1="826.52" y1="121.05" x2="826.52" y2="121.20" stroke="#5ac878" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#e-green-h8)"/>
+<circle cx="770.0" cy="150.0" r="3.2" fill="#5082e6"/>
+<text x="754.1710000512551" y="63.84608967682827" class="xs" text-anchor="end">on the edge</text>
+<text x="888.3199999999999" y="130.6" class="xs" text-anchor="start">on the tread</text>
+<text x="690" y="250" class="xs" text-anchor="start">Resting on the edge it walked off, the capsule's</text>
+<text x="690" y="265" class="xs" text-anchor="start">first hit going down is the EDGE. It rolls off</text>
+<text x="690" y="280" class="xs" text-anchor="start">sideways by (r+s) − overhang ≤ (r+s)(1 − sin θ),</text>
+<text x="690" y="295" class="xs" text-anchor="start">then casts straight down.</text>
+<text x="690" y="310" class="xs mono" text-anchor="start">8 stairs down: 54 frames in the air</text>
+<text x="690" y="325" class="xs mono" text-anchor="start">without the snap, 0 with; worst extra</text>
+<text x="690" y="340" class="xs mono" text-anchor="start">forward 77.7 mm. A 0.30 m drop is</text>
+<text x="690" y="355" class="xs mono" text-anchor="start">snapped; 0.50 m falls (16 frames).</text>
+</svg>

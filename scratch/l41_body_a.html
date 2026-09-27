@@ -1,0 +1,485 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="03-10-profiling-capstone.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">3.10 — Profiling, and the Module 3 Capstone</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-02-sdl-gpu-model.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.2 — The SDL_GPU Mental Model</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.1</div>
+    <h1>How GPUs Actually Work</h1>
+    <p class="deck">
+      A GPU is not a fast CPU. Per lane it is <em>slower</em> — and it finishes first anyway, for
+      three reasons you can measure using the rasterizer you already own. By the end of this
+      lesson your software rasterizer shades in 2×2 quads like the hardware does, wastes lanes
+      like the hardware does, and can tell you exactly how many.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4–5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-02-triangle-edge-functions.html">2.2 — The Triangle: Edge Functions</a>,
+          <a href="03-08-shading-models.html">3.8 — Flat, Gouraud and Per-Pixel Shading</a>,
+          <a href="03-10-profiling-capstone.html">3.10 — Profiling, and the Module 3 Capstone</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd>
+          <code>src/gfx/raster.hpp</code>, <code>src/gfx/raster.cpp</code>,
+          <code>src/main.cpp</code>
+        </dd>
+
+        <dt>Milestone</dt>
+        <dd>
+          A <code>traversal</code> mode that walks triangles in 2×2 quads, shades the lanes the
+          triangle misses, and counts them — producing a <strong>bit-identical image</strong> and
+          a number that explains a decade of graphics folklore about small triangles.
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a GPU is built wide and slow rather than narrow and fast, and demonstrate
+          the underlying effect on a CPU.</li>
+      <li>…say what a warp is, what lockstep execution costs at a branch, and why coherence is a
+          property of your data rather than your code.</li>
+      <li>…derive why fragments are shaded in 2×2 quads from the existence of
+          <code>ddx</code>/<code>ddy</code>, and say what breaks without them.</li>
+      <li>…predict a triangle's lane efficiency from its area and perimeter, and check the
+          prediction.</li>
+      <li>…say why the block is 2×2 and not 4×4, with numbers.</li>
+      <li>…map every stage of a GPU pipeline onto a function you have already written.</li>
+      <li>…explain why render state lives in an immutable pipeline object — and why the usual
+          explanation for that is wrong.</li>
+      <li>…recognise, in your own work, the difference between a measurement and a comparison of
+          two numbers taken an hour apart.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-wide">Wide, not fast</a></li>
+          <li><a href="#intuition-lockstep">Lanes in lockstep</a></li>
+          <li><a href="#intuition-quad">The 2×2 quad</a></li>
+          <li><a href="#intuition-diverge">What a branch costs</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-efficiency">Lane efficiency, from area and perimeter</a></li>
+          <li><a href="#theory-width">Why 2×2 and not wider</a></li>
+          <li><a href="#theory-pipeline">The pipeline you already wrote</a></li>
+          <li><a href="#theory-state">Why state is baked into an object</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-fragment">The fragment, extracted — and what it turned out to be</a></li>
+          <li><a href="#impl-quad">Walking in quads</a></li>
+          <li><a href="#impl-identical">The test: it must change nothing</a></li>
+          <li><a href="#impl-cost">What the helpers cost</a></li>
+          <li><a href="#impl-drift">A 10% speedup that was not there</a></li>
+          <li><a href="#impl-demo">Seeing it: one key</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 3.10 finished Module 3 with a number: <strong>45.47 nanoseconds per covered
+    pixel</strong>. A 1280×720 frame of the capstone scene covers about 475,000 pixels, so that
+    is 21.6 ms of fragment work — over the 16.7 ms budget, from one torus and a floor.
+  </p>
+
+  <p>
+    A GPU renders scenes with a thousand times that geometry, at four times that resolution, in a
+    fraction of the time. The obvious explanation is that it is faster. <strong>It is not.</strong>
+    Take any single lane of a GPU and compare it against one core of your CPU: the GPU lane runs
+    at a lower clock, has a shorter pipeline, no branch predictor worth the name, and far less
+    cache. Per lane, per instruction, it loses.
+  </p>
+
+  <p>
+    So the interesting question is not "how is it faster" but <strong>"what is it doing
+    instead"</strong> — and the answer is three specific architectural choices, each of which has
+    a cost as well as a benefit. This lesson is about those three, and about the fact that you can
+    demonstrate all of them on the machine in front of you, in code you already wrote.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This lesson writes no SDL_GPU code, and that is deliberate</span>
+    <p>
+      Lesson 4.2 introduces the device, the swapchain, command buffers and render passes; 4.3 does
+      the shader toolchain; 4.4 draws the first triangle. Reaching for the API before the model is
+      in place is how people end up with a working triangle and no idea why any of it is shaped
+      the way it is. Today's job is the model — and by the end of it you will have <em>measured</em>
+      most of it rather than been told it.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-wide"><span class="num">2.1</span>Wide, not fast</h3>
+
+  <p>
+    Start with the choice that shapes everything else. Consider a chain of work in which each step
+    needs the previous step's answer:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">a dependent chain</span> <span class="tag">C++</span></figcaption>
+    <pre><code class="lang-cpp">for (int i = 0; i &lt; n; ++i) { acc = std::sqrt(acc * 0.25f + 1.0f); }</code></pre>
+  </figure>
+
+  <p>
+    This runs at the <strong>latency</strong> of a square root and no faster, however many
+    execution units your processor has, because none of them can start until the previous one has
+    finished. Measured on the reference machine: <strong>3.124 ns per step</strong>. The processor
+    is mostly idle, waiting for its own results.
+  </p>
+
+  <p>
+    Now run several <em>independent</em> chains, interleaved. Nothing about the work changes —
+    same instruction, same count, same data — but now there is always something else to issue
+    while a result is in flight.
+  </p>
+
+  @@FIG_LATENCY@@
+
+  <p>
+    Eight chains run at <strong>0.443 ns per step</strong>: a 7× speedup from adding no
+    capability whatsoever, only <em>independent work</em>. That is the entire GPU architecture in
+    one table. A GPU is a machine that has decided, at every level of its design, to be the one
+    with something else to do:
+  </p>
+
+  <ul>
+    <li>a memory read that misses cache costs hundreds of cycles — and the GPU simply switches to
+        another group of lanes and comes back;</li>
+    <li>it keeps thousands of lanes resident so there is always another group ready;</li>
+    <li>and it spends its transistor budget on <em>more lanes</em> rather than on the branch
+        predictors and out-of-order machinery a CPU uses to make one lane fast.</li>
+  </ul>
+
+  <p>
+    This also explains a piece of shader advice that otherwise sounds superstitious:
+    <strong>a shader that uses fewer registers runs faster.</strong> Registers are the resource
+    that limits how many lane groups can be resident at once. Fewer registers per lane means more
+    groups in flight, which means more independent work available, which means more latency
+    hidden. The word for that ratio is <strong>occupancy</strong>, and it is the table in Figure 1.
+  </p>
+
+  <h3 id="intuition-lockstep"><span class="num">2.2</span>Lanes in lockstep</h3>
+
+  <p>
+    Having decided to be wide, a GPU makes a second choice: the lanes are not independent
+    processors. They are grouped — 32 on NVIDIA hardware (a <strong>warp</strong>), 32 or 64 on
+    AMD (a <strong>wavefront</strong>), typically 32 on Apple and Intel — and every lane in a group
+    executes <strong>the same instruction at the same time</strong>, on its own data.
+  </p>
+
+  <p>
+    That is a huge saving: one instruction decoder, one program counter and one scheduler for 32
+    lanes instead of 32 of each. The transistors saved go into more lanes. The name for this model
+    is <strong>SIMT</strong> — single instruction, multiple threads — and it is why a GPU can
+    afford to be as wide as it is.
+  </p>
+
+  <p>
+    It also has a consequence that governs how shaders must be written, and §2.4 is that
+    consequence. But first, a smaller group than 32, and one you cannot escape at all.
+  </p>
+
+  <h3 id="intuition-quad"><span class="num">2.3</span>The 2×2 quad</h3>
+
+  <p>
+    Every GPU ever built shades fragments in <strong>aligned 2×2 blocks of pixels</strong>. If a
+    triangle covers one pixel of such a block, all four lanes run the fragment shader; the three
+    that the triangle misses are called <strong>helper lanes</strong>, and their results are
+    discarded.
+  </p>
+
+  <p>
+    That sounds like waste to be engineered away, and it is not, because of a feature you have
+    used without noticing. A fragment shader can ask <em>how fast is this value changing across
+    the screen?</em> — <code>ddx</code> and <code>ddy</code> in HLSL. And the only way to know how
+    a value changes between neighbouring pixels is to <strong>have the neighbouring pixel's
+    value</strong>. So the hardware computes it: <code>ddx</code> is lane 1 minus lane 0,
+    <code>ddy</code> is lane 2 minus lane 0, and a subtraction is all a derivative ever costs.
+  </p>
+
+  @@FIG_QUAD@@
+
+  <div class="callout warn">
+    <span class="label">This is where mipmapping comes from</span>
+    <p>
+      Lesson 3.9 ended with a gap it named honestly: bilinear filtering cannot fix minification,
+      because a pixel covering 62 texels reads four of them. The fix is mipmaps — but choosing
+      <em>which</em> mip level requires knowing how many texels one pixel covers, which is
+      <code>ddx(uv)</code> and <code>ddy(uv)</code>, which is a difference between neighbouring
+      lanes. <strong>Every automatic mip selection on Earth is paid for by helper lanes.</strong>
+      Module 6 spends them; today you find out what they cost.
+    </p>
+  </div>
+
+  <h3 id="intuition-diverge"><span class="num">2.4</span>What a branch costs</h3>
+
+  <p>
+    Back to lockstep. Thirty-two lanes share one program counter, so what happens when a branch
+    sends them different ways?
+  </p>
+
+  <p>
+    The hardware cannot run two instructions at once, and it cannot leave half the group behind.
+    So it runs <strong>both sides</strong>, with the lanes that did not take a side switched off —
+    <em>masked</em> — for its duration. A warp in which even one lane disagrees pays for every
+    path any of its lanes takes.
+  </p>
+
+  @@FIG_DIVERGE@@
+
+  <p>
+    The measured curve underneath is the part worth dwelling on, because it says the cost is not a
+    property of the branch at all. The same shader, the same branch, the same amount of work
+    — and the cost steps from <strong>1.00×</strong> to <strong>1.93×</strong> depending only on
+    how the two sides are <em>arranged across the screen</em>. And the step happens exactly where
+    the run length crosses the warp width of 32, which is what tells you the model is right rather
+    than merely plausible.
+  </p>
+
+  <p>
+    Hence a piece of real advice that sounds like nonsense until you have seen this:
+    <strong>a branch is cheap if it is coherent and expensive if it is not.</strong> Branching on a
+    material id is fine when whole objects share materials and ruinous when the id comes out of a
+    texture. Branching on "is this pixel in shadow" is expensive precisely at shadow edges, which
+    is where it looked worth doing.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-efficiency"><span class="num">3.1</span>Lane efficiency, from area and perimeter</h3>
+
+  <p>
+    How much do helper lanes actually cost? The answer is derivable before it is measured, and
+    the derivation is one sentence: <strong>covered lanes live in the triangle's area, and helper
+    lanes live along its edge.</strong>
+  </p>
+
+  <p>
+    A quad is wasted in proportion to how much of the triangle's boundary passes through it, so
+    the number of helper lanes grows with the <strong>perimeter</strong> while the number of
+    covered lanes grows with the <strong>area</strong>. For a shape scaled by a factor <em>k</em>,
+    area grows as <em>k</em>² and perimeter as <em>k</em>. So:
+  </p>
+
+  <div class="eq">
+    \[ \text{efficiency} \;=\; \frac{\text{covered}}{\text{covered} + \text{helpers}}
+                        \;\approx\; \frac{A}{A + cP} \]
+    <p class="eq-plain">
+      efficiency ≈ area / (area + constant × perimeter) — so it falls as the triangle shrinks
+    </p>
+  </div>
+
+  <p>
+    For an equilateral triangle of circumradius <em>r</em>, area is
+    <span class="mono">(3√3/4)r²</span> and perimeter is <span class="mono">3√3·r</span>, and
+    taking the constant as 1 lane per pixel of edge gives <span class="mono">r/(r+4)</span>.
+    Here is that prediction against 32 rotations of a real triangle through the real rasterizer:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>circumradius</th><th>covered</th><th>helpers</th><th>quads</th>
+          <th>efficiency</th><th>predicted</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>64 px</td><td>169,938</td><td>6,546</td><td>44,121</td><td><strong>96.3%</strong></td><td>94.1%</td></tr>
+      <tr><td>32 px</td><td>42,630</td><td>3,222</td><td>11,463</td><td>93.0%</td><td>88.9%</td></tr>
+      <tr><td>16 px</td><td>10,638</td><td>1,626</td><td>3,066</td><td>86.7%</td><td>80.0%</td></tr>
+      <tr><td>8 px</td><td>2,700</td><td>740</td><td>860</td><td>78.5%</td><td>66.7%</td></tr>
+      <tr><td>4 px</td><td>678</td><td>322</td><td>250</td><td>67.8%</td><td>50.0%</td></tr>
+      <tr><td>2 px</td><td>186</td><td>262</td><td>112</td><td>41.5%</td><td>33.3%</td></tr>
+      <tr><td>1 px</td><td>48</td><td>144</td><td>48</td><td><strong>25.0%</strong></td><td>20.0%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 1.</span> Lane efficiency against triangle size, averaged over 32
+    rotations because a triangle meets the quad grid differently at every angle. The model is
+    optimistic by a few points throughout — one lane per pixel of edge undercounts, since a
+    diagonal edge clips corners of quads it barely enters — but it gets the <em>shape</em> right,
+    which is what a model is for. At one pixel of radius, <strong>three lanes in four are
+    thrown away.</strong>
+  </figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Our rasterizer understates this, and it is worth knowing why</span>
+    <p>
+      <code>vertex::x</code> and <code>vertex::y</code> are <strong>integers</strong>, so a
+      triangle smaller than about a pixel rounds away to zero area and draws nothing at all. Real
+      hardware rasterizes with sub-pixel precision — typically 1/256 of a pixel — so it happily
+      draws triangles far smaller than one pixel, at an efficiency far below 25%. The right-hand
+      end of Table 1 is therefore the <em>optimistic</em> case.
+    </p>
+  </div>
+
+  <h3 id="theory-width"><span class="num">3.2</span>Why 2×2 and not wider</h3>
+
+  <p>
+    If lanes are grouped for efficiency, why not group pixels in 4×4 blocks and save more
+    scheduling? Because the argument from §3.1 runs the other way too: a wider block has more
+    perimeter per unit area, so it wastes more.
+  </p>
+
+  @@FIG_EFFICIENCY@@
+
+  <p>
+    Figure 4 sweeps all four widths over the same triangles. At a circumradius of 8 pixels, 2×2
+    keeps <strong>75.5%</strong> of its lanes and 16×16 keeps <strong>8.9%</strong>. Every
+    doubling costs more than the last, and the collapse is worst exactly where modern content
+    lives — small triangles.
+  </p>
+
+  <p>
+    So the choice is forced from both ends. <strong>2×2 is the smallest block that can produce a
+    screen-space derivative at all</strong> — you need one neighbour in <em>x</em> and one in
+    <em>y</em>, which is three lanes minimum, and a 2×2 square is the cheapest shape containing
+    them. And every larger block wastes more. The hardware picks the smallest block that satisfies
+    a requirement it cannot drop.
+  </p>
+
+  <p>
+    Wider SIMT groups still exist, of course — a warp is 32 lanes, not 4. But a warp is built from
+    <strong>eight separate quads</strong>, which may come from eight different triangles. The
+    grouping for <em>scheduling</em> and the grouping for <em>derivatives</em> are different
+    things, and only the second one is 2×2.
+  </p>
+
+  <h3 id="theory-pipeline"><span class="num">3.3</span>The pipeline you already wrote</h3>
+
+  <p>
+    Now the reason Module 3 took ten lessons. Here is the graphics pipeline as hardware implements
+    it, and what each stage is called in this repository:
+  </p>
+
+  @@FIG_PIPELINE@@
+
+  <p>
+    Eleven stages, and there is not one you have not written. Module 4 is not going to teach you a
+    pipeline — you have a pipeline. It is going to hand yours to hardware, and the reason that is
+    a rename rather than a rewrite is a decision taken back in Module 2: the software rasterizer
+    targets <strong>SDL_GPU's exact NDC conventions</strong> (+Y up, <em>z</em> ∈ [0,1] with 0 at
+    the near plane), so the maths does not move. See
+    <a href="../conventions.html#ndc">conventions §4</a>.
+  </p>
+
+  <h3 id="theory-state"><span class="num">3.4</span>Why state is baked into an object</h3>
+
+  <p>
+    One structural thing remains, and it is the one that most surprises people coming from
+    older APIs. In OpenGL you set render state with calls: <code>glEnable(GL_DEPTH_TEST)</code>,
+    <code>glCullFace(GL_BACK)</code>, <code>glBlendFunc(…)</code>. In SDL_GPU — and Vulkan, D3D12
+    and Metal — you cannot. You describe the entire state <em>up front</em>, build an immutable
+    <strong>pipeline object</strong> from it, and bind that.
+  </p>
+
+  <p>
+    You have been doing this since Lesson 3.2 without the name.
+  </p>
+
+  @@FIG_STATE@@
+
+  <p>
+    <code>fill_style</code> has ten fields; <code>SDL_GPUGraphicsPipelineCreateInfo</code> has
+    nine, which expand to 53 once its nested state structs are counted. They are
+    <strong>the same object</strong>. That is not a coincidence — Lesson 3.2 adopted the shape
+    deliberately, and 3.4 and 3.9 kept mirroring SDL's field names and enumerator orders — but
+    seeing the two side by side is still the moment the port stops feeling like a leap.
+  </p>
+
+  <p>
+    Now, <em>why</em> does the hardware require this? The usual explanation is that it saves the
+    inner loop from branching on state that never changes. That explanation is testable, and our
+    fill loop is the test: it branches per pixel on <code>style.shade</code>, on a value that is
+    constant for an entire draw. Hoisting that branch should be worth something.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_41.log</span> <span class="tag">output</span></figcaption>
+    <pre><code>     per-element branch on draw-constant state: 0.458 ns
+     the same loop, specialised:                0.492 ns  (0.93x)</code></pre>
+  </figure>
+
+  <p>
+    <strong>Nothing. Slightly worse than nothing.</strong> A branch on a value that never changes
+    is predicted perfectly and effectively free, so the folk explanation is wrong.
+  </p>
+
+  <p>
+    The real reason is that the driver has to do two expensive things with that state, and both of
+    them are the kind of expensive that is measured in milliseconds. It must
+    <strong>validate</strong> the combination — is this blend mode legal with this target format,
+    does this vertex layout match what the shader declares — and it must <strong>compile</strong>
+    a machine-code shader specialised to it, because a real GPU has no runtime "depth test on/off"
+    switch; that decision is compiled in. Doing that once per pipeline is free. Doing it once per
+    draw call would be ruinous.
+  </p>
+
+  <p>
+    SDL says so in its own header, in the list of things an application prepares up front:
+  </p>
+
+  <blockquote>
+    <p>
+      Render pipelines (<strong>precalculated rendering state</strong>): use
+      <code>SDL_CreateGPUGraphicsPipeline()</code>
+    </p>
+    <p class="src">— <code>SDL3/SDL_gpu.h</code>, under “things that are created once and used over
+       and over”</p>
+  </blockquote>
+
+  <div class="callout ok">
+    <span class="label">And this is the sixth pressure, arriving on schedule</span>
+    <p>
+      Lesson 3.10 noted that <code>encode_mode</code> is a per-fragment branch on a draw-constant
+      value — “a compile-time shader variant in a runtime disguise”. Now you can see what it is a
+      disguise <em>for</em>. Our <code>fill_style</code> has four shading modes, two encode modes,
+      two interpolation modes, two blend spaces and now three traversals: <strong>96
+      combinations</strong>, every one of which our fill loop decides at runtime, per pixel. A GPU
+      compiles the one you asked for. That is what a shader is, and Lesson 4.3 is where you get
+      one.
+    </p>
+  </div>

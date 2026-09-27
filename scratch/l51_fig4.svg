@@ -1,0 +1,40 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="l51f4-t l51f4-d">
+  <title id="l51f4-t">What a change costs</title>
+  <desc id="l51f4-d">Bar chart of incremental rebuild times after touching four different files, and the compile time of the largest translation unit before and after.</desc>
+  <defs>
+    <marker id="e-i-l51f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l51f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l51f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="20" y="20" class="sm">Touch one file, rebuild, and time it (best of three)</text>
+<text x="240" y="59" class="xs mono" text-anchor="end">demos/sandbox/main.cpp</text>
+<rect x="250" y="44" width="123.0" height="20" fill="#5ac878" fill-opacity="0.30" stroke="#5ac878" stroke-width="1"/>
+<text x="381.0" y="59" class="xs mono">0.38 s</text>
+<text x="250" y="78" class="xs muted">one demo</text>
+<text x="240" y="105" class="xs mono" text-anchor="end">engine/src/gfx/raster.cpp</text>
+<rect x="250" y="90" width="136.0" height="20" fill="#5ac878" fill-opacity="0.30" stroke="#5ac878" stroke-width="1"/>
+<text x="394.0" y="105" class="xs mono">0.42 s</text>
+<text x="250" y="124" class="xs muted">one object file, then relink</text>
+<text x="240" y="151" class="xs mono" text-anchor="end">engine/include/engine/gfx/gpu_scene.hpp</text>
+<rect x="250" y="136" width="262.3" height="20" fill="#5082e6" fill-opacity="0.30" stroke="#5082e6" stroke-width="1"/>
+<text x="520.3" y="151" class="xs mono">0.81 s</text>
+<text x="250" y="170" class="xs muted">every TU that includes it</text>
+<text x="240" y="197" class="xs mono" text-anchor="end">engine/include/engine/gfx/raster.hpp</text>
+<rect x="250" y="182" width="314.1" height="20" fill="#5082e6" fill-opacity="0.30" stroke="#5082e6" stroke-width="1"/>
+<text x="572.1" y="197" class="xs mono">0.97 s</text>
+<text x="250" y="216" class="xs muted">every TU that includes it</text>
+<text x="20" y="240" class="xs t-hi">A public header is a promise about rebuild time as much as about behaviour.</text>
+<text x="20" y="256" class="xs muted">Seconds, on a project this size. The RATIO is what carries: 2.3&#215; here, and the same shape at a hundred times the code.</text>
+<line x1="20" y1="272" x2="700" y2="272" class="grid" stroke-width="1"/>
+<text x="20" y="292" class="xs">And the biggest translation unit, compiled alone at -O2:</text>
+<text x="20" y="310" class="xs mono">before  src/main.cpp</text>
+<rect x="230" y="302" width="185.7" height="10" fill="#eb786e" fill-opacity="0.32" stroke="#eb786e" stroke-width="0.8"/>
+<text x="423.7" y="310" class="xs mono">1.30 s</text>
+<text x="20" y="326" class="xs mono">after   demos/sandbox/main.cpp</text>
+<rect x="230" y="318" width="117.1" height="10" fill="#5ac878" fill-opacity="0.32" stroke="#5ac878" stroke-width="0.8"/>
+<text x="355.1" y="326" class="xs mono">0.82 s</text>
+<text x="470" y="318" class="xs t-ok">37% less, for 27% fewer lines</text>
+</svg>

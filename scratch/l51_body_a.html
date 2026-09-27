@@ -1,0 +1,602 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-09-renderdoc.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.9 — Debugging a Frame with RenderDoc</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-02-platform-layer.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.2 — The Platform and Application Layer</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.1</div>
+    <h1>The Refactor: Engine, Demos, and the Public API</h1>
+    <p class="deck">
+      Four verification harnesses in a row have had to <em>transcribe</em> the scene by hand,
+      because the function that builds it lives in an anonymous namespace inside a 7,789-line
+      <code>main.cpp</code>. Today we draw a line through that file and through the whole tree:
+      a static library with public headers, and programs that may include only those. The line is
+      not a convention — it is the include path, and the compiler enforces it. And because a
+      refactor's entire claim is that nothing changed, we write the thing that could prove it
+      wrong <em>first</em>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="00-04-cmake-from-zero.html">0.4 — CMake from Zero</a>,
+          <a href="00-06-headers-and-debugger.html">0.6 — Headers &amp; the Debugger</a>,
+          <a href="03-10-profiling-capstone.html">3.10 — Profiling &amp; the Module-3 Capstone</a>,
+          <a href="04-08-porting-the-scene.html">4.8 — Porting the Module-3 Scene</a>,
+          <a href="04-09-renderdoc.html">4.9 — Debugging a Frame with RenderDoc</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/CMakeLists.txt</code>, <code>demos/CMakeLists.txt</code>,
+            <code>cmake/EngineHelpers.cmake</code>, <code>cmake/Shaders.cmake</code>,
+            <code>CMakeLists.txt</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/include/engine/gfx/projector.hpp</code>,
+            <code>engine/include/engine/gfx/scene.hpp</code>,
+            <code>engine/include/engine/gfx/soft_renderer.hpp</code>,
+            <code>engine/src/gfx/soft_renderer.cpp</code>,
+            <code>engine/include/engine/gfx/debug_draw.hpp</code>,
+            <code>engine/src/gfx/debug_draw.cpp</code>,
+            <code>demos/common/demo_scene.hpp</code>,
+            <code>demos/common/demo_scene.cpp</code>,
+            <code>demos/hello_cube/main.cpp</code>,
+            <code>demos/sandbox/main.cpp</code>,
+            and 57 files moved</dd>
+
+        <dt>Milestone</dt>
+        <dd><code>engine/</code> is a real library with a real public API; a 160-line demo links
+            it and cannot see its internals; and the picture it all produces is
+            <strong>byte-identical</strong> to the one the pre-refactor binary made.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say what changes about a body of code the moment it acquires an <em>outside</em>, and
+          why that is a different question from whether the code is good.</li>
+      <li>…split a project into a library and its consumers with CMake, and enforce the boundary
+          with the include path rather than with discipline.</li>
+      <li>…decide, for any given file, whether it belongs to the engine — using a rule you can
+          apply without arguing.</li>
+      <li>…design a public function signature: gather state that travels together, make every
+          default the correct answer, and make instrumentation optional.</li>
+      <li>…reason about <em>physical</em> design — what goes in a header, what a header costs, and
+          why <code>projector.hpp</code> exists at all.</li>
+      <li>…use dependency direction as a design tool, including making a third-party dependency
+          stop at your boundary.</li>
+      <li>…refactor safely: write a characterization test first, then move without changing and
+          change without moving, verifying each separately.</li>
+      <li>…state honestly what a first refactor leaves unresolved, and which later work resolves
+          it.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-outside">A library is a thing with an outside</a></li>
+          <li><a href="#intuition-question">The question the boundary asks about every file</a></li>
+          <li><a href="#intuition-path">Why the include path, and not the style guide</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-api">What makes a good public API</a></li>
+          <li><a href="#theory-fifteen">A worked example: fifteen parameters</a></li>
+          <li><a href="#theory-physical">Physical design: what a header costs</a></li>
+          <li><a href="#theory-direction">Dependency direction as a design tool</a></li>
+          <li><a href="#theory-umbrella">The umbrella header, weighed</a></li>
+        </ol>
+      </li>
+      <li><a href="#method">Refactoring With a Net</a>
+        <ol>
+          <li><a href="#method-char">The characterization test</a></li>
+          <li><a href="#method-two">Move without changing; change without moving</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-shape">The shape, and the three properties that draw the line</a></li>
+          <li><a href="#impl-decide">Deciding, file by file</a></li>
+          <li><a href="#impl-headers">Four new headers, and why each exists</a></li>
+          <li><a href="#impl-collision">A name collision the split created</a></li>
+          <li><a href="#impl-redesign">The redesign, with the net still attached</a></li>
+          <li><a href="#impl-hello">hello_cube — the acceptance test</a></li>
+          <li><a href="#impl-harness">And the harnesses got shorter</a></li>
+        </ol>
+      </li>
+      <li><a href="#cost">What It Cost</a></li>
+      <li><a href="#residue">What Is Still on the Wrong Side</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Open <code>scratch/verify_48.cpp</code> from Lesson 4.8 and scroll to the middle. There is a
+    function in there that builds three objects — an icosahedron, a slab, a plinth — at particular
+    positions, with particular scales, spinning at a particular rate. Now open
+    <code>scratch/verify_49.cpp</code>. It is there too. And in <code>verify_47.cpp</code>. And
+    <code>verify_46.cpp</code>.
+  </p>
+
+  <p>
+    Four copies of the same geometry, typed out four times, because the original lives here:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp — as it stood at the end of Module 4</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">namespace {   // &lt;- and this is the whole problem
+
+int build_scene(scene_object (&amp;out)[k_max_objects], scene_kind kind, spin mode, float t,
+                const floor_geometry&amp; floor, const model_state&amp; model, float shininess)
+{
+    // …208 lines of exactly the scene those four harnesses wanted…
+}</code></pre>
+  </figure>
+
+  <p>
+    An anonymous namespace is C++'s way of saying <em>nothing outside this translation unit may
+    ever refer to this</em>. It is the right default and it was the right choice at the time. But
+    it means that a second program which wants the same picture has exactly one option, and that
+    option is a copy.
+  </p>
+
+  <p>
+    Copies rot. Nothing in the build compares <code>verify_48</code>'s transcription against the
+    demo it is checking, so a change to one and not the other produces a harness that passes
+    while checking the wrong scene — the most expensive kind of green tick there is. This has not
+    happened yet. It is going to.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>The number that should worry you is four, not 7,789.</strong> A big file is a
+      nuisance. A file whose contents cannot be reached is a <em>structural</em> problem, and it
+      gets worse every time somebody works around it rather than every time somebody adds a line.
+    </p>
+  </div>
+
+  <h3 id="problem-tell">The tell</h3>
+
+  <p>
+    <code>src/main.cpp</code> currently runs to 7,789 lines and holds: five software demos on
+    <kbd>Tab</kbd>, the GPU probe that Lessons 4.2 through 4.7 were built on, Lesson 4.8's ported
+    scene, a mesh cache keyed by the address of a vector's first element, the frame budget HUD, an
+    orbit camera, an OBJ model loader's calling code, a floor generator, three procedural
+    textures, and the entire CPU render pipeline.
+  </p>
+
+  <p>
+    Here is the diagnostic that matters. Go down that list and, for each item, answer one
+    question: <strong>would a game need this?</strong>
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Applying the question to a sample of what main.cpp held</caption>
+    <thead><tr><th>in <code>main.cpp</code></th><th>would a game need it?</th><th>so it is…</th></tr></thead>
+    <tbody>
+      <tr><td><code>collect_triangles</code>, <code>draw_triangles</code></td><td>yes — it is the renderer</td><td class="mono">engine</td></tr>
+      <tr><td><code>scene_object</code></td><td>yes — it is what a renderer draws</td><td class="mono">engine</td></tr>
+      <tr><td><code>build_scene</code></td><td>no — a game has its own objects</td><td class="mono">demo</td></tr>
+      <tr><td><code>orbit_camera</code></td><td>no — that is two arrow keys, not a camera model</td><td class="mono">demo</td></tr>
+      <tr><td><code>next_cull()</code>, <code>next_eval()</code></td><td>no — they cycle an enum on a keypress</td><td class="mono">demo</td></tr>
+      <tr><td><code>draw_mesh</code> (wireframe), <code>draw_axes3</code></td><td>yes — every engine ships debug draw</td><td class="mono">engine</td></tr>
+      <tr><td><code>src/game/pong.cpp</code></td><td>it <em>is</em> a game</td><td class="t-bad mono">…and it was in src/</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That last row is the one to sit with. Pong has been living in a directory called
+    <code>src/game/</code> since Lesson 1.8, inside what we have been calling the engine, because
+    there was nowhere else to put it. The old tree already knew the answer and had no way to
+    express it.
+  </p>
+
+  <p>
+    The problem, then, is not that <code>main.cpp</code> is large. It is that
+    <strong>the tree cannot tell you which half of itself is the engine</strong>, and neither can
+    you, and neither can the compiler — which means the question never has to be answered, so it
+    never is.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-outside">2.1 &nbsp; A library is a thing with an outside</h3>
+
+  <p>
+    Every program you have written in this course has been a closed world. You could rearrange
+    anything, rename anything, change any function's signature, and the only thing that could
+    possibly object was the same body of code, which you also controlled. That is an enormous
+    freedom and it has been the right one for four modules.
+  </p>
+
+  <p>
+    A library gives it up on purpose. The moment some code has consumers you do not control, its
+    surface stops being an implementation detail and becomes a <em>promise</em>. Break the promise
+    and you break somebody else's build — and the somebody else, in our case, is the capstone game
+    in Module 9, plus every demo, plus every harness. They are all us, but they are us at a
+    distance, which is exactly the point: <strong>an API is a message you write to a person who
+    cannot ask you what you meant.</strong>
+  </p>
+
+  <p>
+    Everything else in this lesson follows from that one asymmetry. A function with a single
+    caller in the same file has never had to answer a question. Publish it, and it must suddenly
+    answer all of them at once: who owns this pointer, what must be true when you call me, what
+    happens if it is not, what does a caller who does not care about your seventh parameter write
+    instead, and what do I have to change if you want an eighth.
+  </p>
+
+  <h3 id="intuition-question">2.2 &nbsp; The question the boundary asks about every file</h3>
+
+  <p>
+    Drawing the line does something a tidy-up never does: it forces a verdict on every single
+    file. There is no "we'll decide later" bucket, because there are only two directories and a
+    file has to be in one of them.
+  </p>
+
+  <p>
+    The rule we will use, and it settles almost every case in one reading:
+  </p>
+
+  <blockquote>
+    <p>
+      A thing belongs to the <strong>engine</strong> if a different game, one we have not written,
+      would want it. It belongs to a <strong>demo</strong> if it exists to show, teach, or drive
+      this particular program.
+    </p>
+  </blockquote>
+
+  <p>
+    Applied to <code>collect_triangles</code>: any game drawing 3-D through a CPU rasterizer wants
+    it. Engine. Applied to <code>build_scene</code>: no game wants <em>our</em> icosahedron at
+    <em>our</em> position. Demo. Applied to <code>next_cull()</code>, which advances a cull mode to
+    the next one so that the <kbd>U</kbd> key can cycle it: an engine shipping that function is
+    shipping this demo's key bindings to everybody who links it. Demo.
+  </p>
+
+  <p>
+    Where the rule genuinely does not settle it — and there are a handful — §7 lists them rather
+    than pretending otherwise.
+  </p>
+
+  <h3 id="intuition-path">2.3 &nbsp; Why the include path, and not the style guide</h3>
+
+  <p>
+    Suppose we do the split, write the rule down, and agree to follow it. Here is what happens.
+    Someone — you, in eleven weeks, at half past eleven at night, one small feature from a working
+    build — needs a function that lives in <code>engine/src/</code>. Including it directly works.
+    It compiles, it links, it ships. Nobody is watching.
+  </p>
+
+  <p>
+    A boundary maintained by discipline lasts exactly until the first time somebody is in a hurry,
+    and everybody is eventually in a hurry. So we do not maintain it by discipline. We put the
+    public headers in one directory, the private ones in another, and hand each target only the
+    directory it is allowed to see. Then the November-at-half-eleven version of you writes the
+    include, and this happens:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">what the compiler says now</span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">demos/probe.cpp:1:10: fatal error: 'gfx/raster.hpp' file not found
+    1 | #include "gfx/raster.hpp"
+      |          ^~~~~~~~~~~~~~~~</code></pre>
+  </figure>
+
+  <p>
+    That message is the architecture. It is not a review comment, not a lint rule somebody can
+    suppress, not a paragraph in a document nobody has opened since onboarding. It is a compiler,
+    which is never in a hurry and never makes an exception, and it costs exactly one line of CMake
+    to obtain.
+  </p>
+
+  @@FIG_TREE@@
+
+  <div class="callout note">
+    <p>
+      <strong>This is the general principle and it is worth more than the lesson it is in.</strong>
+      Prefer rules a machine enforces over rules people remember. Every architectural constraint
+      you can express as a build-system property, a type, or a compile error is a constraint that
+      still holds after you leave. Every one you express as a convention is a constraint with a
+      half-life.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <p>
+    Four ideas, each with a worked example taken from our own code, because "design your API well"
+    is advice of the same quality as "write good code".
+  </p>
+
+  <h3 id="theory-api">3.1 &nbsp; What makes a good public API</h3>
+
+  <p><strong>(a) It is written in the caller's vocabulary, not the implementation's.</strong>
+    <code>projection_scratch</code> is a name from the inside — it describes some arrays the
+    algorithm reuses. <code>camera_view</code> is a name from the outside: it describes a thing
+    the caller already has an idea about. When the two conflict, the caller wins, because the
+    caller is the one reading.
+  </p>
+
+  <p><strong>(b) State that always travels together travels as one thing.</strong> If two
+    parameters are always derived from the same source and always passed together, they are one
+    parameter that has not been named yet. We have hit this three times now:
+    <code>fill_style</code> in Lesson 3.2 gathered the rasterizer's state, <code>projector</code>
+    in 3.3 gathered the projection and viewport, and today <code>render_options</code> gathers the
+    pipeline's policy. The pattern is settled: gathering is not tidying, it is the removal of a
+    way to be wrong. A caller cannot forget to update the second of two loose parameters if there
+    is only one.
+  </p>
+
+  <p><strong>(c) Every default is the correct answer.</strong> This one is worth stating as an
+    absolute. Our pipeline offers <code>trs_order::tsr</code>, which deforms objects, and
+    <code>correct_normal_matrix = false</code>, which is Lesson 3.6's bug — because a failure you
+    can summon on a keypress teaches more than a paragraph describing it. But
+    <em>default-constructing</em> <code>render_options</code> cannot get you a wrong picture.
+    Reaching a wrong answer costs you a line of code that says its name out loud.
+  </p>
+
+  <p><strong>(d) Instrumentation is optional and says so in the type.</strong> The old signature
+    took <code>clip_stats&amp;</code> — a reference, so every caller had to supply one. Five of
+    the eight call sites did not want the numbers, and each declared a variable called
+    <code>ignored</code> to satisfy the compiler. Seven such variables existed in the codebase.
+    A pointer defaulting to <code>nullptr</code> deletes all seven and tells the reader which
+    parameters are the function's job and which are the observer's.
+  </p>
+
+  <h3 id="theory-fifteen">3.2 &nbsp; A worked example: fifteen parameters</h3>
+
+  <p>
+    Here is what four modules of organic growth produced. Every one of these parameters was added
+    by a lesson that needed it, each addition was locally reasonable, and nobody ever looked at
+    the whole list:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the signature before publication</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void collect_triangles(std::vector&lt;raster_triangle&gt;&amp; out, projection_scratch&amp; scratch,
+                       const scene_object* objects, int count,
+                       const mat4&amp; view_from_world,
+                       const projector&amp; pr, trs_order order, clip_stats&amp; stats,
+                       cull_choice cull, normal_source nsrc, shade_eval eval,
+                       const lighting&amp; lights,
+                       bool correct_normals, normal_stats* normals_out,
+                       vec3 eye_world, specular_model spec_model);</code></pre>
+  </figure>
+
+  <p>
+    Do not read it as a list of fifteen things. Read it as a list of <em>kinds</em> of thing, and
+    count how many of each there are.
+  </p>
+
+  @@FIG_PARAMS@@
+
+  <p>
+    Seven of the sixteen rows are the same kind — <em>policy</em>, the choices a caller makes about
+    how the pipeline should behave. Three more are the camera, spelled as two separate values a
+    caller has to remember to derive from the same place. The arithmetic is immediate: fifteen
+    parameters, minus seven policy values, plus one <code>render_options</code>, minus three camera
+    values, plus one <code>camera_view</code>, minus one <code>count</code> folded into a
+    <code>std::span</code>, minus one <code>normal_stats*</code> folded into
+    <code>collect_stats</code>, gives <strong>eight</strong>.
+  </p>
+
+  <p>
+    And now the number that shows why nobody had fixed it. There were <strong>eight call
+    sites</strong>. Adding a ninth knob to the old signature meant editing eight calls, in a file
+    where the calls are forty lines apart, and getting one of them subtly wrong is a bug you find
+    in a screenshot three weeks later. With the struct, adding a knob is adding a field, and the
+    seven call sites that do not care never mention it. <strong>The bad signature was not just
+    ugly. It was a tax on ever improving the thing it belonged to.</strong>
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>Note what did <em>not</em> happen.</strong> Nothing was removed from the pipeline.
+      Every capability the fifteen-parameter version had, the eight-parameter version has, and
+      §4 proves it to the byte. Redesigning an interface and changing behaviour are two jobs, and
+      doing them in the same edit is how you end up unable to say which one broke the picture.
+    </p>
+  </div>
+
+  <h3 id="theory-physical">3.3 &nbsp; Physical design: what a header costs</h3>
+
+  <p>
+    <em>Logical</em> design is what your types mean. <em>Physical</em> design is which file each
+    one lives in, and it is the half that decides how the project feels to work in. The rules from
+    our own style guide, now with reasons that bite:
+  </p>
+
+  <p>
+    <strong>A header must be self-sufficient.</strong> Including it first, alone, must compile. If
+    <code>soft_renderer.hpp</code> only works because <code>raster.hpp</code> happened to be
+    included above it, then the day somebody reorders two lines the build breaks in a file nobody
+    touched. This is checkable, so we check it: all <strong>37</strong> of our public headers
+    compile on their own.
+  </p>
+
+  <p>
+    <strong>One primary type per header, named after it.</strong> This is why
+    <code>projector.hpp</code> exists. When the moved code first landed, <code>projector</code>,
+    <code>screen_point</code>, <code>to_pixel</code> and <code>screen_from_clip</code> were sitting
+    inside <code>soft_renderer.hpp</code>, where they had happened to arrive. Then
+    <code>debug_draw.cpp</code> needed them — a wireframe is drawn through the same projection as
+    a filled triangle — and the debug overlay would have had to include the entire software
+    renderer to stroke a line.
+  </p>
+
+  <blockquote>
+    <p>A type that two components share is a header, not a section of whichever one defined it
+      first.</p>
+  </blockquote>
+
+  <p>
+    <strong>And a header is a promise about rebuild time.</strong> Not a metaphor: change a
+    <code>.cpp</code> and one object file is recompiled. Change a <code>.hpp</code> and every
+    translation unit that includes it, directly or transitively, is recompiled. So we measured it
+    on this project — touch one file, rebuild, take the best of three:
+  </p>
+
+  @@FIG_COST@@
+
+  <p>
+    2.3× between the cheapest and the most expensive edit, on a project of about twenty-two
+    thousand lines. The absolute numbers are trivial — under a second, all of them — and quoting
+    them as if they were a hardship would be dishonest. <strong>The ratio is the part that
+    travels.</strong> Multiply the codebase by fifty and the private-source edit is still one
+    object file while the public-header edit is still everybody, and the two numbers are a coffee
+    break apart. That is the pressure that produces forward declarations, the pimpl idiom, and
+    module systems — and it is why "should this be in the header?" is an engineering question and
+    not a filing question.
+  </p>
+
+  <h3 id="theory-direction">3.4 &nbsp; Dependency direction as a design tool</h3>
+
+  <p>
+    Dependencies have arrows, the arrows should point one way, and which way they point is a
+    design decision you get to make rather than a fact you discover.
+  </p>
+
+  @@FIG_DEPS@@
+
+  <p>
+    CMake gives us three words to say it with, and the distinction between them is the most
+    useful thing in the whole tool:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">PUBLIC, PRIVATE and INTERFACE in CMake</caption>
+    <thead><tr><th>keyword</th><th>who gets it</th><th>ours</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">PUBLIC</td><td>us, and everyone who links us</td>
+          <td><code>engine/include</code>; <code>SDL3::SDL3</code></td></tr>
+      <tr><td class="mono">PRIVATE</td><td>us alone</td>
+          <td><code>engine/src</code>; <code>stb_image</code></td></tr>
+      <tr><td class="mono">INTERFACE</td><td>everyone who links us, but not us</td>
+          <td>(unused here — it is for header-only libraries)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>stb_image</code> being PRIVATE is the case worth studying, because it is a wrapper
+    paying off. Exactly one translation unit —
+    <code>engine/src/gfx/image.cpp</code> — includes <code>stb_image.h</code>, and
+    <code>image.hpp</code> exposes our own <code>engine::image</code> instead. So the dependency
+    <em>stops at the boundary</em>: a demo cannot see stb, cannot accidentally start depending on
+    it, and would not notice if we replaced it. A demo that tries anyway is refused at compile
+    time, and we check that this is true rather than assuming it.
+  </p>
+
+  <p>
+    <code>SDL3::SDL3</code> being PUBLIC is the case worth being honest about. It is not a choice;
+    it is a consequence. <code>framebuffer.hpp</code> says <code>Uint32</code>,
+    <code>gpu_device.hpp</code> takes an <code>SDL_Window*</code>, <code>input.hpp</code> reads an
+    <code>SDL_Event</code>. Those are SDL's types in our public signatures, so anybody who includes
+    our headers needs SDL's headers too, and PUBLIC is CMake's word for "this dependency is
+    contagious, and it has to be". <strong>An API that names another library's types has adopted
+    that library's vocabulary permanently.</strong> We keep it — SDL is our platform layer and
+    pretending otherwise would cost more than it saves — but we keep <em>knowing</em> about it,
+    and Lesson 5.2 is where the seam gets examined.
+  </p>
+
+  <p>
+    One more piece of direction, and it is free: <code>add_subdirectory(engine)</code> comes before
+    <code>add_subdirectory(demos)</code> in the top-level <code>CMakeLists.txt</code>. Swap the two
+    lines and the configure fails, because <code>engine::engine</code> would not exist yet when
+    <code>demos/</code> asked to link it. An architecture rule enforced by the order of two lines
+    is the cheapest enforcement you will ever get.
+  </p>
+
+  <h3 id="theory-umbrella">3.5 &nbsp; The umbrella header, weighed</h3>
+
+  <p>
+    Should the engine ship <code>&lt;engine/engine.hpp&gt;</code> — one include that pulls in
+    everything? The received wisdom is no, and the received wisdom is worth measuring, because
+    SDL itself ships exactly that: <code>&lt;SDL3/SDL.h&gt;</code> is an umbrella over forty
+    siblings.
+  </p>
+
+  <p>
+    Two translation units, identical except for their first line, both using nothing but
+    <code>engine::framebuffer</code>:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Umbrella header versus including what you use</caption>
+    <thead><tr><th>first line</th><th>preprocessed lines</th><th>syntax-only compile</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">#include &lt;engine/engine.hpp&gt;</td><td class="mono">82,507</td><td class="mono">262 ms</td></tr>
+      <tr><td class="mono">#include &lt;engine/gfx/framebuffer.hpp&gt;</td><td class="mono">72,942</td><td class="mono">215 ms</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    22% slower, and only 13% more preprocessed text — a much smaller penalty than the folklore
+    predicts. The reason is instructive and it is not to the umbrella's credit:
+    <strong>SDL already dominates.</strong> Nearly 73,000 lines arrive before we contribute
+    anything, because <code>framebuffer.hpp</code> pulls in <code>&lt;SDL3/SDL_stdinc.h&gt;</code>
+    for one typedef. Our thirty-seven headers add under ten thousand on top of that. So the
+    honest conclusion is not "umbrellas are cheap"; it is that on <em>this</em> project the
+    umbrella is not where the compile time is, and if we cared we would go after the SDL include
+    in <code>framebuffer.hpp</code> first.
+  </p>
+
+  <p>
+    We ship it, and document what it is for: small programs, throwaway tests, the first hour of
+    learning the API. It is also the shortest complete statement of what the engine offers, which
+    makes it a table of contents. Anything built more than a few hundred times should include what
+    it uses — and every demo in this repository does, which is why the umbrella has no callers at
+    all in the code we ship. That is not a contradiction. It is the difference between providing
+    something and depending on it.
+  </p>

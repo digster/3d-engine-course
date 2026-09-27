@@ -1,0 +1,366 @@
+  <h2 id="cellsize">7. The cell size, and a cost model instead of a rule of thumb</h2>
+
+  <p>
+    One number decides how well the grid works, and every source states the same rule of thumb about
+    it: make the cell about the size of an average object. That is good advice and it is not an
+    explanation, so let us build one, and then check it.
+  </p>
+
+  <p>
+    Two costs pull in opposite directions.
+  </p>
+
+  <p>
+    <strong>Too small</strong>, and each object spans many cells. A box of extent <em>e</em> at cell
+    size <em>s</em> spans about <code>e/s + 1</code> cells on each axis, so the number of insertions
+    is
+  </p>
+
+  <div class="eq">
+    \[
+    E(s) \;\approx\; n\left(\frac{e}{s} + 1\right)^{3}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the entry count is the body count times the cube of (extent over cell size, plus one). Halve
+    the cell and each object claims roughly eight times as many.
+  </p>
+
+  <p>
+    <strong>Too large</strong>, and each cell holds many objects. A cell of side <em>s</em> in a
+    scene of density ρ holds about <code>ρs³</code> of them, its pair loop is quadratic in that, and
+    there are about <code>V/s³</code> occupied cells, so
+  </p>
+
+  <div class="eq">
+    \[
+    T(s) \;\approx\; \frac{V}{s^{3}} \cdot \frac{(\rho s^{3})^{2}}{2}
+        \;=\; \frac{n\rho\,s^{3}}{2}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the pair-test count is the number of cells times the pairs inside each, which simplifies to
+    the body count times the density times the cube of the cell size.
+  </p>
+
+  <p>
+    <strong>Both wings are cubic.</strong> That is the fact worth carrying away, and it has an
+    immediate consequence. Setting the derivative of <code>a·E(s) + b·T(s)</code> to zero, with the
+    small-<em>s</em> approximation <code>E ≈ n e³/s³</code>:
+  </p>
+
+  <div class="eq">
+    \[
+    s^{*} \;=\; \left(\frac{2a\,e^{3}}{b\,\rho}\right)^{1/6}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — the best cell size goes as the <em>sixth root</em> of everything in it, including the scene's
+    density.
+  </p>
+
+  <p>
+    A sixth root is an extraordinarily flat function. Quadruple the density of a scene and the
+    optimum moves by <code>4^(1/6) = 1.26</code> — twenty-six per cent, for a fourfold change in the
+    thing it depends on. <em>That</em> is why the vague rule of thumb survives: the optimum barely
+    moves, so any formula in the right neighbourhood is close enough.
+  </p>
+
+  <h3>7.1 Fitting the model</h3>
+
+  <p>
+    The derivation gives the shape. To get the number we need the two constants, and here the grid
+    helps: <code>broadphase_stats</code> already reports <code>entries</code> and
+    <code>bucket_tests</code>, and both are <strong>deterministic</strong> — they do not vary by a
+    single count between runs. So instead of trusting a timer, sweep the cell size, read the two
+    counts, and solve
+  </p>
+
+  <div class="eq">
+    \[
+    \text{cost} \;=\; a\,E \;+\; b\,T
+    \]
+  </div>
+
+  <p>
+    from two rows chosen because each is dominated by one term: at 0.5 m the sweep inserts 2.6
+    entries for every pair test it runs, and at 15 m it runs 78 pair tests for every entry. Two
+    equations, two unknowns, no fitting and no judgement.
+  </p>
+
+  @@FIG_CELLSIZE@@
+
+  <p>
+    The result is better than it had any right to be. On the sparse scene the fit gives
+    <strong>8.09 ns per entry and 5.45 ns per pair test</strong>; on a scene four times denser,
+    <strong>8.11 and 5.44</strong>. The constants are the same because they are properties of
+    <em>this machine</em> — a cache miss and a comparison — rather than of the scene, which is
+    exactly what a cost model should find and exactly what a timing measurement of the whole build
+    cannot tell you.
+  </p>
+
+  <p>
+    And the model predicts where the minimum is, from counts that carry no noise:
+  </p>
+
+  <pre><code class="lang-text">  model minimum    3.30 m  = 2.13 x mean side       (sparse)
+  model minimum    2.05 m  = 1.32 x mean side       (dense)</code></pre>
+
+  <p>
+    Two point one three and one point three two, for a fourfold change in density. The sixth-root
+    prediction said 1.26×; the measurement says 1.61×, and the gap is the <code>+1</code> in
+    <code>(e/s + 1)³</code>, which is not negligible when <em>s</em> is only twice <em>e</em>. The
+    scaling law has the right shape and the wrong constant, which is the usual fate of an asymptotic
+    argument evaluated near the middle.
+  </p>
+
+  <h3>7.2 Why the timer was the wrong instrument</h3>
+
+  <p>
+    Look at the spread column in the harness's own sweep, which reports
+    <code>(max − min) / median</code> over forty-one runs:
+  </p>
+
+  <pre><code class="lang-text">   cell     entries    bucket    best  sprd
+      m                 tests      ms
+   1.50       30656     22129   0.393  0.22
+   2.00       20752     19105   0.242  0.76
+   2.50       16109     22747   0.186  1.06
+   3.00       13314     24223   0.192  1.18
+   4.00       10324     31306   0.212  1.15</code></pre>
+
+  <p>
+    A spread above 1.0 means the slowest of forty-one runs took more than twice as long as the
+    fastest. At a few hundred microseconds per build, the operating system's interruptions are
+    larger than the thing being measured — so the timing cannot distinguish 2.5 m from 4 m, and the
+    “fastest measured” row moves between them from run to run. Every timing in this lesson is
+    therefore a <strong>minimum over many runs</strong> rather than a median, which is the standard
+    robust estimator for “how fast can this code go”; and where a number could be had without a
+    clock at all, this lesson uses the count instead.
+  </p>
+
+  <div class="callout">
+    <span class="label">3.10's rule, four modules later</span>
+    <p>
+      <em>Measure, do not guess</em> — and its corollary, which this section is: when the
+      measurement is noisier than the difference you are trying to see, find a quantity that does
+      not need a clock. <code>entries</code> and <code>bucket_tests</code> were added to
+      <code>broadphase_stats</code> because a grid is the system in this engine where intuition is
+      least reliable. They paid for themselves here.
+    </p>
+  </div>
+
+  <h3>7.3 And the control that makes the sweep mean anything</h3>
+
+  <p>
+    A cell size is a performance decision. So the thing to check, at every point of the sweep, is
+    that the <em>answer does not change</em>:
+  </p>
+
+  <pre><code class="lang-text">  pair sets identical at every size          13 / 13</code></pre>
+
+  <p>
+    Thirteen cell sizes across three decades, entry counts differing by a factor of three thousand,
+    and the pair list identical at every one of them. A grid that reported different pairs at
+    different tunings would be reporting at least one of them wrongly, and the bug would present as
+    “the physics changes when I change a constant that is supposed to be about speed”.
+  </p>
+
+  <p>
+    Which leaves <code>auto_cell_size</code>, whose job is to be in the right neighbourhood without
+    being told anything about the scene. It returns <strong>one and a half times the mean box's
+    longest side</strong> — between the two measured optima, since the “too large” wing grows with
+    crowding and the “too small” wing does not — and it lands at 1.14× and 0.97× the best measured
+    time on the two scenes. The longest side rather than the mean side, because a cell has to hold a
+    box in its worst direction; the mean rather than the maximum, because the maximum is one ground
+    plane away from being useless, which is §9's subject.
+  </p>
+
+  <h2 id="hashing">8. Hashing rather than allocating</h2>
+
+  <p>
+    A grid needs somewhere to put the entries. The obvious answer is a three-dimensional array
+    indexed by cell coordinate, and it has two problems that are both fatal and neither of them is
+    speed.
+  </p>
+
+  <p>
+    <strong>It allocates for cells that are empty.</strong> A one-kilometre world at a one-metre cell
+    is 10⁹ cells. At four bytes an index that is four gigabytes of memory for a scene of forty
+    crates, almost all of it storing the fact that nothing is there.
+  </p>
+
+  <p>
+    <strong>It has an edge.</strong> An array is finite, so a proxy that walks off it has to be
+    clamped, wrapped, or rejected — and two of those three are silent false-negative machines.
+    Clamping puts everything beyond the boundary into the boundary cell, which is correct and
+    catastrophically slow; wrapping makes two objects a kilometre apart share a cell, which is
+    correct and merely wasteful; rejecting loses pairs, which is the one thing we may not do. And
+    all three require the engine to decide, in advance, how big the world is.
+  </p>
+
+  @@FIG_HASHING@@
+
+  <p>
+    Hashing the cell coordinate removes both at once. The table is sized against the number of
+    <em>occupied</em> cells rather than the number of possible ones, so memory follows the scene;
+    and a cell coordinate is an unbounded <code>int32</code>, so there is no edge and no world bounds
+    to declare. A scene that happens to be a kilometre across costs exactly what a scene a metre
+    across costs.
+  </p>
+
+  <p>
+    The price is <strong>collisions</strong>: two unrelated cells can land in the same bucket, and
+    their proxies then get compared. That costs a comparison and produces no wrong answers, because
+    every entry carries its cell coordinate and a pair whose two entries disagree about the cell is
+    rejected. Note the direction: a collision adds work, never removes an answer, which is the only
+    direction the contract permits.
+  </p>
+
+  <h3>8.1 Measuring a hash against chance</h3>
+
+  <p>
+    The standard spatial hash comes from Teschner and colleagues' 2003 paper: multiply each
+    coordinate by a large prime and exclusive-or the results.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/phys/broadphase.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] static std::uint32_t hash_cell(std::int32_t x, std::int32_t y, std::int32_t z)
+{
+    const std::uint32_t ux = static_cast&lt;std::uint32_t&gt;(x);
+    const std::uint32_t uy = static_cast&lt;std::uint32_t&gt;(y);
+    const std::uint32_t uz = static_cast&lt;std::uint32_t&gt;(z);
+    return (ux * 73856093u) ^ (uy * 19349663u) ^ (uz * 83492791u);
+}</code></pre>
+  </figure>
+
+  <p>
+    The cast through <code>uint32_t</code> before multiplying is not decoration: signed overflow is
+    undefined behaviour in C++, and a negative cell coordinate is entirely ordinary here — it is one
+    metre to the left of the origin.
+  </p>
+
+  <p>
+    Is it a good hash? “Good” needs a reference, and there is one that is neither of the candidates:
+    <strong>balls in bins</strong>. Throwing <em>k</em> distinct cells into <em>m</em> buckets at
+    random puts more than one cell in a bucket
+  </p>
+
+  <div class="eq">
+    \[
+    m\left[1 - \left(1-\tfrac{1}{m}\right)^{k} - k\tfrac{1}{m}\left(1-\tfrac{1}{m}\right)^{k-1}\right]
+    \]
+  </div>
+
+  <p class="eq-plain">
+    times, in expectation — the number of buckets, less those expected to be empty, less those
+    expected to hold exactly one.
+  </p>
+
+  <p>
+    That is what a <em>good</em> hash should match. Measured on two fixtures — a lattice of crates
+    on a floor, which is what a physics scene looks like the moment it settles, and the same number
+    of cells scattered at random:
+  </p>
+
+  <pre><code class="lang-text">   fixture      cells  buckets   xor   mix   ideal
+  lattice       1445     4096   254   209     202
+    xor is +25.7% off ideal, mix is +3.4%
+  scattered     7301    16384  1175  1240    1215</code></pre>
+
+  <p>
+    On random cells the textbook hash sits on the prediction, which is the control: the difference
+    belongs to the <em>input</em>, not to the measurement. On a lattice it is <strong>25.7%</strong>
+    above chance, while a stronger mixing function is at 3.4%. Physics scenes are lattices — things
+    come to rest in rows, on floors, at regular spacings — so this is the input that matters.
+  </p>
+
+  <h3>8.2 And why it stays anyway</h3>
+
+  <p>
+    Having found the textbook answer wanting, the honest next step is to ask what the deficit is
+    actually worth. Two more measurements.
+  </p>
+
+  <p>
+    First, in the loop that matters. Shared buckets are not the cost; <em>comparisons</em> are, and
+    the whole query volume is <code>Σ C(k, 2)</code> over the bucket occupancies — computable
+    exactly, with no timer:
+  </p>
+
+  <pre><code class="lang-text">  inner-loop volume on the lattice, by hash:
+    xor       99852 pair tests
+    mix       90514 pair tests</code></pre>
+
+  <p>
+    A 25.7% excess in shared buckets is a <strong>9.4%</strong> excess in comparisons. Second, the
+    hash itself: three multiplies and two exclusive-ors against a rotate-and-finalise mix.
+  </p>
+
+  <pre><code class="lang-text">  one hash: xor 0.115 ns, mix 0.231 ns (+100%)
+  the same xor behind a call   0.692 ns (6.0x)</code></pre>
+
+  <p>
+    The better-spreading hash costs <strong>twice as much per call</strong>, and it is called once
+    per entry — tens of thousands of times a frame — to save 9.4% of a loop that is a fraction of a
+    stage that is 18% of collision detection. The textbook hash stays, and now it stays for a reason
+    rather than by inheritance. Swapping it and measuring end to end is Exercise 5.
+  </p>
+
+  <p>
+    That third line is a separate lesson, and it changed the code. The first version of this
+    comparison timed the engine's hash at 0.66 ns and the mix at 0.23 and concluded the mix was
+    three times <em>faster</em> — which is absurd, since it does strictly more work. The difference
+    was that <code>hash_cell</code> lived in <code>broadphase.cpp</code>, so the harness paid a
+    function call for it while the mix was inlined in its own translation unit. Six times the cost,
+    for three multiplies. <code>cell_of</code> and <code>hash_cell</code> now live in the header —
+    inside <code>build</code> it never mattered, because that is the same translation unit, but
+    these two are the engine's introspection hooks into the grid, so everybody else is exactly who
+    calls them.
+  </p>
+
+  <div class="callout">
+    <span class="label">A comparison between two things has to be a comparison between two things</span>
+    <p>
+      An A/B measurement where one arm crosses a translation-unit boundary and the other does not is
+      not measuring what it says it is measuring. 4.8 §3 paid for the same lesson in a different
+      currency — a harness that built its own render target and therefore tested a configuration the
+      program never ran. Ask what <em>else</em> differs between the arms before believing the
+      difference you were looking for.
+    </p>
+  </div>
+
+  <h3>8.3 The load factor</h3>
+
+  <p>
+    One more number the table decides for you: how many buckets per entry. <code>build</code> sizes
+    the table at twice the entry count, rounded up to a power of two so the reduction is
+    <code>&amp; (n − 1)</code> rather than a division. Why two?
+  </p>
+
+  <pre><code class="lang-text">  load factor (entries per bucket) on the lattice:
+    ratio   buckets   shared   ideal
+    1:1        2048      346     323
+    1:2        4096      254     202
+    1:4        8192      176     113
+    1:8       16384      156      60</code></pre>
+
+  <p>
+    The second doubling buys 31% fewer shared buckets for twice the memory; the third buys 11% for
+    twice again. Two is where the return per byte stops being worth a colder table.
+  </p>
+
+  <p>
+    And look at the <code>ideal</code> column, which is the same balls-in-bins prediction. The gap
+    between the xor hash and chance <em>widens</em> as the table grows — 7%, 26%, 56%, 160%. A
+    bigger table cannot fix a hash that is not spreading its low bits, and buying one is how people
+    end up concluding that hashing is expensive.
+  </p>

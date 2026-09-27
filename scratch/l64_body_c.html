@@ -1,0 +1,702 @@
+  <!-- =================================================================
+       8 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">8</span>Implementation</h2>
+
+  <p>
+    Everything above goes into <code>gfx/microfacet.hpp</code>, beside the <code>D</code> and
+    <code>G</code> Lesson 6.3 left there. We build it in five steps, and the order is the order the
+    derivation went in.
+  </p>
+
+  <h3><span class="num">8.1</span>Step one: the constant, and where it comes from</h3>
+
+  <p>
+    Start with the two functions that turn a physical measurement into a renderer parameter. They
+    are three lines each and they are the reason the rest of the material is authorable.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag modified">step 1</span></figcaption>
+<pre><code class="lang-cpp">inline constexpr float k_dielectric_f0 = 0.04f;
+
+[[nodiscard]] inline float f0_from_ior(float ior)
+{
+    const float n = std::max(1.0f, ior);
+    const float r = (1.0f - n) / (1.0f + n);
+    return r * r;                       // amplitudes -&gt; powers
+}
+
+[[nodiscard]] inline float ior_from_f0(float f0)
+{
+    const float r = std::sqrt(std::clamp(f0, 0.0f, 0.9999f));
+    return (1.0f + r) / (1.0f - r);
+}</code></pre>
+  </figure>
+
+  <p>
+    The clamp in <code>ior_from_f0</code> is not defensive tidying: at <code>f0 = 1</code> the
+    expression divides by zero, and <code>f0 = 1</code> is a perfect mirror, which is a real thing
+    a caller might ask about. Clamping just below returns a very large index of refraction, which
+    is the right answer to the question "what material reflects everything?".
+  </p>
+
+  <h3><span class="num">8.2</span>Step two: Schlick, twice</h3>
+
+  <p>
+    The scalar version is for dielectrics, where F0 is grey. The <code>linear_rgb</code> version is
+    what makes a metal a metal — and it is worth writing both rather than always paying for three
+    channels, because the dielectric path is the common one.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag modified">step 2</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline float fresnel_schlick(float cos_theta, float f0)
+{
+    const float m = 1.0f - std::clamp(cos_theta, 0.0f, 1.0f);
+    const float m2 = m * m;
+    return f0 + (1.0f - f0) * (m2 * m2 * m);   // (1-cos)^5, four multiplies
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>m2 * m2 * m</code> rather than <code>std::pow(m, 5.0f)</code>: four multiplies against a
+    library call that will compute <code>exp(5 * log(m))</code> and be both slower and less
+    accurate. The clamp matters for the same reason it mattered in Lesson 3.7 — two unit vectors'
+    dot product is a cosine and cannot exceed 1, but it can <em>round</em> above it, and a negative
+    <code>m</code> raised to the fifth is negative.
+  </p>
+
+  <h3><span class="num">8.3</span>Step three: the coupling, as a named choice</h3>
+
+  <p>
+    §7 measured two forms and found the difference large enough that picking one is a decision.
+    That is exactly the situation Lesson 6.3 met with the two geometry terms, and it gets the same
+    treatment: an enum, both implementations, and the measurement written into the doc comment so
+    the choice cannot quietly become a default.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag modified">step 3</span></figcaption>
+<pre><code class="lang-cpp">enum class diffuse_coupling
+{
+    two_crossing,   ///&lt; (1-F(n.l))(1-F(n.v)) — the default. Worst R = 0.9255.
+    half_vector     ///&lt; 1-F(v.h) — what glTF and most engines ship. Worst R = 1.3395.
+};
+
+[[nodiscard]] inline linear_rgb diffuse_transmission(diffuse_coupling coupling,
+                                                     linear_rgb f0,
+                                                     float n_dot_l, float n_dot_v,
+                                                     float v_dot_h)
+{
+    if (coupling == diffuse_coupling::half_vector)
+    {
+        const linear_rgb f = fresnel_schlick(v_dot_h, f0);
+        return {1.0f - f.r, 1.0f - f.g, 1.0f - f.b};
+    }
+
+    // TWO CROSSINGS: in at the light's angle, out at the eye's.
+    const linear_rgb fi = fresnel_schlick(n_dot_l, f0);
+    const linear_rgb fo = fresnel_schlick(n_dot_v, f0);
+    return {(1.0f - fi.r) * (1.0f - fo.r),
+            (1.0f - fi.g) * (1.0f - fo.g),
+            (1.0f - fi.b) * (1.0f - fo.b)};
+}</code></pre>
+  </figure>
+
+  <h3><span class="num">8.4</span>Step four: the material, and a deletion</h3>
+
+  <p>
+    Now the part that touches forty-four call sites. The old surface description was
+  </p>
+
+  <pre><code class="lang-cpp">struct specular
+{
+    linear_rgb colour{0.0f, 0.0f, 0.0f};
+    float shininess = 32.0f;
+};</code></pre>
+
+  <p>
+    and neither field survives. <code>shininess</code> was replaced in Lesson 6.3 by a roughness
+    that measures something; <code>colour</code> is replaced here by an F0 that a physicist could
+    look up. So <code>specular</code> is <strong>deleted</strong>, and <code>microsurface</code>
+    takes its place — in <code>microfacet.hpp</code>, because these are the parameters of the
+    microfacet model and that file is the model.
+  </p>
+
+  <div class="callout">
+    <span class="label">Why delete rather than re-document</span>
+    <p><code>colour = 0.85f</code> and <code>f0 = 0.04f</code> are both perfectly good floats.
+       There is no diagnostic anywhere in C++ for "same type, new meaning" — a struct that kept
+       its name would have let every material in the engine keep compiling while rendering
+       <strong>twenty-one times too bright</strong>.</p>
+    <p>This is the same bargain Lesson 6.2 struck when it renamed <code>intensity</code> to
+       <code>irradiance</code>, and Lesson 3.7 struck when it gave <code>shade()</code> a
+       <code>to_eye</code> parameter with no default. <strong>When the meaning changes, the type
+       system is the only tool that reaches every caller.</strong></p>
+  </div>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag modified">step 4</span></figcaption>
+<pre><code class="lang-cpp">struct microsurface
+{
+    float roughness = 0.5f;              ///&lt; perceptual, [0,1]; alpha is its square
+    float metallic  = 0.0f;              ///&lt; 0 = dielectric, 1 = conductor
+    float f0 = k_dielectric_f0;          ///&lt; dielectric normal-incidence reflectance
+};
+
+[[nodiscard]] inline linear_rgb f0_of(microsurface surface, linear_rgb albedo)
+{
+    const float m = std::clamp(surface.metallic, 0.0f, 1.0f);
+    const float d = surface.f0;
+    return {d + (albedo.r - d) * m,
+            d + (albedo.g - d) * m,
+            d + (albedo.b - d) * m};
+}
+
+[[nodiscard]] inline linear_rgb diffuse_albedo_of(microsurface surface, linear_rgb albedo)
+{
+    const float k = 1.0f - std::clamp(surface.metallic, 0.0f, 1.0f);
+    return {albedo.r * k, albedo.g * k, albedo.b * k};
+}</code></pre>
+  </figure>
+
+  <p>
+    Those last two functions are §6's two sentences, and nothing more.
+  </p>
+
+  <h3><span class="num">8.5</span>Step five: the assembly</h3>
+
+  <p>
+    The specular BRDF goes in <code>microfacet.hpp</code> beside its parts; the two-lobe assembly
+    goes in <code>light.hpp</code>, because that is where the shading equation lives.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/light.hpp</span>
+      <span class="tag modified">step 5</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] inline linear_rgb cook_torrance_brdf(
+    linear_rgb albedo, microsurface surface,
+    float n_dot_l, float n_dot_v, float n_dot_h, float v_dot_h,
+    ndf_model model = ndf_model::ggx,
+    diffuse_coupling coupling = diffuse_coupling::two_crossing)
+{
+    const linear_rgb f0 = f0_of(surface, albedo);
+
+    const linear_rgb f_s = cook_torrance_specular(surface, f0, n_dot_l, n_dot_v,
+                                                  n_dot_h, v_dot_h, model);
+
+    const linear_rgb kd = diffuse_transmission(coupling, f0, n_dot_l, n_dot_v, v_dot_h);
+    const linear_rgb d_albedo = diffuse_albedo_of(surface, albedo);
+    const linear_rgb f_d = lambert_brdf(d_albedo);
+
+    return {f_s.r + kd.r * f_d.r,
+            f_s.g + kd.g * f_d.g,
+            f_s.b + kd.b * f_d.b};
+}</code></pre>
+  </figure>
+
+  <p>
+    Note the four cosines arriving as parameters rather than the three vectors. That is not
+    micro-optimisation: it makes this function <em>pure arithmetic that a test can drive
+    directly</em>, which is what <code>verify_64</code> §E does when it integrates the thing over a
+    hemisphere. It also matches how the shader wants to work — compute the dots once, share them
+    between the two halves.
+  </p>
+
+  <h3><span class="num">8.6</span>And in HLSL, in the same commit</h3>
+
+  <p>
+    <code>shade()</code> and <code>scene.frag.hlsl</code> have tracked each other since Lesson 4.8,
+    and until now one has always followed the other by a lesson. Today they had to move
+    <em>together</em>, and that is the first time in the course.
+  </p>
+
+  <p>
+    That is worth being nervous about, because <strong>a shader that drifts from the CPU does not
+    fail loudly — it renders something plausible.</strong> The thing that makes it survivable is
+    <code>verify_48</code> §F, which renders the same 4096 fragments through both paths and
+    compares them. Its model sweep gained a fourth row today:
+  </p>
+
+  <pre><code class="lang-text">=== F. engine::shade() against scene.frag.hlsl ===
+  none   4096 fragments: mean |CPU - GPU| = 0.000e+00, worst = 0.000e+00
+  Phong  4096 fragments: mean |CPU - GPU| = 0.000e+00, worst = 0.000e+00
+  Blinn  4096 fragments: mean |CPU - GPU| = 8.273e-08, worst = 1.788e-07
+  Cook   4096 fragments: mean |CPU - GPU| = 7.831e-08, worst = 2.384e-07</code></pre>
+
+  <p>
+    <strong>2.4 × 10⁻⁷</strong> — a couple of <code>float</code> ULP, from two independently
+    written implementations of a dozen transcendental operations on two different processors. That
+    is as close to "the same equation" as two machines get.
+  </p>
+
+  <p>
+    Getting there required copying one non-obvious thing across: Lesson 6.3's rearranged GGX
+    denominator. The textbook form <code>c²(α²−1)+1</code> is a catastrophic cancellation in
+    <code>float</code> that loses 1.1% of the model's energy, and <em>a GPU is no less IEEE-754
+    than a CPU</em>. The shader carries the same <code>(1−c)(1+c) + α²c²</code>, and the same
+    comment explaining why.
+  </p>
+
+  <p>
+    One HLSL-specific trap, which cost a compile: <strong>cbuffer members share a single global
+    namespace across every buffer in the shader.</strong> The <code>Light</code> buffer already had
+    a <code>pad0</code>, so adding one to <code>Material</code> is a redefinition, not a local
+    name — and the error message ("nameless block contains a member that already has a name at
+    global scope") is not the first thing you would guess from.
+  </p>
+
+  <!-- =================================================================
+       9 — RE-AUTHORING
+       ================================================================= -->
+  <h2 id="reauthor"><span class="num">9</span>Re-authoring the Materials, and Breaking the Golden</h2>
+
+  <p>
+    §7.1 measured that the same surface is <strong>1.96× brighter</strong> under the old model.
+    Lesson 6.3 measured that the specular constant alone was 17× too small, and that
+    <code>specular::colour</code> had been absorbing it. Those two facts together dictate the shape
+    of this commit:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The constants and the materials move together, or not at all</span>
+    <p>Fix the constant and leave the materials, and every highlight in the engine blows out by
+       seventeen times. Fix the materials and leave the constant, and everything goes black. They
+       were wrong in compensating directions, so <strong>they have to be corrected in the same
+       commit</strong> — which is why this lesson edits the engine, the shader, and every demo
+       together, rather than doing the tidy thing and landing them separately.</p>
+  </div>
+
+  <p>
+    Reading the old values across is mechanical, using Lesson 6.3's own mapping for the exponent
+    and §5.2's for the reflectance:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>object</th><th>was</th><th>is</th><th>why</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>demo torus</td><td><code>{0.85, 0.85, 0.85}, 32</code></td><td><code>{.roughness = 0.49}</code></td><td>a dielectric; F0 defaults to 0.04</td></tr>
+      <tr><td>icosahedron</td><td><code>{0.85, 0.85, 0.85}, 32</code></td><td><code>{.roughness = 0.49}</code></td><td>same</td></tr>
+      <tr><td>teal slab</td><td><code>{0.30, 0.72, 0.66}, 32</code></td><td><code>{.roughness = 0.49, .metallic = 1}</code></td><td><strong>it was always meant to be a metal</strong></td></tr>
+      <tr><td><code>hello_cube</code></td><td><code>{0.6, 0.6, 0.6}, 48</code></td><td><code>{.roughness = 0.45}</code></td><td>painted wood</td></tr>
+      <tr><td>swarm sun</td><td><code>{0.7, 0.65, 0.5}, 64</code></td><td><code>{.roughness = 0.42, .metallic = 1}</code></td><td>a warm tinted highlight is a metal</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The slab is the nicest one. Its comment has said "a METAL colours what it reflects" since
+    Lesson 3.7 — and the way it achieved that was to hand-type a teal highlight colour next to a
+    teal tint, two numbers that had to be kept in step by whoever remembered. <code>metallic = 1</code>
+    says it once, and the object cannot fall out of agreement with itself.
+  </p>
+
+  <h3><span class="num">9.1</span>The golden, re-baselined</h3>
+
+  <p>
+    The reference render has been byte-identical since Lesson 5.1 — fourteen lessons. It is not any
+    more, and this is the lesson where that was always going to happen. Re-baselining honestly
+    means recording four things.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th></th><th>before</th><th>after</th></tr></thead>
+    <tbody>
+      <tr><td>hash</td><td><code>905BF27E</code></td><td><code>E917C06C</code></td></tr>
+      <tr><td>frames</td><td>7</td><td>8</td></tr>
+      <tr><td>bytes</td><td>1,209,616</td><td>1,382,416</td></tr>
+      <tr><td>pixels moved (of the shared 7 frames)</td><td colspan="2">2,400 of 403,200 — <strong>0.60%</strong>, all darker</td></tr>
+      <tr><td>worst per-channel delta</td><td colspan="2">R 38, G 93, B 78</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The last row is the one that matters for judging the change: <strong>every changed pixel got
+    darker</strong>, none brighter, which is exactly what an energy-conserving model replacing one
+    that emitted light should do. If any pixel had brightened, that would have been a question to
+    answer before shipping.
+  </p>
+
+  <h3><span class="num">9.2</span>0.60% is the instrument's fault, not the change's</h3>
+
+  <p>
+    But look at that number again. We replaced the entire shading model, and <strong>0.6% of the
+    picture moved.</strong> That is not a small change producing a small diff; it is a large change
+    that the test barely looked at. Per frame:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>frame</th><th>scene</th><th>pixels changed</th><th>why</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>solids</td><td>654</td><td>Gouraud-lit — the change lands</td></tr>
+      <tr><td>1</td><td>cycle</td><td><strong>0</strong></td><td>all three planks face away from the light</td></tr>
+      <tr><td>2</td><td>intersect</td><td>900</td><td>lit</td></tr>
+      <tr><td>3</td><td>z-fight</td><td>846</td><td>lit</td></tr>
+      <tr><td>4</td><td>floor</td><td><strong>0</strong></td><td><code>shading::textured</code> is <strong>unlit</strong></td></tr>
+      <tr><td>5</td><td>torus</td><td><strong>0</strong></td><td>unlit, same reason</td></tr>
+      <tr><td>6</td><td>floor, close</td><td><strong>0</strong></td><td>unlit, same reason</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Three of seven frames exercised the shading equation at all. Frame 1's planks are entirely in
+    shadow — their pixels encode to <code>albedo × ambient</code> to the code, and 6.4 does not
+    touch the ambient term. And the torus, <em>the one mesh in the demo dense enough to show a
+    highlight and chosen for exactly that reason in Lesson 3.8</em>, is drawn unlit in the
+    reference shot.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">This is Lesson 5.1's finding, arriving a second time</span>
+    <p>5.1 added a seventh frame because the first six all reported <code>straddle = 0</code>: the
+       near-plane clipper was never called, and <em>a characterization test that does not reach a
+       branch cannot pin it</em>. That was about the clipper. This is the same failure about the
+       <strong>shading</strong> branch.</p>
+    <p>And the transferable half: <strong>the moment to extend a characterization test is the
+       moment it breaks for another reason.</strong> This lesson re-baselines the golden anyway, so
+       an eighth frame costs nothing here — and costs a whole re-baseline at any other lesson.</p>
+  </div>
+
+  <p>
+    So frame 7 is the model scene again, this time with <code>shading::lit</code> and the texture
+    bound as the <em>albedo</em> — the combination that runs the whole path: per-pixel normals
+    (3.8), a sampled albedo (3.9), and the Cook-Torrance BRDF evaluated per fragment. It hashes to
+    <code>3F9DD2CF</code> against frame 5's <code>81727C17</code>, so it really is a different
+    picture and not a duplicate.
+  </p>
+
+  <!-- =================================================================
+       10 — WHAT THIS LESSON DOES NOT DO
+       ================================================================= -->
+  <h2 id="notdone"><span class="num">10</span>What This Lesson Does Not Do</h2>
+
+  <p>
+    Three honest gaps, each measured rather than waved at.
+  </p>
+
+  <p>
+    <strong>The model still loses light, and now we have two reasons.</strong> Lesson 6.3 measured
+    the first: single-scattering microfacet theory lets a facet bounce light once and then forgets
+    it, so a fully rough white metal returns <strong>0.3000</strong> of what arrives — the missing
+    69% hit a second facet on the way out. Today adds the second: the two-crossing coupling forgets
+    the light that reflects back <em>inside</em> at the exit boundary, costing about 8.5% on a
+    white dielectric at normal incidence. Both are the same kind of gap — a single-bounce model
+    dropping the second bounce — and both have the same standard fix, <strong>multiple-scattering
+    energy compensation</strong> (Kulla &amp; Conty 2017), which is a lookup table and is out of
+    scope here.
+  </p>
+
+  <p>
+    <strong>The ambient term still has no specular half.</strong> <code>shade()</code> ends in
+    <code>albedo * ambient</code>, exactly as it has since Lesson 3.6, and nothing in this lesson
+    touched it. So a mirror in a bright uniform room renders black except where the key light
+    reaches it. Lesson 6.2 Exercise 13.5 predicted precisely this, and it is Lesson 6.15's subject:
+    the missing term is the specular half of image-based lighting.
+  </p>
+
+  <p>
+    <strong>Fresnel is the dielectric form only.</strong> A conductor's index of refraction is
+    <em>complex</em> — it has an absorption coefficient — and the correct Fresnel equations for one
+    are a good deal messier than §5.1's. We do what every real-time renderer does: take the
+    measured F0 and run it through Schlick, which is a fit to a curve the material does not
+    actually have. It is close enough that no engine bothers, and it is worth knowing that the
+    coloured F0 of a metal is a <em>measurement</em>, not something you can compute from an index
+    of refraction the way §5.2 does for glass.
+  </p>
+
+  <!-- =================================================================
+       11 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">11</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/microfacet.hpp</code></td><td>modified</td><td>Fresnel, the material, the specular BRDF</td></tr>
+      <tr><td><code>engine/include/engine/gfx/light.hpp</code></td><td>modified</td><td><code>specular</code> deleted; <code>cook_torrance_brdf</code>; <code>shade()</code> rewritten</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td><td>the material uniform, same 32 bytes</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td><td>the same equation, in HLSL</td></tr>
+      <tr><td><code>demos/common/demo_scene.cpp</code></td><td>modified</td><td>materials re-authored; the eighth golden frame</td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td><td>[E] cycles roughness; [H] gains Cook-Torrance</td></tr>
+      <tr><td><code>scratch/verify_64.cpp</code></td><td>new</td><td>29 checks, eight sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/microfacet.hpp@@
+  @@LISTING:engine/include/engine/gfx/light.hpp@@
+  @@LISTING:shaders/scene.frag.hlsl@@
+  @@LISTING:scratch/verify_64.cpp@@
+
+  <!-- =================================================================
+       12 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">12</span>Build &amp; Run</h2>
+
+  <p>Nothing new to configure — no new source files, no CMake change.</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+sh scratch/build_verify_64.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <p><strong>What you should see.</strong> <code>verify_64</code> ends with:</p>
+
+  <pre><code class="lang-text">29 checks, 0 failures</code></pre>
+
+  <p>
+    Run the sandbox and press <kbd>H</kbd> to cycle the specular model. The fourth entry is now
+    <code>COOK-TORRANCE</code>, and it is the default. Flip between it and <code>BLINN</code> on
+    the same scene and the difference is not subtle: <strong>the highlight is smaller, tighter and
+    very much dimmer</strong>, and the surface as a whole is slightly darker. Both are correct, and
+    both are the 1.96× from §7.1.
+  </p>
+
+  <p>
+    Press <kbd>E</kbd> and the label has changed from <code>shininess</code> to
+    <code>roughness</code>. Walk it from 0.05 to 1.00 and watch the highlight spread and dim
+    together — which is what energy conservation looks like from the outside. Under Blinn-Phong the
+    highlight spread and stayed the same peak brightness, which is what emitting light looks like.
+  </p>
+
+  <!-- =================================================================
+       13 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">13</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfall">
+    <h3>The highlight is enormous and blown out</h3>
+    <p><strong>Symptom:</strong> every shiny object has a huge white blob on it.</p>
+    <p><strong>Cause:</strong> you corrected the normalisation constant without re-authoring the
+       materials. Lesson 6.3 measured the old constant as 17× too small, and the authored
+       <code>specular::colour</code> values were 21× too large to compensate.</p>
+    <p><strong>Fix:</strong> both, in the same commit. §9's table has the translations.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Fresnel evaluated at the wrong angle</h3>
+    <p><strong>Symptom:</strong> the rim lighting is wrong — either absent, or present everywhere.
+       Objects look flat and slightly plastic-y in a way that is hard to name.</p>
+    <p><strong>Cause:</strong> <code>fresnel_schlick(n_dot_v, ...)</code> in the specular term
+       instead of <code>fresnel_schlick(v_dot_h, ...)</code>. It is an easy substitution to make
+       because both are "the angle you are looking at it from".</p>
+    <p><strong>Fix:</strong> the specular's Fresnel is about the <em>microfacet</em>, and the
+       microfacet's normal is <code>h</code>. It is the facet that is doing the mirroring, not the
+       macroscopic surface. (The <em>diffuse</em> coupling is a different question and does use the
+       macroscopic angles — see §7.)</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Metals look like grey plastic</h3>
+    <p><strong>Symptom:</strong> you set <code>metallic = 1</code> and got something dull and
+       colourless rather than gold.</p>
+    <p><strong>Cause:</strong> the albedo is dark. For a dielectric the albedo is the diffuse
+       colour; for a metal it <em>is F0</em>, and metals have very bright F0 — gold is
+       (1.00, 0.71, 0.29), not (0.4, 0.3, 0.1).</p>
+    <p><strong>Fix:</strong> author metal albedos bright. A metal darker than about 0.5 in every
+       channel is not a metal anyone has seen.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>NaNs, or black pixels at silhouettes</h3>
+    <p><strong>Symptom:</strong> isolated black or garbage pixels at the edge of objects.</p>
+    <p><strong>Cause:</strong> <code>n_dot_v</code> reaching zero in the denominator. At a
+       silhouette the surface is edge-on to the eye and the interpolated normal can land exactly
+       perpendicular — or, after interpolation, slightly past it.</p>
+    <p><strong>Fix:</strong> <code>cook_torrance_specular</code> returns black when either cosine
+       is non-positive, before it divides. That is not defensive coding: light below the horizon
+       is a real case, and the true answer for it is zero. Note that <code>smith_g</code> goes to
+       zero <em>faster</em> than the denominator does, so the quotient stays finite for small
+       positive cosines without any epsilon.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>The CPU and GPU disagree by a lot</h3>
+    <p><strong>Symptom:</strong> <code>verify_48</code> §F reports a worst difference around
+       10⁻¹ or 10⁻² rather than 10⁻⁷.</p>
+    <p><strong>Cause:</strong> almost always a uniform layout mismatch, not a maths error. The
+       material buffer changed shape this lesson, and a shifted field renders something
+       <em>plausible</em> rather than failing.</p>
+    <p><strong>Fix:</strong> the <code>static_assert</code>s on every offset in
+       <code>gpu_uniform.hpp</code> are what make a change this size safe. If they pass and the
+       pixels still disagree, look for arithmetic that was rearranged on one side only — Lesson
+       6.3's GGX denominator is exactly such a case, and it is worth 1.1% on its own.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>HLSL: "nameless block contains a member that already has a name at global scope"</h3>
+    <p><strong>Symptom:</strong> the shader will not compile after you add a field to a cbuffer.</p>
+    <p><strong>Cause:</strong> cbuffer members live in one global namespace across the whole
+       shader, so a second <code>pad0</code> in a different buffer is a redefinition.</p>
+    <p><strong>Fix:</strong> name padding per buffer — <code>pad_m</code>, not another
+       <code>pad0</code>.</p>
+  </div>
+
+  <!-- =================================================================
+       14 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">14</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>14.1 — Ship the glTF coupling and see it fail</h3>
+    <p>Switch the default to <code>diffuse_coupling::half_vector</code> and re-run
+       <code>verify_64</code> §E. Then find a camera angle in the sandbox where the difference is
+       visible on screen, not just in the integral.</p>
+    <details><summary>Hint</summary>
+      <p>The excess lives at grazing view angles on <em>smooth</em> surfaces. Set roughness to
+         0.05 with <kbd>E</kbd> and get the camera nearly edge-on to the floor.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p>§E's worst case goes from 0.9255 to 1.3395. On screen it is much subtler than that sounds,
+         because the excess needs light arriving from a wide range of directions to accumulate —
+         with one directional light you mostly see a brighter rim. <strong>That is the real
+         lesson:</strong> an energy error of 34% can be nearly invisible under a single light and
+         becomes obvious the moment Lesson 6.15 adds an environment. Bugs that only appear when you
+         add the next feature are the expensive kind.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>14.2 — The furnace, as a picture</h3>
+    <p>Lesson 6.2 Exercise 13.5 made a white Lambertian sphere vanish into a uniform background.
+       Do it again with a <em>specular</em> sphere and explain what you see.</p>
+    <details><summary>Solution sketch</summary>
+      <p>It does not vanish — it renders as a dark disc. The ambient term has no specular
+         counterpart, so the specular lobe contributes nothing at all (the key light is off), and
+         the coupling now <em>removes</em> energy from the diffuse that nothing puts back. The
+         sphere is darker than it was before this lesson. That is not a regression: it is the
+         missing image-based specular term becoming visible, which is precisely what a furnace test
+         is for.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>14.3 — Is Schlick's error visible?</h3>
+    <p>§5.3 measured Schlick at 23% relative error for glass and twice the absolute error for
+       diamond. Implement the exact Fresnel equations in the shader, render both, and difference
+       the frames. At what F0 does the error first reach one 8-bit code?</p>
+    <details><summary>Hint</summary>
+      <p>The harness already has <code>fresnel_exact</code>. Port it; it is eight lines. Remember
+         the difference is in linear light and the display is sRGB-encoded, so a small linear
+         difference in the darks is a larger code difference — Lesson 6.1's whole subject.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>14.4 — Audit every material in the engine</h3>
+    <p>Write a twenty-line program that walks the demo scenes and prints, for each material, the
+       index of refraction its F0 implies. Flag anything above 3.</p>
+    <details><summary>Solution sketch</summary>
+      <p>After this lesson nothing should be flagged, because every dielectric is at the 0.04
+         default. Run it against the <em>previous</em> commit and all four demo materials fail. The
+         point of the exercise is the technique: <strong>a parameter that round-trips into a
+         physical quantity can be audited automatically</strong>, and one that cannot, cannot.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>14.5 — Buy the energy back (engine challenge)</h3>
+    <p>Implement multiple-scattering compensation. Precompute the directional albedo of the
+       specular BRDF into a small table indexed by roughness and <code>n·v</code>, then add a
+       second lobe carrying the energy the first one lost.</p>
+    <details><summary>Hint</summary>
+      <p><code>verify_64</code> §F already computes exactly the numbers the table needs — it is the
+         white-furnace integral. A 32×32 table of floats is 4 KB. Kulla &amp; Conty's 2017 course
+         notes are the reference.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p>The rough metal that returns 0.3000 should come back to within a percent of 1. Watch what
+         it does to the <em>look</em>: rough metals stop being unaccountably dark, which is the
+         single most visible artifact of a single-scattering renderer.</p></details>
+  </div>
+
+  <!-- =================================================================
+       15 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">15</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine has a physically-based BRDF. Not "a shinier highlight" — a surface model in which
+    every photon is accounted for once, every parameter is a quantity somebody could measure, and
+    the claim that it conserves energy is a number you can print.
+  </p>
+
+  <div class="eq">
+    \[ f_r \;=\; \frac{D\,G\,F}{4(n\!\cdot\!l)(n\!\cdot\!v)}
+       \;+\; \bigl(1 - F(n\!\cdot\!l)\bigr)\bigl(1 - F(n\!\cdot\!v)\bigr)\frac{\text{albedo}}{\pi} \]
+  </div>
+  <p class="eq-plain">
+    In prose: what bounced off the microfacets, plus what got past the interface, scattered, and
+    got back out.
+  </p>
+
+  <p>What the engine gained:</p>
+
+  <ul>
+    <li><strong>Fresnel</strong>, with F0 derived from an index of refraction rather than typed,
+        and Schlick's fit measured (23% relative, 0.019 absolute) rather than praised.</li>
+    <li><strong>The denominator, derived.</strong> The 4 is a Jacobian; the (v·h) cancelled; the
+        (n·v) is radiance's definition; the (n·l) is the BRDF's.</li>
+    <li><strong>The metallic workflow</strong>, arriving as a consequence of where a metal's colour
+        can live rather than as a pipeline convention.</li>
+    <li><strong>Energy conservation, measured.</strong> Worst hemispherical reflectance 0.9255
+        against 1.4300 before — and the discovery that the coupling nearly every engine ships
+        reaches 1.3395.</li>
+    <li><strong>A better characterization test</strong>, extended at the one moment it was free.</li>
+  </ul>
+
+  <p>
+    And one deletion: <code>engine::specular</code>, the struct Lesson 3.7 called "the first two
+    fields of a material". Both fields turned out to be wrong — one measured nothing, and the other
+    was absorbing a normalisation error. What replaced them, <code>microsurface</code>, is three
+    numbers that all mean something.
+  </p>
+
+  <p>
+    <strong>Next: 6.5 — A Material System.</strong> Watch what just happened to this lesson's diff.
+    A surface description now travels with an albedo, a texture, a cull mode and a blend mode, and
+    changing it meant editing forty-four call sites across the engine, four demos and six test
+    harnesses. Lesson 3.7 said "this is not called <code>material</code> because it is not one
+    yet". It is now, and the pull that made this commit so wide is the design telling us what it
+    wants to be.
+  </p>
+
+  <!-- =================================================================
+       16 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">16</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Cook, R. &amp; Torrance, K., "A Reflectance Model for Computer Graphics" (1982).</strong>
+        The original. Short, readable, and the derivation in §4 is theirs.</li>
+    <li><strong>Schlick, C., "An Inexpensive BRDF Model for Physically-based Rendering" (1994).</strong>
+        Worth reading for how carefully he states what the approximation is <em>for</em>.</li>
+    <li><strong>Walter, B. et al., "Microfacet Models for Refraction through Rough Surfaces" (2007).</strong>
+        The Jacobian of §4.2 is equation 14, and the paper does refraction too.</li>
+    <li><strong>Karis, B., "Real Shading in Unreal Engine 4" (SIGGRAPH 2013 course notes).</strong>
+        The single most influential practical summary; note that it does <em>not</em> couple the
+        lobes, which §7 now lets you evaluate rather than copy.</li>
+    <li><strong>Filament's documentation (Google).</strong> The best free book-length treatment of
+        a shipping PBR implementation, and unusually honest about its approximations.</li>
+    <li><strong>Kulla, C. &amp; Conty, A., "Revisiting Physically Based Shading at Imageworks" (2017).</strong>
+        Multiple-scattering compensation — the fix for §10's two energy losses.</li>
+    <li><strong>Heitz, E., "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs" (2014).</strong>
+        Lesson 6.3's reference, and still the clearest account of why G is shaped as it is.</li>
+    <li><strong>Real-Time Rendering, 4th ed., chapter 9.</strong> The textbook treatment, with a
+        much fuller account of complex indices of refraction than §10 gives.</li>
+  </ul>

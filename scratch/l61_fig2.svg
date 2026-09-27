@@ -1,0 +1,157 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l61f2-t l61f2-d">
+  <title id="l61f2-t">How 256 codes are distributed across the light range</title>
+  <desc id="l61f2-d">Two strips, each showing 256 codes positioned by the light they emit. Spaced evenly in light, only 26 fall in the darkest tenth; spaced by the sRGB curve, 90 do.</desc>
+  <defs>
+    <marker id="e-i-l61f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l61f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l61f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l61f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l61f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Why the curve exists at all: 256 codes are a BUDGET, and the eye does not spend attention evenly.</text>
+<text x="60" y="60" class="xs t-bad" text-anchor="start">spaced evenly in LIGHT</text>
+<rect x="60" y="72" width="600" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<line x1="60.0" y1="72" x2="60.0" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="69.41176470588235" y1="72" x2="69.41176470588235" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="78.82352941176471" y1="72" x2="78.82352941176471" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="88.23529411764706" y1="72" x2="88.23529411764706" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="97.64705882352942" y1="72" x2="97.64705882352942" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="107.05882352941177" y1="72" x2="107.05882352941177" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="116.47058823529412" y1="72" x2="116.47058823529412" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="125.88235294117646" y1="72" x2="125.88235294117646" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="135.29411764705884" y1="72" x2="135.29411764705884" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="144.70588235294116" y1="72" x2="144.70588235294116" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="154.11764705882354" y1="72" x2="154.11764705882354" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="163.52941176470588" y1="72" x2="163.52941176470588" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="172.94117647058823" y1="72" x2="172.94117647058823" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="182.35294117647058" y1="72" x2="182.35294117647058" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="191.76470588235293" y1="72" x2="191.76470588235293" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="201.1764705882353" y1="72" x2="201.1764705882353" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="210.58823529411765" y1="72" x2="210.58823529411765" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="220.0" y1="72" x2="220.0" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="229.41176470588235" y1="72" x2="229.41176470588235" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="238.8235294117647" y1="72" x2="238.8235294117647" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="248.23529411764704" y1="72" x2="248.23529411764704" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="257.6470588235294" y1="72" x2="257.6470588235294" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="267.05882352941177" y1="72" x2="267.05882352941177" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="276.47058823529414" y1="72" x2="276.47058823529414" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="285.88235294117646" y1="72" x2="285.88235294117646" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="295.2941176470588" y1="72" x2="295.2941176470588" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="304.70588235294116" y1="72" x2="304.70588235294116" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="314.11764705882354" y1="72" x2="314.11764705882354" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="323.52941176470586" y1="72" x2="323.52941176470586" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="332.94117647058823" y1="72" x2="332.94117647058823" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="342.3529411764706" y1="72" x2="342.3529411764706" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="351.7647058823529" y1="72" x2="351.7647058823529" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="361.1764705882353" y1="72" x2="361.1764705882353" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="370.5882352941177" y1="72" x2="370.5882352941177" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="380.0" y1="72" x2="380.0" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="389.4117647058824" y1="72" x2="389.4117647058824" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="398.8235294117647" y1="72" x2="398.8235294117647" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="408.2352941176471" y1="72" x2="408.2352941176471" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="417.6470588235294" y1="72" x2="417.6470588235294" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="427.05882352941177" y1="72" x2="427.05882352941177" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="436.4705882352941" y1="72" x2="436.4705882352941" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="445.8823529411765" y1="72" x2="445.8823529411765" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="455.29411764705884" y1="72" x2="455.29411764705884" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="464.7058823529412" y1="72" x2="464.7058823529412" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="474.11764705882354" y1="72" x2="474.11764705882354" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="483.5294117647059" y1="72" x2="483.5294117647059" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="492.94117647058823" y1="72" x2="492.94117647058823" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="502.3529411764706" y1="72" x2="502.3529411764706" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="511.7647058823529" y1="72" x2="511.7647058823529" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="521.1764705882354" y1="72" x2="521.1764705882354" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="530.5882352941176" y1="72" x2="530.5882352941176" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="540.0" y1="72" x2="540.0" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="549.4117647058823" y1="72" x2="549.4117647058823" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="558.8235294117648" y1="72" x2="558.8235294117648" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="568.2352941176471" y1="72" x2="568.2352941176471" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="577.6470588235294" y1="72" x2="577.6470588235294" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="587.0588235294117" y1="72" x2="587.0588235294117" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="596.4705882352941" y1="72" x2="596.4705882352941" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="605.8823529411765" y1="72" x2="605.8823529411765" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="615.2941176470589" y1="72" x2="615.2941176470589" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="624.7058823529412" y1="72" x2="624.7058823529412" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="634.1176470588235" y1="72" x2="634.1176470588235" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="643.5294117647059" y1="72" x2="643.5294117647059" y2="98" class="ink-soft" stroke-width="0.7"/>
+<line x1="652.9411764705883" y1="72" x2="652.9411764705883" y2="98" class="ink-soft" stroke-width="0.7"/>
+<rect x="60" y="72" width="60.0" height="26" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<text x="90.0" y="118" class="xs t-bad" text-anchor="middle">26 codes</text>
+<text x="390.0" y="118" class="xs muted" text-anchor="middle">128 codes in the brightest half — where the eye can barely tell two apart</text>
+<text x="60" y="172" class="xs t-ok" text-anchor="start">spaced by the sRGB curve</text>
+<rect x="60" y="184" width="600" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<line x1="60.0" y1="184" x2="60.0" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="60.72846476051721" y1="184" x2="60.72846476051721" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="61.45692952103442" y1="184" x2="61.45692952103442" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="62.20590439442846" y1="184" x2="62.20590439442846" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="63.108910021403034" y1="184" x2="63.108910021403034" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="64.19724611235924" y1="184" x2="64.19724611235924" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="65.48043522133247" y1="184" x2="65.48043522133247" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="66.96734710784634" y1="184" x2="66.96734710784634" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="68.66630615765553" y1="184" x2="68.66630615765553" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="70.58517269303044" y1="184" x2="70.58517269303044" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="72.73140622560213" y1="184" x2="72.73140622560213" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="75.11211577641697" y1="184" x2="75.11211577641697" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="77.73410066268528" y1="184" x2="77.73410066268528" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="80.6038840852093" y1="184" x2="80.6038840852093" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="83.7277411660397" y1="184" x2="83.7277411660397" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="87.11172263140533" y1="184" x2="87.11172263140533" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="90.76167502442594" y1="184" x2="90.76167502442594" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="94.68325811464034" y1="184" x2="94.68325811464034" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="98.88196001574346" y1="184" x2="98.88196001574346" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="103.36311040939049" y1="184" x2="103.36311040939049" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="108.131892188681" y1="184" x2="108.131892188681" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="113.19335177146377" y1="184" x2="113.19335177146377" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="118.55240828511748" y1="184" x2="118.55240828511748" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="124.21386178696056" y1="184" x2="124.21386178696056" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="130.1824006551065" y1="184" x2="130.1824006551065" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="136.46260826138845" y1="184" x2="136.46260826138845" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="143.05896901947108" y1="184" x2="143.05896901947108" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="149.97587388636515" y1="184" x2="149.97587388636515" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="157.2176253834666" y1="184" x2="157.2176253834666" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="164.78844219335102" y1="184" x2="164.78844219335102" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="172.6924633804067" y1="184" x2="172.6924633804067" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="180.93375227663824" y1="184" x2="180.93375227663824" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="189.51630006833955" y1="184" x2="189.51630006833955" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="198.4440291146095" y1="184" x2="198.4440291146095" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="207.7207960247013" y1="184" x2="207.7207960247013" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="217.35039451781773" y1="184" x2="217.35039451781773" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="227.33655808608623" y1="184" x2="227.33655808608623" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="237.68296247899266" y1="184" x2="237.68296247899266" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="248.39322802543052" y1="184" x2="248.39322802543052" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="259.4709218077076" y1="184" x2="259.4709218077076" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="270.9195597002636" y1="184" x2="270.9195597002636" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="282.7426082844895" y1="184" x2="282.7426082844895" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="294.94348664983397" y1="184" x2="294.94348664983397" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="307.5255680903423" y1="184" x2="307.5255680903423" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="320.4921817048494" y1="184" x2="320.4921817048494" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="333.8466139082428" y1="184" x2="333.8466139082428" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="347.59210986049607" y1="184" x2="347.59210986049607" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="361.73187481954125" y1="184" x2="361.73187481954125" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="376.26907542348783" y1="184" x2="376.26907542348783" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="391.20684090720005" y1="184" x2="391.20684090720005" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="406.5482642577904" y1="184" x2="406.5482642577904" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="422.2964033132027" y1="184" x2="422.2964033132027" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="438.4542818076881" y1="184" x2="438.4542818076881" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="455.02489036766906" y1="184" x2="455.02489036766906" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="472.0111874611881" y1="184" x2="472.0111874611881" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="489.4161003038884" y1="184" x2="489.4161003038884" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="507.24252572423245" y1="184" x2="507.24252572423245" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="525.4933309904542" y1="184" x2="525.4933309904542" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="544.171354601551" y1="184" x2="544.171354601551" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="563.279407044444" y1="184" x2="563.279407044444" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="582.8202715192783" y1="184" x2="582.8202715192783" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="602.7967046346897" y1="184" x2="602.7967046346897" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="623.2114370747328" y1="184" x2="623.2114370747328" y2="210" class="ink-soft" stroke-width="0.7"/>
+<line x1="644.0671742390475" y1="184" x2="644.0671742390475" y2="210" class="ink-soft" stroke-width="0.7"/>
+<rect x="60" y="184" width="60.0" height="26" rx="3" fill="none" stroke="#5ac878" stroke-width="1.6"/>
+<text x="90.0" y="230" class="xs t-ok" text-anchor="middle">90 codes</text>
+<text x="390.0" y="230" class="xs muted" text-anchor="middle">68 codes in the brightest half</text>
+<text x="360.0" y="262" class="xs muted" text-anchor="middle">← both rows are the same 256 codes, positioned by how much LIGHT each one emits →</text>
+<line x1="24" y1="288" x2="696" y2="288" class="grid" stroke-width="1.2"/>
+<text x="24" y="312" class="xs t-hi" text-anchor="start">THE EYE JUDGES RATIOS, NOT DIFFERENCES.</text>
+<text x="24" y="330" class="xs muted" text-anchor="start">The step from 0.01 to 0.02 of white is obvious; the step from 0.90 to 0.91 is invisible. Both are 0.01 of light. So codes</text>
+<text x="24" y="346" class="xs muted" text-anchor="start">should be spaced so that each STEP is a similar ratio — which is what a power curve does, and it is why the encoding is</text>
+<text x="24" y="362" class="xs muted" text-anchor="start">not an accident of old CRT hardware but a compression scheme that outlived the hardware it was named for.</text>
+<text x="24" y="386" class="xs t-hi" text-anchor="start">8 bits of LINEAR light would need about 12 to look as smooth. That is what the curve buys.</text>
+</svg>

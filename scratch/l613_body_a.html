@@ -1,0 +1,304 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-12-hdr-tonemapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.12 — HDR and Tonemapping</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-14-antialiasing.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.14 — Antialiasing: Geometric and Shading</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.13</div>
+    <h1>Bloom and the Post-Processing Stack</h1>
+    <p class="deck">
+      Lesson 6.12 stopped the engine destroying bright values in the fragment shader. It did not
+      make them <em>visible</em>. Measure where the clipping point actually went and the number is
+      uncomfortable: under ACES — the best operator this engine has — the smallest linear value
+      that still resolves to code 255 is <strong>6.3774</strong>, so the polished metal from last
+      lesson still spends <strong>13.10 stops</strong> on a single code. No curve fixes that,
+      because the constraint is not the curve: an 8-bit sRGB display spans code 1 to code 255,
+      which is <strong>11.69 stops, total</strong>. What fixes it is spending a different currency.
+      A real lens scatters light, so a point brighter than white lands on the sensor as a spike
+      with very wide skirts — and the skirts are <em>below</em> the lid even when the source is far
+      above it. The display cannot put 10,000 in a pixel's intensity, so it puts it in how many
+      pixels are lit. This lesson builds that, finds the pyramid is not only cheaper than the
+      Gaussian it approximates but a <em>better shape</em> than it, and then answers the two
+      questions <code>gpu_post.hpp</code> deferred in its own shipped words: how several passes
+      compose, and who owns what between them.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-12-hdr-tonemapping.html">6.12 — HDR and Tonemapping</a>,
+          <a href="06-10-mipmaps.html">6.10 — Mipmaps, LOD, and Anisotropic Filtering</a>,
+          <a href="06-11-transparency.html">6.11 — Transparency</a>,
+          <a href="06-01-linear-and-srgb.html">6.1 — Linear and sRGB</a>,
+          <a href="04-01-how-gpus-work.html">4.1 — How GPUs Actually Work</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/bloom.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/bloom.cpp</code> <em>(new)</em>,
+            <code>shaders/bloom_bright.frag.hlsl</code> <em>(new)</em>,
+            <code>shaders/bloom_down.frag.hlsl</code> <em>(new)</em>,
+            <code>shaders/bloom_up.frag.hlsl</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_post.hpp</code>,
+            <code>engine/src/gfx/gpu_post.cpp</code>,
+            <code>engine/include/engine/gfx/hdr.hpp</code>,
+            <code>engine/src/gfx/hdr.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_pipeline.hpp</code>,
+            <code>engine/src/gfx/gpu_pipeline.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/tonemap.frag.hlsl</code>,
+            <code>cmake/Shaders.cmake</code>, <code>cmake/EngineHelpers.cmake</code>,
+            <code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_613.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>A six-level bloom pyramid in <strong>both renderers</strong>, costing one third of a
+            render target and <strong>0.666 of a single full-screen pass</strong>; a post stack
+            that owns what crosses between stages and says plainly what it cannot do.
+            <strong>39 checks green</strong>, with the GPU's eleven-pass chain, the CPU's four
+            loops and a derivation on paper agreeing <strong>4 of 4</strong>; the reference render
+            byte-identical for the <strong>twenty-second</strong> lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state where a tonemap operator actually starts clipping, and measure it rather than
+          assume it.</li>
+      <li>…explain why a bright light bleeds in a photograph, and why that is information rather
+          than decoration.</li>
+      <li>…derive the soft-knee threshold from three continuity conditions instead of copying
+          five constants.</li>
+      <li>…show that a bilinear upsample <em>is</em> a tent filter, and that one bilinear tap
+          <em>is</em> a 2×2 box average — and say what each identity buys.</li>
+      <li>…explain why a chain of small blurs at halving resolutions is not merely a cheap
+          approximation to one wide Gaussian but a closer match to real glare.</li>
+      <li>…order a post-processing stack correctly, and recognise the artefact each wrong order
+          produces.</li>
+      <li>…say who should own a render pass's intermediate targets, and what makes that answer
+          stop scaling.</li>
+      <li>…recognise a firefly, measure what it costs, and explain the trade the one-tap
+          downsample forces on you.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: the lid moved, it did not leave</a></li>
+      <li><a href="#intuition">Building intuition: what a lens does that a clamp does not</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#payoff">The payoff, as a prediction with an exponent</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#stack">The stack: who owns what</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: the lid moved, it did not leave</h2>
+
+  <p>
+    Last lesson opened by measuring what the engine was already doing wrong before proposing
+    anything, and that turned out to be the right instinct — the framing it produced ("the engine
+    has been avoiding the question by construction") was better than the one that had been planned.
+    So let us do it again, and this time measure what the engine is doing <em>after</em> the fix.
+  </p>
+
+  <p>
+    Here is the question. <code>tonemap::aces</code> maps <code>[0, ∞)</code> into <code>[0, 1]</code>
+    and never exceeds 1. Good. But the display does not have infinitely many codes between 0 and 1;
+    it has 256. So there is some smallest input value that already produces the largest output code,
+    and everything above that value is, once again, indistinguishable. <strong>What is that
+    value?</strong>
+  </p>
+
+  <p>
+    It is not a hard number to get: the curve is monotonic, so bisect. <code>verify_613</code> §A
+    does exactly that, through <code>apply_tonemap</code> and then <code>to_encoded</code> — the
+    engine's own encode, not a re-implementation — and asks where the result first reaches 255.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>operator</th><th>smallest input that resolves to code 255</th>
+          <th>stops still collapsed, at 6.12's peak of 55,917</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>clamp</code></td><td>0.9955</td><td>15.78</td></tr>
+      <tr><td><code>reinhard</code></td><td>223.4789</td><td>7.97</td></tr>
+      <tr><td><code>reinhard_white</code> (W = 4)</td><td>3.9556</td><td>13.79</td></tr>
+      <tr><td><code>aces</code></td><td><strong>6.3774</strong></td><td><strong>13.10</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That ACES figure is worth checking by hand rather than trusting, because a bisection that agrees
+    with itself proves nothing. Code 255 needs an encoded value of at least 254.5/255, which is a
+    linear 0.995544 (this is the same threshold that produced 6.12's famous 224, and the same one
+    this module has now got wrong once already). Narkowicz's fit is a ratio of two quadratics, so
+    setting it equal to 0.995544 gives
+  </p>
+
+  <div class="eq">\[ 0.090828\,x^{2} - 0.557371\,x - 0.139376 = 0 \qquad\Rightarrow\qquad x = 6.3773 \]</div>
+  <div class="eq-plain">0.090828x² − 0.557371x − 0.139376 = 0    →    x = 6.3773</div>
+
+  <p>
+    The harness bisects to <strong>6.3774</strong>. Four figures, from two methods that share no
+    code. That is what makes it a measurement.
+  </p>
+
+  @@FIG_LID@@
+
+  <h3>The thing the table says that the numbers alone do not</h3>
+
+  <p>
+    Look at <code>reinhard</code>. It has by far the <em>highest</em> lid — 223.5, thirty-five times
+    ACES's — and it is the operator everyone agrees looks worst. Those two facts are the same fact.
+    Reinhard's curve approaches 1 asymptotically and never arrives, so it spends its precious codes
+    creeping toward a white it does not reach, and the image comes out grey and flat. ACES clips
+    earlier <em>on purpose</em>: it gives up the top four stops in exchange for spending its codes
+    where an image has content.
+  </p>
+
+  <p class="lede">
+    Tonemapping is not the removal of clipping. It is the choice of <em>where</em> to clip, and how
+    gracefully to approach it.
+  </p>
+
+  <p>
+    And once that is clear, so is the ceiling. The display has <strong>11.69 stops</strong> — code 1
+    is linear 0.00030353, code 255 is 1.0 — and that is the entire budget, fixed by the hardware.
+    The scene has more range than that. You may spend the budget differently; you may not enlarge
+    it. Every curve in the table is a different way of allocating the same 256 numbers, and none of
+    them can represent 6.38 and 55,917 as different pixels.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>So the honest statement of the problem is not "the highlight is too bright".</strong>
+      It is: <em>this image contains information that no assignment of pixel intensities can
+      carry.</em> If we want to show it, we have to encode it in something other than the intensity
+      of the pixel it came from.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: what a lens does that a clamp does not</h2>
+
+  <p>
+    Photograph a streetlight at night and it does not come out as a tidy white disc on black. It has
+    a halo. Often it has spikes. Squint at a bright light with your own eyes and the same thing
+    happens — the light spreads into a glow that is plainly not part of the lamp.
+  </p>
+
+  <p>
+    None of that is the camera failing. It is the camera <em>working</em>, in the only way an
+    optical system can. Light entering a lens does not all arrive where geometry says it should: a
+    fraction scatters off imperfections in the glass, off the edges of the aperture blades, between
+    the elements, and inside the sensor stack itself. Your eye does the same, in the cornea and the
+    vitreous humour — the effect has a name, <em>veiling glare</em>, and it has been measured
+    carefully enough to have a standard model.
+  </p>
+
+  <p>
+    The right way to think about this is as a <strong>point spread function</strong>: the image of a
+    single point of light. In a perfect system the PSF is a point. In a real one it is a sharp spike
+    sitting on very broad, very dim skirts — and the skirts reach a long way.
+  </p>
+
+  <h3>Why that solves our problem</h3>
+
+  <p>
+    Here is the step worth pausing on, because everything else in the lesson follows from it.
+  </p>
+
+  <p>
+    The scattered light carries energy <em>proportional to the source's luminance</em>. But it is
+    spread over a large area, so the amount landing on any one pixel is small. A source at 55,917
+    produces skirts that, a few dozen pixels away, are down at 0.3 — comfortably inside the
+    display's range, and comfortably distinguishable from the skirts of a source at 500.
+  </p>
+
+  <p class="lede">
+    The information that could not survive in the intensity of one pixel survives in the extent of
+    many.
+  </p>
+
+  <p>
+    And that is not a comforting metaphor. It is a claim with an exponent in it, which we will state
+    precisely in §3.3 and test in §4: if the skirts fall off as <code>r⁻²</code>, then the glow's
+    <em>area</em> is linear in the source's luminance. The display is performing a change of
+    variable — from an intensity it cannot represent into an area it can — and we can check whether
+    the conversion is any good.
+  </p>
+
+  <h3>What shape are the skirts?</h3>
+
+  <p>
+    The obvious thing to reach for is a Gaussian blur. It is the blur everyone knows, it is
+    separable, and it looks like the right shape.
+  </p>
+
+  <p>
+    It is the wrong shape, and the reason is its greatest virtue everywhere else. A Gaussian falls
+    off as <code>exp(−r²)</code>, which is <em>extremely</em> fast. At four standard deviations it
+    is down by a factor of ten million. It essentially has no tails.
+  </p>
+
+  <p>
+    Measured glare does. Vos and van den Berg's model of the human glare PSF falls off roughly as
+    <code>1/θ²</code> over an enormous angular range — a power law, not an exponential — and lens
+    flare behaves similarly. A power law is a fundamentally different kind of function from a
+    Gaussian: it has no characteristic width, and it keeps contributing long after a Gaussian has
+    given up.
+  </p>
+
+  <p>
+    So we want a wide, power-law-ish kernel. That sounds expensive, and the standard story says we
+    approximate it with a cheap pyramid of small blurs. The standard story has it backwards, and
+    §3.3 shows why: the pyramid is what a <em>sum of Gaussians whose widths double</em> looks like,
+    and a geometric sum of Gaussians has an approximately power-law envelope. We are not
+    approximating the thing we wanted with something cheaper. We are getting something closer to
+    what we wanted, and it happens to be cheaper.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>A note on honesty before we build.</strong> Real engines do not apply the PSF to the
+      whole image, which is what physics would require. They threshold first, keep only the bright
+      parts, and blur those — because blurring everything hazes the entire picture and costs
+      bandwidth for light that will never be visible. That threshold is <em>not physical</em>, and
+      §3.6 says exactly what it costs. This is the ninety-percent picture; the missing ten percent
+      is thresholdless convolution bloom, which UE4 later added and which is genuinely more correct
+      and genuinely more expensive.
+    </p>
+  </div>

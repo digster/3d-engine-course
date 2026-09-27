@@ -1,0 +1,422 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-07-normal-mapping.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.7 — Normal Mapping and the TBN Derivation</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-09-cascaded-shadows.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.9 — Cascaded Shadow Maps</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.8</div>
+    <h1>Shadow Mapping: Bias, Acne, and PCF</h1>
+    <p class="deck">
+      Every light this engine has ever had is <em>unoccluded</em>. <code>lambert()</code> asks
+      whether a surface faces the light and calls the answer illumination — a question about one
+      surface's orientation and nothing else — so a floor in the open and the same floor under a
+      table are shaded identically, and every object in every picture so far floats. The fix is a
+      z-buffer rendered from the light, which the engine has owned since Lesson 3.1. What is
+      genuinely hard is the <em>comparison</em>: the number stored in that buffer and the number
+      tested against it describe the same point on the same surface and are computed differently.
+      They disagree, always, and that disagreement has a name — <strong>shadow acne</strong> — and,
+      it turns out, a magnitude you can derive on paper before you write a line.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 7 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-10-perspective.html">2.10 — Perspective Projection</a>,
+          <a href="03-01-z-buffer.html">3.1 — The Z-Buffer</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Depth, Textures and Samplers</a>,
+          <a href="04-08-porting-the-scene.html">4.8 — Porting the Scene</a>,
+          <a href="06-07-normal-mapping.html">6.7 — Normal Mapping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/mat4.hpp</code>,
+            <code>engine/include/engine/gfx/bounds.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/shadow.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/shadow.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_shadow.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/light.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/shadow.vert.hlsl</code> <em>(new)</em>,
+            <code>shaders/shadow.frag.hlsl</code> <em>(new)</em>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>CMakeLists.txt</code>, <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>, <code>demos/sandbox/main.cpp</code>,
+            <code>scratch/verify_68.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Shadows in <strong>both renderers</strong>, from a bias derived rather than tuned, with
+            a depth-only GPU pass that has no colour attachment at all. 53 checks green; the
+            reference render <strong>byte-identical</strong> for the seventeenth lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive an orthographic projection from an interval remap, and say why its
+          <em>w</em> stays exactly 1 and what that buys.</li>
+      <li>…fit a shadow frustum to a scene for a light that has no position.</li>
+      <li>…explain shadow acne as a sampling error with a computable magnitude, rather than as a
+          mystery that needs a magic constant.</li>
+      <li>…derive slope-scaled bias, and say precisely why a constant one must peter-pan.</li>
+      <li>…say what a normal-offset bias trades away, and why Lesson 6.7 is the reason it needs the
+          <em>geometric</em> normal.</li>
+      <li>…show with two numbers why a shadow comparison must happen <em>before</em> filtering, and
+          therefore why <code>SamplerComparisonState</code> exists.</li>
+      <li>…build a render pass with no colour attachment, and a depth texture that can be read
+          back.</li>
+      <li>…recognise when a measurement's own sampling grid is aliasing against the thing it is
+          measuring.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem: Nothing Blocks Anything</a></li>
+      <li><a href="#idea">The Idea: A Z-Buffer, Pointed Somewhere Else</a></li>
+      <li><a href="#ortho">A Light With No Position</a></li>
+      <li><a href="#acne">The Comparison, and Why It Fails</a></li>
+      <li><a href="#cures">Three Cures, and What Each One Costs</a></li>
+      <li><a href="#pcf">PCF: Compare, Then Filter</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#gpu">The GPU Port: A Pass With No Colour</a></li>
+      <li><a href="#measure">What the Harness Measured</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run, and What You Should See</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem: Nothing Blocks Anything</h2>
+
+  <p>
+    Open any picture this course has produced since Lesson 3.6 and look at where the objects meet
+    the ground. There is nothing there. The cube does not sit on the floor, it hovers above it; the
+    torus in Lesson 6.7's demo could be one metre up or one centimetre and you cannot tell. That
+    cue — the dark patch where a thing touches another thing — is the single strongest signal the
+    human visual system uses for spatial arrangement, and we have never drawn one.
+  </p>
+
+  <p>
+    The reason is one line, and it has been the same line since Lesson 3.6:
+  </p>
+
+  <div class="eq">
+    \[ \text{lambert}(n, l) \;=\; \max(0,\; n \cdot l) \]
+  </div>
+
+  <p>
+    Read it as a question and it asks: <em>does this surface face the light?</em> That is a fact
+    about one surface's orientation. It is not the question we want, which is: <em>can this surface
+    see the light?</em> — a fact about the surface and <strong>every other object in the
+    scene</strong>. Nothing in the shading equation has ever consulted the rest of the scene. It
+    cannot. <code>shade()</code> receives an albedo, a normal, an eye direction and a light, and
+    from those five arguments there is no possible way to discover that a wall is in the way.
+  </p>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    So the shading equation has to be given a sixth thing: a number saying how much of the light
+    actually arrives. Where that number goes in the equation is not arbitrary and is worth settling
+    now, because getting it wrong is a bug that looks like a material bug. Lesson 6.2 split the
+    shading equation into three factors with three separate physical meanings:
+  </p>
+
+  <div class="eq">
+    \[ L_o \;=\; \underbrace{f_r}_{\text{what the surface does}} \cdot
+                 \underbrace{E_{\perp}\cos\theta}_{\text{what the light delivers}} \;+\;
+                 \underbrace{\text{albedo}\cdot L_a}_{\text{the ambient term}} \]
+  </div>
+
+  <p>
+    A shadow is a statement about <em>whether the light arrives</em>. It says nothing whatsoever
+    about what the surface would do with the light if it did. So it multiplies the middle factor,
+    beside the cosine — which is exactly where Lesson 6.2 put the cosine, and for the same reason.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And it must not multiply the ambient term</span>
+    <p>Ambient models light that has bounced off everything else in the room. An object standing
+       between a surface and the sun does not stop the room from existing — indeed, the ambient
+       term is <em>precisely what a shadowed surface is left with</em>. That is why
+       <code>lighting::ambient</code> being a cool blue is what makes shadows read as blue rather
+       than as holes.</p>
+    <p>Multiply the ambient by the shadow too and shadows render pure black, which is what a shadow
+       looks like in vacuum and nowhere else. It is a one-character mistake and it is instantly
+       recognisable once you have seen it.</p>
+  </div>
+
+  <!-- =================================================================
+       2 — THE IDEA
+       ================================================================= -->
+  <h2 id="idea"><span class="num">2</span>The Idea: A Z-Buffer, Pointed Somewhere Else</h2>
+
+  <p>
+    Here is the whole technique in one sentence, and the pleasure of it is that the engine already
+    owns every part: <strong>render the scene from the light's point of view and keep only the
+    depth.</strong>
+  </p>
+
+  <p>
+    Think about what that buffer contains. For every ray the light emits — one per texel — it holds
+    the distance to the <em>nearest</em> surface along that ray. Which is to say: it is a record of
+    exactly what the light can see. Anything further along a ray than the stored value is behind
+    something, and behind something is what "in shadow" means.
+  </p>
+
+  <p>
+    And "the distance to the nearest surface along every ray from a viewpoint" is not a new
+    algorithm. It is a z-buffer. Lesson 3.1 built one, Lesson 4.7 built the GPU's, and both have
+    been computing this quantity every frame for three modules while we used it only to decide
+    which fragment wins.
+  </p>
+
+  @@FIG_IDEA@@
+
+  <p>
+    So a frame gains a second pass:
+  </p>
+
+  <ol>
+    <li><strong>The depth pass.</strong> Rasterise the scene from the light. No colour, no shading,
+        no textures — a surface's colour cannot change where the surface <em>is</em>. What comes
+        out is a depth buffer, which we now call a <em>shadow map</em>.</li>
+    <li><strong>The scene pass.</strong> For every fragment, project its world position into the
+        light's space, look up the stored depth for that direction, and compare. Further than
+        stored means occluded.</li>
+  </ol>
+
+  <p>
+    On the CPU that first pass is <code>collect_triangles</code> followed by
+    <code>draw_triangles</code> — Module 2's vertex stage and Module 3's rasterizer, unmodified,
+    with a different camera. Not one line of the rasterizer changes. That is the cheapest claim in
+    this lesson and also its biggest: <strong>a shadow map is not a new renderer, it is the
+    renderer you already have, aimed somewhere else.</strong>
+  </p>
+
+  <div class="callout">
+    <span class="label">Two things this lesson deliberately does not do</span>
+    <p><strong>One light.</strong> <code>lighting</code> has one key and this has one map. Two
+       lights are two maps and two lookups: a linear cost and no new ideas.</p>
+    <p><strong>One cascade.</strong> A single map stretched over a whole outdoor scene gives the
+       near field far too few texels — §11 shows what that looks like. Splitting the camera's
+       frustum into ranges and giving each its own map is <em>cascaded</em> shadow mapping, it is
+       Lesson 6.9, and it is an extension of this file rather than a replacement for it.</p>
+  </div>
+
+  <!-- =================================================================
+       3 — ORTHOGRAPHIC
+       ================================================================= -->
+  <h2 id="ortho"><span class="num">3</span>A Light With No Position</h2>
+
+  <p>
+    "Render from the light" needs a camera, and a camera needs an eye. Our light does not have one.
+    <code>directional_light</code> carries a direction and an irradiance and nothing else, because
+    that is what a directional light <em>is</em>: the sun, modelled as parallel rays arriving from
+    infinitely far away. There is no point they converge on, so there is no place to put an eye and
+    no field of view to ask for.
+  </p>
+
+  <h3 id="ortho-box">3.1 — What replaces the pyramid</h3>
+
+  <p>
+    A perspective frustum is a pyramid because rays converge on an eye. If the rays are parallel,
+    the shape swept out is not a pyramid. It is a <strong>box</strong>.
+  </p>
+
+  @@FIG_ORTHO@@
+
+  <p>
+    And a box maps onto the clip cube by scale-and-offset alone — no divide, no <em>w</em> trick,
+    nothing. Lesson 2.10 spent a whole lesson deriving perspective because the projection is
+    genuinely non-linear and a matrix is linear; the entire difficulty there was arranging for the
+    divide to happen afterwards. Here there is no divide to arrange.
+  </p>
+
+  <h3 id="ortho-derive">3.2 — Deriving it, one axis at a time</h3>
+
+  <p>
+    We want the box's left edge <em>l</em> to land at NDC −1 and its right edge <em>r</em> at +1.
+    Any map that takes one interval to another affinely is the same four steps: subtract the start,
+    divide by the width, scale to the new width, add the new start.
+  </p>
+
+  <div class="eq">
+    \[
+      x_{ndc} \;=\; 2\,\frac{x - l}{r - l} - 1
+              \;=\; \left(\frac{2}{r-l}\right) x \;-\; \frac{r+l}{r-l}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: multiply <em>x</em> by <code>2/(r-l)</code> and add <code>-(r+l)/(r-l)</code>. A
+    multiply and an add — which fits in a matrix row with room to spare.
+  </p>
+
+  <p>
+    <em>y</em> is the same sentence with <em>b</em> and <em>t</em>. <em>z</em> is the one that
+    carries this course's conventions: view space looks down −z (Conventions §5), the near plane
+    sits at <em>z</em> = −near and must land at device depth <strong>0</strong>, and the far plane
+    at <em>z</em> = −far must land at <strong>1</strong> — SDL_GPU's depth range, not OpenGL's
+    (Conventions §4).
+  </p>
+
+  <div class="eq">
+    \[
+      z_{ndc} \;=\; \frac{-z - \text{near}}{\text{far} - \text{near}}
+              \;=\; \left(\frac{-1}{\text{far}-\text{near}}\right) z
+                    \;-\; \frac{\text{near}}{\text{far}-\text{near}}
+    \]
+  </div>
+
+  <p>
+    Assembled, with each brace group a column in our column-major storage (Lesson 2.6):
+  </p>
+
+  <div class="eq">
+    \[
+      P_{ortho} =
+      \begin{bmatrix}
+        \frac{2}{r-l} & 0 & 0 & -\frac{r+l}{r-l} \\[2pt]
+        0 & \frac{2}{t-b} & 0 & -\frac{t+b}{t-b} \\[2pt]
+        0 & 0 & \frac{-1}{f-n} & \frac{-n}{f-n} \\[2pt]
+        0 & 0 & 0 & 1
+      \end{bmatrix}
+    \]
+  </div>
+
+  <p>
+    <strong>Look at the bottom row.</strong> Perspective's bottom row is
+    <code>(0, 0, -1, 0)</code>, and that −1 is what copies −<em>z</em> into <em>w</em> and makes
+    the divide happen. Here the bottom row is <code>(0, 0, 0, 1)</code>, so <em>w</em> comes out
+    <strong>exactly 1</strong>, and the perspective divide that follows is the identity.
+  </p>
+
+  <h3 id="ortho-worked">3.3 — A worked example</h3>
+
+  <p>
+    Take a ten-unit-wide box: <em>l</em> = −5, <em>r</em> = 5, <em>b</em> = −5, <em>t</em> = 5,
+    near = 1, far = 21. Then <code>2/(r-l)</code> = 0.2, <code>(r+l)/(r-l)</code> = 0, the depth
+    scale is −1/20 and the depth offset is −1/20.
+  </p>
+
+  <p>
+    Push the view-space point <strong>(2.5, 0, −6)</strong> through by hand:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">A worked orthographic projection of one point</caption>
+      <thead><tr><th>Component</th><th>Arithmetic</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><em>x</em></td><td>0.2 × 2.5 − 0</td><td><strong>0.5</strong></td></tr>
+        <tr><td><em>y</em></td><td>0.2 × 0 − 0</td><td>0</td></tr>
+        <tr><td><em>z</em></td><td>(−1/20) × (−6) − 1/20 = 0.30 − 0.05</td>
+            <td><strong>0.25</strong></td></tr>
+        <tr><td><em>w</em></td><td>the bottom row: 0·x + 0·y + 0·z + 1</td>
+            <td><strong>1</strong>, exactly</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Read the two interesting ones. <em>x</em> = 0.5 because 2.5 is half way from the centre to the
+    right edge at 5. <em>z</em> = 0.25 because a depth of 6 is a quarter of the way from 1 to 21 —
+    <em>linearly</em>. Push the same point through <code>perspective(50°, 1, 1, 21)</code> and the
+    depth comes out <strong>0.792</strong>: three quarters of the depth range consumed by the first
+    quarter of the distance. That crowding is Lesson 2.10's, and Lesson 4.9 measured it on real
+    hardware.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A prediction this lesson's plan got wrong, corrected</span>
+    <p>The plan for this lesson said the projection's non-linear depth distribution is why shadow
+       error grows with distance. That is true of <code>perspective</code> and it is exactly
+       <em>not</em> true here. An orthographic projection spreads device depth evenly over the box,
+       so one depth code is worth the same number of metres at the near plane and at the far one —
+       <code>verify_68</code> §A checks that the two are equal to six decimal places, where under
+       perspective the ratio is over 100×.</p>
+    <p>The consequence is that the <em>quantisation</em> half of §4's bias is a <strong>constant
+       across the whole map</strong>, which makes a directional shadow map the easy case. The
+       non-linear story returns in full the day this light becomes a spot light and its projection
+       becomes a perspective one. Naming that now is cheaper than discovering it in Lesson 6.9.</p>
+  </div>
+
+  <h3 id="ortho-fit">3.4 — Fitting the box, and a negative near plane</h3>
+
+  <p>
+    A box has to be fitted to something, and the something is the scene's world-space bounds. The
+    procedure is four steps and each one has a decision in it:
+  </p>
+
+  <ol>
+    <li><strong>Pick the light's axes.</strong> <code>direction</code> is the direction of travel
+        (Lesson 3.6's convention, stated in capitals in <code>light.hpp</code> because it is the
+        commonest sign error in graphics), so it <em>is</em> the light camera's forward axis, with
+        no negation. The up hint only has to be non-parallel to it.</li>
+    <li><strong>Put the eye at the scene's centre.</strong> This sounds wrong and is exactly right:
+        a directional light has no position, so any point on the axis gives the same rays.</li>
+    <li><strong>Transform the scene's AABB into light view space</strong> and read the extents
+        straight off it.</li>
+    <li><strong>Square the box in x and y.</strong> Every formula in §4 says "one texel" as though a
+        texel had a single size; squaring is what earns that sentence. It costs resolution on the
+        narrow axis and buys one honest number, <code>world_per_texel</code>.</li>
+  </ol>
+
+  <p>
+    Step 2 has a consequence worth stopping on. If the eye is in the middle of the scene, half the
+    scene is <em>behind</em> it — at positive view-space <em>z</em> — so the near plane comes out
+    <strong>negative</strong>. <code>perspective</code> could not accept that for a moment: a
+    negative near plane means dividing by a quantity that changes sign, and everything explodes.
+    <code>orthographic</code> does not care, because it has no divide. <code>verify_68</code> §B
+    measures the scene reaching <em>z</em> = +2.608 in light view space and every one of the eight
+    corners still landing inside the clip cube.
+  </p>
+
+  <p>
+    Two numbers fall out of the fit and the whole of §4 is built from them:
+  </p>
+
+  <div class="eq">
+    \[
+      \text{world\_per\_texel} = \frac{\text{box side}}{\text{resolution}},
+      \qquad
+      \text{depth\_range} = \text{far} - \text{near}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    The first is the map's resolving power in metres. The second is how many metres one unit of
+    device depth is worth — and because the projection is orthographic, it is a single number that
+    is valid everywhere in the box.
+  </p>

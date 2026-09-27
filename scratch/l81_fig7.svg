@@ -1,0 +1,64 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l81f7-t l81f7-d">
+  <title id="l81f7-t">Worst energy excursion against h times omega, with the stability wall at 2</title>
+  <desc id="l81f7-d">The measured excursions land on the predicted curve one over one minus h omega over two, which rises without bound as h omega approaches 2. Everything left of the wall is stable and only the left fifth of it is usable.</desc>
+  <defs>
+    <marker id="e-i-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l81f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="62" y="56" width="420" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">F.2  worst energy excursion against hω</text>
+<line x1="62.0" y1="56" x2="62.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="322" class="xs mono" text-anchor="middle">0.0</text>
+<line x1="157.45454545454544" y1="56" x2="157.45454545454544" y2="306" class="grid" stroke-width="1.0"/>
+<text x="157.45454545454544" y="322" class="xs mono" text-anchor="middle">0.5</text>
+<line x1="252.9090909090909" y1="56" x2="252.9090909090909" y2="306" class="grid" stroke-width="1.0"/>
+<text x="252.9090909090909" y="322" class="xs mono" text-anchor="middle">1.0</text>
+<line x1="348.3636363636363" y1="56" x2="348.3636363636363" y2="306" class="grid" stroke-width="1.0"/>
+<text x="348.3636363636363" y="322" class="xs mono" text-anchor="middle">1.5</text>
+<line x1="443.8181818181818" y1="56" x2="443.8181818181818" y2="306" class="grid" stroke-width="1.0"/>
+<text x="443.8181818181818" y="322" class="xs mono" text-anchor="middle">2.0</text>
+<line x1="62" y1="306.0" x2="482" y2="306.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="310.0" class="xs muted" text-anchor="end">×1</text>
+<line x1="62" y1="209.84615384615387" x2="482" y2="209.84615384615387" class="grid" stroke-width="1.0"/>
+<text x="54" y="213.84615384615387" class="xs muted" text-anchor="end">×10</text>
+<line x1="62" y1="113.69230769230771" x2="482" y2="113.69230769230771" class="grid" stroke-width="1.0"/>
+<text x="54" y="117.69230769230771" class="xs muted" text-anchor="end">×100</text>
+<text x="272.0" y="342" class="xs muted" text-anchor="middle">hω  (step size × angular frequency)</text>
+<path d="M 65.82,305.58 L 67.73,305.37 L 69.64,305.16 L 71.55,304.94 L 73.45,304.73 L 75.36,304.51 L 77.27,304.30 L 79.18,304.08 L 81.09,303.86 L 83.00,303.64 L 84.91,303.42 L 86.82,303.19 L 88.73,302.97 L 90.64,302.74 L 92.55,302.52 L 94.45,302.29 L 96.36,302.06 L 98.27,301.83 L 100.18,301.60 L 102.09,301.37 L 104.00,301.13 L 105.91,300.90 L 107.82,300.66 L 109.73,300.42 L 111.64,300.18 L 113.55,299.94 L 115.45,299.70 L 117.36,299.46 L 119.27,299.21 L 121.18,298.97 L 123.09,298.72 L 125.00,298.47 L 126.91,298.22 L 128.82,297.97 L 130.73,297.71 L 132.64,297.46 L 134.55,297.20 L 136.45,296.94 L 138.36,296.68 L 140.27,296.42 L 142.18,296.16 L 144.09,295.89 L 146.00,295.62 L 147.91,295.36 L 149.82,295.09 L 151.73,294.81 L 153.64,294.54 L 155.55,294.26 L 157.45,293.99 L 159.36,293.71 L 161.27,293.43 L 163.18,293.14 L 165.09,292.86 L 167.00,292.57 L 168.91,292.28 L 170.82,291.99 L 172.73,291.70 L 174.64,291.40 L 176.55,291.11 L 178.45,290.81 L 180.36,290.50 L 182.27,290.20 L 184.18,289.90 L 186.09,289.59 L 188.00,289.28 L 189.91,288.96 L 191.82,288.65 L 193.73,288.33 L 195.64,288.01 L 197.55,287.69 L 199.45,287.36 L 201.36,287.04 L 203.27,286.71 L 205.18,286.37 L 207.09,286.04 L 209.00,285.70 L 210.91,285.36 L 212.82,285.01 L 214.73,284.67 L 216.64,284.32 L 218.55,283.97 L 220.45,283.61 L 222.36,283.25 L 224.27,282.89 L 226.18,282.53 L 228.09,282.16 L 230.00,281.79 L 231.91,281.41 L 233.82,281.03 L 235.73,280.65 L 237.64,280.27 L 239.55,279.88 L 241.45,279.49 L 243.36,279.09 L 245.27,278.69 L 247.18,278.29 L 249.09,277.88 L 251.00,277.47 L 252.91,277.05 L 254.82,276.64 L 256.73,276.21 L 258.64,275.78 L 260.55,275.35 L 262.45,274.91 L 264.36,274.47 L 266.27,274.02 L 268.18,273.57 L 270.09,273.12 L 272.00,272.66 L 273.91,272.19 L 275.82,271.72 L 277.73,271.24 L 279.64,270.76 L 281.55,270.27 L 283.45,269.77 L 285.36,269.27 L 287.27,268.77 L 289.18,268.26 L 291.09,267.74 L 293.00,267.21 L 294.91,266.68 L 296.82,266.14 L 298.73,265.59 L 300.64,265.04 L 302.55,264.48 L 304.45,263.91 L 306.36,263.34 L 308.27,262.75 L 310.18,262.16 L 312.09,261.56 L 314.00,260.95 L 315.91,260.33 L 317.82,259.70 L 319.73,259.07 L 321.64,258.42 L 323.55,257.76 L 325.45,257.09 L 327.36,256.41 L 329.27,255.72 L 331.18,255.02 L 333.09,254.31 L 335.00,253.58 L 336.91,252.84 L 338.82,252.09 L 340.73,251.32 L 342.64,250.54 L 344.55,249.75 L 346.45,248.94 L 348.36,248.11 L 350.27,247.27 L 352.18,246.40 L 354.09,245.53 L 356.00,244.63 L 357.91,243.71 L 359.82,242.77 L 361.73,241.81 L 363.64,240.83 L 365.55,239.82 L 367.45,238.79 L 369.36,237.73 L 371.27,236.65 L 373.18,235.54 L 375.09,234.39 L 377.00,233.22 L 378.91,232.00 L 380.82,230.76 L 382.73,229.47 L 384.64,228.15 L 386.55,226.78 L 388.45,225.36 L 390.36,223.90 L 392.27,222.38 L 394.18,220.80 L 396.09,219.16 L 398.00,217.46 L 399.91,215.68 L 401.82,213.83 L 403.73,211.88 L 405.64,209.85 L 407.55,207.70 L 409.45,205.45 L 411.36,203.06 L 413.27,200.53 L 415.18,197.83 L 417.09,194.95 L 419.00,191.86 L 420.91,188.51 L 422.82,184.88 L 424.73,180.90 L 426.64,176.50 L 428.55,171.58 L 430.45,166.01 L 432.36,159.57 L 434.27,151.96 L 436.18,142.64 L 438.09,130.62 L 440.00,113.69 L 441.91,84.75" fill="none" stroke="#969eaf" stroke-width="2.0"/>
+<circle cx="100.2" cy="301.6" r="3.4" fill="#78dca0"/>
+<circle cx="157.5" cy="294.0" r="3.4" fill="#78dca0"/>
+<circle cx="252.9" cy="277.1" r="3.4" fill="#78dca0"/>
+<circle cx="348.4" cy="248.1" r="3.4" fill="#78dca0"/>
+<circle cx="405.6" cy="209.9" r="3.4" fill="#78dca0"/>
+<circle cx="434.3" cy="152.5" r="3.4" fill="#78dca0"/>
+<circle cx="441.9" cy="84.9" r="3.4" fill="#78dca0"/>
+<line x1="443.8" y1="56.0" x2="443.8" y2="306.0" stroke="#eb6060" stroke-width="2.0" fill="none" stroke-dasharray="5 4"/>
+<text x="435.8181818181818" y="74" class="xs mono t-bad" text-anchor="end">hω = 2</text>
+<text x="435.8181818181818" y="90" class="xs mono t-bad" text-anchor="end">the wall</text>
+<line x1="138.4" y1="56.0" x2="138.4" y2="306.0" stroke="#5ac878" stroke-width="1.6" fill="none" stroke-dasharray="3 3"/>
+<text x="146.0" y="108" class="xs mono t-ok" text-anchor="start">a factor of five</text>
+<text x="146.0" y="124" class="xs mono t-ok" text-anchor="start">of headroom</text>
+<text x="540" y="68" class="xs muted" text-anchor="start">F.1  largest stable h, ω = 2π</text>
+<text x="830" y="68" class="xs muted" text-anchor="end"></text>
+<line x1="540" y1="76.0" x2="836" y2="76.0" class="grid" stroke-width="1.0"/>
+<text x="540" y="93.0" class="xs" text-anchor="start">semi-implicit Euler</text>
+<text x="830" y="93.0" class="xs mono" text-anchor="end">0.3182939</text>
+<text x="540" y="110.0" class="xs" text-anchor="start">velocity Verlet</text>
+<text x="830" y="110.0" class="xs mono" text-anchor="end">0.3183099</text>
+<text x="540" y="127.0" class="xs" text-anchor="start">2 / ω</text>
+<text x="830" y="127.0" class="xs mono" text-anchor="end">0.3183099</text>
+<text x="540" y="144.0" class="xs" text-anchor="start">explicit Euler</text>
+<text x="830" y="144.0" class="xs mono" text-anchor="end">none</text>
+<text x="540" y="174.5" class="xs muted" text-anchor="start">Read it the other way round, which is how</text>
+<text x="540" y="190.5" class="xs muted" text-anchor="start">it is used. At 60 Hz with a safety factor</text>
+<text x="540" y="206.5" class="xs muted" text-anchor="start">of five, hω ≤ 0.4 admits ω ≤ 24 rad/s:</text>
+<text x="540" y="222.5" class="xs mono t-hi" text-anchor="start">a spring of about 3.8 Hz.</text>
+<text x="540" y="250.5" class="xs" text-anchor="start">A real contact is hundreds of Hz. That is</text>
+<text x="540" y="266.5" class="xs" text-anchor="start">why contacts are not springs in this</text>
+<text x="540" y="282.5" class="xs" text-anchor="start">module — they are constraints, and 8.10</text>
+<text x="540" y="298.5" class="xs" text-anchor="start">is where that bill comes due.</text>
+</svg>

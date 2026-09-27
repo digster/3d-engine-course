@@ -1,0 +1,58 @@
+<svg viewBox="0 0 700 380" role="img" aria-labelledby="f71e-t f71e-d">
+  <title id="f71e-t">The collapse at lock</title>
+  <desc id="f71e-d">A square of yaw against roll, both from minus 180 to 180 degrees, crossed by dashed diagonal lines of constant yaw minus roll. One diagonal is highlighted in amber with two points on it joined by an arrow: moving along it changes both knobs by 47 degrees and produces zero rotation. A second arrow leaves the diagonal and is labelled as real rotation.</desc>
+  <defs>
+    <marker id="e-i-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-bad-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-ok-f71e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="350.0" y="24" class="sm" text-anchor="middle">At pitch = +90°, every pose on a diagonal is the SAME orientation</text>
+<text x="350.0" y="42" class="xs muted" text-anchor="middle">the matrix contains yaw and roll only as (yaw − roll)</text>
+<rect x="150.0" y="60.0" width="254.0" height="254.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="150.0" y1="102.3" x2="192.3" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="150.0" y1="144.7" x2="234.7" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="150.0" y1="187.0" x2="277.0" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="150.0" y1="229.3" x2="319.3" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="150.0" y1="271.7" x2="361.7" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="150.0" y1="314.0" x2="404.0" y2="60.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="404.0" y1="102.3" x2="192.3" y2="314.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="404.0" y1="144.7" x2="234.7" y2="314.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="404.0" y1="187.0" x2="277.0" y2="314.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="404.0" y1="229.3" x2="319.3" y2="314.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="404.0" y1="271.7" x2="361.7" y2="314.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 5"/>
+<line x1="188.8" y1="314.0" x2="404.0" y2="98.8" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<circle cx="291.1" cy="211.7" r="4.5" fill="#f0961e"/>
+<circle cx="324.3" cy="178.5" r="4.5" fill="none" stroke="#f0961e" stroke-width="1.8"/>
+<line x1="300.11" y1="220.69" x2="333.27" y2="187.53" stroke="#e05c5c" stroke-width="2.0" marker-end="url(#e-bad-f71e)"/>
+<line x1="291.11" y1="211.69" x2="291.11" y2="162.31" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-ok-f71e)"/>
+<text x="150.0" y="330.0" class="mono xs muted" text-anchor="middle">-180</text>
+<text x="140.0" y="318.0" class="mono xs muted" text-anchor="end">-180</text>
+<text x="213.5" y="330.0" class="mono xs muted" text-anchor="middle">-90</text>
+<text x="140.0" y="254.5" class="mono xs muted" text-anchor="end">-90</text>
+<text x="277.0" y="330.0" class="mono xs muted" text-anchor="middle">0</text>
+<text x="140.0" y="191.0" class="mono xs muted" text-anchor="end">0</text>
+<text x="340.5" y="330.0" class="mono xs muted" text-anchor="middle">90</text>
+<text x="140.0" y="127.5" class="mono xs muted" text-anchor="end">90</text>
+<text x="404.0" y="330.0" class="mono xs muted" text-anchor="middle">180</text>
+<text x="140.0" y="64.0" class="mono xs muted" text-anchor="end">180</text>
+<text x="277.0" y="348.0" class="xs muted" text-anchor="middle">yaw (degrees)</text>
+<text x="108.0" y="187.0" class="xs muted" text-anchor="middle" transform="rotate(-90 108.0 187.0)">roll (degrees)</text>
+<line x1="424.0" y1="86.0" x2="440.0" y2="86.0" stroke="#e05c5c" stroke-width="2.2" fill="none"/>
+<text x="446.0" y="90.0" class="xs t-hi" text-anchor="start">along the line:</text>
+<text x="424.0" y="106.0" class="mono xs" text-anchor="start">yaw +47°, roll +47°</text>
+<text x="424.0" y="121.0" class="mono xs t-bad" text-anchor="start">0.0000° of motion</text>
+<line x1="424.0" y1="148.0" x2="440.0" y2="148.0" stroke="#5ac878" stroke-width="2.2" fill="none"/>
+<text x="446.0" y="152.0" class="xs t-hi" text-anchor="start">across it:</text>
+<text x="424.0" y="168.0" class="mono xs" text-anchor="start">yaw 0°, roll +70°</text>
+<text x="424.0" y="183.0" class="mono xs t-ok" text-anchor="start">real rotation</text>
+<text x="424.0" y="218.0" class="xs muted" text-anchor="start">at pitch 0° the</text>
+<text x="424.0" y="233.0" class="xs muted" text-anchor="start">same joint move</text>
+<text x="424.0" y="248.0" class="mono xs" text-anchor="start">gives 65.51°</text>
+<text x="424.0" y="274.0" class="xs muted" text-anchor="start">at pitch −90° it is</text>
+<text x="424.0" y="289.0" class="xs muted" text-anchor="start">the SUM that dies</text>
+<text x="424.0" y="304.0" class="xs muted" text-anchor="start">(the other diagonal)</text>
+</svg>

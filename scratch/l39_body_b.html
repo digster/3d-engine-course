@@ -1,0 +1,1125 @@
+  <!-- ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    Two new files, one new function on <code>mesh_data</code>, one new enum value in the
+    rasterizer, and four lines in the fill loop. The proportions are the point: almost all of the
+    work is in deciding what the numbers mean, and almost none of it is in the lookup.
+  </p>
+
+  <h3 id="impl-texture">4.1 The image, and what its texels mean</h3>
+
+  <p>
+    Start with what a texture <em>is</em> in memory, because two decisions there settle several
+    arguments later.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/texture.hpp</span>
+      <span class="tag new">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">class texture
+{
+public:
+    texture() = default;
+    texture(int w, int h, Uint32 fill = 0xFF000000u);
+
+    [[nodiscard]] int width() const { return width_; }
+    [[nodiscard]] int height() const { return height_; }
+    [[nodiscard]] bool empty() const { return texels_.empty(); }
+
+    [[nodiscard]] Uint32 texel(int x, int y) const;
+    void set_texel(int x, int y, Uint32 colour);
+    [[nodiscard]] std::span&lt;const Uint32&gt; texels() const { return texels_; }
+
+private:
+    std::vector&lt;Uint32&gt; texels_;
+    int width_ = 0;
+    int height_ = 0;
+};</code></pre>
+  </figure>
+
+  <p>
+    <strong>Row 0 is the top row.</strong> That is the §3.2 decision, made concrete: it is what
+    makes <code>v = 0</code> sample the top, and it is what SDL_GPU's header specifies. Every
+    other convention in this engine on the screen side of the projection already agrees.
+  </p>
+
+  <p>
+    <strong>Texels are <code>Uint32</code> ARGB8888</strong>, byte-identical to a framebuffer
+    pixel. That is not laziness; it means a 1:1 draw is a copy rather than a conversion, which is
+    exactly the property §3.4's headline test leans on. And they are
+    <strong>sRGB-encoded</strong>, like every other stored colour here and like every PNG you
+    will ever be handed. The decode is the sampler's job — §3.6 — which is also what hardware
+    does.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — why <code>texel()</code> clamps</span>
+    <p>
+      <code>texel(x, y)</code> clamps its arguments into range. That is <em>not</em> the address
+      mode: addressing happens in the sampler, which decides what <code>x = −1</code>
+      <em>means</em> before this function ever sees it. The clamp here is the last line of
+      defence — it guarantees this function cannot read memory the texture does not own, whatever
+      a caller does.
+    </p>
+    <p>
+      This is a pattern worth naming: a <strong>defensive</strong> bound and a
+      <strong>semantic</strong> bound are different things, and conflating them is how a policy
+      decision ends up buried in a bounds check. If the sampler ever hands this function an
+      out-of-range index, the clamp keeps the program defined — but the bug is in the sampler,
+      and the clamp is not a licence to skip writing it correctly.
+    </p>
+  </div>
+
+  <h3 id="impl-wrap">4.2 Addressing, in one function</h3>
+
+  <p>
+    All of §3.3, and it is exposed in the header rather than hidden inside the sampler for the
+    same reason <code>is_top_left</code> (2.4) and <code>is_front_facing</code> (3.4) are: it has
+    the most arithmetic per line and the least visible failure, so it deserves to be testable on
+    its own.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/texture.cpp</span>
+      <span class="tag new">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">int wrap_texel(int i, int n, address_mode mode)
+{
+    if (n &lt;= 0) { return 0; }
+
+    switch (mode)
+    {
+    case address_mode::clamp_to_edge:
+        return std::clamp(i, 0, n - 1);
+
+    case address_mode::repeat:
+    {
+        const int m = i % n;
+        return (m &lt; 0) ? m + n : m;
+    }
+
+    case address_mode::mirrored_repeat:
+    {
+        const int period = 2 * n;
+        int m = i % period;
+        if (m &lt; 0) { m += period; }
+        return (m &lt; n) ? m : (period - 1 - m);
+    }
+    }
+
+    return 0;
+}</code></pre>
+  </figure>
+
+  <p>
+    Three lines of real content. The <code>(m &lt; 0) ? m + n : m</code> is §3.3's wrong-modulus
+    fix, and adding <code>n</code> exactly once suffices because <code>i % n</code> is already in
+    <code>(−n, n)</code>. The mirror is the reflection identity written directly:
+    <code>period − 1 − m</code> is what "index <code>−1−k</code> maps where index <code>k</code>
+    does" looks like once you have folded into one period.
+  </p>
+
+  <h3 id="impl-sample">4.3 The two samplers</h3>
+
+  <p>
+    <code>sample_nearest</code> first, because it is where the half-texel argument is
+    conspicuously <em>absent</em>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/texture.cpp</span>
+      <span class="tag new">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float x = std::floor(to_texel_space(u, image.width()));
+const float y = std::floor(to_texel_space(v, image.height()));
+
+constexpr float k_index_limit = 1.0e7f;
+if (!(std::fabs(x) &lt; k_index_limit) || !(std::fabs(y) &lt; k_index_limit))
+{
+    return unbound_colour();
+}
+
+return fetch(image, samp, static_cast&lt;int&gt;(x), static_cast&lt;int&gt;(y));</code></pre>
+  </figure>
+
+  <p>
+    <code>samp.origin</code> does not appear, and that is deliberate rather than an omission:
+    "which texel does this point land in" does not depend on where inside a texel you decide the
+    value lives. §3.4 measured the consequence — 0 of 160,801 samples change.
+  </p>
+
+  <p>
+    The guard against wild values is the one <code>checker_at</code> already carries, for the
+    reason Lesson 3.3 established: with near-plane clipping switched off, the interpolated
+    <code>1/w</code> passes through zero and its reciprocal — the factor every attribute is
+    multiplied by — becomes an infinity. Converting that to an <code>int</code> is
+    <strong>undefined behaviour</strong>, not "a large number". Written as
+    <code>!(|x| &lt; limit)</code> rather than <code>|x| &gt;= limit</code> because every
+    comparison with a NaN is false, and only the negated form catches it.
+  </p>
+
+  <p>
+    Then <code>sample_bilinear</code>, which is §3.4 and §3.5 in about fifteen lines:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/texture.cpp</span>
+      <span class="tag new">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float half = (samp.origin == texel_origin::centre) ? 0.5f : 0.0f;
+
+const float x = to_texel_space(u, image.width()) - half;
+const float y = to_texel_space(v, image.height()) - half;
+
+const float fx = std::floor(x);
+const float fy = std::floor(y);
+
+const int x0 = static_cast&lt;int&gt;(fx);
+const int y0 = static_cast&lt;int&gt;(fy);
+
+const float tu = x - fx;
+const float tv = y - fy;
+
+const linear_rgb c00 = fetch(image, samp, x0,     y0);
+const linear_rgb c10 = fetch(image, samp, x0 + 1, y0);
+const linear_rgb c01 = fetch(image, samp, x0,     y0 + 1);
+const linear_rgb c11 = fetch(image, samp, x0 + 1, y0 + 1);
+
+const linear_rgb top = lerp(c00, c10, tu);
+const linear_rgb bottom = lerp(c01, c11, tu);
+return lerp(top, bottom, tv);</code></pre>
+  </figure>
+
+  <p>
+    Two details in there are load-bearing and neither is visible from the shape of the code.
+  </p>
+
+  <p>
+    <strong>Four fetches, each addressed independently.</strong> <code>fetch</code> calls
+    <code>wrap_texel</code> on its own <code>x</code> and <code>y</code>, so the address mode is
+    applied to each of the four indices separately. §3.3 explained why: wrap the coordinate
+    first and a repeating texture blends the last texel with the last texel instead of with the
+    first, giving a hairline seam along every tile boundary — present only in the filtered mode,
+    and easy to blame on the geometry.
+  </p>
+
+  <p>
+    <strong><code>fetch</code> also decodes.</strong> Every read of the image goes through it,
+    which is what puts the sRGB decode <em>before</em> the filter (§3.6) with no way to get the
+    order wrong at a call site. The lerps below operate on <code>linear_rgb</code>, which is to
+    say on quantities of light.
+  </p>
+
+  <h3 id="impl-fill">4.4 Four lines in the fill loop</h3>
+
+  <p>
+    And now the anticlimax, which is the best thing about this lesson. Here is the new branch in
+    <code>fill_triangle</code>, next to the branch it sits beside:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">if (style.shade == shading::uv_checker)
+{
+    const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+    const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+    row[x] = checker_at(uu, vv);
+}
+else if (style.shade == shading::textured)
+{
+    const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+    const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+    row[x] = to_encoded(
+        sample(*style.albedo.image, style.albedo.samp, uu, vv));
+}</code></pre>
+  </figure>
+
+  <p>
+    Compare them line by line. The uvs are obtained by <em>identical arithmetic</em> — the same
+    three multiply-adds, the same perspective divide-back — and the only difference is what the
+    pair of numbers is handed to: a formula, or an array somebody painted.
+  </p>
+
+  <p>
+    That is the whole structural content of this lesson, and it is a debt Lesson 2.4 booked when
+    it wrote that "the rasterizer never learns what it carries". Nothing about interpolation
+    changed, because nothing needed to. Not the perspective correction (3.2), not the clipper
+    (3.3), not the top-left rule (2.2), not the depth test (3.1). Texture coordinates have been
+    riding through this pipeline correctly since Lesson 3.2; all that was missing was something
+    to look them up in.
+  </p>
+
+  <p>
+    The lit path takes the same sample and puts it somewhere different:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/raster.cpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">linear_rgb albedo{};
+if (textured)
+{
+    const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+    const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+    albedo = sample(*style.albedo.image, style.albedo.samp, uu, vv);
+}
+else
+{
+    albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+              (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+              (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>sample</code> already returns linear light, so the sampled value drops straight into
+    the albedo slot with <strong>no conversion at all</strong>. Pause on that, because it is not
+    a coincidence: it is §3.7 cashing in. An albedo is a reflectance, a reflectance multiplies a
+    quantity of light, so both have to be linear — and a sampler that returns linear light is a
+    sampler designed for the job it actually has.
+  </p>
+
+  <p>
+    Written as one branch rather than "interpolate, then overwrite if textured", because the
+    interpolation is nine multiply-adds and a discarded result is still a paid one.
+    <code>textured</code> is constant for the whole triangle, so the branch predictor handles the
+    branch itself for free; it is only the <em>work</em> behind it worth not doing.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The enum could not express this, and that is the point</span>
+    <p>
+      Notice that "textured <strong>and</strong> lit" is not a value of the <code>shading</code>
+      enum. It is <code>lit</code> <em>plus a binding</em> — which means the enum no longer
+      describes a fragment on its own.
+    </p>
+    <p>
+      Lesson 3.8 split <code>shade_mode</code> in two when one enum tried to hold two questions,
+      and the split worked because the two questions had small, closed answer sets. This is the
+      same pressure arriving a second time, and this time another enum will not do: the number of
+      combinations of "where the albedo comes from" × "what is done with it" × "which of several
+      textures" is not a list, and it is not a grid either. It is a <em>program</em>. The honest
+      answer is a caller-supplied fragment function, which is what a fragment shader is, and it
+      is Module 4.
+    </p>
+    <p>
+      Meanwhile <code>raster.hpp</code> now includes <code>light.hpp</code> (3.8) and
+      <code>texture.hpp</code> (today). The rasterizer owns coverage, interpolation, depth,
+      lighting and texturing — five responsibilities a real pipeline splits into "fixed function"
+      and "whatever the shader says". That debt is deliberate, it is being tracked, and Module 4
+      opens by paying it.
+    </p>
+  </div>
+
+  <h3 id="impl-flip">4.5 The flip, at the import boundary</h3>
+
+  <p>
+    §3.2 decided the uv flip belongs to the import step. Here it is, and the notable thing is how
+    little it is:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/mesh.cpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">void flip_uv_v(mesh_data&amp; m)
+{
+    for (vec2&amp; uv : m.uvs) { uv.y = 1.0f - uv.y; }
+}</code></pre>
+  </figure>
+
+  <p>
+    It does <strong>not</strong> touch the indices, and that is worth a sentence. Flipping a
+    texture coordinate moves where a corner samples <em>from</em>, not which corners exist — so
+    the vertex splits Lesson 3.5 worked out are entirely unaffected. (Flipping the
+    <em>image</em> instead would have been the other way to fix this, and it is worse: it
+    duplicates work per texture rather than per mesh, and it makes the texels disagree with the
+    file they came from.)
+  </p>
+
+  <p>
+    In <code>load_model</code> it is applied to <em>every</em> branch, including the in-memory
+    <code>generated</code> torus, and that uniformity keeps Lesson 3.5's round-trip comparison
+    honest. <code>assets/torus.obj</code> was written from <code>make_torus()</code>; if the
+    file's copy were flipped and the in-memory copy were not, the round-trip pixel count would
+    start measuring the import step instead of the loader. An import applied to everything cannot
+    break a round trip; an import applied to <em>some</em> things silently can.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A test that measured the vertex numbering</span>
+    <p>
+      Checking that claim caught a mistake in the <em>test</em>. The first version compared the
+      two meshes' uv arrays index by index and reported 141 of 1,225 differing — which looked
+      like a real finding and was not. <code>load_obj</code> numbers vertices by
+      <strong>order of first appearance</strong> in the face list (Lesson 3.5); <code>make_torus</code>
+      numbers them by its construction loop. Those orders differ, so <code>uvs[i]</code> names
+      different vertices in the two arrays.
+    </p>
+    <p>
+      Compared as sorted multisets — the order-independent question — the worst difference is
+      <code>0.000e+00</code> over all 1,225. The lesson generalises: when a test fails, check
+      that it is asking about the thing you think it is asking about, before you go looking at
+      the code.
+    </p>
+  </div>
+
+  <h3 id="impl-demo">4.6 Four keys, and two comparisons</h3>
+
+  <p>
+    The demo gains four keys on the scene view — <code>[M]</code> chooses the image (or the
+    procedural rule), <code>[S]</code> switches the filter, <code>[R]</code> cycles the address
+    mode, <code>[1]</code> toggles the half-texel offset — plus <code>[2]</code>, which
+    re-imports the current model with and without the uv flip so the OBJ disagreement is
+    something you look at rather than something you are told.
+  </p>
+
+  <p>
+    And two measurements, which are the cheapest comparisons this demo has ever run:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">engine::fill_style other = style;
+other.albedo.samp.origin =
+    (samp.origin == engine::texel_origin::centre)
+        ? engine::texel_origin::corner
+        : engine::texel_origin::centre;
+
+scratch_fb.clear(k_bg);
+draw_world(scratch_fb, view_from_world, pr);
+scratch_depth.clear();
+draw_triangles(scratch_fb, want_painter ? nullptr : &amp;scratch_depth,
+               scene_tris, want_painter, other);
+texel_wrong = count_differences(fb, scratch_fb, vp);</code></pre>
+  </figure>
+
+  <p>
+    Cheap for a reason worth naming: <strong>a sampler is pipeline state</strong>. Changing it
+    changes no geometry at all, so unlike every comparison since Lesson 3.1 there is no second
+    <code>collect_triangles</code> — the same triangle list is redrawn with one field of
+    <code>style</code> altered. That is the same fact that lets a GPU swap a sampler without
+    re-running the vertex stage, and it is why binding a texture is cheap and changing a vertex
+    format is not.
+  </p>
+
+  <p>
+    The HUD prints the half-texel count with a parenthetical that is the finding itself: under
+    nearest filtering it reads 0, and it says so, because a number that is zero for an
+    interesting reason is worth more than a number that is merely small.
+  </p>
+
+  <h3 id="impl-cost">4.7 A benchmark that measured the wrong thing</h3>
+
+  <p>
+    The obvious question is "what does a texture fetch cost against a procedural rule", and the
+    obvious benchmark answers a different question. Here is what it said:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The misleading benchmark</caption>
+      <thead><tr><th>Unlit fill</th><th>µs/frame</th><th>Ratio</th></tr></thead>
+      <tbody>
+        <tr><td><code>uv_checker</code> (rule)</td><td>111.54</td><td>1.00×</td></tr>
+        <tr><td><code>textured</code>, nearest</td><td>562.06</td><td><strong>5.04×</strong></td></tr>
+        <tr><td><code>textured</code>, bilinear</td><td>758.23</td><td><strong>6.80×</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Five times the cost for an array lookup? That should not be believable, and it is not.
+    <code>checker_at</code> returns a packed pixel and encodes nothing.
+    <code>shading::textured</code> decodes texels and then <em>re-encodes</em> the result, and
+    <code>linear_to_srgb</code> calls <code>std::pow</code> — three <code>pow</code> calls per
+    pixel. That dwarfs a fetch from an image that fits in L1. The benchmark is mostly measuring
+    the sRGB transfer function.
+  </p>
+
+  <p>
+    The fix is to hold the confound constant. Make <em>all three</em> variants
+    <code>shading::lit</code>, so every one pays exactly one decode path and one encode per
+    pixel, and the only difference left is where the albedo came from:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The honest benchmark</caption>
+      <thead><tr><th>Lit fill (encode held constant)</th><th>µs/frame</th><th>Ratio</th></tr></thead>
+      <tbody>
+        <tr><td>vertex albedo</td><td>611.02</td><td>1.00×</td></tr>
+        <tr><td>textured, nearest</td><td>684.46</td><td><strong>1.12×</strong></td></tr>
+        <tr><td>textured, bilinear</td><td>859.07</td><td><strong>1.41×</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    So a nearest fetch costs about <strong>12%</strong> of a lit fragment, and bilinear about
+    <strong>41%</strong> — which is <strong>1.26×</strong> the cost of nearest, for four fetches
+    and three lerps instead of one fetch. That is a believable number, and it is roughly the
+    ratio hardware vendors quote for the same trade.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">The transferable part</span>
+    <p>
+      A plausible benchmark that measures the wrong thing is <em>more</em> dangerous than no
+      benchmark, because it comes with a number and numbers end arguments. Both tables are kept
+      in <code>verify_39</code> §I, labelled, precisely so the trap is visible rather than
+      quietly avoided.
+    </p>
+    <p>
+      The discipline: before believing a ratio, ask what <em>else</em> differs between the two
+      things you timed. Here it was three <code>pow</code> calls hiding behind a plausible story.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="widget"><span class="num">4.8</span>Try it: the sampler, magnified</h2>
+
+  <p>
+    Everything above, in one place. Drag inside the magnified image to move the sample point; the
+    four texels it reads are outlined, with their weights. Switch the filter and watch the
+    weights collapse to <code>(1, 0, 0, 0)</code>; switch the origin off and watch the sample
+    point stop landing on centres.
+  </p>
+
+  <div class="widget" id="w39">
+    <div class="widget-controls">
+      <label><input type="radio" name="w39f" value="linear" checked> bilinear</label>
+      <label><input type="radio" name="w39f" value="nearest"> nearest</label>
+      <span class="sep"></span>
+      <label><input type="radio" name="w39a" value="repeat" checked> repeat</label>
+      <label><input type="radio" name="w39a" value="mirror"> mirrored</label>
+      <label><input type="radio" name="w39a" value="clamp"> clamp</label>
+      <span class="sep"></span>
+      <label><input type="checkbox" id="w39h" checked> half-texel offset</label>
+    </div>
+    <canvas id="w39c" width="640" height="330" aria-label="An interactive magnified texture sampler"></canvas>
+    <p class="widget-readout" id="w39r">drag inside the image</p>
+  </div>
+
+  <p>
+    Three things are worth doing with it. Put the sample exactly on a texel centre under bilinear
+    and confirm one weight reads 1.0000 — then turn the half-texel offset off and watch that
+    become impossible anywhere. Drag past the right-hand edge under each address mode and compare
+    what the outlined texels do. And switch to nearest with the offset off: the image does not
+    change at all — only the note beside it — which is §3.4's finding in one keystroke.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest first:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">File manifest for Lesson 3.9</caption>
+      <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>src/gfx/texture.hpp</code></td><td><strong>new</strong></td>
+            <td>The image type, the sampler's three enums, the binding pair, and the two test-image generators.</td></tr>
+        <tr><td><code>src/gfx/texture.cpp</code></td><td><strong>new</strong></td>
+            <td><code>wrap_texel</code>, the nearest and bilinear samplers, and the generators.</td></tr>
+        <tr><td><code>src/gfx/mesh.hpp</code></td><td>modified</td>
+            <td>Declares <code>flip_uv_v</code>, with the OBJ-versus-SDL_GPU argument in its doc comment.</td></tr>
+        <tr><td><code>src/gfx/mesh.cpp</code></td><td>modified</td>
+            <td>Defines it — one subtraction per uv.</td></tr>
+        <tr><td><code>src/gfx/raster.hpp</code></td><td>modified</td>
+            <td><code>shading::textured</code>, <code>fill_style::albedo</code>, and the include that names the new dependency.</td></tr>
+        <tr><td><code>src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>The textured branch, and the albedo source under <code>lit</code>.</td></tr>
+        <tr><td><code>src/main.cpp</code></td><td>modified</td>
+            <td><code>albedo_source</code>, <code>texture_set</code>, five keys, the HUD line, and the two comparisons.</td></tr>
+        <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+            <td>One line: <code>src/gfx/texture.cpp</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+@@LISTING:src/gfx/texture.hpp@@
+@@LISTING:src/gfx/texture.cpp@@
+@@LISTING:src/gfx/mesh.hpp@@
+@@LISTING:src/gfx/mesh.cpp@@
+@@LISTING:src/gfx/raster.hpp@@
+@@LISTING:src/gfx/raster.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    One new translation unit, so the build is a reconfigure rather than an incremental compile.
+    Same three commands as every lesson since 0.4:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/engine</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\engine.exe</code></pre>
+  </figure>
+
+  <p>
+    And the harness, which is where every number in this lesson came from:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">the verification harness</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_39.cpp \
+    src/gfx/mesh.cpp src/gfx/obj.cpp src/gfx/clip.cpp src/gfx/raster.cpp \
+    src/gfx/texture.cpp src/gfx/framebuffer.cpp src/gfx/depth_buffer.cpp \
+    src/gfx/colour.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,build/_deps/sdl3-build \
+    -o scratch/verify_39
+./scratch/verify_39</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Press <code>[C]</code> until the scene reads <strong>FLOOR</strong>. It looks the same as it
+    did in Lesson 3.2 — a checkerboard running to the horizon — because the default image is a
+    checkerboard chosen to match the procedural rule. That is the control, and it is the
+    interesting part: press <code>[M]</code> to cycle between the rule and the image and the
+    picture barely moves. Everything that <em>does</em> move is the sampler's doing.
+  </p>
+
+  <p>
+    Then, in order:
+  </p>
+
+  <ul>
+    <li><strong><code>[S]</code></strong> — switch to nearest. Distant detail turns hard-edged
+        and starts to crawl as you orbit. Switch back to bilinear and it softens. The HUD prints
+        how many pixels the two disagree about.</li>
+    <li><strong><code>[R]</code></strong> — cycle the address mode. Under <code>clamp</code> the
+        floor loses its tiling entirely and becomes four stretched streaks running outward from
+        the middle: the edge texels smeared forever, which is §3.3 working exactly as designed.
+        Under <code>mirrored</code> the tiling returns, reflected.</li>
+    <li><strong><code>[1]</code></strong> — turn the half-texel offset off. Under bilinear the
+        HUD turns amber and reports a large pixel count. Now press <code>[S]</code> to nearest:
+        the count drops to <strong>0</strong> and the HUD says so in parentheses. That is the
+        whole of §3.4's warning, in two keystrokes.</li>
+    <li><strong><code>[M]</code> to "fine 64px/32 cells"</strong> — and hold an arrow key. The
+        distance sparkles violently. That is minification, and nothing in this lesson fixes
+        it.</li>
+    <li><strong><code>[G]</code> to per-pixel</strong>, then <code>[A]</code>/<code>[D]</code>
+        to swing the light. <strong>The floor is now lit.</strong> The checker darkens and
+        brightens as a surface, which it has never done before — texture × light, on screen.</li>
+    <li><strong><code>[C]</code> to MODEL, <code>[M]</code> to "uv grid", <code>[2]</code></strong>
+        — the torus's texture flips vertically, and the white corner mark moves. The right-hand
+        HUD column names which convention the mesh's uvs are currently in.</li>
+  </ul>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      <code>./scratch/verify_39</code> ends with <code>ALL PASS (0 failures)</code>, the engine
+      builds with no warnings at <code>-Wall -Wextra</code>, and on the floor scene with a
+      texture bound and the offset correct, the HUD's half-texel count reads a large number under
+      bilinear and exactly 0 under nearest.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is upside down</span>
+    <p><strong>Symptom.</strong> Textures look right on a checkerboard and wrong on anything with
+       an orientation — text mirrored top-to-bottom, a face inverted, a logo flipped.</p>
+    <p><strong>Cause.</strong> OBJ writes <code>v</code> bottom-up; a texture is addressed
+       top-down. One of the two conventions was assumed rather than checked.</p>
+    <p><strong>Fix.</strong> <code>flip_uv_v</code> at import (§3.2). And debug it with an
+       <em>asymmetric</em> test image — this is exactly why <code>make_uv_grid</code> has a white
+       mark in one corner. A checkerboard is symmetric under every flip and rotation, so it
+       cannot show you this bug; it is the worst possible image to debug orientation with, and it
+       is the one everybody reaches for.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Filtering makes everything look soft and slightly misaligned</span>
+    <p><strong>Symptom.</strong> Nearest-neighbour looks crisp and correct. Turn bilinear on and
+       the whole image goes soft, and a 1:1 blit — a UI icon, a HUD element — is visibly
+       blurry.</p>
+    <p><strong>Cause.</strong> The half-texel offset is missing (§3.4). Every sample lands
+       between two texel centres instead of on one.</p>
+    <p><strong>Fix.</strong> <code>u * N − 0.5</code>, not <code>u * N</code>. Confirm it with the
+       test that cannot be argued with: draw the texture at 1:1 and compare the framebuffer
+       against the source texels. It must be <em>bit-identical</em>. If it is merely close, the
+       offset is wrong.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A hairline seam along every tile boundary</span>
+    <p><strong>Symptom.</strong> A tiling texture shows a faint grid of lines at exactly the tile
+       edges. Present under bilinear, absent under nearest.</p>
+    <p><strong>Cause.</strong> The address mode was applied to the <em>coordinate</em> before the
+       four neighbours were chosen, so both neighbours ended up inside the image and the last
+       texel blended with itself instead of with the first.</p>
+    <p><strong>Fix.</strong> Address the four texel indices independently, after computing them
+       (§3.3). And note the second possible cause: a texture that genuinely does not tile,
+       because its last column and first column are not continuous. That one is a property of the
+       image, not a bug in the sampler — check it by sampling both sides of <code>u = 1</code>
+       and comparing.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">One stray texel stripe at the origin</span>
+    <p><strong>Symptom.</strong> A single row or column of wrong-looking texels along
+       <code>u = 0</code> or <code>v = 0</code> on a tiled surface, and nowhere else.</p>
+    <p><strong>Cause.</strong> <code>i % n</code> used as the repeat rule. C++'s <code>%</code>
+       truncates toward zero, so <code>-1 % 8</code> is <code>-1</code>, which then gets clamped
+       to 0 by whatever safety net exists.</p>
+    <p><strong>Fix.</strong> <code>m = i % n; if (m &lt; 0) m += n;</code>. The same family of bug
+       as <code>checker_at</code>'s <code>std::floor</code>-not-a-cast (3.2), and it shows up in
+       the same place: negative coordinates, which tiling produces immediately.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Blends look muddy and dark</span>
+    <p><strong>Symptom.</strong> A magnified texture's gradients are darker than either
+       neighbour suggests — most visibly on a black-and-white checkerboard, where the transition
+       is a murky grey rather than a mid grey.</p>
+    <p><strong>Cause.</strong> Filtering the stored sRGB bytes instead of the light (§3.6). Worth
+       <strong>0.286</strong> of full light at the worst pair.</p>
+    <p><strong>Fix.</strong> Decode each texel, then filter. On a GPU, this is what an
+       <code>_SRGB</code> texture format is <em>for</em> — bind the same bytes as plain
+       <code>UNORM</code> and the hardware will happily give you the wrong answer at full
+       speed.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Distant detail crawls and fizzes when the camera moves</span>
+    <p><strong>Symptom.</strong> A textured floor or a tiled wall shimmers in the distance while
+       standing perfectly still in the foreground.</p>
+    <p><strong>Cause.</strong> Minification (§3.8). One pixel covers dozens of texels and the
+       sampler reads four of them; which four depends on sub-pixel position.</p>
+    <p><strong>Fix.</strong> Not in this lesson — mipmaps, in Module 6. What you <em>can</em> do
+       today is diagnose it correctly: if the shimmer scales with texture fineness at a fixed
+       camera distance, it is aliasing and not a filtering bug. Turning bilinear on will not help
+       and may look marginally worse.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The whole surface is magenta</span>
+    <p><strong>Symptom.</strong> A textured surface draws in solid magenta.</p>
+    <p><strong>Cause.</strong> <code>fill_style::albedo</code> has no image bound, or an empty
+       one. <code>sample()</code> returns the debug magenta this engine has used for "this value
+       is invalid" since Lesson 3.2's <code>checker_at</code>.</p>
+    <p><strong>Fix.</strong> Bind one. Note that this is a <em>deliberate</em> difference from
+       the <code>lit</code> path, which falls back to vertex colours when nothing is bound: a
+       <code>lit</code> fill with no texture is a legitimate configuration, and a
+       <code>textured</code> fill with no texture is not. Magenta is louder than black, on
+       purpose — a black surface reads as "unlit" and sends you looking in the wrong file.</p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <h3>8.1 &nbsp;Prove the half texel to yourself</h3>
+  <p>
+    Without looking at <code>verify_39</code>, write a test that samples a 16×16 texture at every
+    one of its 256 texel centres under bilinear filtering and asserts the result equals that texel
+    exactly. Then delete the <code>− 0.5f</code> and watch it fail. Predict the failure count
+    <em>before</em> you run it.
+  </p>
+  <details><summary>Hint</summary>
+    <p>Texel <code>(i, j)</code>'s centre is <code>u = (i + 0.5)/16</code>,
+       <code>v = (j + 0.5)/16</code>. "Equals exactly" means <code>== 0.0f</code> difference, not
+       a tolerance — if you need a tolerance, something is wrong.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>All 256 fail without the offset, because <em>every</em> centre becomes a 4-way blend. What
+       is more interesting is the magnitude: on an image with sharp features it is large (0.625 on
+       the orientation chart), and on a smooth gradient it is nearly invisible — which is why this
+       bug ships. Test with the harshest image you have.</p>
+  </details>
+
+  <h3>8.2 &nbsp;Break the seam deliberately</h3>
+  <p>
+    Change <code>sample_bilinear</code> so it wraps the <em>coordinate</em> into <code>[0, 1)</code>
+    first and then picks neighbours, instead of addressing the four indices independently. Run the
+    floor scene under <code>repeat</code>. Describe the artifact precisely, and say why it is
+    invisible under nearest.
+  </p>
+  <details><summary>Hint</summary>
+    <p>Think about what happens at <code>u = 0.999</code> on an 8-texel image. Which texel is
+       <code>x0</code>? Which is <code>x0 + 1</code>? Where did the wrap send it?</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>At <code>u</code> just under 1, <code>x0 = 7</code> and the right neighbour should be
+       texel 0 of the next tile. Wrapping the coordinate first puts both neighbours inside the
+       image, so the blend runs 7→7 (or worse, 7→8 clamped back to 7) and the ramp that should
+       cross the tile boundary flattens. The result is a one-pixel line of the edge texel's colour
+       at every boundary. Nearest never looks at a neighbour, so it cannot show it.</p>
+  </details>
+
+  <h3>8.3 &nbsp;Bilinear is not smooth</h3>
+  <p>
+    §3.5 claimed bilinear interpolation is only <em>piecewise</em> smooth, because the
+    <code>tu·tv</code> term is not affine. Demonstrate it: sample a 4×4 random texture along a
+    diagonal line at 1,000 points, plot the values, then plot the finite-difference derivative.
+    Where are the kinks, and why exactly there?
+  </p>
+  <details><summary>Hint</summary>
+    <p>The first plot will look perfectly reasonable. This is 3.8's Figure 4 lesson repeating: if
+       the claim is about a rate of change, plot the rate of change.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>The value is continuous everywhere; the derivative jumps at every texel-centre boundary,
+       giving a piecewise-constant-ish staircase along the diagonal. That discontinuity is what
+       gives strongly magnified bilinear its faint diamond-quilt appearance. Bicubic filtering
+       fixes it by matching derivatives as well as values, at the cost of 16 fetches.</p>
+  </details>
+
+  <h3>8.4 &nbsp;Give the sampler its second filter field</h3>
+  <p>
+    Our <code>sampler</code> has one <code>texel_filter</code> where
+    <code>SDL_GPUSamplerCreateInfo</code> has <code>min_filter</code>, <code>mag_filter</code>
+    and <code>mipmap_mode</code>. Work out, from the footprint numbers in §3.8, how the sampler
+    would <em>know</em> which of the two applies to a given fragment — and what the rasterizer
+    would have to compute and pass in for that to be possible.
+  </p>
+  <details><summary>Hint</summary>
+    <p>It is a comparison against 1. And the quantity being compared is the one Figure 6 plots —
+       which is not available at a single fragment unless somebody computes it.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>The sampler needs the <em>derivative</em> of the texture coordinate with respect to screen
+       position: <code>du/dx, dv/dx, du/dy, dv/dy</code>. Footprint greater than one texel means
+       minification, less means magnification. A GPU gets these almost free by rasterizing in 2×2
+       <strong>quads</strong> and differencing neighbouring fragments — which is precisely why
+       fragment shaders have <code>ddx</code>/<code>ddy</code>, and why a 2×2 quad is the real
+       unit of fragment work rather than a single pixel. Our scanline fill has no such neighbours;
+       computing the derivatives analytically per triangle is the software route, and it is
+       Exercise territory now and Module 6's job properly.</p>
+  </details>
+
+  <h3>8.5 &nbsp;An engine challenge: trilinear, from what you have</h3>
+  <p>
+    Build a mipmap chain for a texture: level 0 is the image, level <code>k+1</code> is level
+    <code>k</code> halved in each dimension by averaging 2×2 blocks. Then sample it, choosing the
+    level from a footprint you pass in, and blending between two adjacent levels. Measure the
+    sparkle on the floor before and after, using §3.8's sub-pixel-nudge method.
+  </p>
+  <details><summary>Hint</summary>
+    <p>Two traps. The averaging must happen in <strong>linear light</strong>, for §3.6's reason —
+       a mipmap chain built by averaging sRGB bytes gets progressively darker, which is a famous
+       and long-lived bug. And the level is <code>log2(footprint)</code>, which wants clamping to
+       the chain's length at both ends.</p>
+  </details>
+  <details><summary>Solution sketch</summary>
+    <p>The chain costs 1/3 more memory (1 + 1/4 + 1/16 + … = 4/3). Trilinear = bilinear on two
+       levels plus one lerp between them, i.e. eight fetches. Expect the sparkle percentages in
+       §3.8 to fall dramatically and the distance to look <em>blurrier</em> — which is the trade,
+       and which is what anisotropic filtering later refines by taking several samples along the
+       long axis of the footprint instead of one square average. If you get a chain that darkens
+       with each level, you built it in the wrong space.</p>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now read colour out of an image, and the sampler that does it agrees with
+    SDL_GPU field for field. Specifically, it gained:
+  </p>
+
+  <ul>
+    <li>an owning <code>texture</code>, sRGB-encoded, row 0 at the top — the convention verified
+        against <code>SDL_gpu.h</code> rather than guessed;</li>
+    <li>three address modes with the correct negative-index behaviour, and the reflection identity
+        that defines mirroring;</li>
+    <li>nearest and bilinear sampling with the half-texel offset derived rather than decreed, and
+        checked by a 1:1 blit that is bit-identical to its source;</li>
+    <li>an sRGB decode <em>inside</em> the sampler, so the filter operates on light — Lesson
+        2.4's argument, landing for the third time;</li>
+    <li><code>flip_uv_v</code> at the import boundary, settling a question STATE has carried open
+        since Lesson 3.5;</li>
+    <li>and a floor that is finally <strong>lit</strong>, because a texture supplies the one
+        thing a checkerboard formula never could: an albedo for the light to multiply.</li>
+  </ul>
+
+  <p>
+    That last one closes the final structural gap in Module 3's fragment stage. Every surface in
+    the scene now goes through the same path: interpolate the inputs, read the material, evaluate
+    the light, write the pixel.
+  </p>
+
+  <p>
+    What it also did was pile one more brick on a wall this module has been building since 3.6.
+    <code>raster.hpp</code> now includes <code>light.hpp</code> and <code>texture.hpp</code>; the
+    <code>shading</code> enum has a combination it cannot name; <code>fill_style</code> is two
+    structs wearing one name (pipeline state and uniforms); and a material still rides on a
+    triangle in a way no GPU could permit. Four separate pressures, all pointing the same
+    direction, and all of them resolved by the same thing: a fragment stage the caller programs.
+    That is Module 4, and it is close.
+  </p>
+
+  <p>
+    First, though, Module 3 finishes the way it should — by <strong>measuring</strong> what it
+    built. <a href="03-10-profiling-capstone.html">Lesson 3.10</a> is a profiling pass on the
+    rasterizer and the Module 3 capstone: a textured, lit, z-buffered scene rendered entirely on
+    the CPU, with every microsecond accounted for and no folklore about where the time goes. The
+    benchmark this lesson nearly published turns out to be one instance of a pattern the next
+    lesson meets again and names.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Paul Heckbert, "Survey of Texture Mapping" (IEEE CG&amp;A, 1986)</strong> — still
+        the clearest single account of what texture mapping is as a resampling problem, and where
+        the filtering vocabulary comes from.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.2 "Image Texturing"</strong> — magnification,
+        minification, mipmapping and anisotropy, in the order they actually matter.</li>
+    <li><strong>Scratchapixel — "Texture Coordinates and Texture Mapping"</strong> — the same
+        derivations from a ray-tracing angle, which is a useful second view of the same
+        geometry.</li>
+    <li><strong>SDL3, <code>SDL_gpu.h</code>, the "Coordinate System" section</strong> — the
+        primary source for §3.2, and worth reading in full once: it settles NDC, viewport and
+        texture conventions in four sentences.</li>
+    <li><strong>SDL3 wiki, <code>SDL_CreateGPUSampler</code> and
+        <code>SDL_GPUSamplerCreateInfo</code></strong> — the thirteen fields our four are a
+        subset of, and a preview of what Module 4 will bind.</li>
+    <li><strong>Alvy Ray Smith, "A Pixel Is Not A Little Square" (Microsoft tech memo 6, 1995)</strong>
+        — six pages, cross about it, and the source of §2.1's whole argument. Read it after this
+        lesson rather than before.</li>
+    <li><strong>Nathan Reed, "Understanding Gamma"</strong> and the linear-workflow references
+        from Lesson 1.6 — §3.6 is the third appearance of that argument, and Module 6 makes it
+        the subject.</li>
+  </ul>
+
+  <script>
+  // ---------------------------------------------------------------------
+  // Lesson 3.9's sampler widget. Page-specific, therefore deliberately
+  // OUTSIDE the SHARED-SCRIPT markers, where apply-shared.py cannot reach it.
+  //
+  // Reimplements the sampler in JavaScript rather than describing it: the
+  // arithmetic below is line-for-line src/gfx/texture.cpp, so a reader can
+  // diff the two and find no difference of substance.
+  // ---------------------------------------------------------------------
+  (function () {
+    var cv = document.getElementById('w39c');
+    if (!cv) { return; }
+    var ctx = cv.getContext('2d');
+    var out = document.getElementById('w39r');
+
+    // An 8x8 image with an asymmetric mark, for the same reason make_uv_grid
+    // has one: a symmetric test image cannot show you an orientation bug.
+    var N = 8;
+    var img = [];
+    for (var j = 0; j < N; j++) {
+      for (var i = 0; i < N; i++) {
+        var q = (i < N / 2 ? 0 : 1) + (j < N / 2 ? 0 : 2);
+        var c = [[216, 72, 76], [95, 191, 106], [76, 127, 216], [224, 178, 76]][q];
+        if (i < 2 && j < 2) { c = [242, 239, 232]; }
+        img.push(c);
+      }
+    }
+
+    var sx = 0.31, sy = 0.42;      // the sample point, in uv
+    var drag = false;
+
+    function filt() {
+      return document.querySelector('input[name=w39f]:checked').value;
+    }
+    function addr() {
+      return document.querySelector('input[name=w39a]:checked').value;
+    }
+    function useHalf() { return document.getElementById('w39h').checked; }
+
+    function wrap(i, n, mode) {
+      if (mode === 'clamp') { return Math.max(0, Math.min(n - 1, i)); }
+      if (mode === 'repeat') { var m = i % n; return m < 0 ? m + n : m; }
+      var p = 2 * n, k = i % p; if (k < 0) { k += p; }
+      return k < n ? k : p - 1 - k;
+    }
+
+    function texel(i, j) {
+      var a = addr();
+      return img[wrap(j, N, a) * N + wrap(i, N, a)];
+    }
+
+    // Geometry of the magnified view.
+    var GX = 24, GY = 24, GS = 282;      // the image panel
+    var cell = GS / N;
+
+    function draw() {
+      var css = getComputedStyle(document.documentElement);
+      var ink = css.getPropertyValue('--dia-ink').trim() || '#333';
+      var soft = css.getPropertyValue('--dia-ink-soft').trim() || '#888';
+      var hi = css.getPropertyValue('--dia-hi').trim() || '#b4530a';
+
+      ctx.clearRect(0, 0, cv.width, cv.height);
+
+      // the texels, drawn as squares because that is how you LOOK at an image —
+      // the point of the widget is that the sample points are the dots, not the
+      // squares.
+      for (var j = 0; j < N; j++) {
+        for (var i = 0; i < N; i++) {
+          var c = img[j * N + i];
+          ctx.fillStyle = 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+          ctx.fillRect(GX + i * cell, GY + j * cell, cell, cell);
+        }
+      }
+      // texel centres
+      ctx.fillStyle = soft;
+      for (var j2 = 0; j2 < N; j2++) {
+        for (var i2 = 0; i2 < N; i2++) {
+          ctx.beginPath();
+          ctx.arc(GX + (i2 + 0.5) * cell, GY + (j2 + 0.5) * cell, 1.6, 0, 6.2832);
+          ctx.fill();
+        }
+      }
+
+      var half = useHalf() ? 0.5 : 0.0;
+      var x = sx * N - half, y = sy * N - half;
+      var x0 = Math.floor(x), y0 = Math.floor(y);
+      var tu = x - x0, tv = y - y0;
+
+      var w = [(1 - tu) * (1 - tv), tu * (1 - tv), (1 - tu) * tv, tu * tv];
+      var idx = [[x0, y0], [x0 + 1, y0], [x0, y0 + 1], [x0 + 1, y0 + 1]];
+
+      var nearest = (filt() === 'nearest');
+      if (nearest) {
+        var nx = Math.floor(sx * N), ny = Math.floor(sy * N);
+        idx = [[nx, ny], [nx, ny], [nx, ny], [nx, ny]];
+        w = [1, 0, 0, 0];
+      }
+
+      // outline the texels actually read, after addressing
+      ctx.strokeStyle = hi;
+      ctx.lineWidth = 2;
+      var seen = {};
+      for (var k = 0; k < (nearest ? 1 : 4); k++) {
+        var a = addr();
+        var ti = wrap(idx[k][0], N, a), tj = wrap(idx[k][1], N, a);
+        var key = ti + ',' + tj;
+        if (seen[key]) { continue; }
+        seen[key] = 1;
+        ctx.strokeRect(GX + ti * cell + 1, GY + tj * cell + 1, cell - 2, cell - 2);
+      }
+
+      // the sample point
+      var px = GX + sx * GS, py = GY + sy * GS;
+      ctx.fillStyle = hi;
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = ink; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, 6.2832); ctx.stroke();
+
+      // the readout panel
+      var RX = GX + GS + 26;
+      ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillStyle = ink;
+      ctx.fillText('u = ' + sx.toFixed(4) + '   v = ' + sy.toFixed(4), RX, GY + 14);
+      ctx.fillText('u*N = ' + (sx * N).toFixed(3) + '   v*N = ' + (sy * N).toFixed(3), RX, GY + 32);
+      ctx.fillStyle = soft;
+      ctx.fillText(nearest ? 'nearest: one texel, no weights'
+                           : ('tu = ' + tu.toFixed(4) + '   tv = ' + tv.toFixed(4)),
+                   RX, GY + 56);
+
+      var names = ['c00', 'c10', 'c01', 'c11'];
+      var sum = 0;
+      for (var m = 0; m < 4; m++) {
+        var mi = wrap(idx[m][0], N, addr()), mj = wrap(idx[m][1], N, addr());
+        var col = img[mj * N + mi];
+        ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+        ctx.fillRect(RX, GY + 74 + m * 24, 16, 16);
+        ctx.strokeStyle = soft; ctx.lineWidth = 1;
+        ctx.strokeRect(RX + 0.5, GY + 74.5 + m * 24, 16, 16);
+        ctx.fillStyle = ink;
+        ctx.fillText(names[m] + '  texel (' + idx[m][0] + ', ' + idx[m][1] + ')'
+                     + '  w = ' + w[m].toFixed(4), RX + 24, GY + 87 + m * 24);
+        sum += w[m];
+      }
+      ctx.fillStyle = soft;
+      ctx.fillText('weights sum to ' + sum.toFixed(4), RX, GY + 190);
+
+      if (!useHalf()) {
+        ctx.fillStyle = hi;
+        ctx.fillText(nearest ? 'offset off: nearest cannot see it'
+                             : 'offset off: shifted half a texel', RX, GY + 214);
+      }
+
+      // the readout under the canvas, for screen readers and for people who
+      // would rather read a sentence than a panel.
+      out.textContent = nearest
+        ? ('nearest: reads texel (' + Math.floor(sx * N) + ', ' + Math.floor(sy * N) + ')')
+        : ('bilinear: four texels, weights '
+           + w.map(function (q) { return q.toFixed(3); }).join(' / '));
+    }
+
+    function pick(ev) {
+      var r = cv.getBoundingClientRect();
+      var cxp = (ev.clientX - r.left) * (cv.width / r.width);
+      var cyp = (ev.clientY - r.top) * (cv.height / r.height);
+      // Allowed to run off the panel by half a tile in each direction, so the
+      // address modes have something to do.
+      sx = Math.max(-0.25, Math.min(1.25, (cxp - GX) / GS));
+      sy = Math.max(-0.25, Math.min(1.25, (cyp - GY) / GS));
+      draw();
+    }
+
+    cv.addEventListener('pointerdown', function (e) { drag = true; cv.setPointerCapture(e.pointerId); pick(e); });
+    cv.addEventListener('pointermove', function (e) { if (drag) { pick(e); } });
+    cv.addEventListener('pointerup', function () { drag = false; });
+    document.querySelectorAll('#w39 input').forEach(function (el) {
+      el.addEventListener('change', draw);
+    });
+    window.addEventListener('resize', draw);
+    // Redraw on theme change so the ink colours track.
+    var mo = new MutationObserver(draw);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    draw();
+  })();
+  </script>

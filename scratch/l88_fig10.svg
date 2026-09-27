@@ -1,0 +1,61 @@
+<svg viewBox="0 0 900 510" role="img" aria-labelledby="f88j-t f88j-d">
+  <title id="f88j-t">The budget and the crossover</title>
+  <desc id="f88j-d">Grid against brute force at small scene sizes, and the frame split at 2000.</desc>
+  <defs>
+    <marker id="e-i-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grn-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-f88j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="66" y="50" width="380" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="256.0" y="36" class="sm" text-anchor="middle">below about a hundred bodies the grid LOSES</text>
+<line x1="89.39585349929129" y1="50" x2="89.39585349929129" y2="280" class="grid" stroke-width="0.6"/>
+<text x="89.39585349929129" y="296" class="xs muted" text-anchor="middle">10</text>
+<line x1="204.5816700143636" y1="50" x2="204.5816700143636" y2="280" class="grid" stroke-width="0.6"/>
+<text x="204.5816700143636" y="296" class="xs muted" text-anchor="middle">30</text>
+<line x1="330.81418348492764" y1="50" x2="330.81418348492764" y2="280" class="grid" stroke-width="0.6"/>
+<text x="330.81418348492764" y="296" class="xs muted" text-anchor="middle">100</text>
+<line x1="446.0" y1="50" x2="446.0" y2="280" class="grid" stroke-width="0.6"/>
+<text x="446.0" y="296" class="xs muted" text-anchor="middle">300</text>
+<line x1="66" y1="233.76546021250397" x2="446" y2="233.76546021250397" class="grid" stroke-width="0.6"/>
+<text x="58" y="237.76546021250397" class="xs muted" text-anchor="end">0.1</text>
+<line x1="66" y1="167.61878796522183" x2="446" y2="167.61878796522183" class="grid" stroke-width="0.6"/>
+<text x="58" y="171.61878796522183" class="xs muted" text-anchor="end">1</text>
+<line x1="66" y1="101.47211571793969" x2="446" y2="101.47211571793969" class="grid" stroke-width="0.6"/>
+<text x="58" y="105.47211571793969" class="xs muted" text-anchor="end">10</text>
+<text x="256.0" y="314" class="xs muted" text-anchor="middle">n, bodies</text>
+<text x="22" y="165.0" class="xs muted" text-anchor="middle">µs</text>
+<path d="M 66.00,280.00 L 138.67,260.09 L 181.19,228.53 L 211.35,203.18 L 253.86,177.46 L 284.02,163.11 L 326.53,133.41 L 356.70,121.38 L 399.21,84.86 L 429.37,64.25" fill="none" stroke="#e05c5c" stroke-width="2.2"/>
+<path d="M 66.00,212.45 L 138.67,187.53 L 181.19,181.35 L 211.35,168.79 L 253.86,157.55 L 284.02,146.58 L 326.53,138.98 L 356.70,127.79 L 399.21,118.23 L 429.37,104.24" fill="none" stroke="#5ac878" stroke-width="2.2"/>
+<line x1="330.8" y1="50.0" x2="330.8" y2="280.0" stroke="#f0961e" stroke-width="1.5" fill="none" stroke-dasharray="6 4"/>
+<text x="336.81418348492764" y="68" class="xs" text-anchor="start">~100</text>
+<line x1="66.0" y1="328.0" x2="86.0" y2="328.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="94" y="332" class="xs" text-anchor="start">brute force, n(n−1)/2 AABB tests</text>
+<line x1="66.0" y1="345.0" x2="86.0" y2="345.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="94" y="349" class="xs" text-anchor="start">the grid</text>
+<text x="500" y="56" class="sm" text-anchor="start">one frame, 2,000 bodies, 983 candidates</text>
+<rect x="500" y="74" width="63.36557059961315" height="34" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.0" fill-opacity="0.4"/>
+<rect x="563.3655705996132" y="74" width="296.63442940038686" height="34" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.3"/>
+<text x="531.6827852998066" y="96" class="xs" text-anchor="middle">18%</text>
+<text x="711.6827852998066" y="96" class="xs" text-anchor="middle">82%</text>
+<text x="500" y="126" class="xs muted" text-anchor="start">broadphase 0.091 ms</text>
+<text x="860" y="126" class="xs muted" text-anchor="end">narrow phase 0.426 ms</text>
+<text x="500" y="172" class="xs muted" text-anchor="start">§10</text>
+<text x="854" y="172" class="xs muted" text-anchor="end"></text>
+<line x1="500" y1="180.0" x2="860" y2="180.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="197.0" class="xs" text-anchor="start">the same narrow phase on ALL pairs</text>
+<text x="854" y="197.0" class="xs mono" text-anchor="end">844 ms</text>
+<text x="500" y="214.0" class="xs" text-anchor="start">frames that would fit in 16.67 ms</text>
+<text x="854" y="214.0" class="xs mono" text-anchor="end">0</text>
+<text x="500" y="231.0" class="xs" text-anchor="start">allocations over 2000 rebuilds</text>
+<text x="854" y="231.0" class="xs mono" text-anchor="end">0</text>
+<text x="66" y="392" class="xs muted" text-anchor="start">The crossover is the honest half of the lesson. An AABB overlap test is six comparisons on data already in registers;</text>
+<text x="66" y="409" class="xs muted" text-anchor="start">a grid build touches every proxy twice, chases a hash table and writes an entry array. Below roughly a hundred bodies</text>
+<text x="66" y="426" class="xs muted" text-anchor="start">the quadratic wins, and shipping a broadphase there is a pure loss — which is worth knowing because almost nobody</text>
+<text x="66" y="443" class="xs muted" text-anchor="start">measures it. Above it the two curves separate for ever: 17.4× at 512 bodies, 137.7× at 8,192. And having paid for it,</text>
+<text x="66" y="460" class="xs muted" text-anchor="start">the broadphase is 18% of the pair-finding work rather than the 99.95% the alternative spends on pairs that were never</text>
+<text x="66" y="477" class="xs muted" text-anchor="start">going to touch.</text>
+</svg>

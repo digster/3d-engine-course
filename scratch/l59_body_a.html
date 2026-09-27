@@ -1,0 +1,411 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-08-ecs-runtime.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.8 — The ECS Runtime</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-10-input-mapping.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.10 — Input Mapping: Actions, Not Keycodes</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.9</div>
+    <h1>Transform Hierarchy and the Camera System</h1>
+    <p class="deck">
+      A turret sits on a tank. That sentence needs one component and one line of matrix algebra,
+      and both were ready before this lesson started — <code>parent_from_local</code> has been
+      called that since Lesson 2.8 precisely so this day would change nothing. What is <em>not</em>
+      ready is the order: a parent must be resolved before its children, and Lesson 5.7
+      established that a component pool hands entities back in insertion order, which is not that.
+      This lesson measures three ways to reconcile them, ships the one the numbers chose, and then
+      spends the payoff on making the camera an ordinary entity.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5–6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-08-space-chain.html">2.8 — The Coordinate-Space Chain</a>,
+          <a href="02-09-view-matrix.html">2.9 — Deriving the View Matrix</a>,
+          <a href="05-07-ecs-storage.html">5.7 — ECS Storage Design</a>,
+          <a href="05-08-ecs-runtime.html">5.8 — The ECS Runtime</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/ecs/hierarchy.hpp</code>,
+            <code>engine/include/engine/ecs/camera.hpp</code>,
+            <code>engine/include/engine/math/mat4.hpp</code>,
+            <code>demos/ecs_swarm/main.cpp</code>,
+            <code>scratch/hier_probe.hpp</code>, <code>scratch/bench_59.cpp</code>,
+            <code>scratch/verify_59.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A three-level scene that follows its root, a camera that can ride a moving object,
+            and a resolver whose cost is flat in depth. 73 checks green; the reference shot
+            byte-identical for the <strong>ninth</strong> lesson running.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the composition rule for a transform hierarchy and explain why the function that
+          implements it needed no changes at all.</li>
+      <li>…explain why a component pool's dense order is <em>not</em> a valid resolve order, and
+          demonstrate the failure rather than asserting it.</li>
+      <li>…recognise depth bucketing as a topological sort, and say why sorting by depth is
+          sufficient.</li>
+      <li>…design an experiment that separates a visit order's cost from the container's, and say
+          what each half measured.</li>
+      <li>…read a crossover from a measurement and decide <em>against</em> an optimisation on the
+          strength of it.</li>
+      <li>…choose an orphan policy and a cycle policy, and defend both — including why a cycle is
+          a different class of failure from a wrong picture.</li>
+      <li>…implement a camera as an entity, and derive its view matrix from its placement rather
+          than from a pair of points.</li>
+      <li>…name the two things that made this lesson cheap, both of which were decided years of
+          lessons earlier.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-rule">The rule, and why nothing had to change</a></li>
+          <li><a href="#intuition-order">The order, and why everything did</a></li>
+          <li><a href="#intuition-depth">Depth is a topological sort</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">Three Candidate Orders</a>
+        <ol>
+          <li><a href="#theory-arms">What the three actually differ in</a></li>
+          <li><a href="#theory-probe">Measuring an order without an ECS in the way</a></li>
+          <li><a href="#theory-fair">Being fair to all three</a></li>
+        </ol>
+      </li>
+      <li><a href="#results">The Results</a>
+        <ol>
+          <li><a href="#res-depth">Depth is the axis, and one arm does not feel it</a></li>
+          <li><a href="#res-size">Size, and the row order that decides whether packing pays</a></li>
+          <li><a href="#res-maintain">What the order costs to maintain</a></li>
+          <li><a href="#res-engine">…and what the container adds on top</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">The Implementation</a>
+        <ol>
+          <li><a href="#impl-components">Two components, and what is not in them</a></li>
+          <li><a href="#impl-rebuild">rebuild() — the memoised chase and the counting sort</a></li>
+          <li><a href="#impl-resolve">resolve() — the dullest loop in the engine</a></li>
+          <li><a href="#impl-policy">Orphans, cycles, and the two policies</a></li>
+        </ol>
+      </li>
+      <li><a href="#dirty">The Optimisation We Did Not Ship</a></li>
+      <li><a href="#camera">The Camera Becomes an Entity</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 5.8's world is flat. Every <code>transform</code> is a placement in world space, which
+    was exactly right for a swarm of objects orbiting an origin and is useless the moment one
+    thing has to move with another. A turret on a tank; a lamp on a table; a camera in a car; a
+    hand on an arm on a body. Every one of those is the same sentence — <em>my placement is
+    relative to something else's</em> — and a flat world cannot say it.
+  </p>
+
+  <p>
+    The fix is one component and one line of algebra:
+  </p>
+
+  <div class="worked">
+    <span class="label">The composition rule</span>
+    <p class="mono">world_from_local(child) = world_from_local(parent) × parent_from_local(child)</p>
+  </div>
+
+  <p>
+    That is the whole of a scene graph. And the striking thing about it, in this course, is how
+    little it costs to adopt: <code>math/transform.hpp</code> has been written for it since
+    Lesson 2.8, which is why the function that turns a <code>transform</code> into a matrix is
+    called <strong><code>parent_from_local</code> and not <code>world_from_local</code></strong>.
+    That header's comment said so at the time:
+  </p>
+
+  <blockquote>
+    <p>
+      “Why ‘parent’ and not ‘world’: in Module 2 every object stands on its own, so its parent IS
+      the world… Module 5 adds a transform HIERARCHY, where an object's transform is relative to
+      another object rather than to the world. When that happens this function does not change by
+      a single character — only the meaning of ‘parent’ widens. Naming it
+      <code>world_from_local</code> today would have been a lie we had to go back and correct.”
+    </p>
+  </blockquote>
+
+  <p>
+    It did not change by a single character. Neither did <code>transform</code>. So if the maths
+    is free and the naming was paid for seven lessons ago, what is this lesson about?
+  </p>
+
+  @@FIG_COMPOSE@@
+
+  <p>
+    <strong>The order.</strong> Look at the lower half of Figure 1. The composition rule reads a
+    parent's <em>world</em> matrix, which means that matrix has to exist already — the parent must
+    be finished before any of its children start. That is an ordering constraint on the
+    <em>graph</em>.
+  </p>
+
+  <p>
+    And Lesson 5.7 established, in as many words, that a component pool's dense order is nobody's
+    business but the pool's: it is insertion order, disturbed by every swap-and-pop, and the whole
+    reason a sparse set can be fast is that it was never promised to anyone. Those two facts are
+    in direct tension, and this lesson is what it costs to reconcile them.
+  </p>
+
+  <p>
+    It is worth seeing that this is a real problem rather than a theoretical one. §C of the
+    verification harness builds a four-level tree of forty-eight entities, churns it the way a
+    running game churns — create some things, destroy some things — and then asks how many
+    entities sit in the transform pool <em>ahead of their own parent</em>. The answer is
+    <strong>twelve of forty-eight</strong>. A walk in dense order would compose each of those
+    against a matrix left over from the previous frame: a picture that is wrong, subtly, in a way
+    that nothing reports and that looks like a physics glitch.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A test that passed for the wrong reason — twice</span>
+    <p>
+      Producing those twelve took three attempts, and the failures are more instructive than the
+      success. The first version destroyed a scattering of <em>leaves</em> and found zero
+      violations, because <strong>swap-and-pop fills a hole with the pool's last element</strong>,
+      and in a tree built level by level the last elements are themselves leaves — a leaf replaced
+      a leaf and the order was undisturbed. The second version destroyed filler entities created
+      at the <em>end</em> of the pool, which had the same problem for the same reason.
+    </p>
+    <p>
+      What works is destroying something <em>early</em> while deep entities sit at the end. Twice
+      in a row the test passed because the situation it described had never arisen — which is the
+      failure mode a test of an ordering property is most prone to, and the reason its assertion
+      is written as “this count is greater than zero” rather than “the answer is right”.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-rule">2.1 The rule, and why nothing had to change</h3>
+
+  <p>
+    Start with the arithmetic, on real numbers, because the rule is easier to trust once you have
+    pushed something through it.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — a moon, two composes deep</span>
+    <p>A sun at the origin, a planet at <code>(10, 0, 0)</code> in the sun's space, a moon at
+       <code>(0, 2, 0)</code> in the planet's space.</p>
+    <p class="mono">world(sun)    = parent_from_local(sun)                = T(0,0,0)</p>
+    <p class="mono">world(planet) = world(sun)    × T(10, 0, 0)           = T(10, 0, 0)</p>
+    <p class="mono">world(moon)   = world(planet) × T(0, 2, 0)            = T(10, 2, 0)</p>
+    <p><strong>Nobody computed <code>(10, 2, 0)</code>.</strong> It is not stored anywhere and no
+       system produced it; it is what the two multiplications happen to say.</p>
+  </div>
+
+  <p>
+    Now move the sun to <code>(100, 0, 0)</code> and re-run only the composition. The planet is at
+    <code>(110, 0, 0)</code> and the moon at <code>(110, 2, 0)</code>, and again — no code said so.
+    “Following” is not a feature anybody implemented. It is what <em>relative to my parent</em>
+    means, and the second half of the sentence is the interesting half:
+  </p>
+
+  <p>
+    <strong>Rotation and scale compose too, and scale is the one that surprises people.</strong>
+    Halve the sun's scale and the planet's world distance halves with it — 10 becomes 5 — because
+    the parent's matrix scales the child's <em>whole coordinate frame</em>, its offset included.
+    In the demo, a moon authored at scale 0.8 under a planet of scale 0.16 comes out
+    <strong>0.128</strong> in world units, and its local orbit radius of 3.6 becomes 0.58. That is
+    not a bug in the composition. It is why a “one-metre” prop dropped under a scaled parent turns
+    out to be twenty centimetres, and it catches everybody once.
+  </p>
+
+  <h3 id="intuition-order">2.2 The order, and why everything did</h3>
+
+  <p>
+    So the maths is free. Here is what is not.
+  </p>
+
+  <p>
+    To compute a child you need its parent's world matrix. To compute the parent you need
+    <em>its</em> parent's. The dependency runs up the tree, so the computation has to run down it,
+    and any visit order that ever reaches a child before its parent produces silent nonsense.
+    There is no test you can put in the loop that fixes this cheaply — you could check “has my
+    parent been resolved this frame?”, but then you need a per-entity flag, a way to clear it, and
+    a plan for what to do when the answer is no.
+  </p>
+
+  <p>
+    The alternative is to <strong>arrange for the question never to arise</strong>: visit in an
+    order that guarantees the answer. That is what the rest of this lesson is about, and the
+    reason it is worth measuring rather than deciding is that there are three such orders, they
+    are all correct, and they do not cost the same.
+  </p>
+
+  <h3 id="intuition-depth">2.3 Depth is a topological sort</h3>
+
+  <p>
+    One idea makes the whole thing simple, and it is worth stating on its own because it is
+    doing more work than it looks like it is.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The observation the design rests on</span>
+    <p>
+      <strong>A parent's depth is always exactly one less than its child's.</strong> So sorting
+      entities by depth puts every parent before every child — which is precisely the definition
+      of a topological order. And a counting sort by a small integer key is O(<em>n</em>).
+    </p>
+  </div>
+
+  <p>
+    That gets you a valid order for the price of one pass. But it gives you something else as
+    well, and this is the part that pays off in Module 9: <strong>within a level, the order does
+    not matter at all.</strong> Everything at depth <em>k</em> depends only on things at depth
+    <em>k</em>−1, and nothing at depth <em>k</em> depends on anything else at depth <em>k</em>. A
+    level is therefore a batch of completely independent work — a <code>parallel_for</code>
+    waiting to happen — and nobody had to design that. It arrived with the choice of order.
+  </p>
+
+  <p>
+    A depth-first recursion has the opposite property. It also produces a valid order, but its
+    order is a <em>sequence</em>: node 3 must follow node 1 which must follow node 0, and there is
+    no batch anywhere in it that can be handed to another thread without a dependency analysis.
+  </p>
+
+  <!-- =================================================================
+       3 — THREE CANDIDATE ORDERS
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>Three Candidate Orders</h2>
+
+  <h3 id="theory-arms">3.1 What the three actually differ in</h3>
+
+  @@FIG_ORDERS@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The three candidate resolve orders and what each one costs.
+    </caption>
+    <thead><tr><th></th><th>the order</th><th>what it is good at</th><th>what it pays</th></tr></thead>
+    <tbody>
+      <tr><td><strong>A — recurse from roots</strong></td>
+          <td>depth first</td>
+          <td>the best temporal locality available: a parent's matrix was written one call ago and
+              is certainly in L1</td>
+          <td>stack traffic, and a write pattern that jumps</td></tr>
+      <tr><td><strong>B — level order, via an index</strong></td>
+          <td>breadth first, through an <code>order[]</code> array</td>
+          <td>flat loops, no recursion, and a level is independent work</td>
+          <td>both reads and writes are scattered through arrays that were never moved</td></tr>
+      <tr><td><strong>C — level order, rows packed</strong></td>
+          <td>breadth first, with the rows physically rearranged</td>
+          <td>reads and writes go straight down the arrays</td>
+          <td>a permutation, every time the shape changes</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    B and C are worth looking at twice, because they visit in <em>the same order</em> and differ
+    only in where the rows live. C is Lesson 5.7's <strong>group</strong> idea, generalised: 5.7
+    measured that two pools sorted to agree on index let a query skip the sparse lookup entirely,
+    and noted that this was available precisely <em>because</em> dense order had never been
+    promised to anyone. Here the same freedom buys an ordering constraint instead of an agreement
+    between two pools — and it is worth noticing that the second use arrived two lessons after the
+    first, without the design needing to be revisited.
+  </p>
+
+  <h3 id="theory-probe">3.2 Measuring an order without an ECS in the way</h3>
+
+  <p>
+    The three arms differ in <strong>a visit order over three parallel arrays</strong>, and that
+    is all they differ in. So the probe (<code>scratch/hier_probe.hpp</code>) is three parallel
+    arrays — a local transform, a parent row, an output matrix — plus two indexes built on top of
+    them. No registry, no pools, no entities.
+  </p>
+
+  <p>
+    That is the same method Lesson 5.7 used to choose between an archetype and a sparse set before
+    either was built, and it is worth naming the reason again: <strong>building the experiment on
+    the ECS would tie four timings to one container's incidental behaviour</strong>, and then a
+    change to the container would silently invalidate a design decision. What is being compared
+    here is the order. The container's own cost is measured separately, in
+    <a href="#res-engine">§4.4</a>, and it is not small.
+  </p>
+
+  <h3 id="theory-fair">3.3 Being fair to all three</h3>
+
+  <p>
+    Three decisions in the probe are there to stop an arm winning for the wrong reason.
+  </p>
+
+  <p>
+    <strong>The recursive arm gets a CSR children list, not a vector of vectors.</strong> The
+    obvious spelling for “each node's children” is <code>std::vector&lt;std::vector&lt;uint32_t&gt;&gt;</code>,
+    which would hand arm A <em>n</em> separate heap allocations to chase and would make it lose to
+    anything. Compressed sparse row — one <code>children</code> array and one
+    <code>child_start</code> array — is what a competent implementation uses, so it is what the
+    competitor gets.
+  </p>
+
+  <p>
+    <strong>Arm C's permutation is not timed inside the resolve.</strong> It is a cost the world
+    pays when its shape changes, and hiding it in the per-frame number would be measuring a world
+    that never spawns anything. <a href="#res-maintain">§4.3</a> prices it separately and it turns
+    out to matter.
+  </p>
+
+  <p>
+    <strong>The row order is an axis, not an assumption.</strong> In a world built all at once, row
+    order <em>is</em> creation order, so parents naturally sit near their children and every arm
+    walks nearly forwards. In a world that has been running for ten minutes the orders have
+    decayed. Both are real; quoting only the first is not an argument. The tables below report
+    both, and the difference between them turns out to be the entire case for arm C.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A measurement that reported the timer instead of the code</span>
+    <p>
+      The first run of this benchmark reported <strong>10.417 ns/entity for two different arms at
+      <em>n</em> = 100</strong>. That number is 25 ticks of SDL's performance counter exactly —
+      41.67 ns each on this machine — and a pass over a hundred entities takes about a microsecond,
+      which is below the course's noise floor of 100 ticks. The timer was talking, not the code.
+    </p>
+    <p>
+      The fix is the standard one from Lesson 4.9: <strong>scale the workload until it clears the
+      floor and divide</strong>. Small worlds are now walked repeatedly — enough repetitions to
+      reach 200,000 composes — and the total is divided by the total items. Every number below the
+      thousand-entity mark in the tables that follow would otherwise be quantisation.
+    </p>
+  </div>

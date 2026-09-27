@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 392" role="img" aria-labelledby="f610a-t f610a-d">
+  <title id="f610a-t">Footprint against what bilinear reads</title>
+  <desc id="f610a-d">A logarithmic axis of texels covered by one screen pixel. Bilinear always reads four texels, a flat line. What the pixel actually covers rises from 0.60 at the bottom of the frame to 62.46 below the horizon, crossing the flat line at four.</desc>
+  <defs>
+    <marker id="e-i-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f610a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">What one pixel covers, and what four taps can see</text>
+<line x1="90" y1="250" x2="640" y2="250" class="grid" stroke-width="1.0"/>
+<line x1="90.0" y1="246" x2="90.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="90.0" y="270" class="xs" text-anchor="middle">0.5</text>
+<line x1="168.57142857142856" y1="246" x2="168.57142857142856" y2="255" class="grid" stroke-width="1.0"/>
+<text x="168.57142857142856" y="270" class="xs" text-anchor="middle">1</text>
+<line x1="247.14285714285714" y1="246" x2="247.14285714285714" y2="255" class="grid" stroke-width="1.0"/>
+<text x="247.14285714285714" y="270" class="xs" text-anchor="middle">2</text>
+<line x1="325.7142857142857" y1="246" x2="325.7142857142857" y2="255" class="grid" stroke-width="1.0"/>
+<text x="325.7142857142857" y="270" class="xs" text-anchor="middle">4</text>
+<line x1="404.2857142857143" y1="246" x2="404.2857142857143" y2="255" class="grid" stroke-width="1.0"/>
+<text x="404.2857142857143" y="270" class="xs" text-anchor="middle">8</text>
+<line x1="482.85714285714283" y1="246" x2="482.85714285714283" y2="255" class="grid" stroke-width="1.0"/>
+<text x="482.85714285714283" y="270" class="xs" text-anchor="middle">16</text>
+<line x1="561.4285714285714" y1="246" x2="561.4285714285714" y2="255" class="grid" stroke-width="1.0"/>
+<text x="561.4285714285714" y="270" class="xs" text-anchor="middle">32</text>
+<line x1="640.0" y1="246" x2="640.0" y2="255" class="grid" stroke-width="1.0"/>
+<text x="640.0" y="270" class="xs" text-anchor="middle">64</text>
+<text x="360.0" y="326" class="xs" text-anchor="middle">texels covered by one screen pixel</text>
+<line x1="90" y1="92" x2="640" y2="92" class="hi" stroke-width="2.0"/>
+<text x="96" y="82" class="xs" text-anchor="start">what bilinear READS: four texels, always</text>
+<path d="M 90.0 244 L 640.0 70" stroke="#5082e6" stroke-width="1.8" fill="none"/>
+<text x="537.8916921396572" y="136" class="xs" text-anchor="middle">what it COVERS</text>
+<line x1="110.7" y1="62.0" x2="110.7" y2="250.0" stroke="#5ac878" stroke-width="1.4" fill="none" stroke-dasharray="4 4"/>
+<text x="110.66698902979809" y="52" class="xs" text-anchor="middle">0.6</text>
+<text x="110.66698902979809" y="290" class="xs" text-anchor="middle">bottom of frame</text>
+<line x1="637.2" y1="62.0" x2="637.2" y2="250.0" stroke="#e05c5c" stroke-width="1.4" fill="none" stroke-dasharray="4 4"/>
+<text x="637.2390521907453" y="52" class="xs" text-anchor="middle">62.46</text>
+<text x="637.2390521907453" y="306" class="xs" text-anchor="middle">below the horizon</text>
+<line x1="325.7142857142857" y1="92" x2="325.7142857142857" y2="250" class="grid" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="325.7142857142857" y="110" class="xs" text-anchor="middle">they cross here</text>
+<text x="360.0" y="356" class="xs" text-anchor="middle">past the crossover the sampler sees a fraction of the truth</text>
+<text x="360.0" y="374" class="xs" text-anchor="middle">— 6.4% of it at the horizon. That gap IS the sparkle.</text>
+</svg>

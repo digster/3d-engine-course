@@ -1,0 +1,305 @@
+  <h2 id="mass">6. A skeleton with mass</h2>
+
+  <p>
+    With the angles settled, a ragdoll is a description and a build step. The description is written
+    against the skeleton's <strong>bind pose</strong>, in <strong>model space</strong>, because that is
+    where a person authoring one is looking: the character stands in its T-pose, capsules are drawn
+    over it, and the numbers are read off the picture. For each part, <code>ragdoll_part_desc</code>
+    names the skeleton joint the body follows (called <code>bone</code>, because this file has two
+    kinds of joint in it and every part has one of each at the same place), the capsule's segment and
+    radius, its share of the total mass, and how it hangs from its parent: a hinge axis and range, or
+    a twist axis, a cone axis, a cone half-angle and a twist range.
+  </p>
+
+  <p>
+    <code>build_ragdoll</code> does four passes over that. It finds each part's parent <em>part</em> —
+    the nearest ancestor skeleton joint that is also a part, so the upper arm hangs from the torso
+    through a clavicle that is only a passenger. It stands each capsule along its segment (8.5's
+    capsules run along body <code>+y</code>, so the body's orientation is 7.4's two-mirror rotor from
+    <code>+y</code> to the bone) and records where the body sits in its bone's frame — the
+    <code>joint_from_body</code> transform, constant, and the only link between the two
+    representations. It authors each joint with 8.11's <code>make_hinge</code> or this lesson's
+    <code>make_cone_twist</code>, at the bind pose, and keeps only the body-local result, which is valid
+    at every pose. And it audits every pair of capsules for self-collision.
+  </p>
+
+  <h3>How good is a capsule as a limb?</h3>
+
+  <p>
+    A capsule puts a body's centre of mass at its middle and spreads its mass uniformly. A real limb
+    does neither: a thigh is heavier at the hip. Dempster measured both on cadavers, and Winter's
+    Table 4.1 gives each segment's centre of mass as a fraction of its length from the proximal joint
+    and its radius of gyration about that centre. The number that matters to the solver is neither
+    of those directly — it is 8.11's <code>ρ = m·d²/(I_cm + m·d²)</code> about the proximal joint,
+    which sets how fast the limb's limits converge against its pin, how much energy a velocity joint
+    takes out of it per step, and how hard it bounces off a stop. Computed both ways:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§D — a capsule as a limb, as fractions of the joint-to-joint length</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     segment          L m    CoM: capsule  Dempster   k: capsule  Dempster   rho: capsule  Dempster
+     upper arm        0.280   0.500        0.436      0.282      0.322      0.759         0.647
+     forearm + hand   0.250   0.650        0.682      0.344      0.468      0.781         0.680
+     thigh            0.420   0.500        0.433      0.272      0.323      0.772         0.642
+     shin + foot      0.410   0.500        0.606      0.273      0.416      0.770         0.680</code></pre>
+  </div>
+
+  <p>
+    Every capsule's <code>ρ</code> comes out about 0.1 high — 0.76 to 0.78 against Dempster's 0.64 to
+    0.68 — and the cause is the second column more than the first: a capsule carries too little of its
+    mass far from its own centre (<code>k</code> 0.27–0.34 of the length against 0.32–0.47), so too
+    much of the inertia about the joint is the orbit. The engine keeps capsules anyway. They are what
+    the narrow phase is fast on, the error is in the direction of more dissipation and slower-bouncing
+    stops — a ragdoll that settles a little faster than a person would — and the honest move is to
+    say so here rather than to hide a correction in the inertia tensor that the collision shape
+    disagrees with.
+  </p>
+
+  <h3>Which pairs may collide</h3>
+
+  <p>
+    8.11's rule was that two bodies a joint connects must not collide: they overlap at the joint by
+    construction, and a contact solver that sees the overlap fights the joint every step. The
+    handover to this lesson predicted that a ragdoll would need more than that — "a forearm and a torso
+    overlap too, two joints apart" — and the engine grew a rule for it: exclude every pair whose
+    capsules overlap, within a centimetre, <em>at rest</em>. The harness then audited the humanoid.
+    <strong>The prediction was wrong.</strong> In the bind pose, and over a whole cycle of both
+    motions this lesson hands over, no unjointed pair comes within 4&nbsp;cm of another — the closest is
+    the two thighs, a constant 40&nbsp;mm apart. So the default rule excludes exactly the ten jointed
+    pairs and nothing else.
+  </p>
+
+  <p>
+    What the prediction was reaching for is real, but it is not about rest. It is about falls. Over
+    twelve trips from the jog, three seconds each, the narrow phase's own manifolds record every pair
+    of parts that touched:
+  </p>
+
+  @@FIG_SELF@@
+
+  <p>
+    The torso and a forearm touch in <strong>nine falls of twelve</strong>, more than any other pair;
+    the two thighs in six. Both are two links apart. That matters because the obvious rule a ragdoll
+    author writes first — "exclude anything within two links of each other", which is what the
+    handover's sentence suggests — excludes thirteen pairs beyond the jointed ten, and those three are
+    among them. Under it a forearm swung across the chest does not stop at the chest. The same twelve
+    falls, each rule:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§D — do the overlaps persist?</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     rule                     deepest instant   frames &gt; 20 mm   deepest at rest
+     two links                   189.9 mm          1503             179.6 mm
+     overlapping (default)       106.6 mm           509              61.4 mm</code></pre>
+  </div>
+
+  <p>
+    The first column is not the instrument, and the section's first draft used it: a forearm swung at
+    several metres a second arrives up to <code>v·h</code> deep in one step whatever the rule — 8.10
+    §6's arrival depth, and this engine's missing speculative contacts — so both rules reach a tenth of
+    a metre for a frame. What separates them is whether the overlap <em>persists</em>. Under the
+    two-links rule limbs spend three times as many frames more than 2&nbsp;cm inside the body, and come
+    to rest there: 179.6&nbsp;mm, which is a forearm lying inside a chest whose capsule is 150&nbsp;mm in
+    radius. The default's 61.4 is something else, and §8 finds exactly the same number as the
+    torso-on-forearm overlap of the one fall that ends face down on its own arm: a chest lying on a
+    forearm, pressed into it from above. That is an iteration problem, not the filter's.
+  </p>
+
+  <p>
+    The control is to exclude nothing, not even the jointed pairs. After a trip and four seconds the
+    default ragdoll holds 0.0015&nbsp;J and its worst joint gap is 0.01&nbsp;mm; with every jointed pair
+    colliding it holds 0.0429&nbsp;J, its worst joint has been pushed <strong>67.51&nbsp;mm</strong> open, and
+    it is still moving — each joint's two capsules shoving apart what the joint pulls together, 8.11's
+    pitfall at the scale of a body.
+  </p>
+
+  <h2 id="bug">7. The first fall, and a bug 8.11 shipped</h2>
+
+  <p>
+    The first ragdoll this lesson dropped — tripped out of the jog, three seconds on the floor — lay
+    still, which looked right, and then a probe printed each joint's angle against its limits. The
+    right knee was <strong>7.9° past its stop</strong>, bent backward, and a shoulder 6.4° past its
+    twist range. Run for longer, the knee went on creeping: 3.9° after one second, 7.9° after three,
+    9.0° after ten, and the ragdoll never fell asleep. Those numbers were measured on 8.11's engine,
+    before the fix below, and they are the one thing in this lesson the harness cannot reproduce —
+    it links the fixed engine. What it reproduces is the mechanism.
+  </p>
+
+  <p>
+    A limit held under load is 8.11's machinery doing exactly what it was built for, so the first
+    suspects were the ones 8.11 had already measured: the limit converging against the pin at
+    <code>ρ</code> per sweep, or the contacts pushing the leg. Neither survives an isolated test. The
+    harness puts a shin on a <em>fixed</em> thigh, lying straight out behind the knee so gravity drives
+    it into its hyperextension stop, and holds it there for ten seconds under a harness-local copy of
+    the solver's joint path, once with 8.11's position pass (kept verbatim in the harness, as 8.10
+    kept a private copy of the step it split) and once with the engine's:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — the knee angle, degrees, with the stop at 0</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     position pass       warm start   2 s        4 s        6 s        8 s        10 s
+     8.11's              on            -0.1691    -0.1691    -0.1691    -0.1691    -0.1691
+     8.12's              on            -0.0000    -0.0000    -0.0000    -0.0000    -0.0000
+     8.11's              off          -19.8455   -37.5492   -51.8791   -62.7588   -70.7129
+     8.12's              off           -1.8915    -1.8915    -1.8915    -1.8915    -1.8915
+     none (Baumgarte)    on            -0.0000    -0.0000    -0.0000    -0.0000    -0.0000</code></pre>
+  </div>
+
+  <p>
+    The first row is the whole bug in one line. A violation of 0.1691° that does not change <em>in
+    the fourth decimal</em> for ten seconds is not a limit converging slowly; it is a limit that is not
+    being corrected at all. Split impulse's position pass removes a fifth of a violation every step,
+    and here it removes none. The third row confirms it from the other side: without warm starting,
+    the velocity pass leaves a little approach velocity every step, and with no correction to hold it
+    the stop gives way without bound, 70° in ten seconds. Baumgarte, which corrects in the velocity
+    pass, never had the problem — which is why the obvious diagnosis, "split impulse is too weak for
+    a loaded stop", would have been exactly wrong.
+  </p>
+
+  <p>
+    What the position pass was doing is in the prepared rows, and the harness prints them five
+    seconds in:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — inside 8.11's position pass</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     lower stop    C = -0.002951 rad   bias 0.03541   pseudo impulse +0.006513
+     upper stop    C = +2.620945 rad   bias 0.00000   pseudo impulse +0.006513
+     the knee's pseudo spin about the hinge after the pass: +3.648e-09 rad/s</code></pre>
+  </div>
+
+  <p>
+    The <em>upper</em> stop — 150° away, nowhere near violated — has accumulated exactly as much pseudo
+    impulse as the lower one, in the opposite direction, and the knee's net pseudo spin is
+    3.6&nbsp;×&nbsp;10⁻⁹&nbsp;rad/s. It cancels the correction to seven figures. And the reason is a line
+    8.11 wrote with a correct comment above it. Every one-sided row gets a speculative target
+    <code>−C/h</code> in the velocity pass — "you may approach this stop, but not faster than a step
+    allows" — and <code>bias = 0</code>, because it is not violated. 8.11's position pass solved every
+    row against its <code>bias</code>. For a satisfied row that made the target zero: a hard "no
+    pseudo-velocity toward me", from a stop the joint could not reach in a hundred steps. A hinge with
+    both ends of its range enabled always has both rows, speculation being on, so the far stop undid
+    every correction of the near one, and <strong>under split impulse a violated two-ended limit was
+    never repaired</strong>. 8.11's comment on the function said "a position correction only repairs
+    error that already exists", which is the right intent; the code skipped motors and nothing else.
+  </p>
+
+  @@FIG_BUG@@
+
+  <p>
+    The fix is one line in <code>solve_joint_positions</code> and a helper that takes the goal
+    explicitly: a one-sided row that is not violated gets its own speculative target, <code>−C/h</code>,
+    in the position pass too — a correction may carry the joint up to the far stop and no further.
+    Violated rows keep their bias; a rod's bilateral row has no speculative side. The fixed pass holds
+    the loaded knee at 0.0000°, and cold it settles at a steady lag of 1.8915° instead of giving way.
+    On the whole ragdoll the knee now lies inside its range, and §6's default row — a trip and four
+    seconds, measured by the harness on the fixed engine — reads a worst joint gap of 0.01&nbsp;mm.
+  </p>
+
+  <h3>Why 8.11 never saw it, and what the fix moved</h3>
+
+  <p>
+    8.11 measured limits at the velocity level: a turnstile's overshoot, a door's rebound, a motor's
+    stall. Each of those is decided in the step the limb arrives, before a violation has had time to be
+    frozen; the position pass is barely involved. A rope has one row and a rod's row is bilateral, so
+    neither ever had a far stop. It took a limit held against a <em>steady</em> load — a knee under a
+    leg's weight, which is every ragdoll's normal state — for a violation to sit there long enough to
+    notice that nothing was repairing it.
+  </p>
+
+  <p>
+    Fixing a shipped lesson's engine code raises the question 8.10's tangent-basis fix settled: what
+    happens to the lesson that shipped the bug? Its page is an archive of its own code — the listings
+    are pinned, and 8.11's page still shows the pass that has the bug, with the comment that was
+    right about the intent. What the fix must not do is quietly change 8.11's measurements, so the
+    harness that published them was rerun against the fixed engine: <strong>58 checks of 58, and one
+    table moved</strong>. It is §10's rebound table, the one place 8.11 held a limb against a stop for
+    a second:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">verify_811 §H, at eight sweeps — as published, then against the fixed engine</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     hinge offset   rho^8      overshoot     rebound        (8.11's page)
+     d = 0.25 W    0.00109    0.00003 rad     0.0011
+     d = 0.50 W    0.09813    0.00318 rad     0.0753
+     d = 1.00 W    0.52388    0.01744 rad     0.2706
+
+     hinge offset   rho^8      overshoot     rebound        (with 8.12's fix)
+     d = 0.25 W    0.00109    0.00001 rad     0.0011
+     d = 0.50 W    0.09813    0.00316 rad     0.0750
+     d = 1.00 W    0.52388    0.01743 rad     0.2706</code></pre>
+  </div>
+
+  <p>
+    The overshoot past each stop is now repaired a little, so it is a little smaller, and a door's
+    rebound moves from 7.53% to 7.50%. 8.11's prose says "7.5%", which is still true. Every other
+    number in 8.11's harness is byte-identical except its timings. The lesson learned is 8.10's again,
+    in a new place: <strong>what found the bug was a probe, not a test.</strong> No check in 8.11 was
+    wrong. Printing one joint's angle against its limits, on an object the check had never been run
+    on, was what disagreed.
+  </p>
+
+  <h2 id="sweeps">8. What eight sweeps do to a ragdoll</h2>
+
+  <p>
+    8.11 §14 left a warning for this lesson: a chain's stretch grows with its mass ratio and halves
+    with each doubling of sweeps, and eight sub-steps of one sweep beat one step of eight sweeps by
+    19× on a 100:1 chain, for the same number of joint visits. A ragdoll is a tree of short chains with
+    a 16:1 ratio in it. The harness measures four scenes against five budgets — 8, 16 and 32 sweeps,
+    eight sub-steps of one sweep (the same visits as the shipped eight), and a control of 32 sub-steps
+    of four sweeps each, sixteen times the shipped work:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§F — worst joint gap (mm) and the chest-on-forearm overlap (mm), by budget</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     budget               fall: peak   rest     hanging by a hand   chest on arm
+     8 sweeps (shipped)      92.47    12.860         4.128  (KE 6.5e-05)     61.4
+     16 sweeps               54.88     7.204         3.319  (KE 4.6e-05)     28.8
+     32 sweeps               32.75     0.488         2.524  (KE 2.7e-05)     20.3
+     8 sub-steps x 1         30.03     6.741         0.001  (KE 1.2e-08)      3.3
+     CONTROL 32 x 4           3.69     0.002         0.001  (KE 1.4e-07)      0.0</code></pre>
+  </div>
+
+  @@FIG_SWEEPS@@
+
+  <p>
+    <strong>A fall opens the joints for a moment.</strong> The worst joint gap anywhere in six falls
+    peaks at 92&nbsp;mm at eight sweeps — the instant a shin or a head strikes the floor and the impulse
+    has to cross the tree — and closes again (12.9&nbsp;mm at rest, in the worst of the six). More sweeps
+    help, halving it roughly per doubling as 8.11 found. Eight sub-steps do as well as 32 sweeps, at a
+    quarter of the visits.
+  </p>
+
+  <p>
+    <strong>A hanging character refuses 8.11's rule.</strong> Hang the whole 80&nbsp;kg from one hand —
+    1.76&nbsp;kg of forearm carrying everything, a 45:1 load — damp every part so it comes to rest, and
+    read the gap after eight seconds. More sweeps barely help: 4.13, 3.32, 2.52&nbsp;mm for 8, 16 and 32.
+    Eight sub-steps of one sweep: <strong>0.001&nbsp;mm</strong>, four thousand times less for the same
+    visits, and the sixteen-times-the-work control does no better. This section's first draft hung the
+    body undamped, and the measurement was nonsense — the body swings like a pendulum for a long time
+    after release, with tens of joules still in it five seconds later, and a gap sampled mid-swing
+    measures the phase of the swing, not the solver. A load test needs the load at rest.
+  </p>
+
+  <p>
+    <strong>And there is a stack nobody built.</strong> §6's resting overlap turned out to be one fall
+    that ends face down on the right forearm: 28.4&nbsp;kg of chest on 1.76&nbsp;kg of arm on the floor.
+    That is 8.10's heavy-on-light tower, the case eight sweeps cannot hold, formed by accident, and
+    the chest sinks <strong>61.4&nbsp;mm</strong> into the arm and stays there. It is an iteration
+    problem — 28.8 at sixteen sweeps, 20.3 at thirty-two, 3.3 with eight sub-steps, nothing at the
+    control — and it comes back in §13, because a crushed arm is a ragdoll that never stops fighting.
+  </p>
+
+  <p>
+    So the handover's first limit is confirmed and sharpened: a ragdoll's mass ratios cost it
+    centimetres at eight sweeps, and the answer 8.11 measured for chains — small steps rather than
+    many sweeps — is better still for a body, by orders of magnitude on a static load. The engine does
+    not sub-step yet; the harness's <code>scene</code> does it by running the whole pipeline
+    <code>substeps</code> times at <code>h/substeps</code>, and the demo's <kbd>U</kbd> does the same.
+    Pricing that for a whole scene, contacts and broadphase included, is Module 9's.
+  </p>

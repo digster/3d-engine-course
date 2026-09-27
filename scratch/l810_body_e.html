@@ -1,0 +1,421 @@
+  <h2 id="slot">11. Where the solve goes in the step</h2>
+
+  <p>
+    Everything above assumes the contact solve happens between the two halves of a step: after the
+    velocities have been integrated, before the positions have. <code>body_world::step</code> does
+    both in one call, so until this lesson there was nowhere to put it.
+  </p>
+
+  <p>
+    You could solve <em>before</em> the step, but then gravity is applied afterwards and overrides
+    whatever the solver approved. You could solve <em>after</em> — which is what every caller does
+    when <code>step</code> is the only entry point — and the body then moves at the velocity
+    gravity asked for rather than the one the contact allowed. That costs a closed form:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \Delta y \;=\; v\,h \;=\; (g\,h)\,h \;=\; g\,h^2 \quad\text{per resting step} \]</span>
+    <span class="eq-plain">sink per step = (g*h)*h = g*h^2</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> <code>g·h² = 9.81/3600 = 2.725 mm</code> at 60&nbsp;Hz. Every step,
+    forever, for a body that is doing nothing at all. Four seconds of that is 654&nbsp;mm, which is
+    a crate through a half-metre floor.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — a crate on a floor, solved mid-step and solved late</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     slot             sink after 4 s    per step mm    g*h^2 mm
+     mid step (ours)          0.0000        0.00000     2.72500
+     end of step            654.0007        2.72500     2.72500
+     measured 2.72500 mm per step against a predicted 2.72500 — ratio 1.0000</code></pre>
+  </div>
+
+  <p>
+    Four decimal places, and a ratio of exactly 1.0000. That is the kind of agreement you get when
+    the thing being measured is arithmetic rather than physics, and it is worth having because it
+    means the diagnosis is certain: if your bodies sink at 2.7&nbsp;mm a step, your solve is in the
+    wrong place, and no amount of iteration or correction will help.
+  </p>
+
+  <h3>Splitting the step, and checking that nothing moved</h3>
+
+  <p>
+    So <code>body_world::step</code> becomes two functions with a gap between them:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">the shape every caller with contacts now writes</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">world.integrate_velocities(h);
+// broadphase, narrow phase, contact_solver::solve(h)
+world.integrate_positions(h);</code></pre>
+  </div>
+
+  <p>
+    <code>step(h)</code> is kept and is now literally the composition of the two, because most of
+    the engine has no contacts to insert and a caller who writes the two lines by hand has written
+    a bug waiting for the day somebody reorders them.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The split is only possible because the integrator is semi-implicit Euler.</strong>
+      Its two lines — <code>v += a·h</code> then <code>x += v·h</code> — are independent
+      statements, so taking the first here and the second there is an identity. Explicit Euler's
+      position line reads the velocity from <em>before</em> the update and velocity Verlet's needs
+      the acceleration as well, so neither is separable; for those two rules
+      <code>integrate_velocities</code> runs the whole integration and a contact impulse arrives
+      one step late. That is another entry in 8.1's ledger against them, and it is not a reason to
+      use them.
+    </p>
+  </div>
+
+  <p>
+    A refactor that is "obviously" behaviour-preserving is exactly the kind that is not, so the
+    harness keeps a private copy of the monolithic function this replaced and runs both over the
+    same scene — 400 bodies with mixed masses, damping, angular damping, gravity scales,
+    gyroscopic modes and kinds, 120 steps, compared by <code>memcmp</code>:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — the refactor, checked rather than asserted</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     bit-identical bodies: 400 of 400
+     worst position difference: 0.000e+00 m</code></pre>
+  </div>
+
+  <p>
+    Two things in the split are not free, and both are named rather than hidden. The first is
+    <code>gyroscopic_mode::momentum</code>, whose derivation advances the orientation in the
+    <em>middle</em> of itself — a half step to estimate where the body will be pointing, then the
+    full step, then the angular velocity re-derived at the new orientation. That block cannot be
+    cut in two, so all of it runs in the velocity half and the position half skips the orientation
+    of a body in that mode. The consequence is one frame of lag on spin for a contact impulse
+    applied in the gap, on a mode that is off by default.
+  </p>
+
+  <p>
+    The second is a cost:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§I — what the split costs, and what pays for it</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     monolithic    58.167 us   14.542 ns/body
+     split         79.750 us   19.938 ns/body   +37.1%
+
+     AND WHAT PAYS FOR IT: the same 101-body yard, integrated
+     asleep 0.125 us and awake 1.958 us — 15.7x.</code></pre>
+  </div>
+
+  <p>
+    A second <code>mat3_from_quat</code> per dynamic body per step, because two functions cannot
+    share a local variable. 8.3 §12's largest single saving was hoisting exactly that call so the
+    angular half built the rotation once and used it twice; splitting the function gives half of it
+    back. Thirty-seven per cent is not nothing, and it is paid gladly, because §10's sleeping
+    removes both halves for most of the bodies in a settled scene.
+  </p>
+
+  <h2 id="implementation">12. Writing it</h2>
+
+  <p>
+    Nine pieces, and the order below is the order they were written, because each one is testable
+    before the next exists.
+  </p>
+
+  <h3>12.1 The position correction, as a target</h3>
+
+  <p>
+    Baumgarte's bias is the one prepared quantity that depends on the length of the step, which is
+    why it is not computed in <code>prepare_contacts</code>. That function's other outputs — lever
+    arms, effective masses, the restitution target — are facts about the contact at an instant;
+    this is a fact about the contact <em>and the schedule</em>.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — the bias</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">const float inv_h = 1.0f / h;
+for (int i = 0; i &lt; batch.count; ++i)
+{
+    contact_constraint&amp; c = batch.points[i];
+    const float excess = std::max(0.0f, -c.separation - cfg.penetration_slop);
+    c.bias = std::min(cfg.baumgarte * excess * inv_h, cfg.max_correction_speed);
+}</code></pre>
+  </div>
+
+  <p>
+    Three decisions in three lines. The slop comes off <em>first</em> and the result is clamped at
+    zero, so a contact resting at the slop asks for nothing (§8). The division by <code>h</code>
+    turns a displacement into a velocity. And the <code>min</code> is §7's clamp.
+  </p>
+
+  <h3>12.2 …and where it is applied</h3>
+
+  <p>
+    The same number drives both corrections, and what differs is <em>whose velocity</em> it pushes
+    on. <code>solve_contacts</code> adds it to the target only under Baumgarte:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — one line, switched</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">const bool use_bias = cfg.correction == position_correction::baumgarte;
+...
+report.normal_impulse += solve_one_normal(a, b, batch, c, use_bias ? c.bias : 0.0f);</code></pre>
+  </div>
+
+  <p>
+    and <code>solve_one_normal</code> gains one term:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — the normal solve, unchanged except for <code>bias</code></span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">float delta = (c.target_normal_velocity + bias - vn) * c.normal_mass;
+
+const float total = std::max(0.0f, c.normal_impulse + delta);
+delta = total - c.normal_impulse;
+c.normal_impulse = total;</code></pre>
+  </div>
+
+  <h3>12.3 The position solve, in the shadow</h3>
+
+  <p>
+    Structurally identical, against <code>pseudo_velocity</code> instead of the bodies. Notice what
+    it does <em>not</em> take:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — no bodies at all</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">float solve_positions(contact_batch&amp; batch, pseudo_velocity&amp; pa, pseudo_velocity&amp; pb,
+                      const solver_config&amp; cfg)
+{
+    ...
+    const vec3 u = (pb.linear + cross(pb.angular, c.r_b))
+                   - (pa.linear + cross(pa.angular, c.r_a));
+    const float vn = dot(u, batch.normal);
+
+    float delta = (c.bias - vn) * c.normal_mass;
+
+    const float total = std::max(0.0f, c.pseudo_impulse + delta);
+    delta = total - c.pseudo_impulse;
+    c.pseudo_impulse = total;
+    ...
+}</code></pre>
+  </div>
+
+  <p>
+    Everything it needs — the lever arms, the inverse masses, the world inverse inertia tensors,
+    the effective masses — was hoisted into <code>contact_batch</code> by
+    <code>prepare_contacts</code>, and the bodies themselves were only ever the place the velocity
+    happened to live. <strong>That is the shape 8.11 generalises</strong>: a constraint is a
+    Jacobian, an effective mass and a clamp, and the solver never needs to know what it is
+    constraining.
+  </p>
+
+  <p>
+    Every point is solved, not just the penetrating ones. A point resting at the slop has a target
+    of zero, and solving it is what stops a <em>neighbouring</em> point's correction from levering
+    this corner further into the floor.
+  </p>
+
+  <p>
+    And the pseudo velocity moves the orientation as well as the position, which is not decoration:
+    a crate resting on one corner is corrected <em>at that corner</em>, the correction is
+    off-centre, and what the contact wants is for the crate to <strong>level</strong>. Translate
+    only and it climbs out of the floor sideways, sliding along a surface it is not sliding on.
+  </p>
+
+  <h3>12.4 The tangent basis, rotated</h3>
+
+  <p>
+    §4's bug, fixed with two dot products:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — in <code>prepare_contacts</code></span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">if (length_squared(m.tangent[0]) &gt; 0.5f)
+{
+    const vec3 world = m.tangent[0] * cp.tangent_impulse[0]
+                       + m.tangent[1] * cp.tangent_impulse[1];
+    c.tangent_impulse[0] = dot(world, batch.tangent[0]);
+    c.tangent_impulse[1] = dot(world, batch.tangent[1]);
+}</code></pre>
+  </div>
+
+  <p>
+    Rebuild the world-space impulse in the frame it was measured in; re-measure it in this one.
+    The <code>length_squared &gt; 0.5</code> is the "no basis stored" case — a manifold that has
+    never been through a solver, whose impulses are zero and whose frame is therefore moot.
+  </p>
+
+  <h3>12.5 Islands, in place</h3>
+
+  <p>
+    Union–find with path halving, using the output array as the parent array, and the encoding
+    trick §9's callout describes:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — the labelling passes</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">for (int i = 0; i &lt; n; ++i)
+{
+    const std::size_t u = static_cast&lt;std::size_t&gt;(i);
+    if (island_of[u] &gt;= 0) { island_of[u] = find_root(island_of, i); }
+}
+
+int count = 0;
+for (int i = 0; i &lt; n; ++i)
+{
+    const std::size_t u = static_cast&lt;std::size_t&gt;(i);
+    if (island_of[u] == i) { island_of[u] = -count - 2; ++count; }
+}</code></pre>
+  </div>
+
+  <p>
+    <code>−count − 2</code>, and the 2 is not a typo. The obvious <code>−label − 1</code> sends
+    label 0 to <code>−1</code>, which is already this array's sentinel for "no island" — so the
+    <em>first</em> island in every scene silently ceased to exist, its contacts were never grouped
+    and never solved, and a tower whose bottom crate happened to land in it fell through the floor
+    while every other tower stood.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>What found that was not the falling crate.</strong> A crate falling through a floor
+      has a hundred plausible causes and the geometry pipeline is five lessons of them. What found
+      it was <code>stats.points == 0</code> on a frame where <code>deepest()</code> was reporting
+      57&nbsp;mm — <em>two instruments disagreeing with each other</em>. Neither was wrong about
+      what it measured; they could not both be measuring the same manifold. Keep enough counters
+      that they can contradict one another.
+    </p>
+  </div>
+
+  <h3>12.6 The grouping</h3>
+
+  <p>
+    A counting sort, exactly as 8.8's grid sorts proxies into cells and for the same payoff: every
+    island's members end up adjacent in one contiguous array, so the sleep pass can take a range
+    and Module 9's job system can take one per thread. Count, prefix-sum, scatter — and the
+    <code>body_count</code> field doubles as the fill cursor, restored by the scatter itself.
+  </p>
+
+  <h3>12.7 Waking, before; sleeping, after</h3>
+
+  <p>
+    <code>wake_islands</code> reads flags the previous step set and clears them on any island that
+    is not entirely asleep. <code>update_sleep</code> advances the timers and puts whole islands
+    out. §10 is why they are at opposite ends of <code>solve</code>.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — the sleep pass, per island</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">bool quiet = cfg.enabled;
+for (int k = 0; quiet &amp;&amp; k &lt; isl.body_count; ++k)
+{
+    const rigid_body&amp; b = bodies[island_bodies[isl.first_body + k]];
+    if (!b.allow_sleep
+        || !is_sleep_candidate(b, cfg.linear_threshold, cfg.angular_threshold))
+    {
+        quiet = false;
+    }
+}</code></pre>
+  </div>
+
+  <p>
+    One veto is enough, which is the all-or-nothing rule: a single moving crate at the bottom of a
+    pile keeps the pile awake, and that is not a compromise — it is the correct answer, because the
+    pile is about to move.
+  </p>
+
+  <p>
+    And a body that falls asleep has its velocities <em>zeroed</em>. That is not tidiness: a body
+    frozen at 4&nbsp;cm/s resumes at 4&nbsp;cm/s when something wakes it half a second later, in a
+    direction that no longer means anything, and until then its momentum keeps appearing in
+    <code>step_report</code> so the scene's conservation laws report a drift that nothing is
+    causing. Two lines, and they make "asleep" a state rather than a pause.
+  </p>
+
+  <h3>12.8 The loop</h3>
+
+  <p>
+    Thirty lines, and the only subtlety is what is inside it and what is outside:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — <code>contact_solver::solve</code>, in outline</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">// 1. the contact graph, and the counting sort
+// 2. wake_islands — before the solve
+// 3. per awake manifold: prepare_contacts, prepare_bias, warm_start_contacts   ONCE
+// 4. velocity_iterations x { per awake manifold: solve_contacts }
+// 5. position_iterations x { per awake manifold: solve_positions }
+//    then apply_pseudo_velocity per awake body
+// 6. write_back per awake manifold
+// 7. update_sleep — after the solve</code></pre>
+  </div>
+
+  <p>
+    Stage 3's warm start is <em>once per step</em>, and that is 8.9's scar: the first draft of that
+    lesson put it inside the iteration loop, and with sixteen iterations the inherited impulse was
+    applied sixteen times. A crate dropped on a 20-degree ramp slid <strong>810&nbsp;mm</strong>
+    down a slope it should have gripped — and it did not look like "warm starting is applied too
+    often", it looked like friction had stopped working, because the spurious normal impulses had
+    launched the crate off the surface.
+  </p>
+
+  <h3>12.9 The caller's side</h3>
+
+  <p>
+    Worth writing out once in full, because the ordering constraints are all in it:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">scratch/verify_810.cpp — one step, every stage</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">cfg.restitution_bias = world.gravity() * h;
+
+world.integrate_velocities(h);
+
+// broadphase
+grid.build(proxies, bp);
+
+// narrow phase, with 8.7's cache in the middle
+cache.begin_frame();
+manifolds.reserve(grid.pairs().size());     // the solver holds POINTERS into this
+for (const broadphase_pair&amp; p : grid.pairs())
+{
+    contact_manifold m = collide_indices(p.a, p.b);
+    if (m.count == 0) { continue; }
+    if (const contact_manifold* previous = cache.find(pair_key(p.a, p.b)))
+    {
+        carry_impulses(m, *previous);
+    }
+    manifolds.push_back(m);
+}
+
+// the solve
+solver.begin(world.bodies());
+for (...) { solver.add(pair_a[i], pair_b[i], manifolds[i], material); }
+stats = solver.solve(h, cfg, sleep);
+
+for (...) { cache.store(keys[i], manifolds[i]); }
+cache.end_frame();
+
+world.integrate_positions(h);</code></pre>
+  </div>
+
+  <p>
+    The <code>reserve</code> is load-bearing and is the kind of thing that bites once:
+    <code>contact_solver::add</code> keeps a pointer into that vector, and a reallocation half way
+    through the loop hands the solver freed memory. The engine's contract says the manifold must
+    outlive the step; that line is what honouring it looks like from the caller's side.
+  </p>

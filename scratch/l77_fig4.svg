@@ -1,0 +1,53 @@
+<svg viewBox="0 0 760 410" role="img" aria-labelledby="f77c-t f77c-d">
+  <title id="f77c-t">Interpolating scale linearly or geometrically</title>
+  <desc id="f77c-d">Two curves from 1 to 8 with their midpoints marked at 4.500 and 2.828, and the percentage gap between the two rules plotted against the ratio, with the range content actually uses shaded.</desc>
+  <defs>
+    <marker id="e-i-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-rose-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<defs><marker id="e-teal-f77c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60c4ce"/></marker></defs>
+<text x="380.0" y="30" class="sm" text-anchor="middle">scale: equal differences, or equal ratios</text>
+<text x="380.0" y="47" class="xs muted" text-anchor="middle">the same two endpoints, 1 and 8, reached two ways</text>
+<rect x="54.0" y="74.0" width="300.0" height="210.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<path d="M 68.00,268.00 L 72.25,265.22 L 76.50,262.44 L 80.75,259.66 L 85.00,256.88 L 89.25,254.09 L 93.50,251.31 L 97.75,248.53 L 102.00,245.75 L 106.25,242.97 L 110.50,240.19 L 114.75,237.41 L 119.00,234.62 L 123.25,231.84 L 127.50,229.06 L 131.75,226.28 L 136.00,223.50 L 140.25,220.72 L 144.50,217.94 L 148.75,215.16 L 153.00,212.38 L 157.25,209.59 L 161.50,206.81 L 165.75,204.03 L 170.00,201.25 L 174.25,198.47 L 178.50,195.69 L 182.75,192.91 L 187.00,190.12 L 191.25,187.34 L 195.50,184.56 L 199.75,181.78 L 204.00,179.00 L 208.25,176.22 L 212.50,173.44 L 216.75,170.66 L 221.00,167.88 L 225.25,165.09 L 229.50,162.31 L 233.75,159.53 L 238.00,156.75 L 242.25,153.97 L 246.50,151.19 L 250.75,148.41 L 255.00,145.62 L 259.25,142.84 L 263.50,140.06 L 267.75,137.28 L 272.00,134.50 L 276.25,131.72 L 280.50,128.94 L 284.75,126.16 L 289.00,123.38 L 293.25,120.59 L 297.50,117.81 L 301.75,115.03 L 306.00,112.25 L 310.25,109.47 L 314.50,106.69 L 318.75,103.91 L 323.00,101.12 L 327.25,98.34 L 331.50,95.56 L 335.75,92.78 L 340.00,90.00" fill="none" stroke="#ec7a8c" stroke-width="1.4"/>
+<path d="M 68.00,268.00 L 72.25,267.16 L 76.50,266.29 L 80.75,265.40 L 85.00,264.47 L 89.25,263.51 L 93.50,262.53 L 97.75,261.51 L 102.00,260.45 L 106.25,259.36 L 110.50,258.24 L 114.75,257.08 L 119.00,255.87 L 123.25,254.63 L 127.50,253.35 L 131.75,252.03 L 136.00,250.66 L 140.25,249.25 L 144.50,247.79 L 148.75,246.28 L 153.00,244.73 L 157.25,243.12 L 161.50,241.46 L 165.75,239.74 L 170.00,237.97 L 174.25,236.14 L 178.50,234.24 L 182.75,232.29 L 187.00,230.27 L 191.25,228.19 L 195.50,226.03 L 199.75,223.81 L 204.00,221.51 L 208.25,219.13 L 212.50,216.68 L 216.75,214.14 L 221.00,211.52 L 225.25,208.82 L 229.50,206.02 L 233.75,203.14 L 238.00,200.16 L 242.25,197.08 L 246.50,193.89 L 250.75,190.61 L 255.00,187.21 L 259.25,183.70 L 263.50,180.08 L 267.75,176.34 L 272.00,172.47 L 276.25,168.47 L 280.50,164.35 L 284.75,160.09 L 289.00,155.68 L 293.25,151.13 L 297.50,146.43 L 301.75,141.58 L 306.00,136.56 L 310.25,131.38 L 314.50,126.03 L 318.75,120.50 L 323.00,114.79 L 327.25,108.89 L 331.50,102.80 L 335.75,96.50 L 340.00,90.00" fill="none" stroke="#60c4ce" stroke-width="1.4"/>
+<circle cx="204.00" cy="179.00" r="3.4" fill="#ec7a8c"/>
+<text x="214.0" y="183.0" class="xs mono" text-anchor="start">4.500</text>
+<circle cx="204.00" cy="221.51" r="3.4" fill="#60c4ce"/>
+<text x="214.0" y="225.50563714285715" class="xs mono" text-anchor="start">2.828</text>
+<line x1="204.0" y1="221.50563714285715" x2="204.0" y2="179.0" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="204.0" y="64.0" class="xs muted" text-anchor="middle">the value, against t</text>
+<text x="68.0" y="300.0" class="xs mono" text-anchor="start">1</text>
+<text x="340.0" y="300.0" class="xs mono" text-anchor="end">8</text>
+<text x="236.64" y="130.68571428571428" class="xs" text-anchor="start">lerp</text>
+<text x="263.84000000000003" y="217.14285714285714" class="xs" text-anchor="start">a·(b/a)ᵗ</text>
+<rect x="406.0" y="74.0" width="300.0" height="210.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="424.0126950816163" y="78.0" width="28.31697726847159" height="202.0" rx="2" fill="#60c4ce" stroke="#60c4ce" stroke-width="0.0" fill-opacity="0.12"/>
+<text x="438.17118371585207" y="96.0" class="xs muted" text-anchor="middle">squash</text>
+<text x="438.17118371585207" y="110.0" class="xs muted" text-anchor="middle">and</text>
+<text x="438.17118371585207" y="124.0" class="xs muted" text-anchor="middle">stretch</text>
+<text x="438.17118371585207" y="140.0" class="xs mono" text-anchor="middle">≤ 0.62%</text>
+<path d="M 424.10,266.00 L 424.39,266.00 L 424.86,266.00 L 425.53,265.99 L 426.39,265.99 L 427.42,265.97 L 428.64,265.95 L 430.03,265.92 L 431.58,265.87 L 433.29,265.81 L 435.16,265.72 L 437.18,265.61 L 439.33,265.47 L 441.62,265.30 L 444.03,265.10 L 446.56,264.85 L 449.19,264.57 L 451.93,264.24 L 454.76,263.87 L 457.68,263.44 L 460.68,262.97 L 463.75,262.44 L 466.88,261.85 L 470.07,261.21 L 473.32,260.51 L 476.61,259.75 L 479.94,258.93 L 483.31,258.05 L 486.71,257.11 L 490.14,256.11 L 493.58,255.04 L 497.05,253.92 L 500.52,252.73 L 504.01,251.48 L 507.51,250.18 L 511.00,248.81 L 514.50,247.38 L 518.00,245.90 L 521.49,244.36 L 524.98,242.76 L 528.46,241.11 L 531.92,239.41 L 535.38,237.65 L 538.82,235.84 L 542.25,233.98 L 545.66,232.07 L 549.05,230.11 L 552.43,228.11 L 555.79,226.05 L 559.12,223.96 L 562.44,221.82 L 565.73,219.64 L 569.01,217.41 L 572.26,215.15 L 575.49,212.84 L 578.69,210.50 L 581.87,208.12 L 585.03,205.70 L 588.17,203.25 L 591.28,200.76 L 594.36,198.24 L 597.43,195.69 L 600.46,193.10 L 603.48,190.49 L 606.47,187.84 L 609.44,185.17 L 612.38,182.46 L 615.30,179.73 L 618.19,176.97 L 621.06,174.19 L 623.91,171.38 L 626.73,168.55 L 629.53,165.69 L 632.31,162.81 L 635.07,159.91 L 637.80,156.98 L 640.51,154.03 L 643.19,151.06 L 645.86,148.07 L 648.50,145.07 L 651.12,142.04 L 653.73,138.99 L 656.30,135.93 L 658.86,132.84 L 661.40,129.74 L 663.92,126.63 L 666.41,123.49 L 668.89,120.34 L 671.34,117.18 L 673.78,114.00 L 676.20,110.80 L 678.60,107.59 L 680.97,104.37 L 683.33,101.13 L 685.68,97.88 L 688.00,94.61" fill="none" stroke="#ec7a8c" stroke-width="1.4"/>
+<circle cx="430.19" cy="265.91" r="3.0" fill="#ec7a8c"/>
+<circle cx="452.33" cy="264.19" r="3.0" fill="#ec7a8c"/>
+<text x="438.3296723500879" y="254.19330000000002" class="xs mono" text-anchor="middle">0.62%</text>
+<text x="452.3296723500879" y="300.0" class="xs mono" text-anchor="middle">1.25×</text>
+<circle cx="512.00" cy="248.41" r="3.0" fill="#ec7a8c"/>
+<text x="512.0" y="238.4086" class="xs mono" text-anchor="middle">6.07%</text>
+<text x="512.0" y="300.0" class="xs mono" text-anchor="middle">2×</text>
+<circle cx="600.00" cy="193.50" r="3.0" fill="#ec7a8c"/>
+<text x="600.0" y="183.5" class="xs mono" text-anchor="middle">25.00%</text>
+<text x="600.0" y="300.0" class="xs mono" text-anchor="middle">4×</text>
+<circle cx="688.00" cy="94.61" r="3.0" fill="#ec7a8c"/>
+<text x="688.0" y="84.61290000000002" class="xs mono" text-anchor="middle">59.10%</text>
+<text x="688.0" y="300.0" class="xs mono" text-anchor="middle">8×</text>
+<text x="556.0" y="64.0" class="xs muted" text-anchor="middle">how far apart the two rules are, at the midpoint</text>
+<text x="380.0" y="328.0" class="sm" text-anchor="middle">and two things that end the argument</text>
+<text x="380.0" y="348.0" class="xs muted" text-anchor="middle">a scale of ZERO is how an animator hides a thing, and ln(0) is −∞: the geometric rule</text>
+<text x="380.0" y="364.0" class="xs muted" text-anchor="middle">does not shrink toward zero, it teleports there on the first frame after t = 0. A mirrored</text>
+<text x="380.0" y="380.0" class="xs muted" text-anchor="middle">rig carries a NEGATIVE scale, and ln(−1) is NaN. glTF’s LINEAR mode is (1−t)·vₖ + t·vₖ₊₁.</text>
+</svg>

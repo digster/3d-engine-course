@@ -1,0 +1,259 @@
+  <h2 id="step">8. Stepping up</h2>
+
+  <p>
+    A stair is a wall 18&nbsp;cm tall, and walls stop the sideways pass. The <strong>step-up</strong> turns a
+    short wall into a stair. When the sideways pass hits a wall while the character is grounded, it tries,
+    once per move, three casts in a row: <em>up</em> by <code>step_height</code> (or as far as the ceiling
+    allows), <em>across</em> by the rest of the move, and <em>down</em> by as much as it rose. The step is
+    kept only if the down cast <strong>lands on walkable ground</strong>, higher than the start and no
+    higher than <code>step_height</code>. Otherwise it never happened, and the pass slides along the wall
+    as usual.
+  </p>
+
+  <p>
+    That much is in every character controller. The round bottom adds a condition that is easy to miss
+    and fatal to leave out. At the riser, the bottom sphere's centre is <em>short of the ledge's edge</em>:
+    by <code>√((r+s)²&nbsp;−&nbsp;(r+s&nbsp;−&nbsp;riser)²)</code> for a riser lower than
+    <code>r&nbsp;+&nbsp;skin</code>, and by the full <code>r&nbsp;+&nbsp;skin</code> for anything taller. After
+    rising and moving across by <code>f</code>, the down cast lands on the <em>edge</em>, with the tilted
+    normal of §6. The landing is walkable only if the centre is now within <code>(r+s)·sin&nbsp;θ</code> of the
+    edge. So <code>f</code> must be at least the distance short of the edge, less that, and for any riser at
+    least as tall as <code>r&nbsp;+&nbsp;skin</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ f_{\min} \;=\; (r + \text{skin})\,(1 - \sin\theta_{\max}) \;=\; 0.31 \times 0.2929 \;=\; 90.8\ \text{mm} \]</span>
+    <span class="eq-plain">the least forward move that lands walkable on a tall ledge = (r + skin)(1 - sin max_slope) = 90.8 mm</span>
+  </div>
+
+  <p>
+    At 2&nbsp;m/s a step is 33.3&nbsp;mm across. A step-up that moved across only by the rest of the move
+    would land on the edge at a tilt of more than 45° every time, be refused every time, and leave the
+    character standing at the foot of the staircase forever. §G bisects the least forward move that lands
+    walkable at three risers and finds <strong>46.15, 84.67 and 90.89&nbsp;mm</strong>, against a prediction
+    of 46.32, 84.94 and 90.80 from the distance short of the edge less <code>(r+s)·sin&nbsp;θ</code>. The
+    step-up therefore moves across by <code>max(rest&nbsp;of&nbsp;move,&nbsp;f_min)</code>. That is a lurch
+    forward on the frame the step is taken, and it is the price of a round bottom; the same 90.8&nbsp;mm
+    rolled the capsule off a stair edge in §7, going down. Up eight 18&nbsp;cm stairs at 2&nbsp;m/s: eight
+    step-ups, zero frames in the air, at the top in 1.267&nbsp;s, and the worst extra forward movement in
+    one step is 75.9&nbsp;mm.
+  </p>
+
+  <p>
+    <strong>The tallest ledge is not <code>step_height</code>.</strong> §G bisects the tallest ledge the
+    character climbs with <code>step_height&nbsp;=&nbsp;0.30</code> and gets <strong>0.39092&nbsp;m</strong>.
+    After rising 0.30, the capsule's round bottom rolls over whatever of the ledge is left, exactly as it
+    rolled over §6's curb. The two add: <code>0.30&nbsp;+&nbsp;90.80&nbsp;mm&nbsp;=&nbsp;0.39080&nbsp;m</code>. If a
+    level designer's number is the ledge, author <code>step_height</code> as that number less the free curb.
+  </p>
+
+  <p>
+    <strong>A step that lands on a slope is refused</strong>, or a staircase of small steps would climb
+    anything. Pressed into a 60° slope for two seconds with the step-up on, the character takes
+    <strong>zero</strong> steps and rises zero: every down cast lands on the slope itself, with its own
+    60° normal. Set that against §1's rigid capsule, which climbed a 20&nbsp;cm ledge only at 8&nbsp;m/s. The
+    controller climbs 18&nbsp;cm, 30&nbsp;cm and anything up to 39&nbsp;cm at walking pace, at a jog, at a
+    run, and at a crawl. What climbs is decided by the ledge, and not by the speed.
+  </p>
+
+  @@FIG_STEP@@
+
+  <h2 id="tunnel">9. Tunnelling, revisited</h2>
+
+  <p>
+    Lesson 1.8's ball passed straight through its paddle at speed, and the swept test was the fix. Eight
+    modules later the rigid capsule of §1 has the same problem, and now we can say exactly how often.
+    8.10 §6 found that a body is first sampled overlapping a surface at a depth <code>d</code> spread
+    uniformly on <code>[0,&nbsp;v·h]</code>, because it crossed the surface at an unknown moment during the
+    step. Against a wall of thickness <code>w</code>, EPA's minimum translation pushes the capsule back out
+    the <em>near</em> side only while its centre has not passed the wall's middle,
+    <code>d&nbsp;&lt;&nbsp;w/2&nbsp;+&nbsp;r</code>. Past that, the shortest way out is forwards. So the
+    probability of going through is
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ P_{\text{through}} \;=\; \max\!\left(0,\; 1 - \frac{w/2 + r}{v\,h}\right) \]</span>
+    <span class="eq-plain">P(through) = max(0, 1 - (w/2 + r)/(v h)): zero below v = (w/2 + r)/h, 21 m/s for a 10 cm wall</span>
+  </div>
+
+  <p>
+    — zero below <code>(w/2&nbsp;+&nbsp;r)/h</code>, 21&nbsp;m/s for a 10&nbsp;cm wall and a 30&nbsp;cm capsule.
+    §H samples the <em>phase</em>, 200 evenly spaced starting offsets across one step of travel, not the
+    speed. That is 8.11's lesson: the quantity depends on where the event falls inside a step, so that
+    is what must be uniform. It measures 15.5%, 30.0%, 50.0%, 65.0% and 79.0% at 25, 30, 42, 60 and
+    100&nbsp;m/s, against 16.0, 30.0, 50.0, 65.0 and 79.0.
+  </p>
+
+  <p>
+    The controller never samples an instant. Its one question is about the whole interval, so a wall is
+    either in the swept volume or it is not. §H dashes it at a <strong>1&nbsp;cm</strong> wall at 10, 100,
+    1,000 and 10,000&nbsp;m/s, which is 167&nbsp;m in one step. It passes none of them, and stops
+    10.011, 10.051, 10.004 and 10.004&nbsp;mm from the face: the skin, to the tolerance. The character does
+    not need continuous collision detection added on. The cast <em>is</em> continuous collision
+    detection, for the one body that needed it most. The crates it kicks still tunnel at 8.10's odds;
+    speculative contacts remain open defect 3 of the module.
+  </p>
+
+  @@FIG_TUNNEL@@
+
+  <h2 id="carry">10. Standing on things that move</h2>
+
+  <p>
+    A lift rises, a turntable turns, a boat rocks. A character standing on one must move with it, and a
+    rigid body would do that for free, through friction, which is exactly the property §1 threw away. So
+    the controller carries the character itself. It knows which body it is standing on (the ground probe
+    kept the index), and it runs after the physics step. So the question is exact: what did that body
+    just do?
+  </p>
+
+  <p>
+    A kinematic body is moved by <code>integrate_positions</code>, and 8.12's lesson was that anything
+    reading a body's motion must invert the integrator the body was actually moved with. Its centre
+    travelled <code>v·h</code>. It turned about its old centre by the rotation <code>advance_orientation</code>
+    performs, which for the default linearised rule is <code>normalise(1,&nbsp;½hω)</code> and not the
+    axis-angle <code>|ω|h</code>. <code>step_motion</code> reads both back, and the carry applies them to the
+    character as a <strong>transform</strong>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ p' \;=\; c + v\,h + R_{\Delta}\,(p - c) \]</span>
+    <span class="eq-plain">p' = c + v h + R(p - c): the platform's step, applied to the rider — c the platform's old centre, R its step's rotation</span>
+  </div>
+
+  <p>
+    The carry is swept like any other move (a platform can carry you into a wall), and its rotation is
+    handed back so the game can turn the character's facing with the platform. On a turntable at 1 and
+    2&nbsp;rad/s, a rider 1.5&nbsp;m out is at <strong>1.50000&nbsp;m</strong> after one revolution, lagging
+    the plate by 0.000°, and facing exactly where the plate has turned it.
+  </p>
+
+  <p>
+    <strong>The tempting carry is by velocity</strong>: add the point velocity of the ground under the
+    rider, <code>v&nbsp;+&nbsp;ω&nbsp;×&nbsp;r</code>, times <code>h</code>. It is exact for a lift that only
+    translates. Both rules keep a rider on a lift moving (2,&nbsp;1.5,&nbsp;0)&nbsp;m/s within 10&nbsp;µm for
+    two seconds, and not carrying at all leaves it 5.1&nbsp;m behind. On a turntable it is wrong, and 8.11
+    already said why. A point velocity is <em>tangent</em> to the circle the rider is on, so each step
+    moves the rider along a tangent, off the circle:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ |r|^2 \;\leftarrow\; |r|^2\,\bigl(1 + (\omega h)^2\bigr) \qquad\Longrightarrow\qquad \text{growth per revolution} \;=\; \bigl(1 + (\omega h)^2\bigr)^{N/2} \;\approx\; e^{\pi\omega h} \]</span>
+    <span class="eq-plain">|r|^2 grows by 1 + (w h)^2 a step, so the radius grows by about e^(pi w h) a revolution: 5.4% at 1 rad/s, 11.1% at 2</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> At <code>ω&nbsp;=&nbsp;2&nbsp;rad/s</code> and 60&nbsp;Hz,
+    <code>ωh&nbsp;=&nbsp;1/30</code>, so each step multiplies the radius by
+    <code>√(1&nbsp;+&nbsp;1/900)&nbsp;=&nbsp;1.000555</code>. One linearised step turns the plate by
+    <code>2·atan(1/60)&nbsp;=&nbsp;0.033330</code>&nbsp;rad, so a revolution is
+    <code>2π/0.033330&nbsp;=&nbsp;188.51</code> steps, and
+    <code>1.000555<sup>188.51</sup>&nbsp;=&nbsp;1.11035</code>. The harness turns the plate for 189 whole steps
+    and measures <strong>1.11065</strong>, which is that number times one half-step more. At 1&nbsp;rad/s,
+    1.05375 measured and 1.05375 predicted. A rider 1.5&nbsp;m out gains 17&nbsp;cm a revolution and is thrown
+    off the plate in a few turns. It is 8.11's velocity joint again: a velocity is a tangent, and a tangent
+    leaves a circle.
+  </p>
+
+  @@FIG_CARRY@@
+
+  <h2 id="proxy">11. One owner: pushing, and being pushed</h2>
+
+  <p>
+    The character has left the simulation, and the crates have not. They meet through the
+    <strong>proxy</strong> of §2: a kinematic capsule in the <code>body_world</code>, which
+    <code>steer_proxy</code> gives the chord velocity from where it is to where the controller left the
+    character. The next physics step lands it there exactly, and that is 8.12's <code>steer</code>, for one
+    body. A dynamic body of 40&nbsp;kg or less is <em>pushable</em>: the controller's sideways moves ignore
+    it, the character walks into it, and the proxy, a moving body of infinite mass, shoves it out of the
+    way. §J pushes a 20&nbsp;kg crate at 2&nbsp;m/s for a second and a half and then lets it go.
+  </p>
+
+  <p>
+    <strong>Steered</strong>, the crate moves at 2.0000&nbsp;m/s with a velocity of 2.0000&nbsp;m/s: the
+    number anything reading it (friction, sound, damage, a network) will see is the truth. The proxy
+    overlaps it by exactly 5.00&nbsp;mm, which is 8.10's penetration slop. Released, it coasts 0.3562&nbsp;m.
+    That is the discrete <code>v²/(2μg)</code> of 0.3233, plus one step at 2&nbsp;m/s, because the proxy
+    follows the character a step late and so lets go a step late. Together they predict 0.3566.
+  </p>
+
+  <p>
+    <strong>Teleported</strong>, the proxy's position is written and its velocity left at zero, the obvious
+    way to put a body where you want it. The obvious prediction is a crate that moves with no velocity and
+    stops dead when the character stops. The first run refused even that. The crate had
+    <strong>fallen asleep</strong> before the character arrived, and 8.12's
+    <code>wake_touched_by_kinematic</code> wakes what a kinematic body touches only if that body is
+    <em>moving</em>. A teleported proxy's velocity says it is not, so the crate never woke, and the
+    character <strong>walked straight through it</strong>. That is the exact bug 8.12 fixed, reintroduced by
+    a lie about a velocity.
+  </p>
+
+  <p>
+    Kept awake, the teleported crate does move at 1.9941&nbsp;m/s, with a velocity of −0.0000. Only split
+    impulse's position pass moves it, by <code>β·(d&nbsp;−&nbsp;slop)</code> a step. To move it
+    <code>v·h</code> a step the proxy must start each step <code>v·h/β&nbsp;+&nbsp;slop</code> deep in it, and
+    end it <code>v·h</code> shallower:
+    <code>0.005&nbsp;+&nbsp;0.0333/0.2&nbsp;−&nbsp;0.0333&nbsp;=&nbsp;138.33&nbsp;mm</code> predicted, 138.20 measured.
+    The character is visibly <em>inside</em> the crate, sunk to its elbows. When the character stops, the
+    crate is pushed out of the excess, about <code>v·h/β&nbsp;=&nbsp;0.167&nbsp;m</code> (0.165 measured), and
+    has no velocity to keep. Under Baumgarte the same bias <em>is</em> velocity, so the crate gets its
+    2&nbsp;m/s back and coasts 0.3565&nbsp;m, while the character is still sunk 138&nbsp;mm in.
+  </p>
+
+  @@FIG_PUSH@@
+
+  <p>
+    <strong>Too heavy to push.</strong> A 100&nbsp;kg crate is over the limit and is a wall to the sideways
+    pass. The character stops a skin from it, the proxy never touches it, and it moves at 0.00000&nbsp;m/s.
+    <strong>Standing on a pushable crate</strong> still works, because the vertical pass and the ground
+    probe include pushable bodies: dropped onto a 20&nbsp;kg crate the character lands grounded, on the
+    crate, 0.0100&nbsp;m above its top. The crate carries none of the character's weight, because nothing
+    touches it. Exercise&nbsp;4 adds it.
+  </p>
+
+  <p>
+    <strong>Being pushed.</strong> A 200&nbsp;kg boulder rolled at 5&nbsp;m/s into a standing character is
+    moving at 0.0688&nbsp;m/s a second and a half later, and the character has not moved at all. The proxy
+    is kinematic, infinitely heavy, and the boulder hits it like a wall. That is the one-way coupling every
+    kinematic controller has. The first draft of <code>recover</code>, which pushes the character out of
+    whatever has moved into it, included heavy <em>dynamic</em> bodies too. With it, the same boulder
+    carried the character <strong>2.94&nbsp;m</strong> and kept 3.57&nbsp;m/s. That looked like a feature
+    until it was named: the solver was moving the controller's character, which is two owners for one
+    position. <code>recover</code> now answers only to fixed and kinematic bodies, the ones gameplay moves
+    by intent. A game that wants boulders to shove its hero reads the proxy's contact impulses back as a
+    <em>knockback</em>, deliberately, and exercise&nbsp;4 does that as well.
+  </p>
+
+  <h2 id="bill">12. The bill</h2>
+
+  <p>
+    §K times <code>move_character</code>, minimum over repetitions, against the optimised library:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Cost per move_character call</caption>
+    <thead>
+      <tr><th>scene</th><th>µs / move</th><th>sweeps</th><th>casts</th><th>Newton steps</th><th>GJK iterations</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>walking on a flat floor</td><td>0.963</td><td>2.01</td><td>1.99</td><td>1.99</td><td>15.05</td></tr>
+      <tr><td>up eight stairs (step-ups)</td><td>3.271</td><td>2.56</td><td>2.77</td><td>4.20</td><td>52.61</td></tr>
+      <tr><td>pressed into a 60° corner</td><td>6.852</td><td>4.95</td><td>13.83</td><td>13.86</td><td>124.50</td></tr>
+      <tr><td>a corridor through 10 boxes</td><td>1.750</td><td>3.00</td><td>2.05</td><td>2.05</td><td>10.06</td></tr>
+      <tr><td>…through 100 boxes</td><td>7.734</td><td>3.00</td><td>2.05</td><td>2.05</td><td>10.06</td></tr>
+      <tr><td>…through 1,000 boxes</td><td>84.698</td><td>3.00</td><td>2.05</td><td>2.05</td><td>10.06</td></tr>
+      <tr><td>…through 10,000 boxes</td><td>847.212</td><td>3.00</td><td>2.05</td><td>2.05</td><td>10.06</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A character on a floor costs <strong>a microsecond</strong> a step, two casts of about 7.5 GJK iterations
+    each: a sixteen-thousandth of a 60&nbsp;Hz frame. Stairs cost three times that, because every step-up is
+    three more casts. A corner costs seven times that, because it slides twice and each slide is a cast
+    against both walls. None of that grows with the size of the world. What does is the <em>cull</em>. Every
+    sweep tests the move's bounds against every body in the scene, and at ten thousand boxes that linear
+    scan is 847&nbsp;µs, <strong>10.00×</strong> the cost at a thousand, for the same 2.05 casts. The casts
+    are cheap and the list is not, which is 8.8's lesson from the other side. A region query on 8.8's grid
+    is exercise&nbsp;5.
+  </p>

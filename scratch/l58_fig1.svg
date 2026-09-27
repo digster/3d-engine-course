@@ -1,0 +1,100 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="l58f1-t l58f1-d">
+  <title id="l58f1-t">One wide struct compared with six components</title>
+  <desc id="l58f1-d">Above, a six-field scene_object where a floor and a mover leave fields unused but still pay for them. Below, six component types where each kind of entity simply has a different subset, and an absent component is an absent row.</desc>
+  <defs>
+    <marker id="e-i-l58f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l58f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l58f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l58f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l58f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The same world, described two ways. Read the ROWS: what does each kind of thing actually mean?</text>
+<text x="24" y="46" class="xs t-hi" text-anchor="start">TODAY — one struct, six fields, and every object carries all six.</text>
+<rect x="96" y="58" width="96" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="144" y="71" class="xs mono" text-anchor="middle">xform</text>
+<rect x="196" y="58" width="96" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="244" y="71" class="xs mono" text-anchor="middle">geometry</text>
+<rect x="296" y="58" width="96" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="344" y="71" class="xs mono" text-anchor="middle">name</text>
+<rect x="396" y="58" width="96" height="18" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="444" y="71" class="xs mono" text-anchor="middle">tint</text>
+<rect x="496" y="58" width="96" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="544" y="71" class="xs mono" text-anchor="middle">closed</text>
+<rect x="596" y="58" width="96" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="644" y="71" class="xs mono" text-anchor="middle">surface</text>
+<text x="88" y="95" class="xs mono muted" text-anchor="end">a cube</text>
+<rect x="96" y="82" width="96" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="196" y="82" width="96" height="17" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="296" y="82" width="96" height="17" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="396" y="82" width="96" height="17" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="496" y="82" width="96" height="17" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="596" y="82" width="96" height="17" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="88" y="115" class="xs mono muted" text-anchor="end">the floor</text>
+<rect x="96" y="102" width="96" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="196" y="102" width="96" height="17" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="296" y="102" width="96" height="17" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="396" y="102" width="96" height="17" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="496" y="102" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="544" y="114" class="xs muted" text-anchor="middle">unused</text>
+<rect x="596" y="102" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="644" y="114" class="xs muted" text-anchor="middle">unused</text>
+<text x="88" y="135" class="xs mono muted" text-anchor="end">a mover</text>
+<rect x="96" y="122" width="96" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="196" y="122" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="244" y="134" class="xs muted" text-anchor="middle">unused</text>
+<rect x="296" y="122" width="96" height="17" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="396" y="122" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="444" y="134" class="xs muted" text-anchor="middle">unused</text>
+<rect x="496" y="122" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="544" y="134" class="xs muted" text-anchor="middle">unused</text>
+<rect x="596" y="122" width="96" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="644" y="134" class="xs muted" text-anchor="middle">unused</text>
+<text x="24" y="166" class="xs muted" text-anchor="start">The dashed cells are paid for anyway: they are in the struct, in the array, and in the cache line.</text>
+<text x="24" y="180" class="xs muted" text-anchor="start">A “mover” with no geometry is a null handle plus a branch in the renderer.</text>
+<line x1="24" y1="196" x2="696" y2="196" class="grid" stroke-width="1.2"/>
+<text x="24" y="218" class="xs t-hi" text-anchor="start">LESSON 5.8 — six components, and an entity is WHICH ONES IT HAS.</text>
+<rect x="118" y="230" width="88" height="18" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="162" y="243" class="xs mono" text-anchor="middle">placement</text>
+<rect x="213" y="230" width="88" height="18" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="257" y="243" class="xs mono" text-anchor="middle">geometry</text>
+<rect x="308" y="230" width="88" height="18" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="352" y="243" class="xs mono" text-anchor="middle">material</text>
+<rect x="403" y="230" width="88" height="18" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="447" y="243" class="xs mono" text-anchor="middle">orbit</text>
+<rect x="498" y="230" width="88" height="18" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="542" y="243" class="xs mono" text-anchor="middle">spin</text>
+<rect x="593" y="230" width="88" height="18" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="637" y="243" class="xs mono" text-anchor="middle">lifetime</text>
+<text x="110" y="267" class="xs mono muted" text-anchor="end">the sun</text>
+<rect x="118" y="254" width="88" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="213" y="254" width="88" height="17" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="308" y="254" width="88" height="17" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<line x1="435" y1="262" x2="459" y2="262" class="grid" stroke-width="1.0"/>
+<rect x="498" y="254" width="88" height="17" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<line x1="625" y1="262" x2="649" y2="262" class="grid" stroke-width="1.0"/>
+<text x="110" y="287" class="xs mono muted" text-anchor="end">a ring member</text>
+<rect x="118" y="274" width="88" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="213" y="274" width="88" height="17" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="308" y="274" width="88" height="17" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="403" y="274" width="88" height="17" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="498" y="274" width="88" height="17" rx="3" fill="none" stroke="#8f918a" stroke-width="0.9" stroke-dasharray="3 3"/>
+<text x="542" y="286" class="xs muted" text-anchor="middle">1 in 3</text>
+<line x1="625" y1="282" x2="649" y2="282" class="grid" stroke-width="1.0"/>
+<text x="110" y="307" class="xs mono muted" text-anchor="end">a waypoint</text>
+<rect x="118" y="294" width="88" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<line x1="245" y1="302" x2="269" y2="302" class="grid" stroke-width="1.0"/>
+<line x1="340" y1="302" x2="364" y2="302" class="grid" stroke-width="1.0"/>
+<rect x="403" y="294" width="88" height="17" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<line x1="530" y1="302" x2="554" y2="302" class="grid" stroke-width="1.0"/>
+<line x1="625" y1="302" x2="649" y2="302" class="grid" stroke-width="1.0"/>
+<text x="110" y="327" class="xs mono muted" text-anchor="end">a spark</text>
+<rect x="118" y="314" width="88" height="17" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="213" y="314" width="88" height="17" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="308" y="314" width="88" height="17" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.14"/>
+<rect x="403" y="314" width="88" height="17" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.14"/>
+<line x1="530" y1="322" x2="554" y2="322" class="grid" stroke-width="1.0"/>
+<rect x="593" y="314" width="88" height="17" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="24" y="352" class="xs muted" text-anchor="start">There is no cell to leave blank — an absent component is an absent ROW, in a pool that was never asked about.</text>
+<text x="24" y="366" class="xs muted" text-anchor="start">The waypoint is invisible because the render query names `geometry` and it has none. Nobody wrote an `if`.</text>
+<text x="24" y="384" class="xs t-hi" text-anchor="start">Same information. The difference is which absences cost something.</text>
+</svg>

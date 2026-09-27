@@ -1,0 +1,572 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="04-02-sdl-gpu-model.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">4.2 — The SDL_GPU Mental Model</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-04-first-triangle.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.4 — The First Triangle</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 4 — To the GPU: SDL_GPU · Lesson 4.3</div>
+    <h1>The Shader Toolchain</h1>
+    <p class="deck">
+      One HLSL file has to become three different binaries, because Metal, Vulkan and D3D12 do
+      not speak the same language — and then SDL has to be told four numbers about it that only
+      the compiler knows. This lesson builds that pipeline into CMake, and finds out what the
+      tool actually does rather than what its documentation implies.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="00-04-cmake-from-zero.html">0.4 — CMake From Zero</a>,
+          <a href="03-09-textures.html">3.9 — Textures</a>,
+          <a href="../conventions.html">Conventions</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>shaders/triangle.vert.hlsl</code>, <code>shaders/triangle.frag.hlsl</code>,
+            <code>shaders/textured.vert.hlsl</code>, <code>shaders/textured.frag.hlsl</code>,
+            <code>cmake/Shaders.cmake</code>, <code>src/gfx/gpu_shader.hpp</code>,
+            <code>src/gfx/gpu_shader.cpp</code>, <code>src/gfx/gpu_device.hpp</code>,
+            <code>src/gfx/gpu_device.cpp</code>, <code>src/main.cpp</code>,
+            <code>CMakeLists.txt</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>Four HLSL files become <code>SDL_GPUShader</code> objects on the device, in a binary
+            format chosen from what the device says it accepts — and four green squares in
+            <code>engine --gpu</code> say so.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why one shader source must become three binaries, and why SPIR-V sits in the
+          middle of every path.</li>
+      <li>…wire shader compilation into CMake so a shader edit is a build step, and
+          <em>probe</em> the toolchain at configure time instead of assuming it.</li>
+      <li>…declare a resource in the register space SDL_GPU requires, and verify with one command
+          that your shader ended up where you think it did.</li>
+      <li>…fill in <code>SDL_GPUShaderCreateInfo</code> correctly — including the four counts SDL
+          will happily let you get wrong.</li>
+      <li>…recognise the two failures that make a correctly-written shader refuse to load: the
+          renamed entry point, and the format the device cannot read.</li>
+      <li>…say where the shader compile actually happens, having established that it is not where
+          the function called <code>CreateShader</code> is.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-hub">Why there is a hub in the middle</a></li>
+          <li><a href="#intuition-offline">Offline, and what that actually buys</a></li>
+          <li><a href="#intuition-tool">The tool, honestly described</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-spaces">Register spaces, and why they are not yours to choose</a></li>
+          <li><a href="#theory-semantics">Semantics, and the one that is different</a></li>
+          <li><a href="#theory-counts">The four counts</a></li>
+          <li><a href="#theory-entry">The entry point you did not write</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-shaders">Four shaders</a></li>
+          <li><a href="#impl-cmake">A build step that asks first</a></li>
+          <li><a href="#impl-load">Loading one onto the device</a></li>
+          <li><a href="#impl-json">A parser that is allowed to be small</a></li>
+          <li><a href="#impl-probe">Four green squares</a></li>
+          <li><a href="#impl-when">Where the compile actually happens</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Lesson 4.2 ended with your rasterizer's picture on screen, carried entirely by SDL_GPU. Every
+    object in the API existed except one, and the reason we could get that far without it is that
+    clearing and copying are things the hardware does <em>without being told how</em>. The moment
+    you want the GPU to <em>compute</em> a colour, you need a program to run on it.
+  </p>
+
+  <p>
+    So write one. Here is a fragment shader, in about the smallest form that does anything:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">the shader we want</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-hlsl">float4 main(float4 colour : TEXCOORD0) : SV_Target0
+{
+    return colour;
+}</code></pre>
+  </figure>
+
+  <p>
+    Now hand it to SDL. The signature is the obvious one — <code>SDL_CreateGPUShader(device,
+    &amp;info)</code> — and the trouble starts with what <code>info</code> wants:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">SDL3/SDL_gpu.h</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="c">C</span>
+    </figcaption>
+    <pre><code class="lang-cpp">typedef struct SDL_GPUShaderCreateInfo
+{
+    size_t code_size;             /**&lt; The size in bytes of the code pointed to. */
+    const Uint8 *code;            /**&lt; A pointer to shader code. */
+    const char *entrypoint;       /**&lt; ...the entry point function name for the shader. */
+    SDL_GPUShaderFormat format;   /**&lt; The format of the shader code. */
+    SDL_GPUShaderStage stage;     /**&lt; The stage the shader program corresponds to. */
+    Uint32 num_samplers;          /**&lt; The number of samplers defined in the shader. */
+    Uint32 num_storage_textures;  /**&lt; The number of storage textures defined in the shader. */
+    Uint32 num_storage_buffers;   /**&lt; The number of storage buffers defined in the shader. */
+    Uint32 num_uniform_buffers;   /**&lt; The number of uniform buffers defined in the shader. */
+
+    SDL_PropertiesID props;
+} SDL_GPUShaderCreateInfo;</code></pre>
+  </figure>
+
+  <p>
+    Read the first two fields again. <code>code</code> is a pointer to <em>bytes</em>, and
+    <code>format</code> says which kind. Nowhere in this struct is there a place to put HLSL.
+    There is no <code>SDL_GPU_SHADERFORMAT_HLSL</code>, and it is not an oversight:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The gap</span>
+    <p>
+      <strong>A GPU does not run text.</strong> Metal wants MSL or a precompiled
+      <code>metallib</code>; Vulkan wants SPIR-V; D3D12 wants DXIL. These are not dialects of one
+      language — they are different binary formats produced by different compilers, and the API
+      that has to work on all three cannot take sides. So SDL takes bytes and asks you which
+      flavour they are.
+    </p>
+    <p>
+      That means <strong>something has to turn one source file into three binaries</strong>, and
+      it is not SDL. It is not part of your program either, if you have any sense. It is a build
+      step you do not have yet.
+    </p>
+  </div>
+
+  <p>
+    And then there is the second half of the struct, which is stranger. SDL wants to be told
+    <em>how many samplers, storage textures, storage buffers and uniform buffers the shader
+    uses</em>. You wrote the shader; you could count them. But look at what SDL's own FAQ says
+    about that, from the header's overview:
+  </p>
+
+  <blockquote>
+    <p>
+      <em>"Another common issue is not setting the correct number of samplers, textures, and
+      buffers in <code>SDL_GPUShaderCreateInfo</code>. If possible use shader reflection to
+      extract the required information from the shader automatically instead of manually filling
+      in the struct's values."</em>
+    </p>
+  </blockquote>
+
+  <p>
+    The API's own documentation names this as a leading cause of shaders that do not work, and
+    tells you to have a machine count instead. That is a strong hint, and this lesson takes it —
+    §4.4 shows the numbers being read out of a file the compiler writes. But first, the more
+    interesting question: <em>why is getting them wrong so easy to do and so hard to notice?</em>
+    §5 of this lesson measures the answer, and it is worse than you would guess.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-hub"><span class="num">2.1</span>Why there is a hub in the middle</h3>
+
+  <p>
+    Three target formats from one source suggests three compilers: HLSL→SPIR-V, HLSL→DXIL,
+    HLSL→MSL. That is not how it is built, and the reason is the same reason a compiler has an
+    intermediate representation at all.
+  </p>
+
+  <p>
+    Writing <em>n</em> front ends and <em>m</em> back ends as <em>n</em>×<em>m</em> direct
+    translators is a quantity of work nobody has ever finished. Put one neutral format in the
+    middle and it becomes <em>n</em>+<em>m</em>. SPIR-V is that middle: a binary intermediate
+    representation for shaders, designed by Khronos, and — importantly — a format with a good
+    <em>decompiler</em>. SPIRV-Cross reads SPIR-V and writes MSL, HLSL, GLSL or a description of
+    what the shader needs.
+  </p>
+
+  <p>
+    So the real pipeline has exactly two stages, and only the first is a compiler in the usual
+    sense:
+  </p>
+
+  @@FIG_TOOLCHAIN@@
+
+  <p>
+    Figure 1 is worth reading for its shape before its numbers. Everything to the right of the hub
+    is <em>translation from SPIR-V</em>. That has an immediate practical consequence that this
+    lesson ran into head first: <strong>if the front end is missing, you do not lose one backend
+    — you lose all of them</strong>, because there is no SPIR-V for the second stage to work
+    from.
+  </p>
+
+  <p>
+    The numbers say the same thing from the other side. The HLSL→SPIR-V hop measured
+    <strong>12.3 ms</strong> and each SPIR-V→anything hop measured <strong>1.5 ms</strong>. The
+    front end is doing eight times the work of a translation, because it is the part that has to
+    parse a language, resolve types, and optimise.
+  </p>
+
+  <h3 id="intuition-offline"><span class="num">2.2</span>Offline, and what that actually buys</h3>
+
+  <p>
+    SDL_shadercross ships as both a library and a command-line tool, so this pipeline can run
+    inside your program at startup instead of at build time. That is genuinely convenient — edit a
+    shader, relaunch, see it — and this course does not use it. The reason is worth stating
+    precisely, because the obvious reason is wrong.
+  </p>
+
+  <p>
+    <strong>It is not about time.</strong> Compiling all four of this lesson's shaders through all
+    three hops takes <strong>61.2 ms</strong>. You could do that at every launch and no user would
+    notice.
+  </p>
+
+  <p>
+    It is about <em>what you would have to ship, and what could fail</em>:
+  </p>
+
+  <ul>
+    <li>
+      <strong>The compiler goes in the box.</strong> Runtime translation means shipping
+      SPIRV-Cross — <strong>6.7 MB</strong> on this machine — and, for HLSL input,
+      DirectXShaderCompiler, which is a fork of LLVM. That is a large dependency to carry so that
+      every copy of your game can redo a computation whose answer never changes.
+    </li>
+    <li>
+      <strong>A compile can fail on someone else's machine.</strong> An offline build fails on
+      <em>your</em> machine, where you can read the message. The same failure at a customer's
+      launch is a black screen and a bug report that says "it does not work".
+    </li>
+    <li>
+      <strong>You cannot inspect what you did not produce.</strong> When the picture is wrong,
+      being able to open the generated MSL and read it is worth a great deal — §5.4 does exactly
+      that to catch a renamed function.
+    </li>
+  </ul>
+
+  <p>
+    So: compile offline, ship binaries, and keep the tool on the developer's machine. Runtime
+    cross-compilation is the right answer for a shader editor, a material system with
+    user-authored nodes, or a tool that must accept shaders it has never seen. It is the wrong
+    answer for a game that knows its own shaders at build time.
+  </p>
+
+  <h3 id="intuition-tool"><span class="num">2.3</span>The tool, honestly described</h3>
+
+  <p>
+    <strong>SDL_shadercross</strong> is a separate libsdl-org project from SDL itself, and this
+    lesson has to be careful about how it describes it, because the description that would be
+    convenient is not accurate.
+  </p>
+
+  <div class="callout verify">
+    <span class="label">⚠ Verify</span>
+    <p>
+      Checked while writing this lesson, and worth re-checking rather than trusting: the installed
+      headers declare <code>SDL_SHADERCROSS_MAJOR_VERSION 3</code>, and the packaged metadata says
+      <code>Version: 3.0.0</code>. But the upstream repository has <strong>no tags and no
+      releases</strong> at all.
+    </p>
+    <p>
+      This matters practically. Our <code>CMakeLists.txt</code> pins SDL with
+      <code>GIT_TAG release-3.4.12</code>, and the comment beside it says "never a branch name".
+      You cannot do that here, because there is no tag to name. <strong>Pin a commit SHA
+      instead</strong> — it is exactly as reproducible and rather less pretty. If you find tags
+      have appeared since, prefer them.
+    </p>
+  </div>
+
+  <p>
+    Two more facts about the tool that follow from how it is built, and that decide what your
+    machine can do:
+  </p>
+
+  <ul>
+    <li>
+      <strong>It is two libraries in a coat.</strong> HLSL→SPIR-V is DirectXShaderCompiler;
+      SPIR-V→everything is SPIRV-Cross. Both are optional at build time.
+    </li>
+    <li>
+      <strong>A build without DXC cannot read HLSL at all.</strong> Not "cannot produce DXIL" —
+      cannot read the source language. The machine this lesson was written on has exactly such a
+      build, and asking it to compile our vertex shader produces:
+      <code>ERROR: Failed to compile SPIR-V From HLSL: Shadercross was not built with DXC
+      support</code>.
+    </li>
+  </ul>
+
+  <p>
+    That is not a disaster, and it is not a reason to write the lesson around a machine that does
+    not exist. The first hop is a job several tools can do — <code>glslc</code>, from Google's
+    shaderc, compiles HLSL to SPIR-V with one flag — so §4.2 builds a CMake step that
+    <em>asks the tool what it can do</em> and picks a route accordingly. Which is a better habit
+    than the one it replaces, so the accident is worth keeping.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-spaces"><span class="num">3.1</span>Register spaces, and why they are not yours to choose</h3>
+
+  <p>
+    In HLSL you declare where a resource lives with a <code>register</code> annotation:
+    <code>t0</code> for the first texture, <code>s0</code> for the first sampler, <code>b0</code>
+    for the first constant buffer, and a <em>space</em> to disambiguate. Under SDL_GPU the space
+    is not a free choice. The header states the layout, and it differs per stage:
+  </p>
+
+  @@FIG_SPACES@@
+
+  <p>
+    The four rows of Figure 2 are the whole rule, and the right-hand column is what makes them
+    checkable. When HLSL is compiled to SPIR-V, a register space becomes a
+    <strong>descriptor set</strong>, and SDL's SPIR-V rules are stated in those terms — vertex
+    uniform buffers in set 1, fragment textures in set 2, fragment uniform buffers in set 3. So
+    the two halves of the header's documentation are one rule wearing two notations, and you can
+    confirm your own shader landed correctly with a disassembler:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">checking our own compiled output</span></figcaption>
+    <pre><code>$ spirv-dis build/shaders/textured.frag.spv | grep DescriptorSet
+               OpDecorate %albedo Binding 0
+               OpDecorate %albedo DescriptorSet 2
+               OpDecorate %albedo_sampler Binding 0
+               OpDecorate %albedo_sampler DescriptorSet 2
+               OpDecorate %_ Binding 0
+               OpDecorate %_ DescriptorSet 3</code></pre>
+  </figure>
+
+  <p>
+    The texture and its sampler landed in set 2, the constant buffer in set 3 — which is what
+    <code>space2</code> and <code>space3</code> in the source asked for, and what SDL requires of a
+    fragment shader. Nothing here was taken on trust.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The failure mode, and why it is nasty</span>
+    <p>
+      Put a fragment shader's constant buffer in <code>space1</code> instead of
+      <code>space3</code> and <strong>everything still works</strong>: it is valid HLSL, it
+      compiles, it translates, it loads, and it runs. At which point it reads whatever happens to
+      be bound at the slot it named — usually nothing, sometimes the vertex stage's data.
+    </p>
+    <p>
+      There is no error anywhere in that chain, because every stage did what it was told. The
+      symptom is a shader that returns black, or a constant that never changes. Check it with the
+      disassembler above, at the moment you write the declaration, rather than debugging it later
+      from the picture.
+    </p>
+  </div>
+
+  <h3 id="theory-semantics"><span class="num">3.2</span>Semantics, and the one that is different</h3>
+
+  <p>
+    HLSL attaches a <em>semantic</em> to every value crossing a stage boundary — the
+    <code>: TEXCOORD0</code> after a field. They exist because D3D matches a vertex buffer's
+    contents to a shader's inputs by name rather than by position, and SDL_GPU has to say
+    something about them since it targets D3D12 too:
+  </p>
+
+  <blockquote>
+    <p>
+      <em>"Shader semantics other than system-value semantics do not matter in D3D12 and for ease
+      of use the SDL implementation assumes that non system-value semantics will all be TEXCOORD.
+      If you are using HLSL as the shader source language, your vertex semantics should start at
+      TEXCOORD0 and increment like so: TEXCOORD1, TEXCOORD2, etc."</em>
+    </p>
+  </blockquote>
+
+  <p>
+    So the practical rule is short: <strong>name every user-defined input and output
+    <code>TEXCOORD<em>n</em></code>, numbered from zero, in order.</strong> The names carry no
+    meaning — a normal is not more "TEXCOORD" than a colour is — and the numbering is what
+    actually binds. Skip a number and the attribute that arrives is not the one you meant.
+  </p>
+
+  <p>
+    <strong>System-value semantics are the exception</strong>, and they are the ones that do mean
+    something. <code>SV_Position</code> names the clip-space position the rasterizer itself
+    consumes — the vec4 our vertex pipeline has been producing since Lesson 2.10, complete with
+    the <em>w</em> that Lesson 2.7 spent a lesson explaining. <code>SV_Target0</code> names the
+    first colour attachment of the render pass. These are not conventions you may rename; they are
+    how the shader talks to the fixed-function hardware around it.
+  </p>
+
+  <h3 id="theory-counts"><span class="num">3.3</span>The four counts</h3>
+
+  <p>
+    Now the fields SDL's FAQ warns about. Why does SDL need to be told what the shader plainly
+    contains?
+  </p>
+
+  <p>
+    Because <strong>SDL does not read your shader</strong>. It receives an opaque blob in one of
+    three formats and passes it to a driver. Parsing DXIL to count its registers would mean
+    shipping a DXIL parser inside SDL, and doing the same for SPIR-V and MSL, for a fact the
+    application already knows. So the API asks. The counts let SDL size the descriptor sets and
+    validate the bindings you later make against what the shader claims to want.
+  </p>
+
+  <p>
+    Which raises the obvious question: what happens if you lie? Here is
+    <code>textured.frag</code>, which genuinely has one sampler and one uniform buffer, created
+    four times with four different sets of counts:
+  </p>
+
+  @@FIG_COUNTS@@
+
+  <p>
+    Figure 3 is that experiment, and <strong>all four were accepted</strong>. Ninety-nine samplers
+    on a shader with one — created,
+    no error, no warning. So <code>SDL_CreateGPUShader</code> validates nothing here, and the
+    mistake the FAQ calls common is a mistake nothing in the creation path will catch for you.
+    The damage shows up later, when something binds resources against a count that does not
+    describe reality.
+  </p>
+
+  <p>
+    That is the argument for reflection, and it is not "it saves typing". It is that
+    <strong>there is no other check</strong>. Every other error in this lesson is caught by
+    something — a bad register space by the disassembler, a wrong entry point by SDL itself, a
+    missing file by the loader. This one is caught by nobody, so the number must come from a
+    machine that read the actual compiled code.
+  </p>
+
+  <p>
+    Which shadercross will do, in the same run that compiles the shader:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">build/shaders/textured.frag.json</span></figcaption>
+    <pre><code>{ "samplers": 1, "storage_textures": 0, "storage_buffers": 0, "uniform_buffers": 1,
+  "inputs": [{ "name": "input.uv", "type": "float2", "location": 0 }],
+  "outputs": [{ "name": "@entryPointOutput", "type": "float4", "location": 0 }] }</code></pre>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — counting by hand, and then checking</span>
+    <p>
+      Count the resources in <code>textured.frag.hlsl</code> yourself before reading on. The file
+      declares:
+    </p>
+    <ul>
+      <li><code>Texture2D&lt;float4&gt; albedo : register(t0, space2)</code> — one sampled texture,
+          which pairs with…</li>
+      <li><code>SamplerState albedo_sampler : register(s0, space2)</code> — …one sampler. SDL
+          counts the <em>pair</em> once, as <code>num_samplers = 1</code>.</li>
+      <li><code>cbuffer Tint : register(b0, space3)</code> — one uniform buffer.</li>
+      <li>No storage textures and no storage buffers: those are the read-write resources of
+          Module 9's compute work, and nothing here declares one.</li>
+    </ul>
+    <p>
+      So by hand: <code>smp 1, tex 0, buf 0, uni 1</code>. And the reflection file says
+      <code>samplers 1, storage_textures 0, storage_buffers 0, uniform_buffers 1</code>. They
+      agree — for all four shaders, as §B of the harness checks.
+    </p>
+    <p>
+      <strong>The agreement is the point, and so is doing it anyway.</strong> Hand-counting is
+      right today and wrong the first time somebody adds a texture and forgets the struct. The
+      file is regenerated by the build every time the shader changes, which is a property no
+      amount of care gives you.
+    </p>
+  </div>
+
+  <h3 id="theory-entry"><span class="num">3.4</span>The entry point you did not write</h3>
+
+  <p>
+    One field of the create-info remains, and it is the one that fails first for most people.
+    <code>entrypoint</code> is the name of the function to call. Our HLSL says:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/triangle.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-hlsl">Output main(Input input)</code></pre>
+  </figure>
+
+  <p>
+    So the entry point is <code>"main"</code>. Except that on this machine, it is not:
+  </p>
+
+  @@FIG_ENTRY@@
+
+  <p>
+    Figure 4 is the answer, and the top row is the cause: <code>main</code> is a
+    <strong>reserved identifier in Metal Shading Language</strong> — MSL is
+    C++-derived, and <code>main</code> means something there. SPIRV-Cross therefore renames it on
+    the way through, and the generated MSL declares
+    <code>vertex main0_out main0(main0_in in [[stage_in]])</code>. Pass <code>"main"</code> and SDL
+    asks Metal for a function that does not exist.
+  </p>
+
+  <p>
+    The good news is in the bottom half of Figure 4: this failure is <strong>caught at
+    creation</strong>. <code>"main0"</code> created a shader; <code>"main"</code> and a deliberate
+    nonsense name were both refused, with SDL logging <code>Creating MTLFunction failed</code>.
+    Compare that with §3.3's silent acceptance of nonsense counts and you have the two halves of
+    this API's temperament in one page: it checks the name and not the numbers.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The ninety-percent picture</span>
+    <p>
+      The rename is a property of the SPIRV-Cross MSL backend, not a law of nature, and the
+      missing ten percent is that other paths differ: a <code>metallib</code> compiled by Apple's
+      own tools keeps whatever name its source used, and the SPIR-V path keeps
+      <code>main</code> because SPIR-V has no reserved words. Our loader therefore ties the entry
+      point to the <em>format</em> rather than to the shader, which is the only place the
+      knowledge belongs.
+    </p>
+  </div>

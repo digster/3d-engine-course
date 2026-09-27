@@ -1,0 +1,308 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-04-quaternions.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.4 — Quaternions, Derived</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-06-skeletal-animation.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.6 — Skeletal Animation: The Skinning Math</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.5</div>
+    <h1>Slerp, and the Storage Swap</h1>
+    <p class="deck">
+      Three lessons have now derived the same three steps in three different algebras, and this one
+      writes them down for the fourth time in three lines — <strong>because
+      <code>a·(a⁻¹b)ᵗ</code> is not a fact about quaternions, it is the definition of a geodesic on
+      any group that has an inverse, a product and a power.</strong> What is genuinely new is the
+      half that has no analogue in the plane. The double cover means every pair of orientations has
+      <em>two</em> arcs between it, one of them wrong, and half of all pairs name the wrong one; the
+      fix is one comparison and the bug without it is a character spinning 359° between two
+      keyframes a degree apart. Then the same fact pays a dividend nobody advertises: because that
+      comparison forces the arc into one hemisphere, <strong>nlerp's schedule error — unbounded in
+      the plane, where Lesson 7.3 measured it at a factor of 13,131 — is capped here at exactly
+      2, and at 8.1491° of pose.</strong> The thing that looked like a nuisance is what bounds the
+      error. Everything is measured, and two of the measurements refused the claim they were
+      written to confirm. <strong>The lesson's own metric had to be rewritten before anything could
+      be measured at all</strong>: <code>angle_between</code> shipped in 7.4 as
+      <code>2·acos|a·b|</code>, which is the formula every reference gives and is blind near zero,
+      and it scored slerp's own geodesic at <strong>−41.10% of its own arc</strong>. And a table of
+      small-arc errors printed a clean <code>0.0000e+00</code> for a function that was returning
+      <em>NaN</em>, because <code>std::max(x, NaN)</code> returns <code>x</code>. Then the swap this
+      engine has promised since Module 2: <code>transform::rotation</code> becomes a
+      <code>quat</code>, twenty-five call sites move, and the narrower type finds — as it found one
+      in 7.4 — <strong>two more places that had never put a rotation in a field called
+      <code>rotation</code></strong>, one of them a published demo whose camera boom had been
+      storing a sheared basis since Lesson 5.12.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 7 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="07-02-axis-angle.html">7.2 — Axis-Angle and Rodrigues' Rotation Formula</a>,
+          <a href="07-03-complex-numbers.html">7.3 — Complex Numbers Rotate the Plane</a>,
+          <a href="07-04-quaternions.html">7.4 — Quaternions, Derived</a>,
+          <a href="05-09-transform-hierarchy.html">5.9 — Transform Hierarchy</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/quat.hpp</code>,
+            <code>engine/include/engine/math/transform.hpp</code>,
+            <code>engine/include/engine/gfx/renderable.hpp</code>,
+            <code>engine/src/gfx/renderable.cpp</code>,
+            <code>engine/include/engine/ecs/camera.hpp</code>,
+            <code>engine/include/engine/gfx/scene.hpp</code>,
+            <code>demos/common/demo_scene.cpp</code>,
+            <code>demos/hello_cube/main.cpp</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>demos/ecs_swarm/main.cpp</code>,
+            <code>demos/collector/main.cpp</code>,
+            <code>demos/gimbal/main.cpp</code>,
+            <code>scratch/verify_75.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_75.sh</code> <em>(new)</em>,
+            <code>scratch/golden_75.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>blend two orientations</strong> — along the shortest arc, at
+            constant speed, in three lines — and it <strong>stores</strong> them as four floats
+            rather than nine, which is what Lessons 7.6 and 7.7 are built on. <strong>42 checks
+            green</strong>, twelve of them controls, including one that deletes the single
+            comparison this lesson is about and demands a 359° journey in return. The
+            <code>gimbal</code> demo gains <kbd>S</kbd>: a dial with two rows of ticks on it, one
+            evenly spaced and one not. And the golden render is <strong>byte-identical</strong>
+            across the storage swap — hash <code>E917C06C</code>, unchanged since Lesson 5.2.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…write spherical linear interpolation from the definition of a geodesic rather than from
+          memory, and explain why the same three steps worked for matrices, for complex numbers and
+          for quaternions.</li>
+      <li>…derive the power of a unit quaternion, and say why the division it performs is safe at
+          every angle including zero — where the formula every textbook prints returns
+          <code>NaN</code>.</li>
+      <li>…state exactly what nlerp gets right and what it gets wrong, put a closed form on the
+          error, and choose between the two with a number instead of a preference.</li>
+      <li>…explain why the double cover forces a sign choice, name the bug you ship without it, and
+          show that the same fact <em>bounds</em> nlerp's error at a factor of exactly 2.</li>
+      <li>…recognise an <code>acos</code>-based metric as a blind instrument, predict its noise
+          floor from machine epsilon, and rewrite it.</li>
+      <li>…decompose an affine matrix into position, rotation and scale; say precisely which
+          matrices that cannot be done for; and detect those rather than silently approximating
+          them.</li>
+      <li>…justify storing orientations as quaternions and converting them to matrices once per
+          object per frame, with the crossover measured rather than asserted.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a rotation you cannot blend</a></li>
+      <li><a href="#intuition">Building intuition: the shortest way round a sphere</a></li>
+      <li><a href="#power">The power of a unit quaternion</a></li>
+      <li><a href="#slerp">Implementation: slerp, in three lines</a></li>
+      <li><a href="#nlerp">The right road on the wrong schedule</a></li>
+      <li><a href="#sign">The double cover, twice: a sign and a bound</a></li>
+      <li><a href="#measure">Measuring it, and fixing the instrument first</a></li>
+      <li><a href="#swap">The storage swap</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a rotation you cannot blend</h2>
+
+  <p>
+    Here is a thing an engine has to do several thousand times a frame, and which this engine
+    currently cannot do at all. A character's left elbow is at one orientation in keyframe 41 and a
+    different one in keyframe 42. The clock says you are 37% of the way between them. Where is the
+    elbow?
+  </p>
+
+  <p>
+    Try it with what <code>transform</code> holds today. Its <code>rotation</code> field is a
+    <code>mat3</code>, so you have two matrices and a number, and the obvious thing to do with two
+    matrices and a number is to average their entries:
+  </p>
+
+  <div class="eq">\[ M(t) \;=\; (1-t)\,A \;+\; t\,B \]</div>
+
+  <p>
+    That is not a rotation. It is not <em>nearly</em> a rotation, either — it is a matrix that
+    shears and shrinks, and you can see how badly in one number. The determinant of a rotation is
+    exactly 1, because a rotation preserves volume; the determinant of the entrywise average of the
+    two poses this lesson's harness uses is <strong>0.00007</strong>. Feed that to a vertex shader
+    and the character does not merely bend oddly. It collapses to a plane.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Why this is not a fixable defect of matrices</span>
+    <p>
+      You could Gram-Schmidt the average back into a rotation, and people do. The result is not
+      the halfway pose — it is <em>a</em> pose, somewhere near the halfway one, arrived at by a
+      procedure with no geometric meaning, whose error grows with the angle between the endpoints
+      and which has no closed form you can reason about. The problem is not that the average is
+      wrong. It is that <strong>the set of rotation matrices is not closed under addition</strong>,
+      so there is nothing between two of them to find. Nine numbers is six too many, and the six
+      extra are constraints, not freedom.
+    </p>
+  </div>
+
+  <p>
+    This is the last of the four costs Lesson 7.1 opened the module by listing, and it is the one
+    that decided the storage. Lesson 7.2 could compose but not store cheaply; Lesson 7.3 proved in
+    the plane that a number system does the job and that four components are <em>forced</em> in
+    space; Lesson 7.4 built the four components and measured everything about them except the one
+    operation the animation system actually needs. This lesson does that operation, and then makes
+    the engine store the thing that can do it.
+  </p>
+
+  <h3>1.1 What we already have, and what is genuinely missing</h3>
+
+  <p>
+    It is worth being precise about how little of this lesson is new, because the shape of what
+    <em>is</em> new is the interesting part.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Already built</th><th>Where</th><th>What 7.5 does with it</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>The geodesic formula <code>a·(a⁻¹b)ᵗ</code></td>
+          <td>7.2 §9 for <code>mat3</code>, 7.3 §10.1 for <code>complex</code></td>
+          <td>Substitutes <code>quat</code>. Three lines.</td></tr>
+      <tr><td>nlerp's character: right path, wrong schedule, by <code>sec²(Ω/2)</code></td>
+          <td>7.3 §10.3, derived and measured at seven arcs</td>
+          <td><em>Checks</em> that it generalises, and finds a bound the plane could not have.</td></tr>
+      <tr><td>The double cover, <code>q ≡ −q</code>, measured bitwise</td>
+          <td>7.4 §8</td>
+          <td>Turns it into a sign choice, and then into a guarantee.</td></tr>
+      <tr><td><code>angle_between(quat, quat)</code>, the metric</td>
+          <td>7.4, deliberately, before slerp needed it</td>
+          <td><strong>Rewrites it</strong> — §7.3 measures why.</td></tr>
+      <tr><td>The promise that <code>transform::rotation</code> becomes a <code>quat</code></td>
+          <td>Module 2, restated in 7.1 and again in 7.4</td>
+          <td>Keeps it.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    What is left is three things, and none of them is the formula: <strong>the sign that makes the
+    arc short</strong> (§6), <strong>an instrument honest enough to measure any of it</strong>
+    (§7.3), and <strong>the twenty-five call sites</strong> (§8). Two of those three produced
+    findings that were not in anybody's plan.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: the shortest way round a sphere</h2>
+
+  <p>
+    Forget quaternions for a paragraph and think about the Earth. You are in London and you want to
+    be in Tokyo, and you want to fly the shortest route and arrive at a steady speed. Two questions,
+    and they are different: <em>which way do I go</em>, and <em>where am I at each moment</em>.
+  </p>
+
+  <p>
+    The first has a famous answer. The shortest path between two points on a sphere is the arc of
+    the great circle through them — the circle you get by slicing the sphere with the plane that
+    contains both points and the centre. Any other route is longer, and the reason is worth one
+    sentence because the same sentence is going to do all the work later: <strong>the great circle
+    is the only path that never turns</strong>. Every other route is curving <em>within</em> the
+    surface as well as with it.
+  </p>
+
+  <p>
+    The second question is the one people skip. Having chosen the arc, you still have to say how
+    far along it you are at time <code>t</code>, and "37% of the way" can mean 37% of the
+    <em>angle</em> or 37% of something else. Those are different points, and telling them apart is
+    most of §5.
+  </p>
+
+  <h3>2.1 Why a rotation is a point on a sphere</h3>
+
+  <p>
+    Lesson 7.4 gave us the object: a rotation of <code>θ</code> about the unit axis <code>n̂</code>
+    is the quaternion
+  </p>
+
+  <div class="eq">\[ q \;=\; \cos(\theta/2) \;+\; \sin(\theta/2)\,\hat n \]</div>
+
+  <p>
+    and its norm is 1, because <code>cos²+sin²=1</code> and <code>n̂</code> is a unit vector. So
+    <strong>every rotation is a point at distance 1 from the origin in four-dimensional space</strong>
+    — a point on the unit 3-sphere, exactly as every rotation of the <em>plane</em> was a point on
+    the unit circle in Lesson 7.3. The London-to-Tokyo problem is not an analogy for what we are
+    about to do. It is the same problem with one more coordinate.
+  </p>
+
+  <p>
+    And with one wrinkle that the Earth does not have, which §6 is entirely about: every
+    orientation is <em>two</em> points on this sphere, <code>q</code> and <code>−q</code>, at
+    opposite ends of a diameter. Imagine arriving in Tokyo and being told there is a second Tokyo on
+    the far side of the planet that is also Tokyo. Which one you aim at changes your flight plan
+    completely, and nothing in the destination's name tells you.
+  </p>
+
+  <h3>2.2 One formula, now in its third algebra</h3>
+
+  <p>
+    Lesson 7.2 built <code>rotation_slerp</code> for matrices and Lesson 7.3 built
+    <code>complex_slerp</code> for the plane, and 7.3 pointed out — without cashing it in — that
+    the two are the same three steps. Here they are for the last time, and the third column is this
+    lesson's whole implementation:
+  </p>
+
+  <div class="eq">\[ \operatorname{slerp}(a, b, t) \;=\; a \cdot \big(a^{-1} b\big)^{t} \]</div>
+
+  <p class="eq-plain">
+    <strong>Undo <code>a</code>; take <code>t</code> of the difference; redo <code>a</code>.</strong>
+    Nothing in that sentence mentions a dimension, a representation, or a number of components. It
+    needs an inverse, a product, and a way to raise something to a real power — and a unit
+    quaternion has all three.
+  </p>
+
+  @@FIG_ONE_ROAD@@
+
+  <p>
+    The bottom of figure 1 is the part that makes this a lesson rather than a claim. Lesson 7.2's
+    <code>rotation_slerp</code> works on <code>mat3</code> in a notation that has never heard of a
+    quaternion, and 7.3's <code>complex_slerp</code> works in two dimensions on two floats. Run all
+    three over the same journey and they agree to <strong>4.172e−07</strong> of a matrix entry and
+    <strong>2.384e−07</strong> radians respectively — which is float resolution, three times over.
+    Those two numbers are §7's instruments as much as they are its results: the new function is
+    checked against two older ones that share no code with it and no code with each other.
+  </p>
+
+  <div class="callout">
+    <span class="label">The word "geodesic", earned</span>
+    <p>
+      A geodesic is the straightest path a curved space allows. Lesson 7.2 introduced the word with
+      matrices and measured what it buys: <strong>0.00% of excess turning</strong>, against
+      Euler-angle interpolation's <strong>+14%</strong> on a generic pair and <strong>+209%</strong>
+      near gimbal lock. §7.2 of this lesson re-measures the same pose pair with quaternions and gets
+      <strong>+14.10%</strong> for the Euler route — the same number, from a completely different
+      representation, with a completely different metric. That agreement is not a coincidence and it
+      is not a tautology: it is two implementations of "how much turning did this path actually
+      do?" landing on the same answer.
+    </p>
+  </div>

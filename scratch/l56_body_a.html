@@ -1,0 +1,381 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-05-asset-system.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.5 — The Asset System v1</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-07-ecs-storage.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.7 — An ECS from Scratch: Storage Design</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.6</div>
+    <h1>Data-Oriented Design: Why Scene Trees Creak</h1>
+    <p class="deck">
+      Everything since 5.1 has been about structure — where code lives, who owns what, how things
+      refer to each other. This is the first lesson in the module about <em>speed</em>, and its
+      job is to <strong>earn</strong> the ECS that 5.7 and 5.8 will build rather than assume it.
+      So: no dogma, no parable about cache lines, no appeal to what everybody knows. Six scene
+      layouts, two workloads, five scene sizes, timed on this engine's own
+      <code>transform</code>. Three of the results contradicted what I expected before running
+      them, one of them by a factor of two — and the lesson keeps all three, including the two
+      places where a first attempt measured something that was not there.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-08-space-chain.html">2.8 — The Coordinate-Space Chain</a>,
+          <a href="03-10-profiling-capstone.html">3.10 — Profiling the Rasterizer</a>,
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="05-05-asset-system.html">5.5 — The Asset System v1</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/core/bench.hpp</code>,
+            <code>scratch/scene_layouts.hpp</code>, <code>scratch/bench_56.cpp</code>,
+            <code>scratch/measure_56.py</code>, <code>scratch/verify_56.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine gains a <strong>reusable A/B timing harness</strong> that reports medians,
+            spreads, and whether the two arms computed the same answer. And you have numbers —
+            reproducible on your own machine — that say which layout decisions are worth making,
+            at which scene size, and which are worth nothing at all.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the four rules of an honest A/B measurement, and name the failure each one
+          prevents.</li>
+      <li>…recognise the three ways a microbenchmark lies — a timer too coarse to see the work, a
+          loop the compiler deleted, and an accumulator that <em>is</em> the bottleneck — and
+          detect each from the numbers themselves.</li>
+      <li>…separate a memory effect from a codegen effect with one experiment, instead of
+          asserting which one you saw.</li>
+      <li>…say at what scene size layout starts to matter on your machine, and why that number
+          is a property of your cache and not of your taste.</li>
+      <li>…explain why an array of pointers costs 2.4× and a linked list costs 6.5×, from memory-
+          level parallelism rather than from folklore.</li>
+      <li>…state what a <code>virtual</code> call actually costs, and which of the three usual
+          explanations the measurement rules out.</li>
+      <li>…articulate the real rule that replaces "use SoA" — and quantify the prize.</li>
+      <li>…make the case for data-oriented storage <em>fairly</em>, including where a scene tree
+          is the right answer.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-scale">How much data is there, really?</a></li>
+          <li><a href="#intuition-layouts">Six layouts, as memory</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-rules">Four rules for an honest comparison</a></li>
+          <li><a href="#theory-lies">Three ways a microbenchmark lies</a></li>
+          <li><a href="#theory-mlp">Why a linked list is worse than a scattered array</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-bench">The harness</a></li>
+          <li><a href="#impl-layouts">The six layouts, and being fair to them</a></li>
+          <li><a href="#impl-fair">The check that makes the numbers mean anything</a></li>
+        </ol>
+      </li>
+      <li><a href="#results">The Results</a>
+        <ol>
+          <li><a href="#res-knee">Where the knee is</a></li>
+          <li><a href="#res-soa">SoA wins twice, for two different reasons</a></li>
+          <li><a href="#res-virtual">What <code>virtual</code> costs, and what it does not</a></li>
+          <li><a href="#res-tree">The tree, judged fairly</a></li>
+          <li><a href="#res-decide">What this justifies, and what it does not</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Two lessons from now this course builds an entity-component system, and every treatment of
+    ECS you will read opens the same way: object-oriented scene graphs are slow, cache misses
+    dominate modern performance, arrays of structures are bad and structures of arrays are good,
+    therefore ECS. It is a persuasive story, most of it is even true, and it has a defect that
+    matters more than its truth:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The problem with the story</span>
+    <p><strong>You cannot act on it.</strong> It contains no number, so it cannot tell you
+       whether <em>your</em> scene is big enough to care, which of the four things it blames is
+       actually costing you, or what to do first. An argument you cannot check is an argument you
+       have to take on faith — and a course that has derived the perspective matrix from similar
+       triangles and measured the cost of a handle in fractions of a nanosecond should not start
+       taking things on faith in Module 5.</p>
+  </div>
+
+  <p>
+    So this lesson does the experiment. It is unusual for the course in that it changes almost no
+    engine code — one new header — and its output is <em>evidence</em>. That evidence then has to
+    be allowed to say whatever it says, including "this does not matter at your scale", which is
+    an answer the ECS literature never gives and which happens to be true of this engine today.
+  </p>
+
+  <p>
+    There is a second, quieter problem, and it is the reason the one new header exists. Lessons
+    5.3, 5.4 and 5.5 each needed to time two things against each other, and each hand-rolled the
+    same twenty lines slightly differently. Lesson 5.5's own argument about the search path was
+    that three copies of one idea is the usual sign that the idea has no name. Its name is
+    <strong>A/B timing</strong>, and getting it wrong is much easier than it looks — §3.2 is a
+    catalogue of the ways this very lesson got it wrong before it got it right.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-scale"><span class="num">2.1</span>How much data is there, really?</h3>
+
+  <p>
+    Before any argument about layout, one question settles most of the argument: <em>how much
+    data is there, and where does it fit?</em>
+  </p>
+
+@@FIG_SCALE@@
+
+  <p>
+    An <code>engine::scene_object</code> is 96 bytes — Lesson 5.4 shrank it from 160 by replacing
+    a borrowed <code>mesh</code> view with a four-byte handle — of which 60 are the
+    <code>transform</code>, which is everything a model-matrix loop reads. So a flat array of
+    them is 96 bytes per object with 36 bytes of ballast the transform loop fetches and ignores.
+  </p>
+
+  <p>
+    Now put that against a cache. A cache line is 64 bytes; an L1 data cache is typically 32–64
+    KB; an L2 is a few hundred KB to a couple of MB; an L3 is measured in tens. Multiply out:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Working-set size of a flat scene_object array at five scene
+             sizes.</caption>
+    <thead><tr><th>objects</th><th>bytes</th><th>lives in</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>4</td><td>0.4 KB</td><td>L1</td><td><strong>our scene</strong> — <code>k_max_objects</code> is 4</td></tr>
+      <tr><td>100</td><td>9.4 KB</td><td>L1</td><td></td></tr>
+      <tr><td>1,000</td><td>93.8 KB</td><td>L2</td><td></td></tr>
+      <tr><td>10,000</td><td>937.5 KB</td><td>L2 / L3</td><td></td></tr>
+      <tr><td>100,000</td><td>9,375 KB</td><td>L3 / DRAM</td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That table is the whole shape of the lesson in advance. <strong>Every claim about layout is a
+    claim about which row you are on</strong>, and a rule with no <em>N</em> in it is not a rule.
+    If your scene is four objects, it fits in a quarter of an L1 cache and no arrangement of it
+    can miss; if it is a hundred thousand, it does not fit anywhere and the arrangement decides
+    how many times you go to DRAM.
+  </p>
+
+  <h3 id="intuition-layouts"><span class="num">2.2</span>Six layouts, as memory</h3>
+
+@@FIG_LAYOUTS@@
+
+  <p>
+    <strong>Flat</strong> is what the engine has: <code>engine::scene_object scene[4]</code>, and
+    <code>pool::items()</code> for anything the store holds. One stride, one direction. Hardware
+    prefetchers detect a constant stride and fetch ahead, so a linear walk of an array is close
+    to the best a machine can do — at the price of dragging 36 unread bytes along with every 60
+    read ones.
+  </p>
+
+  <p>
+    <strong>Pointers</strong> is what an object-oriented scene is, in every language:
+    <code>std::vector&lt;Entity*&gt;</code>, or a parent holding <code>unique_ptr</code> children,
+    or a list of <code>shared_ptr</code>. Eight bytes in the array, then a load to somewhere else.
+    We measure two versions, and separating them turns out to matter: <em>ordered</em> visits the
+    heap blocks in the order they were allocated, <em>shuffled</em> does not. Real scenes start
+    ordered and become shuffled, because objects are created and destroyed, the allocator reuses
+    holes, and the draw list gets sorted by material.
+  </p>
+
+  <p>
+    <strong>SoA</strong> takes the transform apart: an array of positions, an array of rotations,
+    an array of scales. A loop that needs only positions touches only positions. This is the
+    layout the ECS literature is really arguing for, and §5.2 finds that <em>why</em> it wins is
+    not what the literature says.
+  </p>
+
+  <p>
+    <strong>Virtual</strong> is the same object hierarchy with a <code>virtual mat4 world()
+    const</code>, because the scene graph being argued against is usually polymorphic too, and
+    comparing against a straw man produces a worthless conclusion. Two variants again: one
+    concrete type (perfectly predictable) and two interleaved (not).
+  </p>
+
+  <p>
+    <strong>Tree</strong> is the thing this lesson is named after — nodes linked by
+    <code>first_child</code> / <code>next_sibling</code>, walked depth-first. Two variants once
+    more, and this is the pair that produces the lesson's headline: children in allocation order,
+    and children shuffled.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-rules"><span class="num">3.1</span>Four rules for an honest comparison</h3>
+
+  <p>
+    The theory in this lesson is not about caches. It is about measurement, because the caches
+    will tell you the truth and the measurement is where the lying happens.
+  </p>
+
+  <p>
+    <strong>Rule 1 — alternate the arms.</strong> Not "run A ten thousand times, then B ten
+    thousand times". A machine warms up, throttles, migrates between cores and gets interrupted,
+    and every one of those effects lands on whichever arm happens to be running. Lesson 3.10
+    discovered this expensively: it published a 10% improvement that turned out to be session
+    drift, visible in the data as both columns climbing monotonically as the machine warmed. Run
+    one rep of A, then one rep of B, and repeat — then any drift lands on both.
+  </p>
+
+  <p>
+    <strong>Rule 2 — report the median, and the spread.</strong> A single scheduler hiccup moves
+    a mean and cannot move a median. But a median alone hides a bimodal result, so the minimum
+    and maximum come with it. If one arm's range straddles the other's median, you have not
+    measured a difference; you have measured noise, and the honest word for the result is
+    "tie".
+  </p>
+
+  <p>
+    <strong>Rule 3 — stop the optimiser deleting the work.</strong> A loop whose result is unused
+    is a loop a modern compiler may remove entirely, and a benchmark that measures an empty loop
+    reports beautiful numbers. Storing the accumulated value through a <code>volatile</code> is
+    the cheapest portable answer: the standard requires the store to happen, so everything the
+    value depends on must happen too.
+  </p>
+
+  <p>
+    <strong>Rule 4 — check that both arms computed the same answer.</strong> This is the rule
+    people skip and it is the one that makes the other three mean anything. If arm A is faster
+    because it is doing less, the number is not a comparison, it is a bug report with a stopwatch
+    attached. §4.3 is this rule catching two real problems in this lesson's own benchmark.
+  </p>
+
+  <h3 id="theory-lies"><span class="num">3.2</span>Three ways a microbenchmark lies</h3>
+
+  <p>
+    Each of these happened here, in this order, and each produced numbers that looked entirely
+    plausible.
+  </p>
+
+  <p>
+    <strong>The timer is coarser than the work.</strong> The first run reported
+    <code>0.0000 ns/item</code> at four objects. That is not a fast layout, it is a timer:
+    <code>SDL_GetPerformanceFrequency()</code> is 24 MHz on this machine, so one tick is 41.67 ns
+    and a pass over four objects finishes inside one. Every sample read either zero ticks or one.
+    <em>The tell:</em> a suspiciously round number, especially zero, and neighbouring
+    measurements that differ by exactly one quantum. <em>The fix:</em> repeat the pass inside the
+    timed region until a sample is worth ~100 µs, and divide back out.
+  </p>
+
+  <p>
+    <strong>The compiler deleted the loop.</strong> With the pass repeated, the tree arm reported
+    0.166 ns per item at n = 4 — which is 2.3 cycles for four matrix builds.
+    <code>parent_from_local</code> is nine multiplies and sixteen stores; two cycles is not a
+    plausible price for it. Repeating a pure function of nothing lets the compiler compute it
+    once and reuse the answer. <em>The tell is arithmetic, not suspicion:</em> multiply the
+    number out and ask whether the hardware could physically do that. <em>The fix:</em> make each
+    pass genuinely different work — here, a per-pass bias added to the accumulator so the running
+    sum's rounding depends on it, which floating-point non-associativity makes impossible to
+    optimise away.
+  </p>
+
+  <p>
+    <strong>The accumulator is the bottleneck.</strong> The cull workload's arms came out
+    identical at every size, which for a memory-bound loop is impossible. The cause was
+    <code>hits += 1.0</code>: a serial chain of double additions, ~4 cycles of latency each,
+    against a body of three multiplies and a compare. The accumulator was the critical path in
+    <em>both</em> arms and the layout difference was completely masked. <em>The tell:</em> two
+    arms that should differ, agreeing exactly. <em>The fix:</em> an integer counter, one cycle
+    and vectorisable, which puts the memory back on the critical path where the experiment wanted
+    it.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The pattern behind all three</span>
+    <p>Every one of them was found by <strong>asking whether the number was physically
+       possible</strong>, not by suspecting the code. Nanoseconds convert to cycles; cycles
+       convert to instructions; instructions are countable. A benchmark result you have not
+       sanity-checked against the hardware is a number you have chosen to believe.</p>
+  </div>
+
+  <h3 id="theory-mlp"><span class="num">3.3</span>Why a linked list is worse than a scattered array</h3>
+
+  <p>
+    One piece of mechanism is worth having before the results, because it explains the largest
+    number in them. Both an array of pointers and a linked list are "pointer chasing", and they
+    behave completely differently.
+  </p>
+
+@@FIG_CHAIN@@
+
+  <p>
+    With an array of pointers, the addresses are <strong>known in advance</strong>. The CPU reads
+    <code>p0</code> through <code>p4</code> out of one or two cache lines and can issue all five
+    dependent loads before any of them has returned. A modern core sustains something like a
+    dozen outstanding misses; they overlap, so five 80-nanosecond misses cost rather less than
+    400 nanoseconds. This is <strong>memory-level parallelism</strong>, and it is why scattering
+    objects across the heap costs 2.4× and not 20×.
+  </p>
+
+  <p>
+    With a linked list, the address of the next node is <em>inside</em> the current one. You
+    cannot start fetching node 1 until node 0 has arrived, because node 0 is where node 1's
+    address is written down. The misses are a <strong>serial dependency chain</strong>: they add
+    instead of overlapping.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ t_{\text{array}} \approx \frac{N \cdot t_{\text{miss}}}{k} \qquad\qquad t_{\text{list}} \approx N \cdot t_{\text{miss}} \]</span>
+    <span class="eq-plain">array of pointers ~ N * miss / k (k misses in flight); linked list ~ N * miss</span>
+  </div>
+
+  <p>
+    That factor of <em>k</em> — the number of misses the core can keep in flight — is the entire
+    difference, and it is why the two arms come out at 2.4× and 6.5×. A scene tree is the second
+    picture. <strong>That is what creaks</strong>: not the hierarchy, not the object orientation,
+    not the virtual calls, but the fact that finding the next thing to work on requires having
+    finished fetching the last one.
+  </p>

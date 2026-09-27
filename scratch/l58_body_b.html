@@ -1,0 +1,1017 @@
+
+  <!-- =================================================================
+       4 — THE IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>The Implementation</h2>
+
+  <p>
+    Four headers, all of them header-only, none of them adding a line to
+    <code>engine/CMakeLists.txt</code>. They are deliberately separable: each of the first two
+    is testable without the others, and the dependency runs one way only.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The four new headers, what each knows, and what each
+             deliberately does not.</caption>
+    <thead><tr><th>file</th><th>knows about</th><th>deliberately does <em>not</em> know</th></tr></thead>
+    <tbody>
+      <tr><td><code>ecs/entity.hpp</code></td><td>ids, generations, a free list</td>
+          <td>that components exist at all</td></tr>
+      <tr><td><code>ecs/pool.hpp</code></td><td>one component type, keyed by id</td>
+          <td>which ids are alive — it never met the allocator</td></tr>
+      <tr><td><code>ecs/registry.hpp</code></td><td>both of the above</td>
+          <td>what any component type is, once the pool is built</td></tr>
+      <tr><td><code>ecs/view.hpp</code></td><td>a set of pools</td>
+          <td>the registry, entities' liveness, or systems</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That split is why the harness in <a href="#verify">§6</a> can test the allocator with no
+    components in sight (§A) and the pool with no registry (§B). A design whose pieces can only
+    be tested together is a design whose pieces are not really pieces.
+  </p>
+
+  <h3 id="impl-entity">4.1 <code>entity.hpp</code> — minting ids</h3>
+
+  <p>
+    The type first. An entity is one 32-bit word with the same layout as
+    <code>handle&lt;T&gt;</code>, and it reuses that header's constants rather than restating
+    them:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/entity.hpp — the id</span></figcaption>
+    <pre><code class="lang-cpp">struct entity
+{
+    std::uint32_t bits = 0;
+
+    [[nodiscard]] constexpr std::uint32_t index() const { return bits &amp; k_handle_index_mask; }
+    [[nodiscard]] constexpr std::uint32_t generation() const { return bits &gt;&gt; k_handle_index_bits; }
+    [[nodiscard]] constexpr bool valid() const { return generation() != 0; }
+    [[nodiscard]] explicit constexpr operator bool() const { return valid(); }
+    [[nodiscard]] friend constexpr bool operator==(entity, entity) = default;
+};
+
+static_assert(sizeof(entity) == 4, "an entity is one 32-bit word");
+
+inline constexpr entity null_entity{};</code></pre>
+  </figure>
+
+  <p>
+    <strong>Why is this not just <code>handle&lt;entity_tag&gt;</code>?</strong> It was the first
+    thing tried, and the reason it is not here is worth a paragraph, because it is not “handles
+    are wrong”. Everything <code>core/handle.hpp</code> argues is argued again here — index plus
+    generation, twenty bits and twelve, generation zero reserved, the bump on removal. What
+    differs is what the type <em>means</em>:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What a handle names compared with what an entity names.</caption>
+    <thead><tr><th></th><th>names</th><th>the thing it names</th></tr></thead>
+    <tbody>
+      <tr><td><code>handle&lt;mesh_data&gt;</code></td><td>an item <em>in</em> a
+          <code>pool&lt;mesh_data&gt;</code></td><td>lives in exactly one container</td></tr>
+      <tr><td><code>entity</code></td><td>a row <em>across</em> every pool there is</td>
+          <td>may not exist anywhere at all</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Aliasing them would compile, and then <code>pool&lt;T&gt;::get(handle&lt;T&gt;)</code> and a
+    component lookup would be spelled the same way while meaning opposite things. The phantom
+    type parameter in <code>handle.hpp</code> exists precisely so that two ids which must not mix
+    <em>cannot</em> mix; spending it to make them mix would be an odd use of it.
+  </p>
+
+  <p>
+    The allocator is Lesson 5.4's slot machinery with the payload deleted. <code>create()</code>
+    pops the free list or grows; <code>destroy()</code> bumps the generation and pushes the slot
+    back:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/entity.hpp — retiring an id</span></figcaption>
+    <pre><code class="lang-cpp">bool destroy(entity e)
+{
+    if (!alive(e)) { return false; }
+
+    slot&amp; s = slots_[e.index()];
+    s.live = false;
+
+    std::uint32_t next = s.generation + 1u;
+    if (next &gt; k_handle_max_generation)
+    {
+        next = k_handle_first_generation;
+        ++wraps_;
+        ENGINE_LOG_WARN(log_core, "ecs: entity generation wrapped on slot %u (wrap #%zu)",
+                        e.index(), wraps_);
+    }
+    s.generation = next;
+
+    free_slots_.push_back(e.index());
+    --live_;
+    return true;
+}</code></pre>
+  </figure>
+
+  <p>
+    Note what this function does <em>not</em> do: it does not touch a single component, and it
+    cannot, because the allocator has never heard of one. <code>registry::destroy</code> is the
+    operation that erases the rows and then calls this. Calling this one directly on an entity
+    that still has components leaves those rows filed under an id nothing will ever look up
+    again — a leak with no symptom — which is why the registry is the public door.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Eight bytes for five bits, and the arithmetic that says it is fine</span>
+    <p>
+      A slot holds a 12-bit generation and one <code>live</code> flag, so a packed slot fits in
+      two bytes; ours takes eight, because <code>{ std::uint32_t; bool; }</code> pads. At the
+      10,000 peak entities Lesson 5.7 budgeted for, the difference is 80 KB against 20 KB — both
+      of which vanish beside the 400 KB of <em>component</em> sparse arrays that the same 10,000
+      entities imply across ten component types. Packing this would buy 0.4 KB per thousand
+      entities and cost every reader a shift and a mask. The fields are private, so if a profile
+      ever disagrees the change is local.
+    </p>
+  </div>
+
+  <h3 id="impl-pool">4.2 <code>pool.hpp</code> — one component type's storage</h3>
+
+  <p>
+    The three arrays from <a href="#theory-sparse">§3.3</a>, and about twenty lines of logic. The
+    insert is unremarkable — resize the sparse array if this entity's index is a new high-water
+    mark, write the sparse entry, push both dense arrays. The erase is the one to read carefully:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/pool.hpp — swap, pop, patch</span></figcaption>
+    <pre><code class="lang-cpp">bool erase(entity e) override
+{
+    if (!contains(e)) { return false; }
+
+    const std::uint32_t at = sparse_[e.index()];
+    const std::uint32_t last = static_cast&lt;std::uint32_t&gt;(dense_.size() - 1u);
+
+    if (at != last)
+    {
+        dense_[at] = dense_[last];
+        data_[at] = std::move(data_[last]);
+        sparse_[dense_[at].index()] = at;   // the patch
+    }
+
+    dense_.pop_back();
+    data_.pop_back();
+    sparse_[e.index()] = k_none;
+    return true;
+}</code></pre>
+  </figure>
+
+  <p>
+    Three things about those eighteen lines.
+  </p>
+
+  <p>
+    <strong>The patch is line three of the <code>if</code>,</strong> and it is the entire subject
+    of Figure 4. Without it the pool is silently corrupt: the entity that got swapped into the
+    hole still believes its component is at the old position, so the next lookup returns somebody
+    else's data. It is one line, it is easy to leave out, and it produces the least debuggable
+    class of bug there is.
+  </p>
+
+  <p>
+    <strong>The last-element case is handled by the <code>if</code>,</strong> and the reason the
+    guard exists is subtler than “skip a redundant copy”. When <code>at == last</code>, the
+    entity that “moves” is the entity being erased — so the patch would write its sparse entry
+    back to the position it already occupies, immediately before the final line marks it absent.
+    Harmless either way. The order is what saves us, not the branch, and §B of the harness tests
+    this case separately because a test that only ever erases from the middle passes forever.
+  </p>
+
+  <p>
+    <strong><code>data_[at] = std::move(data_[last])</code> is a move, not a copy.</strong> A
+    component might own a buffer; assigning a moved-from value into the hole and then popping
+    means the erased component's resources are released with it rather than kept alive by a copy
+    nobody is looking at. This is the same care <code>engine::pool::remove</code> takes for the
+    same reason.
+  </p>
+
+  <p>
+    One more piece, and it is the piece the view is built on:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/pool.hpp — the type-independent part</span></figcaption>
+    <pre><code class="lang-cpp">class pool_base
+{
+public:
+    virtual ~pool_base() = default;
+    virtual bool erase(entity e) = 0;
+    virtual void clear() = 0;
+    [[nodiscard]] virtual std::size_t size() const = 0;
+    [[nodiscard]] virtual std::span&lt;const entity&gt; entities() const = 0;
+};</code></pre>
+  </figure>
+
+  <p>
+    Every function there is <strong>cold</strong>, and that is a constraint rather than an
+    accident. <code>erase</code> runs once per pool per entity destruction; <code>clear</code>
+    once at teardown; <code>entities()</code> once per view, not once per entity. Nothing on the
+    hot path goes through this interface — a view holds concrete <code>pool&lt;T&gt;*</code> and
+    calls non-virtual members — which is Lesson 5.6's measurement being obeyed rather than
+    quoted. <code>pool&lt;T&gt;</code> is <code>final</code> besides, so even the cold calls
+    devirtualise wherever the static type is known.
+  </p>
+
+  <p>
+    <code>entities()</code> deserves its own sentence. It returns
+    <code>std::span&lt;const entity&gt;</code> for <em>every</em> <code>T</code> — a
+    type-independent window onto a type-dependent container. That one signature is what lets the
+    view in §4.4 choose the smallest of four pools with a plain loop rather than a pile of
+    template machinery.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Two containers called <code>pool</code>, on purpose</span>
+    <p>
+      <code>engine::pool&lt;T&gt;</code> (Lesson 5.4) and <code>engine::ecs::pool&lt;T&gt;</code>
+      (this lesson) are different containers with the same name. Same three arrays, same
+      swap-and-pop, same generational check — <strong>opposite jobs</strong>: one mints its own
+      keys, the other is keyed by an id it did not mint. Calling this one
+      <code>component_storage</code> would hide a relationship the course spent two lessons
+      drawing out, so the namespace keeps them apart instead. Inside <code>engine::ecs</code>,
+      bare <code>pool</code> is this one. The one arrangement that breaks is
+      <code>using namespace engine;</code> and <code>using namespace engine::ecs;</code> in the
+      same scope, which makes bare <code>pool</code> ambiguous — and an ambiguity the compiler
+      reports is the good kind.
+    </p>
+  </div>
+
+  <h3 id="impl-registry">4.3 <code>registry.hpp</code> — the world</h3>
+
+  <p>
+    The registry is an <code>entity_allocator</code> and a vector of type-erased pools, and its
+    interesting method is the one from <a href="#theory-erasure">§3.5</a>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/registry.hpp — the pool lookup</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename T&gt;
+[[nodiscard]] pool&lt;T&gt;&amp; storage()
+{
+    const component_id id = component_id_of&lt;T&gt;();
+    if (id &gt;= pools_.size()) { pools_.resize(id + 1u); }
+    if (!pools_[id]) { pools_[id] = std::make_unique&lt;pool&lt;T&gt;&gt;(); }
+
+    return *static_cast&lt;pool&lt;T&gt;*&gt;(pools_[id].get());
+}</code></pre>
+  </figure>
+
+  <p>
+    There is a second, non-creating version — <code>storage_if&lt;T&gt;()</code> — and
+    <strong>every read path uses it.</strong> That is not a micro-optimisation; it is a
+    correctness property. If <code>has&lt;T&gt;()</code> went through <code>storage&lt;T&gt;()</code>,
+    then merely <em>asking</em> whether an entity had a component would allocate a pool and grow
+    the pool vector, which makes a query a mutating operation and makes a <code>const</code>
+    registry impossible. Views use <code>storage_if</code> too, so a view naming a component type
+    nobody has ever attached is simply empty — the right answer, arrived at without a special
+    case.
+  </p>
+
+  <p>
+    <code>destroy</code> is where the type erasure earns itself:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/registry.hpp — destroying an entity</span></figcaption>
+    <pre><code class="lang-cpp">bool destroy(entity e)
+{
+    if (!entities_.alive(e)) { return false; }
+    for (std::unique_ptr&lt;pool_base&gt;&amp; p : pools_)
+    {
+        if (p) { p-&gt;erase(e); }
+    }
+    return entities_.destroy(e);
+}</code></pre>
+  </figure>
+
+  <p>
+    Every pool, every time, because the registry keeps no record of which components an entity
+    holds — such a record would be a second source of truth and the pools are the first. The cost
+    is one virtual call per component <em>type</em>, not per component, and most of them return
+    after a single array read. At the demo's five types that is nothing; an engine with three
+    hundred component types would keep a per-entity bitmask, and Lesson 5.7 §9 said as much.
+  </p>
+
+  <p>
+    Two smaller decisions worth naming. <code>add&lt;T&gt;</code> to a dead entity
+    <strong>asserts in debug and is refused in release</strong> — refusing rather than filing it,
+    because a component filed under a dead id is invisible to every query and will never be
+    erased, which is a leak whose only symptom is a pool that keeps growing. And
+    <code>has&lt;T&gt;</code> deliberately does <em>not</em> check liveness first: a stale entity
+    fails <code>pool::contains</code> anyway (the full-word comparison from §3.3), so an
+    <code>alive()</code> call would be a second, slower route to the same answer on the hottest
+    path in the engine.
+  </p>
+
+  <h3 id="impl-view">4.4 <code>view.hpp</code> — the query, and rule 3</h3>
+
+  <p>
+    Here is rule 3, in the form it actually takes:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/view.hpp — choosing the lead</span></figcaption>
+    <pre><code class="lang-cpp">explicit view(pool&lt;Ts&gt;*... pools)
+    : pools_{pools...}
+{
+    if (((pools == nullptr) || ...)) { return; }
+
+    const std::span&lt;const entity&gt; spans[] = {pools-&gt;entities()...};
+    const pool_base* bases[] = {static_cast&lt;const pool_base*&gt;(pools)...};
+
+    for (std::size_t i = 1; i &lt; sizeof...(Ts); ++i)
+    {
+        if (spans[i].size() &lt; spans[lead_].size()) { lead_ = i; }
+    }
+    lead_pool_ = bases[lead_];
+}</code></pre>
+  </figure>
+
+  <p>
+    Five lines, no metaprogramming, no dispatch. The trick is entirely in
+    <code>entities()</code> returning the same type for every pool: a pack of
+    <code>pool&lt;Ts&gt;*</code> becomes an ordinary array of spans, and choosing the smallest is
+    a <code>for</code> loop a beginner could write. The <code>(... || ...)</code> fold at the top
+    is a C++17 fold expression — “is any of these null?” — and a null pool means the type has
+    never been used, so nothing can have it and the view is empty.
+  </p>
+
+  <p>
+    The walk itself:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/view.hpp — the loop</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename F, std::size_t... I&gt;
+void each_impl(F&amp; f, std::index_sequence&lt;I...&gt;) const
+{
+    const std::span&lt;const entity&gt; lead = lead_pool_-&gt;entities();
+
+    for (std::size_t i = 0; i &lt; lead.size(); ++i)
+    {
+        const entity e = lead[i];
+
+        if (!(... &amp;&amp; (I == lead_ || std::get&lt;I&gt;(pools_)-&gt;contains(e)))) { continue; }
+
+        if constexpr (std::is_invocable_v&lt;F&amp;, entity, Ts&amp;...&gt;)
+        {
+            f(e, fetch&lt;I&gt;(e, i)...);
+        }
+        else
+        {
+            f(fetch&lt;I&gt;(e, i)...);
+        }
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    The <code>&amp;&amp;</code> fold short-circuits, so the first pool that says no stops the
+    rest from being asked, and <code>I == lead_</code> skips the lead entirely — it contains
+    <code>e</code> by construction, since that is where <code>e</code> came from. The
+    <code>if constexpr</code> lets a callback take the entity or not; most systems never use the
+    id, and a parameter that is always <code>(void)</code>-cast is a parameter that should not
+    have been there.
+  </p>
+
+  <p>
+    And <code>fetch</code>, which is where the lead pool earns its keep a second time:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/ecs/view.hpp — fetching one component</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;std::size_t I&gt;
+[[nodiscard]] auto&amp; fetch(entity e, std::size_t i) const
+{
+    auto* p = std::get&lt;I&gt;(pools_);
+    if (I == lead_)
+    {
+        ENGINE_ASSERT_MSG(p-&gt;entity_at(i) == e, log_core,
+                          "ecs::view: lead pool changed during iteration "
+                          "(slot %zu now holds entity %u, expected %u)",
+                          i, p-&gt;entity_at(i).index(), e.index());
+        return p-&gt;at(i);
+    }
+    return *p-&gt;get(e);
+}</code></pre>
+  </figure>
+
+  <p>
+    For the lead pool the dense position <em>is</em> the loop counter, so its component is
+    <code>data_[i]</code> — the next element of an array we are already walking, with no sparse
+    read and no random access. Only the other pools pay the redirect. <code>I == lead_</code>
+    compares a compile-time constant against a value fixed for the whole loop, so the branch
+    predicts perfectly after the first iteration.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The one rule a view imposes</span>
+    <p>
+      <strong>Do not add or erase components of a type this view names while iterating it.</strong>
+      The walk is over the lead pool's dense array <em>by position</em>, and both
+      <code>insert</code> and <code>erase</code> move elements of that array — so a callback that
+      destroys the entity it was just handed will skip whichever entity got swapped into its
+      place, and one that inserts may reallocate the array outright.
+    </p>
+    <p>
+      This is exactly how mutating a <code>std::vector</code> inside a range-<code>for</code>
+      behaves, and it is no more forgivable here. The assertion in <code>fetch</code> catches it
+      in a debug build the moment the dense position stops matching the entity. The two safe
+      patterns are the familiar ones: <strong>collect, then act</strong> (which is what
+      <code>lifetime_system</code> in the demo does, and why it takes a scratch vector), or defer
+      the change to a command list — Module 9 builds one for the job system.
+    </p>
+  </div>
+
+  <h3 id="impl-nogroups">4.5 What is deliberately not here</h3>
+
+  <p>
+    <strong>Groups.</strong> Lesson 5.7's decisive measurement was that two pools sorted to agree
+    on dense order let a query read <em>no</em> sparse entry at all, and run at 0.99× a real
+    archetype on the archetype's own best case. That number is why this course chose a sparse
+    set: it means the migration only ever runs one way — a sparse set can be given an archetype's
+    query later, one group at a time, and an archetype can never be given O(1) structural change,
+    because moving between archetypes <em>is</em> what an archetype is.
+  </p>
+
+  <p>
+    So the door is deliberately left open and deliberately not walked through. Building a group
+    now would be optimising before there is a profile, on an engine whose demo has 121 entities
+    and whose renderer does not read the ECS at all. <code>pool::components()</code> documents
+    that its dense order is nobody's business <em>precisely so</em> that a future group may sort
+    it, and <a href="#exercises">Exercise 10.4</a> builds one for a reader who wants to see the
+    0.99× for themselves.
+  </p>
+
+  <p>
+    Also absent, and each for a stated reason: <strong>exclusion queries</strong>
+    (<code>view&lt;A&gt;().without&lt;B&gt;()</code>, which is Exercise 10.2 and about fifteen
+    lines); <strong>const views</strong>, which need a second class template or a
+    <code>const T</code> spelling and have no caller yet; <strong>signals</strong> (on-construct,
+    on-destroy callbacks), which every mature ECS grows and none of which we can design without a
+    user; and <strong>thread safety</strong>, which Module 9 addresses for every container in the
+    engine at once rather than one at a time.
+  </p>
+
+  <!-- =================================================================
+       5 — THE DEMO
+       ================================================================= -->
+  <h2 id="demo"><span class="num">5</span>The Demo: Composition, Visible</h2>
+
+  <p>
+    <code>demos/ecs_swarm</code> builds a world of 121 entities out of six component types and
+    draws it with the software renderer. Its whole job is to make
+    <a href="#problem">§1</a>'s argument something you can look at.
+  </p>
+
+  <p>
+    The components are six plain structs — <code>placement</code> (which is
+    <code>engine::transform</code>, unmodified, under an alias), <code>geometry</code>,
+    <code>material</code>, <code>orbit</code>, <code>spin</code> and <code>lifetime</code> — and
+    the four kinds of entity differ only in which ones they carry:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Which components each kind of entity in the demo carries.</caption>
+    <thead><tr><th>kind</th><th>count</th><th><code>placement</code></th><th><code>geometry</code></th>
+               <th><code>material</code></th><th><code>orbit</code></th><th><code>spin</code></th>
+               <th><code>lifetime</code></th></tr></thead>
+    <tbody>
+      <tr><td>the sun</td><td>1</td><td>✓</td><td>✓</td><td>✓</td><td>—</td><td>✓</td><td>—</td></tr>
+      <tr><td>ring member</td><td>96</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
+          <td>1 in 3</td><td>—</td></tr>
+      <tr><td>waypoint</td><td>24</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>—</td><td>—</td></tr>
+      <tr><td>spark ([Space])</td><td>32/burst</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td>
+          <td>—</td><td>✓</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Nothing in the program records that table. There is no <code>enum class kind</code>, no
+    <code>if (is_waypoint)</code>, and no field left blank — a waypoint simply has no row in the
+    geometry pool. Run it and the HUD confirms the arithmetic: <strong>121 entities, 468
+    components, 5 pools, 97 drawn</strong>. Five pools rather than six, incidentally, because
+    nothing has a <code>lifetime</code> until you press <kbd>Space</kbd> — a component type this
+    world has never used has no pool, and asking about it does not create one. The gap between 121 and 97 is the twenty-four waypoints, which
+    are moving every step and are invisible because the render query asks for a component they do
+    not have.
+  </p>
+
+  <p>
+    Four keys turn the argument into an experiment:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The demo's keys and what each one demonstrates.</caption>
+    <thead><tr><th>key</th><th>what it does</th><th>what to watch</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Space</kbd></td><td>spawn 32 short-lived sparks</td>
+          <td><code>components</code> jumps by 160 and drifts back down as the
+              <code>lifetime</code> system retires them — 4.2 ns per structural change,
+              whatever else the world holds</td></tr>
+      <tr><td><kbd>M</kbd></td><td>remove <code>material</code> from every third ring member</td>
+          <td>they vanish, <code>components</code> drops by 32, and
+              <strong><code>lead pool</code> on the HUD changes from 1 to 2</strong> — the
+              material pool is now the smallest, so the view starts leading with it</td></tr>
+      <tr><td><kbd>O</kbd></td><td>remove <code>orbit</code> from half the ring</td>
+          <td>they freeze in place and keep spinning, because spinning is a different component
+              read by a different system</td></tr>
+      <tr><td><kbd>X</kbd></td><td>destroy every fourth ring member</td>
+          <td><code>slots</code> holds steady while <code>free</code> climbs — and the next
+              <kbd>Space</kbd> reuses those slots rather than minting new ones</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <kbd>M</kbd> is the one to try first. Watching the <code>lead pool</code> readout move from 1
+    to 2 is rule 3 doing its job in front of you: the query did not simply keep walking 97
+    candidates and reject 32 of them, it noticed that the intersection could only be as large as
+    the smallest set and started from there.
+  </p>
+
+  <p>
+    <kbd>X</kbd> demonstrates something quieter and more important. The demo keeps a
+    <code>std::vector&lt;entity&gt; swarm_</code> so that <kbd>M</kbd> and <kbd>O</kbd> can find
+    the ring members again, and after <kbd>X</kbd> that vector is full of destroyed ids. Nothing
+    prunes it. Every loop over it says <code>if (!world_.alive(e)) { continue; }</code> and that
+    is the end of the matter — which is Lesson 5.4's entire argument arriving in ordinary code. A
+    vector of pointers there would be a vector of landmines.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The seam, named rather than hidden</span>
+    <p>
+      <code>render_system</code> walks a view and pushes <code>scene_object</code>s into a vector
+      for <code>collect_triangles</code>. That is a copy of six fields per visible entity — about
+      8 KB at 97 objects, which is nothing, and which stops being nothing at 10,000. It is in the
+      source with a comment saying exactly that, because a temporary bridge that nobody wrote
+      down is a permanent bridge. Module 6 removes it by teaching the renderer to read pools
+      directly.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — VERIFICATION
+       ================================================================= -->
+  <h2 id="verify"><span class="num">6</span>Verification</h2>
+
+  <p>
+    <code>scratch/verify_58.cpp</code> is 101 checks in seven sections. Three of them are worth
+    describing, because they are the ones that could actually fail.
+  </p>
+
+  <p>
+    <strong>§D checks a design decision, not a behaviour.</strong> The other sections check that
+    the view returns the right answer — but a view that walked the <em>biggest</em> pool would
+    also return the right answer, more slowly, and no correctness test would notice. So
+    <code>view</code> exposes <code>lead()</code> and <code>size_hint()</code>, and §D asserts
+    that a view over pools of 60, 30 and 12 leads with the 12 and considers twelve candidates. A
+    rule nothing can observe is a rule that quietly stops being true.
+  </p>
+
+  <p>
+    <strong>§E is 200 frames of churn against an independent model.</strong> Three
+    <code>std::map</code>s track what the world <em>should</em> hold, and share not one line of
+    code with the thing under test; after two hundred frames of spawning, killing, adding and
+    removing, every entry in the model must resolve to the right value and no pool may hold a row
+    the model does not know about. This is the shape that found a real bug in Lesson 5.7 — a
+    single-frame test of swap-and-pop passes forever, because the failure needs the moved element
+    to be the element being removed, which is one iteration in <em>N</em>.
+  </p>
+
+  <p>
+    The run reports the numbers as it goes, and two of them are the theory from §3.1 measured:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">selected output — <code>sh scratch/build_verify_58.sh</code></span></figcaption>
+    <pre><code class="lang-bash">=== E. Churn ===
+  … 518 created, 301 destroyed, 1061 components added, 131 removed, 217 live
+  [PASS] the world holds exactly the live entities (217 vs 217)
+  [PASS] component_count() matches the model: 383 vs 383
+  [PASS] EVERY component the model holds resolves to the right value after 200 frames of
+         swap-and-pop — this is the check that catches a missing sparse patch
+  [PASS] the id space is 220 slots after creating 518 entities — sized by peak live, which
+         is why the sparse arrays do not need paging (Lesson 5.7 rule 4)
+
+=== F. Memory ===
+  [PASS] the LABEL pool's sparse array is also ~9991 entries — for 1000 components.
+         90% of it means "absent", and that is the sparse set's memory story
+  … 10,000 entities, 2 component types: 78 KB of sparse index
+  … extrapolated to Lesson 5.7's revisit point (32 types x 1e5): 12 MB</code></pre>
+  </figure>
+
+  <p>
+    <strong>220 slots for 518 entities created.</strong> That is rule 4's premise, measured: the
+    id space is sized by peak live, so every component pool's sparse array is too, and the paged
+    sparse arrays that real ECS libraries need can wait until the 12 MB line above becomes a
+    number somebody minds.
+  </p>
+
+  <p>
+    <strong>§G is the one that has run for eight lessons.</strong> The reference shot written in
+    Lesson 5.1 is still byte-identical — 1,209,616 bytes, unchanged. That is not a decoration:
+    the ECS is purely additive this lesson, nothing renders through it, so the picture
+    <em>cannot</em> have moved, and if it had we would know immediately that the change was not
+    where we thought it was.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The full run</span>
+    <p>
+      <strong>101 checks, 0 failures</strong> at <code>-O2 -DNDEBUG</code> (99 in a debug build,
+      where two checks are skipped because an assertion fires before the release-path refusal can
+      be observed — the harness says so rather than silently passing). All twelve earlier
+      harnesses, <code>verify_45</code> through <code>verify_57</code>, are still green.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">7</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Every file this lesson creates or modifies.</caption>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/ecs/entity.hpp</code></td><td>new</td>
+          <td>the id, and the allocator that mints it</td></tr>
+      <tr><td><code>engine/include/engine/ecs/pool.hpp</code></td><td>new</td>
+          <td>one component type's sparse set, plus the type-erased base</td></tr>
+      <tr><td><code>engine/include/engine/ecs/registry.hpp</code></td><td>new</td>
+          <td>the world: one id space, N pools, component ids</td></tr>
+      <tr><td><code>engine/include/engine/ecs/view.hpp</code></td><td>new</td>
+          <td>the query, leading with the smallest pool</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>new</td>
+          <td>121 entities, six components, four systems</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>one target added</td></tr>
+      <tr><td><code>scratch/verify_58.cpp</code></td><td>new</td>
+          <td>101 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    No change to <code>engine/CMakeLists.txt</code>: all four headers are header-only, so the
+    library's source list is untouched. The engine's public header count goes from 47 to
+    <strong>51</strong>.
+  </p>
+
+  @@LISTING:engine/include/engine/ecs/entity.hpp@@
+  @@LISTING:engine/include/engine/ecs/pool.hpp@@
+  @@LISTING:engine/include/engine/ecs/registry.hpp@@
+  @@LISTING:engine/include/engine/ecs/view.hpp@@
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:scratch/verify_58.cpp@@
+
+  <!-- =================================================================
+       8 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">8</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">macOS / Linux</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+./build/demos/ecs_swarm                            # a window
+./build/demos/ecs_swarm --shot swarm.ppm           # one frame, no window, no display
+
+sh scratch/build_verify_58.sh                              # correctness, -O0
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_58.sh # …and optimised</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (PowerShell, MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo
+
+.\build\demos\RelWithDebInfo\ecs_swarm.exe
+.\build\demos\RelWithDebInfo\ecs_swarm.exe --shot swarm.ppm</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> A golden torus at the origin, tumbling slowly, ringed
+    by ninety-six small cubes and icosahedra in six tint families, orbiting on tilted circles at
+    three radii. A third of them tumble as well; the rest hold their orientation. Nothing else is
+    visible — the twenty-four waypoints are there, and moving, and have no geometry.
+  </p>
+
+  <p>
+    Across the top, three lines of HUD:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the HUD at rest</span></figcaption>
+    <pre><code class="lang-bash">ECS  entities 121   components  468   pools 5
+render view  lead pool 1   candidates  97   drawn  97   tris 3136
+slots 121   free 0   unresolved 0   fps  60.0</code></pre>
+  </figure>
+
+  <p>
+    <code>lead pool 1</code> is the geometry pool — 97 rows against the placement pool's 121 —
+    and <code>candidates 97</code> equals <code>drawn 97</code> because every entity with a
+    geometry also has a material. Press <kbd>M</kbd> and the second line becomes
+    <code>lead pool 2 · candidates 65 · drawn 65</code>: the material pool is now the smallest,
+    the view leads with it, and thirty-two objects have gone.
+  </p>
+
+  <p>
+    The headless <code>--shot</code> run prints its own arithmetic and writes a 480×270 PPM:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the reproducible frame</span></figcaption>
+    <pre><code class="lang-bash">ecs_swarm: 121 entities, 468 components, 5 pools, 97 drawn, 3136 triangles
+ecs_swarm: render view leads with pool 1, 97 candidates</code></pre>
+  </figure>
+
+  <p>
+    Those numbers are worth checking by hand, because they are the composition table above,
+    added up: 1 sun × 4 components + 96 ring × 4 + 32 of the ring with a spin + 24 waypoints × 2
+    = 4 + 384 + 32 + 48 = <strong>468</strong>. And 1 + 96 = <strong>97</strong> entities carry a
+    geometry, which is exactly what got drawn.
+  </p>
+
+  <!-- =================================================================
+       9 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">9</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">One entity reads another's component, hours after the bug</span>
+    <p><strong>Symptom.</strong> Everything works for a while. Then an object teleports, or takes
+       on another object's colour, or a system writes into the wrong row — and it starts
+       happening only after entities have been destroyed for a bit.</p>
+    <p><strong>Cause.</strong> The missing sparse patch in <code>erase</code>. The entity that
+       got swapped into the hole still has a sparse entry pointing at its old dense position.</p>
+    <p><strong>Fix.</strong> <code>sparse_[dense_[at].index()] = at;</code> after the swap. To
+       <em>find</em> it, do what §E does: churn for a few hundred frames, then walk every pool
+       and assert <code>sparse_[dense_[i].index()] == i</code> for every <code>i</code>. That one
+       invariant catches the entire class.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A loop over a view skips every other entity</span>
+    <p><strong>Symptom.</strong> A system that destroys entities — a lifetime system, a damage
+       system — only ever kills about half of what it should, and the survivors change from run
+       to run.</p>
+    <p><strong>Cause.</strong> Destroying inside the callback. The erase swap-and-pops the lead
+       pool's dense array, the entity that moved into position <code>i</code> is never visited,
+       and the loop moves on to <code>i + 1</code>.</p>
+    <p><strong>Fix.</strong> Collect, then act — see <code>lifetime_system</code>. In a debug
+       build the assertion inside <code>view::fetch</code> fires on the first occurrence and
+       names the position and both entities.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A recycled entity inherits a dead one's components</span>
+    <p><strong>Symptom.</strong> A freshly created entity already has a <code>velocity</code>
+       nobody gave it.</p>
+    <p><strong>Cause.</strong> Either <code>entity_allocator::destroy</code> was called directly
+       instead of <code>registry::destroy</code> (so the rows were never erased), or
+       <code>dense_</code> stores bare indices instead of full entity words (so the generation
+       cannot be compared).</p>
+    <p><strong>Fix.</strong> Go through the registry, and store the whole word. Note that these
+       are two <em>independent</em> defences and either alone would prevent the symptom — which
+       is precisely why §E's shadow-model check exists rather than a single targeted test: a
+       test that passes with one of the two broken is not testing much.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A stored <code>T*</code> points at the wrong component</span>
+    <p><strong>Symptom.</strong> A pointer from <code>get&lt;T&gt;()</code>, cached across a call
+       that adds or removes a component, starts writing into somebody else's row — or into freed
+       memory if the vector reallocated.</p>
+    <p><strong>Cause.</strong> The same one Lesson 5.4 abolished, wearing new clothes.
+       <strong>Resolve late, use immediately, never store.</strong></p>
+    <p><strong>Fix.</strong> Hold the <code>entity</code>, not the pointer. Under a sanitiser
+       (<code>-fsanitize=address</code>) the reallocation case is caught instantly; the
+       swap-and-pop case is not, because that memory is still validly owned by the vector — which
+       is exactly why the rule is a rule rather than a suggestion.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Memory climbs and never comes back down</span>
+    <p><strong>Symptom.</strong> A level that spawns a hundred thousand short-lived entities
+       leaves every component pool holding a hundred-thousand-entry sparse array for the rest of
+       the process.</p>
+    <p><strong>Cause.</strong> High-water marks do not fall. The free list keeps the id space
+       compact against <em>peak live</em>, and if peak live was once 100,000 then that is the
+       size for ever.</p>
+    <p><strong>Fix.</strong> The same answer Lesson 5.4 gave and Lesson 5.7 repeated:
+       <strong>things that exist in millions and die in seconds should not be
+       entities.</strong> A particle system owns its own array. Entities are for things a
+       designer would name.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Ambiguous <code>pool</code></span>
+    <p><strong>Symptom.</strong> <code>error: reference to 'pool' is ambiguous</code>.</p>
+    <p><strong>Cause.</strong> <code>using namespace engine;</code> and
+       <code>using namespace engine::ecs;</code> in the same scope, which drags both
+       <code>engine::pool</code> and <code>engine::ecs::pool</code> into one name.</p>
+    <p><strong>Fix.</strong> Qualify, or drop one of the <code>using</code>s. The engine's own
+       code never writes <code>using namespace</code> at all, which is why this cannot happen
+       inside the library.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">10</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>10.1 — Make the lead choice observable in the demo.</strong> The HUD prints
+         <code>lead pool</code> for the render view. Add a second readout that prints what the
+         walk <em>would have cost</em> with the worst lead — that is, the size of the largest
+         named pool — so the saving is on screen as a ratio rather than as a claim. Then press
+         <kbd>M</kbd> and watch it move.</p>
+      <details><summary>Hint</summary>
+        <p><code>view</code> already stores every pool pointer. Add a <code>size_worst()</code>
+           beside <code>size_hint()</code> that takes the max instead of the min — the array of
+           spans in the constructor has everything you need.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.2 — Exclusion.</strong> Add
+         <code>view&lt;Ts...&gt;::without&lt;Us...&gt;()</code>, so a query can ask for “every
+         entity with a placement and an orbit but <em>no</em> geometry” — which is exactly the
+         demo's waypoints, and currently not expressible. Then use it to draw the waypoints as
+         debug-draw crosses, and watch twenty-four invisible things become visible without a
+         single new component.</p>
+      <details><summary>Hint</summary>
+        <p>The excluded pools do not participate in choosing the lead — they can only make the
+           result smaller, never the walk. One more fold in the filter:
+           <code>(... &amp;&amp; !excluded-&gt;contains(e))</code>, with a null excluded pool
+           meaning "nothing has it", which is trivially satisfied.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Store a second tuple of <code>pool&lt;Us&gt;*</code>. In <code>each_impl</code>, after
+           the inclusion fold passes, run
+           <code>if ((... || (ex&lt;J&gt; != nullptr &amp;&amp; ex&lt;J&gt;-&gt;contains(e)))) continue;</code>.
+           Roughly fifteen lines including a second <code>index_sequence</code>. Note that a
+           <em>null</em> excluded pool must mean “nobody has this component”, so the fold must
+           test the pointer first — getting that backwards makes every exclusion query empty.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.3 — Break it on purpose, then catch it.</strong> Delete the line
+         <code>sparse_[dense_[at].index()] = at;</code> from <code>pool::erase</code> and run
+         <code>verify_58</code>. Which sections fail, and after how many frames of §E? Then put
+         it back, and instead delete the <code>dense_[at] == e</code> term from
+         <code>contains</code>. Which sections fail <em>now</em>? Write down, in one sentence
+         each, what class of bug each line prevents.</p>
+      <details><summary>Solution sketch</summary>
+        <p>The missing patch fails §B immediately (the “entity swapped into the hole still
+           resolves” check is aimed straight at it) and §E's value comparison. The missing
+           generation term is more interesting: §A and §B's early checks still pass, and the
+           failure shows up in §B's impostor test and in §C's “recycled id inherits nothing”. The
+           first line prevents a <em>wrong row</em>; the second prevents a <em>wrong
+           entity</em>.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.4 — Build a group and measure the 0.99×.</strong> Lesson 5.7 measured that
+         two pools sorted to agree on dense order let a query skip the sparse read entirely.
+         Implement <code>registry::group&lt;A, B&gt;()</code>, which maintains that ordering on
+         insert and erase, and a <code>group_view</code> that walks both dense arrays by index
+         with no lookups. Benchmark it against the ordinary view with
+         <code>engine/core/bench.hpp</code> at 100, 10,000 and 100,000 entities, obeying all four
+         of the measurement rules — alternate the arms, report median and spread, stop the
+         optimiser deleting the work, and check both arms computed the same answer.</p>
+      <details><summary>Hint</summary>
+        <p>Maintaining a group is a swap: when an entity joins the group, swap its row in each
+           pool down to a boundary index, and keep a count of how many rows are “grouped”. Both
+           pools' sparse entries need patching, twice each.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Expect three regimes and be suspicious if you do not get them: no measurable
+           difference below a thousand entities (the working set is in cache and the redirect is
+           free); a growing win above that; and a cost on every <code>insert</code>/<code>erase</code>
+           of a grouped type that you must measure too, or you have benchmarked half the
+           trade. That last number is the one that decides whether a group is worth it, and it is
+           the one this lesson declined to pay in advance.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.5 — What does a 16-bit entity buy, and what does it cost?</strong> Change the
+         id to 16 bits — say 12 index, 4 generation — and work out, without running anything:
+         the maximum live entities, the number of frees before a slot's generation repeats, and
+         the memory saved on a 10,000-entity world with ten component types. Then decide whether
+         any real game could use it, and say which of the three numbers rules it out.</p>
+      <details><summary>Solution sketch</summary>
+        <p>4,096 live entities; 15 frees before a repeat; and the saving is 2 bytes per sparse
+           entry per component type — 10 × 10,000 × 2 = 200 KB, except that the world cannot hold
+           10,000 entities in the first place. The killer is the generation: fifteen reuses is
+           about a quarter of a second of one recycled slot at 60 Hz, so stale ids would resolve
+           routinely. This is the same arithmetic <code>core/handle.hpp</code> does for 12 bits,
+           run at a scale where the answer flips — which is the point of the exercise.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       11 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">11</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine now has an ECS, and it is about four hundred lines of logic under a great deal
+    of commentary. What it gained, concretely:
+  </p>
+
+  <ul>
+    <li><strong>One id space.</strong> <code>engine::ecs::entity</code> is minted by one
+        allocator and honoured by every pool, which is the single thing Lesson 5.4's
+        <code>pool&lt;T&gt;</code> could not offer — not because it was badly built, but because
+        each of its pools mints its own keys and two sevens from two pools mean nothing to each
+        other.</li>
+    <li><strong>O(1) structural change that does not scale with the world's complexity.</strong>
+        Adding a component touches one pool and writes three values. It costs the same whether
+        the entity has two other components or twelve, which is the property Lesson 5.7 measured
+        at 4.2 ns and made the deciding argument.</li>
+    <li><strong>Queries that lead with the smallest pool.</strong> Rule 3, five lines in a
+        constructor, worth a fifth of the walk on the harness's own 60/30/12 world and more as
+        the component gets rarer.</li>
+    <li><strong>Composition.</strong> Four kinds of entity in the demo, distinguished by nothing
+        but which of six component types they carry, with no enum, no flags and no branch in the renderer.
+        Twenty-four of them are invisible because they lack a component, not because anything
+        hid them.</li>
+    <li><strong>Staleness that survives reuse.</strong> A destroyed entity fails every lookup in
+        every pool, and a vector of destroyed ids is safe to keep and skip — which the demo does,
+        on purpose, in ordinary code.</li>
+  </ul>
+
+  <p>
+    And what it did <em>not</em> gain, said plainly: any speed at all. The demo is 121 entities;
+    Lesson 5.6 measured that layout is worth nothing below a thousand. Nothing renders through
+    the ECS, the reference shot is byte-identical for the eighth lesson running, and the render
+    system copies through a <code>scene_object</code> bridge that Module 6 will delete.
+  </p>
+
+  <p>
+    <strong>Next: 5.9 — Transform Hierarchy and the Camera System.</strong> Every placement in this lesson is in world
+    space, which is fine for a swarm orbiting an origin and useless the moment a turret needs to
+    sit on a tank. A hierarchy on top of an ECS is a genuinely interesting problem — the parent
+    link is a component, but the <em>order</em> in which transforms must be resolved is a
+    property of the graph rather than of any pool's dense order, and the two want different
+    things. That tension, and what it costs to resolve it once per frame instead of once per
+    query, is the next lesson — along with the observation that a camera, once there is an ECS,
+    stops being a special object and becomes an entity with a component like everything else.
+  </p>
+
+  <!-- =================================================================
+       12 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">12</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>EnTT</strong> — Michele Caini's sparse-set ECS, and the closest production
+        relative of what we built. <code>entt::entity</code> uses the same 20/12 split; its
+        <code>basic_sparse_set</code> is the same three arrays with paging and groups added. Read
+        <code>sparse_set.hpp</code> after this lesson and it will be legible.</li>
+    <li><strong>Michele Caini, “ECS back and forth”</strong> — a series that walks from a naïve
+        component array to sparse sets to groups, with the reasoning kept visible. Parts 1–3
+        cover exactly this lesson's ground.</li>
+    <li><strong>Sander Mertens, “Building an ECS”</strong> (the Flecs author) — the archetype
+        side of the argument, written by someone who chose the other design and explains what it
+        buys. Read alongside Lesson 5.7's numbers.</li>
+    <li><strong>Adam Martin, “Entity Systems are the future of MMOG development”</strong> — the
+        2007 posts that named the pattern. Dated in its specifics and still the clearest
+        statement of why composition beats inheritance for game objects.</li>
+    <li><strong>Bob Nystrom, <em>Game Programming Patterns</em>, “Component”</strong> — the
+        gentler on-ramp: the same decomposition argued at the level of one game object, before
+        storage enters the picture.</li>
+    <li><strong>Lesson 5.4</strong> for the generational index this id is built on,
+        <strong>5.6</strong> for what iteration costs, and <strong>5.7</strong> for why this is a
+        sparse set and not an archetype.</li>
+  </ul>

@@ -1,0 +1,80 @@
+<svg viewBox="0 0 720 430" role="img" aria-labelledby="l63f1-t l63f1-d">
+  <title id="l63f1-t">A surface as a landscape of microfacets</title>
+  <desc id="l63f1-d">A cross-section of a rough surface with every facet's normal drawn. Light arrives from l and leaves toward v; only the few facets whose own normal is close to the halfway vector h reflect between them, so the highlight's shape is a histogram of surface slopes.</desc>
+  <defs>
+    <marker id="e-i-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l63f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The whole model, in one picture: every microfacet is a perfect mirror, so only the ones facing h send light at you.</text>
+<path d="M 56 266 L 56.0 199.6 L 68.7 206.7 L 81.3 207.8 L 94.0 204.8 L 106.7 207.6 L 119.3 214.6 L 132.0 215.3 L 144.7 210.2 L 157.3 213.2 L 170.0 228.5 L 182.7 240.4 L 195.3 233.3 L 208.0 214.0 L 220.7 201.0 L 233.3 199.1 L 246.0 199.1 L 258.7 197.7 L 271.3 203.4 L 284.0 218.0 L 296.7 227.8 L 309.3 222.4 L 322.0 211.9 L 334.7 213.6 L 347.3 226.0 L 360.0 231.9 L 372.7 223.6 L 385.3 211.7 L 398.0 206.0 L 410.7 201.9 L 423.3 194.0 L 436.0 191.3 L 448.7 204.6 L 461.3 226.1 L 474.0 235.6 L 486.7 227.5 L 499.3 217.1 L 512.0 217.0 L 524.7 221.0 L 537.3 217.9 L 550.0 211.1 L 562.7 210.2 L 575.3 212.3 L 588.0 206.0 L 600.7 193.4 L 613.3 191.6 L 626.0 208.6 L 638.7 229.5 L 651.3 236.2 L 664.0 230.0 L 664 266 Z" class="fill-soft grid" stroke-width="1.5"/>
+<line x1="62.333333333333336" y1="203.1080645099198" x2="68.6947467526813" y2="191.77085059696307" class="grid" stroke-width="1.0"/>
+<line x1="75.0" y1="207.2365968193667" x2="76.1751075882333" y2="194.28981644137014" class="grid" stroke-width="1.0"/>
+<line x1="87.66666666666666" y1="206.28767879421207" x2="84.62572435991709" y2="193.64834851579064" class="grid" stroke-width="1.0"/>
+<line x1="100.33333333333333" y1="206.16083406488582" x2="103.13338376626061" y2="193.46596433049848" class="grid" stroke-width="1.0"/>
+<line x1="113.0" y1="211.0815073127701" x2="119.32053881995104" y2="199.72145497902216" class="grid" stroke-width="1.0"/>
+<line x1="125.66666666666667" y1="214.92807413899112" x2="126.3284145270848" y2="201.944927764971" class="grid" stroke-width="1.0"/>
+<line x1="138.33333333333334" y1="212.7037630478475" x2="133.4826299700927" y2="200.64264050963217" class="grid" stroke-width="1.0"/>
+<line x1="151.0" y1="211.65373603886687" x2="153.99056335268529" y2="199.00239101813582" class="grid" stroke-width="1.0"/>
+<line x1="163.66666666666666" y1="220.8438241649491" x2="173.70308788057605" y2="212.58124289654458" class="grid" stroke-width="1.0"/>
+<line x1="176.33333333333334" y1="234.45345097338276" x2="185.2078947215978" y2="224.9538636051901" class="grid" stroke-width="1.0"/>
+<line x1="189.0" y1="236.8255852624648" x2="182.65111498483216" y2="225.4813506446434" class="grid" stroke-width="1.0"/>
+<line x1="201.66666666666669" y1="223.64602996670095" x2="190.80338738515653" y2="216.50536030259295" class="grid" stroke-width="1.0"/>
+<line x1="214.33333333333331" y1="207.4815749042052" x2="205.00191186913054" y2="198.43035545832853" class="grid" stroke-width="1.0"/>
+<line x1="239.66666666666669" y1="199.11713726760433" x2="239.65395972041063" y2="186.11714347785517" class="grid" stroke-width="1.0"/>
+<line x1="265.0" y1="200.53322827482987" x2="270.3197448966503" y2="188.6715119473095" class="grid" stroke-width="1.0"/>
+<line x1="277.6666666666667" y1="210.68452732642317" x2="287.4924877903776" y2="202.17258047245159" class="grid" stroke-width="1.0"/>
+<line x1="290.3333333333333" y1="222.90028462050353" x2="298.2932153723593" y2="212.62213897428936" class="grid" stroke-width="1.0"/>
+<line x1="303.0" y1="225.08580379076204" x2="297.87103848618534" y2="213.14035470796034" class="grid" stroke-width="1.0"/>
+<line x1="315.6666666666667" y1="217.15307432368473" x2="307.40461663197846" y2="207.1162157900444" class="grid" stroke-width="1.0"/>
+<line x1="328.33333333333337" y1="212.76945915230334" x2="330.02217421595145" y2="199.87962531034876" class="grid" stroke-width="1.0"/>
+<line x1="341.0" y1="219.81466002990575" x2="350.10559592083047" y2="210.5362914811492" class="grid" stroke-width="1.0"/>
+<line x1="353.66666666666663" y1="228.9759552084723" x2="359.1494089340907" y2="217.18869355747796" class="grid" stroke-width="1.0"/>
+<line x1="366.33333333333337" y1="227.75318012824425" x2="359.1859217352933" y2="216.894335463723" class="grid" stroke-width="1.0"/>
+<line x1="379.0" y1="217.63621742622428" x2="370.1001746113768" y2="208.1602948826395" class="grid" stroke-width="1.0"/>
+<line x1="391.66666666666663" y1="208.83719812987496" x2="386.33079488185194" y2="196.98272756826748" class="grid" stroke-width="1.0"/>
+<line x1="404.33333333333337" y1="203.9194496406871" x2="400.2998829326658" y2="191.5609999860842" class="grid" stroke-width="1.0"/>
+<line x1="417.0" y1="197.91668218500143" x2="410.1383546302978" y2="186.8750417805849" class="grid" stroke-width="1.0"/>
+<line x1="429.66666666666663" y1="192.6277627982015" x2="426.95040638644963" y2="179.91470140095672" class="grid" stroke-width="1.0"/>
+<line x1="442.33333333333337" y1="197.94523052937262" x2="451.7609904626081" y2="188.994293089482" class="grid" stroke-width="1.0"/>
+<line x1="455.0" y1="215.35813414368369" x2="466.1985990965134" y2="208.75575742953228" class="grid" stroke-width="1.0"/>
+<line x1="467.66666666666663" y1="230.84373723786206" x2="475.4596631343545" y2="220.43848827137384" class="grid" stroke-width="1.0"/>
+<line x1="480.33333333333337" y1="231.53938686136138" x2="473.33255930254785" y2="220.58543036291394" class="grid" stroke-width="1.0"/>
+<line x1="493.0" y1="222.2937722953185" x2="484.75261157777646" y2="212.244862692134" class="grid" stroke-width="1.0"/>
+<line x1="505.66666666666663" y1="217.07199026263055" x2="505.61769354851555" y2="204.07208250781557" class="grid" stroke-width="1.0"/>
+<line x1="518.3333333333334" y1="219.01864790843848" x2="522.1954596738515" y2="206.60559106776154" class="grid" stroke-width="1.0"/>
+<line x1="531.0" y1="219.45953690217223" x2="527.9479915216357" y2="206.82287420001893" class="grid" stroke-width="1.0"/>
+<line x1="543.6666666666666" y1="214.51329566868532" x2="537.4944676100661" y2="203.07196887474663" class="grid" stroke-width="1.0"/>
+<line x1="569.0" y1="211.2157535134034" x2="571.1088605229512" y2="198.3879435953099" class="grid" stroke-width="1.0"/>
+<line x1="581.6666666666667" y1="209.12825616536807" x2="575.9088806683462" y2="197.47287541665187" class="grid" stroke-width="1.0"/>
+<line x1="594.3333333333333" y1="199.6958600875286" x2="585.1625157601413" y2="190.48195184839173" class="grid" stroke-width="1.0"/>
+<line x1="619.6666666666667" y1="200.13704610607408" x2="630.0892628047048" y2="192.36726555940785" class="grid" stroke-width="1.0"/>
+<line x1="632.3333333333333" y1="219.07796143366141" x2="643.4495351313235" y2="212.337779122599" class="grid" stroke-width="1.0"/>
+<line x1="645.0" y1="232.85509304586816" x2="651.0526970740451" y2="221.35010029794148" class="grid" stroke-width="1.0"/>
+<line x1="657.6666666666667" y1="233.0803686650773" x2="651.9415443182893" y2="221.40890885509168" class="grid" stroke-width="1.0"/>
+<line x1="220.7" y1="201.0" x2="233.3" y2="199.1" stroke="#9b7ede" stroke-width="3.4"/>
+<line x1="227.0" y1="200.0377530066939" x2="223.14166987283582" y2="173.31485479879328" class="hi" stroke-width="1.8"/>
+<circle cx="223.1" cy="173.3" r="2.6" fill="#9b7ede" stroke="none"/>
+<line x1="246.0" y1="199.1" x2="258.7" y2="197.7" stroke="#9b7ede" stroke-width="3.4"/>
+<line x1="252.33333333333331" y1="198.40190019176487" x2="249.32932340212403" y2="171.56953308908092" class="hi" stroke-width="1.8"/>
+<circle cx="249.3" cy="171.6" r="2.6" fill="#9b7ede" stroke="none"/>
+<line x1="550.0" y1="211.1" x2="562.7" y2="210.2" stroke="#9b7ede" stroke-width="3.4"/>
+<line x1="556.3333333333334" y1="210.63562549247723" x2="554.372964560884" y2="183.70688704679424" class="hi" stroke-width="1.8"/>
+<circle cx="554.4" cy="183.7" r="2.6" fill="#9b7ede" stroke="none"/>
+<line x1="600.7" y1="193.4" x2="613.3" y2="191.6" stroke="#9b7ede" stroke-width="3.4"/>
+<line x1="607.0" y1="192.51674269493523" x2="603.3031654611832" y2="165.77102501167587" class="hi" stroke-width="1.8"/>
+<circle cx="603.3" cy="165.8" r="2.6" fill="#9b7ede" stroke="none"/>
+<line x1="426.0439036266123" y1="132.34983810614898" x2="549.4759949277164" y2="206.5153208931968" class="hi" stroke-width="1.8" marker-end="url(#e-h-l63f1)"/>
+<text x="409.75789601818695" y="126.16938120722835" class="sm mono t-hi" text-anchor="middle">l</text>
+<line x1="562.2784919371526" y1="205.28258064160636" x2="669.2913468058973" y2="108.92777332593079" class="ink-soft" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#e-s-l63f1)"/>
+<text x="684.6953743625809" y="99.55994483690677" class="sm mono" text-anchor="middle">v</text>
+<line x1="556.3333333333334" y1="210.63562549247723" x2="548.0905986165941" y2="125.03155243289986" class="ink" stroke-width="1.7" marker-end="url(#e-i-l63f1)"/>
+<text x="550.9404495863514" y="117.08679805249372" class="sm mono t-hi" text-anchor="middle">h</text>
+<text x="360.0" y="296" class="sm t-hi" text-anchor="middle">4 of 48 facets face h closely enough to count</text>
+<text x="360.0" y="314" class="xs muted" text-anchor="middle">— and “how many?” is the only question the model asks</text>
+<rect x="24" y="344" width="672" height="66" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="368" class="sm t-hi" text-anchor="middle">So the shape of a highlight is a HISTOGRAM of surface slopes, and roughness is that histogram’s width.</text>
+<text x="360.0" y="390" class="xs muted" text-anchor="middle">Lesson 3.7 already derived that h is “the normal this surface would need in order to bounce the light into the eye”. That stops being a metaphor here.</text>
+</svg>

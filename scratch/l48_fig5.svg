@@ -1,0 +1,109 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f48e-t f48e-d">
+  <title id="f48e-t">Two implementations of the sRGB encode</title>
+  <desc id="f48e-d">A sweep of linear values through engine::to_encoded and through the hardware's _SRGB render target. Everything above 0.006 agrees exactly; three probes in the darks differ by one code, because the sRGB curve's slope near zero is 12.92 and both sides are approximations of the same curve. This explains why every pixel of a flat untextured floor differs by one code in blue.</desc>
+  <defs>
+    <marker id="e-i-f48e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f48e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f48e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the last step, measured: linear float &#8594; eight-bit sRGB, <tspan class="t-hi">two implementations</tspan></text>
+  <text x="148" y="52" class="xs muted" text-anchor="end">linear value</text>
+  <text x="244" y="52" class="xs muted" text-anchor="end">exact &#215;255</text>
+  <text x="314" y="52" class="xs muted" text-anchor="end">ours</text>
+  <text x="398" y="52" class="xs muted" text-anchor="end">hardware</text>
+  <rect x="34" y="55" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="68" class="xs mono muted" text-anchor="end">0.0000000</text>
+  <text x="244" y="68" class="xs mono muted" text-anchor="end">0.000</text>
+  <text x="314" y="68" class="xs mono" text-anchor="end">0</text>
+  <text x="398" y="68" class="xs mono" text-anchor="end">0</text>
+  <text x="148" y="87" class="xs mono muted" text-anchor="end">0.0010000</text>
+  <text x="244" y="87" class="xs mono muted" text-anchor="end">3.295</text>
+  <text x="314" y="87" class="xs mono" text-anchor="end">3</text>
+  <text x="398" y="87" class="xs mono" text-anchor="end">3</text>
+  <rect x="34" y="93" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="106" class="xs mono muted" text-anchor="end">0.0031308</text>
+  <text x="244" y="106" class="xs mono muted" text-anchor="end">10.315</text>
+  <text x="314" y="106" class="xs mono" text-anchor="end">10</text>
+  <text x="398" y="106" class="xs mono" text-anchor="end">10</text>
+  <text x="148" y="125" class="xs mono muted" text-anchor="end">0.0044000</text>
+  <text x="244" y="125" class="xs mono muted" text-anchor="end">14.023</text>
+  <text x="314" y="125" class="xs mono" text-anchor="end">14</text>
+  <text x="398" y="125" class="xs mono" text-anchor="end">14</text>
+  <rect x="34" y="131" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="144" class="xs mono muted" text-anchor="end">0.0045148</text>
+  <text x="244" y="144" class="xs mono muted" text-anchor="end">14.325</text>
+  <text x="314" y="144" class="xs mono" text-anchor="end">14</text>
+  <text x="398" y="144" class="xs mono" text-anchor="end">14</text>
+  <rect x="34" y="150" width="378" height="19" fill="#eb786e" fill-opacity="0.16" stroke="none"/>
+  <text x="148" y="163" class="xs mono muted" text-anchor="end">0.0045186</text>
+  <text x="244" y="163" class="xs mono muted" text-anchor="end">14.335</text>
+  <text x="314" y="163" class="xs mono t-bad" text-anchor="end">14</text>
+  <text x="398" y="163" class="xs mono t-bad" text-anchor="end">15</text>
+  <rect x="34" y="169" width="378" height="19" fill="#eb786e" fill-opacity="0.16" stroke="none"/>
+  <text x="148" y="182" class="xs mono muted" text-anchor="end">0.0045800</text>
+  <text x="244" y="182" class="xs mono muted" text-anchor="end">14.495</text>
+  <text x="314" y="182" class="xs mono t-bad" text-anchor="end">14</text>
+  <text x="398" y="182" class="xs mono t-bad" text-anchor="end">15</text>
+  <text x="148" y="201" class="xs mono muted" text-anchor="end">0.0046000</text>
+  <text x="244" y="201" class="xs mono muted" text-anchor="end">14.547</text>
+  <text x="314" y="201" class="xs mono" text-anchor="end">15</text>
+  <text x="398" y="201" class="xs mono" text-anchor="end">15</text>
+  <rect x="34" y="207" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="220" class="xs mono muted" text-anchor="end">0.0047000</text>
+  <text x="244" y="220" class="xs mono muted" text-anchor="end">14.804</text>
+  <text x="314" y="220" class="xs mono" text-anchor="end">15</text>
+  <text x="398" y="220" class="xs mono" text-anchor="end">15</text>
+  <rect x="34" y="226" width="378" height="19" fill="#eb786e" fill-opacity="0.16" stroke="none"/>
+  <text x="148" y="239" class="xs mono muted" text-anchor="end">0.0050000</text>
+  <text x="244" y="239" class="xs mono muted" text-anchor="end">15.557</text>
+  <text x="314" y="239" class="xs mono t-bad" text-anchor="end">16</text>
+  <text x="398" y="239" class="xs mono t-bad" text-anchor="end">15</text>
+  <rect x="34" y="245" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="258" class="xs mono muted" text-anchor="end">0.0060000</text>
+  <text x="244" y="258" class="xs mono muted" text-anchor="end">17.892</text>
+  <text x="314" y="258" class="xs mono" text-anchor="end">18</text>
+  <text x="398" y="258" class="xs mono" text-anchor="end">18</text>
+  <text x="148" y="277" class="xs mono muted" text-anchor="end">0.0100000</text>
+  <text x="244" y="277" class="xs mono muted" text-anchor="end">25.462</text>
+  <text x="314" y="277" class="xs mono" text-anchor="end">25</text>
+  <text x="398" y="277" class="xs mono" text-anchor="end">25</text>
+  <rect x="34" y="283" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="296" class="xs mono muted" text-anchor="end">0.0451480</text>
+  <text x="244" y="296" class="xs mono muted" text-anchor="end">59.974</text>
+  <text x="314" y="296" class="xs mono" text-anchor="end">60</text>
+  <text x="398" y="296" class="xs mono" text-anchor="end">60</text>
+  <text x="148" y="315" class="xs mono muted" text-anchor="end">0.2000000</text>
+  <text x="244" y="315" class="xs mono muted" text-anchor="end">123.555</text>
+  <text x="314" y="315" class="xs mono" text-anchor="end">124</text>
+  <text x="398" y="315" class="xs mono" text-anchor="end">124</text>
+  <rect x="34" y="321" width="378" height="19" class="fill-soft" stroke="none"/>
+  <text x="148" y="334" class="xs mono muted" text-anchor="end">0.5000000</text>
+  <text x="244" y="334" class="xs mono muted" text-anchor="end">187.516</text>
+  <text x="314" y="334" class="xs mono" text-anchor="end">188</text>
+  <text x="398" y="334" class="xs mono" text-anchor="end">188</text>
+  <text x="148" y="353" class="xs mono muted" text-anchor="end">1.0000000</text>
+  <text x="244" y="353" class="xs mono muted" text-anchor="end">255.000</text>
+  <text x="314" y="353" class="xs mono" text-anchor="end">255</text>
+  <text x="398" y="353" class="xs mono" text-anchor="end">255</text>
+  <text x="424" y="68" class="xs">Everything above linear 0.006 agrees</text>
+  <text x="424" y="84" class="xs"><tspan class="t-ok">exactly</tspan>. Every disagreement is in</text>
+  <text x="424" y="100" class="xs">the <tspan class="t-hi">darks</tspan>.</text>
+  <text x="424" y="128" class="xs muted">The sRGB curve&#8217;s slope near zero is</text>
+  <text x="424" y="144" class="xs muted">12.92, so a linear value crosses a code</text>
+  <text x="424" y="160" class="xs muted">more than twelve times faster there than</text>
+  <text x="424" y="176" class="xs muted">it does near white. Both sides approximate</text>
+  <text x="424" y="192" class="xs muted">the same curve; neither is wrong.</text>
+  <text x="424" y="224" class="xs">Which explains the untextured floor:</text>
+  <text x="424" y="244" class="xs mono muted">one flat quad, one colour,</text>
+  <text x="424" y="260" class="xs mono muted">blue = 0.0045186</text>
+  <text x="424" y="284" class="xs">&#8212; and so <tspan class="t-bad">39,202 pixels</tspan>, 100% of</text>
+  <text x="424" y="300" class="xs">them, differ by exactly one code.</text>
+  <text x="424" y="328" class="xs muted">&#8220;100% of pixels differ&#8221; turns out to</text>
+  <text x="424" y="344" class="xs muted">mean nothing at all.</text>
+  <rect x="424" y="358" width="14" height="10" fill="#eb786e" fill-opacity="0.20"/>
+  <text x="444" y="367" class="xs muted">rows where the two disagree</text>
+  <text x="24" y="386" class="xs">So a per-pixel comparison across this boundary has a <tspan class="t-hi">floor of one code</tspan>, and the floor is worst in the shadows. Plan your assertions accordingly.</text>
+</svg>

@@ -1,0 +1,313 @@
+
+  <!-- =================================================================
+       5 — THE EDGE THAT SURVIVES THE STEP
+       ================================================================= -->
+  <h2 id="step"><span class="num">5</span>The Edge That Survives the Step</h2>
+
+  <h3 id="step-where">5.1 Where the map must run</h3>
+
+  <p>
+    An action map has to be updated once per frame, after input is published. Lesson 5.2's
+    application layer offers seven hooks — <code>configure</code>, <code>on_start</code>,
+    <code>on_event</code>, <code>on_fixed_step</code>, <code>on_frame</code>,
+    <code>on_overlay</code>, <code>on_stop</code> — and it turns out that <em>none of them</em> is
+    the right place, which is the sort of discovery that means either the design is wrong or
+    something is missing.
+  </p>
+
+  @@FIG_FRAME@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Why each existing hook is the wrong place to update an action
+             map.</caption>
+    <thead><tr><th>hook</th><th>runs</th><th>why not</th></tr></thead>
+    <tbody>
+      <tr><td><code>on_event</code></td><td>once per event</td>
+          <td>Several times a frame, or none. An update per event would publish a different
+              answer to every event handler.</td></tr>
+      <tr><td><code>on_fixed_step</code></td><td>zero or more times</td>
+          <td>The same problem, and worse — it is <em>also</em> where the answers get read.</td></tr>
+      <tr><td><code>on_frame</code></td><td>exactly once</td>
+          <td>The right frequency, the wrong <em>place</em>: it runs <strong>after</strong> the
+              steps, so every step of the frame would read last frame's actions.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>on_frame</code> is the near miss, and it is worth being precise about why it fails,
+    because "once per frame" sounds like the whole requirement. It is not. The requirement is
+    <strong>once per frame, after input is published, and before anything reads it</strong> — and
+    the simulation reads it. A map updated in <code>on_frame</code> is a map that is always
+    exactly one frame stale from the simulation's point of view, which is invisible in a demo and
+    is a real 16-millisecond input delay in a game.
+  </p>
+
+  <p>
+    So Lesson 5.10 adds an eighth. One virtual, with an empty default, in the one gap the other
+    seven left:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/platform/app.cpp — the frame, with the new line</span></figcaption>
+    <pre><code class="lang-cpp">sys.begin_frame();          // ticks the clock and publishes input
+
+self-&gt;on_input();           // <- Lesson 5.10. Exactly here, and nowhere else.
+
+while (sys.next_step())
+{
+    self-&gt;on_fixed_step(sys.steps().h());
+}
+
+self-&gt;on_frame(sys.steps().alpha());</code></pre>
+  </figure>
+
+  <p>
+    Adding a hook to a framework is not free — every hook is a thing every future reader has to
+    learn — so it is worth saying what else it is good for, because a hook that serves one caller
+    is a smell. <code>on_input</code> is the once-per-frame, pre-simulation moment, and that is
+    also where you would read a network snapshot, sample a debug scrubber, or latch a replay's
+    recorded intentions. It was missing before this lesson happened to need it.
+  </p>
+
+  <h3 id="step-queue">5.2 Two failures, one queue</h3>
+
+  <p>
+    Now the harder half, and it is Lesson 1.4's trap in its most expensive form.
+  </p>
+
+  <p>
+    <code>on_fixed_step</code> runs <em>zero or more times per frame</em> — the accumulator decides,
+    and Lesson 1.4 measured 0, 1, 2, 1, 2 across five consecutive frames on this machine. A
+    frame-scoped edge read inside it fails in <strong>both</strong> directions:
+  </p>
+
+  @@FIG_QUEUE@@
+
+  <p>
+    A <strong>two-step frame</strong> reads <code>pressed()</code> twice, both times true, and the
+    player jumps twice for one press. A <strong>zero-step frame</strong> reads it not at all, and
+    by the next frame the edge is gone — <strong>the press is silently lost</strong>. Neither is
+    fixable by the caller without keeping state across frames, so the map keeps it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the queued edge</span></figcaption>
+    <pre><code class="lang-cpp">/// Take one queued press, if there is one. **Safe inside `on_fixed_step`.**
+[[nodiscard]] bool consume_pressed(action_id id);</code></pre>
+  </figure>
+
+  <p>
+    Every rising edge pushes one press onto a small per-action queue. <code>consume_pressed</code>
+    pops one and returns true. A two-step frame takes it once and the second step finds the queue
+    empty; a zero-step frame leaves it queued until a step actually happens.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — six presses and no steps</span>
+    <p>The queue is <code>k_action_press_queue = 4</code> deep. Press and release six times with
+       no step running: the harness finds <strong>4</strong> queued, and draining gives exactly
+       4. Two presses were dropped.</p>
+    <p><strong>That is a decision, not an overflow bug.</strong> An unbounded queue turns a hitch
+       into a burst of jumps arriving after the player has stopped asking, which feels worse than
+       losing them. Four survives a stutter and is short enough not to feel like a recording.</p>
+  </div>
+
+  <p>
+    A fighting game with a deliberate input buffer would raise that number and call it a design
+    parameter — which is exactly what it is. The engine's job is to make the number visible and
+    the behaviour predictable, not to guess the genre.
+  </p>
+
+  <p>
+    So the rule for a caller is two lines long:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Which edge query to use where.</caption>
+    <thead><tr><th>where</th><th>use</th><th>why</th></tr></thead>
+    <tbody>
+      <tr><td><code>on_input</code>, <code>on_frame</code>, <code>on_event</code></td>
+          <td><code>pressed()</code> / <code>released()</code></td>
+          <td>runs once per frame; the frame-scoped edge is exactly right</td></tr>
+      <tr><td><code>on_fixed_step</code></td>
+          <td><code>consume_pressed()</code> for edges,<br><code>held()</code> /
+              <code>value()</code> for levels</td>
+          <td>runs 0..N times; levels are frame-coherent and safe, edges are not</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The demo does one of each, on purpose:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — both kinds, side by side</span></figcaption>
+    <pre><code class="lang-cpp">void on_input() override                     // exactly once per frame
+{
+    actions_.update(in());
+    if (actions_.pressed(a_materials_)) { toggle_materials(); }   // a frame edge
+    // …
+}
+
+void on_fixed_step(float h) override         // zero or more times per frame
+{
+    if (actions_.consume_pressed(a_spawn_)) { spawn_sparks(); }   // a queued edge
+
+    camera_.azimuth += (0.15f + 2.0f * actions_.value(a_yaw_)) * h;   // a level
+}</code></pre>
+  </figure>
+
+  <p>
+    The last line is worth a second look. <code>a_yaw_</code> is bound to Left with −1 and Right
+    with +1, so holding both gives exactly zero and the camera holds still — and there is no
+    <code>if</code> anywhere that says so. That is §3's arithmetic arriving in gameplay code.
+  </p>
+
+  <!-- =================================================================
+       6 — A CONCEPT
+       ================================================================= -->
+  <h2 id="concept"><span class="num">6</span>A Concept, and the Test It Makes Possible</h2>
+
+  <p>
+    There is a problem with testing any of this, and it is worth meeting because the solution is
+    a C++20 feature this course has not needed until now.
+  </p>
+
+  <p>
+    <code>engine::input::update()</code> samples SDL's live keyboard state — that is the whole
+    point of Lesson 1.2's design, and it is right. It also means a test that wants a key held
+    would have to <em>persuade SDL that a key is held</em>, which SDL offers no supported way to
+    do. So a harness cannot construct an <code>input</code> in a chosen state, and every
+    interesting behaviour above — the two-binding edge case, the queue across variable steps —
+    would go untested.
+  </p>
+
+  <p>
+    Look at what <code>update()</code> actually needs, though. Six questions:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the requirement, named</span></figcaption>
+    <pre><code class="lang-cpp">template &lt;typename T&gt;
+concept input_snapshot = requires(const T&amp; t, SDL_Scancode key, int button) {
+    { t.key_down(key) }    -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_down(button) } -&gt; std::convertible_to&lt;bool&gt;;
+    { t.mouse_x() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.mouse_y() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_x() }        -&gt; std::convertible_to&lt;float&gt;;
+    { t.wheel_y() }        -&gt; std::convertible_to&lt;float&gt;;
+};</code></pre>
+  </figure>
+
+  <p>
+    <code>update</code> is templated on that, and the whole test problem evaporates: the harness
+    writes a struct with six functions and the mapping logic runs exactly as it ships.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">scratch/verify_510.cpp — a complete input device</span></figcaption>
+    <pre><code class="lang-cpp">struct fake_input
+{
+    std::set&lt;int&gt; keys;
+    std::set&lt;int&gt; buttons;
+    float mx = 0.0f, my = 0.0f, wx = 0.0f, wy = 0.0f;
+
+    [[nodiscard]] bool key_down(SDL_Scancode k) const { return keys.count((int)k) != 0; }
+    [[nodiscard]] bool mouse_down(int b) const { return buttons.count(b) != 0; }
+    [[nodiscard]] float mouse_x() const { return mx; }
+    // …
+};
+static_assert(engine::input_snapshot&lt;fake_input&gt;);</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — a concept describes a shape, not a hierarchy</span>
+    <p>
+      The alternative is an abstract base class: <code>struct input_source { virtual bool
+      key_down(...) = 0; };</code>, with <code>input</code> inheriting from it. That would work,
+      and it would cost three things a concept does not. <strong>It changes
+      <code>input</code></strong> — Lesson 1.2's header would have to know about a base class it
+      has no other use for. <strong>It costs a virtual call per query</strong>, on a loop that
+      runs per binding per frame. And it is <em>closed</em>: a type can only be an
+      <code>input_source</code> if its author said so.
+    </p>
+    <p>
+      <code>engine::input</code> satisfies <code>input_snapshot</code> without knowing the concept
+      exists. Not one character of <code>input.hpp</code> changed in this lesson. That is the
+      property worth having: <strong>a concept describes a shape, and types that already have
+      that shape are already members.</strong>
+    </p>
+    <p>
+      It is also free. The compiler instantiates one copy of <code>update</code> per source type
+      and inlines the six accessors, so the production path compiles to exactly what a
+      hand-written <code>update(const input&amp;)</code> would have. The `static_assert` beside the
+      concept keeps the claim honest: if <code>input.hpp</code> ever renames one of the six, the
+      engine fails to build with a message naming the requirement rather than failing somewhere
+      inside a template.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — THE DEVICE THAT IS NOT HERE
+       ================================================================= -->
+  <h2 id="gamepad"><span class="num">7</span>The Device That Is Not Here</h2>
+
+  <p>
+    The second of §1's four problems was "it is about one device", and the natural way to prove
+    that fixed would be to add gamepad support. This lesson does not, and it would be dishonest
+    to let that pass without saying why.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">There is no gamepad code here, and this is the reason</span>
+    <p>
+      <strong>It could not be run on the machine this was written on.</strong> SDL3's gamepad API
+      needs <code>SDL_INIT_GAMEPAD</code>, device add/remove events, an opened
+      <code>SDL_Gamepad*</code> per controller, and axis values that need a deadzone whose right
+      value is a matter of taste and hardware. Every one of those is easy to write and impossible
+      to be confident about without a controller in your hand.
+    </p>
+    <p>
+      <strong>Untested device code in an engine is a liability rather than a feature.</strong> It
+      looks like support, it compiles, it appears in the API — and the first person to plug in a
+      controller finds out it was never run. Shipping the enum with an unimplemented arm would be
+      worse still.
+    </p>
+  </div>
+
+  <p>
+    What the design <em>does</em> demonstrate, with hardware this machine has, is the property
+    the gamepad claim actually rests on: <strong>one action, several bindings, on more than one
+    device.</strong> The demo binds <code>spawn_sparks</code> to Space and to the left mouse
+    button, and §4's five-frame walk is exactly the multi-device case in miniature. A gamepad is a
+    third device that behaves like the second.
+  </p>
+
+  <p>
+    And here is what adding one would take, so the claim is checkable rather than asserted:
+  </p>
+
+  <ol>
+    <li>Two enumerators on <code>input_source</code>: <code>gamepad_button</code> and
+        <code>gamepad_axis</code>.</li>
+    <li>Two arms in <code>update()</code>'s switch, reading <code>SDL_GetGamepadButton</code> and
+        <code>SDL_GetGamepadAxis</code>. <strong>⚠ VERIFY</strong> both signatures and the axis
+        range against <code>SDL3/SDL_gamepad.h</code> before typing them: SDL3 renamed this whole
+        family from SDL2's <code>SDL_GameController*</code>, and the axis value is a signed 16-bit
+        integer that has to be normalised before it can be scaled.</li>
+    <li>Two more accessors on the <code>input_snapshot</code> concept, which is the only part
+        that touches existing code — and it touches it additively.</li>
+    <li>A deadzone, which belongs on the <em>binding</em> rather than the action, because two
+        sticks on the same pad can want different ones.</li>
+    <li>Device connect/disconnect handling, which is the part that is actually hard: an action
+        bound to a controller that has been unplugged must go inactive, and the release edge must
+        fire.</li>
+  </ol>
+
+  <p>
+    Exercise 11.2 does it. Point 5 is the one worth thinking about before you start.
+  </p>

@@ -1,0 +1,70 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="f611e-t f611e-d">
+  <title id="f611e-t">Alpha coverage down a mip chain</title>
+  <desc id="f611e-d">Coverage per mip level for an ordinary chain, which falls away, and for a coverage-preserving one, which holds the source's value.</desc>
+  <defs>
+    <marker id="e-i-f611e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f611e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f611e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f611e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f611e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Foliage that thins out as it recedes</text>
+<line x1="96" y1="268" x2="456" y2="268" class="grid" stroke-width="1.0"/>
+<line x1="96" y1="268" x2="96" y2="70" class="grid" stroke-width="1.0"/>
+<line x1="96.0" y1="268" x2="96.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="96.0" y="288" class="xs" text-anchor="middle">0</text>
+<line x1="156.0" y1="268" x2="156.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="156.0" y="288" class="xs" text-anchor="middle">1</text>
+<line x1="216.0" y1="268" x2="216.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="216.0" y="288" class="xs" text-anchor="middle">2</text>
+<line x1="276.0" y1="268" x2="276.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="276.0" y="288" class="xs" text-anchor="middle">3</text>
+<line x1="336.0" y1="268" x2="336.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="336.0" y="288" class="xs" text-anchor="middle">4</text>
+<line x1="396.0" y1="268" x2="396.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="396.0" y="288" class="xs" text-anchor="middle">5</text>
+<line x1="456.0" y1="268" x2="456.0" y2="273" class="grid" stroke-width="1.0"/>
+<text x="456.0" y="288" class="xs" text-anchor="middle">6</text>
+<text x="276.0" y="308" class="xs" text-anchor="middle">mip level</text>
+<line x1="91" y1="268.0" x2="96" y2="268.0" class="grid" stroke-width="1.0"/>
+<text x="84" y="272.0" class="xs" text-anchor="end">0.20</text>
+<line x1="91" y1="218.5" x2="96" y2="218.5" class="grid" stroke-width="1.0"/>
+<text x="84" y="222.5" class="xs" text-anchor="end">0.25</text>
+<line x1="91" y1="169.0" x2="96" y2="169.0" class="grid" stroke-width="1.0"/>
+<text x="84" y="173.0" class="xs" text-anchor="end">0.30</text>
+<line x1="91" y1="119.50000000000006" x2="96" y2="119.50000000000006" class="grid" stroke-width="1.0"/>
+<text x="84" y="123.50000000000006" class="xs" text-anchor="end">0.35</text>
+<line x1="91" y1="70.0" x2="96" y2="70.0" class="grid" stroke-width="1.0"/>
+<text x="84" y="74.0" class="xs" text-anchor="end">0.40</text>
+<text x="40" y="169.0" class="xs" text-anchor="middle">coverage</text>
+<line x1="96.0" y1="106.1" x2="456.0" y2="106.1" stroke="#8f918a" stroke-width="1.2" fill="none" stroke-dasharray="5 4"/>
+<polyline points="96.0,106.1 156.0,108.5 216.0,107.3 276.0,102.5 336.0,94.8 396.0,94.8 456.0,218.5" fill="none" stroke="#5ac878" stroke-width="2.2"/>
+<polyline points="96.0,106.1 156.0,103.2 216.0,103.5 276.0,102.5 336.0,125.6 396.0,94.8 456.0,218.5" fill="none" stroke="#e05c5c" stroke-width="2.2" stroke-dasharray="6 4"/>
+<circle cx="96.0" cy="106.1" r="3" fill="#e05c5c"/>
+<circle cx="156.0" cy="103.2" r="3" fill="#e05c5c"/>
+<circle cx="216.0" cy="103.5" r="3" fill="#e05c5c"/>
+<circle cx="276.0" cy="102.5" r="3" fill="#e05c5c"/>
+<circle cx="336.0" cy="125.6" r="3" fill="#e05c5c"/>
+<circle cx="396.0" cy="94.8" r="3" fill="#e05c5c"/>
+<circle cx="456.0" cy="218.5" r="3" fill="#e05c5c"/>
+<circle cx="96.0" cy="106.1" r="3" fill="#5ac878"/>
+<circle cx="156.0" cy="108.5" r="3" fill="#5ac878"/>
+<circle cx="216.0" cy="107.3" r="3" fill="#5ac878"/>
+<circle cx="276.0" cy="102.5" r="3" fill="#5ac878"/>
+<circle cx="336.0" cy="94.8" r="3" fill="#5ac878"/>
+<circle cx="396.0" cy="94.8" r="3" fill="#5ac878"/>
+<circle cx="456.0" cy="218.5" r="3" fill="#5ac878"/>
+<line x1="496.0" y1="96.0" x2="522.0" y2="96.0" stroke="#8f918a" stroke-width="2.2" fill="none" stroke-dasharray="5 4"/>
+<text x="532" y="100" class="xs" text-anchor="start">the source: 0.3635</text>
+<text x="532" y="118" class="xs" text-anchor="start">of its area passes a</text>
+<text x="532" y="136" class="xs" text-anchor="start">cutoff of 0.5</text>
+<line x1="496.0" y1="172.0" x2="522.0" y2="172.0" stroke="#5ac878" stroke-width="2.2" fill="none"/>
+<text x="532" y="176" class="xs" text-anchor="start">with coverage_cutoff set:</text>
+<text x="532" y="194" class="xs" text-anchor="start">within 0.0115 down to 8x8</text>
+<line x1="496.0" y1="228.0" x2="522.0" y2="228.0" stroke="#e05c5c" stroke-width="2.2" fill="none" stroke-dasharray="6 4"/>
+<text x="532" y="232" class="xs" text-anchor="start">an ordinary chain:</text>
+<text x="532" y="250" class="xs" text-anchor="start">31.2% of the leaves</text>
+<text x="532" y="268" class="xs" text-anchor="start">gone by level 6</text>
+<text x="360.0" y="336" class="xs" text-anchor="middle">Nothing in the chain is wrong, and nothing in the alpha test is wrong.</text>
+<text x="360.0" y="358" class="xs" text-anchor="middle">AVERAGING AND THRESHOLDING DO NOT COMMUTE — and only one of the two is the mip chain's business.</text>
+</svg>

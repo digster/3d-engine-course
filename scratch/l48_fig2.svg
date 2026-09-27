@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 402" role="img" aria-labelledby="f48b-t f48b-d">
+  <title id="f48b-t">Four rates of change</title>
+  <desc id="f48b-d">Per-frame data (the camera and the lamp, 128 bytes) is pushed once before the render pass. Per-draw data (this object's matrices and material, 144 bytes) is pushed between draws — the rate this lesson adds. Per-instance data is unused by a scene of distinct meshes. Per-vertex data was uploaded once at import. The whole frame moves 560 bytes of uniform traffic.</desc>
+  <defs>
+    <marker id="e-i-f48b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f48b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f48b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">four rates of change, and where each one physically lives</text>
+  <rect x="24" y="46" width="672" height="68" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="24" y="46" width="6" height="68" fill="#5acdd7"/>
+  <text x="42" y="66" class="sm mono muted">per FRAME</text>
+  <text x="42" y="84" class="xs mono muted">camera_uniforms (64 B)</text>
+  <text x="42" y="98" class="xs mono muted">scene_light_uniforms (64 B)</text>
+  <text x="300" y="66" class="xs mono">SDL_PushGPUVertexUniformData(cb, 0, ...)</text>
+  <text x="300" y="84" class="xs muted">pushed once, before the pass; every draw after it sees them</text>
+  <text x="680" y="66" class="xs mono muted" text-anchor="end">128 B / frame</text>
+  <rect x="24" y="124" width="672" height="68" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="24" y="124" width="6" height="68" fill="#f0961e"/>
+  <text x="42" y="144" class="sm mono t-hi">per DRAW</text>
+  <text x="42" y="162" class="xs mono muted">object_uniforms (112 B)</text>
+  <text x="42" y="176" class="xs mono muted">material_uniforms (32 B)</text>
+  <text x="300" y="144" class="xs mono">SDL_PushGPU*UniformData(cb, 1, ...)</text>
+  <text x="300" y="162" class="xs muted">pushed between draws &#8212; the rate Lesson 4.8 adds</text>
+  <text x="680" y="144" class="xs mono t-hi" text-anchor="end">144 B &#215; 3 draws</text>
+  <rect x="24" y="202" width="672" height="68" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="24" y="202" width="6" height="68" fill="#a97ae0"/>
+  <text x="42" y="222" class="sm mono muted">per INSTANCE</text>
+  <text x="42" y="240" class="xs mono muted">gpu_instance (28 B)</text>
+  <text x="300" y="222" class="xs mono">a vertex buffer at slot 1, INSTANCE rate</text>
+  <text x="300" y="240" class="xs muted">unused by a scene of distinct meshes; back for foliage and crates</text>
+  <text x="680" y="222" class="xs mono muted" text-anchor="end">0 B here</text>
+  <rect x="24" y="280" width="672" height="68" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="24" y="280" width="6" height="68" fill="#5082e6"/>
+  <text x="42" y="300" class="sm mono muted">per VERTEX</text>
+  <text x="42" y="318" class="xs mono muted">gpu_vertex_pnu (32 B)</text>
+  <text x="300" y="300" class="xs mono">a vertex buffer at slot 0, VERTEX rate</text>
+  <text x="300" y="318" class="xs muted">uploaded ONCE at import and never touched again</text>
+  <text x="680" y="300" class="xs mono muted" text-anchor="end">0 B / frame</text>
+  <text x="24" y="366" class="xs">This frame moved <tspan class="t-hi">560 bytes</tspan> of uniform data for a scene of 44 triangles &#8212; and would move the same 560 bytes if each object had a million.</text>
+  <text x="24" y="384" class="xs muted">That is the whole argument for grouping data by how often it changes rather than by what it is about.</text>
+</svg>

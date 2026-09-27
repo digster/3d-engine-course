@@ -1,0 +1,56 @@
+<svg viewBox="0 0 720 476" role="img" aria-labelledby="l68f5-t l68f5-d">
+  <title id="l68f5-t">Where shadow acne comes from</title>
+  <desc id="l68f5-d">A surface tilted relative to the light, divided into shadow-map texels. The map stores the depth at one sample per texel; a fragment elsewhere in the texel is downhill of it, and the difference is the acne. The error is bounded by the lateral travel times the tangent of the tilt.</desc>
+  <defs>
+    <marker id="e-i-l68f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l68f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l68f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l68f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l68f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="476" class="bg"/>
+<text x="360.0" y="22" class="sm" text-anchor="middle">The map samples ONE point per texel; the fragment is somewhere else</text>
+<line x1="70.0" y1="66" x2="70.0" y2="116.0" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="116.0" y1="66" x2="116.0" y2="134.4" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="162.0" y1="66" x2="162.0" y2="152.8" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="208.0" y1="66" x2="208.0" y2="171.2" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="254.0" y1="66" x2="254.0" y2="189.60000000000002" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="300.0" y1="66" x2="300.0" y2="208.0" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="346.0" y1="66" x2="346.0" y2="226.4" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="392.0" y1="66" x2="392.0" y2="244.8" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="438.0" y1="66" x2="438.0" y2="263.20000000000005" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="484.0" y1="66" x2="484.0" y2="281.6" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<line x1="530.0" y1="66" x2="530.0" y2="300.0" class="hi" stroke-width="0.9" stroke-dasharray="3 3" marker-end="url(#e-h-l68f5)"/>
+<text x="66" y="60" class="xs" text-anchor="start">the light, straight down in its own frame</text>
+<line x1="70" y1="122.0" x2="530" y2="306.0" class="ink" stroke-width="2.2"/>
+<text x="536" y="310.0" class="xs" text-anchor="start">surface</text>
+<line x1="70.0" y1="66" x2="70.0" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="70.0" cy="122.0" r="4" fill="#5ac878"/>
+<line x1="146.66666666666669" y1="66" x2="146.66666666666669" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="146.66666666666669" cy="152.7" r="4" fill="#5ac878"/>
+<line x1="223.33333333333334" y1="66" x2="223.33333333333334" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="223.33333333333334" cy="183.3" r="4" fill="#5ac878"/>
+<line x1="300.0" y1="66" x2="300.0" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="300.0" cy="214.0" r="4" fill="#5ac878"/>
+<line x1="376.6666666666667" y1="66" x2="376.6666666666667" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="376.6666666666667" cy="244.7" r="4" fill="#5ac878"/>
+<line x1="453.33333333333337" y1="66" x2="453.33333333333337" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="453.33333333333337" cy="275.3" r="4" fill="#5ac878"/>
+<line x1="530.0" y1="66" x2="530.0" y2="330" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<circle cx="530.0" cy="306.0" r="4" fill="#5ac878"/>
+<line x1="70" y1="336" x2="146.66666666666669" y2="336" class="ink-soft" stroke-width="1.2"/>
+<text x="108.33333333333334" y="350" class="xs" text-anchor="middle">one texel</text>
+<circle cx="332.2" cy="226.9" r="4.5" fill="#e05c5c"/>
+<line x1="332.2" y1="214.0" x2="332.2" y2="226.9" stroke="#e05c5c" stroke-width="2.4"/>
+<line x1="300.0" y1="214.0" x2="332.2" y2="214.0" stroke="#5ac878" stroke-width="1.6" stroke-dasharray="3 3"/>
+<line x1="60" y1="364" x2="660" y2="364" class="grid" stroke-width="1.0"/>
+<circle cx="70" cy="381" r="4.5" fill="#5ac878"/>
+<text x="84" y="385" class="xs" text-anchor="start">the depth the map STORED, at this texel's sample point</text>
+<circle cx="70" cy="403" r="4.5" fill="#e05c5c"/>
+<text x="84" y="407" class="xs" text-anchor="start">the FRAGMENT being tested, downhill inside the same texel</text>
+<line x1="60" y1="424" x2="660" y2="424" class="grid" stroke-width="1.0"/>
+<text x="64" y="444" class="xs" text-anchor="start">lateral travel  ≤  reach x world_per_texel</text>
+<text x="64" y="462" class="xs" text-anchor="start">depth error     =  that, times tan(theta)</text>
+<text x="656" y="444" class="xs" text-anchor="end">measured  1.931e-03</text>
+<text x="656" y="462" class="xs" text-anchor="end">bound     2.101e-03   (92%)</text>
+</svg>

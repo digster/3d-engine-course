@@ -1,0 +1,80 @@
+<svg viewBox="0 0 980 470" role="img" aria-labelledby="f89a-t f89a-d">
+  <title id="f89a-t">The rate a penalty spring demands</title>
+  <desc id="f89a-d">Left: a log-log plot of allowed penetration against the minimum step rate a penalty spring needs to stay stable. One millimetre of static sink needs at least 49.5 Hz; at 60 Hz the finest achievable is 0.681 mm. A millimetre under a 1.96 m/s impact needs 990 Hz. Right: a table of the best result from 164 penalty settings at each of four stiffnesses, showing that a settled crate costs 108 mm of penetration while a shallow one bounces 367 mm forever, and that the impulse solver achieves 12.55 mm with no residual bounce.</desc>
+  <defs>
+    <marker id="e-i-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-amber-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-grey-f89a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<rect x="56" y="56" width="400" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="56" y="26" class="sm" text-anchor="start">What a penalty spring costs, before anything moves</text>
+<text x="56" y="44" class="xs muted" text-anchor="start">allowed static sink → stiffness → rate → minimum step rate</text>
+<line x1="118.56751026070401" y1="56" x2="118.56751026070401" y2="306" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="118.56751026070401" y="322" class="xs muted" text-anchor="middle">10 Hz</text>
+<line x1="275.79600927365203" y1="56" x2="275.79600927365203" y2="306" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="275.79600927365203" y="322" class="xs muted" text-anchor="middle">100 Hz</text>
+<line x1="433.02450828660005" y1="56" x2="433.02450828660005" y2="306" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="433.02450828660005" y="322" class="xs muted" text-anchor="middle">1000 Hz</text>
+<line x1="56" y1="283.2018130659677" x2="456" y2="283.2018130659677" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="48" y="287.2018130659677" class="xs muted" text-anchor="end">0.1 mm</text>
+<line x1="56" y1="207.4678753773118" x2="456" y2="207.4678753773118" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="48" y="211.4678753773118" class="xs muted" text-anchor="end">1 mm</text>
+<line x1="56" y1="131.73393768865589" x2="456" y2="131.73393768865589" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="48" y="135.73393768865589" class="xs muted" text-anchor="end">10 mm</text>
+<line x1="56" y1="56.0" x2="456" y2="56.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="48" y="60.0" class="xs muted" text-anchor="end">100 mm</text>
+<path d="M 94.21,78.80 L 149.37,131.73 L 227.78,207.47 L 306.42,283.20" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<circle cx="94.2" cy="78.8" r="3.4" fill="#e05c5c"/>
+<circle cx="149.4" cy="131.7" r="3.4" fill="#e05c5c"/>
+<circle cx="227.8" cy="207.5" r="3.4" fill="#e05c5c"/>
+<circle cx="306.4" cy="283.2" r="3.4" fill="#e05c5c"/>
+<line x1="240.9" y1="56.0" x2="240.9" y2="306.0" stroke="#5ac878" stroke-width="1.8" fill="none" stroke-dasharray="5 4"/>
+<text x="234.915063363573" y="72" class="xs" text-anchor="end">60 Hz</text>
+<circle cx="240.9" cy="220.1" r="4" fill="#5ac878"/>
+<circle cx="432.3" cy="207.5" r="4" fill="#f0961e"/>
+<line x1="248.92" y1="207.47" x2="424.34" y2="207.47" stroke="#f0961e" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-amber-f89a)"/>
+<line x1="56.0" y1="342.0" x2="76.0" y2="342.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="84" y="346" class="xs" text-anchor="start">at 60 Hz the finest a STABLE spring can hold is 0.681 mm</text>
+<line x1="56.0" y1="359.0" x2="76.0" y2="359.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="84" y="363" class="xs" text-anchor="start">1 mm under a 1.96 m/s IMPACT instead needs 990 Hz</text>
+<text x="520" y="28" class="xs muted" text-anchor="start">The best of 164 penalty settings, per stiffness</text>
+<text x="520" y="48" class="xs muted" text-anchor="start">tuned for</text>
+<text x="744" y="48" class="xs muted" text-anchor="end">best ζ</text>
+<text x="844" y="48" class="xs muted" text-anchor="end">depth mm</text>
+<text x="954" y="48" class="xs muted" text-anchor="end">bounce mm</text>
+<line x1="520" y1="56.0" x2="960" y2="56.0" class="grid" stroke-width="1.0"/>
+<text x="520" y="73.0" class="xs" text-anchor="start">50 mm</text>
+<text x="744" y="73.0" class="xs mono" text-anchor="end">0.40</text>
+<text x="844" y="73.0" class="xs mono" text-anchor="end">108.6</text>
+<text x="954" y="73.0" class="xs mono" text-anchor="end">0.00</text>
+<text x="520" y="90.0" class="xs" text-anchor="start">10 mm</text>
+<text x="744" y="90.0" class="xs mono" text-anchor="end">0.20</text>
+<text x="844" y="90.0" class="xs mono" text-anchor="end">50.1</text>
+<text x="954" y="90.0" class="xs mono" text-anchor="end">0.00</text>
+<text x="520" y="107.0" class="xs" text-anchor="start">1 mm</text>
+<text x="744" y="107.0" class="xs mono" text-anchor="end">0.35</text>
+<text x="844" y="107.0" class="xs mono" text-anchor="end">18.9</text>
+<text x="954" y="107.0" class="xs mono" text-anchor="end">275</text>
+<text x="520" y="124.0" class="xs" text-anchor="start">0.1 mm</text>
+<text x="744" y="124.0" class="xs mono" text-anchor="end">0.30</text>
+<text x="844" y="124.0" class="xs mono" text-anchor="end">12.6</text>
+<text x="954" y="124.0" class="xs mono" text-anchor="end">367</text>
+<text x="520" y="141.0" class="xs" text-anchor="start">impulse, 16×</text>
+<text x="744" y="141.0" class="xs mono" text-anchor="end">—</text>
+<text x="844" y="141.0" class="xs mono" text-anchor="end">12.55</text>
+<text x="954" y="141.0" class="xs mono" text-anchor="end">0.00</text>
+<text x="520" y="206" class="xs" text-anchor="start">Read it as a TRADE. At 60 Hz you may have a crate that</text>
+<text x="520" y="222" class="xs" text-anchor="start">settles, 108 mm into the floor; or one 12.6 mm in that</text>
+<text x="520" y="238" class="xs" text-anchor="start">bounces 367 mm forever. Not both. The impulse solver</text>
+<text x="520" y="254" class="xs" text-anchor="start">is the last row: it takes both, and there is no knob</text>
+<text x="520" y="270" class="xs" text-anchor="start">on it to turn.</text>
+<text x="520" y="300" class="xs muted" text-anchor="start">And the tuning is a property of the SCENE. The same</text>
+<text x="520" y="316" class="xs muted" text-anchor="start">spring under a 200 kg crate lets it 962 mm in —</text>
+<text x="520" y="332" class="xs muted" text-anchor="start">through a half-metre floor.</text>
+<text x="56" y="448" class="xs muted" text-anchor="start">§1 and harness §A. Left: every point is m·g/x, ω = √(g/x) and 8.1's h·ω &lt; 2, computed rather than drawn.</text>
+</svg>

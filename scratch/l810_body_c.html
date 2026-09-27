@@ -1,0 +1,299 @@
+  <h2 id="order">5. The order within a sweep</h2>
+
+  <p>
+    A Gauss–Seidel sweep uses each impulse as soon as it is computed, which means it carries
+    information in the direction it <em>walks</em>. A tower is held up from the bottom, so solving
+    it top-down means each contact is solved against a support that has not been established yet;
+    solving it bottom-up means each contact already knows what is under it. Every write-up of
+    sequential impulses says so, usually with some confidence.
+  </p>
+
+  <p>
+    This engine does not sort. The order is whatever the caller added the manifolds in, grouped by
+    island — which is cell-bucket order out of 8.8's grid, and therefore arbitrary. Before
+    defending that, it is worth finding out what a sort would have been worth.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — a ten-crate tower, settled, warm starting off. Residual after n sweeps</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     order        n=1         n=4         n=16        n=64        n=256
+     as added     3.798e-02   2.152e-02   1.090e-02   3.357e-03   3.623e-04
+     bottom-up    3.798e-02   2.152e-02   1.090e-02   3.357e-03   3.623e-04
+     top-down     2.122e-02   2.485e-02   1.156e-02   3.621e-03   3.676e-04
+     bottom-up against top-down: 1.06x at n=16, 1.08x at n=64</code></pre>
+  </div>
+
+  <p>
+    Eight per cent. At §3's measured contraction of 0.53 per iteration, a factor of 1.08 is worth
+    <code>ln(1.08)/ln(1/0.53) = 0.12</code> of an iteration — which is to say, sorting the whole
+    scene every frame buys you about an eighth of one sweep. <strong>The folklore makes more of
+    solve order than this fixture supports.</strong>
+  </p>
+
+  <p>
+    Two things in that table are worth more than the headline. The first is that the "as added"
+    row is <em>identical</em> to "bottom-up" — the broadphase's cell order happens to run up the
+    tower, which means the default is not a coin toss on this scene and would not be on most. The
+    second is the control:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — control: twelve crates that touch only the floor</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     bottom-up 0.247181252 m   top-down 0.247181252 m   difference 0.000e+00</code></pre>
+  </div>
+
+  <p>
+    With no chain of contacts there is no direction for information to travel in, and the two
+    orders do exactly the same arithmetic in a different sequence — bit for bit, over two seconds
+    of simulation. That is what says the 8% above is the chain and not something else.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>And the sort is not free of design, even where it is free of cost.</strong>
+      "Bottom-up" means "by height", which is a statement about gravity pointing down. An engine
+      whose levels have ceilings to hang from, ropes, and rotating platforms has no such axis. The
+      general version is a topological order of the contact graph, per island, which is a sort per
+      frame rather than a comparison — and it would need the graph, which §9 builds for a
+      different reason. This engine ships the broadphase's order and <em>names</em> it, which is
+      more honest than implying that an accident is a decision.
+    </p>
+  </div>
+
+  <h2 id="frozen">6. The frozen overlap</h2>
+
+  <p>
+    Now the other failure, and it starts with a claim that turned out to be the wrong shape.
+  </p>
+
+  <p>
+    A converged velocity solve leaves the relative normal velocity at zero. That means the overlap
+    <em>stops growing</em>. It says nothing whatever about the overlap that is already there — and
+    there is always some, because <code>collide_manifold</code> reports nothing at all until the
+    shapes actually overlap. The first frame on which a contact exists is the frame <em>after</em>
+    the body crossed the surface. So the first thing a solver ever sees is a contact that is
+    already too deep, and the obvious claim is that it is one step of travel deep:
+    <code>v·h</code>.
+  </p>
+
+  <p>
+    That claim is wrong by up to 81%, and the measurement is more interesting than the claim was.
+  </p>
+
+  @@FIG_ARRIVAL@@
+
+  <div class="listing">
+    <figcaption><span class="path">§D — arrival depth as a fraction of <code>v·h</code>, 200 drop heights per row</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     drop m    arrival m/s    v*h mm     min     mean     max
+       0.10         2.1255     35.425   0.005    0.486    0.919
+       0.50         3.5970     59.950   0.004    0.489    0.950
+       2.00         6.5400    109.000   0.002    0.505    0.972
+     largest fraction seen anywhere: 0.9725;  means are within 0.014 of 0.5</code></pre>
+  </div>
+
+  <p>
+    <code>v·h</code> is a <strong>ceiling</strong>, not an equality, and once the measurement says
+    so the reason is obvious: the body crosses the surface at some instant <em>inside</em> a step,
+    and the next sample is taken a whole step later. How much of that step was left over depends
+    on where the body happened to be when the step began, which is to say it is arbitrary. So the
+    arrival depth is uniform on <code>[0, v·h]</code>, its mean is half the ceiling, and only the
+    ceiling is predictable.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> A crate dropped 0.5&nbsp;m arrives at
+    <code>√(2gh) = √(2 × 9.81 × 0.5) = 3.13 m/s</code> in continuous time; the measurement reads
+    3.597, which is larger because a 60&nbsp;Hz semi-implicit step overshoots the fall slightly and
+    because the drop is measured to the crate's <em>face</em>. One step at that speed is
+    <code>3.597/60 = 59.95 mm</code>, which is the ceiling in the table. The deepest arrival over
+    200 finely spaced drops was 0.950 of it — 56.9&nbsp;mm — and the mean was 0.489, or
+    29.3&nbsp;mm. Half a crate-depth of overlap, waiting for the solver on the very first frame.
+  </p>
+
+  <p>
+    And no amount of iteration touches it:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§D — a crate dropped 0.5 m, 10 s, <code>position_correction::none</code></span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     iters    depth mm       residual m/s
+         1     17.6959         2.1986e-09
+         2     18.1701         1.9977e-09
+         4     18.2592         1.5694e-09
+         8     17.7703         2.3629e-09
+        16     17.7503         3.0436e-09
+        32     17.7501         5.4689e-09
+        64     17.7501         5.4689e-09
+     over a 64x range of iteration count the depth moves 0.5633 mm (3.09%)
+     and the residual moves by orders of magnitude.</code></pre>
+  </div>
+
+  <p>
+    Three per cent, over a sixty-four-fold range of the knob people reach for. That is as close to
+    a controlled experiment as this lesson gets: the residual falls by whatever you ask of it and
+    the depth does not move, because they are <strong>two different problems and iteration is the
+    answer to one of them</strong>.
+  </p>
+
+  <p>
+    The control is the other end of the same statement. If the frozen depth really is bounded by
+    one step of approach travel, then a body arriving arbitrarily slowly must arrive arbitrarily
+    shallow. Lower a crate onto the floor at 1&nbsp;cm/s with gravity switched off: the ceiling is
+    <code>0.01/60 = 0.1667 mm</code> and the measurement is <strong>0.1630</strong>. Which is also
+    the bound on how good <code>position_correction::none</code> can be — a scene in which nothing
+    ever arrives faster than a few centimetres per second does not need a position correction at
+    all, and knowing that is worth more than the correction is.
+  </p>
+
+  <h2 id="baumgarte">7. Baumgarte, and the energy it adds</h2>
+
+  <p>
+    A position error needs a position fix, and the oldest one is to smuggle it into the velocity
+    solve. If the contact is <code>d</code> metres too deep, ask the solver not merely to stop the
+    approach but to produce a small <em>separating</em> velocity — enough to remove a fraction of
+    <code>d</code> over the coming step. The bodies then push apart as well as refusing to
+    approach, and the overlap shrinks.
+  </p>
+
+  <p>
+    The arithmetic is one line. To remove <code>β·d</code> metres of overlap in <code>h</code>
+    seconds you need a relative separating velocity of
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ b \;=\; \frac{\beta\,\max(0,\; d - s)}{h} \]</span>
+    <span class="eq-plain">bias = beta * max(0, depth - slop) / h</span>
+  </div>
+
+  <p>
+    where <code>s</code> is the penetration slop §8 is about. Add <code>b</code> to the target
+    velocity in <code>solve_one_normal</code> and you are done. This is Baumgarte stabilisation,
+    from a 1972 paper on constrained dynamics by way of every rigid-body write-up since, and it is
+    what every first implementation does.
+  </p>
+
+  <h3>The time constant, in closed form</h3>
+
+  <p>
+    Each step removes the fraction <code>β</code> of whatever excess remains, so after <em>n</em>
+    steps the excess is <code>(1 − β)ⁿ</code> of what it started at. That is an exponential wearing
+    a discrete hat:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ (1-\beta)^n \;=\; e^{\,n\ln(1-\beta)} \qquad\Longrightarrow\qquad \tau \;=\; \frac{-h}{\ln(1-\beta)} \]</span>
+    <span class="eq-plain">(1 - beta)^n = exp(n ln(1 - beta)), so tau = -h / ln(1 - beta)</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked.</strong> At <code>β = 0.2</code> and <code>h = 1/60</code>:
+    <code>ln(0.8) = −0.22314</code>, so <code>τ = (1/60)/0.22314 = 0.0747 s</code> — 74.7&nbsp;ms.
+    Four and a half frames to remove 63% of an overlap, twenty frames to remove 99%. Notice what
+    is <em>not</em> in that expression: the mass, the depth, the number of contacts. A Baumgarte
+    correction settles at the same rate for a pebble and a piano.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — the decay, against <code>baumgarte_time_constant(beta, h)</code></span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     beta    predicted tau ms    measured tau ms    ratio
+     0.05              324.93              333.33    1.026
+     0.10              158.19              166.67    1.054
+     0.20               74.69               83.33    1.116
+     0.40               32.63               33.33    1.022
+     worst deviation: 11.57%, and one 16.67 ms step is 51.1% of the
+     shortest row — the measurement cannot be finer than a frame.</code></pre>
+  </div>
+
+  <p>
+    Every measured value is the predicted one rounded up to a whole frame, which is the finest a
+    quantity sampled once per step can be. That is agreement, and stating the resolution is what
+    makes it agreement rather than a 12% error.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The first draft of that table had gravity switched off, and it came out 33% too fast
+      at β = 0.05 and dead on at β = 0.40.</strong> An error that <em>grows as a parameter
+      shrinks</em> is a second effect, not a wrong constant — 8.9 §8's rule, arriving again. The
+      second effect is this section's whole subject: an <em>unheld</em> crate keeps the correction
+      velocity, so it coasts out at the largest bias it ever saw instead of decaying with the
+      overlap. Geometric decay is what a correction does to a body that is being pushed back in,
+      which is every body in a real stack. The fixture had to have gravity in it.
+    </p>
+  </div>
+
+  <h3>And then the bill</h3>
+
+  <p>
+    The bias is a velocity the contact was never asked for, and the solver cannot tell it from a
+    real one. When the overlap runs out, the body is still carrying it. Put a crate 100&nbsp;mm
+    inside the floor with gravity switched <em>off</em>, so that a correction which added nothing
+    would leave it exactly at rest on the surface:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — gravity off; a correct correction would leave the crate at rest</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     start mm    departure m/s    KE added J    as a drop of
+         10.0           0.0600    1.8003e-02         0.2 mm
+         50.0           0.5400    1.4582e+00        14.9 mm
+        100.0           1.1401    6.4987e+00        66.2 mm
+
+  CONTROL, the same crate with no correction at all:
+     departure 0.000000e+00 m/s   still 100.000 mm deep</code></pre>
+  </div>
+
+  <p>
+    Six and a half joules, from nowhere, on a 10&nbsp;kg crate. The control is what makes that the
+    correction's doing rather than something else's: switch the correction off and the crate sits
+    where it was put, motionless, forever.
+  </p>
+
+  <p>
+    With gravity on, this is mostly <em>hidden</em>, which is exactly why it survives in so many
+    engines. The push has to climb, and below a certain starting depth it never gets out:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — peak height relative to the surface, gravity on (negative = never surfaced)</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     start mm    peak vs surface mm    peak speed m/s    Baumgarte / split
+         10.0                -5.000            0.0600    -5.000 / -5.000 mm
+         50.0                -5.000            0.5401    -5.000 / -5.000 mm
+        100.0                -5.000            1.1401    -5.000 / -5.000 mm
+        200.0                98.886            2.3400    98.886 / -5.000 mm
+        300.0               215.077            3.0000    215.077 / -5.000 mm</code></pre>
+  </div>
+
+  <p>
+    Below 200&nbsp;mm the crate arrives shallower than it should and settles, and a reader who has
+    only ever tested shallow overlaps has never seen the bug. At 200&nbsp;mm it is
+    <strong>thrown 99&nbsp;mm clear of the floor</strong>, and at 300 it reaches 215. The
+    <code>−5.000</code> in most rows is the penetration slop: a crate resting correctly.
+  </p>
+
+  <p>
+    The clamp is the difference between a push and a launch, and it is one <code>min</code>:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§E — <code>max_correction_speed</code>, a crate spawned 300 mm inside the floor</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     clamp m/s    peak departure m/s    peak above surface mm
+         100.0                3.5400                  368.523
+           3.0                3.0000                  215.077
+           1.0                1.0000                   -5.000</code></pre>
+  </div>
+
+  <p class="worked">
+    <strong>Worked: why the clamp is not optional.</strong> A body spawned a whole metre inside a
+    wall — every project does this, usually by dragging an object in an editor — is told to leave
+    at <code>β·d/h = 0.2 × 1.0 × 60 = 12 m/s</code>. Under Baumgarte that is a real velocity it
+    keeps. Twelve metres per second is a body that crosses a room in a quarter of a second and
+    tunnels through everything on the way, from a placement mistake of one metre.
+  </p>

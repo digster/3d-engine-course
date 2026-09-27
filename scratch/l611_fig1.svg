@@ -1,0 +1,58 @@
+<svg viewBox="0 0 720 400" role="img" aria-labelledby="f611a-t f611a-d">
+  <title id="f611a-t">The three alpha modes</title>
+  <desc id="f611a-d">Opaque, mask and blend as three different sequences of depth and colour operations, with the pipeline cost of each.</desc>
+  <defs>
+    <marker id="e-i-f611a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f611a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f611a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f611a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f611a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">One glTF enum, three different machines</text>
+<rect x="56" y="50" width="190" height="300" rx="6" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<rect x="56" y="50" width="190" height="34" rx="6" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="151.0" y="73" class="sm" text-anchor="middle">OPAQUE</text>
+<text x="151.0" y="104" class="xs" text-anchor="middle">alpha ignored</text>
+<text x="70" y="132" class="xs" text-anchor="start">&gt; test depth</text>
+<text x="70" y="151" class="xs" text-anchor="start">&gt; write depth</text>
+<text x="70" y="170" class="xs" text-anchor="start">&gt; write colour</text>
+<line x1="68" y1="246" x2="234" y2="246" class="grid" stroke-width="1.0"/>
+<text x="151.0" y="266" class="xs" text-anchor="middle">order-free</text>
+<text x="151.0" y="283" class="xs" text-anchor="middle">(the z-buffer</text>
+<text x="151.0" y="300" class="xs" text-anchor="middle">IS the sort)</text>
+<line x1="68" y1="324" x2="234" y2="324" class="grid" stroke-width="1.0"/>
+<text x="151.0" y="341" class="xs" text-anchor="middle">0 pipelines</text>
+<rect x="271" y="50" width="190" height="300" rx="6" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<rect x="271" y="50" width="190" height="34" rx="6" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="366.0" y="73" class="sm" text-anchor="middle">MASK</text>
+<text x="366.0" y="104" class="xs" text-anchor="middle">alpha is a TEST</text>
+<text x="285" y="132" class="xs" text-anchor="start">&gt; test depth</text>
+<text x="285" y="151" class="xs" text-anchor="start">! SHADE FIRST</text>
+<text x="285" y="170" class="xs" text-anchor="start">&gt; discard, or</text>
+<text x="285" y="189" class="xs" text-anchor="start">&gt; write depth</text>
+<text x="285" y="208" class="xs" text-anchor="start">&gt; write colour</text>
+<line x1="283" y1="246" x2="449" y2="246" class="grid" stroke-width="1.0"/>
+<text x="366.0" y="266" class="xs" text-anchor="middle">order-free</text>
+<text x="366.0" y="283" class="xs" text-anchor="middle">(a discarded</text>
+<text x="366.0" y="300" class="xs" text-anchor="middle">fragment</text>
+<text x="366.0" y="317" class="xs" text-anchor="middle">occludes nothing)</text>
+<line x1="283" y1="324" x2="449" y2="324" class="grid" stroke-width="1.0"/>
+<text x="366.0" y="341" class="xs" text-anchor="middle">0 pipelines</text>
+<rect x="486" y="50" width="190" height="300" rx="6" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<rect x="486" y="50" width="190" height="34" rx="6" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="581.0" y="73" class="sm" text-anchor="middle">BLEND</text>
+<text x="581.0" y="104" class="xs" text-anchor="middle">alpha is a FRACTION</text>
+<text x="500" y="132" class="xs" text-anchor="start">&gt; test depth</text>
+<text x="500" y="151" class="xs" text-anchor="start">! NEVER write depth</text>
+<text x="500" y="170" class="xs" text-anchor="start">&gt; read dst</text>
+<text x="500" y="189" class="xs" text-anchor="start">&gt; composite</text>
+<text x="500" y="208" class="xs" text-anchor="start">&gt; write colour</text>
+<line x1="498" y1="246" x2="664" y2="246" class="grid" stroke-width="1.0"/>
+<text x="581.0" y="266" class="xs" text-anchor="middle">ORDER MATTERS</text>
+<text x="581.0" y="283" class="xs" text-anchor="middle">(`over` is not</text>
+<text x="581.0" y="300" class="xs" text-anchor="middle">commutative:</text>
+<text x="581.0" y="317" class="xs" text-anchor="middle">sort back to front)</text>
+<line x1="498" y1="324" x2="664" y2="324" class="grid" stroke-width="1.0"/>
+<text x="581.0" y="341" class="xs" text-anchor="middle">+6 pipelines</text>
+<text x="360.0" y="386" class="xs" text-anchor="middle">the line 6.5 drew — which half can be a number in a buffer? — runs between MASK and BLEND</text>
+</svg>

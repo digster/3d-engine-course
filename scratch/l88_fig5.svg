@@ -1,0 +1,70 @@
+<svg viewBox="0 0 900 491" role="img" aria-labelledby="f88e-t f88e-d">
+  <title id="f88e-t">Duplicates and the owner cell</title>
+  <desc id="f88e-d">Two proxies meeting in four shared cells, and the rule that reports them once.</desc>
+  <defs>
+    <marker id="e-i-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-grn-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amb-f88e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="56" y="42" class="sm" text-anchor="start">two proxies whose cell ranges overlap in four cells</text>
+<line x1="56" y1="60" x2="56" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="108" y1="60" x2="108" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="160" y1="60" x2="160" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="212" y1="60" x2="212" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="264" y1="60" x2="264" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="316" y1="60" x2="316" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="368" y1="60" x2="368" y2="320" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="60" x2="368" y2="60" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="112" x2="368" y2="112" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="164" x2="368" y2="164" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="216" x2="368" y2="216" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="268" x2="368" y2="268" class="grid" stroke-width="1.0"/>
+<line x1="56" y1="320" x2="368" y2="320" class="grid" stroke-width="1.0"/>
+<rect x="61" y="65" width="198" height="146" rx="3" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<rect x="171" y="123" width="186" height="186" rx="3" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<rect x="162" y="114" width="48" height="48" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="0.8" fill-opacity="0.26"/>
+<text x="186.0" y="142.0" class="xs" text-anchor="middle">owner</text>
+<rect x="214" y="114" width="48" height="48" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.14"/>
+<text x="238.0" y="142.0" class="xs" text-anchor="middle">dup</text>
+<rect x="162" y="166" width="48" height="48" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.14"/>
+<text x="186.0" y="194.0" class="xs" text-anchor="middle">dup</text>
+<rect x="214" y="166" width="48" height="48" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.14"/>
+<text x="238.0" y="194.0" class="xs" text-anchor="middle">dup</text>
+<text x="212" y="340" class="xs muted" text-anchor="middle">the pair meets in all 4; owner_cell picks the minimum corner</text>
+<text x="414" y="42" class="sm" text-anchor="start">owner_cell(lo_a, lo_b) = max(lo_a, lo_b), per axis</text>
+<text x="414" y="66" class="xs muted" text-anchor="start">The overlap of two axis-aligned cell RANGES is</text>
+<text x="414" y="83" class="xs muted" text-anchor="start">itself an axis-aligned range, and a range has</text>
+<text x="414" y="100" class="xs muted" text-anchor="start">exactly one minimum corner. Both proxies are in it</text>
+<text x="414" y="117" class="xs muted" text-anchor="start">by construction, because it lies inside both their</text>
+<text x="414" y="134" class="xs muted" text-anchor="start">ranges. So reporting only from there reports the</text>
+<text x="414" y="151" class="xs muted" text-anchor="start">pair exactly once — not usually, exactly — for three</text>
+<text x="414" y="168" class="xs muted" text-anchor="start">max calls and no memory.</text>
+<text x="414" y="221" class="xs muted" text-anchor="start">§5 — 2000 proxies</text>
+<text x="738" y="221" class="xs muted" text-anchor="end"></text>
+<line x1="414" y1="229.0" x2="744" y2="229.0" class="grid" stroke-width="1.0"/>
+<text x="414" y="246.0" class="xs" text-anchor="start">duplicate meetings, closed form</text>
+<text x="738" y="246.0" class="xs mono" text-anchor="end">3,271</text>
+<text x="414" y="263.0" class="xs" text-anchor="start">duplicate meetings, counted</text>
+<text x="738" y="263.0" class="xs mono" text-anchor="end">3,271</text>
+<text x="414" y="280.0" class="xs" text-anchor="start">pairs reported</text>
+<text x="738" y="280.0" class="xs mono" text-anchor="end">963</text>
+<text x="414" y="297.0" class="xs" text-anchor="start">duplicates in the reported list</text>
+<text x="738" y="297.0" class="xs mono" text-anchor="end">0</text>
+<text x="56" y="402" class="xs muted" text-anchor="start">the three ways to deduplicate</text>
+<text x="410" y="402" class="xs muted" text-anchor="end">cost</text>
+<text x="630" y="402" class="xs muted" text-anchor="end">against 0.080 ms</text>
+<line x1="56" y1="410.0" x2="636" y2="410.0" class="grid" stroke-width="1.0"/>
+<text x="56" y="427.0" class="xs" text-anchor="start">std::set of pair keys</text>
+<text x="410" y="427.0" class="xs mono" text-anchor="end">0.036 ms</text>
+<text x="630" y="427.0" class="xs mono" text-anchor="end">45% of the broadphase</text>
+<text x="56" y="444.0" class="xs" text-anchor="start">sort + unique</text>
+<text x="410" y="444.0" class="xs mono" text-anchor="end">0.004 ms</text>
+<text x="630" y="444.0" class="xs mono" text-anchor="end">5%</text>
+<text x="56" y="461.0" class="xs" text-anchor="start">owner_cell</text>
+<text x="410" y="461.0" class="xs mono" text-anchor="end">0.000 ms</text>
+<text x="630" y="461.0" class="xs mono" text-anchor="end">three max calls</text>
+</svg>

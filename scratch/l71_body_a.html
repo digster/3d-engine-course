@@ -1,0 +1,340 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-18-text-overlay.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-02-axis-angle.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.2 — Axis-Angle and Rodrigues’ Rotation Formula</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.1</div>
+    <h1>Euler Angles and Their Pathologies</h1>
+    <p class="deck">
+      Every rotation in this engine so far has been <em>composed</em>, never <em>typed</em>. There
+      are twenty-six calls to <code>rotation_x</code>, <code>rotation_y</code> and
+      <code>rotation_z</code> across the demos, four of which multiply two of them together — and
+      each of those four invented its own private convention on the spot, including two on adjacent
+      lines of <code>demo_scene.cpp</code> that disagree <em>deliberately</em>, to show that the
+      order matters. Nobody has ever handed this engine three numbers and said "that is the
+      orientation". A designer does. A file written by somebody else's tool does. A debug panel
+      with three sliders does. So: what are the three numbers, and what do they mean? The answer is
+      that <strong>there are twenty-four self-consistent ways to answer that</strong>, they are all
+      in use, and reading the same triple <code>(30°, 40°, 50°)</code> under the wrong one puts the
+      nose <strong>83° away</strong> from where it belongs — measured, not estimated. We fix one
+      convention, write it into the Conventions page, and derive the matrix it names. Then we meet
+      the hole. Three numbers cannot parameterise rotation without a singularity — that is a
+      theorem, not a bug, and no choice of order escapes it. What a choice of order decides is
+      <em>where the hole sits</em>, and ours puts it at pitch&nbsp;±90°, nose straight up. Most
+      treatments show you the gimbals and stop. We are going to <strong>print the
+      number</strong>: the matrix that turns knob rates into angular velocity has determinant
+      <code>−cos(pitch)</code>, its weakest gain is <code>|cos p| / √(1+|sin p|)</code>, and at a
+      hundredth of a degree from lock you would need <strong>464,000 degrees per second</strong> of
+      knob to turn the aircraft at one. Along the way this lesson trips over the same numerical
+      trap three separate times — in the conditioning formula, in the extraction, and in the
+      textbook expression for "the angle between two rotations", which returns <strong>exactly
+      zero</strong> for a turn of 0.004° and is therefore incapable of measuring the thing every
+      claim here is measured with.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="02-06-mat4.html">2.6 — Building mat4 by Hand</a>,
+          <a href="02-08-space-chain.html">2.8 — The Space Chain: Model to World</a>,
+          <a href="05-09-transform-hierarchy.html">5.9 — Transform Hierarchy and the Camera System</a>,
+          <a href="05-11-imgui-debug-draw.html">5.11 — Dear ImGui and the Debug Draw System</a>,
+          <a href="05-12-checkpoint-game.html">5.12 — Checkpoint: A Small 3D Game on the Public API</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/euler.hpp</code> <em>(new)</em>,
+            <code>demos/gimbal/main.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/math/transform.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_71.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_71.sh</code> <em>(new)</em>,
+            <code>scratch/golden_71.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Three numbers become an orientation, under a convention this course now states rather
+            than assumes. A demo puts the rig on screen and the measurement beside it, so you can
+            drive a knob into the singularity and watch the response go to zero while the knob
+            keeps turning. <strong>34 checks green</strong>, six of them controls that had to fail
+            for the measurement next to them to mean anything — and one of which <em>did</em> fail
+            on the first run, which is how its threshold got fixed. The reference render is
+            byte-identical for the fifth lesson running, and §12 says why that is a null result
+            here and what was built instead. Nothing in the engine stores a Euler angle, and §7
+            measures why that is the conclusion rather than an omission.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state a Euler convention precisely enough that somebody else could implement it, and
+          say why a triple without one is not an orientation.</li>
+      <li>…derive the composite rotation matrix for any axis order, and read its structure well
+          enough to invert it.</li>
+      <li>…explain gimbal lock as a <em>rank deficiency of a map</em> rather than as a story about
+          hardware, and compute how close to it you are with two functions the engine already
+          had.</li>
+      <li>…choose an axis order by deciding where you want the singularity, rather than by
+          copying one.</li>
+      <li>…measure the distance between two orientations, and say why the formula everyone quotes
+          cannot do it at the step sizes that matter.</li>
+      <li>…demonstrate that interpolating Euler angles does not interpolate the rotation, with a
+          number of degrees rather than an assertion.</li>
+      <li>…recognise catastrophic cancellation against 1.0 in a trigonometric identity, and
+          re-spell the identity so it survives <code>float</code>.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a rotation nobody can type</a></li>
+      <li><a href="#intuition">Three knobs, and which axis each one turns about</a></li>
+      <li><a href="#twentyfour">A convention is not a detail: there are twenty-four</a></li>
+      <li><a href="#matrix">The matrix, derived</a></li>
+      <li><a href="#lock">Gimbal lock, as a number</a></li>
+      <li><a href="#extract">Going backwards, and the branch that admits defeat</a></li>
+      <li><a href="#interp">Interpolation: the real indictment</a></li>
+      <li><a href="#metric">The instrument, and the formula that cannot measure</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#golden">The golden, and why it is blind to this lesson</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: a rotation nobody can type</h2>
+
+  <p>
+    Open <code>demos/common/demo_scene.cpp</code> and look at two adjacent lines that have been
+    sitting there since Module 2:
+  </p>
+
+<pre><code class="lang-cpp">case spin::tumble_xy: return engine::rotation_x(t) * engine::rotation_y(1.1f);
+case spin::tumble_yx: return engine::rotation_y(1.1f) * engine::rotation_x(t);</code></pre>
+
+  <p>
+    The comment above them says what they are for: <em>"the two tumble modes share both ingredients
+    and differ ONLY in which rotation is applied first"</em>. They exist to demonstrate that matrix
+    multiplication does not commute, and they do it well. But notice what they also are. Each of
+    them is a two-angle Euler convention, invented at the call site, used once, and never named.
+    There are four such sites in this repository. Lesson 5.12's rover is another:
+  </p>
+
+<pre><code class="lang-cpp">const engine::mat3 heading = engine::rotation_y(r.yaw);
+t.rotation = heading * engine::rotation_z(r.bank);</code></pre>
+
+  <p>
+    That is a yaw followed by a bank about the yawed forward axis — a perfectly reasonable
+    convention, chosen by whoever wrote the line, documented nowhere, and impossible to hand to
+    anything else. If a designer asked "what numbers do I type to point the rover north-east and
+    lean it 15° into the turn?", there would be no answer in the engine to give them. There would
+    be a line of C++ in a demo.
+  </p>
+
+  <p>
+    This is the gap. The engine stores a rotation as a <code>mat3</code> and has done since Lesson
+    2.6, and that is the right thing to store — nine floats that the renderer can multiply by
+    directly, with no conversion at the point of use. What it has no answer for is the
+    <strong>interface</strong>: the small number of human-sized quantities that a person, or a file,
+    or a slider, uses to <em>say</em> an orientation.
+  </p>
+
+  <p>
+    A rotation in three dimensions has exactly three degrees of freedom. You can see that without
+    any algebra: to specify an orientation you have to say where the object's forward axis points
+    (two numbers — a direction on a sphere) and then how far it is twisted about that axis (one
+    more). Three. So the minimum possible interface is three numbers, and three numbers is
+    precisely what every tool a human touches offers: three boxes in a transform panel, three
+    sliders, three columns in a spreadsheet of camera keyframes.
+  </p>
+
+  <p>
+    Three numbers for three degrees of freedom sounds like it should be the end of the story. It is
+    the beginning of two separate ones, and this lesson is both of them.
+  </p>
+
+  <p>
+    <strong>The first is that three numbers are not enough information.</strong> "Yaw 30, pitch 40,
+    roll 50" is not an orientation. It becomes an orientation only when you also fix which axes the
+    three turns are about, in which order they are applied, and whether each later turn happens
+    about a world axis or about the axis the earlier turns have just moved. There are twenty-four
+    self-consistent ways to answer that, all of them in use somewhere, and §3 measures what it costs
+    to guess wrong. The answer is not "a bit of drift". It is up to 83°.
+  </p>
+
+  <p>
+    <strong>The second is that three numbers cannot do the job at all, anywhere.</strong> Not
+    "our three numbers"; any three. There is no way to cover all rotations smoothly with three
+    coordinates without at least one place where the coordinate system tears. That is gimbal lock,
+    it is a theorem rather than an engineering mistake, and §5 both proves it locally and
+    <em>measures</em> it — because a fact you can print a number for is a fact you can act on,
+    and a picture of three brass rings is not.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What this lesson does not do</span>
+    <p>
+      It does not change how the engine <em>stores</em> rotation. <code>transform::rotation</code>
+      is still a <code>mat3</code> when this lesson ends, and Lesson 7.4 replaces it with a
+      quaternion. Euler angles are an interface, and §7 argues that conclusion with numbers
+      rather than assuming it. If you finish this lesson thinking "so I should store yaw, pitch and roll in my
+      entities", the lesson has failed and §7 is where to re-read.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Three knobs, and which axis each one turns about</h2>
+
+  <h3>2.1 The chain</h3>
+
+  <p>
+    Picture an aircraft on a stand, and three knobs on a console.
+  </p>
+
+  <p>
+    The first knob is <strong>yaw</strong>. Turning it swings the aircraft left and right about the
+    vertical — about world <strong>+Y</strong>, which is our up (<a href="../conventions.html#world">Conventions §2</a>).
+    Nothing about the aircraft's current attitude changes which axis this knob uses: the vertical is
+    the vertical.
+  </p>
+
+  <p>
+    The second knob is <strong>pitch</strong>, and here is where it gets interesting. Pitch tips the
+    nose up and down — about the axis that runs through the wingtips. But the wings have
+    <em>already been moved</em> by the yaw. If the aircraft is pointing north-east, the wingtip axis
+    runs north-west to south-east, not east to west. So the pitch knob turns about <strong>the +X
+    axis that the yaw carried</strong>, not about world +X.
+  </p>
+
+  <p>
+    The third knob is <strong>roll</strong>, which banks the aircraft about the axis running from
+    tail to nose. Both the yaw and the pitch have moved that axis, so roll turns about
+    <strong>the +Z axis that both of them carried</strong>.
+  </p>
+
+  <p>
+    That progression — each knob acting about an axis the previous knobs have already moved — is
+    what the word <strong>intrinsic</strong> means, and Figure 1 is a picture of it. Watch the
+    "was here" stubs: the first panel has none, because yaw's axis is the world's own and has never
+    been carried by anything.
+  </p>
+
+  @@FIG_CHAIN@@
+
+  <p>
+    Written as a product, the whole convention is one line:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R(\psi, \theta, \phi) \;=\; R_y(\psi)\,R_x(\theta)\,R_z(\phi) \]</span>
+    <span class="eq-plain">R(yaw, pitch, roll) = rotation_y(yaw) * rotation_x(pitch) * rotation_z(roll)</span>
+  </div>
+
+  <p>
+    and it is worth stopping on the fact that this single expression carries <em>both</em> readings.
+    Read it left to right and you get the story above: yaw first, then pitch about the yawed X, then
+    roll about the twice-carried Z. Read it right to left — the direction every matrix product in
+    this engine is read (<a href="../conventions.html#matrices">Conventions §6</a>) — and you get a
+    different but equally true story: a vertex is first rolled in the aircraft's own frame, then
+    pitched, then yawed, each about a fixed world axis. Those are the same matrix. §4.3 proves it
+    rather than asserting it, because "it works out to the same thing" is exactly the kind of
+    sentence that turns out to be false in the one case you needed it.
+  </p>
+
+  <h3>2.2 Why yaw-pitch-roll, and not x-y-z</h3>
+
+  <p>
+    You might be wondering why we picked this order at all, given that §3 is about to tell you there
+    are twenty-three others. Hold that thought for two paragraphs, because the reason is the most
+    useful single idea in this lesson.
+  </p>
+
+  <p>
+    Every three-angle parameterisation of rotation has a singularity. This is not a defect of any
+    particular choice; it is a consequence of the shape of the space of rotations, and no clever
+    ordering escapes it. So the choice of order is not a choice of <em>whether</em> to have a hole.
+    It is a choice of <strong>where to put it</strong>.
+  </p>
+
+  <p>
+    For the six orders that use three different axes — the family yaw-pitch-roll belongs to — the
+    singularity always lands on the <em>middle</em> angle, at ±90°. (The repeated-axis families put
+    it at a middle angle of 0° instead, which is worse for a reason §5.6 gives.) §5 derives it. So:
+  </p>
+
+  <ul>
+    <li>Order <strong>x-y-z</strong> puts the hole at the middle angle, which is the rotation about
+        Y. For a camera, Y is the one you swing all day long. The hole would be somewhere you pass
+        through every few seconds.</li>
+    <li>Order <strong>y-x-z</strong> — ours — puts the hole at pitch ±90°, which is nose straight up
+        or straight down. That is a configuration that <em>every first-person camera in every game
+        you have ever played already forbids</em>, by clamping the pitch, for reasons that have
+        nothing to do with mathematics and everything to do with it being disorienting.</li>
+  </ul>
+
+  <p>
+    So we are not avoiding the problem. We are putting it where the product already forbids the user
+    to go. That is the kind of decision worth recognising when you meet it: you cannot remove the
+    constraint, so you move it somewhere it costs nothing.
+  </p>
+
+  <h3>2.3 What the failure looks like</h3>
+
+  <p>
+    Before any algebra, look at it. Figure 2 is two renders from this lesson's demo, which you will
+    build in §9. The left-hand panel is pitch 0: three hoops at right angles, each pivoting about
+    its own axle, drawn in this course's axis colours — green for the vertical (yaw), red for the
+    wingtip axis (pitch), blue for the nose axis (roll).
+  </p>
+
+  @@FIG_RIG@@
+
+  <p>
+    Now the right-hand panel, at pitch 90°. The blue axle — the one the roll knob turns about — has
+    swung round until it lies <em>exactly along the green one</em>. Two knobs, one axis. Turning the
+    yaw knob and turning the roll knob now do the same thing, and there is a whole direction of
+    rotation that no combination of the three knobs can produce at all.
+  </p>
+
+  <p>
+    Notice also what is <em>missing</em> from the right-hand panel. In the left one there is a
+    magenta arrow: the demo draws, at its true length, the rotation produced by the weakest
+    combination of knob rates. At pitch 90° that arrow has zero length, so it is not there. The
+    picture is not a diagram of the situation; it is the measurement, drawn.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The thing almost every explanation gets wrong</span>
+    <p>
+      Gimbal lock does <strong>not</strong> mean the aircraft cannot reach some orientation. It can
+      reach every orientation there is; nothing has been lost from the space of rotations. What has
+      been lost is a <em>direction of motion in the parameterisation</em>. Sitting at pitch 90°, you
+      can still get to any attitude you like — but to move <em>infinitesimally</em> in one
+      particular direction, you would have to make an enormous, finite excursion through the angles
+      first. That distinction is why §5 talks about the derivative of a map and not about brass
+      rings, and it is the whole reason the failure shows up as <em>stuttering and lurching</em> in
+      real systems rather than as something simply refusing to move.
+    </p>
+  </div>

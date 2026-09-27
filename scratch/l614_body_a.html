@@ -1,0 +1,272 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-13-bloom-post-stack.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.13 — Bloom and the Post-Processing Stack</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-15-skybox-ibl.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.15 — Skybox and Image-Based Lighting</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.14</div>
+    <h1>Antialiasing: Geometric and Shading</h1>
+    <p class="deck">
+      Two different problems share this name, and the cure everyone reaches for fixes exactly one of
+      them. <strong>Geometric aliasing</strong> is the staircase on a silhouette — coverage, a step
+      function with infinite bandwidth, answered yes or no. <strong>Shading aliasing</strong> is the
+      sparkle on a polished curve, where what is undersampled is the <em>lighting</em>: a specular
+      lobe narrower than the pixel looking for it. We can say exactly where the second begins,
+      because the GGX lobe has a closed-form width — <code>sin t = α·√((√2−1)/(1−α²))</code>, which
+      is <strong>0.6436 α</strong> and not the α everyone quotes — and on a sphere 40 px in radius
+      that crosses the normal's per-pixel variation at <strong>roughness 0.2468</strong>. The demo's
+      0.49 sits safely above it; every polished metal Lesson 6.12 introduced sits below. Then the
+      measurement that reframes the whole subject: filtering the NDF improves per-pixel
+      <em>accuracy</em> by 2.4× and at some roughnesses makes it <em>worse</em>, while improving
+      <em>stability</em> by <strong>2,034×</strong>. Antialiasing was never about getting a more
+      correct pixel.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-13-bloom-post-stack.html">6.13 — Bloom and the Post-Processing Stack</a>,
+          <a href="06-12-hdr-tonemapping.html">6.12 — HDR and Tonemapping</a>,
+          <a href="06-10-mipmaps.html">6.10 — Mipmaps, LOD, and Anisotropic Filtering</a>,
+          <a href="06-03-microfacet-theory.html">6.3 — Microfacet Theory</a>,
+          <a href="04-01-how-gpus-work.html">4.1 — How GPUs Actually Work</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/antialias.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/antialias.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/microfacet.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_pipeline.hpp</code>,
+            <code>engine/src/gfx/gpu_pipeline.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_post.hpp</code>,
+            <code>engine/src/gfx/gpu_post.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_614.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>Supersampling and NDF filtering on the CPU, MSAA on the GPU — and the honest account of
+            what each one can and cannot reach. <strong>27 checks green</strong>, the GGX lobe's
+            closed form agreeing with a bisection of the real NDF to <strong>1.6 × 10⁻⁸</strong>,
+            and the reference render byte-identical for the <strong>twenty-third</strong> lesson,
+            with the reason settled <em>before</em> any code was written.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…distinguish geometric from shading aliasing by their cause, not their appearance.</li>
+      <li>…explain why no sample rate resolves a silhouette, and what supersampling therefore
+          achieves instead.</li>
+      <li>…derive the width of a GGX specular lobe in closed form, and say where the usual
+          approximation loses 55%.</li>
+      <li>…compute the roughness at which a given surface starts to sparkle.</li>
+      <li>…say precisely why MSAA cannot help with shading aliasing, in terms of what it samples.</li>
+      <li>…filter a normal distribution to match a pixel's footprint, and justify the one step of
+          that derivation that is real.</li>
+      <li>…state what antialiasing actually optimises, and defend the answer with a measurement.</li>
+      <li>…configure MSAA in SDL_GPU — sample counts, matching attachments, and the resolve.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: one name, two failures</a></li>
+      <li><a href="#intuition">Building intuition: a pixel is an area</a></li>
+      <li><a href="#theory">The theory</a></li>
+      <li><a href="#stability">What antialiasing actually optimises</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#msaa">MSAA in SDL_GPU</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: one name, two failures</h2>
+
+  <p>
+    Render the demo with a polished material and two things look wrong. They look wrong in different
+    places, they respond to different settings, and almost every treatment of antialiasing runs them
+    together.
+  </p>
+
+  <p>
+    The first is the one everybody names: <strong>the silhouette is a staircase</strong>. A
+    triangle's edge cuts across the pixel grid at some angle, each pixel is either inside or
+    outside, and the boundary comes out as a flight of steps.
+  </p>
+
+  <p>
+    The second only appears once the camera moves: <strong>the highlight sparkles</strong>. Isolated
+    pixels on a curved shiny surface flash on and off as the view pans, and they do it at a spatial
+    frequency that has nothing to do with the geometry. Hold the camera still and the frame looks
+    fine. That is the tell.
+  </p>
+
+  @@FIG_TWO@@
+
+  <h3>Why they are not the same problem</h3>
+
+  <p>
+    Both are aliasing — high-frequency content masquerading as low-frequency content, because the
+    sample grid cannot tell them apart. But <em>what</em> is undersampled differs, and that decides
+    which cures are even available:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th></th><th>geometric</th><th>shading</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>what is undersampled</td><td>coverage — is this pixel inside the triangle?</td>
+          <td>the lighting — how bright is this surface here?</td></tr>
+      <tr><td>where it appears</td><td>silhouettes and intersections</td>
+          <td>anywhere the surface curves and is shiny</td></tr>
+      <tr><td>visible when still?</td><td>yes</td><td>barely — it is a motion artefact</td></tr>
+      <tr><td>fixed by MSAA</td><td><strong>yes</strong></td><td><strong>no, by construction</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That last row is the reason this lesson separates them before building anything. MSAA is the
+    default answer to "how do I antialias this", and it is a <em>coverage</em> technique: it
+    evaluates coverage and depth at several positions inside each pixel while running the fragment
+    shader <strong>once</strong> per primitive per pixel. That asymmetry is not a shortcut — it is
+    what MSAA <em>is</em>, and it is why 4× MSAA costs about 1.3× rather than 4×.
+  </p>
+
+  <p class="lede">
+    You cannot buy shading samples with a coverage feature.
+  </p>
+
+  <h3>And we can say exactly where the second one starts</h3>
+
+  <p>
+    This is where the module's own arc pays off. Lesson 6.12 put a value of 55,917 in the frame
+    buffer by polishing a metal; Lesson 6.13 measured what a display could do with it. The same
+    polishing is what makes a surface sparkle, and by §3.4 we will have the crossover as a number
+    rather than a feeling: on a sphere 40 pixels in radius, shading aliasing begins at
+    <strong>roughness 0.2468</strong>.
+  </p>
+
+  <p>
+    The demo's own roughness is 0.49 — above it. Every polished material 6.12 introduced (0.20,
+    0.10, 0.05) is below it. The module has been walking toward this number for three lessons.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: a pixel is an area</h2>
+
+  <p>
+    Almost every bug in this lesson comes from one habit of thought, so it is worth attacking
+    directly.
+  </p>
+
+  <p>
+    A pixel is not a point. It is a little square region of the image plane, and the value it should
+    hold is the <em>average of the image over that region</em>. The rasterizer we built in Module 2
+    decides coverage by testing whether the pixel's <strong>centre</strong> is inside the triangle —
+    one point sample standing in for an integral over an area.
+  </p>
+
+  <p>
+    That substitution is exact only when the thing being sampled does not vary over the pixel. When
+    it does — and at a silhouette it varies from "entirely covered" to "entirely uncovered" — the
+    point sample is not an approximation of the average. It is a different number that happens to
+    share a location.
+  </p>
+
+  <h3>Why more samples is not the whole answer</h3>
+
+  <p>
+    The obvious fix is more sample points. It helps, and it is what supersampling does, but it is
+    worth understanding why it cannot <em>solve</em> the problem before relying on it.
+  </p>
+
+  <p>
+    The sampling theorem says a signal can be reconstructed exactly from point samples only if it
+    contains no frequencies above half the sample rate. Coverage is a <strong>step function</strong>
+    — it jumps from 0 to 1 at the triangle's edge — and a step's Fourier transform has energy at
+    <em>every</em> frequency, falling off only as 1/f. There is no sample rate high enough.
+  </p>
+
+  <p>
+    So no amount of supersampling makes a silhouette correct. What it does is push the error down
+    and, crucially, make the error <em>smooth</em>: instead of a pixel that is fully black or fully
+    white depending on which side of the edge its centre happens to fall, you get one that changes
+    gradually as the edge moves across it.
+  </p>
+
+  @@FIG_NYQUIST@@
+
+  <div class="worked">
+    <p>
+      <strong>Worked example.</strong> A checkerboard of period 0.37 pixels — far above the Nyquist
+      limit. Its true local mean is exactly 0.5 whatever the phase, which is what makes it a ground
+      truth rather than another rendering.
+    </p>
+    <div class="eq-plain">factor   samples/px   per-pixel RMS deviation   worst pixel
+     1            1                   0.5000        0.5000
+     2            4                   0.1719        0.5000
+     4           16                   0.0794        0.1240
+     8           64                   0.0231        0.0333</div>
+    <p>
+      At 1× every pixel is black or white — the deviation is a full 0.5, which is as wrong as it is
+      possible to be. At 8× it is 0.0231. <strong>But the checker is never recovered</strong>, at
+      any factor, because it is not representable on this grid. What changes is that the image stops
+      claiming to be something it is not.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <p>
+      <strong>A measurement that measured nothing.</strong> The first version of that table reported
+      the <em>mean over the whole image</em>, and found it already correct at 1×. Of course it did:
+      across 4,096 pixels whose phases differ, errors of opposite sign cancel. The mean was blind to
+      the thing it was pointed at. Aliasing is a per-pixel phenomenon, so the statistic has to be a
+      per-pixel one — and a check that passes while measuring nothing is worse than no check at all.
+    </p>
+  </div>
+
+  <p class="lede">
+    Antialiasing does not recover detail the grid cannot hold. It removes the lie.
+  </p>
+
+  <p>
+    Hold on to that sentence — §4 turns it into a measurement, and the measurement is the most
+    surprising result in this module.
+  </p>

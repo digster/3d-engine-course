@@ -1,0 +1,428 @@
+  <h2 id="listings">10. Complete code listings</h2>
+
+  <p>
+    Nine files. Two are new engine code, one is the game, three are build files, and three are the
+    harness. The file manifest first, because the shape of the change is the argument: <strong>a
+    lesson whose job is to audit an API should not need to change much of it.</strong>
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>path</th><th>new / modified</th><th>purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/renderable.hpp</code></td><td>new</td><td>the component the engine's renderer reads, and the loop that was written twice</td></tr>
+      <tr><td><code>engine/src/gfx/renderable.cpp</code></td><td>new</td><td>the loop itself, and the only place the ECS is compiled for it</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td><td>40 headers → 55; the claim in its first line becomes true</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td><td>one source, and the lint that keeps the umbrella honest</td></tr>
+      <tr><td><code>demos/collector/main.cpp</code></td><td>new</td><td>the game</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td><td>one target, linking <code>engine::engine</code> and nothing else</td></tr>
+      <tr><td><code>scratch/verify_512.cpp</code></td><td>new</td><td>27 checks, three of them controls</td></tr>
+      <tr><td><code>scratch/build_verify_512.sh</code></td><td>new</td><td>compile and run it</td></tr>
+      <tr><td><code>scratch/golden_512.cpp</code></td><td>new</td><td>the reference render, unchanged &mdash; and §12 says why that proves nothing here</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/renderable.hpp@@
+  @@LISTING:engine/src/gfx/renderable.cpp@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:demos/collector/main.cpp@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:scratch/verify_512.cpp@@
+  @@LISTING:scratch/build_verify_512.sh@@
+  @@LISTING:scratch/golden_512.cpp@@
+
+  <h2 id="run">11. Build &amp; run</h2>
+
+  <p>
+    A new target and a new engine source, so CMake has to be re-run once before the first build.
+    It will also print the umbrella lint's verdict, which is the first thing to look for.
+  </p>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Linux / macOS</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+# -- engine: umbrella lists 55 of 56 public headers (1 documented exception)
+cmake --build build -j8
+
+./build/demos/collector                              # play it
+./build/demos/collector --shot arena.ppm             # one deterministic frame
+./build/demos/collector --shot arena.ppm --gizmos    # the same frame, plus §8.1's boxes
+./build/demos/collector --no-boom                    # §6, with the horizon see-sawing
+
+# every number in this lesson
+sh scratch/build_verify_512.sh
+</code></pre>
+</figure>
+
+<figure class="listing nofold">
+  <figcaption><span class="path">Windows (MSVC, from a Developer Command Prompt)</span><span class="lang">shell</span></figcaption>
+<pre><code class="lang-text">cmake -S . -B build
+cmake --build build --config Debug
+
+.\build\demos\Debug\collector.exe
+.\build\demos\Debug\collector.exe --shot arena.ppm
+</code></pre>
+</figure>
+
+  <p>
+    <strong>Expected result.</strong> A window showing a dark arena with a kerb round it, eight
+    pillars, an amber rover with a pale nose, and twelve pale-blue orbs — six bobbing in place and
+    six sweeping round the middle. <kbd>W</kbd> and <kbd>S</kbd> drive, <kbd>A</kbd> and <kbd>D</kbd>
+    steer, and the rover leans into its turns while the horizon stays level. Drive into an orb and
+    it disappears and the count in the top-left goes up. Drive into a pillar and you go straight
+    through it. Drive at the kerb and you stop, and nothing about the kerb is why.
+  </p>
+
+  <p>
+    <code>--shot</code> writes a 480 × 270 PPM and prints one line, which is the same line on every
+    run on every machine:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption>
+      <span class="path">a shell</span>
+      <span class="lang" data-lang="bash">bash</span>
+    </figcaption>
+    <pre><code class="lang-bash">$ ./build/demos/collector --shot arena.ppm
+collector: 2/12 orbs, 25 objects, 380 triangles, 0 debug lines, 240 steps</code></pre>
+  </figure>
+
+  @@FIG_RESULT@@
+
+  <p>
+    Check the numbers against §7's table rather than taking them: 30 entities exist, five of them
+    have no <code>renderable</code> (the carousel, the boom, the camera — and two orbs have been
+    destroyed), so 25 are drawn. Press <kbd>G</kbd> and 889 debug lines appear. Press <kbd>P</kbd>
+    and the panel shows the same three counters <code>collect_renderables</code> returns, including
+    the two that are zero in a healthy frame and are on screen anyway.
+  </p>
+
+  <p>
+    <code>verify_512</code> prints six sections and finishes with <code>0 failures</code> out of 27
+    checks. It needs no GPU and no display; it links <code>libengine.a</code> and not
+    <code>libdemo_common.a</code>, which is the same statement the demo's CMake target makes.
+  </p>
+
+  <h2 id="golden">12. The golden, and why it is blind to this lesson</h2>
+
+  <p>
+    The reference render is byte-identical, as it has been for every lesson since 5.1. Run it
+    anyway — “I am confident it cannot have changed” is what a test is for — but be clear that it
+    is a <strong>null instrument</strong> here, and say so structurally rather than hopefully:
+  </p>
+
+  <ul>
+    <li><code>demo::write_reference_shot</code> renders through <code>soft_renderer.cpp</code>,
+        <code>raster.cpp</code> and <code>framebuffer.cpp</code>, driven by
+        <code>demos/common/demo_scene.cpp</code>.</li>
+    <li><code>renderable.cpp</code> is a new translation unit that nothing in that list calls. It
+        reads a registry, and the reference scene has no registry.</li>
+    <li><code>engine.hpp</code> gained fifteen <code>#include</code> lines and no declarations, and
+        nothing under <code>demos/common</code> includes it — §3 established that nothing anywhere
+        did.</li>
+    <li>The CMake lint emits a message and never a compile flag.</li>
+  </ul>
+
+  <p>
+    So the picture cannot move, and a byte-identical result is evidence of nothing except that
+    nobody edited a file they did not mean to. That is worth ninety seconds and no more. The real
+    instrument for this lesson is <code>verify_512</code> §B — the matrix round trip every object
+    drawn through <code>collect_renderables</code> depends on — and it carries a control that fires
+    at 1.0.
+  </p>
+
+  <div class="callout ok">
+    <p class="label">A second shot now exists</p>
+    <p>
+      <code>collector --shot</code> is itself a characterization test, and a better one than the
+      golden for anything the ECS touches: it runs 240 deterministic simulation steps and prints
+      four numbers derived from them. If a future lesson changes the hierarchy's resolve order, the
+      view's lead-pool choice, or the pool's swap-and-patch, the triangle count will move and this
+      line will say so.
+    </p>
+  </div>
+
+  <h2 id="pitfalls">13. Common pitfalls &amp; debugging</h2>
+
+  <div class="callout pitfall">
+    <p class="label">Everything is half the size it should be, and some of it is floating</p>
+    <p>
+      <strong>Symptom:</strong> the arena is a quarter of its intended area, the pillars stand
+      beside it in the void, and the whole thing reads as a broken camera.<br>
+      <strong>Cause:</strong> <code>cube_mesh()</code> spans ±0.5, so a <code>transform</code>'s
+      <code>scale</code> is the box's <em>full size</em>. A half-extent passed straight through —
+      the natural thing to do, because a half-extent is what everything else wants — halves every
+      dimension, and using the half-extent as the centre height puts the box half underground.<br>
+      <strong>Fix:</strong> one helper that takes a centre and a half-extent and does the doubling
+      (<code>box_at</code>, §7.1). Do not fix the call sites individually; you will miss one.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">A debug box is exactly twice the size of the thing it outlines</p>
+    <p>
+      <strong>Symptom:</strong> collision proxies look like they have a generous margin.<br>
+      <strong>Cause:</strong> <code>debug_lines::box(const mat4&amp;, vec3 half_extent, …)</code>
+      takes the half-extent in the matrix's <em>local</em> space, and the world matrix already
+      carries the scale. Passing metres scales them again.<br>
+      <strong>Fix:</strong> pass <code>{0.5f, 0.5f, 0.5f}</code> — the unit cube's own half-extent.
+      The tell is that the error is <em>exactly</em> 2×, never 1.8×: a plausible-looking margin that
+      is exactly a factor of two is never a margin.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">A headless run hangs for ever and prints nothing</p>
+    <p>
+      <strong>Symptom:</strong> <code>--shot</code> never returns, no output, no crash. CI times out.<br>
+      <strong>Cause:</strong> an <code>SDL_assert</code> fired. It expands to a <code>while</code>
+      loop so that <kbd>RETRY</kbd> genuinely re-tests, and with no display to put a dialog on and
+      no terminal to prompt at, the default answer keeps arriving and the condition cannot change.<br>
+      <strong>Fix:</strong> attach a sampling profiler or debugger and read the top frame —
+      <code>sample &lt;pid&gt;</code> on macOS, <code>gdb -p</code> elsewhere — and the assertion's
+      own function is sitting at the top of the stack. Exercise 5 installs a handler that aborts
+      instead.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">Moving objects are subtly harder to interact with than still ones</p>
+    <p>
+      <strong>Symptom:</strong> the carousel's orbs feel like they need a bigger pickup radius than
+      the stationary ones.<br>
+      <strong>Cause:</strong> something read a <code>world_transform</code> before
+      <code>hierarchy::resolve</code> ran this step, so it saw last step's composition. At 0.45 rad/s
+      and a 4 m radius that is 3 cm — invisible, and far too small to blame on anything.<br>
+      <strong>Fix:</strong> one resolve per step, after everything that writes a local
+      <code>transform</code> and before everything that reads a <code>world_transform</code>. If two
+      resolves are genuinely needed, write down why.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">An entity exists, looks right in the debugger, and does not draw</p>
+    <p>
+      <strong>Symptom:</strong> you spawned it, <code>alive()</code> is true, the component is
+      there, nothing appears.<br>
+      <strong>Cause:</strong> it has a <code>renderable</code> and no <code>world_transform</code>.
+      <code>hierarchy::resolve</code> never creates components (5.9, deliberately), so
+      <code>add&lt;renderable&gt;</code> without <code>add_hierarchy_components</code> is silently
+      invisible.<br>
+      <strong>Fix:</strong> read <code>renderable_report::unresolved</code>, which exists for
+      exactly this and is on the debug panel for exactly this reason. Before that counter the only
+      symptom was “the orb is not there”.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">The first keystroke after clicking into a panel also reaches the game</p>
+    <p>
+      <strong>Symptom:</strong> type into the ImGui field and the rover lurches once.<br>
+      <strong>Cause:</strong> <code>debug_ui::begin_frame()</code> was called beside the panels in
+      <code>on_overlay</code> rather than first in <code>on_input</code>. The capture flags are
+      computed inside <code>NewFrame</code>, so every read is one frame stale.<br>
+      <strong>Fix:</strong> <code>begin_frame()</code> is the first statement of
+      <code>on_input</code>, before <code>gate_.update(...)</code>. Lesson 5.11 argued this at
+      length; it is here because a new program is exactly where the ordering gets re-invented.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <p class="label">Your program's log lines never appear, whatever <code>--log</code> spec you pass</p>
+    <p>
+      <strong>Symptom:</strong> <code>--log '*=info'</code> shows the engine's messages and none of
+      yours.<br>
+      <strong>Cause:</strong> a category past <code>log_category_count</code> is not in
+      <code>name_of</code>'s table, so the spec parser cannot address it and it keeps SDL's default
+      floor (§8.6).<br>
+      <strong>Fix:</strong> set it in code with <code>SDL_SetLogPriority</code>, or — for anything
+      that is the program's <em>output</em> rather than a diagnostic — use <code>printf</code> and
+      stop calling it a log.
+    </p>
+  </div>
+
+  <h2 id="exercises">14. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>1 — A second carousel.</strong> Add another pivot at a different radius and a
+        different rate, with the remaining orbs parented to it, and make one of them turn the other
+        way. Then parent the <em>second</em> carousel to the first and predict what the orbs do
+        before you run it.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>2 — A trail with a lifetime.</strong> Give the rover a trail: queue one debug line
+        per step from its last position to its current one, with a lifetime of 1.5 s. Then pause the
+        game (add a <code>paused</code> action) and check the trail is still there. Lesson 5.11's
+        expiry rule says it should be; confirm it, and say what would have happened with a
+        subtract-then-test rule and <code>dt == 0</code>.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>3 — Actually interpolate.</strong> <code>on_frame</code> takes <code>alpha</code>
+        and throws it away. Keep the previous step's <code>world_transform</code> for every
+        renderable and lerp — position linearly, and the basis by whatever you can justify — then
+        run at a fixed step of 20 Hz and compare. Report the extra memory in bytes per entity.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4 — <code>const</code> views (open).</strong> Make
+        <code>world.view&lt;const renderable&gt;()</code> compile and hand out
+        <code>const renderable&amp;</code>, then change <code>collect_renderables</code> to take a
+        <code>const ecs::registry&amp;</code>. Count how many other functions in this repository
+        could then say what they mean.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>5 — An assertion that does not hang (open).</strong> Install an
+        <code>SDL_AssertionHandler</code> that returns <code>SDL_ASSERTION_ABORT</code> when
+        <code>SDL_WasInit(SDL_INIT_VIDEO)</code> is false, and <code>SDL_ASSERTION_ALWAYS_IGNORE</code>
+        never. Decide where it belongs — the engine, or each program — and defend the choice.
+      </p>
+    </li>
+  </ol>
+
+  <details class="hints">
+    <summary>Hints</summary>
+    <p>
+      <strong>1.</strong> <code>set_parent</code> returns a <code>parent_status</code>; read it. A
+      cycle is reported, not crashed, and the second half of this exercise is a good way to see
+      that happen on purpose.
+    </p>
+    <p>
+      <strong>2.</strong> The lifetime argument is the last parameter of <code>debug_lines::line</code>
+      and defaults to <code>k_debug_this_frame</code>, which is 0.0. Look at how
+      <code>advance()</code> compares before it subtracts.
+    </p>
+    <p>
+      <strong>3.</strong> Interpolating a basis is the hard half and Module 7 is where it is done
+      properly. For this exercise, interpolating position and taking the newer basis is a defensible
+      answer <em>if you say so</em> — and it is what a great many shipped games do for objects that
+      do not rotate quickly.
+    </p>
+    <p>
+      <strong>4.</strong> The blocker is that <code>view</code> stores <code>pool&lt;Ts&gt;*</code>
+      and <code>pool&lt;const T&gt;</code> is not instantiable. <code>std::remove_const_t</code> in
+      the storage and the original <code>Ts</code> in <code>each</code>'s parameter pack is the
+      shape of the answer.
+    </p>
+    <p>
+      <strong>5.</strong> <code>SDL_SetAssertionHandler</code> takes a function pointer and a
+      <code>void*</code>. Note that it must be installed before anything can assert, which is a
+      constraint on <em>where</em> more than on <em>what</em>.
+    </p>
+  </details>
+
+  <details class="solutions">
+    <summary>Solution sketches</summary>
+    <p>
+      <strong>1.</strong> Parenting carousel B to carousel A composes the rotations, so B's orbs
+      sweep an epicycle — the same picture Lesson 5.9's moons drew, arrived at from the other
+      direction. If B turns the other way at the same rate, its orbs travel in a straight line
+      relative to the world, which is a satisfying thing to watch and a genuinely useful sanity
+      check on the composition.
+    </p>
+    <p>
+      <strong>2.</strong> It survives, because <code>advance()</code> tests before it subtracts. With
+      subtract-then-test and a strict <code>&lt;</code>, a line whose remaining lifetime is exactly
+      0 and a <code>dt</code> of 0 never expires — so on a paused clock, a single-frame
+      <code>--shot</code>, or any frame you are stopped in the debugger for, the queue fills and
+      never drains.
+    </p>
+    <p>
+      <strong>3.</strong> Two <code>mat4</code>s per entity is 128 bytes, which at this scale is
+      nothing and at a hundred thousand entities is 12.8 MB — precisely the arithmetic Lesson 5.6
+      measured, arriving in a new place. The usual production answer is to interpolate only what is
+      visible, which needs the culling that Module 6 builds.
+    </p>
+    <p>
+      <strong>4.</strong> The change is small and it touches two published headers, which is why
+      this lesson reported it rather than making it. Expect the count in the second half to be
+      larger than you guess: <code>hierarchy_debug_system</code>, every gizmo pass, every
+      serializer, and every query a future editor makes.
+    </p>
+    <p>
+      <strong>5.</strong> It belongs in the engine, installed by <code>platform::start</code>,
+      because the property it depends on — “is there a video subsystem” — is the platform layer's
+      business and no program should have to know to ask. The counter-argument worth weighing is
+      that an engine which aborts on your behalf has taken a decision away from you; the answer is
+      that in a headless run there was never a decision to take.
+    </p>
+  </details>
+
+  <h2 id="recap">15. Recap &amp; next</h2>
+
+  <p>
+    The engine now has a <strong>game</strong> built on it, written from outside the boundary Lesson
+    5.1 drew, by a program that was not designed to flatter it. That is the capability this lesson
+    adds, and it is a capability of the <em>project</em> rather than the engine: from here on,
+    “does the public API suffice?” is a question with a program attached to it.
+  </p>
+
+  <p>
+    Two things in the engine changed. <code>engine.hpp</code> now lists every public header, and a
+    configure-time lint keeps it that way — because §3 established that the file has no consumer, and
+    a header nobody compiles cannot be kept correct by being used. And
+    <code>gfx/renderable.hpp</code> keeps the promise <code>scene.hpp</code> made in Lesson 5.1:
+    Module 5's ECS does now replace the struct with components, the <code>mat4</code>-to-
+    <code>transform</code> conversion lives in exactly one place, and it is exact to the bit rather
+    than nearly so.
+  </p>
+
+  <p>
+    Five things did not change, and they are the more valuable half. There is no collision, so a
+    wall is a clamp and a pillar is scenery. There is no text, so the score is drawn by SDL's debug
+    font and vanishes the moment you run headless. There is no audio, so the only rewarding thing in
+    the game is silent. There is no public path from an entity to the GPU renderer, so the engine's
+    real renderer is the one a game cannot reach. And <code>view()</code> has no <code>const</code>
+    overload, so no system in this engine can say that it only reads. Each of those is now named,
+    dated and pointed at the module that owns it — at hour 62 rather than hour 434.
+  </p>
+
+  <p>
+    <strong>Module 5 is complete.</strong> Twelve lessons ago <code>engine</code> was the name of an
+    executable; it is now a library with a public API, an application layer, a logger, handles, an
+    asset store, an ECS, a transform hierarchy, a camera, an input map, a debug drawer, a debug UI —
+    and a game that uses all of them and nothing else.
+  </p>
+
+  <p>
+    Which makes the next thing the right next thing. Look again at the arena: the floor is matte
+    because a specular term revealed the triangulation of a 14-metre quad, and the pillars are
+    almost black on the side facing you. Both of those are shading, and Module 6 opens by explaining
+    that the single largest error in every picture this engine has ever produced is not the shading
+    model at all. It is that the numbers have been added up in the wrong space.
+  </p>
+
+  <h2 id="reading">16. Further reading</h2>
+
+  <ul>
+    <li><strong>John Lakos, <em>Large-Scale C++ Software Design</em></strong> — the source of
+        “physical design” as a discipline: levelization, insulation, and the argument for
+        forward declarations that §5.3 applies. Dated in its C++ and not in its reasoning.</li>
+    <li><strong>Casey Muratori, “Semantic Compression”</strong> — the case for hoisting code
+        <em>after</em> you have written it twice rather than designing for reuse up front, which is
+        the position §4.1 argues with and mostly agrees with.</li>
+    <li><strong>The EnTT wiki, “Views and Groups”</strong> — how a mature ECS spells
+        <code>const</code> in a view, which is the shape Exercise 4 asks you to build.</li>
+    <li><strong>SDL3 wiki: <code>SDL_SetAssertionHandler</code>, <code>SDL_assert</code></strong> —
+        the retry loop §6.1 met, documented, including what the default handler does when it cannot
+        open a dialog.</li>
+    <li><strong>Jason Gregory, <em>Game Engine Architecture</em>, 3rd ed., ch. 16</strong> — the
+        “gameplay foundation” layer, and a long survey of where engines draw the line between engine
+        components and game components. §5.1's rule is one answer among several; this is the survey
+        of the others.</li>
+    <li><strong>Mike Acton, “Solving the Right Problems for Engine Programmers”</strong> — on
+        measuring the thing you are about to optimise, which is what §3.2 did and why the result was
+        the opposite of the prediction.</li>
+  </ul>

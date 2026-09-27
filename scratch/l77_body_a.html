@@ -1,0 +1,352 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-06-skeletal-animation.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.6 — Skeletal Animation: The Skinning Math</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-08-audio.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.7</div>
+    <h1>Sampling and Blending Animations</h1>
+    <p class="deck">
+      Lesson 7.6 ended with a character that can be posed and a demo that posed it from two sliders.
+      A clip replaces the sliders, and the whole of the replacement is <strong>a function from time
+      to pose</strong> — which sounds like an afternoon's work and is not, because a clip does not
+      <em>store</em> poses. Storing them costs <strong>3.6 MB</strong> for thirty seconds of one
+      character; storing a handful of samples per channel and reconstructing everything between them
+      costs a fiftieth of that, and every interesting decision in this lesson comes from that one
+      substitution. Finding the two keys that bracket a time is a search, and playback is coherent,
+      so it is a search you can usually skip — but the cursor that skips it has a worst case, and
+      that worst case is the loop wrap. Reconstructing the value between two keys means choosing a
+      rule <em>per field</em>: a position lerps, a rotation nlerps (three orders inside Lesson 7.5's
+      threshold, because two adjacent keys of a 30 Hz clip are <strong>24° apart even on a limb
+      turning at 720°/s</strong>), and scale is the decision 7.5 left open — settled here with a
+      picture, a conformance argument, and the observation that <code>ln(0)</code> is
+      <code>−∞</code> and a scale of zero is how an animator hides a thing. Then the two questions
+      that only arise once motion is data. <strong>A loop has a seam</strong>, and a clip whose last
+      key lands one frame short of its stated duration ticks by 5.82° once per cycle — while a walk
+      cycle's root <em>legitimately</em> ends 1.2 units from where it started, so the instrument that
+      finds the first must not report the second. And <strong>a cross-fade is not the weighted sum
+      Lesson 7.6 built</strong>: blend the poses and every bone keeps its length exactly; blend the
+      composed matrices instead — the same inputs, one step later in the pipeline — and the limb
+      shortens by <code>Σ cos(kδ/2)</code>, which is 7.6's candy wrapper with the accumulated
+      whole-chain angle in place of the per-joint one, worst at hands and feet.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>,
+          <a href="07-05-slerp.html">7.5 — Slerp, and the Storage Swap</a>,
+          <a href="07-06-skeletal-animation.html">7.6 — Skeletal Animation: The Skinning Math</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/anim/clip.hpp</code> <em>(new)</em>,
+            <code>engine/src/anim/clip.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/math/transform.hpp</code>,
+            <code>engine/include/engine/math/quat.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/rig/main.cpp</code>,
+            <code>scratch/verify_77.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_77.sh</code> <em>(new)</em>,
+            <code>scratch/golden_77.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>play recorded motion</strong>: keyframed clips with per-channel
+            tracks, cursor-based sampling, looping, cross-fading, load-time canonicalisation and
+            keyframe reduction. <strong>39 checks green</strong>, twelve of them controls — including
+            one that jams every cursor at index 9999 and demands the poses come back bit-identical
+            anyway, and one that fits a reduction against slerp and then plays it with nlerp to show
+            the budget overrun. A walk-shaped clip on a 23-joint rig reduces from <strong>37,076
+            bytes to 3,716</strong> with a half-degree tolerance, because 53 of its 69 channels turn
+            out to carry nothing. The <code>rig</code> demo gains a clip mode with a cross-fade and
+            a one-key switch between blending poses and blending matrices, and prints the chain
+            length either way: <strong>5.00000 against 4.65020</strong>. The golden render is
+            <strong>byte-identical</strong> for the eleventh consecutive lesson — hash
+            <code>E917C06C</code>.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a clip is stored as independent per-channel tracks rather than as an array of
+          poses, and give the two numbers that make the case — including the one where the
+          per-channel layout <em>loses</em>.</li>
+      <li>…implement keyframe sampling with a cursor, say what its worst case is, and explain why a
+          corrupt cursor costs time and not correctness.</li>
+      <li>…choose an interpolation rule per field and defend each choice with a measurement, a
+          failure mode, or a specification.</li>
+      <li>…wrap a playback time correctly, name the two <em>different</em> wrong things that happen
+          when you do not, and say which of them a clamp three functions away decides between.</li>
+      <li>…measure a loop seam, and distinguish a broken loop from root motion.</li>
+      <li>…cross-fade two poses, and explain from Lesson 7.6's derivation why doing it one step later
+          in the pipeline shortens the character's limbs.</li>
+      <li>…pay for the double cover once at load time instead of every frame, and say honestly what
+          that buys and what it does not.</li>
+      <li>…reduce a clip's keyframes to a stated error tolerance, and explain why the reduction must
+          be fitted with the same interpolation rule the sampler uses.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: the pose has to come from somewhere</a></li>
+      <li><a href="#intuition">Building intuition: a bundle of curves, not a film strip</a></li>
+      <li><a href="#layout">The clip, in memory</a></li>
+      <li><a href="#sampling">Sampling: the bracket, and the cursor</a></li>
+      <li><a href="#rules">Three fields, three rules</a></li>
+      <li><a href="#looping">Looping, the seam, and the negative time</a></li>
+      <li><a href="#blending">Cross-fading, and the one step that ruins it</a></li>
+      <li><a href="#signs">The double cover, inside one track</a></li>
+      <li><a href="#cost">What a clip weighs, and what reading it costs</a></li>
+      <li><a href="#limits">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: the pose has to come from somewhere</h2>
+
+  <p>
+    Here is the state of the engine at the end of Lesson 7.6, stated as a pipeline:
+  </p>
+
+  <pre>    pose  ──▶  compose_pose  ──▶  build_palette  ──▶  skin_into  ──▶  pixels</pre>
+
+  <p>
+    Four stages, all of them written, all of them measured. The arrow on the far left is the one
+    with nothing behind it. <code>compose_pose</code> takes a
+    <code>std::span&lt;const transform&gt;</code> and asks no questions about where those transforms
+    came from; in 7.6's demo they came from two ImGui sliders, and the doc comment on the function
+    that built them said so in as many words:
+  </p>
+
+  <pre><code class="lang-cpp">/// **This is the only place in the program that knows what "a pose" means**,
+/// and it is deliberately tiny: Lesson 7.7 replaces it with a clip sampler
+/// and nothing else in this file changes, because everything downstream takes
+/// `std::span&lt;const transform&gt;` and does not care where the transforms came
+/// from.</code></pre>
+
+  <p>
+    That is a prediction with a date on it, and this is the lesson that collects. What replaces the
+    sliders is a <strong>clip</strong>: a recorded piece of motion, authored in a tool by somebody
+    who is not you, that answers one question —
+  </p>
+
+  <div class="eq">\[ \mathrm{pose} \;=\; \mathrm{clip}(t) \]</div>
+
+  <p class="eq-plain">
+    …a clip is a function from time to pose.
+  </p>
+
+  <p>
+    It really is that simple, and the simplicity is worth pausing on, because it is what makes the
+    rest of this lesson possible to reason about. A clip has no state. It does not know what frame
+    it is on, it does not know how fast it is playing, it does not know how many characters are
+    playing it. Ask it for <code>t = 0.37</code> and it answers; ask it again and it gives the same
+    answer. Everything in an animation system that <em>does</em> have state — the playhead, the
+    blend weights, the state machine that decides what to play next — sits on top of that function
+    and could be thrown away and rewritten without touching it.
+  </p>
+
+  <p>
+    So where is the difficulty? In the word <em>function</em>. A clip does not store the pose for
+    every <code>t</code>, because there is no such thing as every <code>t</code> and because even the
+    ones you might ask for are ruinously expensive to keep. Count it on the rig the harness uses —
+    a plausible humanoid with a spine, two arms and two legs, 23 joints:
+  </p>
+
+  <div class="eq">\[ 100 \;\text{joints} \times 40 \;\text{bytes} \times 30 \;\text{Hz}
+      \times 30 \;\text{s} \;=\; 3{,}600{,}000 \;\text{bytes} \]</div>
+
+  <p class="eq-plain">
+    …a hundred-joint character, sampled thirty times a second for thirty seconds, is 3.6 MB of pose.
+  </p>
+
+  <p>
+    That number comes out of Lesson 7.6's own arithmetic: <code>transform</code> is a
+    <code>vec3</code>, a <code>quat</code> and a <code>vec3</code>, which is 40 bytes, so a
+    hundred-joint pose is 4 KB and thirty seconds of them at 30 Hz is <strong>3.6 MB</strong>. For
+    one clip. A game has hundreds. A fighting game has thousands.
+  </p>
+
+  <p>
+    And the memory is only the visible half of the problem. The invisible half is that a pose array
+    is a <em>film strip</em>: it records everything at the same rate, whether or not anything is
+    happening, and it has no way to say <em>this joint does not move</em>. On a real rig that is most
+    of them.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: a bundle of curves, not a film strip</h2>
+
+  <p>
+    Open any animation tool and look at what an animator actually sees. It is not a strip of poses.
+    It is a <strong>curve editor</strong>: one horizontal track per thing that moves, with dots on it
+    where the animator set a value, and a curve drawn through the dots. The left thigh's rotation is
+    one track. The root's forward translation is another. The left hand's scale is a track too, and
+    it is empty, and the animator has never once thought about it.
+  </p>
+
+  <p>
+    That picture is not a user-interface convenience laid over a pose array. <strong>It is the
+    storage format</strong>, in every engine and every interchange format, and the reason is exactly
+    the two problems above. Independent tracks let each channel be sampled as densely as it needs and
+    no denser; and a channel with nothing in it costs nothing.
+  </p>
+
+  <p>
+    Before writing any of it down, it is worth being precise about what a "channel" is, because the
+    word does a lot of work below. A channel is <strong>one field of one joint, over time</strong>.
+    Joint 15's rotation is a channel. Joint 15's position is a different channel, with its own key
+    times, which may be — and usually is — empty. A rig with <code>n</code> joints has
+    <code>3n</code> channels, and the whole storage argument is about how few of them are occupied.
+  </p>
+
+  <p>
+    How few? The harness bakes a walk-shaped motion into every channel of all 23 joints at 30 Hz —
+    2,139 keys, deliberately naively — and then runs the reduction. Here is the map of what survived:
+  </p>
+
+  <pre>   what survived, joint by joint (P/R/S, . = gone):
+     root         P . .    26 keys
+     hips         . R .     6 keys
+     spine1       . R .     4 keys
+     …
+     head         . . .     0 keys
+     clavicle.L   . . .     0 keys
+     upperarm.L   . R .    14 keys
+     …
+     thigh.L      . R .    19 keys
+     shin.L       . R .    16 keys
+     foot.L       . R .    11 keys
+     toe.L        . . .     0 keys
+
+   channels carrying data: 16 of 69  (23.2%)
+     channels elided entirely: 53</pre>
+
+  <p>
+    <strong>One position channel in the entire rig</strong>, on the root, because that is the joint
+    that carries the character across the ground. <strong>No scale channels at all.</strong> Fifteen
+    rotation channels out of twenty-three, because the head, the clavicles, the hands and the toes
+    do not move in a walk. That is 23.2% of the channels holding 100% of the motion, and it is not a
+    property of this fixture — it is a property of how limbs work. A limb does not slide along its
+    parent; it pivots. The whole of animation is rotation, with translation on the root and almost
+    nowhere else.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The elision is exact, not approximate</span>
+    <p>
+      A channel with no keys is not "close enough to the bind pose". The sampler <em>falls back</em>
+      to <code>sk.joints[j].local_bind</code> for an empty channel, so deleting a channel whose only
+      value is that bind value reproduces the same pose bit for bit — the harness's §I.7 control
+      samples an entirely empty clip and compares it against <code>rest_pose</code>, and the
+      difference is <code>0.000e+00</code> on every joint. The zero-key case is a
+      <em>representation</em>, not a compression artefact.
+    </p>
+  </div>
+
+  <h2 id="layout">3. The clip, in memory</h2>
+
+  <p>
+    Three nested things, and the nesting is the whole design:
+  </p>
+
+  <pre>    clip
+     +- tracks[j]                       joint j
+          +- position  [ (t, v) ... ]   its own times
+          +- rotation  [ (t, q) ... ]   its own times
+          +- scale     [ (t, v) ... ]   its own times</pre>
+
+  <p>
+    A <code>keyframe</code> is a time and a value. A <code>joint_track</code> is three vectors of
+    them. A <code>clip</code> is a name, a duration, a loop flag and one track per joint. That is the
+    entire format, and it is glTF's, and Unity's, and Unreal's, with different spellings.
+  </p>
+
+  @@FIG_TRACKS@@
+
+  <p>
+    Two things in that picture are worth stopping on, because they are the parts a first
+    implementation tends to get wrong in the other direction.
+  </p>
+
+  <p>
+    <strong>Each channel keeps its own times.</strong> Not one time array shared by all three
+    channels of a joint, and certainly not one shared by the whole clip. It costs four bytes per key
+    to repeat the time, and it buys the ability to reduce each channel independently — which is where
+    the saving comes from, and §9 measures it. A shared time array means the busiest channel sets the
+    key rate for every other one, which is the film-strip problem in miniature.
+  </p>
+
+  <p>
+    <strong>The time is absolute, not a delta from the previous key.</strong> Deltas would save
+    nothing (the field is the same four bytes either way) and would make a random seek impossible
+    without a running sum. A clip has to be seekable — a scrub bar, a blend that starts mid-clip, a
+    network rewind — and absolute times make a seek a comparison.
+  </p>
+
+  <h3>3.1 What is <em>not</em> in the clip, and why it matters more than it sounds</h3>
+
+  <p>
+    There is no <code>float time</code> in the struct above. There is no cursor, no playback rate,
+    no "current frame". That absence is a deliberate architectural line and it is the same one
+    Lesson 7.6 drew between <code>skeleton</code> and <code>pose</code>, one level up.
+  </p>
+
+  <p>
+    <strong>A clip is an asset.</strong> One copy, loaded once, shared by every character playing it,
+    immutable from the moment it arrives. Put a playhead in it and two guards could not walk out of
+    step. Put the sampler's search cursor in it and they could not walk at all without fighting over
+    a <code>std::uint32_t</code>. So the mutable half lives in the caller:
+  </p>
+
+  <pre><code class="lang-cpp">struct track_cursor
+{
+    std::uint32_t position = 0;
+    std::uint32_t rotation = 0;
+    std::uint32_t scale = 0;
+};</code></pre>
+
+  <p>
+    Twelve bytes a joint — 1.2 KB for a hundred-joint character — against a clip that may be
+    megabytes and is shared by everyone. That ratio is what makes the split obviously right, and it
+    is the same ratio that made 7.6's palette the thing to upload rather than the deformed mesh.
+  </p>
+
+  <p>
+    The engine's convention for caller-owned scratch is already established:
+    <code>skinning_palette(sk, pose, model_from_joint, palette)</code> takes two vectors it neither
+    owns nor allocates. <code>sample</code> follows it exactly:
+  </p>
+
+  <pre><code class="lang-cpp">void sample(const clip&amp; c, const skeleton&amp; sk, float time,
+            std::vector&lt;track_cursor&gt;&amp; cursors, std::vector&lt;transform&gt;&amp; out);</code></pre>
+
+  <p>
+    Read that signature as a sentence and it says what the lesson is: <em>this clip, on this
+    skeleton, at this time, remembering this — produces a pose.</em> The pose that comes out is the
+    span every function in <code>anim/skeleton.hpp</code> already takes, and that is the seam
+    holding. Nothing in Lesson 7.6 changes by a character.
+  </p>

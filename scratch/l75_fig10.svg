@@ -1,0 +1,44 @@
+<svg viewBox="0 0 760 392" role="img" aria-labelledby="f75j-t f75j-d">
+  <title id="f75j-t">The node that could not hold a rotation</title>
+  <desc id="f75j-d">The collector demo's camera boom, which stored a sheared basis in a field called rotation, and the two-node chain that replaces it exactly.</desc>
+  <defs>
+    <marker id="e-i-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-gold-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d678"/></marker></defs>
+<defs><marker id="e-blue-f75j" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7ebcf8"/></marker></defs>
+<text x="380.0" y="24" class="sm" text-anchor="middle">one node could only pretend; two hold it exactly</text>
+<text x="380.0" y="40" class="xs muted" text-anchor="middle">a transform is T · R · S, so it can say “rotate then scale” and cannot say “scale then rotate”</text>
+<text x="380.0" y="72" class="xs mono" text-anchor="middle">rover world  =  H · Rz(bank) · S</text>
+<text x="380.0" y="90" class="xs mono t-hi" text-anchor="middle">boom local  =  (H · Rz(bank) · S)⁻¹ · H  =  S⁻¹ · Rz(−bank)</text>
+<rect x="46.0" y="112.0" width="330.0" height="122.0" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="211.0" y="130.0" class="xs t-bad" text-anchor="middle">one node, until Lesson 7.5</text>
+<text x="211.0" y="154.0" class="xs mono" text-anchor="middle">rotation = S⁻¹ · Rz(−bank)</text>
+<text x="58.0" y="174.0" class="xs muted" text-anchor="start">A mat3 accepted it without comment. The columns are</text>
+<text x="58.0" y="188.0" class="xs muted" text-anchor="start">not perpendicular — it is a SHEARED basis living in a</text>
+<text x="58.0" y="202.0" class="xs muted" text-anchor="start">field called rotation, and it had been there since 5.12.</text>
+<text x="58.0" y="216.0" class="xs mono t-bad" text-anchor="start">Through a quat: 0.5863 of entry error.</text>
+<rect x="384.0" y="112.0" width="330.0" height="122.0" rx="3" fill="none" stroke="#7ebcf8" stroke-width="1.4"/>
+<text x="549.0" y="130.0" class="xs t-hi" text-anchor="middle">two nodes, Lesson 7.5</text>
+<text x="549.0" y="152.0" class="xs mono" text-anchor="middle">child A:  scale = S⁻¹</text>
+<text x="549.0" y="168.0" class="xs mono" text-anchor="middle">child B:  rotation = quat_z(−bank)</text>
+<text x="396.0" y="188.0" class="xs muted" text-anchor="start">The hierarchy multiplies them parent-first, which is the</text>
+<text x="396.0" y="202.0" class="xs muted" text-anchor="start">order the derivation asked for. No shear anywhere, and</text>
+<text x="396.0" y="216.0" class="xs mono t-ok" text-anchor="start">the same camera basis: 0.000e+00 of difference.</text>
+<text x="380.0" y="268.0" class="sm" text-anchor="middle">the case that is genuinely outside the struct</text>
+<rect x="48.0" y="278.0" width="664.0" height="88.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="60.0" y="296.0" class="xs muted" text-anchor="start">a non-uniformly scaled parent with a rotated child</text>
+<text x="700.0" y="296.0" class="xs mono muted" text-anchor="end"></text>
+<line x1="56.0" y1="303.0" x2="704.0" y2="303.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="316.0" class="xs muted" text-anchor="start">out of square, measured</text>
+<text x="700.0" y="316.0" class="xs mono t-bad" text-anchor="end">0.5941</text>
+<line x1="56.0" y1="323.0" x2="704.0" y2="323.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="336.0" class="xs muted" text-anchor="start">worst entry after the best repair either route can make</text>
+<text x="700.0" y="336.0" class="xs mono t-bad" text-anchor="end">0.3922</text>
+<line x1="56.0" y1="343.0" x2="704.0" y2="343.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="356.0" class="xs muted" text-anchor="start">what collect_renderables does about it</text>
+<text x="700.0" y="356.0" class="xs mono t-hi" text-anchor="end">counts report.skewed</text>
+</svg>

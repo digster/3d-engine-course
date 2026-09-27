@@ -1,0 +1,38 @@
+<svg viewBox="0 0 720 386" role="img" aria-labelledby="f47d-t f47d-d">
+  <title id="f47d-t">A texture and a sampler are two objects</title>
+  <desc id="f47d-d">On the CPU in Lesson 3.9 the filter and the address mode were arguments to a function. On the GPU they are an object, created once and bound alongside the texture as a pair — which is Lesson 4.1's argument arriving for the fourth time, after pipelines, vertex layouts and uniform blocks. The separation is better than it looks: one image can be read three ways in one frame by binding it with three samplers, and one sampler serves every texture in a material system.</desc>
+  <defs>
+    <marker id="e-i-f47d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f47d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f47d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">Lesson 3.9 passed the filter as an <tspan class="t-hi">argument</tspan>; the GPU wants an <tspan class="t-hi">object</tspan></text>
+  <text x="24" y="52" class="xs muted">Lesson 3.9, on the CPU</text>
+  <text x="24" y="72" class="xs mono">sample(image, uv, filter::linear, address_mode::repeat)</text>
+  <text x="24" y="106" class="xs muted">Lesson 4.7, on the GPU</text>
+  <rect x="24.0" y="118.0" width="300.0" height="54.0" fill="#5082e6" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="36.0" y="140.0" class="xs mono t-hi">SDL_GPUTexture</text>
+  <text x="36.0" y="158.0" class="xs muted">the pixels &#8212; what is there</text>
+  <rect x="24.0" y="182.0" width="300.0" height="54.0" fill="#f0961e" fill-opacity="0.16" stroke="none" rx="3"/>
+  <text x="36.0" y="204.0" class="xs mono t-hi">SDL_GPUSampler</text>
+  <text x="36.0" y="222.0" class="xs muted">the rules &#8212; how to read it</text>
+  <path d="M332.0,145.0 L358.0,177.0 L332.0,209.0" class="ink-soft" fill="none" stroke-width="0.9"/>
+  <text x="366.0" y="178.0" class="xs t-hi">bound as a PAIR</text>
+  <text x="366.0" y="194.0" class="xs mono">SDL_GPUTextureSamplerBinding</text>
+  <text x="366.0" y="210.0" class="xs muted">t0 with s0, in space2</text>
+  <rect x="24" y="240" width="672" height="132" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="260" class="sm">fields SDL_GPUSamplerCreateInfo has that Lesson 3.9&#8217;s call had no room for</text>
+  <text x="40" y="282" class="xs mono t-hi">min_filter / mag_filter</text>
+  <text x="330" y="282" class="xs muted">separately &#8212; the CPU path never minified</text>
+  <text x="40" y="299" class="xs mono t-hi">mipmap_mode, min_lod, max_lod, mip_lod_bias</text>
+  <text x="330" y="299" class="xs muted">Module 6</text>
+  <text x="40" y="316" class="xs mono t-hi">address_mode_u / _v / _w</text>
+  <text x="330" y="316" class="xs muted">three axes; ours wrapped both the same way</text>
+  <text x="40" y="333" class="xs mono t-hi">enable_anisotropy, max_anisotropy</text>
+  <text x="330" y="333" class="xs muted">sampling along the axis of stretch</text>
+  <text x="40" y="350" class="xs mono t-hi">enable_compare, compare_op</text>
+  <text x="330" y="350" class="xs muted">SHADOW sampling &#8212; the comparison happens IN the sampler</text>
+</svg>

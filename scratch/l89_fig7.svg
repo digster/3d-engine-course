@@ -1,0 +1,67 @@
+<svg viewBox="0 0 980 440" role="img" aria-labelledby="f89g-t f89g-d">
+  <title id="f89g-t">Friction turning a slide into a roll</title>
+  <desc id="f89g-d">The speed of a ball's centre and the speed of its surface, against time after it lands at six metres per second with no spin. The centre slows linearly and the surface speeds up linearly; where they meet, at five sevenths of the initial speed, the contact point is stationary and the sliding stops. The meeting point does not depend on the coefficient of friction, which sets only how quickly the two lines converge.</desc>
+  <defs>
+    <marker id="e-i-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-f89g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<rect x="66" y="64" width="470" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="66" y="32" class="sm" text-anchor="start">A ball landing at 6 m/s with no spin, μ = 0.40</text>
+<text x="66" y="50" class="xs muted" text-anchor="start">closed forms; the measured end point is the marker on top of them</text>
+<line x1="66" y1="314.0" x2="536" y2="314.0" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="318.0" class="xs muted" text-anchor="end">0 m/s</text>
+<line x1="66" y1="238.24242424242425" x2="536" y2="238.24242424242425" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="242.24242424242425" class="xs muted" text-anchor="end">2 m/s</text>
+<line x1="66" y1="162.48484848484847" x2="536" y2="162.48484848484847" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="166.48484848484847" class="xs muted" text-anchor="end">4 m/s</text>
+<line x1="66" y1="86.72727272727272" x2="536" y2="86.72727272727272" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="58" y="90.72727272727272" class="xs muted" text-anchor="end">6 m/s</text>
+<line x1="141.80645161290323" y1="64" x2="141.80645161290323" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="141.80645161290323" y="332" class="xs muted" text-anchor="middle">0.1</text>
+<line x1="217.61290322580646" y1="64" x2="217.61290322580646" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="217.61290322580646" y="332" class="xs muted" text-anchor="middle">0.2</text>
+<line x1="293.41935483870964" y1="64" x2="293.41935483870964" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="293.41935483870964" y="332" class="xs muted" text-anchor="middle">0.3</text>
+<line x1="369.2258064516129" y1="64" x2="369.2258064516129" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="369.2258064516129" y="332" class="xs muted" text-anchor="middle">0.4</text>
+<line x1="445.03225806451616" y1="64" x2="445.03225806451616" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="445.03225806451616" y="332" class="xs muted" text-anchor="middle">0.5</text>
+<line x1="520.8387096774193" y1="64" x2="520.8387096774193" y2="314" class="grid" stroke-width="1.0" stroke-dasharray="3 4"/>
+<text x="520.8387096774193" y="332" class="xs muted" text-anchor="middle">0.6</text>
+<text x="301.0" y="352" class="xs muted" text-anchor="middle">seconds after landing</text>
+<path d="M 66.00,86.73 L 397.18,151.66 L 536.00,151.66" fill="none" stroke="#5082e6" stroke-width="2.2"/>
+<path d="M 66.00,314.00 L 397.18,151.66 L 536.00,151.66" fill="none" stroke="#f0961e" stroke-width="2.2"/>
+<line x1="66" y1="151.66233766233768" x2="536" y2="151.66233766233768" class="grid" stroke-width="1.0" stroke-dasharray="2 5"/>
+<text x="530" y="143.66233766233768" class="xs" text-anchor="end">5/7 · v₀ = 4.2857 m/s</text>
+<circle cx="407.1" cy="151.8" r="4.5" fill="#5ac878"/>
+<line x1="407.1" y1="157.8" x2="407.1" y2="314.0" stroke="#8f918a" stroke-width="0.9" fill="none" stroke-dasharray="3 3"/>
+<line x1="66.0" y1="368.0" x2="86.0" y2="368.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="94" y="372" class="xs" text-anchor="start">v — the centre, slowing at μ·g</text>
+<line x1="66.0" y1="385.0" x2="86.0" y2="385.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="94" y="389" class="xs" text-anchor="start">ω·r — the surface, spinning up at μ·g/c</text>
+<line x1="66.0" y1="402.0" x2="86.0" y2="402.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="94" y="406" class="xs" text-anchor="start">measured: 4.2833 m/s at 0.4500 s, against 5/7·v₀ = 4.2857</text>
+<text x="590" y="60" class="xs" text-anchor="start">Friction acts BELOW the centre of mass, so it does</text>
+<text x="590" y="76" class="xs" text-anchor="start">two things at once: it slows the ball down and it</text>
+<text x="590" y="92" class="xs" text-anchor="start">spins the ball up. The gap closes at μ·g·(1 + 1/c)</text>
+<text x="590" y="108" class="xs" text-anchor="start">and when it reaches zero the contact point is</text>
+<text x="590" y="124" class="xs" text-anchor="start">stationary, so friction has nothing left to act</text>
+<text x="590" y="140" class="xs" text-anchor="start">on.</text>
+<text x="590" y="170" class="xs muted" text-anchor="start">Where they meet does NOT depend on μ: cancel it</text>
+<text x="590" y="186" class="xs muted" text-anchor="start">and the answer is v₀/(1 + c), which is 5/7 for a</text>
+<text x="590" y="202" class="xs muted" text-anchor="start">solid sphere and 3/5 for a shell. μ decides only</text>
+<text x="590" y="218" class="xs muted" text-anchor="start">how long the transition takes — measured at 0.88</text>
+<text x="590" y="234" class="xs muted" text-anchor="start">s, 0.45 s and 0.23 s for μ of 0.2, 0.4 and 0.8,</text>
+<text x="590" y="250" class="xs muted" text-anchor="start">with the same end speed to six decimal places.</text>
+<text x="590" y="280" class="xs muted" text-anchor="start">The 0.06% the measurement misses 5/7 by is not</text>
+<text x="590" y="296" class="xs muted" text-anchor="start">noise. The contact point sits depth/2 inside the</text>
+<text x="590" y="312" class="xs muted" text-anchor="start">ball, so the lever arm is R − depth/2, and the</text>
+<text x="590" y="328" class="xs muted" text-anchor="start">corrected closed form tracks the measurement to</text>
+<text x="590" y="344" class="xs muted" text-anchor="start">8e-07 across a 150× sweep of penetration.</text>
+<text x="66" y="426" class="xs muted" text-anchor="start">§9 and harness §I. The two lines are algebra; only the green marker is a simulation.</text>
+</svg>

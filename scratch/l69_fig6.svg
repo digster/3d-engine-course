@@ -1,0 +1,56 @@
+<svg viewBox="0 0 720 280" role="img" aria-labelledby="f69f-t f69f-d">
+  <title id="f69f-t">The seam between two cascades</title>
+  <desc id="f69f-d">Two adjacent bands representing cascades 1 and 2, with a fine texel grid on the near side and a coarse one on the far side. A highlighted line marks the split distance, and an amber band either side of it marks where the two are blended together.</desc>
+  <defs>
+    <marker id="e-i-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f69f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Where two cascades meet</text>
+<rect x="90" y="87.0" width="270" height="66" rx="3" fill="#5ac878" stroke="#5ac878" fill-opacity="0.30" stroke-width="1.2"/>
+<rect x="360" y="87.0" width="280" height="66" rx="3" fill="#5082e6" stroke="#5082e6" fill-opacity="0.30" stroke-width="1.2"/>
+<text x="225.0" y="124" class="xs" text-anchor="middle">cascade 1</text>
+<text x="500.0" y="124" class="xs" text-anchor="middle">cascade 2</text>
+<line x1="90" y1="87.0" x2="90" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="102" y1="87.0" x2="102" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="114" y1="87.0" x2="114" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="126" y1="87.0" x2="126" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="138" y1="87.0" x2="138" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="150" y1="87.0" x2="150" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="162" y1="87.0" x2="162" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="174" y1="87.0" x2="174" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="186" y1="87.0" x2="186" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="198" y1="87.0" x2="198" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="210" y1="87.0" x2="210" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="222" y1="87.0" x2="222" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="234" y1="87.0" x2="234" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="246" y1="87.0" x2="246" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="258" y1="87.0" x2="258" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="270" y1="87.0" x2="270" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="282" y1="87.0" x2="282" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="294" y1="87.0" x2="294" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="306" y1="87.0" x2="306" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="318" y1="87.0" x2="318" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="330" y1="87.0" x2="330" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="342" y1="87.0" x2="342" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="354" y1="87.0" x2="354" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="360" y1="87.0" x2="360" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="390" y1="87.0" x2="390" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="420" y1="87.0" x2="420" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="450" y1="87.0" x2="450" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="480" y1="87.0" x2="480" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="510" y1="87.0" x2="510" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="540" y1="87.0" x2="540" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="570" y1="87.0" x2="570" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="600" y1="87.0" x2="600" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="630" y1="87.0" x2="630" y2="153.0" class="grid" stroke-width="0.5"/>
+<line x1="360" y1="65.0" x2="360" y2="175.0" class="hi" stroke-width="2.2"/>
+<text x="360" y="57.0" class="xs" text-anchor="middle">16.25 m</text>
+<rect x="306" y="87.0" width="54" height="66" rx="0" fill="#f0961e" stroke="none" fill-opacity="0.40"/>
+<text x="333.0" y="173.0" class="xs" text-anchor="middle">blend band</text>
+<text x="360.0" y="214" class="xs" text-anchor="middle">different texel grids and different biases, so the two answers disagree along one line — and a line is exactly what the eye finds</text>
+<text x="360.0" y="238" class="xs" text-anchor="middle">blend_fraction fades across a band: both answers are defensible, so anything between them is too</text>
+<text x="360.0" y="262" class="xs" text-anchor="middle">it costs a second lookup, but only for fragments inside the band</text>
+</svg>

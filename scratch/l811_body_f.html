@@ -1,0 +1,553 @@
+  <h2 id="leaves">14. What joints leave behind</h2>
+
+  <p>
+    §7's block made each joint exact, and §7 already said what it cannot do: a chain is a system that
+    Gauss–Seidel crosses one joint per sweep, exactly as 8.10's tower was crossed one contact per
+    sweep. A chain adds the one thing a tower of equal crates does not have, which is a <strong>mass
+    ratio</strong>. A heavy lamp on a light chain, a wrecking ball on a cable, a character's torso on
+    a hand: every sweep, the light links have to transmit the heavy one's weight, and an impulse
+    that a light link can deliver barely moves the heavy one. The harness hangs ten 1&nbsp;kg links
+    from a fixed ceiling with an end weight of <code>M</code>&nbsp;kg, lets them settle, and measures
+    how far the whole chain has stretched — the sum of every joint's gap, which ideally is zero.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — total stretch of a ten-link chain, by end weight and sweeps per step</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     end weight    8 sweeps    16         32         64        128
+          1 kg      1.33 mm     0.60 mm     0.24 mm     0.08 mm     0.01 mm
+         10 kg     18.36 mm     8.86 mm     4.13 mm     1.79 mm     0.66 mm
+        100 kg    388.14 mm   158.73 mm    70.39 mm    34.66 mm    16.72 mm
+       1000 kg   2471.50 mm   558.67 mm  1216.53 mm   341.77 mm   165.20 mm</code></pre>
+  </div>
+
+  <p>
+    At 1:1 eight sweeps leave a millimetre and a third over ten joints. The stretch grows roughly in
+    proportion to the ratio — 18&nbsp;mm at 10:1, <strong>388&nbsp;mm</strong> at 100:1, a chain
+    stretched by 16% of its own length — and each doubling of the sweeps roughly halves it, which is
+    the signature of a solve that has not converged rather than of a steady state it has reached.
+    At 1000:1 the numbers stop meaning anything: the chain is not settling at all, it is bouncing,
+    and the mean over half a second is not even monotone in the sweep count. That is the honest
+    capability of this solver on a chain, and it is 8.10 §14's table again, in the other orientation.
+  </p>
+
+  <h3>The same work, spent differently</h3>
+
+  <p>
+    There is a better answer than more sweeps, and it follows from §5. The error a joint
+    <em>creates</em> in a step is second order in the step — the drift is <code>(ωh)²·d/2</code> —
+    and the error a sweep has to remove is whatever the last step left. So consider spending the same
+    number of joint visits per frame differently: instead of one 1/60&nbsp;s step with eight sweeps,
+    take eight 1/480&nbsp;s steps with one sweep each.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — 100 kg end weight, the same joint visits per frame</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     schedule                       stretch
+     8 sweeps x 1 step              388.142 mm
+     4 sweeps x 2 steps             163.119 mm
+     2 sweeps x 4 steps              49.051 mm
+     1 sweep  x 8 steps              20.491 mm</code></pre>
+  </div>
+
+  @@FIG_LEAVES@@
+
+  <p>
+    <strong>Nineteen times</strong> less stretch for the same visits. Two things compound. Each small
+    step starts from the answer the last one reached an eighth of a frame ago, so the error its single
+    sweep must remove is small; and eight small steps each create an eighth of the drift of one big
+    one. Iterating the big step addresses neither. This is the argument of Macklin and colleagues'
+    "Small Steps in Physics Simulation" (2019) and of Box2D v3's soft step, and it is where
+    real-time rigid-body solvers have been moving. It is not free here: every sub-step re-runs
+    <code>prepare</code>, and in a scene with contacts it re-runs the narrow phase too, which 8.10
+    §13 priced at 1.1&nbsp;ms for two thousand bodies. So it is named, measured, and left for Module 9's
+    profiling lessons to price properly — and the demo's <kbd>U</kbd> key does it, for a chain, so
+    you can watch the difference.
+  </p>
+
+  <h3>The budget</h3>
+
+  <div class="listing">
+    <figcaption><span class="path">§K — per joint, in the engine's loop, 1,000 joints, restored from one snapshot</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     joint                      prepare + warm start    per sweep
+     ball-socket, block                90.46 ns            13.70 ns
+     ball-socket, rows                104.21 ns            35.79 ns
+     hinge, block                     112.54 ns            23.90 ns
+     hinge + limit + motor            138.79 ns            59.98 ns
+     rod                               90.46 ns            12.45 ns</code></pre>
+  </div>
+
+  <p>
+    Against 8.10 §13's <strong>129&nbsp;ns</strong> per contact manifold per sweep, a hinge with a limit
+    and a motor costs less than half of one crate resting on another, and a socket about a tenth. The
+    rows-versus-block line is §7's finding in the solver's own loop: 35.8&nbsp;ns against 13.7. A
+    ragdoll of fifteen joints at eight sweeps is under 10&nbsp;µs a frame even if every one of them is
+    a hinge with a limit and a motor, which is to say that joints
+    are not where a physics budget goes; contacts are, and 8.12's ragdoll lying on a floor will spend
+    far more on its contacts than on its joints.
+  </p>
+
+  <h3>And the things named rather than built</h3>
+
+  <p>
+    Every one of these is measured in this lesson, and none is a bug. Each is a known limitation of
+    solving joints by sequential impulses, with a known answer the engine does not yet have:
+  </p>
+
+  <ul>
+    <li>
+      <strong>Chains and mass ratios</strong> (above). The answers are sub-stepping, which this
+      section measured, and a <em>direct</em> solve over a tree of joints — Baraff's linear-time
+      method, or Featherstone's reduced coordinates — which is exact for a ragdoll's tree in
+      <code>O(n)</code> and is what several production engines use for articulated characters.
+    </li>
+    <li>
+      <strong>The limit–pin coupling</strong> (§10). A door bounces off its stop at 7.5% of its speed
+      at eight sweeps. The fix at any sweep count is to solve the active limit and the pin as one 4×4
+      block, trying the limit both active and inactive — a block with one clamp, the easiest possible
+      case of the LCP 8.10 said nobody ships for contacts.
+    </li>
+    <li>
+      <strong>Velocity-level dissipation</strong> (§5, §8). <code>ρ(ωh)²</code> per step: a
+      90° pendulum keeps 75.4% of its energy per period. Sub-stepping cuts it by the square of the
+      sub-step count per step and linearly per second; a per-joint choice of correction, which is
+      §18's second exercise, is the cheaper partial answer.
+    </li>
+    <li>
+      <strong>No swing or twist limits on a ball-socket.</strong> A shoulder needs a cone that
+      limits how far the arm swings and a separate limit on how far it twists. That is 8.12's
+      first job, and it will be built from the same one-sided angular row this lesson's hinge limit
+      is.
+    </li>
+  </ul>
+
+  <h2 id="listings">15. Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/constraint.hpp</code></td><td>new</td>
+          <td>The Jacobian row and the functions that prepare and solve one; the three joint kinds,
+              limits and motors; the joint batch with its 3×3 and 2×2 blocks; the collision filter;
+              and five closed forms, including <code>lever_ratio</code>.
+              <code>pseudo_velocity</code> moved here from <code>solver.hpp</code>.</td></tr>
+      <tr><td><code>engine/src/phys/constraint.cpp</code></td><td>new</td>
+          <td>Rows, blocks, and the three joints built from them.</td></tr>
+      <tr><td><code>engine/include/engine/phys/solver.hpp</code></td><td>modified</td>
+          <td><code>constraint_solver</code> (with the old name as an alias), <code>joint_pair</code>,
+              joint ranges on <code>island</code>, the four-argument <code>build_islands</code>,
+              <code>joint_config</code> in <code>solver_config</code>, joint fields in
+              <code>solver_stats</code>.</td></tr>
+      <tr><td><code>engine/src/phys/solver.cpp</code></td><td>modified</td>
+          <td><code>union_edge</code>, and joints through every stage of the loop. The contact half
+              is byte for byte 8.10's.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One include.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file.</td></tr>
+      <tr><td><code>demos/joints/main.cpp</code></td><td>new</td>
+          <td>Pendulums, stops, a weighted chain and a hinged bridge.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>One executable.</td></tr>
+      <tr><td><code>scratch/verify_811.cpp</code></td><td>new</td>
+          <td>Eleven measured sections, 58 checks, every one with a control.</td></tr>
+      <tr><td><code>scratch/build_verify_811.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, and refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>demos/stack/main.cpp</code> is <em>not</em> in that list, although it names
+    <code>contact_solver</code> — the alias is what keeps 8.10's demo compiling unchanged, and its
+    published listing therefore still describes the file exactly.
+  </p>
+
+  @@LISTING:engine/include/engine/phys/constraint.hpp@@
+
+  @@LISTING:engine/src/phys/constraint.cpp@@
+
+  @@LISTING:engine/include/engine/phys/solver.hpp@@
+
+  @@LISTING:engine/src/phys/solver.cpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/joints/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_811.cpp@@
+
+  @@LISTING:scratch/build_verify_811.sh@@
+
+  <h2 id="build">16. Build &amp; run</h2>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target joints -j
+./build/demos/joints</code></pre>
+  </div>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug --target joints
+.\build\demos\Debug\joints.exe</code></pre>
+  </div>
+
+  <p>
+    And the harness, which times library code and so needs an optimised library — the script refuses
+    to run against one without a <code>CMAKE_BUILD_TYPE</code>, for the reason 7.6 measured at 18×:
+  </p>
+
+  <div class="listing shell">
+    <figcaption><span class="path">the measurements</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_811.sh
+sh scratch/build_verify_811.sh --only=eh    # sections E and H</code></pre>
+  </div>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on three pendulums hung from one bar. The ball on the left and the plank in the
+    middle start in step — both centres are a metre below their pins — and within four swings they
+    are visibly out of it: the plank is slower, by the 15% the parallel-axis theorem says for a 2&nbsp;m
+    plank. The ball on the right is on a rope; watch the rope go dim a little <em>below</em> half a
+    length above the bar — §4 says why — and the ball leave the circle on a parabola, its trail drawing
+    the loop. All three swings slowly lose amplitude, which is §5's <code>ρ(ωh)²</code>; press
+    <kbd>C</kbd> twice for Baumgarte and they keep it noticeably longer.
+  </p>
+
+  <p>
+    Press <kbd>2</kbd>. Two arms are kicked toward alternate stops every 1.2&nbsp;seconds and coast
+    into them; the red wedges are the limits. The upper arm, hinged through its centre, stops dead and
+    stays. The lower one, hinged at its end, stops and then <em>drifts back off its stop</em> — the
+    7.5% rebound, carrying it a visible fraction of a radian before the next kick. <kbd>Right</kbd>
+    twice to 32 sweeps and it stays put. <kbd>S</kbd> turns speculation off, and both arms overshoot
+    their wedges by a sliver on arrival.
+  </p>
+
+  <p>
+    Press <kbd>3</kbd> for a ten-link chain with a 100&nbsp;kg weight: the orange joint crosses sit
+    visibly off the link centres, and the panel's total joint gap reads a few hundred millimetres.
+    <kbd>U</kbd> switches to eight sub-steps of one sweep each and the chain pulls nearly true;
+    <kbd>W</kbd> cycles the weight through 1, 10 and 100&nbsp;kg. Press <kbd>4</kbd> for the bridge:
+    twelve planks sagging between two posts under three crates, all one colour because the planks
+    and the crates on them are one island. <kbd>X</kbd> drops another.
+  </p>
+
+  <p>
+    The harness prints eleven sections and ends with <code>PASS: 58 checks, 0 failures</code>. Every
+    number in this lesson is in that output; the whole run takes half a second.
+  </p>
+
+  <h2 id="pitfalls">17. Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>A joint pulls the bodies apart, or does nothing at all.</dt>
+    <dd>
+      <strong>Symptom:</strong> a rod that lengthens under load, or a rope that never catches; or a
+      limit that pushes the wrong way and flings the door.<br>
+      <strong>Cause:</strong> a sign in the Jacobian. <code>J·V</code> must be the rate at which
+      <code>C</code> grows, with <code>C ≥ 0</code> the satisfied side of a one-sided row. Flip it
+      and an equality row still converges — the equation is the same — but a one-sided row's clamp is
+      on the wrong side and it acts only when it should not.<br>
+      <strong>Fix:</strong> check each row against a finite difference once: move the bodies by a
+      small velocity for a tiny step and confirm <code>ΔC ≈ h·J·V</code>. §3's second control is what
+      the wrong sign does to contacts.
+    </dd>
+
+    <dt>A chain or a ragdoll jitters and then explodes.</dt>
+    <dd>
+      <strong>Symptom:</strong> a chain that is fine in isolation shakes violently once it is in the
+      same scene as the collision pipeline.<br>
+      <strong>Cause:</strong> the two bodies a joint connects are also colliding. Adjacent links
+      overlap at the joint by construction, and the contact solver pushes them apart every step while
+      the joint pulls them together.<br>
+      <strong>Fix:</strong> <code>collision_filter</code> — exclude every jointed pair in the caller's
+      narrow phase, unless the joint sets <code>collide_connected</code>.
+    </dd>
+
+    <dt>A door with restitution zero bounces off its stop.</dt>
+    <dd>
+      <strong>Symptom:</strong> a hinged arm hits its limit and comes back off it at a few percent of
+      the speed it arrived at; a turnstile hinged through its centre does not.<br>
+      <strong>Cause:</strong> §10. The limit row converges against the pin at
+      <code>ρ = m·d²/(I_cm + m·d²)</code> per sweep — 3/4 for a door — so eight sweeps leave 9.8% of the
+      stop undone, and the warm start returns it as a bounce.<br>
+      <strong>Fix:</strong> compute <code>lever_ratio</code> for the body and choose sweeps from
+      <code>ρⁿ</code>; or solve the limit and pin as one block.
+    </dd>
+
+    <dt>Pendulums and swinging lamps die away too quickly.</dt>
+    <dd>
+      <strong>Symptom:</strong> a large swing loses a quarter of its energy per period; a small one
+      barely any.<br>
+      <strong>Cause:</strong> §5. A velocity-level joint dissipates <code>ρ(ωh)²</code> of its kinetic
+      energy per step, so faster swings lose disproportionately more.<br>
+      <strong>Fix:</strong> sub-steps (the loss per second is first order in the step), or Baumgarte
+      for joints if you can guarantee they are never pulled far apart. Diagnose by halving the step:
+      if the loss per second halves, it is this.
+    </dd>
+
+    <dt>A limb twitches forever on a body that should be lying still.</dt>
+    <dd>
+      <strong>Symptom:</strong> a ragdoll at rest has one part slowly spinning or rocking.<br>
+      <strong>Cause:</strong> Baumgarte on a joint that was pulled apart — spawned in a pose the
+      joints disagree with, or yanked by a heavy impact. The bias impulse off the centre of mass spins
+      the body about the joint's free axes and nothing takes the energy back out. §6 measured 0.35&nbsp;J.<br>
+      <strong>Fix:</strong> split impulse, the default.
+    </dd>
+
+    <dt>A chain hangs from a frozen link in mid-air after being hit.</dt>
+    <dd>
+      <strong>Symptom:</strong> the struck link swings; everything above it stays exactly still.<br>
+      <strong>Cause:</strong> the joints are not edges of the island graph, so each link slept as its
+      own island and a sleeping body is an immovable body to its neighbours.<br>
+      <strong>Fix:</strong> union joint edges in <code>build_islands</code>, by the same rule as
+      contacts. The island count on two chains from one ceiling should be two.
+    </dd>
+
+    <dt>A hinge limit fires at the wrong angle, or the angle jumps by a full turn.</dt>
+    <dd>
+      <strong>Symptom:</strong> a door stops a few degrees early, or a wheel's limit trips as it
+      passes half a turn.<br>
+      <strong>Cause:</strong> the angle is measured from the wrong rest pose, or read from a
+      quaternion in the <code>w &lt; 0</code> hemisphere — 7.4's double cover, which adds 2π.<br>
+      <strong>Fix:</strong> record <code>rest</code> when the joint is made, and move the deviation to
+      <code>w ≥ 0</code> before <code>atan2</code>.
+    </dd>
+
+    <dt>A hinge is solid until warm starting is on, then twists sideways now and then.</dt>
+    <dd>
+      <strong>Symptom:</strong> an occasional kick perpendicular to the hinge axis.<br>
+      <strong>Cause:</strong> the two perpendicular impulses cached as coordinates in a basis rebuilt
+      from a world axis every step — 8.10 §4's bug. §9 counts 127 flips on a bridge.<br>
+      <strong>Fix:</strong> cache a world vector, or choose the basis in the body's own frame. The
+      engine does both.
+    </dd>
+  </dl>
+
+  <h2 id="exercises">18. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Warm-up: how many sweeps does an arm need?</strong> A 0.1&nbsp;×&nbsp;1.2&nbsp;×&nbsp;0.1&nbsp;m
+        arm is hinged at one end. Compute <code>ρ</code>, then the number of sweeps for which a limit
+        leaves less than 1% of its correction undone. Check it in the demo's second scene with
+        <kbd>Right</kbd>.
+      </p>
+      <details><summary>Hint</summary>
+        <p><code>I_cm</code> about the hinge axis is <code>m(L² + T²)/12</code>, <code>d = L/2</code>, and
+           you want <code>ρⁿ &lt; 0.01</code>.</p>
+      </details>
+      <details><summary>Solution</summary>
+        <p>
+          <code>I_cm/m = (1.44 + 0.01)/12 = 0.12083</code> and <code>d² = 0.36</code>, so
+          <code>ρ = 0.36/0.48083 = 0.7487</code> — a hair under the 3/4 of a thin slab, because the
+          arm's thickness adds to <code>I_cm</code>. Then <code>n = ln 0.01 / ln 0.7487 = 15.9</code>:
+          sixteen sweeps. Note that the mass never appeared, and neither did the length on its own:
+          <code>ρ</code> is a ratio of shapes.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Let joints choose their correction.</strong> Add an override to
+        <code>joint_config</code> so that joints can use Baumgarte while contacts use split impulse.
+        Measure §8's 90° pendulum (target: 92.0% of its energy kept per period, against 75.4%) and
+        §6's dislocated limb (0.35&nbsp;J of spin). Then design a policy that gets the first without
+        the second.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The energy Baumgarte injects is proportional to the error it corrects, and a healthy turning
+          joint's error is <code>δ/β</code> — millimetres. A dislocated one's is centimetres.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          Apply the Baumgarte bias only while <code>|C|</code> is below a threshold of a few times the
+          expected steady stretch, and use split impulse above it. The pendulum then keeps its
+          Baumgarte energy balance and the limb is pulled home by a correction that throws its
+          velocity away. The threshold is a length and so, like 8.10's slop, a scale decision.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: the hoist.</strong> §3 found the row form 27% faster than 8.9's
+        contact solve because it stores <code>M⁻¹Jᵀ</code>. Add the two angular halves —
+        <code>I_a⁻¹(r_a × n)</code> and <code>I_b⁻¹(r_b × n)</code>, and the same for both tangents — to
+        <code>contact_constraint</code>, compute them in <code>prepare_contacts</code>, and use them in
+        <code>apply_impulse_pair</code>. Target: 8.75&nbsp;ns a point per sweep. Then run 8.10's harness
+        and report how far its numbers moved.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The friction solve applies a vector impulse built from two tangents, so store the six
+          vectors, not a matrix, and apply each tangent's share separately.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          The saving comes almost entirely from removing the two matrix-vector products from the apply;
+          the memory grows by three <code>vec3</code>s per body side per point. 8.10's numbers move in
+          their last printed digits and its conclusions do not — which is the evidence that the change
+          is safe and the reason this lesson did not make it silently.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Measure the order.</strong> The solver visits joints before contacts in every sweep,
+        on an argument rather than a measurement (§13). Add a switch, and measure the bridge under
+        five crates both ways: the deepest crate penetration and the worst hinge gap, at 4 and 8
+        sweeps.
+      </p>
+      <details><summary>Solution sketch</summary>
+        <p>
+          Expect each order to favour whichever constraint goes last: contacts-last gives shallower
+          crates and larger hinge gaps, and the reverse. Which is <em>right</em> is a question about
+          which error the player will notice — and the answer is the order that makes the most
+          visible error the smallest one.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: sub-stepping as a feature.</strong> §14 measured eight sub-steps of
+        one sweep holding a 100:1 chain nineteen times tighter than one step of eight. Build it for a
+        scene with contacts: decide which stages must run every sub-step and which can run once per
+        frame, and measure the cost against the stretch.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The broadphase can run once with a margin wide enough for a frame's motion. The narrow phase
+          is the question: re-running it is exact and expensive; reusing the frame's manifolds and
+          updating only their separations along the normal is Box2D v3's answer.
+        </p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>
+          Integrate, prepare, one velocity sweep, a relaxation and the position update per sub-step;
+          broadphase and narrow phase once per frame, with each contact's separation re-evaluated from
+          the bodies' current poses. The chain and the bridge both hold far better than at eight
+          sweeps for a similar cost, and a deep stack is the case to check, because a manifold computed
+          once per frame is a manifold that can go stale inside it.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">19. Recap &amp; next</h2>
+
+  <p>
+    The engine has joints, and it has them without a second solver: a joint is a set of rows, a row
+    is twelve numbers and two bounds, and the loop that stacked 8.10's crates visits them in the same
+    sweeps, sorts them into the same islands and puts them to sleep by the same rule.
+  </p>
+
+  <p>
+    Getting there took one derivation and a lot of measurement. <strong>A constraint is a question
+    about velocity</strong>: <code>Ċ = J·V</code>, the impulse is <code>Jᵀλ</code> because an ideal
+    constraint does no work on what it allows, and the effective mass is <code>1/(J M⁻¹ Jᵀ)</code> —
+    which is 8.9's contact, checked to 1.9&nbsp;×&nbsp;10⁻⁷, and which runs 27% faster as a row than it
+    did by hand. <strong>A joint is a choice of rows and bounds</strong>: a rod is a contact without
+    its clamp, a rope is a contact turned inside out, a socket is three rows best solved as one exact
+    block, a hinge adds two angular rows, a limit is a contact on an angle that can be speculative for
+    free, and a motor is a clamp at a torque — which is what friction was all along.
+  </p>
+
+  <p>
+    And three things about solving joints at the velocity level that were measured rather than
+    assumed. A joint <strong>drifts</strong> along a tangent, by a Pythagorean recurrence, and loses
+    <code>ρ(ωh)²</code> of its energy each step. The position correction <strong>cuts both ways</strong>:
+    Baumgarte conserves a turning joint's energy and invents energy in a dislocated one, and the
+    default stays split impulse because damping is the failure a game survives. And one number,
+    <code>ρ = m·d²/(I_cm + m·d²)</code>, set a pendulum's period, a joint's dissipation, a motor's
+    spin-up and a limit's convergence — the parallel-axis theorem from 8.3, turning up four lessons
+    later as the organising fact of a solver.
+  </p>
+
+  <p>
+    <strong>Next:</strong> <em>8.12 — Ragdolls: Joints on a Skeleton</em>. 7.6's skeleton becomes a
+    tree of capsules joined by the sockets and hinges built here, with the two limits a shoulder needs
+    and this lesson did not build — a swing cone and a twist range — and the hard part, which is
+    handing a character from the animation system to the solver mid-motion and back. Everything this
+    lesson measured arrives at once: a torso is ten times a hand, a ragdoll is a chain, and every
+    limb is a body on a pin with its own <code>ρ</code>.
+  </p>
+
+  <h2 id="reading">20. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Erin Catto, “Iterative Dynamics with Temporal Coherence” (2005), and “Modeling and
+      Solving Constraints” (GDC 2009).</strong> The Jacobian formulation of sequential impulses from
+      the person who made it standard in games — the second is the clearest derivation of
+      <code>Jᵀλ</code> and the effective mass there is, with the revolute joint worked through.
+    </li>
+    <li>
+      <strong>Erin Catto, “Soft Constraints” (GDC 2011) and “Solver2D” (2024).</strong> The first
+      treats Baumgarte, the slop and joint softness as one idea; the second compares the solvers that
+      replaced plain sequential impulses — including the soft step with sub-stepping that §14 measured
+      the case for.
+    </li>
+    <li>
+      <strong>Miles Macklin et al., “Small Steps in Physics Simulation” (SCA 2019).</strong> The paper
+      behind §14's second table: one iteration of many small steps against many iterations of one
+      large step, with chains and mass ratios among the fixtures.
+    </li>
+    <li>
+      <strong>David Baraff, “Linear-Time Dynamics using Lagrange Multipliers” (SIGGRAPH 1996).</strong>
+      The exact, <code>O(n)</code> solve for a tree of joints — what a ragdoll is — and the answer to
+      §14's chains that sequential impulses cannot give.
+    </li>
+    <li>
+      <strong>Roy Featherstone, <em>Rigid Body Dynamics Algorithms</em> (2008).</strong> Reduced
+      coordinates and the articulated-body algorithm: the other way to build joints, in which a hinge
+      has one coordinate and cannot drift at all.
+    </li>
+    <li>
+      <strong>Andrew Witkin and David Baraff, <em>Physically Based Modeling</em>, SIGGRAPH course
+      notes, the “Constrained Dynamics” chapter.</strong> The virtual-work argument of §2, done for
+      forces rather than impulses, with the drift of §5 and its stabilisation discussed as a problem
+      of the formulation.
+    </li>
+    <li>
+      <strong>The Jolt Physics source (Jorrit Rouwé), <code>PointConstraintPart</code>,
+      <code>HingeRotationConstraintPart</code> and <code>AngleConstraintPart</code>.</strong> A
+      production engine built from exactly this lesson's pieces — a 3×3 point block, a 2×2 hinge
+      block, and scalar angular rows for limits and motors — and small enough to read.
+    </li>
+    <li>
+      <strong>Box2D's <code>b2RevoluteJoint</code> (v2.4).</strong> The speculative limit of §10 and the
+      motor-limits-point order of §13, in two dimensions, in a few hundred lines.
+    </li>
+    <li>
+      <strong>J. M. Borwein and P. B. Borwein, <em>Pi and the AGM</em> (1987), chapter 1.</strong>
+      Where §8's formula comes from: Gauss's arithmetic–geometric mean and its connection to the
+      complete elliptic integral, and why it converges quadratically.
+    </li>
+  </ul>

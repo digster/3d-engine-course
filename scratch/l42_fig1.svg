@@ -1,0 +1,70 @@
+<svg viewBox="0 0 720 492" role="img" aria-labelledby="l42f1-t l42f1-d">
+  <title id="l42f1-t">The SDL_GPU object model against what you already built</title>
+  <desc id="l42f1-d">Two columns. On the left, 5 things built in Modules 1 to 3; on the right, the SDL_GPU object each becomes: framebuffer to swapchain texture, texture and sampler to SDL_GPUTexture and SDL_GPUSampler, depth buffer to depth-stencil target, fill_style to graphics pipeline, the fill loop to a render pass and draw call. Below them 4 SDL_GPU objects with an empty box opposite: the device, the command buffer, the transfer buffer and the fence. Those four have no counterpart because they exist to manage a second processor, which a software rasterizer does not have.</desc>
+  <defs>
+    <marker id="e-i-l42f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l42f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l42f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">what you have already built</text>
+<text x="400.0" y="26" class="sm">what SDL_GPU calls it</text>
+<text x="24" y="46" class="xs muted">Modules 1-3, on the CPU</text>
+<text x="400.0" y="46" class="xs muted">the objects of Lessons 4.2 to 4.8</text>
+<rect x="24.0" y="76.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="34.0" y="94.0" class="xs mono">engine::framebuffer</text>
+<text x="282.0" y="94.0" class="xs muted" text-anchor="end">1.5</text>
+<line x1="304.0" y1="90.0" x2="388.0" y2="90.0" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l42f1)"/>
+<rect x="400.0" y="76.0" width="296.0" height="28" rx="4" fill="#78b4eb" opacity="0.18" stroke="#78b4eb" stroke-width="1.4"/>
+<text x="410.0" y="94.0" class="xs mono">swapchain texture</text>
+<rect x="24.0" y="116.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="34.0" y="134.0" class="xs mono">engine::texture + sampler</text>
+<text x="282.0" y="134.0" class="xs muted" text-anchor="end">3.9</text>
+<line x1="304.0" y1="130.0" x2="388.0" y2="130.0" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l42f1)"/>
+<rect x="400.0" y="116.0" width="296.0" height="28" rx="4" fill="#78b4eb" opacity="0.18" stroke="#78b4eb" stroke-width="1.4"/>
+<text x="410.0" y="134.0" class="xs mono">SDL_GPUTexture + SDL_GPUSampler</text>
+<rect x="24.0" y="156.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="34.0" y="174.0" class="xs mono">engine::depth_buffer</text>
+<text x="282.0" y="174.0" class="xs muted" text-anchor="end">3.1</text>
+<line x1="304.0" y1="170.0" x2="388.0" y2="170.0" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l42f1)"/>
+<rect x="400.0" y="156.0" width="296.0" height="28" rx="4" fill="#78b4eb" opacity="0.18" stroke="#78b4eb" stroke-width="1.4"/>
+<text x="410.0" y="174.0" class="xs mono">depth-stencil target</text>
+<rect x="24.0" y="196.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="34.0" y="214.0" class="xs mono">engine::fill_style</text>
+<text x="282.0" y="214.0" class="xs muted" text-anchor="end">3.2-4.1</text>
+<line x1="304.0" y1="210.0" x2="388.0" y2="210.0" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l42f1)"/>
+<rect x="400.0" y="196.0" width="296.0" height="28" rx="4" fill="#78b4eb" opacity="0.18" stroke="#78b4eb" stroke-width="1.4"/>
+<text x="410.0" y="214.0" class="xs mono">SDL_GPUGraphicsPipeline</text>
+<rect x="24.0" y="236.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-width="1"/>
+<text x="34.0" y="254.0" class="xs mono">the loop in fill_triangle</text>
+<text x="282.0" y="254.0" class="xs muted" text-anchor="end">2.2</text>
+<line x1="304.0" y1="250.0" x2="388.0" y2="250.0" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l42f1)"/>
+<rect x="400.0" y="236.0" width="296.0" height="28" rx="4" fill="#78b4eb" opacity="0.18" stroke="#78b4eb" stroke-width="1.4"/>
+<text x="410.0" y="254.0" class="xs mono">render pass + draw call</text>
+<rect x="24.0" y="276.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-dasharray="4 4" stroke-width="1"/>
+<text x="34.0" y="294.0" class="xs mono muted">&#8212;</text>
+<line x1="304.0" y1="290.0" x2="388.0" y2="290.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l42f1)"/>
+<rect x="400.0" y="276.0" width="296.0" height="28" rx="4" fill="#eb786e" opacity="0.18" stroke="#eb786e" stroke-width="1.4"/>
+<text x="410.0" y="294.0" class="xs mono">SDL_GPUDevice</text>
+<rect x="24.0" y="316.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-dasharray="4 4" stroke-width="1"/>
+<text x="34.0" y="334.0" class="xs mono muted">&#8212;</text>
+<line x1="304.0" y1="330.0" x2="388.0" y2="330.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l42f1)"/>
+<rect x="400.0" y="316.0" width="296.0" height="28" rx="4" fill="#eb786e" opacity="0.18" stroke="#eb786e" stroke-width="1.4"/>
+<text x="410.0" y="334.0" class="xs mono">SDL_GPUCommandBuffer</text>
+<rect x="24.0" y="356.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-dasharray="4 4" stroke-width="1"/>
+<text x="34.0" y="374.0" class="xs mono muted">&#8212;</text>
+<line x1="304.0" y1="370.0" x2="388.0" y2="370.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l42f1)"/>
+<rect x="400.0" y="356.0" width="296.0" height="28" rx="4" fill="#eb786e" opacity="0.18" stroke="#eb786e" stroke-width="1.4"/>
+<text x="410.0" y="374.0" class="xs mono">SDL_GPUTransferBuffer</text>
+<rect x="24.0" y="396.0" width="268.0" height="28" rx="4" class="fill-soft ink-soft" stroke-dasharray="4 4" stroke-width="1"/>
+<text x="34.0" y="414.0" class="xs mono muted">&#8212;</text>
+<line x1="304.0" y1="410.0" x2="388.0" y2="410.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-l42f1)"/>
+<rect x="400.0" y="396.0" width="296.0" height="28" rx="4" fill="#eb786e" opacity="0.18" stroke="#eb786e" stroke-width="1.4"/>
+<text x="410.0" y="414.0" class="xs mono">SDL_GPUFence</text>
+<rect x="24.0" y="451.0" width="12" height="12" fill="#78b4eb" opacity="0.6"/>
+<text x="42.0" y="462.0" class="xs">5 renames &#8212; you know these already</text>
+<rect x="264.0" y="451.0" width="12" height="12" fill="#eb786e" opacity="0.6"/>
+<text x="282.0" y="462.0" class="xs">4 new &#8212; and all four exist because there are two processors</text>
+</svg>

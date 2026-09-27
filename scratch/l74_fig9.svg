@@ -1,0 +1,43 @@
+<svg viewBox="0 0 760 392" role="img" aria-labelledby="f74i-t f74i-d">
+  <title id="f74i-t">What a quaternion cannot hold, and why the swap is not a rename</title>
+  <desc id="f74i-d">A three-stage pipeline: an ECS world transform holding a four by four matrix with scale in it, feeding through linear-of into the transform struct's rotation field which is a three by three matrix and will hold anything, and then into a quaternion which will not. Below, four measured rows: a uniform scale of two goes in with determinant eight and comes out with determinant 1.6531 and a quaternion of norm 1.3337, which is neither answer; a non-uniform scale moves the pose itself by 1.2089 degrees; taking the scale off as the column lengths first recovers the rotation exactly; and a shear of 0.30 leaves all three column lengths at one and is invisible to both routes.</desc>
+  <defs>
+    <marker id="e-i-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-mag-f74i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d676e2"/></marker></defs>
+<text x="380.0" y="40" class="sm" text-anchor="middle">the field is called `rotation` and one caller does not put a rotation in it</text>
+<rect x="60" y="78" width="160" height="92" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="140" y="102" class="xs mono t-hi" text-anchor="middle">world_transform</text>
+<text x="140" y="124" class="xs muted" text-anchor="middle">a mat4 from the</text>
+<text x="140" y="139" class="xs muted" text-anchor="middle">hierarchy, scale</text>
+<text x="140" y="154" class="xs muted" text-anchor="middle">and all</text>
+<rect x="300" y="78" width="160" height="92" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="380" y="102" class="xs mono t-hi" text-anchor="middle">transform.rotation</text>
+<text x="380" y="124" class="xs muted" text-anchor="middle">a mat3, which</text>
+<text x="380" y="139" class="xs muted" text-anchor="middle">will hold</text>
+<text x="380" y="154" class="xs muted" text-anchor="middle">anything</text>
+<rect x="540" y="78" width="160" height="92" rx="3" fill="none" stroke="#d676e2" stroke-width="1.3"/>
+<text x="620" y="102" class="xs mono t-hi" text-anchor="middle">quat</text>
+<text x="620" y="124" class="xs muted" text-anchor="middle">which will</text>
+<text x="620" y="139" class="xs muted" text-anchor="middle">not</text>
+<line x1="224" y1="124" x2="294" y2="124" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-f74i)"/>
+<line x1="464" y1="124" x2="534" y2="124" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-f74i)"/>
+<text x="259" y="114" class="xs mono muted" text-anchor="middle">linear_of</text>
+<text x="499" y="114" class="xs mono muted" text-anchor="middle">7.5</text>
+<line x1="40" y1="196" x2="720" y2="196" class="grid" stroke-width="1.0"/>
+<text x="380.0" y="220" class="sm" text-anchor="middle">what the narrower type finds, measured (§11)</text>
+<text x="330" y="250" class="xs mono" text-anchor="end">a uniform scale of 2</text>
+<text x="348" y="250" class="xs t-hi" text-anchor="start">det 8 in, det 1.6531 out, |q| = 1.3337</text>
+<text x="348" y="272" class="xs muted" text-anchor="start">not the rotation, and not a unit quaternion either</text>
+<text x="330" y="294" class="xs mono" text-anchor="end">a non-uniform scale</text>
+<text x="348" y="294" class="xs t-hi" text-anchor="start">the pose itself moves by 1.2089°</text>
+<text x="330" y="316" class="xs mono" text-anchor="end">take the scale off first</text>
+<text x="348" y="316" class="xs muted" text-anchor="start">column lengths, then extract: 0.000e+00°</text>
+<text x="330" y="338" class="xs mono" text-anchor="end">a shear of 0.30</text>
+<text x="348" y="338" class="xs t-hi" text-anchor="start">column lengths are all 1. Invisible to both.</text>
+<text x="380.0" y="372" class="xs muted" text-anchor="middle">A `mat3` reproduced the affine matrix to the bit because it was storing the scale too. That is the bug the type finds.</text>
+</svg>

@@ -1,0 +1,70 @@
+<svg viewBox="0 0 640 332" role="img" aria-labelledby="f414-t f414-d">
+  <title id="f414-t">Latency hiding: the same work, with and without something else to do</title>
+  <desc id="f414-d">A timeline of one dependent chain shows short bars of work separated by long dashed gaps of waiting. Beneath it, four independent chains interleaved fill those gaps completely with the same total work. A bar chart of the measured result follows: one chain runs at 3.124 nanoseconds per step and 32 chains at 0.112, a speedup of 27.88 times, with no change to the arithmetic.</desc>
+  <defs>
+    <marker id="e-i-f414" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f414" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f414" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="16" y="24" class="sm muted">one dependent chain: each step needs the previous step&#8217;s result</text>
+  <rect x="128.0" y="42.0" width="17.0" height="16" fill="#78b4eb"/>
+  <rect x="145.0" y="42.0" width="51.0" height="16" fill="none" class="grid" stroke-width="1" stroke-dasharray="2 2"/>
+  <rect x="196.0" y="42.0" width="17.0" height="16" fill="#78b4eb"/>
+  <rect x="213.0" y="42.0" width="51.0" height="16" fill="none" class="grid" stroke-width="1" stroke-dasharray="2 2"/>
+  <rect x="264.0" y="42.0" width="17.0" height="16" fill="#78b4eb"/>
+  <rect x="281.0" y="42.0" width="51.0" height="16" fill="none" class="grid" stroke-width="1" stroke-dasharray="2 2"/>
+  <rect x="332.0" y="42.0" width="17.0" height="16" fill="#78b4eb"/>
+  <rect x="349.0" y="42.0" width="51.0" height="16" fill="none" class="grid" stroke-width="1" stroke-dasharray="2 2"/>
+  <rect x="400.0" y="42.0" width="17.0" height="16" fill="#78b4eb"/>
+  <rect x="417.0" y="42.0" width="51.0" height="16" fill="none" class="grid" stroke-width="1" stroke-dasharray="2 2"/>
+  <text x="120.0" y="54.0" class="xs mono" text-anchor="end">chain 1</text>
+  <text x="478.0" y="54.0" class="xs muted">dashed = waiting</text>
+  <text x="16" y="86.0" class="sm muted">four independent chains, interleaved &#8212; the same work, none of the waiting</text>
+  <rect x="128.0" y="102.0" width="16.0" height="16" fill="#78b4eb" opacity="0.95"/>
+  <rect x="196.0" y="102.0" width="16.0" height="16" fill="#78b4eb" opacity="0.95"/>
+  <rect x="264.0" y="102.0" width="16.0" height="16" fill="#78b4eb" opacity="0.95"/>
+  <rect x="332.0" y="102.0" width="16.0" height="16" fill="#78b4eb" opacity="0.95"/>
+  <rect x="400.0" y="102.0" width="16.0" height="16" fill="#78b4eb" opacity="0.95"/>
+  <text x="120.0" y="114.0" class="xs mono" text-anchor="end">chain 1</text>
+  <rect x="145.0" y="120.0" width="16.0" height="16" fill="#78b4eb" opacity="0.82"/>
+  <rect x="213.0" y="120.0" width="16.0" height="16" fill="#78b4eb" opacity="0.82"/>
+  <rect x="281.0" y="120.0" width="16.0" height="16" fill="#78b4eb" opacity="0.82"/>
+  <rect x="349.0" y="120.0" width="16.0" height="16" fill="#78b4eb" opacity="0.82"/>
+  <rect x="417.0" y="120.0" width="16.0" height="16" fill="#78b4eb" opacity="0.82"/>
+  <text x="120.0" y="132.0" class="xs mono" text-anchor="end">chain 2</text>
+  <rect x="162.0" y="138.0" width="16.0" height="16" fill="#78b4eb" opacity="0.69"/>
+  <rect x="230.0" y="138.0" width="16.0" height="16" fill="#78b4eb" opacity="0.69"/>
+  <rect x="298.0" y="138.0" width="16.0" height="16" fill="#78b4eb" opacity="0.69"/>
+  <rect x="366.0" y="138.0" width="16.0" height="16" fill="#78b4eb" opacity="0.69"/>
+  <rect x="434.0" y="138.0" width="16.0" height="16" fill="#78b4eb" opacity="0.69"/>
+  <text x="120.0" y="150.0" class="xs mono" text-anchor="end">chain 3</text>
+  <rect x="179.0" y="156.0" width="16.0" height="16" fill="#78b4eb" opacity="0.5599999999999999"/>
+  <rect x="247.0" y="156.0" width="16.0" height="16" fill="#78b4eb" opacity="0.5599999999999999"/>
+  <rect x="315.0" y="156.0" width="16.0" height="16" fill="#78b4eb" opacity="0.5599999999999999"/>
+  <rect x="383.0" y="156.0" width="16.0" height="16" fill="#78b4eb" opacity="0.5599999999999999"/>
+  <rect x="451.0" y="156.0" width="16.0" height="16" fill="#78b4eb" opacity="0.5599999999999999"/>
+  <text x="120.0" y="168.0" class="xs mono" text-anchor="end">chain 4</text>
+  <text x="16" y="198.0" class="sm muted">measured throughput, same arithmetic in every row</text>
+  <text x="120.0" y="222.0" class="xs mono" text-anchor="end">1</text>
+  <rect x="128.0" y="212.0" width="12.3" height="12" fill="#78b4eb"/>
+  <text x="146.3" y="222.0" class="xs mono">1.00&#215;  (3.124 ns/step)</text>
+  <text x="120.0" y="239.0" class="xs mono" text-anchor="end">2</text>
+  <rect x="128.0" y="229.0" width="24.7" height="12" fill="#78b4eb"/>
+  <text x="158.7" y="239.0" class="xs mono">2.01&#215;  (1.558 ns/step)</text>
+  <text x="120.0" y="256.0" class="xs mono" text-anchor="end">4</text>
+  <rect x="128.0" y="246.0" width="49.4" height="12" fill="#78b4eb"/>
+  <text x="183.4" y="256.0" class="xs mono">4.03&#215;  (0.776 ns/step)</text>
+  <text x="120.0" y="273.0" class="xs mono" text-anchor="end">8</text>
+  <rect x="128.0" y="263.0" width="86.5" height="12" fill="#78b4eb"/>
+  <text x="220.5" y="273.0" class="xs mono">7.05&#215;  (0.443 ns/step)</text>
+  <text x="120.0" y="290.0" class="xs mono" text-anchor="end">16</text>
+  <rect x="128.0" y="280.0" width="86.5" height="12" fill="#78b4eb"/>
+  <text x="220.5" y="290.0" class="xs mono">7.05&#215;  (0.443 ns/step)</text>
+  <text x="120.0" y="307.0" class="xs mono" text-anchor="end">32</text>
+  <rect x="128.0" y="297.0" width="342.0" height="12" fill="#78b4eb"/>
+  <text x="476.0" y="307.0" class="xs mono">27.88&#215;  (0.112 ns/step)</text>
+  <text x="120.0" y="210.0" class="xs muted" text-anchor="end">chains</text>
+</svg>

@@ -1,0 +1,63 @@
+<svg viewBox="0 0 640 372" role="img" aria-labelledby="f3101-t f3101-d">
+  <title id="f3101-t">The clock ticks more slowly than one encode takes</title>
+  <desc id="f3101-d">A timeline of counter ticks 41.667 nanoseconds apart, with one sRGB encode drawn to scale beneath it at 9.3 nanoseconds - about four and a half encodes fit inside a single tick, so timing one of them reports either zero or one whole tick. A table beneath shows the same work timed in batches of 1 to 10000, with the batch length in ticks; only from about N = 100 does the batch span enough ticks for the answer to settle at 9.3 nanoseconds.</desc>
+  <defs>
+    <marker id="e-i-f3101" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f3101" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f3101" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f3101" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--verify-bd)"/></marker>
+  </defs>
+  <text x="16" y="24" class="sm muted">the counter, ticking at 24 MHz &#8212; one tick every 41.667 ns</text>
+  <line x1="92.0" y1="60.0" x2="610.0" y2="60.0" class="ink" stroke-width="1.2"/>
+  <line x1="92.0" y1="44.0" x2="92.0" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="92.0" y="84.0" class="xs mono muted" text-anchor="middle">0</text>
+  <line x1="190.1" y1="44.0" x2="190.1" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="190.1" y="84.0" class="xs mono muted" text-anchor="middle">1</text>
+  <line x1="288.2" y1="44.0" x2="288.2" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="288.2" y="84.0" class="xs mono muted" text-anchor="middle">2</text>
+  <line x1="386.3" y1="44.0" x2="386.3" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="386.3" y="84.0" class="xs mono muted" text-anchor="middle">3</text>
+  <line x1="484.4" y1="44.0" x2="484.4" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="484.4" y="84.0" class="xs mono muted" text-anchor="middle">4</text>
+  <line x1="582.5" y1="44.0" x2="582.5" y2="70.0" class="ink" stroke-width="1.6"/>
+  <text x="582.5" y="84.0" class="xs mono muted" text-anchor="middle">5</text>
+  <text x="618.0" y="84.0" class="xs muted">ticks</text>
+  <text x="16" y="128.0" class="sm muted">one encode</text>
+  <rect x="92.0" y="116.0" width="21.9" height="18" fill="var(--dia-hi)" opacity="0.85"/>
+  <text x="123.9" y="129.0" class="xs mono t-hi">9.3 ns &#8212; 4.5 of them fit in ONE tick</text>
+  <text x="16" y="156.0" class="sm muted">what the</text>
+  <text x="16" y="168.0" class="sm muted">clock says</text>
+  <rect x="92.0" y="152.0" width="1.5" height="18" fill="var(--verify-bd)"/>
+  <text x="100.0" y="165.0" class="xs mono t-bad">0.00 ns &#8212; or 41.67, depending on where the tick fell</text>
+  <text x="16" y="206.0" class="sm">The way out: time N of them and divide.</text>
+  <text x="96.0" y="226.0" class="xs muted" text-anchor="end">N</text>
+  <text x="190.0" y="226.0" class="xs muted" text-anchor="end">min ns</text>
+  <text x="286.0" y="226.0" class="xs muted" text-anchor="end">max ns</text>
+  <text x="400.0" y="226.0" class="xs muted" text-anchor="end">batch in ticks</text>
+  <text x="96" y="242.0" class="xs mono t-bad" text-anchor="end">1</text>
+  <text x="190" y="242.0" class="xs mono t-bad" text-anchor="end">0.00</text>
+  <text x="286" y="242.0" class="xs mono t-bad" text-anchor="end">666.67</text>
+  <text x="400" y="242.0" class="xs mono t-bad" text-anchor="end">0 &#8211; 16</text>
+  <text x="416" y="242.0" class="xs t-bad">under 20 ticks &#8212; quantisation, not measurement</text>
+  <text x="96" y="259.0" class="xs mono t-bad" text-anchor="end">10</text>
+  <text x="190" y="259.0" class="xs mono t-bad" text-anchor="end">8.33</text>
+  <text x="286" y="259.0" class="xs mono t-bad" text-anchor="end">12.50</text>
+  <text x="400" y="259.0" class="xs mono t-bad" text-anchor="end">2 &#8211; 3</text>
+  <text x="416" y="259.0" class="xs t-bad">under 20 ticks &#8212; quantisation, not measurement</text>
+  <text x="96" y="276.0" class="xs mono" text-anchor="end">100</text>
+  <text x="190" y="276.0" class="xs mono" text-anchor="end">9.17</text>
+  <text x="286" y="276.0" class="xs mono" text-anchor="end">10.42</text>
+  <text x="400" y="276.0" class="xs mono" text-anchor="end">22 &#8211; 25</text>
+  <text x="96" y="293.0" class="xs mono" text-anchor="end">1000</text>
+  <text x="190" y="293.0" class="xs mono" text-anchor="end">9.50</text>
+  <text x="286" y="293.0" class="xs mono" text-anchor="end">9.62</text>
+  <text x="400" y="293.0" class="xs mono" text-anchor="end">228 &#8211; 231</text>
+  <text x="96" y="310.0" class="xs mono" text-anchor="end">10000</text>
+  <text x="190" y="310.0" class="xs mono" text-anchor="end">9.33</text>
+  <text x="286" y="310.0" class="xs mono" text-anchor="end">9.53</text>
+  <text x="400" y="310.0" class="xs mono" text-anchor="end">2239 &#8211; 2287</text>
+</svg>

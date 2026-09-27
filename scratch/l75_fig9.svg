@@ -1,0 +1,71 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f75i-t f75i-d">
+  <title id="f75i-t">The storage swap</title>
+  <desc id="f75i-d">The transform struct before and after the swap, and a table of what the narrower type cost and found.</desc>
+  <defs>
+    <marker id="e-i-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-gold-f75i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d678"/></marker></defs>
+<text x="380.0" y="24" class="sm" text-anchor="middle">the storage swap this header has promised since Module 2</text>
+<rect x="46.0" y="50" width="300.0" height="128.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="196.0" y="68" class="xs muted" text-anchor="middle">before — Modules 2 to 7.4</text>
+<rect x="150.0" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="170.22222222222223" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="190.44444444444446" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="142.0" y="94" class="xs mono muted" text-anchor="end">position</text>
+<rect x="150.0" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="170.22222222222223" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="190.44444444444446" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="210.66666666666666" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="230.88888888888889" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="251.11111111111111" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="271.3333333333333" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="291.55555555555554" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="311.77777777777777" y="104" width="18.22222222222222" height="15" rx="1" fill="#eca856" stroke="#eca856" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="142.0" y="116" class="xs mono muted" text-anchor="end">rotation  mat3</text>
+<rect x="150.0" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="170.22222222222223" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="190.44444444444446" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="142.0" y="138" class="xs mono muted" text-anchor="end">scale</text>
+<text x="196.0" y="162" class="xs mono t-hi" text-anchor="middle">15 floats</text>
+<rect x="414.0" y="50" width="300.0" height="128.0" rx="3" fill="none" stroke="#7ebcf8" stroke-width="1.4"/>
+<text x="564.0" y="68" class="xs t-hi" text-anchor="middle">after — Lesson 7.5</text>
+<rect x="518.0" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="538.2222222222222" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="558.4444444444445" y="82" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="510.0" y="94" class="xs mono muted" text-anchor="end">position</text>
+<rect x="518.0" y="104" width="18.22222222222222" height="15" rx="1" fill="#7ebcf8" stroke="#7ebcf8" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="538.2222222222222" y="104" width="18.22222222222222" height="15" rx="1" fill="#7ebcf8" stroke="#7ebcf8" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="558.4444444444445" y="104" width="18.22222222222222" height="15" rx="1" fill="#7ebcf8" stroke="#7ebcf8" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="578.6666666666666" y="104" width="18.22222222222222" height="15" rx="1" fill="#7ebcf8" stroke="#7ebcf8" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="510.0" y="116" class="xs mono muted" text-anchor="end">rotation  quat</text>
+<rect x="518.0" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="538.2222222222222" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<rect x="558.4444444444445" y="126" width="18.22222222222222" height="15" rx="1" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.8"/>
+<text x="510.0" y="138" class="xs mono muted" text-anchor="end">scale</text>
+<text x="564.0" y="162" class="xs mono t-hi" text-anchor="middle">10 floats</text>
+<text x="380.0" y="196.0" class="sm" text-anchor="middle">what the compiler found when the type got narrower</text>
+<rect x="48.0" y="208.0" width="664.0" height="142.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="60.0" y="229.0" class="xs muted" text-anchor="start">call sites the swap touched</text>
+<text x="700.0" y="229.0" class="xs mono muted" text-anchor="end">25</text>
+<line x1="56.0" y1="237.0" x2="704.0" y2="237.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="251.0" class="xs muted" text-anchor="start">of them assigning something that was not a rotation</text>
+<text x="700.0" y="251.0" class="xs mono t-bad" text-anchor="end">3</text>
+<line x1="56.0" y1="259.0" x2="704.0" y2="259.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="273.0" class="xs muted" text-anchor="start">of them in the ENGINE</text>
+<text x="700.0" y="273.0" class="xs mono t-bad" text-anchor="end">1, shipping since 5.11</text>
+<line x1="56.0" y1="281.0" x2="704.0" y2="281.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="295.0" class="xs muted" text-anchor="start">mat3 → quat → mat3, worst entry over 20,000 poses</text>
+<text x="700.0" y="295.0" class="xs mono t-ok" text-anchor="end">5.960e−07</text>
+<line x1="56.0" y1="303.0" x2="704.0" y2="303.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="317.0" class="xs muted" text-anchor="start">which at 3 units out, 960 px wide, is</text>
+<text x="700.0" y="317.0" class="xs mono t-ok" text-anchor="end">0.00014 px</text>
+<line x1="56.0" y1="325.0" x2="704.0" y2="325.0" class="grid" stroke-width="1.0"/>
+<text x="60.0" y="339.0" class="xs muted" text-anchor="start">golden render after the swap</text>
+<text x="700.0" y="339.0" class="xs mono t-ok" text-anchor="end">identical, E917C06C</text>
+<text x="380.0" y="374.0" class="xs t-hi" text-anchor="middle">a narrower type does not only prevent future mistakes —</text>
+<text x="380.0" y="388.0" class="xs t-hi" text-anchor="middle">it finds existing ones</text>
+</svg>

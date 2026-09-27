@@ -1,0 +1,79 @@
+<svg viewBox="0 0 900 420" role="img" aria-labelledby="l84f10-t l84f10-d">
+  <title id="l84f10-t">The budget</title>
+  <desc id="l84f10-d">Cost per test for each primitive pair, and the distribution of how many of the fifteen candidate axes a query actually examines.</desc>
+  <defs>
+    <marker id="e-i-l84f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l84f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l84f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l84f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l84f10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="900" height="420" class="fill-bg" stroke="none"/>
+<text x="232" y="46" class="sm" text-anchor="middle">nanoseconds per test</text>
+<text x="232" y="62" class="xs muted" text-anchor="middle">20,000 pairs, median of 21 runs</text>
+<text x="40" y="96.0" class="xs" text-anchor="start">sphere vs sphere</text>
+<rect x="190.0" y="86.0" width="4.1" height="14" fill="#5ac878" stroke="none" rx="2"/>
+<text x="202.1119430465202" y="97.0" class="xs mono" text-anchor="start">1.21</text>
+<text x="40" y="126.0" class="xs" text-anchor="start">bounds_of(obb)</text>
+<rect x="190.0" y="116.0" width="4.5" height="14" fill="#8f918a" stroke="none" rx="2"/>
+<text x="202.53813946510644" y="127.0" class="xs mono" text-anchor="start">1.33</text>
+<text x="40" y="156.0" class="xs" text-anchor="start">aabb vs aabb</text>
+<rect x="190.0" y="146.0" width="8.9" height="14" fill="#5ac878" stroke="none" rx="2"/>
+<text x="206.88534293468626" y="157.0" class="xs mono" text-anchor="start">2.61</text>
+<text x="40" y="186.0" class="xs" text-anchor="start">obb vs obb, spread</text>
+<rect x="190.0" y="176.0" width="57.5" height="14" fill="#5082e6" stroke="none" rx="2"/>
+<text x="255.47855379621674" y="187.0" class="xs mono" text-anchor="start">16.86</text>
+<text x="40" y="216.0" class="xs" text-anchor="start">obb vs obb, crowded</text>
+<rect x="190.0" y="206.0" width="250.0" height="14" fill="#e05c5c" stroke="none" rx="2"/>
+<text x="448.0" y="217.0" class="xs mono" text-anchor="start">73.32</text>
+<text x="40" y="246.0" class="xs" text-anchor="start">overlaps(), crowded</text>
+<rect x="190.0" y="236.0" width="35.7" height="14" fill="#f0961e" stroke="none" rx="2"/>
+<text x="233.65729716460046" y="247.0" class="xs mono" text-anchor="start">10.46</text>
+<line x1="40" y1="280.0" x2="460" y2="280.0" class="grid" stroke-width="1.0"/>
+<text x="40" y="300.0" class="xs muted" text-anchor="start">The boolean-only form is 7.58× the full one on the</text>
+<text x="40" y="314.0" class="xs muted" text-anchor="start">same pairs, for the same answers: 79.3 ns against</text>
+<text x="40" y="328.0" class="xs muted" text-anchor="start">10.5. Everything it saves is square roots.</text>
+<text x="690" y="46" class="sm" text-anchor="middle">axes examined per query</text>
+<text x="690" y="62" class="xs muted" text-anchor="middle">spread population, mean 2.47 of 15</text>
+<text x="530" y="97.0" class="xs mono" text-anchor="end">1</text>
+<rect x="538.0" y="86.0" width="240.0" height="11.0" fill="#5ac878" stroke="none"/>
+<text x="786.0" y="97.0" class="xs mono" text-anchor="start">55.6%</text>
+<text x="530" y="113.0" class="xs mono" text-anchor="end">2</text>
+<rect x="538.0" y="102.0" width="108.3" height="11.0" fill="#5ac878" stroke="none"/>
+<text x="654.3453237410072" y="113.0" class="xs mono" text-anchor="start">25.1%</text>
+<text x="530" y="129.0" class="xs mono" text-anchor="end">3</text>
+<rect x="538.0" y="118.0" width="45.8" height="11.0" fill="#5ac878" stroke="none"/>
+<text x="591.7553956834532" y="129.0" class="xs mono" text-anchor="start">10.6%</text>
+<text x="530" y="145.0" class="xs mono" text-anchor="end">4</text>
+<rect x="538.0" y="134.0" width="2.6" height="11.0" fill="#60687c" stroke="none"/>
+<text x="548.589928057554" y="145.0" class="xs mono" text-anchor="start">0.6%</text>
+<text x="530" y="161.0" class="xs mono" text-anchor="end">5</text>
+<rect x="538.0" y="150.0" width="2.6" height="11.0" fill="#60687c" stroke="none"/>
+<text x="548.589928057554" y="161.0" class="xs mono" text-anchor="start">0.6%</text>
+<text x="530" y="177.0" class="xs mono" text-anchor="end">6</text>
+<rect x="538.0" y="166.0" width="2.6" height="11.0" fill="#60687c" stroke="none"/>
+<text x="548.589928057554" y="177.0" class="xs mono" text-anchor="start">0.6%</text>
+<text x="530" y="193.0" class="xs mono" text-anchor="end">7</text>
+<rect x="538.0" y="182.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="209.0" class="xs mono" text-anchor="end">8</text>
+<rect x="538.0" y="198.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="225.0" class="xs mono" text-anchor="end">9</text>
+<rect x="538.0" y="214.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="241.0" class="xs mono" text-anchor="end">10</text>
+<rect x="538.0" y="230.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="257.0" class="xs mono" text-anchor="end">11</text>
+<rect x="538.0" y="246.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="273.0" class="xs mono" text-anchor="end">12</text>
+<rect x="538.0" y="262.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="289.0" class="xs mono" text-anchor="end">13</text>
+<rect x="538.0" y="278.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="305.0" class="xs mono" text-anchor="end">14</text>
+<rect x="538.0" y="294.0" width="0.8" height="11.0" fill="#60687c" stroke="none"/>
+<text x="530" y="321.0" class="xs mono" text-anchor="end">15</text>
+<rect x="538.0" y="310.0" width="27.6" height="11.0" fill="#f0961e" stroke="none"/>
+<text x="573.6258992805756" y="321.0" class="xs mono" text-anchor="start">6.4%</text>
+<line x1="510" y1="342.0" x2="860" y2="342.0" class="grid" stroke-width="1.0"/>
+<text x="510" y="362.0" class="xs muted" text-anchor="start">91% of separated pairs exit on one of the first</text>
+<text x="510" y="376.0" class="xs muted" text-anchor="start">three axes; 6.4% run the whole list, and those are</text>
+<text x="510" y="390.0" class="xs muted" text-anchor="start">exactly the pairs that overlap.</text>
+</svg>

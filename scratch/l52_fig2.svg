@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 386" role="img" aria-labelledby="l52f2-t l52f2-d">
+  <title id="l52f2-t">One frame under the SDL callbacks</title>
+  <desc id="l52f2-d">Three bands: SDL pumps and dispatches events then calls iterate; on_event runs once per event; and one iterate expands into begin_frame, the fixed steps, on_frame, the blit, on_overlay and present.</desc>
+  <defs>
+    <marker id="e-i-l52f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l52f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l52f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l52f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">One frame under SDL_MAIN_USE_CALLBACKS, top to bottom</text>
+<text x="20" y="42" class="xs muted" text-anchor="start">SDL3 owns the schedule</text>
+<rect x="20" y="50" width="150" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="95.0" y="69" class="xs mono t-inv" text-anchor="middle">SDL_PumpEvents()</text>
+<rect x="180" y="50" width="230" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2"/>
+<text x="295.0" y="69" class="xs mono t-inv" text-anchor="middle">dispatch each queued event</text>
+<rect x="418" y="50" width="282" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="559.0" y="69" class="xs mono t-inv" text-anchor="middle">SDL_AppIterate(appstate)</text>
+<line x1="295" y1="82" x2="295" y2="112" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f2)"/>
+<rect x="180" y="116" width="230" height="30" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="295" y="135" class="xs mono t-inv" text-anchor="middle">on_event(e)   x N</text>
+<text x="424" y="128" class="xs muted" text-anchor="start">once per event, before the frame</text>
+<text x="424" y="142" class="xs muted" text-anchor="start">it belongs to</text>
+<line x1="654" y1="82" x2="654" y2="170" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l52f2)"/>
+<text x="20" y="184" class="xs muted" text-anchor="start">one call to SDL_AppIterate expands to:</text>
+<rect x="20.0" y="196" width="130.0" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="85.0" y="215" class="xs mono t-inv" text-anchor="middle">begin_frame</text>
+<text x="85.0" y="229" class="xs t-inv" text-anchor="middle">clock + input</text>
+<rect x="157.0" y="196" width="130.0" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="222.0" y="215" class="xs mono t-inv" text-anchor="middle">on_fixed_step</text>
+<text x="222.0" y="229" class="xs t-inv" text-anchor="middle">x N  (0..8)</text>
+<rect x="294.0" y="196" width="130.0" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="359.0" y="215" class="xs mono t-inv" text-anchor="middle">on_frame</text>
+<text x="359.0" y="229" class="xs t-inv" text-anchor="middle">alpha</text>
+<rect x="431.0" y="196" width="130.0" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="496.0" y="215" class="xs mono t-inv" text-anchor="middle">blit_framebuffer</text>
+<text x="496.0" y="229" class="xs t-inv" text-anchor="middle">our pixels</text>
+<rect x="568.0" y="196" width="130.0" height="44" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="633.0" y="215" class="xs mono t-inv" text-anchor="middle">on_overlay + present</text>
+<text x="633.0" y="229" class="xs t-inv" text-anchor="middle">HUD, then vsync</text>
+<line x1="20" y1="254" x2="698" y2="254" class="grid" stroke-width="1"/>
+<text x="20" y="274" class="xs t-hi" text-anchor="start">Every queued event is delivered BEFORE the frame it belongs to,</text>
+<text x="20" y="290" class="xs muted" text-anchor="start">so Lesson 1.2's “drain, then update()” contract still holds — SDL enforces it now instead of your loop.</text>
+<text x="20" y="306" class="xs" text-anchor="start">Verified in SDL 3.4.12: SDL_IterateMainCallbacks() calls SDL_PumpEvents(),</text>
+<text x="20" y="322" class="xs muted" text-anchor="start">then SDL_DispatchMainCallbackEvents(), then the iterate callback — src/main/SDL_main_callbacks.c.</text>
+<text x="20" y="338" class="xs muted" text-anchor="start">The ordering is not a promise in a doc comment; it is three lines in that order.</text>
+<text x="20" y="360" class="xs t-hi" text-anchor="start">Nothing about Lesson 1.4's loop changed. What changed is who owns the `while`.</text>
+</svg>

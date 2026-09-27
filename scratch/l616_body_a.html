@@ -1,0 +1,489 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-15-skybox-ibl.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.15 — Skybox and Image-Based Lighting</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-17-frame-graph.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.16</div>
+    <h1>Frustum Culling and Instanced Submission</h1>
+    <p class="deck">
+      Every renderer in this engine submits every object every frame. The GPU does eventually throw
+      away what is off screen — but it throws it away in the <em>clipper</em>, which sits downstream
+      of the vertex shader, so a prop two kilometres behind the camera costs a full vertex dispatch,
+      a pipeline bind, two uniform pushes and a draw call before anything notices. This lesson stops
+      paying for that, and it does so with six dot products. The interesting part is not the test —
+      it is <strong>where the planes come from</strong>: they fall out of the rows of the
+      view-projection matrix by a single observation, with no trigonometry anywhere, because
+      <em>a clip-space coordinate is already a signed distance</em>. That derivation is short,
+      checkable against facts that need no trust, and almost never shown. Then the honest part: an
+      AABB test is conservative in two directions and one of them is a genuine corner case, measured
+      here at <strong>0.69% of kept boxes</strong>. And the number that actually decides whether any
+      of this was worth doing is not the cull rate — it is frame time, and there is a regime where
+      culling <em>loses</em>. We find the break-even by prediction and then confirm it:
+      <strong>one object in 409</strong>. Finally the survivors become an instance buffer, sixteen
+      draw calls become one, and the picture comes back <strong>bit-identical</strong>.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-15-skybox-ibl.html">6.15 — Skybox and Image-Based Lighting</a>,
+          <a href="06-08-shadow-mapping.html">6.8 — Shadow Mapping: Bias, Acne, and PCF</a>,
+          <a href="06-11-transparency.html">6.11 — Transparency: Alpha Modes, Blending, and Draw Order</a>,
+          <a href="02-07-homogeneous.html">2.7 — Homogeneous Coordinates and What <em>w</em> Really Means</a>,
+          <a href="02-10-perspective.html">2.10 — Perspective from Similar Triangles</a>,
+          <a href="04-05-vertex-buffers.html">4.5 — Vertex Buffers and Layouts</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/frustum.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/frustum.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/instancing.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/instancing.cpp</code> <em>(new)</em>,
+            <code>shaders/scene_instanced.vert.hlsl</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/bounds.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_pipeline.hpp</code>,
+            <code>engine/src/gfx/gpu_pipeline.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code>,
+            <code>scratch/verify_616.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine decides what not to draw, and draws what is left in as few calls as it can.
+            <strong>60 checks green</strong>, a plane extraction verified against four independent
+            zeros, the conservative bound's cost measured rather than asserted, a break-even cull
+            rate <em>predicted</em> at 0.24% and then found, sixteen draw calls collapsed into one,
+            and the instanced frame <strong>bit-identical</strong> to the uniform one across 76,800
+            channels. The reference render is unchanged for the <strong>twenty-fifth</strong>
+            lesson — and §9 explains why that is a null result rather than a pass.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the six frustum planes from the rows of a view-projection matrix, and say what
+          each row combination means.</li>
+      <li>…explain why the near plane's row combination differs between SDL_GPU and OpenGL, and
+          what breaks when you copy the wrong one.</li>
+      <li>…verify a plane extraction against facts that need no reference implementation — and say
+          why four of those facts are not enough.</li>
+      <li>…test an AABB against a plane by choosing one corner, and justify which corner.</li>
+      <li>…name both directions in which a bounding-volume test is conservative, and say which one
+          is allowed to be wrong.</li>
+      <li>…predict the cull rate at which culling breaks even, from two measurements, and then
+          confirm it.</li>
+      <li>…state precisely what an instanced draw requires every instance to share, and why that
+          makes instancing a content decision.</li>
+      <li>…explain why instancing saves submission rather than bandwidth, with the byte
+          accounting.</li>
+      <li>…build a pipeline whose vertex data comes from two buffers at two different rates.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: work that was never going to be seen</a></li>
+      <li><a href="#intuition">Building intuition: six walls, and the room between them</a></li>
+      <li><a href="#derive">The derivation: a clip coordinate <em>is</em> a signed distance</a></li>
+      <li><a href="#precision">An honest digression: the far plane is in the wrong place</a></li>
+      <li><a href="#boxes">Testing a box: one corner, not eight</a></li>
+      <li><a href="#conservative">How wrong is it allowed to be?</a></li>
+      <li><a href="#crossover">The measurement that matters</a></li>
+      <li><a href="#implement">Implementation: the culler</a></li>
+      <li><a href="#golden">What the golden can and cannot tell us</a></li>
+      <li><a href="#instancing">Instanced submission</a></li>
+      <li><a href="#gpu">The tenth pipeline</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: work that was never going to be seen</h2>
+
+  <p>
+    Lesson 4.8 gave the GPU renderer a <code>draw_stats</code> struct, and it has been counting
+    honestly ever since: how many items were submitted, how many draw calls that became, how many
+    pipeline binds, how many triangles. In four lessons of Module 4 and eleven of Module 6, nothing
+    has ever <em>acted</em> on those counts. Every object in the list gets a pipeline bind (if it
+    needs one), a texture bind (if it needs one), 112 bytes of matrices pushed to the vertex stage,
+    48 bytes of material pushed to the fragment stage, a vertex buffer bound, an index buffer bound,
+    and a draw call issued — and then the GPU decides whether any of it was visible.
+  </p>
+
+  <p>
+    It <em>does</em> decide correctly. That is worth saying plainly, because frustum culling is not a
+    correctness fix and this course has been careful about that distinction since Lesson 3.4 drew it
+    for back-face culling. Geometry outside the clip volume is clipped away; nothing wrong reaches
+    the framebuffer. The problem is <em>when</em> it is thrown away.
+  </p>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    Look at where the clipper sits. It is downstream of the vertex shader, which means every vertex
+    of an off-screen object has already been transformed, had its normal matrix applied, had its
+    tangent rotated and its world position computed — all four varyings, for geometry that
+    contributes not one fragment. On the CPU path the same thing happens inside
+    <code>collect_triangles</code>, which is worse, because there the vertex stage is a loop in C++
+    rather than a thousand lanes in parallel.
+  </p>
+
+  <p>
+    So there is a cheaper question to ask first, and it is cheap by an amount worth internalising.
+    Transforming one object's vertices through this engine's CPU path costs
+    <strong>23,821 ns</strong> per object on the machine this lesson was written on. Deciding
+    whether that object is on screen at all costs <strong>58 ns</strong>. That is a ratio of 409,
+    and it is the entire economic argument for this lesson in one number.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>Both of those numbers are measured, and the second one is the surprising one.</strong>
+      Fifty-eight nanoseconds is not free. §7 is about exactly what it buys and when it does not,
+      because a test that costs something and rejects nothing is a pure loss — and there is a real
+      scene, in this very repository, on which that is precisely what happens.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: six walls, and the room between them</h2>
+
+  <p>
+    What can the camera see? Start with the picture rather than the algebra. A perspective camera
+    sits at a point and looks out through a rectangular window. Rays leave the eye, pass through the
+    four edges of that window, and continue outward forever, sweeping out an infinite pyramid with
+    the eye at its tip. Cut that pyramid at two distances — the near plane and the far plane — and
+    what is left is a box with sloping sides: a <strong>frustum</strong>, which is just the Latin
+    word for a pyramid with its top cut off, here standing on its head.
+  </p>
+
+  <p>
+    Six flat surfaces bound it. Four of them — left, right, bottom, top — all pass through the eye,
+    because they are the sides of a pyramid whose apex is the eye. The other two, near and far, are
+    perpendicular to the view direction and cut across it. So:
+  </p>
+
+  <p class="eq-plain">
+    <strong>A point is visible if and only if it is on the inside of all six planes at once.</strong>
+  </p>
+
+  <p>
+    That sentence is the whole algorithm, and its shape matters: it is a conjunction of six
+    independent tests, so the moment any one of them fails we can stop. A point outside the left
+    plane is outside the frustum whatever the other five say. This is why a frustum test has such a
+    good best case — most rejected objects are rejected by the first or second plane tried, and §5
+    measures that at <strong>1.95 plane evaluations per rejection</strong> against six per survivor.
+  </p>
+
+  <h3>What a plane is, as arithmetic</h3>
+
+  <p>
+    A plane in three dimensions is the set of points at zero distance from it, and the cleanest way
+    to write that is with a <strong>normal</strong> — a unit vector perpendicular to the plane — and
+    a single number saying how far along that normal the plane sits from the origin:
+  </p>
+
+  <div class="eq">\[ f(\mathbf{p}) = \mathbf{n} \cdot \mathbf{p} + d \]</div>
+
+  <p class="eq-plain">
+    <em>In prose:</em> take the dot product of the point with the plane's normal and add the
+    constant <code>d</code>. If the answer is zero the point is on the plane; if it is positive the
+    point is on the side the normal points toward; if negative, the other side. And — this is the
+    part that makes planes so pleasant to work with — <strong>when the normal is unit length, the
+    value <em>is</em> the perpendicular distance</strong>, in whatever units the world uses. Not
+    proportional to it. Equal to it.
+  </p>
+
+  <p>
+    Lesson 1.7 built the dot product as a projection — the shadow one vector casts on another — and
+    this is that idea with an offset bolted on. <code>n · p</code> is how far along the normal the
+    point lies, measured from the origin; <code>d</code> slides the zero of that measurement to
+    wherever the plane actually is.
+  </p>
+
+  <p>
+    So we need six of these, with their normals pointing <em>inward</em>, and then "visible" is
+    "all six values are ≥ 0". The only question left is where the six come from.
+  </p>
+
+  <h3>The construction you will reach for first, and why not to</h3>
+
+  <p>
+    The obvious route is geometric. You have the eye position, the camera's forward, right and up
+    axes, the vertical field of view, the aspect ratio, and the near and far distances. From those
+    you can build all six planes with some trigonometry: the left plane's normal is the forward axis
+    rotated by half the horizontal field of view about the up axis, and so on. It works. Many
+    engines do it. It has one flaw, and the flaw is not that it is slow.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>It re-derives, in a second place, information the projection matrix already
+      contains.</strong> The renderer does not draw using your field of view; it draws using
+      <code>clip_from_world</code>. The moment those two disagree — an off-centre projection for a
+      VR eye, a sheared frustum for a planar mirror, the oblique near plane of a water clip, a
+      reversed-Z depth range, or simply a <code>perspective()</code> that is not the one you assumed
+      — the culler starts rejecting geometry the renderer would have drawn. And the symptom is
+      objects vanishing near the edge of the frame, which reads as a bug in the <em>renderer</em>.
+    </p>
+  </div>
+
+  <p>
+    The matrix-row construction cannot drift, because it reads the matrix the renderer actually uses.
+    It is also four lines long. Here it is.
+  </p>
+
+  <!-- =================================================================
+       3 — THE DERIVATION
+       ================================================================= -->
+  <h2 id="derive"><span class="num">3</span>The derivation: a clip coordinate <em>is</em> a signed distance</h2>
+
+  <p>
+    Recall from Lesson 2.7 what clip space is. A world position <code>p</code> becomes a clip
+    position by one matrix multiply:
+  </p>
+
+  <div class="eq">\[ \mathbf{p}_{clip} = M \, \mathbf{p}_{world}, \qquad M = \texttt{clip\_from\_world} \]</div>
+
+  <p>
+    and a point survives clipping when its four clip coordinates satisfy six inequalities. For
+    SDL_GPU (conventions §4 — and this is the line that differs from OpenGL, so hold onto it):
+  </p>
+
+  <div class="eq">\[ -w \le x \le w, \qquad -w \le y \le w, \qquad 0 \le z \le w \]</div>
+
+  <p>
+    Now the observation that does all the work. Take the first of those six:
+  </p>
+
+  <div class="eq">\[ x \ge -w \quad\Longleftrightarrow\quad x + w \ge 0 \]</div>
+
+  <p>
+    What are <code>x</code> and <code>w</code>? They are the first and fourth components of
+    <code>M · p</code>, which is to say they are <em>rows</em> of <code>M</code> dotted with the
+    world position:
+  </p>
+
+  <div class="eq">\[ x = \mathbf{r}_0 \cdot \mathbf{p}, \qquad w = \mathbf{r}_3 \cdot \mathbf{p} \]</div>
+
+  <p>
+    where <code>p</code> carries its fourth coordinate of 1 (Lesson 2.7: this is a position, so the
+    translation column applies in full). Substituting:
+  </p>
+
+  <div class="eq">\[ x + w = (\mathbf{r}_0 + \mathbf{r}_3) \cdot \mathbf{p} \ge 0 \]</div>
+
+  <p class="eq-plain">
+    <em>And that is a plane.</em> <code>r₀ + r₃</code> is four numbers; the first three are a normal
+    and the fourth is a <code>d</code>; the inequality says "this point is on the positive side".
+    The left frustum plane, in world space, is <strong>row 0 plus row 3 of the view-projection
+    matrix</strong>. No trigonometry, no camera basis, no field of view.
+  </p>
+
+  <p>
+    Every one of the six goes the same way. Write each inequality as <em>something ≥ 0</em> and read
+    off the row combination:
+  </p>
+
+  @@FIG_PLANES@@
+
+  <h3>3.1 The sign goes on the second row, and getting it wrong is invisible</h3>
+
+  <p>
+    Look carefully at the right plane: <code>x ≤ w</code> becomes <code>w − x ≥ 0</code>, which is
+    <code>r₃ − r₀</code>. Note that it is <em>not</em> the negative of the left plane. Both contain
+    <code>+r₃</code>; they differ only in the sign of <code>r₀</code>. That is exactly what makes
+    them two distinct walls meeting at the apex rather than one wall counted twice.
+  </p>
+
+  <div class="callout warn">
+    <p>
+      <strong>The first draft of this code put the sign on the wrong row</strong> — it computed
+      <code>r₀ − r₃</code> instead of <code>r₃ − r₀</code> — and the symptom was that the culler
+      rejected the entire scene, every frame, from every camera. The tell, once you print the
+      numbers, is unmistakable: <strong>left and right reported exactly opposite distances for every
+      point</strong>. Two opposite frustum planes should never be exact negations of one another.
+      <code>verify_616</code> §A asserts on that directly, because it is the one symptom that
+      names the cause.
+    </p>
+  </div>
+
+  <h3>3.2 The near plane is the one that is a convention</h3>
+
+  <p>
+    Five of the six follow the same pattern. The near plane does not, and the reason is our depth
+    range. SDL_GPU's clip volume runs <code>0 ≤ z ≤ w</code>. So the near condition is simply
+    <code>z ≥ 0</code>, which is <code>r₂ · p ≥ 0</code> — <strong>row 2 on its own, with nothing
+    added to it.</strong>
+  </p>
+
+  <p>
+    OpenGL's clip volume is <code>−w ≤ z ≤ w</code>, so in an OpenGL engine the near plane is
+    <code>r₂ + r₃</code>. Almost every article you will find online is written for OpenGL, because
+    the technique was popularised by a 2001 paper (Gribb and Hartmann) written against fixed-function
+    OpenGL, and the <code>r₂ + r₃</code> spelling has been copied ever since.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>What happens if you copy it.</strong> With <code>r₂ + r₃</code> under a 0-to-<em>w</em>
+      depth range, the plane you get sits roughly a <em>far</em> distance behind the camera instead
+      of a <em>near</em> distance in front of it. Nothing within the entire visible range is ever
+      rejected by the near plane. The culler still works — it just never culls anything behind you,
+      which is the single most common thing there is to cull. The symptom is "frustum culling
+      doesn't seem to help much", which is not a symptom anyone debugs.
+    </p>
+  </div>
+
+  <h3>3.3 Normalising, and why we do it even though the test does not need it</h3>
+
+  <p>
+    The rows come out of the matrix with an arbitrary scale. For the left plane, <code>r₀ + r₃</code>
+    has whatever magnitude the projection's <code>f/aspect</code> term gave it. That does not affect
+    an inside/outside test at all: multiplying a plane equation by any positive number leaves every
+    sign unchanged.
+  </p>
+
+  <p>
+    We normalise anyway — divide all four coefficients by the length of the first three — for two
+    reasons that will both arrive later:
+  </p>
+
+  <ul>
+    <li><strong>The sphere test compares a distance against a radius.</strong>
+        <code>signed_distance(plane, centre) &lt; −radius</code> is meaningless unless the left-hand
+        side is in the same units as the right. This is the reason that actually forces it.</li>
+    <li><strong>Every diagnostic that prints a distance is otherwise nonsense.</strong> "This object
+        is 4.89 outside the left plane" is useful; "this object is 7.21 outside the left plane in
+        units of whatever the row happened to scale to" is not.</li>
+  </ul>
+
+  <p>
+    Six square roots per camera per frame. It is not a cost worth thinking about, and the
+    alternative — normalising in half the engine and not the other half — is exactly the kind of
+    thing that produces a bug three lessons later.
+  </p>
+
+  <h3>3.4 A worked example, in round numbers</h3>
+
+  <p>
+    Abstract row algebra is easy to nod along to and hard to check. So take a frustum where every
+    number is exact: a <strong>90° vertical field of view, square aspect, near 1, far 11</strong>,
+    with the camera at the origin looking down −z. At 90° the focal length <code>f = cot(45°) =
+    1</code> exactly, so from Lesson 2.10's derivation the projection matrix, written as rows, is
+  </p>
+
+  <div class="eq">\[ M = \begin{pmatrix} 1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \\ 0 & 0 & A & B \\ 0 & 0 & -1 & 0 \end{pmatrix},
+\quad A = \frac{far}{near - far} = \frac{11}{1-11} = -1.1, \quad B = \frac{far \cdot near}{near-far} = -1.1 \]</div>
+
+  <p>
+    and because the camera is at the origin looking down its own −z, the view matrix is the identity
+    and <code>clip_from_world = M</code>.
+  </p>
+
+  @@FIG_WORKED@@
+
+  <p><strong>The left plane.</strong> <code>r₀ + r₃ = (1, 0, 0, 0) + (0, 0, −1, 0) = (1, 0, −1, 0)</code>.
+    Its normal <code>(1, 0, −1)</code> has length <code>√2</code>, so the unit plane is</p>
+
+  <div class="eq">\[ \left(\tfrac{1}{\sqrt 2},\; 0,\; -\tfrac{1}{\sqrt 2} \;\middle|\; 0\right)
+= (0.707107,\; 0,\; -0.707107 \mid 0) \]</div>
+
+  <p>
+    <code>d = 0</code>, which is right: the left plane passes through the eye, and the eye is at the
+    origin. Now push two points through it by hand.
+  </p>
+
+  <ul>
+    <li><strong>(−5, 0, −5)</strong> — five units to the left and five units in front. At 90° the
+        wall is at 45°, so this point should be exactly <em>on</em> it:
+        <code>0.707107 × (−5) + 0 + (−0.707107) × (−5) + 0 = −3.535534 + 3.535534 = 0</code>. ✓</li>
+    <li><strong>(−4.5, 0, −5)</strong> — half a unit further in:
+        <code>0.707107 × (−4.5) − 0.707107 × (−5) = −3.181981 + 3.535534 = 0.353553</code>, which is
+        <code>0.5/√2</code>. ✓ Half a unit of horizontal offset, measured perpendicular to a wall
+        tilted at 45°, is <code>0.5·cos(45°)</code>. The geometry and the arithmetic agree.</li>
+  </ul>
+
+  <p><strong>The near plane.</strong> <code>r₂ = (0, 0, A, B) = (0, 0, −1.1, −1.1)</code>. Its
+    normal <code>(0, 0, −1.1)</code> has length 1.1, so dividing through gives</p>
+
+  <div class="eq">\[ (0,\; 0,\; -1 \mid -1) \]</div>
+
+  <p>
+    A normal of <code>(0, 0, −1)</code> — pointing down −z, into the scene, which is inward, correct
+    — and <code>d = −1</code>, which is <code>−near</code>. So <code>signed_distance</code> at
+    <code>z = −1</code> is <code>(−1)(−1) − 1 = 0</code> (on the plane ✓) and at <code>z = −3</code>
+    is <code>3 − 1 = 2</code> (two units inside ✓).
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>Notice what just happened to <code>B/|A|</code>.</strong> In general
+      <code>A = far/(near−far)</code> and <code>B = far·near/(near−far)</code>, so
+      <code>B/|A| = near</code> for any near and far at all. The near plane's constant term always
+      works out to <code>−near</code>, which is a small piece of evidence that the extraction is
+      doing something real rather than coincidentally working for one set of numbers.
+    </p>
+  </div>
+
+  <h3>3.5 Verifying against facts that need no trust</h3>
+
+  <p>
+    Here is the part worth stealing for your own work, whatever you are building. When you implement
+    something like this, the temptation is to check it against a reference implementation. There
+    usually isn't one, and if there is, agreeing with it proves only that you made the same mistake.
+  </p>
+
+  <p>
+    A frustum has facts about it that follow from what it <em>is</em>:
+  </p>
+
+  <ol>
+    <li><strong>The eye is the apex of the pyramid</strong>, so it lies exactly <em>on</em> all four
+        side planes. Four independent zeros, and they come out as
+        <code>0.000000</code> — not approximately.</li>
+    <li><strong>The eye is <code>near</code> behind the near plane</strong>, so its signed distance
+        there is <code>−near</code> — negative, because the eye is outside the volume. Measured:
+        <code>−0.299999714</code> against a near of 0.3.</li>
+    <li><strong>The camera's target is inside all six.</strong></li>
+    <li><strong>Opposite planes are not negatives of each other</strong> — the assertion that catches
+        the sign bug §3.1 describes.</li>
+    <li><strong>Every normal is unit length</strong> after extraction.</li>
+  </ol>
+
+  <div class="callout warn">
+    <p>
+      <strong>And here is why the four zeros are not enough on their own.</strong> A sign error that
+      <em>reverses</em> a plane's normal leaves the apex exactly on it — zero is zero either way. All
+      four checks still pass while the culler rejects the world. That is the trap the first draft
+      fell into, and it is why checks 2 and 4 exist. <em>A test that would pass on the bug you
+      actually made is not a test.</em>
+    </p>
+  </div>

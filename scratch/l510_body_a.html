@@ -1,0 +1,422 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-09-transform-hierarchy.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.9 — Transform Hierarchy and the Camera System</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-11-imgui-debug-draw.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.11 — Dear ImGui and the Debug Draw System</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.10</div>
+    <h1>Input Mapping: Actions, Not Keycodes</h1>
+    <p class="deck">
+      Every program in this course reads input by switching on a scancode, which is fine for a
+      demo and wrong for a game in four separate ways — none of them about speed. This lesson
+      puts a name in the middle. It measures nothing, and says so: the argument is entirely about
+      what the code can express. Two things in it are worth the price of admission on their own —
+      why an edge must be derived from an action's <em>level</em> rather than from any binding's,
+      and why a fixed-timestep engine needs a second kind of edge that the first cannot provide.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-02-input-state-vs-events.html">1.2 — Input: State vs Events</a>,
+          <a href="01-04-fixed-timestep.html">1.4 — The Fixed Timestep</a>,
+          <a href="05-02-platform-layer.html">5.2 — The Platform and Application Layer</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/core/actions.hpp</code>,
+            <code>engine/src/core/actions.cpp</code>,
+            <code>engine/include/engine/platform/app.hpp</code>,
+            <code>engine/src/platform/app.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/ecs_swarm/main.cpp</code>, <code>scratch/verify_510.cpp</code></dd>
+
+        <dt>Milestone</dt>
+        <dd>A demo with no scancodes in its gameplay code, controls that can be rebound while it
+            runs, and a camera driven by axes built out of key pairs. 62 checks green; the
+            reference shot byte-identical for the <strong>tenth</strong> lesson.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the four things a hard-coded keycode cannot do, and notice that none of them is a
+          performance problem.</li>
+      <li>…design a binding table in which buttons and axes are the same mechanism, and say what
+          a design with two mechanisms would have had to decide that this one does not.</li>
+      <li>…explain why an edge must come from an action's level rather than from a binding's, and
+          construct the input sequence that exposes the difference.</li>
+      <li>…state precisely why a frame-scoped edge is unsafe inside a fixed step, in both
+          directions, and implement the queue that fixes it.</li>
+      <li>…decide where in the frame an input mapper must run, and defend the answer against the
+          two hooks that nearly work.</li>
+      <li>…use a C++20 <code>concept</code> to depend on a shape rather than a type, and explain
+          what that buys a test that could not otherwise be written.</li>
+      <li>…argue about who should own an input map, using the same reasoning this course used for
+          the asset store and the registry.</li>
+      <li>…recognise when a lesson has no measurement to make, and say so instead of inventing
+          one.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-name">A name in the middle</a></li>
+          <li><a href="#intuition-own">Who owns the map</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">One Mechanism</a>
+        <ol>
+          <li><a href="#theory-sum">Every binding contributes a signed value</a></li>
+          <li><a href="#theory-threshold">The threshold, and what it is for</a></li>
+        </ol>
+      </li>
+      <li><a href="#edges">Edges Come From the Level</a></li>
+      <li><a href="#step">The Edge That Survives the Step</a>
+        <ol>
+          <li><a href="#step-where">Where the map must run</a></li>
+          <li><a href="#step-queue">Two failures, one queue</a></li>
+        </ol>
+      </li>
+      <li><a href="#concept">A Concept, and the Test It Makes Possible</a></li>
+      <li><a href="#gamepad">The Device That Is Not Here</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Here is how <code>ecs_swarm</code> read input at the end of Lesson 5.9, and how every program
+    in this course has read it since Lesson 1.2:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp — before</span></figcaption>
+    <pre><code class="lang-cpp">switch (event.key.scancode)
+{
+case SDL_SCANCODE_ESCAPE: request_quit(); break;
+case SDL_SCANCODE_SPACE:  spawn_sparks(); break;
+case SDL_SCANCODE_C:      toggle_camera_ride(); break;
+// …
+}</code></pre>
+  </figure>
+
+  <p>
+    That is not slow, and it is not wrong in any way a compiler or a profiler will tell you
+    about. It is wrong in four ways that only show up when somebody tries to use the program.
+  </p>
+
+  @@FIG_INDIRECTION@@
+
+  <p>
+    <strong>It cannot be rebound.</strong> The scancode is compiled in. A left-handed player, a
+    player whose keyboard puts that key somewhere awkward, a player with a disability that makes
+    it unreachable — every one of them is out of luck, and the fix is a recompile. This is the
+    one that matters most and gets thought about least.
+  </p>
+
+  <p>
+    <strong>It is about one device.</strong> A gamepad has no scancodes. Adding one means a second
+    switch, which must be kept in step with the first by hand, for the life of the program. The
+    third device makes it three.
+  </p>
+
+  <p>
+    <strong>It cannot be recorded.</strong> A replay system, a demo recording, an automated test
+    that drives the game — all of them want to store what the player <em>meant</em>. Storing
+    <code>SDL_SCANCODE_SPACE</code> records a fact about a keyboard; if the binding changes
+    between the recording and the playback, the replay does something else.
+  </p>
+
+  <p>
+    <strong>And it says the wrong thing.</strong> <code>if (key_pressed(SDL_SCANCODE_SPACE))</code>
+    inside a jump handler is a sentence about hardware in a file about jumping. That is not a
+    performance problem or a portability problem; it is code failing to describe what it does,
+    which is the kind of problem that compounds quietly for years.
+  </p>
+
+  <div class="callout note">
+    <span class="label">This lesson measures nothing, and that is deliberate</span>
+    <p>
+      Lessons 5.6, 5.7 and 5.9 each turned on a benchmark, because each was choosing between
+      designs that differed in <em>cost</em>. This one is not: the alternatives differ in what
+      they can express, and every one of them is far too cheap to matter — an action map's
+      per-frame work is a loop over a couple of dozen bindings, which is nanoseconds.
+    </p>
+    <p>
+      Producing a benchmark anyway would be worse than useless. It would attach a number to a
+      decision the number did not make, and the next reader would think the number was the reason.
+      <strong>A design lesson should say it is a design lesson.</strong>
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-name">2.1 A name in the middle</h3>
+
+  <p>
+    All four problems have the same shape — the code names a <em>signal</em> where it means an
+    <em>intention</em> — and therefore the same fix. Put a name in the middle:
+  </p>
+
+  <div class="worked">
+    <span class="label">The three pieces</span>
+    <p><strong>An action is a name.</strong> <code>"jump"</code>, <code>"camera_yaw"</code>. It is
+       what the game means.</p>
+    <p><strong>A binding maps a signal onto it.</strong> Space contributes +1 to
+       <code>"jump"</code>. There may be several, on several devices.</p>
+    <p><strong>A frame publishes the values.</strong> Once per frame,
+       <code>jump = 1.0, held, pressed this frame</code>.</p>
+  </div>
+
+  <p>
+    That is the entire idea, and every one of the four problems dissolves against it. Rebinding
+    edits the middle row. A second device adds a row. A replay records the left column. And the
+    game code reads <code>actions.pressed(jump)</code>, which is a sentence about jumping.
+  </p>
+
+  <p>
+    The indirection is one level deep and it is worth being suspicious of it anyway, because
+    "add a layer" is the answer to everything and is usually wrong. What makes it right here is
+    that the layer is not <em>hiding</em> the thing below it — it is <strong>naming</strong> it.
+    A wrapper that renamed <code>key_pressed</code> to <code>button_pressed</code> would be pure
+    cost. This one changes what can be said.
+  </p>
+
+  <h3 id="intuition-own">2.2 Who owns the map</h3>
+
+  <p>
+    The engine could own one. It owns exactly one <code>input</code>, after all — <code>platform</code>
+    creates it and publishes it once per frame, and that is right, because there is one keyboard
+    and one mouse and no program wants two views of them.
+  </p>
+
+  <p>
+    An action map is different, and the difference is the same one this course has now hit three
+    times. Lesson 5.5 refused to make <code>asset_store</code> a singleton because
+    <code>sandbox</code> holds three in one program. Lesson 5.8 refused to make
+    <code>registry</code> one because the harness holds four in one function. Here: a
+    <strong>two-player local game needs two maps</strong>, with different bindings, and a game that
+    wants per-entity input puts one in a component and lets <code>view&lt;player_input&gt;</code>
+    find it.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The rule, stated once and applied for the third time</span>
+    <p>
+      <strong>The engine does not know how many of a thing a game needs, so it declines to
+      decide.</strong> <code>action_map</code> is a value: construct one on the stack, hold
+      several, put one in a component, throw one away. There is no global, no
+      <code>get_instance()</code>, and nothing in the engine holds a pointer to yours.
+    </p>
+    <p>
+      What the engine <em>does</em> provide is the moment at which updating one is correct, which
+      turns out to be the interesting part — see <a href="#step-where">§5.1</a>.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — ONE MECHANISM
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>One Mechanism</h2>
+
+  <h3 id="theory-sum">3.1 Every binding contributes a signed value</h3>
+
+  <p>
+    An input system has to do two jobs that look different. It has to answer "is the player
+    jumping" — a yes or no — and "how hard is the player steering" — a number between −1 and 1.
+    The obvious design gives those two jobs two mechanisms: button actions and axis actions,
+    declared differently and queried differently.
+  </p>
+
+  <p>
+    There is a better one, and it is smaller:
+  </p>
+
+  <div class="worked">
+    <span class="label">The rule</span>
+    <p><strong>Every binding contributes a signed float to its action. An action's value is the
+       sum of its bindings' contributions.</strong></p>
+  </div>
+
+  @@FIG_MECHANISM@@
+
+  <p>
+    Work the three cases through and notice that nothing special happens in any of them.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — three actions, one rule</span>
+    <p><code>jump</code> is bound to Space with scale +1. Space down → value 1. Space up →
+       value 0. Ask <code>held()</code>.</p>
+    <p><code>steer</code> is bound to A with −1 and D with +1. A alone → −1. D alone → +1.
+       <strong>Both held → −1 + 1 = 0.</strong> Ask <code>value()</code>.</p>
+    <p><code>look_x</code> is bound to the mouse's x delta with scale 0.5. A ten-pixel move →
+       10 × 0.5 = 5. No movement → 0. Ask <code>value()</code>.</p>
+  </div>
+
+  <p>
+    The third line of the middle case is the one that pays for the design. <strong>A system with
+    two mechanisms would have needed a rule for "what does holding both halves of an axis
+    mean"</strong> — and would have had to write it, document it and test it. Here there is no
+    rule, because −1 + 1 is 0 and arithmetic already knew that.
+  </p>
+
+  <p>
+    It also means an action's value is not clamped, and that is deliberate rather than an
+    oversight. Two keys both bound to <code>jump</code> with +1, both held, gives 2. For a button
+    that is meaningless and harmless — you asked <code>held()</code>, which does not care. For a
+    mouse delta scaled by 0.5 it is the whole point, since a fast flick should produce a big
+    number. Clamping would have had to know which kind of action it was looking at, and knowing
+    that is precisely what this design avoids.
+  </p>
+
+  <h3 id="theory-threshold">3.2 The threshold, and what it is for</h3>
+
+  <p>
+    <code>held()</code> is not "value is non-zero". It is:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the level</span></figcaption>
+    <pre><code class="lang-cpp">inline constexpr float k_action_press_threshold = 0.5f;
+
+// …
+const bool now = std::fabs(values_[i]) &gt;= k_action_press_threshold;</code></pre>
+  </figure>
+
+  <p>
+    A digital binding contributes ±1, so any threshold above 0 and at or below 1 would behave
+    identically for keys. It exists for the sources that are not keys: a gamepad trigger resting
+    at 0.02 because the spring is tired, a stick with a little drift. <strong>An analog source
+    should have to be pushed, not brushed</strong>, and 0.5 is the conventional halfway point.
+  </p>
+
+  <p>
+    Note the <code>fabs</code>. A two-way axis is "held" when pushed <em>either</em> way, which is
+    legal, occasionally useful — "is the player steering at all?" — and rarely the question you
+    meant to ask of an axis. The header says so.
+  </p>
+
+  <!-- =================================================================
+       4 — EDGES
+       ================================================================= -->
+  <h2 id="edges"><span class="num">4</span>Edges Come From the Level</h2>
+
+  <p>
+    Lesson 1.2 established the distinction this whole course has run on: a <strong>level</strong>
+    is "is it down now", an <strong>edge</strong> is "did it change this frame", and confusing
+    them produces two different bugs. That distinction survives into the action layer unchanged —
+    <code>held()</code>, <code>pressed()</code>, <code>released()</code> — and there is exactly
+    one new decision to make, which is where the edge is computed <em>from</em>.
+  </p>
+
+  <p>
+    It looks like it should not matter. Space goes down; the binding sees a rising edge; the
+    action fires. Why would you compute it any other way?
+  </p>
+
+  <p>
+    Because an action may have more than one binding, and then the two answers differ.
+  </p>
+
+  @@FIG_EDGES@@
+
+  <p>
+    Follow the five frames. <code>jump</code> is bound to Space <em>and</em> the left mouse
+    button, which is an ordinary thing to want — a keyboard binding and a mouse binding for the
+    same intention.
+  </p>
+
+  <ol>
+    <li>Nothing held. No edges.</li>
+    <li>Space goes down. The action becomes active: <strong>one press edge</strong>. Correct
+        either way.</li>
+    <li>The mouse button goes down <em>while Space is still held</em>. A binding-derived edge
+        fires again — <strong>a second press, and the player jumps twice</strong>. A
+        level-derived edge does not, because the action was already active and nothing changed.</li>
+    <li>Space comes up, the mouse is still down. A binding-derived edge fires a
+        <em>release</em> — while the action is plainly still active. A level-derived edge does
+        not.</li>
+    <li>The mouse comes up. The action goes inactive: <strong>one release edge</strong>.</li>
+  </ol>
+
+  <p>
+    So the rule is:
+  </p>
+
+  <div class="worked">
+    <span class="label">The decision</span>
+    <p><strong>An edge is a change in the ACTION, not a change in a signal.</strong></p>
+    <p>Compute the level first — sum the bindings, compare against the threshold — and derive the
+       edges by comparing this frame's level against last frame's. Exactly as
+       <code>engine::input</code> derives key edges from two snapshots, one layer up.</p>
+  </div>
+
+  <p>
+    The implementation is four lines, and its shape matters more than its length:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/core/actions.hpp — the edge, derived</span></figcaption>
+    <pre><code class="lang-cpp">for (std::size_t i = 0; i &lt; values_.size(); ++i)
+{
+    const bool now = std::fabs(values_[i]) &gt;= k_action_press_threshold;
+    const bool was = held_prev_[i] != 0u;
+    held_[i] = now ? 1u : 0u;
+
+    if (now &amp;&amp; !was &amp;&amp; queued_[i] &lt; k_action_press_queue) { ++queued_[i]; }
+}</code></pre>
+  </figure>
+
+  <p>
+    The loop is over <em>actions</em>, not over bindings. By the time it runs, the bindings have
+    already been summed away and there is nothing left to be confused by.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A bug that hides until the second binding</span>
+    <p>
+      Everything about the wrong version works perfectly with one binding per action, which is
+      what a first implementation has and what a first test writes. It fails the moment a player
+      binds a controller button alongside their keyboard — in production, on somebody else's
+      machine, as "sometimes it jumps twice".
+    </p>
+    <p>
+      §C of the verification harness binds two on purpose and walks the five frames above,
+      asserting one rising edge and one falling edge for the whole sequence. It is four lines of
+      setup and it is the only part of the harness that could have caught this.
+    </p>
+  </div>

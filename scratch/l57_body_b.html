@@ -1,0 +1,1053 @@
+
+  <!-- =================================================================
+       4 — THE EXPERIMENT
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>The Experiment</h2>
+
+  <h3 id="impl-simulate"><span class="num">4.1</span>Simulating a design you have not built</h3>
+
+  <p>
+    The probe is one header, and the first thing to say about it is what is <em>not</em> in it.
+    There is no entity manager, no component registry, no type erasure, no view type, no system
+    scheduler, and no way to create an entity. Every one of those is required by a real ECS and
+    none of them differs between the two designs, so including them would put a thousand lines of
+    identical machinery between us and the two numbers we came for.
+  </p>
+
+  <p>
+    What is in it is the two access patterns. An archetype is four parallel
+    <code>std::vector</code>s and a shared index; a sparse set is, per type, three vectors and a
+    redirect. Both hold the same entities with the same component values, generated from the
+    entity id by the same integer hash Lesson 5.6 used, so the two arms can be compared bit for
+    bit.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/ecs_probe.hpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// One component type's storage: sparse map, dense entity list, dense data.
+template &lt;typename T&gt;
+struct pool
+{
+    std::vector&lt;std::uint32_t&gt; sparse;
+    std::vector&lt;entity&gt; dense;
+    std::vector&lt;T&gt; data;
+
+    void insert(entity e, const T&amp; v)
+    {
+        sparse[e] = static_cast&lt;std::uint32_t&gt;(dense.size());
+        dense.push_back(e);
+        data.push_back(v);
+    }
+
+    /// Swap-and-pop, and the sparse entry of the entity that MOVED has to be
+    /// patched. Two arrays touched, one extra sparse write, no data copied except
+    /// the one component. This is the operation the archetype cannot match.
+    void erase(entity e)
+    {
+        const std::uint32_t at = sparse[e];
+        const std::uint32_t last = static_cast&lt;std::uint32_t&gt;(dense.size() - 1u);
+        dense[at] = dense[last];
+        data[at] = data[last];
+        sparse[dense[at]] = at;
+        dense.pop_back();
+        data.pop_back();
+        sparse[e] = k_none;
+    }
+};</code></pre>
+  </figure>
+
+  <p>
+    Twenty lines, and everything the sparse-set design claims is visible in them: the insert is
+    two appends and a write, the erase touches one pool, and neither has any way to know what
+    else the entity owns. Compare that with the archetype's move, which needs a source chunk, a
+    destination chunk, a per-entity archetype map, a per-entity row map, and a re-pack — a hundred
+    lines in the same file, and it is not padded.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ in place — <code>if constexpr</code>, and why K is a template parameter</span>
+    <p>The query is written once and instantiated for K = 1, 2, 3, 4. Making K a template
+       parameter rather than a runtime argument matters for a benchmark: <code>if constexpr
+       (K &gt;= 2)</code> is resolved at compile time, so the K = 2 instantiation contains no
+       branch, no dead pointer and no unused load. A runtime <code>if</code> would leave a
+       predictable branch in the loop, and predictable branches are cheap but not free — at
+       0.5 ns per item, "not free" is 10% of the measurement.</p>
+    <p>The same trick carries the two body variants as a <code>bool Real</code>. Two template
+       parameters produce eight query functions from one piece of source, which is the property
+       that matters here: <strong>every arm runs the same code</strong>, so a difference in the
+       source cannot be a difference in the result.</p>
+  </div>
+
+  <h3 id="impl-fair-arch"><span class="num">4.2</span>Being fair to the archetype</h3>
+
+  <p>
+    A benchmark comparing your preferred design against a strawman is a benchmark whose result
+    you already know. Three deliberate concessions were made to the archetype, and each one costs
+    it nothing that a real implementation would not also avoid.
+  </p>
+
+  <p>
+    <strong>Its columns are statically typed.</strong> The probe's chunk holds
+    <code>std::vector&lt;engine::transform&gt;</code>, not a type-erased byte buffer with a
+    per-archetype column index that has to be looked up. A real archetype ECS cannot do this —
+    the set of component types is not known at compile time, so a query must resolve "which
+    column is <code>transform</code> in <em>this</em> archetype" per archetype per query, and its
+    inner loop indexes through a pointer it obtained at run time. The probe skips that cost
+    entirely. <strong>Every archetype number below is therefore an upper bound on how good a real
+    archetype ECS would be.</strong>
+  </p>
+
+  <p>
+    <strong>Its query really does skip non-matching entities.</strong> The chunk carries a
+    <code>columns</code> count and the query walks only chunks with at least K of them, so in the
+    selectivity test the archetype visits a quarter of the world and the other three quarters
+    cost it literally nothing — not even a rejected test. That is the archetype's genuine
+    structural advantage and the experiment gives it in full.
+  </p>
+
+  <p>
+    <strong>Its fragmented case is measured, not assumed.</strong> §5.4 splits the same entities
+    across up to 4,096 archetypes and reports what that costs, rather than asserting that
+    fragmentation is a disaster because the sparse-set literature says so.
+  </p>
+
+  <h3 id="impl-fair-sparse"><span class="num">4.3</span>Being fair to the sparse set: the alignment axis</h3>
+
+  <p>
+    The sparse set gets one concession too, and it is the axis most published comparisons leave
+    out. Ask the question directly: <em>when the query reads <code>velocity.sparse[e]</code>,
+    where in memory does it land?</em>
+  </p>
+
+  <p>
+    A pool's dense order is its insertion order. In a world built all at once — spawn ten thousand
+    entities in a loop, each with the same four components — every pool receives the same entities
+    in the same sequence, so every pool's dense order is identical. The query walks the transform
+    pool in order, and <code>velocity.sparse[e]</code> therefore also walks <em>in order</em>. The
+    redirect is a sequential read that the hardware prefetcher will have already fetched. It costs
+    almost nothing.
+  </p>
+
+  <p>
+    Now run the game for ten minutes. Things spawn and die, components get added when a character
+    picks up a torch and removed when it drops it, and every <code>erase</code> swaps some
+    unrelated entity into the hole. The pools' orders drift apart, and eventually there is no
+    relationship between position in one pool and position in another. The same source code is now
+    performing random access into a 1.6 MB array.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Both are real, and a comparison that quotes one is not a comparison</span>
+    <p>The benchmark therefore builds the sparse world <strong>twice</strong>: once
+       <em>aligned</em> (every pool receives entities in id order) and once <em>scrambled</em>
+       (each secondary pool receives them in an independent random permutation). These are the
+       best and worst case of the same design, they differ by up to 1.8× in the results below,
+       and the truth for any given world is somewhere between them. The lead pool is in id order
+       in both, so the two arms visit entities in the same sequence — which is what lets the
+       harness demand bit-identical answers rather than a tolerance.</p>
+  </div>
+
+  <h3 id="impl-bodies"><span class="num">4.4</span>Two bodies, because one cannot answer the question</h3>
+
+  <p>
+    §2.3 concluded that the redirect is latency and that latency can be hidden behind work. That
+    is a hypothesis with an obvious test: run the same query with two different amounts of work in
+    it and see whether the penalty changes.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/ecs_probe.hpp</span>
+      <span class="tag modified">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// Almost nothing: one float out of each component. Isolates the cost of REACHING
+/// the data by making the cost of using it negligible.
+template &lt;int K&gt;
+[[nodiscard]] inline double cheap_body(const engine::transform&amp; t, const velocity* v,
+                                       const bounds* b, const material* m, double bias)
+{
+    double acc = static_cast&lt;double&gt;(t.position.x) + bias;
+    if constexpr (K &gt;= 2) { acc += static_cast&lt;double&gt;(v-&gt;v.x); }
+    if constexpr (K &gt;= 3) { acc += static_cast&lt;double&gt;(b-&gt;radius); }
+    if constexpr (K &gt;= 4) { acc += static_cast&lt;double&gt;(m-&gt;roughness); }
+    return acc;
+}
+
+/// What a render query actually does: build the model matrix, then read the rest.
+template &lt;int K&gt;
+[[nodiscard]] inline double real_body(const engine::transform&amp; t, const velocity* v,
+                                      const bounds* b, const material* m, double bias)
+{
+    double acc = layouts::sample(engine::parent_from_local(t)) + bias;
+    if constexpr (K &gt;= 2) { acc += static_cast&lt;double&gt;(v-&gt;v.x); }
+    if constexpr (K &gt;= 3) { acc += static_cast&lt;double&gt;(b-&gt;radius); }
+    if constexpr (K &gt;= 4) { acc += static_cast&lt;double&gt;(m-&gt;roughness); }
+    return acc;
+}</code></pre>
+  </figure>
+
+  <p>
+    The real body is deliberately <em>the same workload Lesson 5.6 timed</em> — build a model
+    matrix with <code>parent_from_local</code>, then read all sixteen entries of it with
+    <code>layouts::sample</code>. Reading all sixteen was 5.6's hard-won correction: reading five
+    lets a compiler stop computing the other eleven in whichever arm it managed to inline, and 5.6
+    published a 3.4× that was really 1.7× before it caught that. Reusing the function rather than
+    re-typing it means 5.7 cannot re-acquire the bug, and it puts both lessons' numbers on the
+    same scale.
+  </p>
+
+  <p>
+    Everything else about the harness is Lesson 5.6's, unchanged: <code>bench_compare</code>
+    alternates the arms one repetition each so drift lands on both, medians with minimum and
+    maximum so a hiccup is visible, <code>bench_keep</code> so the loop is not deleted, a
+    <code>bias</code> that differs per pass so the pass is not a pure function of nothing, and
+    enough inner repetitions that a sample is worth ~100 µs against a 41.67 ns timer tick. Every
+    ratio quoted below is taken <em>within one alternating pairing</em>, never between two
+    absolutes from different pairings — 5.6 found the same arm reading 0.98 and 1.83 ns
+    depending on who shared the cache with it.
+  </p>
+
+  <!-- =================================================================
+       5 — THE RESULTS
+       ================================================================= -->
+  <h2 id="results"><span class="num">5</span>The Results</h2>
+
+  <p>
+    Everything below is from one machine — an Apple M4 Pro, 64 KB L1d, 4 MB L2 — built with
+    Clang at <code>-O2 -DNDEBUG</code>, no LTO. Run it on yours; the shapes should survive and
+    the exact sizes will move. <code>python3 scratch/measure_57.py</code> prints every table in
+    this section.
+  </p>
+
+  <h3 id="res-query"><span class="num">5.1</span>The query, and the control that says the harness works</h3>
+
+  <p>
+    Start with the control, because a benchmark you have not falsified is a benchmark you should
+    not read. At <strong>K = 1</strong> the query touches only the lead pool. Both designs are
+    then doing literally the same thing — walking one dense array of transforms — so the ratio
+    must be 1.00×, and any deviation would be the harness measuring itself rather than the
+    designs. It is 0.99×–1.01× at every size on the real body. The instrument is honest.
+  </p>
+
+  <p>
+    Now K = 4, which is what a render query wants:
+  </p>
+
+@@FIG_QUERY@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Sparse-set query cost relative to the archetype at K equals
+             four, for two body costs and two pool alignments, across five world sizes.</caption>
+    <thead><tr><th>K = 4, relative to archetype</th><th>4</th><th>100</th><th>1,000</th>
+               <th>10,000</th><th>100,000</th></tr></thead>
+    <tbody>
+      <tr><td>archetype, ns/item (real body)</td><td>2.04</td><td>1.75</td><td>1.79</td>
+          <td>1.91</td><td>2.04</td></tr>
+      <tr><td>cheap body, aligned</td><td>0.81×</td><td>0.91×</td><td>1.06×</td>
+          <td>1.26×</td><td>1.31×</td></tr>
+      <tr><td>cheap body, scrambled</td><td>0.84×</td><td>0.98×</td><td>1.16×</td>
+          <td>1.92×</td><td><strong>2.40×</strong></td></tr>
+      <tr><td>real body, aligned</td><td>0.97×</td><td>1.05×</td><td>1.05×</td>
+          <td>1.02×</td><td><strong>0.96×</strong></td></tr>
+      <tr><td>real body, scrambled</td><td>0.98×</td><td>1.05×</td><td>1.05×</td>
+          <td>1.17×</td><td><strong>1.34×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Three readings, in order of how much they matter.
+  </p>
+
+  <p>
+    <strong>Below a thousand entities, nothing.</strong> Every arm is within 16% of the archetype
+    and most are within 5%. This is 5.6's finding arriving again by a different route: the working
+    set is small enough that every access is a hit, and a redirect to somewhere already in L1
+    costs a few cycles that the core has nothing better to do with. If your world is a few hundred
+    entities, this entire lesson's query argument is worth zero nanoseconds to you.
+  </p>
+
+  <p>
+    <strong>The scrambled and aligned arms differ by nearly a factor of two at 100,000.</strong>
+    On the cheap body, 1.31× against 2.40×. Same code, same data, same design — the only
+    difference is whether the pools happen to be in the same order. Any comparison that reports
+    one number for "sparse set" is reporting whichever of these its benchmark happened to build.
+  </p>
+
+  <p>
+    <strong>The body dilutes everything.</strong> The worst case falls from 2.40× to 1.34× purely
+    because the query does a matrix multiply per entity instead of one addition. That is the
+    hypothesis from §2.3 confirmed, and §5.2 is the experiment that turns it from a plausible
+    story into a mechanism.
+  </p>
+
+  <h3 id="res-hide"><span class="num">5.2</span>The redirect is latency, and latency hides</h3>
+
+  <p>
+    There is one loose end in the table above and it is at the far left: the <em>cheap</em> arms
+    at n = 4 read 0.81× — the sparse set beating the archetype by 19% on four entities in L1,
+    which no memory effect can explain. Worse, the full data has the archetype's own K = 3 column
+    at n = 4 costing <strong>2.58 ns</strong> against 0.87 ns at K = 4. A cost that is not
+    monotonic in the amount of work is not a cost, it is a compiler.
+  </p>
+
+  <p>
+    Lesson 5.6's answer to this applies unchanged: rebuild with the vectoriser off and see what
+    moves. One experiment, and it does two jobs.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The same K equals four query rebuilt with vectorisation
+             disabled, for both bodies.</caption>
+    <thead><tr><th>K = 4, <code>-fno-vectorize -fno-slp-vectorize</code></th><th>4</th>
+               <th>100</th><th>1,000</th><th>10,000</th><th>100,000</th></tr></thead>
+    <tbody>
+      <tr><td>archetype ns/item, cheap (was 0.87 at n=4)</td><td>0.56</td><td>0.56</td>
+          <td>0.60</td><td>0.82</td><td>0.80</td></tr>
+      <tr><td>cheap body, aligned</td><td>1.17×</td><td>1.20×</td><td>1.29×</td>
+          <td>1.37×</td><td>1.49×</td></tr>
+      <tr><td>cheap body, scrambled</td><td>1.15×</td><td>1.20×</td><td>1.26×</td>
+          <td>2.17×</td><td><strong>2.79×</strong></td></tr>
+      <tr><td>real body, aligned</td><td>0.99×</td><td>0.99×</td><td>0.98×</td>
+          <td>1.02×</td><td>1.02×</td></tr>
+      <tr><td>real body, scrambled</td><td><strong>1.00×</strong></td><td><strong>1.00×</strong></td>
+          <td><strong>1.01×</strong></td><td>1.21×</td><td><strong>1.39×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Job one: the n = 4 anomalies are gone.</strong> The archetype's non-monotonic K = 3
+    column collapses from 2.58 ns to 0.53, and the cheap arms stop beating the archetype at four
+    entities. They were vectorisation decisions — the auto-vectoriser succeeding on one arm's
+    four-iteration loop and not another's — which is a property of the compiler and of nothing
+    else. This is why the left-hand columns of the vectorised table should be read as "no
+    difference" rather than as numbers.
+  </p>
+
+  <p>
+    <strong>Job two, and it is the mechanism.</strong> Look at the real body with codegen held
+    still: <strong>1.00×, 1.00×, 1.01×</strong> up to a thousand entities, on the
+    <em>scrambled</em> world. Not "close to". The redirect, performed with the pools in
+    completely unrelated orders, costs <em>nothing at all</em> — and then costs 1.21× at ten
+    thousand and 1.39× at a hundred thousand.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The finding, stated as a mechanism rather than a ratio</span>
+    <p>The sparse set's extra loads are <strong>latency in the shadow of work already being
+       done</strong>. While the core is executing the nine multiplies and sixteen stores of
+       <code>parent_from_local</code> for entity <em>i</em>, it has already issued the redirect
+       loads for entities <em>i</em>+1 and beyond, because those addresses are available and
+       independent. The loads finish before anyone asks for them.</p>
+    <p>Two things break the shadow, and <strong>both must happen together</strong>. The working
+       set must exceed cache, so the latency to hide grows from ~4 cycles to ~200; and the pools
+       must be out of order, so the prefetcher cannot have fetched the line already. Aligned at
+       100,000 is 1.02×; scrambled at 1,000 is 1.01×; scrambled at 100,000 is 1.39×. Neither
+       condition alone costs anything.</p>
+  </div>
+
+  <p>
+    That also tells you which systems in a real engine will and will not care. A render query
+    building matrices, a physics integrator doing collision maths, a skinning pass blending
+    matrices — these all have work to hide behind. A system that adds two floats across a
+    hundred thousand entities does not, and that is exactly where the cheap body's 2.79× lives.
+  </p>
+
+  <h3 id="res-churn"><span class="num">5.3</span>The structural change, and the number that scales</h3>
+
+  <p>
+    Now the operation that points the other way. Each frame, 1% of the world gains a component and
+    loses it again — an entity picking something up, a projectile being marked for despawn, a
+    character entering a state. Measured per operation, at two entity widths.
+  </p>
+
+@@FIG_CHURN@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Nanoseconds per component add or remove in each design, at
+             two entity widths, across five world sizes.</caption>
+    <thead><tr><th>ns per add or remove</th><th>4</th><th>100</th><th>1,000</th>
+               <th>10,000</th><th>100,000</th></tr></thead>
+    <tbody>
+      <tr><td>archetype, 4 components (108 B)</td><td>15.38</td><td>15.25</td><td>12.25</td>
+          <td>15.00</td><td>13.10</td></tr>
+      <tr><td>sparse set, 4 components</td><td>9.56</td><td>9.42</td><td>4.50</td>
+          <td>5.31</td><td>4.25</td></tr>
+      <tr><td><em>ratio</em></td><td><em>1.61×</em></td><td><em>1.62×</em></td>
+          <td><em>2.72×</em></td><td><em>2.82×</em></td><td><em>3.08×</em></td></tr>
+      <tr><td>archetype, 12 components (236 B)</td><td>29.68</td><td>31.42</td><td>40.92</td>
+          <td>38.96</td><td><strong>58.48</strong></td></tr>
+      <tr><td>sparse set, 12 components</td><td>10.05</td><td>10.42</td><td>4.58</td>
+          <td>4.38</td><td><strong>4.23</strong></td></tr>
+      <tr><td><em>ratio</em></td><td><em>2.95×</em></td><td><em>3.02×</em></td>
+          <td><em>8.93×</em></td><td><em>8.90×</em></td><td><em>13.83×</em></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The ratio is not the finding. <strong>The finding is which row moved.</strong> Widening the
+    entity from four components to twelve — adding eight components that the operation does not
+    read, does not write and has no logical relationship to — takes the archetype from 13.10 ns to
+    58.48 ns. The sparse set goes from 4.25 to 4.23, which is the same number.
+  </p>
+
+  <p>
+    That is §3.2's cost model confirmed and its correction confirmed with it. The archetype's move
+    is two memory touches per column, and the columns are what widened; the sparse set's insert is
+    three writes into one pool, and the pool did not widen because pools never do.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Four components is a number that flatters the archetype</span>
+    <p>The probe's entity has four. A shipping game entity has ten to thirty — a transform, a
+       parent link, a mesh, a material, a bounding volume, a rigid body, a collider, a health
+       value, a team, an AI state, a sound emitter, a light, an animation state, a network id.
+       <strong>This course's entity will pass twelve during Modules 7–8</strong>, when rigid bodies
+       and skeletons arrive. The 13.83× column is the one to plan against, not the 3.08× one.</p>
+  </div>
+
+  <p>
+    Both designs' small-world numbers deserve a note, because they look wrong. At n = 4 the sparse
+    set costs 9.56 ns rather than 4.25 — <em>more</em> than at 100,000. That is not the world
+    size, it is the churn set: 1% of four entities is one entity, so a "frame" is two operations
+    and the per-frame overhead (building the set, the loop setup) is divided by two instead of by
+    two thousand. It is measurement overhead, it applies equally to both arms, and the ratio in
+    that column is still meaningful even though the absolute is not.
+  </p>
+
+  <h3 id="res-fragment"><span class="num">5.4</span>Fragmentation, measured, and smaller than advertised</h3>
+
+  <p>
+    The standard argument against archetypes is fragmentation: every distinct component set is a
+    separate chunk, so a game with lots of rare combinations ends up with thousands of tiny
+    archetypes and the contiguity that justified the design evaporates. It is stated confidently
+    and almost never measured. Here it is, at K = 4 on the real body:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Archetype query cost as the same entities are split across
+             more archetypes, at two world sizes.</caption>
+    <thead><tr><th>archetypes</th><th colspan="2">10,000 entities</th>
+               <th colspan="2">100,000 entities</th></tr></thead>
+    <tbody>
+      <tr><td></td><td>each</td><td>vs 1 chunk</td><td>each</td><td>vs 1 chunk</td></tr>
+      <tr><td>8</td><td>1,250</td><td>1.03×</td><td>12,500</td><td>0.99×</td></tr>
+      <tr><td>64</td><td>156</td><td>1.05×</td><td>1,562</td><td>1.00×</td></tr>
+      <tr><td>512</td><td>19</td><td><strong>1.12×</strong></td><td>195</td><td>1.06×</td></tr>
+      <tr><td>4,096</td><td>2</td><td>1.07×</td><td>24</td><td>1.08×</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Twelve percent, worst case, with two entities per archetype.</strong> That is far
+    less than the argument implies, and the reason is visible once stated: a chunk of two entities
+    is still contiguous, still prefetched, and the per-chunk overhead is a loop setup, not a cache
+    miss. Splitting a contiguous array into 4,096 contiguous arrays does not stop it being
+    contiguous.
+  </p>
+
+  <p>
+    Be careful about what this does and does not license. It measures <em>iteration over</em>
+    fragmented archetypes, which is the part the probe can simulate honestly. It does not measure
+    what a real archetype ECS additionally pays as archetypes multiply: resolving which archetypes
+    match a query (a set operation over thousands of them, usually cached but the cache has to be
+    invalidated on every structural change), the per-archetype column lookup §4.2 gave the probe
+    for free, and the allocator pressure of thousands of small chunks. <strong>Those are real and
+    this lesson does not measure them</strong> — so the honest summary is that fragmentation's
+    <em>iteration</em> cost is small, its bookkeeping cost is unmeasured here, and the case
+    against archetypes should not lean on this argument.
+  </p>
+
+  <h3 id="res-select"><span class="num">5.5</span>Selectivity, and the group that answers it</h3>
+
+  <p>
+    Now the archetype's best case, and the one the argument should be judged on. Give one entity
+    in four a velocity and query <code>{transform, velocity}</code>. The archetype visits exactly
+    the matching quarter, contiguously. The sparse set walks its dense velocity pool — also
+    exactly the matching quarter — and reaches into a transform pool where only one element in
+    four is wanted, so every cache line it fetches contains one useful transform and two useless
+    ones.
+  </p>
+
+@@FIG_GROUP@@
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Selective query cost relative to the archetype on the real
+             body, for three sparse-set strategies plus a maintained group.</caption>
+    <thead><tr><th>1 entity in 4 matches, real body</th><th>4</th><th>100</th><th>1,000</th>
+               <th>10,000</th><th>100,000</th></tr></thead>
+    <tbody>
+      <tr><td>archetype, ns per matching entity</td><td>3.80</td><td>1.57</td><td>1.39</td>
+          <td>1.52</td><td>1.47</td></tr>
+      <tr><td>lead with the small pool</td><td>0.50×</td><td>1.16×</td><td>1.19×</td>
+          <td>1.50×</td><td><strong>1.46×</strong></td></tr>
+      <tr><td>…and with the pools scrambled</td><td>0.49×</td><td>1.13×</td><td>1.18×</td>
+          <td>1.38×</td><td><strong>1.94×</strong></td></tr>
+      <tr><td>lead with the big pool and skip</td><td>0.62×</td><td>1.16×</td><td>1.21×</td>
+          <td>1.58×</td><td>1.73×</td></tr>
+      <tr><td><strong>grouped</strong></td><td>0.48×</td><td>0.99×</td><td>1.01×</td>
+          <td>1.01×</td><td><strong>0.99×</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    (The n = 4 column is one matching entity behind a two-chunk outer loop; it is loop overhead,
+    not a result. Read from 100 rightwards.)
+  </p>
+
+  <p>
+    The first three rows are the archetype winning, properly, by 1.46× to 1.94× on a real body at
+    scale — a bigger margin than the all-match query gave it, exactly as §2.1 predicted. Two of
+    those rows are also an implementation lesson worth having: leading with the <em>small</em>
+    pool rather than the big one is one line in a view's constructor, it means no entity is ever
+    visited only to be rejected, and it is worth 1.73× → 1.46×. The "sparse sets are bad at
+    selective queries because they have to skip" claim is about a naive implementation, not about
+    the design.
+  </p>
+
+  <p>
+    And then the last row, which is why this lesson's recommendation is confident rather than
+    grudging.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A group is an archetype you can add later</span>
+    <p>A pool's dense order is nobody's business but the pool's — no id outside it depends on
+       where an element sits. So two pools can be <strong>sorted into a common order</strong>,
+       putting the entities that have both components at the front of both dense arrays in the
+       same sequence. Once that holds, index <em>i</em> of one array and index <em>i</em> of the
+       other are the same entity, <strong>the query needs no sparse read at all</strong>, and
+       what you are iterating is — byte for byte, access for access — an archetype chunk.</p>
+    <p>EnTT calls this a <em>group</em>. It is not a different storage design; it is a
+       maintenance obligation laid on top of one, paid as a couple of swaps on insert and erase
+       for the pools involved. Measured: <strong>0.99× to 1.01× of the archetype at every
+       size</strong>, on the archetype's best case.</p>
+  </div>
+
+  <p>
+    So the archetype's query advantage is not a permanent property of the archetype. It is
+    something a sparse set can buy, per query, when a measurement says that query needs it, at the
+    price of slower structural changes <em>for the two or three component types in that group</em>
+    — and at no cost to the other thirty.
+  </p>
+
+  <!-- =================================================================
+       6 — THE DECISION
+       ================================================================= -->
+  <h2 id="decision"><span class="num">6</span>The Decision</h2>
+
+  <p>
+    Assemble it. On this machine, at the sizes measured, with both designs given their best
+    implementation:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Summary of every measured difference between the two
+             designs.</caption>
+    <thead><tr><th>quantity</th><th>archetype</th><th>sparse set</th><th>at 100,000 entities</th></tr></thead>
+    <tbody>
+      <tr><td>Query, all match, real body</td><td>baseline</td><td>0.96× – 1.34×</td>
+          <td>archetype by up to 34%</td></tr>
+      <tr><td>Query, 1 in 4 match, real body</td><td>baseline</td><td>1.46× – 1.94×</td>
+          <td>archetype by up to 94%</td></tr>
+      <tr><td>…the same, with a group</td><td>baseline</td><td>0.99×</td>
+          <td><strong>a tie</strong></td></tr>
+      <tr><td>Query, cheap body, worst case</td><td>baseline</td><td>2.40×</td>
+          <td>archetype, substantially</td></tr>
+      <tr><td>Structural change, 4 components</td><td>13.10 ns</td><td>4.25 ns</td>
+          <td>sparse by 3.1×</td></tr>
+      <tr><td>Structural change, 12 components</td><td>58.48 ns</td><td>4.23 ns</td>
+          <td><strong>sparse by 13.8×</strong></td></tr>
+      <tr><td>Index memory, 4 types</td><td>400 KB</td><td>3.2 MB</td><td>archetype by 2.8 MB</td></tr>
+      <tr><td>Index memory, 32 types</td><td>400 KB</td><td>15.2 MB</td><td>archetype by 14.8 MB</td></tr>
+      <tr><td>Lines of code to implement</td><td>~100 in the probe</td><td>~20 in the probe</td>
+          <td>sparse, by a lot</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>This course builds a sparse set.</strong> Four reasons, in the order of how much
+    weight they carry.
+  </p>
+
+  <p>
+    <strong>1. The migration only runs one way.</strong> This is the argument, and everything else
+    is supporting detail. A sparse set can be given an archetype's query performance later,
+    incrementally, one group at a time, guided by a profile, without changing what a component is
+    or invalidating a single id — measured at 0.99× on the archetype's own best case. An archetype
+    cannot be given a sparse set's O(1) structural change at all, at any price, because moving
+    between archetypes <em>is</em> what an archetype is. Choosing the design that can become the
+    other one is not a preference; it is the option with strictly more future in it.
+  </p>
+
+  <p>
+    <strong>2. The cost we would be accepting is bounded and the cost we would be avoiding is
+    not.</strong> The archetype's query win is at most 1.94×, only above ten thousand entities,
+    only when a query is selective, and only on the arms we have <em>not</em> grouped. The
+    archetype's structural-change loss is 13.8× and it <em>grows with every component type this
+    course adds</em> — Module 6 adds materials, Module 7 adds skeletal state, Module 8 rigid bodies and colliders and
+    state. A cost that scales with the future of the codebase is worse than a larger cost that
+    does not.
+  </p>
+
+  <p>
+    <strong>3. Nothing at this engine's scale is on the table anyway.</strong> Below a thousand
+    entities every arm is within 16% and most within 5%. The demos have four objects. Module 9's
+    capstone will have hundreds. We are choosing the design that will be right at 10<sup>5</sup>
+    entities while paying nothing either way at 10<sup>2</sup>, which means the decision can be
+    made on the properties above rather than on today's frame time.
+  </p>
+
+  <p>
+    <strong>4. It is a quarter of the code, and this is a course.</strong> Twenty lines against a
+    hundred in the probe, and the gap widens in a real implementation: an archetype needs
+    type-erased columns, chunk allocation, an archetype graph with add/remove edges, and a query
+    cache invalidated on every structural change. A student must be able to read the whole
+    container. This reason is a tiebreaker, admissible only because points 1–3 already decided
+    it — which is what §3.4 promised.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">When this is the wrong answer — the one sentence</span>
+    <p><strong>Choose the archetype when your world is large (past ~10<sup>4</sup> entities), its
+       component sets are stable (structural changes are rare rather than per-frame), and your
+       systems are narrow (little arithmetic per entity, so there is nothing for the redirect to
+       hide behind)</strong> — a streaming open world, a crowd simulation, a particle or boid
+       system with millions of near-identical agents. That is precisely the shape Unity DOTS is
+       built for, and on that shape the 1.46×–1.94× becomes the dominant term while the 13.8×
+       almost never fires.</p>
+    <p>And note what the escape hatch does to even that: if the engine ever reaches that shape,
+       the fix is to group the two or three pools that matter, not to rewrite the storage.</p>
+  </div>
+
+  <p>
+    Two consequences for what 5.8 builds, both of which follow from the measurements rather than
+    from taste. <strong>Components must stay small and single-purpose</strong>, because the sparse
+    set's whole model is that a system pays only for the pools it names — a fat component drags
+    unread bytes through cache exactly as 5.6's 96-byte <code>scene_object</code> did.
+    And <strong>the entity id must be one shared id space</strong>, which is the change §3.4
+    identified: <code>pool&lt;T&gt;</code>'s pattern is right, but the key must be minted by an
+    entity allocator and handed to every pool, instead of each pool minting its own. 5.8 will
+    lift 5.4's generational index out of <code>pool&lt;T&gt;</code> and make it the entity — which
+    is the second time this course has been able to build a new system mostly out of a decision
+    made two lessons earlier for a different reason.
+  </p>
+
+  <!-- =================================================================
+       7 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">7</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Files created or modified in this lesson.</caption>
+    <thead><tr><th>path</th><th>new / modified</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>scratch/ecs_probe.hpp</code></td><td>new</td>
+          <td>The two storage shapes, the queries, and the structural change. Shared by the
+              benchmark and the harness so neither can drift from the other.</td></tr>
+      <tr><td><code>scratch/bench_57.cpp</code></td><td>new</td>
+          <td>Four measurements: query, structural change, fragmentation, selectivity.</td></tr>
+      <tr><td><code>scratch/measure_57.py</code></td><td>new</td>
+          <td>Builds the benchmark twice — vectorised and scalar — and prints §5's tables.</td></tr>
+      <tr><td><code>scratch/verify_57.cpp</code></td><td>new</td>
+          <td>54 checks: the invariants, that both worlds hold the same components, that every
+              arm computes the same answer, and the golden.</td></tr>
+      <tr><td><code>scratch/build_bench_57.sh</code>, <code>scratch/build_verify_57.sh</code></td>
+          <td>new</td><td>One-line build-and-run for each.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>No engine source changes this lesson.</strong> Not one file under
+    <code>engine/</code> or <code>demos/</code> is touched, the CMake build is unchanged, and the
+    golden screenshot is byte-identical for the seventh lesson running. That is deliberate: the
+    output of a design lesson is a decision, and a decision that quietly rewrote the renderer on
+    its way past would be a different lesson.
+  </p>
+
+@@LISTING:scratch/ecs_probe.hpp@@
+
+@@LISTING:scratch/bench_57.cpp@@
+
+@@LISTING:scratch/verify_57.cpp@@
+
+@@LISTING:scratch/measure_57.py@@
+
+  <!-- =================================================================
+       8 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">8</span>Build &amp; Run</h2>
+
+  <p>
+    Everything here builds against the engine library the earlier lessons produced, so build that
+    first. The commands are the same on all three platforms except for the shell.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">macOS / Linux — build the engine, then the harness</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+sh scratch/build_verify_57.sh                              # correctness, -O0
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_57.sh # …and optimised</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (PowerShell, MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config RelWithDebInfo
+
+# The .sh wrappers are two lines of clang invocation; on MSVC compile the two
+# translation units directly against the built library:
+cl /std:c++20 /O2 /DNDEBUG /EHsc /W4 /I engine\include /I scratch ^
+   /I build\_deps\sdl3-src\include scratch\verify_57.cpp ^
+   build\demos\RelWithDebInfo\demo_common.lib ^
+   build\engine\RelWithDebInfo\engine.lib build\_deps\sdl3-build\RelWithDebInfo\SDL3.lib</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">⚠ VERIFY — the MSVC line is the shape, not a transcript</span>
+    <p>The Unix invocations above are what was actually run to produce every number in this
+       lesson. The MSVC one follows the same pattern the earlier modules' harnesses use, but the
+       exact library paths depend on your generator and configuration — check
+       <code>build\engine\</code> for where <code>engine.lib</code> landed. If in doubt, add
+       <code>scratch/verify_57.cpp</code> as a target in <code>CMakeLists.txt</code> and let
+       CMake work out the linkage, which is what a real project would do anyway.</p>
+  </div>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">The measurement — expect it to take about a minute</span></figcaption>
+    <pre><code class="lang-bash">python3 scratch/measure_57.py
+
+# …or run one build yourself and read the raw rows:
+sh scratch/build_bench_57.sh | head -20</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> <code>verify_57</code> prints seven sections and ends
+    with <code>54 checks, 0 failures</code> at both optimisation levels. <code>measure_57.py</code>
+    prints six numbered sections; the shapes to look for are the ones §5 discusses — a K = 1 row
+    that is 1.00× (your instrument is honest), a left half where everything is within a few
+    percent of 1.00× (your world is small), a scrambled-versus-aligned gap that opens somewhere
+    between 1,000 and 100,000 (your cache), a structural-change row that does not move when the
+    entity widens (the sparse set), and one that quadruples (the archetype).
+  </p>
+
+  <p>
+    Your knee will not be at the same size as this machine's, and that is the point of running it
+    rather than reading it. Divide your L2 size by 108 bytes and see whether it lands where your
+    numbers turn.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">sh scratch/build_verify_57.sh — the sections that carry the argument</span></figcaption>
+    <pre><code class="lang-bash">=== C. Every query arm computes the same answer ===
+  [PASS] K=4 real: archetype -19174.452911317, aligned -19174.452911317, scrambled -19174.452911317
+  [PASS] widening the query from K=1 to K=2 changes the answer — the axis is real
+
+=== E. A structural change leaves both worlds consistent ===
+  [PASS] after the removals the entities moved archetype: 1980 with, 20 without
+  [PASS] …and the sparse world's material pool shrank by exactly as many
+  [PASS] …while its OTHER pools were not touched at all — the whole argument, in one check
+  [PASS] after 200 frames the archetype's row map still points at the right rows
+  [PASS] every component of every entity survived 400 moves unchanged (0 drifted)
+
+=== F. The selective arms, and the group ===
+  [PASS] the grouped walk, which reads no sparse entry at all: -5747.959473968
+  [PASS] in the grouped world the two dense arrays agree on index for every member
+
+54 checks, 0 failures</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       9 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">9</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The row map written before the re-pack</span>
+    <p><strong>Symptom:</strong> an archetype ECS that is correct for thousands of moves and then
+       silently corrupts one entity. <strong>Cause:</strong> <code>add_material</code> originally
+       recorded where the entity landed <em>before</em> calling <code>pop_row</code> on the source
+       chunk. <code>pop_row</code> moves the source's last row into the hole and patches
+       <em>that</em> entity's row index — and when the moved entity is the last row, that entity
+       <em>is</em> the one being moved, so the stale index overwrites the fresh one.</p>
+    <p><strong>Fix:</strong> re-pack first, then record. <strong>How it was found:</strong> a
+       1-in-N event needs N tries, so <code>verify_57</code> §E churns 200 frames and then walks
+       the entire row map. A single-frame test would have passed for weeks.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A benchmark whose arms visit entities in different orders</span>
+    <p><strong>Symptom:</strong> <code>bench_ab::agree</code> is false and you reach for a
+       tolerance. <strong>Cause:</strong> usually the arms sum the same numbers in a different
+       sequence, which floating-point addition does not promise to give the same answer for — 5.6
+       hit exactly this. <strong>But:</strong> reaching for a tolerance disables the check that
+       would catch an arm which is fast because it is doing less.</p>
+    <p><strong>Fix here:</strong> make the orders the same by construction. All three arms walk
+       the lead pool in entity-id order, so every ratio in this lesson is between arms that agree
+       to the last bit. Prefer arranging for exactness over tolerating inexactness — and when you
+       genuinely cannot, report the magnitude, as <code>bench_ab::max_rel_diff</code> does.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Comparing "sparse set" against "archetype" with one number</span>
+    <p><strong>Symptom:</strong> your benchmark says 1.05× and someone else's says 2.4×, and you
+       conclude one of you is wrong. <strong>Cause:</strong> you built the pools in the same order
+       and they did not, or your body did real work and theirs did not. Those two axes span a
+       range of <strong>1.00× to 2.79×</strong> in this lesson's own data, for identical source
+       code.</p>
+    <p><strong>Fix:</strong> state the alignment and the per-entity work with every number you
+       publish, and measure both ends of each. A comparison with one number for a two-parameter
+       family is not a comparison.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Reading the small-n columns as results</span>
+    <p><strong>Symptom:</strong> a table where cost is not monotonic in the amount of work — here,
+       the archetype's cheap query costing 2.58 ns at K = 3 and 0.87 ns at K = 4, on four
+       entities. <strong>Cause:</strong> at four entities the loop is four iterations and the
+       auto-vectoriser's decisions dominate everything else.</p>
+    <p><strong>Fix:</strong> rebuild with <code>-fno-vectorize -fno-slp-vectorize</code>. If the
+       anomaly disappears — it does, 2.58 → 0.53 — it was codegen. Do not explain a compiler with
+       a cache.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Leading a selective view with the largest pool</span>
+    <p><strong>Symptom:</strong> a sparse-set query over <code>{transform, rare_thing}</code> that
+       costs the same whether one entity in four matches or one in a thousand.
+       <strong>Cause:</strong> the view is walking the transform pool and testing each entity for
+       <code>rare_thing</code>, so it visits the whole world to find a handful.</p>
+    <p><strong>Fix:</strong> walk the smallest pool. It is one comparison in the view's
+       constructor and it is worth 1.73× → 1.46× at one-in-four; the further the selectivity
+       goes, the more it is worth. 5.8's view must do this, and it is the reason a pool has to be
+       able to report its own size cheaply.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Treating a sparse array as free because it is only indices</span>
+    <p><strong>Symptom:</strong> memory use that grows when you add a component type nothing uses
+       yet. <strong>Cause:</strong> a sparse array is sized by the entity id space, not by the
+       number of components — so a type with three instances in a 100,000-entity world still
+       costs 400 KB. <strong>Fix:</strong> keep the id space compact (5.4's free list already
+       does), do not make short-lived swarms into entities, and if a real world needs 32+ types at
+       10<sup>5</sup> entities, page the sparse arrays the way EnTT does.</p>
+  </div>
+
+  <!-- =================================================================
+       10 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">10</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>10.1 — Find the crossover on your machine.</strong> §6 argues from a rate
+         comparison it never actually performs. Do it: using your own numbers, solve for the
+         number of structural changes per frame at which the sparse set's total cost equals the
+         archetype's, for a world of 10,000 entities running one K = 4 query per frame. Then do
+         it again for a 12-component entity.</p>
+      <details><summary>Hint</summary>
+        <p>Query cost is <em>N</em> × (ratio − 1) × archetype-ns; structural cost is
+           <em>C</em> × (archetype-ns − sparse-ns). Set them equal and solve for <em>C</em>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>With this machine's numbers — 10,000 entities, real body, scrambled (1.17×,
+           1.91 ns archetype) — the sparse set gives up 10,000 × 0.17 × 1.91 ≈ 3,250 ns of query
+           per frame, and wins 15.00 − 5.31 = 9.7 ns per structural change. It breaks even at
+           <strong>≈ 335 structural changes per frame</strong>, or 3.4% of the world. At twelve
+           components it is 34.6 ns per change and break-even falls to <strong>≈ 94</strong>. Two
+           things are worth noticing: the number is small enough that a game with any real
+           spawning reaches it, and it is a per-frame budget you can actually go and count in your
+           own game.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.2 — Page the sparse array.</strong> §3.3 argues this course does not need
+         paging because 5.4's free list keeps ids compact. Test the cost of being wrong: change
+         <code>pool&lt;T&gt;</code> in the probe to store <code>sparse</code> as a vector of
+         4,096-entry pages, and re-run the query benchmark.</p>
+      <details><summary>Hint</summary>
+        <p><code>sparse[e]</code> becomes <code>pages[e &gt;&gt; 12][e &amp; 4095]</code>. That is
+           one more dependent load, so the chain in Figure 2 goes from depth 2 to depth 3.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Expect near-zero cost on the aligned world and on the real body below the knee — the
+           page pointer is one line that stays hot and the extra latency hides. Expect it to be
+           visible on the scrambled cheap body at 100,000, where there was nothing to hide behind
+           already. The interesting part is that it costs memory-bandwidth <em>nothing</em>: the
+           page table is 4 bytes per 4,096 entities. Paging trades a small latency you can usually
+           hide for a large footprint you cannot.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.3 — Make the group pay for itself.</strong> §5.5 measures what a group is
+         worth on a query but never measures what it costs to maintain. Add a fourth structural
+         arm: a sparse set that keeps <code>{transform, velocity}</code> grouped, so every insert
+         and erase of either component must swap the affected element across the group boundary.
+         Measure it against the ungrouped sparse set.</p>
+      <details><summary>Hint</summary>
+        <p>Maintaining a group is: on insert, if the entity now has both, swap it to position
+           <code>group_size</code> in both pools and increment. On erase, swap it out and
+           decrement. Each swap is two element moves plus two sparse patches, per pool.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>You should find it costs on the order of a few nanoseconds per structural change
+           <em>on the grouped types only</em> — a fraction of the archetype's, because it moves two
+           components rather than all of them. That is the whole shape of the argument in §6
+           reduced to one measurement: a group buys the archetype's query at the archetype's
+           price, but charges it only on the pools you chose, instead of on every component the
+           entity happens to own.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.4 — Type-erase the archetype's columns.</strong> §4.2 admits the probe's
+         archetype is faster than a real one because its columns are statically typed. Quantify
+         the concession: store each column as a <code>std::vector&lt;std::byte&gt;</code> plus an
+         element size, look up the column index per archetype at query time, and re-run §5.1.</p>
+      <details><summary>Hint</summary>
+        <p>The inner loop's addressing becomes <code>base + i * stride</code> with a
+           <code>stride</code> the compiler cannot see, which blocks some vectorisation. Take the
+           scalar build too, so you can tell the codegen cost from the memory cost — the move this
+           lesson made twice.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Expect the loss to be modest and real, and concentrated on the cheap body where the
+           loop was tight enough for vectorisation to matter. However large it turns out on your
+           machine, subtract it from every archetype-favouring number in §5 — which is what "upper
+           bound" in §4.2 means, and which strengthens §6 rather than weakening it.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>10.5 — Argue the other side.</strong> Write the design document that chooses the
+         archetype, using only the numbers in this lesson, and make it honest — no straw men, no
+         numbers omitted. Then write down what it would take to change this course's mind.</p>
+      <details><summary>Hint</summary>
+        <p>The strongest archetype case is not the query ratio. It is the memory table plus a
+           claim about what the engine will look like at Module 9.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>The best version runs: at 32 component types the sparse set pays 14.8 MB of index that
+           the archetype does not, which is 3.7× this machine's L2 and is therefore not merely
+           footprint but a permanent tax on every cache the engine uses; the query win is
+           1.46×–1.94× on exactly the selective queries a mature engine has most of; and the
+           structural-change loss can be mitigated by deferring changes to a command buffer and
+           applying them in bulk at a frame boundary, which is what Unity DOTS does and which the
+           13.83× column does not model. That last point is the real one, and the honest answer to
+           "what would change our mind" is: <strong>a measurement of batched structural
+         change</strong>. If moving a thousand entities between two archetypes at once costs much
+           less than a thousand individual moves — and it should, since the destination appends
+           become one memcpy — then the archetype's worst column is an artefact of measuring the
+           operation one at a time. That experiment is not in this lesson, it is the strongest
+           thing that could be, and it is exercise 10.5 rather than a table because it needs a
+           batching API neither probe has.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       11 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">11</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine gained no code this lesson and gained the thing it most needed: <strong>a decided
+    architecture with its evidence attached</strong>. When 5.8's container turns out to be
+    awkward somewhere — and it will — the question "should this have been an archetype?" now has
+    an answer with numbers behind it, and a stated condition under which the answer changes.
+  </p>
+
+  <p>What was established:</p>
+
+  <ul>
+    <li><strong>Both designs satisfy every constraint 5.6 produced</strong>, so 5.6's numbers
+        genuinely could not decide this, and a new measurement was necessary rather than
+        rhetorical.</li>
+    <li><strong>A design can be measured before it is built</strong>, when the difference between
+        the candidates is an access pattern. Three hundred lines answered a question that would
+        otherwise have cost two implementations and a sunk-cost argument.</li>
+    <li><strong>The sparse set's redirect is latency, and latency hides.</strong> With codegen
+        held still it costs <em>nothing</em> — 1.00× — until the working set leaves cache
+        <em>and</em> the pools' orders have diverged. Both conditions are needed; either alone is
+        free.</li>
+    <li><strong>The archetype's structural change carries the entity's width in it</strong> and
+        the sparse set's does not: 13.10 → 58.48 ns against 4.25 → 4.23 ns when the entity goes
+        from four components to twelve.</li>
+    <li><strong>A group is an archetype you can add later</strong>, measured at 0.99× of a real
+        archetype on the archetype's own best case — which makes the migration one-directional and
+        is the reason for the recommendation.</li>
+    <li><strong>Fragmentation's iteration cost is 12% at worst</strong>, far less than the
+        argument against archetypes implies, and this lesson says so even though it argues the
+        other way.</li>
+  </ul>
+
+  <p>
+    <strong>Next: 5.8 — The ECS Runtime.</strong> It builds what this lesson chose. The entity
+    becomes a generational id in one shared space — 5.4's handle, lifted out of
+    <code>pool&lt;T&gt;</code> and given its own allocator — a component pool becomes a sparse set
+    keyed by it, and a <em>view</em> becomes the thing that walks the smallest pool and looks the
+    rest up, because §5.5 measured what leading with the wrong one costs. Then, and only then, the
+    engine gets its first system, and the demo scene stops being four <code>scene_object</code>s
+    in a <code>std::vector</code>.
+  </p>
+
+  <!-- =================================================================
+       12 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">12</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Michele Caini (skypjack), “ECS back and forth”.</strong> The series behind EnTT,
+        and the best available written account of sparse sets as an ECS storage — including
+        groups, which parts 4 and 5 develop. Read it after this lesson and you will recognise
+        every structure.</li>
+
+    <li><strong>The EnTT source, <code>entt/entity/sparse_set.hpp</code> and
+        <code>storage.hpp</code>.</strong> Denser than the articles and worth the effort: the
+        paged sparse array, the version bits inside the entity, and the group machinery are all
+        there in a form you can now read.</li>
+
+    <li><strong>Unity's Entities documentation on chunks and archetypes.</strong> The clearest
+        first-party description of the archetype model, including the 16 KB chunk size and change
+        filtering. Read it as the strongest case for the side this lesson did not take.</li>
+
+    <li><strong>Sander Mertens, the Flecs manual and his “Building an ECS” posts.</strong> An
+        archetype implementation whose author writes candidly about the costs — particularly the
+        archetype graph and what it does to structural changes.</li>
+
+    <li><strong>Adam Martin, “Entity Systems are the future of MMOG development” (2007).</strong>
+        The historical starting point. Worth reading for how much of the modern argument is
+        already there, and how much of it was about editors and iteration speed rather than about
+        caches.</li>
+
+    <li><strong>Bjarne Stroustrup / Chandler Carruth on data structure choice.</strong> Whenever
+        a "which container" argument stalls, the answer is usually the one this lesson took:
+        measure the two operations that differ, and prefer the option that can become the other
+        one.</li>
+
+    <li><strong>Lesson 5.6 of this course.</strong> Not padding: §5.2's latency-hiding result only
+        makes sense against 5.6's memory-level-parallelism measurement, and the vectoriser
+        experiment in §5.2 is 5.6's method applied unchanged.</li>
+  </ul>

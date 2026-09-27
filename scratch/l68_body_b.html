@@ -1,0 +1,435 @@
+  <!-- =================================================================
+       4 — THE COMPARISON
+       ================================================================= -->
+  <h2 id="acne"><span class="num">4</span>The Comparison, and Why It Fails</h2>
+
+  <p>
+    Everything so far is machinery. This section is the lesson.
+  </p>
+
+  <p>
+    Build the map, render the scene, and what you get is not shadows. It is this:
+  </p>
+
+  @@FIG_ARTEFACT@@
+
+  <h3 id="acne-why">4.1 — Two numbers, computed differently</h3>
+
+  <p>
+    Here is the situation, stated precisely, because the precision is what makes the fix
+    derivable rather than a guess.
+  </p>
+
+  <p>
+    A point <em>P</em> on a lit surface projects into the light's space at some continuous position
+    (<em>u</em>, <em>v</em>) with depth <em>d</em>. We compare <em>d</em> against the depth the map
+    stored for that direction. But the map does not store a depth "for that direction" — it stores
+    <strong>one depth per texel</strong>, sampled at one point, and <em>P</em> is somewhere else
+    inside that texel.
+  </p>
+
+  <p>
+    Both numbers describe the same plane. Neither is wrong. They differ because they were evaluated
+    at two different points on it — and on a surface tilted relative to the light, two different
+    points have two different depths.
+  </p>
+
+  @@FIG_ACNE@@
+
+  <p>
+    Now the crucial observation, and it is the one that turns a mystery into arithmetic:
+    <strong>half of every texel's footprint lies downhill of the point the map sampled.</strong>
+    Downhill means further from the light, which means the comparison says "something is in front of
+    me", which means shadow. So with no bias at all, <em>half of every lit surface should shadow
+    itself.</em>
+  </p>
+
+  <p>
+    That is a prediction with a number in it, and <code>verify_68</code> §C measures it: on an
+    unoccluded plane, sampled at 9,216 points, <strong>50.1%</strong> come back shadowed. Not
+    "some". Half. Shadow acne is not an artefact of a subtle bug; it is what the algorithm does
+    when you implement it correctly and stop.
+  </p>
+
+  <h3 id="acne-bound">4.2 — How big is the disagreement?</h3>
+
+  <p>
+    Bound it. The fragment and the stored sample are at most some lateral distance apart in the
+    light's <em>uv</em> plane. Call that distance's size in texels the <strong>reach</strong>. For
+    a single lookup the fragment sits somewhere inside its own texel, so the worst case is half a
+    texel in each axis — half a texel diagonal:
+  </p>
+
+  <div class="eq">
+    \[ \text{reach}_1 = \tfrac{\sqrt{2}}{2} = 0.7071 \ \text{texels} \]
+  </div>
+
+  <p>
+    Walking that far <em>across</em> a surface changes its depth. By how much? If the surface's
+    normal makes an angle <em>θ</em> with the direction to the light, then moving one unit
+    perpendicular to the light changes the depth along the light by exactly
+    <code>tan(θ)</code> — that is what a slope <em>is</em>. And <code>cos(θ)</code> is
+    <code>n · l</code>, which the shading equation already computed:
+  </p>
+
+  <div class="eq">
+    \[ \tan\theta \;=\; \frac{\sqrt{1 - (n\cdot l)^2}}{n \cdot l} \]
+  </div>
+
+  <p>
+    So the worst depth error, in <em>world</em> units, is the lateral travel times the slope; and
+    dividing by <code>depth_range</code> converts it into the device-depth units the comparison is
+    actually performed in:
+  </p>
+
+  <div class="eq">
+    \[
+      \text{bias} \;=\; \text{reach} \cdot \text{world\_per\_texel} \cdot
+                        \frac{\tan\theta}{\text{depth\_range}}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: how far the furthest tap can be (in texels), times how big a texel is (in metres),
+    times how steeply the surface is leaning, divided by how many metres a unit of depth is worth.
+    Four quantities, all of which the engine already knows.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The bound is tight, and that is the check that matters</span>
+    <p>A bound you cannot exceed is easy to write; a bound that is <em>reached</em> is a
+       derivation. <code>verify_68</code> §C walks a tilted plane and records the worst actual
+       disagreement between a fragment's depth and its texel's stored depth:</p>
+    <p><strong>measured 1.931 × 10⁻³, derived bound 2.101 × 10⁻³ — the measurement reaches 92% of
+       the bound.</strong> The remaining 8% is simply that no sample landed at the exact worst
+       corner. Had the measurement come out at 20% of the bound, the bound would be describing
+       something other than what actually happens, and the bias built on it would be a
+       superstition that works.</p>
+  </div>
+
+  <h3 id="acne-worked">4.3 — The worked example, with real numbers</h3>
+
+  <p>
+    A 1024-texel map fitted to a 20-metre box gives <code>world_per_texel</code> = 20/1024 =
+    <strong>0.01953 m</strong>. A surface at 60° to the light has <code>tan θ</code> =
+    <strong>1.7321</strong>. With a 24-metre depth range and a single tap:
+  </p>
+
+  <div class="eq">
+    \[ 0.7071 \times 0.01953 \times \frac{1.7321}{24} \;=\; 9.966\times 10^{-4} \]
+  </div>
+
+  <p>
+    About a thousandth of the depth range — which in world units is 0.024 m, or roughly one and a
+    quarter texels' worth of height. Now vary the two inputs and watch what the formula says:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">How the derived bias responds to angle and resolution</caption>
+      <thead><tr><th>Change</th><th>tan θ</th><th>Bias, device</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>facing the light (0°)</td><td>0.000</td><td>0</td>
+            <td>the surface's depth does not vary across a texel at all, so nothing to correct</td></tr>
+        <tr><td>45°</td><td>1.000</td><td>5.75 × 10⁻⁴</td><td>the reference case</td></tr>
+        <tr><td>60°</td><td>1.732</td><td>9.97 × 10⁻⁴</td><td>the worked example</td></tr>
+        <tr><td>84°</td><td>9.514</td><td>5.47 × 10⁻³</td><td><strong>ten times</strong> the 45° figure</td></tr>
+        <tr><td>90°, exactly</td><td>∞</td><td>∞</td>
+            <td>a shadow map genuinely cannot resolve an edge-on surface. We clamp at 10 and say so</td></tr>
+        <tr><td>map halved to 512</td><td>—</td><td>doubles</td>
+            <td><code>world_per_texel</code> doubles; resolution and bias trade directly</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    That table is the argument against a constant bias, written out. The required correction spans
+    <em>a factor of infinity</em> across the angles in a single scene, and a constant is by
+    definition the same at all of them.
+  </p>
+
+  <h3 id="acne-quant">4.4 — The other half: the format's own error</h3>
+
+  <p>
+    There is a second, smaller disagreement that has nothing to do with geometry. The stored depth
+    was rounded to the nearest code the depth buffer can represent, so it can already be wrong by
+    half a code before any surface is tilted:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Half a depth code, per format</caption>
+      <thead><tr><th>Format</th><th>Half a code (device)</th><th>Over a 20 m box</th></tr></thead>
+      <tbody>
+        <tr><td><code>D16_UNORM</code></td><td>7.6295 × 10⁻⁶</td><td>0.15 mm</td></tr>
+        <tr><td><code>D24_UNORM</code></td><td>2.9802 × 10⁻⁸</td><td>0.6 µm</td></tr>
+        <tr><td><code>D32_FLOAT</code></td><td>≈ 6 × 10⁻⁸ near the far plane</td><td>≈ 1.2 µm</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    All three are one to three orders of magnitude below the slope term at every angle this engine
+    can rasterise, which is why <code>quantisation_bias</code> exists, is added unconditionally, and
+    is then almost never the thing that matters. It matters on a 16-bit map with a very large depth
+    range, and it matters on a spot light where — because the projection is perspective — that half
+    code is worth a hundred times more world depth at the far plane than at the near one.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A real subtlety: <em>where</em> your rasterizer puts its samples</span>
+    <p>This engine's <code>fill_triangle</code> evaluates every attribute — depth included — at
+       <strong>integer</strong> pixel coordinates, not at pixel centres. So the depth stored "for
+       texel <em>i</em>" is the depth of the surface at exactly <em>x</em> = <em>i</em>, and the
+       nearest stored sample to a fragment at <em>x</em> is <code>round(x)</code>, putting the
+       offset in [−0.5, +0.5).</p>
+    <p>Write <code>floor</code> there instead — which is what a GPU lookup does, because hardware
+       samples at pixel <em>centres</em> and <code>SampleCmp</code> selects the texel containing the
+       uv — and every offset is biased half a texel in one direction. The reach doubles, the derived
+       bias is half what is needed, and acne returns on one side of every slope. The two renderers
+       spell it differently and must mean the same thing; this cost a debugging pass and it is
+       written into the code where the decision lives.</p>
+  </div>
+
+  <!-- =================================================================
+       5 — THE THREE CURES
+       ================================================================= -->
+  <h2 id="cures"><span class="num">5</span>Three Cures, and What Each One Costs</h2>
+
+  @@FIG_CURES@@
+
+  <h3 id="cure-const">5.1 — A constant, and why it must peter-pan</h3>
+
+  <p>
+    Subtract a fixed number from the fragment's depth before comparing. It is what everyone writes
+    first, it does remove the acne, and it is worth understanding exactly how it fails rather than
+    just being told it does.
+  </p>
+
+  <p>
+    The error being cancelled is proportional to <code>tan θ</code>. The correction is not. So the
+    constant must be sized for the <em>steepest</em> surface in the scene, and every flatter surface
+    then receives a bias far larger than it needed. <code>verify_68</code> §D puts a number on it:
+    a bias sized for a 50° surface is <strong>3.1× too small at 75°</strong>. Size it for 75°
+    instead and everything shallower is over-corrected.
+  </p>
+
+  <p>
+    What over-correction looks like has a name — <strong>peter-panning</strong>, after the boy whose
+    shadow came unstuck — and it too is exactly quantifiable. Subtracting <em>b</em> from a
+    fragment's device depth is the same as moving that fragment <em>b</em> × <code>depth_range</code>
+    world units <em>toward the light along its own ray</em>. Any occluder nearer to it than that
+    stops occluding. So:
+  </p>
+
+  <div class="eq">
+    \[ \text{shadow lost wherever the caster is within } b \cdot \text{depth\_range}
+       \text{ of the receiver} \]
+  </div>
+
+  <p>
+    Which is worst precisely where a caster <em>touches</em> its receiver, because that is where the
+    gap is smallest — so the contact shadow, the one cue we added shadows to get, is the first
+    thing a constant bias destroys. <code>verify_68</code> §D measures it directly: a receiver under
+    a caster 0.541 world units away along the light ray is fully shadowed at a bias worth half that
+    gap and <strong>fully lit</strong> at a bias worth 1.5× it.
+  </p>
+
+  <h3 id="cure-slope">5.2 — Slope-scaled: the derived answer</h3>
+
+  <p>
+    §4.2's formula, applied per fragment. Each surface gets exactly the bias its own geometry
+    requires and no more — zero when it faces the light square-on, growing with the tilt, clamped
+    where the map genuinely cannot resolve the surface at all.
+  </p>
+
+  <p>
+    Measured, on the same plane that showed 50.1% acne with no bias: <strong>0.0%</strong>. And
+    because the bias is zero on surfaces facing the light, the contact shadows a constant bias
+    destroys are exactly the ones this preserves.
+  </p>
+
+  <div class="callout">
+    <span class="label">A scale factor of 1.0 is the derivation</span>
+    <p><code>shadow_settings::slope_scale</code> defaults to 1.0, and a number other than 1 is an
+       admission that something upstream is not what the derivation assumed. That is worth knowing
+       rather than absorbing silently into a magic constant — if you find yourself needing 3.0, the
+       question to ask is <em>which of the four quantities in the formula is wrong</em>, and §6.3
+       gives one very common answer.</p>
+  </div>
+
+  <h3 id="cure-normal">5.3 — Normal-offset, and why 6.7 is why it works</h3>
+
+  <p>
+    The third answer is structurally different: instead of moving the fragment's <em>depth</em>,
+    move the <em>sample point</em>, along the surface normal, before projecting it into the light's
+    space.
+  </p>
+
+  <div class="eq">
+    \[ p' = p + n_{geom}\,\cdot\,\text{scale}\cdot\text{world\_per\_texel}\cdot\sin\theta \]
+  </div>
+
+  <p>
+    Nothing at all when the surface faces the light; one texel's worth when it is edge-on. And
+    <em>edge-on is exactly where the depth-side bias diverges</em>, which is the trade: depth error
+    grows without bound as <code>tan θ</code> does, while the lateral offset is bounded by
+    construction because it never exceeds a texel.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">It converts the error; it does not remove it</span>
+    <p>Be honest about the mechanism. Moving along the normal buys clearance partly by lifting the
+       point off the surface and partly by landing the lookup in a <em>neighbouring texel</em> —
+       one whose stored sample is further uphill. That second half is a heuristic, not a bound, and
+       what it costs is a lookup that has moved sideways: near a silhouette the sample can slide off
+       the caster entirely and light a pixel that should be dark. The magnitude below is the
+       standard one (Holbert, <em>Saying Goodbye to Shadow Acne</em>, GDC 2011); the derivation that
+       would make it a bound does not exist, and pretending otherwise would be the kind of
+       hand-waving this course is against.</p>
+  </div>
+
+  <p>
+    And here is where Lesson 6.7 collects. <em>Which</em> normal? The engine now has two that
+    disagree: the geometric normal the triangles have, and the shading normal a normal map invented.
+    <strong>It must be the geometric one</strong>, and the reason is a sentence: shadow acne is a
+    disagreement about where the <em>triangles</em> are, and a normal map does not move a triangle.
+    Offset along a mapped normal and the correction wobbles per texel of an image that has nothing
+    to do with the geometry causing the problem.
+  </p>
+
+  <p>
+    The same argument applies one line earlier, to the cosine itself. The <code>n · l</code> that
+    scales the light uses the shading normal, because it asks how much light the surface receives.
+    The <code>n · l</code> that scales the bias uses the geometric normal, because it asks how
+    steeply the surface leans against the texel grid. <strong>They are two different cosines that
+    have been the same number for five lessons</strong>, and this is the first line in the engine
+    that has to tell them apart.
+  </p>
+
+  <h3 id="cure-cull">5.4 — And a fourth, which is free</h3>
+
+  <p>
+    Render only the <em>back</em> faces of casters into the map. Then every front face being shaded
+    is compared against a surface that is genuinely behind it, and the disagreement has the whole
+    thickness of the object to absorb it. It costs nothing — it is one field on the pipeline's
+    rasterizer state — and on closed geometry it is excellent.
+  </p>
+
+  <p>
+    On open geometry it is a disaster, and the failure is total rather than subtle: a ground plane
+    has no back face, so it contributes nothing to the map, so the map is empty and nothing is ever
+    shadowed. <code>verify_68</code> §D measures exactly that — 0.00% acne on a plane, because the
+    plane's only face was culled. The default is therefore <code>cull_mode::none</code> and the
+    choice belongs to whoever knows what is in the scene.
+  </p>
+
+  <!-- =================================================================
+       6 — PCF
+       ================================================================= -->
+  <h2 id="pcf"><span class="num">6</span>PCF: Compare, Then Filter</h2>
+
+  <p>
+    A shadow map's edge is a hard step: one texel is occluded and its neighbour is not. Blown up to
+    screen scale that is a staircase, and the cure is obvious — filter it. What is <em>not</em>
+    obvious is that the obvious way to filter it is wrong, in a way that produces a plausible
+    picture.
+  </p>
+
+  <h3 id="pcf-order">6.1 — The order is not a preference</h3>
+
+  <p>
+    Take two adjacent texels storing depths <strong>0.3</strong> and <strong>0.9</strong>, and a
+    receiver at <strong>0.5</strong>. Filter the depths first, as a linear sampler naturally would:
+  </p>
+
+  <div class="eq">
+    \[ \frac{0.3 + 0.9}{2} = 0.6, \qquad 0.6 > 0.5 \;\Rightarrow\; \textbf{fully lit} \]
+  </div>
+
+  <p>
+    The receiver is reported completely unshadowed — with half of its taps occluded. That is not a
+    blurrier answer. It is a <em>wrong</em> one, and it stays wrong however many taps you add.
+  </p>
+
+  <p>
+    Compare first, then filter:
+  </p>
+
+  <div class="eq">
+    \[ 0.3 < 0.5 \Rightarrow 0, \qquad 0.9 > 0.5 \Rightarrow 1,
+       \qquad \frac{0 + 1}{2} = \textbf{0.5} \]
+  </div>
+
+  @@FIG_PCF@@
+
+  <p>
+    Half shadowed, which is the answer. The rule underneath is one line and it generalises far
+    beyond shadows: <strong>the values you average must be the values you want the average
+    of.</strong> We want an average <em>visibility</em>, so visibility is what has to be averaged —
+    and a depth is not a visibility, it is an input to computing one.
+  </p>
+
+  <p>
+    That is the entire reason the graphics API has a type for this. An
+    <code>SDL_GPUSampler</code> with <code>enable_compare = true</code> — HLSL's
+    <code>SamplerComparisonState</code> — performs the depth test on each of its four bilinear
+    texels <em>before</em> blending them, so a single fetch is already 2×2 percentage-closer
+    filtering in fixed-function hardware. The comparison operator lives in the sampler object, not
+    in the shader, which means it is free.
+  </p>
+
+  <h3 id="pcf-reach">6.2 — And the bias has to widen with the kernel</h3>
+
+  <p>
+    Widen the kernel beyond hardware's 2×2 and the taps get further away. This is the finding this
+    lesson made by rendering, and it is worth the space because the symptom points at the wrong
+    culprit.
+  </p>
+
+  <p>
+    §4.2's reach was half a texel diagonal, because the only sample involved was the fragment's own
+    texel. A 3×3 kernel reads a texel one step out in each direction, so its furthest tap is
+    <em>1.5</em> texels away on each axis:
+  </p>
+
+  <div class="eq">
+    \[ \text{reach}_r = (r + 0.5)\sqrt{2}
+       \qquad\Rightarrow\qquad
+       \text{reach}_0 = 0.707, \quad \text{reach}_1 = 2.121 \]
+  </div>
+
+  <p>
+    <strong>Three times as far.</strong> So a bias sized for a single tap covers a third of what a
+    3×3 kernel needs, and two thirds of the acne walks straight back in — at the exact moment you
+    turn PCF on. Which makes it look like a filtering bug. It is not; it is the same bias formula
+    with the wrong reach.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Measured, twice</span>
+    <p>On the controlled plane in <code>verify_68</code> §E: 1 tap with the derived bias gives
+       <strong>0.00%</strong> acne, 3×3 with the reach-corrected bias gives <strong>0.00%</strong>,
+       and 3×3 with the bias deliberately sized for one tap gives <strong>79.6%</strong>.</p>
+    <p>And in the actual renderer, before the fix was made: <code>shapes.glb</code> at PCF radius 0
+       had 78 stray pixels, at radius 1 it had <strong>10,348</strong>, and at radius 2 it had
+       <strong>20,265</strong>. After the fix, 174 and 224 — and what is left is the legitimate soft
+       edge, which <em>should</em> differ from a hard one.</p>
+  </div>
+
+  <h3 id="pcf-cost">6.3 — What it costs, and what it does not buy</h3>
+
+  <p>
+    A 3×3 kernel is nine comparison fetches per shadowed fragment, and each hardware fetch is
+    already filtering four texels — so the footprint is 4×4 texels of effective coverage for nine
+    fetches. That is the cheapest soft shadow there is and it is what most games ship.
+  </p>
+
+  <p>
+    What it does <em>not</em> buy is a physically meaningful penumbra. A real shadow's softness
+    depends on the light's angular size and on the distance from the caster to the receiver: sharp
+    at contact, blurring with distance. PCF's blur is a constant number of shadow texels, so it is
+    the same everywhere — which reads as "slightly out of focus" rather than as "soft light".
+    Percentage-closer <em>soft</em> shadows estimate a blocker distance first and scale the kernel
+    by it; that is a real technique and it is out of scope here.
+  </p>

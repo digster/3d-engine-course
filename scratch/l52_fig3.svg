@@ -1,0 +1,47 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="l52f3-t l52f3-d">
+  <title id="l52f3-t">The lifecycle ladder and the three surfaces</title>
+  <desc id="l52f3-d">Four creation steps drawn as a ladder with a downward create arrow and an upward destroy arrow, and three dashed markers showing where the headless, gpu and renderer surfaces each stop.</desc>
+  <defs>
+    <marker id="e-i-l52f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l52f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l52f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l52f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Created downwards, destroyed upwards — and the three surfaces are three stopping points</text>
+<rect x="170" y="56" width="210" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="275" y="77" class="xs mono" text-anchor="middle">SDL_Init(flags)</text>
+<text x="396" y="77" class="xs muted" text-anchor="start">video only when the surface needs it</text>
+<rect x="170" y="112" width="210" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="275" y="133" class="xs mono" text-anchor="middle">SDL_CreateWindow</text>
+<text x="396" y="133" class="xs muted" text-anchor="start">one window, and nobody owns it yet</text>
+<line x1="240" y1="92" x2="240" y2="108" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f3)"/>
+<line x1="310" y1="116" x2="310" y2="92" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l52f3)"/>
+<rect x="170" y="168" width="210" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="275" y="189" class="xs mono" text-anchor="middle">SDL_CreateRenderer</text>
+<text x="396" y="189" class="xs muted" text-anchor="start">CLAIMS the window (Lesson 4.2)</text>
+<line x1="240" y1="148" x2="240" y2="164" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f3)"/>
+<line x1="310" y1="172" x2="310" y2="148" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l52f3)"/>
+<rect x="170" y="224" width="210" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="275" y="245" class="xs mono" text-anchor="middle">SDL_CreateTexture</text>
+<text x="396" y="245" class="xs muted" text-anchor="start">streaming, ARGB8888, framebuffer-sized</text>
+<line x1="240" y1="204" x2="240" y2="220" class="ink" stroke-width="1.4" marker-end="url(#e-i-l52f3)"/>
+<line x1="310" y1="228" x2="310" y2="204" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l52f3)"/>
+<text x="206" y="30" class="xs" text-anchor="middle">create</text>
+<text x="330" y="30" class="xs muted" text-anchor="middle">destroy</text>
+<line x1="90" y1="96" x2="164" y2="96" stroke="#5ac878" stroke-width="2" stroke-dasharray="3 2"/>
+<circle cx="164" cy="96" r="4" fill="#5ac878"/>
+<text x="20" y="100" class="xs mono" text-anchor="start">headless</text>
+<line x1="90" y1="152" x2="164" y2="152" stroke="#9b7ede" stroke-width="2" stroke-dasharray="3 2"/>
+<circle cx="164" cy="152" r="4" fill="#9b7ede"/>
+<text x="20" y="156" class="xs mono" text-anchor="start">gpu</text>
+<line x1="90" y1="264" x2="164" y2="264" stroke="#5082e6" stroke-width="2" stroke-dasharray="3 2"/>
+<circle cx="164" cy="264" r="4" fill="#5082e6"/>
+<text x="20" y="268" class="xs mono" text-anchor="start">renderer</text>
+<line x1="20" y1="296" x2="700" y2="296" class="grid" stroke-width="1"/>
+<rect x="20" y="308" width="8" height="8" fill="#5ac878"/>
+<text x="36" y="316" class="xs muted" text-anchor="start">headless: no window at all — and no SDL_INIT_VIDEO, so it runs on a build server</text>
+<rect x="20" y="324" width="8" height="8" fill="#9b7ede"/>
+<text x="36" y="332" class="xs muted" text-anchor="start">gpu: a window claimed by NOBODY, ready for gpu_device::create</text>
+<rect x="20" y="340" width="8" height="8" fill="#5082e6"/>
+<text x="36" y="348" class="xs muted" text-anchor="start">renderer: the whole ladder: Module 1's presentation path</text>
+</svg>

@@ -1,0 +1,591 @@
+  <!-- =================================================================
+       4 — THE DERIVATION
+       ================================================================= -->
+  <h2 id="derive"><span class="num">4</span>Deriving the Tangent Frame</h2>
+
+  <p>
+    Here is the part that usually arrives as a formula to be copied. It is four lines of algebra
+    and it follows from one observation, so there is no reason to copy anything.
+  </p>
+
+  <p>
+    Take a triangle. Its three corners have positions <em>p<sub>0</sub></em>, <em>p<sub>1</sub></em>,
+    <em>p<sub>2</sub></em> in metres, and texture coordinates <em>w<sub>0</sub></em>,
+    <em>w<sub>1</sub></em>, <em>w<sub>2</sub></em> in texture units. Two edges from the first corner
+    describe the triangle in space:
+  </p>
+
+  <div class="eq">
+    \[ e_1 = p_1 - p_0, \qquad e_2 = p_2 - p_0 \]
+  </div>
+
+  <p>
+    …and the corresponding uv differences describe the <em>same two directions</em> in the chart:
+  </p>
+
+  <div class="eq">
+    \[ (\Delta u_1, \Delta v_1) = w_1 - w_0, \qquad (\Delta u_2, \Delta v_2) = w_2 - w_0 \]
+  </div>
+
+  <p>
+    That correspondence is the entire content of the derivation, so it is worth saying slowly.
+    <strong><em>e<sub>1</sub></em> and (Δu<sub>1</sub>, Δv<sub>1</sub>) are two descriptions of one
+    walk across the surface</strong> — one measured in metres, one in texture units. If <em>T</em>
+    is the world direction you move when <em>u</em> increases by one, and <em>B</em> is the
+    direction for <em>v</em>, then walking Δu<sub>1</sub> in <em>u</em> and Δv<sub>1</sub> in
+    <em>v</em> must land you exactly where <em>e<sub>1</sub></em> lands you:
+  </p>
+
+  <div class="eq">
+    \[
+      \begin{aligned}
+      e_1 &= \Delta u_1\,T \;+\; \Delta v_1\,B \\
+      e_2 &= \Delta u_2\,T \;+\; \Delta v_2\,B
+      \end{aligned}
+    \]
+  </div>
+
+  <p>
+    Two equations, two unknowns. That is all a tangent frame is — and the whole reputation of this
+    subject for being fiddly comes from being shown the answer rather than the question.
+  </p>
+
+  @@FIG_DERIVATION@@
+
+  <p>
+    Solving is inverting a 2×2. Write the system as a matrix equation with <em>T</em> and <em>B</em>
+    as the unknowns:
+  </p>
+
+  <div class="eq">
+    \[
+      \begin{bmatrix} e_1 \\ e_2 \end{bmatrix}
+      =
+      \begin{bmatrix} \Delta u_1 & \Delta v_1 \\ \Delta u_2 & \Delta v_2 \end{bmatrix}
+      \begin{bmatrix} T \\ B \end{bmatrix}
+    \]
+  </div>
+
+  <p>
+    and multiply through by the inverse. With
+    <em>det</em> = Δu<sub>1</sub>Δv<sub>2</sub> − Δu<sub>2</sub>Δv<sub>1</sub>:
+  </p>
+
+  <div class="eq">
+    \[
+      \begin{aligned}
+      T &= \tfrac{1}{\det}\big(\Delta v_2\,e_1 - \Delta v_1\,e_2\big) \\
+      B &= \tfrac{1}{\det}\big(\Delta u_1\,e_2 - \Delta u_2\,e_1\big)
+      \end{aligned}
+    \]
+  </div>
+
+  <div class="callout ok">
+    <span class="label">Worked example — the triangle <code>verify_67</code> §B uses</span>
+    <p>
+      <em>p<sub>0</sub></em> = (0, 0, 0), <em>p<sub>1</sub></em> = (2, 0, 0),
+      <em>p<sub>2</sub></em> = (0, 0, −2), lying flat in the xz plane so <em>N</em> = (0, 1, 0).
+      Texture coordinates (0, 0), (1, 0) and (0, 1).
+    </p>
+    <p>
+      <em>e<sub>1</sub></em> = (2, 0, 0) and <em>e<sub>2</sub></em> = (0, 0, −2). The uv deltas are
+      (1, 0) and (0, 1), so the 2×2 is the <strong>identity</strong> and <em>det</em> = 1.
+    </p>
+    <p>
+      <em>T</em> = 1·(2,0,0) − 0·(0,0,−2) = <strong>(2, 0, 0)</strong>, which normalises to
+      (1, 0, 0).<br>
+      <em>B</em> = 1·(0,0,−2) − 0·(2,0,0) = <strong>(0, 0, −2)</strong>, which normalises to
+      (0, 0, −1).
+    </p>
+    <p>
+      Sanity-check it against the picture: the triangle's <em>u</em> runs along +x, so the direction
+      of increasing <em>u</em> is +x. It does. And <em>v</em> runs toward −z, so <em>B</em> points
+      that way. It does. <code>verify_67</code> §B gets exactly these to six decimals.
+    </p>
+  </div>
+
+  <h3>What the determinant is, and why zero is not a bug</h3>
+
+  <p>
+    <em>det</em> is twice the <strong>signed area the triangle occupies in the uv chart</strong> —
+    which is the same signed-area quantity Lesson 2.4 derived barycentric coordinates from, applied
+    to a different pair of axes.
+  </p>
+
+  <p>
+    So <em>det</em> = 0 means the triangle has no area in texture space: three corners on one line
+    of the chart, or all three at the same point. That is not a degenerate input to be guarded
+    against — it is <strong>an untextured face, or a collapsed unwrap, and both are ordinary</strong>.
+    There is genuinely no tangent frame to compute, so the face contributes nothing and its vertices
+    fall back to whatever their other faces say:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/mesh.cpp — the case, not the guard</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float det = w1.x * w2.y - w2.x * w1.y;
+if (det == 0.0f) { continue; }</code></pre>
+  </figure>
+
+  <p>
+    Dividing anyway would put an infinity into every vertex the face touches and spread it through
+    the average — so a single untextured face would poison a region of an otherwise fine model.
+    <code>verify_67</code> §B feeds a triangle whose three uvs are collinear and asserts the output
+    is finite.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And it is why <code>cube.gltf</code> looks odd under a normal map</span>
+    <p>Lesson 6.6 gave <code>assets/cube.gltf</code> one uv per <em>box corner</em>, so that the
+       round-trip test in §A could compare index-for-index against <code>cube_mesh()</code>. That
+       was the right call for that test and it has a consequence nobody could see until now: on four
+       of the cube's six faces, <em>u</em> is constant — so those faces have <strong>zero uv
+       area</strong> and no tangent frame at all.</p>
+    <p>Normal-map the cube and the result is banded rather than dimpled, because only two faces have
+       a chart. That is not a bug in this lesson; it is a property of that asset, which normal
+       mapping is simply the first thing to make visible. Use <code>--model torus.obj</code> for a
+       mesh with a real chart on every triangle.</p>
+  </div>
+
+  <h3>From per-face to per-vertex</h3>
+
+  <p>
+    The solve gives a frame per <em>triangle</em>, and a vertex shared by several triangles needs
+    one answer. The same treatment <code>with_normals</code> gives normals applies without a word of
+    new argument: accumulate, then normalise.
+  </p>
+
+  <p>
+    And the weighting is free, for the reason Lesson 3.6 gave about area-weighted normals. The
+    solved <em>T</em> is <em>not</em> normalised before accumulation, and its magnitude scales with
+    the triangle's own size — so summing the raw solutions weights each face by its area without a
+    single extra multiply.
+  </p>
+
+  <p>
+    Then one step that has no counterpart in the normal case:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/mesh.cpp — Gram-Schmidt, and which vector we refuse to move</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const vec3 ortho = t - nrm * dot(nrm, t);</code></pre>
+  </figure>
+
+  <p>
+    The accumulated tangent is an average of what several faces wanted, and the accumulated normal
+    is an average of what several faces wanted, and there is no reason the two averages should be
+    perpendicular. Subtracting the component along <em>N</em> leaves what lies in the tangent plane.
+  </p>
+
+  <p>
+    Note which vector is held fixed. <strong>The normal is what we refuse to move</strong>, because
+    it is what the lighting is actually about; the tangent only has to span the plane, so it is the
+    one that gets adjusted. Doing it the other way round would tilt the shading normal to
+    accommodate a texture coordinate, which is precisely backwards.
+  </p>
+
+  <!-- =================================================================
+       5 — HANDEDNESS
+       ================================================================= -->
+  <h2 id="handed"><span class="num">5</span>The Fourth Component</h2>
+
+  <p>
+    <code>mesh::tangents</code> is a span of <code>vec4</code>, not <code>vec3</code>, and the fourth
+    component is not padding. It is the frame's <strong>handedness</strong>: +1 or −1.
+  </p>
+
+  <p>
+    Once <em>N</em> and <em>T</em> are known, the bitangent is almost determined — it is
+    perpendicular to both, so it is <code>cross(N, T)</code> up to a sign. <em>Which</em> sign is not
+    determined by the geometry at all. It is determined by the <strong>uv chart</strong>, and a chart
+    can be mirrored.
+  </p>
+
+  <div class="callout">
+    <span class="label">Every symmetric model has a mirrored chart</span>
+    <p>An artist unwrapping a character does not unwrap both arms. They unwrap one, reflect it, and
+       lay both halves on the same region of texture — which halves the texture memory and means a
+       detail painted once appears on both sides.</p>
+    <p>On the reflected half, <em>u</em> increases in the opposite direction, so the frame comes out
+       <strong>left-handed</strong> where the other half is right-handed. That is not a defect in the
+       model; it is the point of mirroring.</p>
+  </div>
+
+  <p>
+    So the sign has to be recorded, and it is recorded by testing the solved <em>B</em> against the
+    one <code>cross(N, T)</code> would produce:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/mesh.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float handed = (dot(cross(nrm, unit), bitan[i]) &lt; 0.0f) ? -1.0f : 1.0f;
+out.tangents[i] = vec4{unit.x, unit.y, unit.z, handed};</code></pre>
+  </figure>
+
+  <p>
+    Rerun §4's worked example with <em>u</em> negated — texture coordinates (0,0), (−1,0), (0,1) —
+    and the arithmetic falls out: <em>det</em> = −1, so <em>T</em> = (−1, 0, 0) and <em>B</em> =
+    (0, 0, −1). But <code>cross(N, T)</code> is now (0, 0, +1), which <em>disagrees</em> with
+    <em>B</em>. Handedness −1. <code>verify_67</code> §C asserts exactly that.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Why store a sign instead of the bitangent</span>
+    <p>Twelve bytes a vertex to save one cross product a fragment is a poor trade on its own. The
+       decisive argument is different: <strong>a stored bitangent can disagree with the N and T
+       beside it</strong>, and a recomputed one cannot.</p>
+    <p>After interpolation across a triangle, three separately-interpolated vectors are no longer
+       mutually perpendicular and no longer unit length. Recomputing <em>B</em> from the <em>N</em>
+       and <em>T</em> you actually have guarantees a frame that is consistent with itself. This is
+       the same argument Lesson 6.5 made for deriving <code>material::textured()</code>: a value you
+       compute cannot contradict the value it came from.</p>
+    <p>glTF stores it this way too (§3.7.2.1: <em>"the w component […] is 1 or −1 and indicates the
+       handedness of the tangent basis"</em>), which is a useful independent vote.</p>
+  </div>
+
+  <p>
+    Get the sign wrong and the failure is specific and recognisable: the lighting on the mirrored
+    half of a model is the <em>mirror image</em> of the lighting on the other half. Bumps lit from
+    the left on one arm are lit from the right on the other. <code>verify_67</code> §C measures it —
+    the two handednesses give normals whose bitangent components are exact negatives — and it reads
+    as a modelling error rather than a shading one, which is why it survives.
+  </p>
+
+  <!-- =================================================================
+       6 — THE BASIS CHANGE
+       ================================================================= -->
+  <h2 id="basis"><span class="num">6</span>The Basis Change, and the Lavender</h2>
+
+  <p>
+    With the frame in hand the fragment's job is four lines. Sample, decode, build, multiply.
+  </p>
+
+  @@FIG_BASIS@@
+
+  <p>
+    The decode is the step worth pausing on, because it explains something you have already seen a
+    hundred times without being told why.
+  </p>
+
+  <p>
+    A direction has negative components. A byte does not. So the encoding is an <strong>offset</strong>
+    — the stored value is <code>(c + 1) / 2</code> and the decode is <code>c = 2·value − 1</code>.
+    Which means the direction (0, 0, 1) — "no change at all" — is stored as (0.5, 0.5, 1.0), or
+    (128, 128, 255) in bytes.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">That is why every normal map is lavender</span>
+    <p>The pale blue-violet you see in every normal map ever authored is not a convention somebody
+       chose, or a tint applied for recognisability. <strong>It is arithmetic.</strong> It is what
+       "this surface is flat here" looks like when a signed direction is packed into unsigned bytes,
+       and the more nearly flat a region is the more nearly that exact colour it becomes.</p>
+    <p>Which also tells you how to read one at a glance: reddish means tilted toward +u, greenish
+       means tilted toward +v, and the strength of the tint is the steepness.</p>
+  </div>
+
+  <p>
+    Then the basis change itself, and it is a matrix multiply written as its own definition. Lesson
+    2.5 established that <strong>a matrix is where the basis vectors land</strong> — and here
+    <em>T</em>, <em>B</em> and <em>N</em> <em>are</em> the basis vectors, so the multiply is:
+  </p>
+
+  <div class="eq">
+    \[ n_{\text{world}} \;=\; T\,x \;+\; B\,y \;+\; N\,z \]
+  </div>
+
+  <p>
+    Read the <em>z</em> term and the round trip is obvious: a flat map has <em>x</em> = <em>y</em> = 0
+    and <em>z</em> = 1, so the result is <em>N</em> exactly. Nothing changes. That single property is
+    the most valuable test in this lesson, because <em>every</em> mistake it is possible to make
+    here breaks it — a wrong colour space, a wrong decode range, a frame that is not orthonormal, a
+    bitangent with the wrong sign, a basis change written in the wrong order, a tangent that was
+    never re-orthogonalised. One assertion, six bugs.
+  </p>
+
+  <h3>And the round trip is not exact, which is the finding</h3>
+
+  <p>
+    <code>verify_67</code> §D asserted <code>worst &lt; 1e-6</code> on its first run and measured
+    <strong>5.5460 × 10<sup>−3</sup></strong>. The renderer was right and the assertion was wrong,
+    for a reason worth considerably more than the check:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">0.5 is not an 8-bit code</span>
+    <p>The codes either side are 127 and 128, giving 0.498 and 0.502. Take 128 — the conventional
+       choice — and decode it: <code>128/255 × 2 − 1</code> is <strong>1/255</strong>, not zero.</p>
+    <p>So the flattest normal map that can be <em>stored</em> encodes the direction
+       (0.0039, 0.0039, 1), and <strong>every flat normal map in existence tilts its surface by
+       0.318°</strong>. Not the ones authored badly. All of them.</p>
+    <p>That is why 16-bit normal maps exist, and why you will find pipelines that argue about 127
+       against 128 — neither is exactly right, and the argument is about which direction to be
+       wrong in.</p>
+  </div>
+
+  <p>
+    The fix in the harness is not to loosen the tolerance — Lesson 6.3's rule is that a tolerance
+    widened to admit a failure is a test deleted slowly. It is to <strong>predict the floor from the
+    encoding</strong> and assert the measurement equals it:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">scratch/verify_67.cpp — §D</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const float flat_code = 128.0f / 255.0f * 2.0f - 1.0f;   // = 1/255 exactly
+const vec3 storable = normalised(vec3{flat_code, flat_code, 1.0f});
+const float floor_err = length(storable - vec3{0.0f, 0.0f, 1.0f});
+
+checkf(std::fabs(worst - floor_err) &lt; 1e-6f, …);</code></pre>
+  </figure>
+
+  <p>
+    Which is a strictly stronger test than the one that failed: it now catches an implementation
+    that is <em>better</em> than the quantisation floor as well as one that is worse, and either
+    would mean the encoding is not what we think it is.
+  </p>
+
+  <!-- =================================================================
+       7 — WHICH MATRIX
+       ================================================================= -->
+  <h2 id="matrix"><span class="num">7</span>Which Matrix Carries a Tangent</h2>
+
+  <p>
+    The frame is computed in model space and used in world space, so something has to carry it
+    across. Lesson 3.6 established that a normal is <em>not</em> carried by the model matrix — it
+    needs the inverse transpose, because a non-uniform scale does not preserve perpendicularity.
+    The obvious move is to use that matrix for the tangent too.
+  </p>
+
+  <p>
+    It is wrong, and the reason is the same reason, arriving on the other side of it.
+  </p>
+
+  @@FIG_MATRIX@@
+
+  <div class="callout ok">
+    <span class="label">The distinction in one sentence each</span>
+    <p>A <strong>normal</strong> is defined by being <em>perpendicular to</em> the surface.
+       Perpendicularity is the property that a non-uniform scale destroys, and the inverse transpose
+       is exactly the correction that restores it.</p>
+    <p>A <strong>tangent</strong> lies <em>in</em> the surface. It is the direction the surface goes
+       as <em>u</em> increases — which makes it a <strong>difference of positions</strong>, and a
+       difference of positions transforms precisely the way positions do.</p>
+  </div>
+
+  <p>
+    <code>verify_67</code> §F establishes that rather than asserting it, by transporting two nearby
+    points through the model matrix and subtracting — which is what "difference of positions" means
+    operationally. Under a scale of (2, 1, 1) applied to a tangent at 45°:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The two candidate transforms for a tangent under a
+        non-uniform scale, against the ground truth</caption>
+      <thead><tr><th>Route</th><th>Result</th><th>Against the truth</th></tr></thead>
+      <tbody>
+        <tr><td>the <strong>model</strong> matrix</td><td>(0.894, 0.447, 0)</td>
+            <td><strong>0.0</strong> — exact</td></tr>
+        <tr><td>the normal matrix</td><td>(0.447, 0.894, 0)</td>
+            <td>0.632</td></tr>
+        <tr><td colspan="3">…which is <strong>36.9°</strong> apart, on one object.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Note what makes the wrong answer dangerous rather than obvious: <strong>both results still lie
+    in the surface.</strong> The frame is not broken, it is <em>skewed</em> — the normal map's bumps
+    are rotated within the plane — and a skewed normal map reads as an asset that was authored at
+    the wrong angle.
+  </p>
+
+  <p>
+    And, exactly as with the normal-matrix bug that Lesson 3.6 put on a key: under a
+    <strong>uniform</strong> scale the two agree to 8.4 × 10<sup>−8</sup>. An engine that gets this
+    wrong looks perfect on every object nobody stretched, which is most of them.
+  </p>
+
+  <!-- =================================================================
+       8 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">8</span>Implementation</h2>
+
+  <h3>8.1 — A fourth varying, through four places</h3>
+
+  <p>
+    "What a vertex carries" is written down in three separate places in this engine, and a tangent
+    has to be threaded through all of them plus the clipper:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">The four definitions of a vertex a new attribute must pass
+        through</caption>
+      <thead><tr><th>Type</th><th>Where</th><th>What it is for</th></tr></thead>
+      <tbody>
+        <tr><td><code>mesh_data::tangents</code></td><td><code>gfx/mesh.hpp</code></td>
+            <td>the stored geometry — a fifth parallel array</td></tr>
+        <tr><td><code>clip_vertex::tangent</code></td><td><code>gfx/clip.hpp</code></td>
+            <td>so a corner the clipper <em>invents</em> has one</td></tr>
+        <tr><td><code>vertex::tangent</code></td><td><code>gfx/raster.hpp</code></td>
+            <td>the varying the fragment interpolates</td></tr>
+        <tr><td><code>gpu_vertex_pnu::tx…tw</code></td><td><code>gfx/gpu_mesh.hpp</code></td>
+            <td>the interleaved GPU form</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The clipper is the one people forget. A triangle cut by the near plane gets <em>new corners</em>
+    that were never in the mesh, and there is nowhere to get their tangent from except
+    interpolation — so it is one more line beside the normal's, lerped with the same crossing
+    parameter (Lesson 3.3).
+  </p>
+
+  <div class="callout warn">
+    <span class="label">And <code>w</code> is lerped too, which is the interesting case</span>
+    <p>Across an ordinary triangle both corners carry the same handedness and the interpolation is
+       the identity. Across one that spans a <em>mirroring seam</em> they carry +1 and −1, the
+       interpolated value passes through zero, and the frame collapses in the middle of the
+       triangle.</p>
+    <p>That is a real artefact and it is not the clipper's to fix: an exporter splits the vertices at
+       such a seam, exactly as it does at a uv seam. Clamping the sign here would hide it while
+       leaving the tangent itself interpolated through the same degeneracy.</p>
+  </div>
+
+  <h3>8.2 — Designated initialisers, arriving three lessons late</h3>
+
+  <p>
+    Adding the field broke two aggregate initialisations in <code>soft_renderer.cpp</code>, which had
+    been positional:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/soft_renderer.cpp — before</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">return vertex{to_pixel(s.xy.x), to_pixel(s.xy.y),
+                      s.depth, s.inv_w, cv.uv.x, cv.uv.y, cv.colour,
+                      cv.normal, cv.world};</code></pre>
+  </figure>
+
+  <p>
+    That is a compile error once <code>tangent</code> lands between <code>normal</code> and
+    <code>world</code> — a <code>vec3</code> arriving where a <code>vec4</code> is expected — which
+    is the <em>good</em> outcome. The version worth designing against is the one that
+    <strong>compiles</strong>: two same-typed fields swapping places, silently.
+  </p>
+
+  <p>
+    <code>mesh.hpp</code> made exactly this argument in Lesson 3.5 — <em>"listing them by name means
+    adding a fifth attribute one day cannot silently shift a value into the wrong field"</em> — and
+    this file never took it. It does now.
+  </p>
+
+  <h3>8.3 — The fragment</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/raster.cpp — the whole technique, in the lit path</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const linear_rgb t = sample(*style.normal_map.image, style.normal_map.samp, uu, vv);
+const vec3 tn{t.r * 2.0f - 1.0f, t.g * 2.0f - 1.0f, t.b * 2.0f - 1.0f};
+
+const vec3 nn = normalised_or(n, vec3{0.0f, 0.0f, 1.0f});
+const vec3 ti{…interpolated tangent…};
+const vec3 tt = normalised_or(ti - nn * dot(nn, ti), vec3{1.0f, 0.0f, 0.0f});
+
+const float handed = (…interpolated w…) &gt;= 0.0f ? 1.0f : -1.0f;
+const vec3 bb = cross(nn, tt) * handed;
+
+shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;</code></pre>
+  </figure>
+
+  <p>
+    The Gram-Schmidt appears <em>again</em>, here at the fragment, having already been done at the
+    vertex — and that is not redundancy. The vertex pass makes the frame orthonormal <em>at the
+    vertices</em>; interpolation across the triangle destroys both properties again, exactly as it
+    does for the normal (Lesson 3.8 measured that). The per-vertex pass is what makes the
+    <em>inputs</em> sane; the per-fragment pass is what makes the <em>frame</em> sane.
+  </p>
+
+  <p>
+    And the guard on the whole branch is worth reading, because it needed no new flag:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/raster.cpp — per triangle, not per pixel</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const bool normal_mapped = style.normal_map.bound()
+                           &amp;&amp; (v0.tangent.x != 0.0f || v0.tangent.y != 0.0f
+                               || v0.tangent.z != 0.0f);</code></pre>
+  </figure>
+
+  <p>
+    Geometry with no tangents cannot be normal mapped, because tangent space <em>is</em> the uv
+    parameterisation. The zero <code>xyz</code> that <code>tangent_at</code> returns for a mesh
+    without them is what makes that checkable here rather than needing a flag alongside — the same
+    trick <code>normal_at</code> has used since Lesson 3.6.
+  </p>
+
+  <h3>8.4 — A normal map with an analytic answer</h3>
+
+  <p>
+    The test image is generated rather than painted, for the reason Lesson 3.9 generated its
+    checkerboard and 6.6 generated its glTF: the course ships no third-party assets, and every number
+    a lesson quotes has to be reproducible from the repository alone.
+  </p>
+
+  <p>
+    It is an egg-carton — a height field whose normal has a closed form, so
+    <code>verify_67</code> §E can compute the right answer and compare rather than looking at it:
+  </p>
+
+  <div class="eq">
+    \[ k = 2\pi c, \qquad h(u,v) = \tfrac{s}{k}\cos(ku)\cos(kv), \qquad
+       \mathbf{n} \propto (-\partial_u h,\; -\partial_v h,\; 1) \]
+  </div>
+
+  <div class="callout warn">
+    <span class="label">The <code>1/k</code>, and the build where it was not there</span>
+    <p>The first version used <em>s</em> as the amplitude directly. <code>A·cos(ku)cos(kv)</code>
+       has a peak gradient of <code>A·k</code>, and <em>k</em> grows with the cell count — so an
+       amplitude of 1 at six cells is a slope of <strong>37.7</strong>, a surface tilted 88°
+       everywhere. Every normal points sideways, <em>n·l</em> collapses, and the render goes dark.</p>
+    <p>It took a minute to realise that was <em>a parameterisation bug pointing at the renderer</em>.
+       Dividing the amplitude by <em>k</em> makes <code>strength</code> mean the maximum
+       <strong>slope</strong>: 1.0 is a 45° tilt at any cell count. <strong>A parameter whose effect
+       changes when you change an unrelated parameter is one nobody can author against</strong> —
+       and its failures accuse the wrong subsystem.</p>
+  </div>
+
+  <p>
+    §E compares 1,369 samples against the closed form and agrees to
+    <strong>5.18 × 10<sup>−3</sup></strong>, against a bound of <strong>√3/255 =
+    6.79 × 10<sup>−3</sup></strong> — and that bound is <em>derived</em>, not chosen: rounding to
+    the nearest of 256 codes is a half-code error, a half code in the stored [0,1] range is
+    <code>0.5/255</code>, the [−1,1] decode doubles it to <code>1/255</code>, and three channels of
+    that in the worst direction is √3/255.
+  </p>
+
+  <p>
+    (The first draft of that line said <code>1/510</code> and forgot the doubling, which produced a
+    bound <em>below</em> the true floor and failed a correct implementation. A tolerance that is
+    wrong rather than merely loose is the more expensive of the two mistakes.)
+  </p>

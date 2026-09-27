@@ -1,0 +1,1022 @@
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-path"><span class="num">4.1</span>The search path</h3>
+
+  <p>
+    Smallest piece first, and it is the one that dissolves §1's three copies. A
+    <code>search_path</code> is a vector of roots and one function.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/asset/search_path.hpp</span></figcaption>
+    <pre><code class="lang-cpp">class search_path
+{
+public:
+    [[nodiscard]] static search_path standard();                       // &lt;exe&gt;/assets
+    [[nodiscard]] static search_path beside_executable(std::string_view subdir);
+
+    void add_root(std::string dir);       // searched LAST  — additional content
+    void prepend_root(std::string dir);   // searched FIRST — overrides
+
+    [[nodiscard]] resolved_path resolve(std::string_view name) const;
+};</code></pre>
+  </figure>
+
+  <p>
+    Two factories rather than one, and the second is the one that matters:
+    <code>beside_executable</code> is now <strong>the only place in the engine that calls
+    <code>SDL_GetBasePath()</code></strong>. Assets, shaders and (Module 7) sounds each want
+    their own root; they want the same <em>rule</em> for finding it, and one function is how you
+    get one rule instead of one per subsystem.
+  </p>
+
+  <p>
+    <code>resolve</code> returns a report rather than a string, for Lesson 5.3's reason: the
+    failure has to say enough to act on, and <code>""</code> says nothing.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/asset/search_path.hpp — the result</span></figcaption>
+    <pre><code class="lang-cpp">struct resolved_path
+{
+    std::string path;          ///&lt; the absolute path, or empty if not found
+    int root_index = -1;       ///&lt; which root answered; -1 if none did
+    std::uint64_t bytes = 0;   ///&lt; the file's size, which SDL hands us for free
+    bool refused = false;      ///&lt; the NAME was rejected, before any root was tried
+
+    [[nodiscard]] bool ok() const { return root_index &gt;= 0; }
+};</code></pre>
+  </figure>
+
+  <p>
+    <code>bytes</code> is free and worth taking. <code>SDL_GetPathInfo</code> is documented as
+    returning false when a path does not exist, and it fills in an <code>SDL_PathInfo</code>
+    while it is there — so a store that wants to report how many bytes it read does not pay for a
+    second look at the filesystem.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/search_path.cpp — the loop</span></figcaption>
+    <pre><code class="lang-cpp">for (std::size_t i = 0; i &lt; roots_.size(); ++i)
+{
+    std::string candidate = join(roots_[i], name);
+
+    SDL_PathInfo info{};
+    if (SDL_GetPathInfo(candidate.c_str(), &amp;info) &amp;&amp; info.type == SDL_PATHTYPE_FILE)
+    {
+        resolved_path found;
+        found.path = std::move(candidate);
+        found.root_index = static_cast&lt;int&gt;(i);
+        found.bytes = info.size;
+        return found;
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>info.type == SDL_PATHTYPE_FILE</code> is not defensive padding. Without it,
+    <code>resolve("shaders")</code> reports success on the directory of that name and the caller
+    fails later, inside a loader, with a much worse message. A directory that happens to share a
+    name is not a hit.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The check that is not about correctness</span>
+    <p>Before any root is tried, a name containing <code>..</code>, an absolute name, and an
+       empty name are all <strong>refused</strong>. Names come from scene files, from
+       configuration, and eventually from users; a name that can climb out of every root is a
+       name that can read <code>/etc/passwd</code>.</p>
+    <p>It is deliberately a <em>syntactic</em> check rather than a canonicalising one.
+       Canonicalisation needs the filesystem, differs per platform, and is exactly the sort of
+       clever code that grows a bypass. A name with <code>..</code> in it is not a name we want
+       to serve, whether or not it happens to resolve somewhere harmless today.</p>
+  </div>
+
+  <h3 id="impl-store"><span class="num">4.2</span>The store, and what it holds</h3>
+
+  <p>
+    Now the store. Its state is five members and the interesting thing about them is how
+    ordinary they are — Lesson 5.4 did the hard part.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/asset/asset_store.hpp — the state</span></figcaption>
+    <pre><code class="lang-cpp">search_path paths_;
+
+mesh_pool meshes_;
+image_pool images_;
+
+std::unordered_map&lt;std::string, mesh_handle&gt; mesh_by_key_;
+std::unordered_map&lt;std::string, image_handle&gt; image_by_key_;
+
+std::vector&lt;derivation&gt; mesh_derivations_;   // source -&gt; derived edges
+
+asset_counters counters_;</code></pre>
+  </figure>
+
+  <p>
+    <code>image_pool</code> is new this lesson and it cost two lines in
+    <code>gfx/image.hpp</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/image.hpp</span></figcaption>
+    <pre><code class="lang-cpp">using image_handle = handle&lt;image_data&gt;;
+using image_pool = pool&lt;image_data&gt;;</code></pre>
+  </figure>
+
+  <p>
+    That is worth pausing on. <code>pool&lt;T&gt;</code> was written knowing nothing about
+    geometry, and images join it by <em>naming</em> it — no change to the container, no
+    specialisation, no second implementation. Whether an abstraction is real is decided the
+    second time it is used, and this is that second time.
+  </p>
+
+  <p>
+    Note also <em>which type is the asset</em>. <code>image_data</code> is what the file
+    contained: RGBA8 rows, top row first, exactly as decoded, which is exactly what
+    <code>gpu_texture::create_sampled</code> uploads. <code>engine::texture</code> — the
+    sampler-ready form from Lesson 3.9 — is a different thing that you <em>make</em> from an
+    image. Keeping them apart is the same distinction this lesson draws everywhere: what was
+    loaded, versus what was derived from what was loaded.
+  </p>
+
+  <h3 id="impl-load"><span class="num">4.3</span>Loading, and the cache that is not a map</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/asset_store.cpp — the cache probe</span></figcaption>
+    <pre><code class="lang-cpp">if (const auto it = mesh_by_key_.find(key); it != mesh_by_key_.end())
+{
+    if (meshes_.contains(it->second))
+    {
+        ++counters_.cache_hits;
+        // …fill in a mesh_load with cached = true and return it
+    }
+    mesh_by_key_.erase(it);   // the pool freed it; the map catches up
+}</code></pre>
+  </figure>
+
+  <p>
+    <strong>The map is not the truth. The pool is.</strong> That nested <code>contains</code> is
+    the whole reason this cache can be trusted, and it is a direct dividend from Lesson 5.4: a
+    map entry can be out of date, and a generational handle cannot lie about whether its asset is
+    still there. So the map is treated as a <em>hint</em> — if it points at something the pool no
+    longer has, the entry is dropped and the load proceeds.
+  </p>
+
+  <p>
+    A cache keyed on a raw pointer could never do this. It would have no way to ask.
+  </p>
+
+  <p>
+    Then the load itself, which is short because everything in it already existed:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/asset_store.cpp — the acquire</span></figcaption>
+    <pre><code class="lang-cpp">const resolved_path found = paths_.resolve(name);
+if (!found.ok()) { /* null handle + report, counted */ }
+
+mesh_data data;
+mesh_load out;
+out.report = load_obj(found.path.c_str(), data);
+++counters_.files_read;
+counters_.bytes_read += found.bytes;
+
+if (!out.report.ok()) { ++counters_.loads_failed; return out; }
+
+if (settings.flip_uv_v) { flip_uv_v(data); }        // THE IMPORT STEP
+
+out.handle = meshes_.insert(std::move(data));
+mesh_by_key_[key] = out.handle;</code></pre>
+  </figure>
+
+  <p>
+    The import step is <em>here</em>, and not in the parser, for the reason Lesson 3.5 settled
+    and 3.9 restated: a loader stores what the file says, so that two loads of a file are
+    diffable and a loader is never a place where data quietly differs from its source.
+    Reconciling somebody else's convention with ours is a separate act, performed once, at the
+    boundary where their data becomes ours. This function is that boundary.
+  </p>
+
+  <div class="callout pitfall">
+    <span class="label">A bug this lesson introduced and the first run caught</span>
+    <p>The failure path originally logged <code>"asset_store: '%s' is in none of the roots"</code>
+       unconditionally — so a refused name (<code>../../etc/passwd</code>) produced
+       <strong>two</strong> log lines: <code>search_path</code>'s refusal, which says <em>why</em>,
+       and the store's, which says less. That is precisely the double-reporting Lesson 5.3
+       forbade, reintroduced by the lesson after it.</p>
+    <p>The fix is the <code>refused</code> flag on <code>resolved_path</code>: the point that
+       knows why logs it, and the point that only knows the name was wanted stays quiet.
+       <strong>A rule you wrote down is not a rule you will follow</strong>; it is a rule you
+       will notice breaking.</p>
+  </div>
+
+  <p>
+    One naming hazard, worth a line because it produces a baffling error.
+    <code>engine::load_image</code> is a free function in <code>gfx/image.hpp</code>, and
+    <code>asset_store::load_image</code> is a member — so inside the class, the member
+    <em>hides</em> the free function and an unqualified call fails with "too few arguments",
+    which is a confusing way to be told about a name-lookup rule. The implementation calls
+    <code>engine::load_image</code> fully qualified. (Lesson 5.4 hit the same shape with
+    <code>handle</code>; it is the second time in two lessons.)
+  </p>
+
+  <h3 id="impl-key"><span class="num">4.4</span>One key space, and the bug that proved it</h3>
+
+  <p>
+    §3.3 said the cache key is the name plus the import settings. The obvious implementation is
+    the one this lesson shipped first:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the first version — wrong</span></figcaption>
+    <pre><code class="lang-cpp">std::string asset_key(std::string_view name, const mesh_import&amp; settings)
+{
+    std::string key(name);
+    key += settings.flip_uv_v ? "|flip=1" : "|flip=0";
+    return key;
+}</code></pre>
+  </figure>
+
+  <p>
+    It passed everything except one check in <code>verify_55</code> §D, one line after the check
+    that stored the asset:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the first run</span></figcaption>
+    <pre><code class="lang-bash">[PASS] generated content gets a name and a handle like anything else
+[FAIL] …and is findable by that name</code></pre>
+  </figure>
+
+  <p>
+    <code>insert_mesh("cube", …)</code> stored under <code>"cube"</code>, because generated
+    content has no import step and no settings to record.
+    <code>find_mesh("cube")</code> looked up <code>"cube|flip=1"</code>, because that is what the
+    default settings encode to. <strong>Two key spaces wearing one name.</strong> Nothing
+    crashed, nothing logged, and <code>find_mesh</code> simply answered "not resident" about an
+    asset that was.
+  </p>
+
+  <p>
+    The fix is one line, and it generalises past this bug:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/asset_store.cpp — the fix</span></figcaption>
+    <pre><code class="lang-cpp">if (!(settings == mesh_import{})) { key += "|flip=0"; }</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">The general rule</span>
+    <p><strong>The default configuration must serialise to nothing.</strong>
+       <code>asset_key("torus.obj", {})</code> is <code>"torus.obj"</code>, and only a
+       non-default import earns a suffix. Now generated and loaded content share one key space
+       <em>by construction</em> rather than by discipline — which is the same shape of argument as
+       Lesson 5.4 reserving generation 0 so that an all-bits-zero handle is null for free.</p>
+    <p>It also makes the key readable, which is not nothing: <code>"torus.obj|flip=0"</code> in a
+       log tells you both what was loaded and that somebody imported it unusually.</p>
+  </div>
+
+  <h3 id="impl-cascade"><span class="num">4.5</span>The cascade</h3>
+
+  <p>
+    Derived assets are stored as edges — a flat vector of <code>{source, derived}</code> handle
+    bits — and released by walking them.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/asset_store.cpp — release_mesh</span></figcaption>
+    <pre><code class="lang-cpp">int asset_store::release_mesh(mesh_handle h)
+{
+    if (!meshes_.contains(h)) { return 0; }
+
+    // Collect first, then recurse.
+    std::vector&lt;mesh_handle&gt; children;
+    for (const derivation&amp; d : mesh_derivations_)
+    {
+        if (d.source == h.bits) { children.push_back(mesh_handle{d.derived}); }
+    }
+
+    int released = 0;
+    for (const mesh_handle child : children) { released += release_mesh(child); }
+
+    std::erase_if(mesh_derivations_, [h](const derivation&amp; d) {
+        return d.source == h.bits || d.derived == h.bits;
+    });
+
+    if (meshes_.remove(h)) { ++released; ++counters_.unloaded; }
+    return released;
+}</code></pre>
+  </figure>
+
+  <p>
+    <strong>Collect first, then recurse</strong>, and the comment in the source says why:
+    walking <code>mesh_derivations_</code> while the recursion erases from it is the classic
+    iterator-invalidation bug, and it shows up only for a mesh with more than one dependent —
+    which the demo does not have and a real scene does. That is the worst kind of bug: correct
+    in every test you would think to write.
+  </p>
+
+  <p>
+    The other half is the refusal:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/asset/asset_store.cpp — derive_mesh</span></figcaption>
+    <pre><code class="lang-cpp">if (!meshes_.contains(source))
+{
+    ENGINE_LOG_WARN(log_asset, "asset_store: refusing to derive from a stale "
+                               "source [handle %u:%u]",
+                    source.index(), source.generation());
+    return {};
+}</code></pre>
+  </figure>
+
+  <p>
+    An asset derived from a source that is already gone has no name to find it by and no source
+    to free it with. Refusing turns a guaranteed leak into a null handle the caller is already
+    prepared to see — which is the same move as <code>pool::insert</code> returning null when it
+    runs out of slots.
+  </p>
+
+  <p>
+    And here is what the cascade did to the code that asked for it. Lesson 4.8's mesh cache used
+    to own a private second pool with no rule connecting it to anything:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/sandbox/main.cpp — before and after</span></figcaption>
+    <pre><code class="lang-cpp">// before (5.4): a pool of its own, and a comment admitting the hole
+e.cpu = derived_.insert(engine::with_normals(m, style));
+
+// after (5.5): a derivation, with its lifetime bound to the source
+e.cpu = store.derive_mesh(source, engine::with_normals(m, style));</code></pre>
+  </figure>
+
+  <p>
+    What the cache then has to do about an unloaded source is the part worth reading:
+    <strong>nothing, except notice.</strong>
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/sandbox/main.cpp — eviction, for free</span></figcaption>
+    <pre><code class="lang-cpp">if (slots_[i].source == source &amp;&amp; slots_[i].style == style)
+{
+    // …and one more, added in 5.5: is the DERIVED asset still there?
+    if (store.meshes().contains(slots_[i].cpu)) { return &amp;slots_[i]; }
+
+    slots_[i].gpu.destroy();
+    // …drop the entry and fall through to a fresh upload
+}</code></pre>
+  </figure>
+
+  <p>
+    A hit whose geometry is gone is a miss, and its GPU buffers are this cache's to destroy —
+    nobody else knows they exist. That is the only eviction this cache has, and it arrives for
+    free: it is the same <code>contains</code> question a handle answers everywhere else. A
+    cache keyed on a pointer could never have been told.
+  </p>
+
+  <h3 id="impl-demo"><span class="num">4.6</span>Forty lines become one</h3>
+
+  <p>
+    The demo side is where the payoff is legible. §1's eight-step load is now:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.cpp — after</span></figcaption>
+    <pre><code class="lang-cpp">const engine::mesh_import settings{.flip_uv_v = apply_uv_flip};
+const engine::mesh_load got = assets.store.load_mesh(file_of(c), settings);
+m.geometry = got.handle;
+m.load = got.report;
+m.cached = got.cached;</code></pre>
+  </figure>
+
+  <p>
+    Two behavioural changes hide in that diff and both are deliberate.
+  </p>
+
+  <p>
+    <strong>The flip is an import setting, not a step afterwards.</strong> §3.3's consequence:
+    toggling it loads a <em>second</em> asset rather than silently rewriting the first, and the
+    two coexist.
+  </p>
+
+  <p>
+    <strong>Loading no longer frees.</strong> The old <code>load_model</code> removed the
+    previous mesh; the store keeps everything resident, because that is what a cache is. Cycling
+    <kbd>L</kbd> round the five models reads five files <em>once</em> and is a hit for ever
+    after. Freeing moved to its own function and its own key — because burying a free inside a
+    load is how you get an engine where nobody can say what is resident.
+  </p>
+
+  <p>
+    That change broke a check in <code>verify_54</code>, written one lesson earlier, which
+    asserted that loading a second model made the first handle stale. The harness was right to
+    fail: it caught a real behavioural change. The check was updated to assert the
+    <em>new</em> contract, with the reason written next to it — a test that is edited to match
+    the code is only honest when the edit records what changed and why.
+  </p>
+
+  <p>
+    And the new key, which is the demonstration:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.cpp — unload_model</span></figcaption>
+    <pre><code class="lang-cpp">const int went = assets.store.unload_mesh(m.geometry);
+if (went == 0) { /* already gone */ }
+
+m.unloaded = true;
+// The handle is DELIBERATELY LEFT IN PLACE rather than nulled, and this is the
+// whole demonstration. `build_scene` keeps writing it into the scene every
+// frame, `collect_triangles` keeps failing to resolve it, and the object
+// disappears with a number next to it instead of a crash.</code></pre>
+  </figure>
+
+  <p>
+    There is also a refusal in there worth naming: <kbd>Bksp</kbd> will not unload
+    <code>make_torus()</code>'s output, because it is the <em>control</em> for the round-trip
+    comparison — <code>torus.obj</code> was written from it, and a demo that could delete its own
+    reference would be a demo whose measurement means nothing. <strong>Naming an asset is also
+    how you protect it.</strong>
+  </p>
+
+  <h3 id="impl-singleton"><span class="num">4.7</span>The pressure to make it global</h3>
+
+  <p>
+    A handle is meaningless without its pool, so every function that resolves one needs the store
+    — and the temptation to make it a singleton and stop passing it is real, and it is the single
+    most common shape in engine code.
+  </p>
+
+  <p>
+    We refuse, and not for stylistic reasons. Lesson 5.4 ended with <code>demos/sandbox</code>
+    holding <strong>two</strong> mesh pools in one frame, and 5.5's GPU probe adds a third store
+    of its own. A store is a plain object precisely so that a program can have several:
+  </p>
+
+  <ul>
+    <li>a game and its editor, with different roots;</li>
+    <li>the level you are playing and the one streaming in behind it;</li>
+    <li>a test fixture and the real thing — which is exactly how <code>verify_55</code> checks
+        override ordering without touching the shipped assets.</li>
+  </ul>
+
+  <p>
+    Note also where a store is <em>not</em>: <code>engine::platform</code> and
+    <code>engine::app</code> do not own one. Putting it there would be a singleton with better
+    manners — every program would get exactly one, in one place, and the second store would be
+    the awkward special case instead of the ordinary thing.
+  </p>
+
+  <!-- =================================================================
+       5 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">5</span>What It Cost, and What It Bought</h2>
+
+  <p>
+    From <code>scratch/measure_55.py</code> and <code>scratch/verify_55.cpp</code>, so it can be
+    re-derived rather than trusted.
+  </p>
+
+@@FIG_COST@@
+
+  <div class="callout warn">
+    <span class="label">Getting this table to add up took a correction</span>
+    <p>The first version of this measurement timed <code>read</code> and <code>parse</code> as
+       though they were stages beside one another and stacked them. They are not:
+       <code>load_obj</code> <em>opens the file itself</em>, so the separately-timed read is a
+       <strong>subset</strong> of the parse. It also stacked <code>validate</code> into the
+       acquire, which the store does not perform at all — that is the demo's check, from Lesson
+       3.5. The bar summed to 6.20 ms for an operation that takes 3.69.</p>
+    <p>Columns below are stages of the acquire and sum to it; <code>read</code> is shown
+       indented because it is inside <code>parse</code>; <code>validate</code> is listed apart
+       because it is somebody else's.</p>
+  </div>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>The stages of a cold acquire. Medians of 15, <code>-O2 -DNDEBUG</code>,
+             milliseconds.</caption>
+    <thead>
+      <tr><th>asset</th><th>KB</th><th>tris</th><th>resolve</th><th>(read)</th><th>parse</th>
+          <th>import</th><th>store</th><th>= COLD</th><th>HIT</th><th>validate*</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>torus.obj</code></td><td>200.6</td><td>2304</td><td>0.0022</td><td>0.0148</td>
+          <td><strong>3.6922</strong></td><td>0.0034</td><td>~0</td>
+          <td>3.693</td><td><strong>0.00025</strong></td><td>2.4525</td></tr>
+      <tr><td><code>cube.obj</code></td><td>1.9</td><td>12</td><td>0.0015</td><td>0.0092</td>
+          <td>0.0220</td><td>0.0001</td><td>0.0011</td><td>0.034</td><td>0.00021</td><td>0.0115</td></tr>
+      <tr><td><code>twisted.obj</code></td><td>1.3</td><td>12</td><td>0.0015</td><td>0.0092</td>
+          <td>0.0210</td><td>0.0001</td><td>0.0010</td><td>0.033</td><td>0.00021</td><td>0.0115</td></tr>
+      <tr><td><code>quirks.obj</code></td><td>1.9</td><td>6</td><td>0.0014</td><td>0.0091</td>
+          <td>0.0170</td><td>0.0001</td><td>0.0010</td><td>0.029</td><td>0.00021</td><td>0.0062</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read the torus row and there is only one number on it. <strong>The acquire is the
+    parse.</strong> Finding the file is 0.0022 ms, reading 200 KB off disk is 0.0148 ms, flipping
+    2,352 texture coordinates is 0.0034 ms, and moving four vectors into the pool rounds to zero
+    — together <strong>0.55%</strong>. Parsing is the other 99.9%.
+  </p>
+
+  <p>
+    That is worth internalising because it is the opposite of the intuition. "Asset loading is
+    slow because disks are slow" is a sentence from a different decade; on this machine the disk
+    is a rounding error and the CPU work is everything. It is also why Module 9's cooked assets
+    are a real optimisation and a faster <em>file format</em> would not be: the win is not
+    reading fewer bytes, it is <em>not parsing them</em>.
+  </p>
+
+  <p>
+    And the starred column is a finding of its own. The demo validates every mesh it loads —
+    Lesson 3.5's Euler characteristic, edge manifoldness, winding and signed volume — which is
+    <strong>2.45 ms, another 66% of the whole acquire</strong>, for a check the store does not
+    perform and a shipping build would not. It is not a mistake; it is a development-time check
+    that has been quietly doubling load times since Module 3, and it took separating the stages
+    to see it. <em>Cost you can see is cost you can choose.</em>
+  </p>
+
+  <p>
+    And the cache: <strong>3.693 ms → 0.00025 ms, about 14,771×</strong>. A hit is a hash of a
+    short string, a map probe and one pool lookup. It is not "fast loading" — it is
+    <em>not loading</em>, which is the only version of the idea that scales. A parser twice as
+    fast would have moved 3.69 ms to 1.85.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>A session: the five models cycled twice, exactly as <kbd>L</kbd> does.</caption>
+    <thead><tr><th>acquires</th><th>files read</th><th>cache hits</th><th>generated</th>
+               <th>bytes read</th></tr></thead>
+    <tbody>
+      <tr><td>8</td><td><strong>4</strong></td><td>4</td><td>1</td><td>205.7 KB</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The second lap is free, and that sentence is now a number rather than an intention.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>What left the demo, and what became one thing instead of three.</caption>
+    <thead><tr><th></th><th>Before</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine::asset_path(</code> in <code>demos/</code></td><td>3</td><td><strong>0</strong></td></tr>
+      <tr><td><code>engine::load_obj(</code> in <code>demos/</code></td><td>1</td><td><strong>0</strong></td></tr>
+      <tr><td><code>engine::load_image(</code> in <code>demos/</code></td><td>1</td><td><strong>0</strong></td></tr>
+      <tr><td><code>engine::flip_uv_v(</code> in <code>demos/</code></td><td>1</td><td><strong>0</strong></td></tr>
+      <tr><td>raw <code>mesh_pool</code> members in <code>demos/</code></td><td>2</td><td><strong>0</strong></td></tr>
+      <tr><td><code>SDL_GetBasePath()</code> call sites in <code>engine/</code></td><td>2</td><td><strong>1</strong></td></tr>
+      <tr><td>public headers</td><td>44</td><td><strong>46</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The harness: <strong>85 checks in eight sections, 0 failures</strong>, identically at
+    <code>-O0</code> and <code>-O2 -DNDEBUG</code>. The one worth reproducing is §F, which is the
+    lesson's whole claim in one page of output.
+  </p>
+
+@@FIG_UNLOAD_LIVE@@
+
+  <figure class="listing shell">
+    <figcaption><span class="path">sh scratch/build_verify_55.sh</span></figcaption>
+    <pre><code class="lang-bash">=== F. Unloading out from under a live scene ===
+  [PASS] the solids scene is 3 objects
+  [PASS] all three resolve: 44 triangles, 0 unresolved
+  [PASS] unloaded the icosahedron: 1 asset
+  [PASS] exactly 1 object skipped and COUNTED
+  [PASS] …and the rest still drew: 24 triangles of 44 (the icosahedron's 20 gone)
+  [PASS] nothing else changed — the clipper saw exactly what was collected
+  [PASS] unload_model refuses the generated control — naming an asset protects it
+
+=== E. Derived assets ===
+  [PASS] the source has 1 dependent
+  [PASS] a chain of two: derived_count(source) = 2
+  [PASS] unloading the source released 3 assets, not 1
+  [PASS] the derived mesh went with it
+  [PASS] …and so did the one derived from THAT
+  [PASS] deriving from a stale source is refused, not leaked</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">The acceptance tests, all green</span>
+    <ul>
+      <li><strong>The golden is byte-identical</strong> — hash <code>905BF27E</code>, 0 bytes
+          differ, for the <strong>fifth</strong> lesson running, through a change that replaced
+          the demo's entire ownership model. <code>hello_cube --shot</code> likewise.</li>
+      <li><strong>Same name twice ⇒ same handle, one file read</strong>, proved by
+          <code>files_read</code> and <code>cache_hits</code> (§B), and by the session
+          measurement above.</li>
+      <li><strong>Unloading a mesh a live scene uses shows up as
+          <code>collect_stats::unresolved</code> and nothing else</strong> (§F).</li>
+      <li><strong>A derived asset cannot outlive its source</strong>, transitively, and cannot be
+          created from a dead one (§E).</li>
+      <li><strong>All ten harnesses still pass</strong>: verify_45 through 55, three of them
+          ported to the new API, with the reasons recorded.</li>
+    </ul>
+  </div>
+
+  <!-- =================================================================
+       6 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">6</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>File manifest for Lesson 5.5.</caption>
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/asset/search_path.hpp</code></td><td><span class="tag new">new</span></td>
+          <td>Ordered roots; a name becomes a path in one place.</td></tr>
+      <tr><td><code>engine/src/asset/search_path.cpp</code></td><td><span class="tag new">new</span></td>
+          <td>The resolve loop, and the names it refuses.</td></tr>
+      <tr><td><code>engine/include/engine/asset/asset_store.hpp</code></td><td><span class="tag new">new</span></td>
+          <td>Load, find, insert, derive, unload — and the argument against a refcount.</td></tr>
+      <tr><td><code>engine/src/asset/asset_store.cpp</code></td><td><span class="tag new">new</span></td>
+          <td>The cache probe, the key space, the cascade.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/image.hpp</code></td><td><span class="tag modified">modified</span></td>
+          <td><code>image_handle</code>, <code>image_pool</code> — two lines.</td></tr>
+      <tr><td><code>engine/src/gfx/obj.cpp</code></td><td><span class="tag modified">modified</span></td>
+          <td><code>asset_path</code> becomes a shim over the search path.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_shader.cpp</code></td><td><span class="tag modified">modified</span></td>
+          <td><code>shader_path</code> likewise — one implementation, three roots.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td><span class="tag modified">modified</span></td>
+          <td>A new <code>src/asset/</code> directory, and why it is not under <code>gfx/</code>.</td></tr>
+      <tr><td><code>demos/common/demo_scene.hpp</code></td><td><span class="tag modified">modified</span></td>
+          <td><code>mesh_library</code> → <code>scene_assets</code>; <code>unload_model</code>.</td></tr>
+      <tr><td><code>demos/common/demo_scene.cpp</code></td><td><span class="tag modified">modified</span></td>
+          <td>Eight steps become five lines.</td></tr>
+      <tr><td><code>demos/hello_cube/main.cpp</code></td><td><span class="tag modified">modified</span></td>
+          <td>Generated content, through the same door.</td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td><span class="tag modified">modified</span></td>
+          <td>The <kbd>Bksp</kbd> key, the derived cache, and three direct loads deleted.</td></tr>
+      <tr><td><code>scratch/verify_55.cpp</code></td><td><span class="tag new">new</span></td>
+          <td>85 checks in eight sections.</td></tr>
+      <tr><td><code>scratch/measure_55.py</code></td><td><span class="tag new">new</span></td>
+          <td>The numbers §5 quotes.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The four new engine files in full:</p>
+
+@@LISTING:engine/include/engine/asset/search_path.hpp@@
+
+@@LISTING:engine/src/asset/search_path.cpp@@
+
+@@LISTING:engine/include/engine/asset/asset_store.hpp@@
+
+@@LISTING:engine/src/asset/asset_store.cpp@@
+
+  <p>And the demo side, where the load path used to live:</p>
+
+@@LISTING:demos/common/demo_scene.hpp@@
+
+@@LISTING:demos/common/demo_scene.cpp@@
+
+  <p>The harness, which is where §5's claims are actually checked:</p>
+
+@@LISTING:scratch/verify_55.cpp@@
+
+  <!-- =================================================================
+       7 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">7</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j8</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <p>
+    <code>engine/CMakeLists.txt</code> gains two sources and a new directory. The comment there
+    is the reason it is not another file under <code>gfx/</code>: an asset system is not a
+    graphics subsystem — it loads meshes, images, and in Module 7 sounds — and putting it under
+    <code>gfx/</code> would make the audio loader's home a joke six lessons before it is written.
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the 85 checks, in two configurations</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_55.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_55.sh</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the golden, for the fifth lesson running</span></figcaption>
+    <pre><code class="lang-bash">./build/demos/sandbox --shot /tmp/shot_55.ppm
+cmp /tmp/shot_55.ppm scratch/shot_52.ppm &amp;&amp; echo "0 bytes differ"</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the numbers in §5, on your machine</span></figcaption>
+    <pre><code class="lang-bash">python3 scratch/measure_55.py</code></pre>
+  </figure>
+
+  <p><strong>What to look for.</strong> Run the software demo and watch the terminal:</p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">./build/demos/sandbox --software</span></figcaption>
+    <pre><code class="lang-bash">Loaded torus.obj  1225 verts (+73 split), 2304 tris, euler +0, volume +3.1134, closed  [3.95 ms]
+  assets: 5 live | 1 file(s) read, 0 cache hit(s), 4 generated, 0 derived, 0 unloaded, 0 failed | 200.6 KB read</code></pre>
+  </figure>
+
+  <ul>
+    <li>Press <kbd>L</kbd> five times to cycle the models. The first lap says <code>Loaded</code>
+        and <code>files read</code> climbs; the second lap says <code>Cached</code> and it stops.
+        The HUD's load time goes from <code>read 3.95 ms</code> to <code>cached 0.00 ms</code>.</li>
+    <li>Press <kbd>Bksp</kbd>. <strong>The model vanishes.</strong> Nothing else changes, nothing
+        crashes, and the HUD line becomes
+        <code>[Bksp] torus.obj UNLOADED  handle 4:1 is stale, unresolved = 1</code>. Press
+        <kbd>L</kbd> to load something again.</li>
+    <li>Press <kbd>2</kbd> to toggle the uv flip, then <kbd>L</kbd>. Watch
+        <code>files read</code> go up by one even for a model you have already loaded — that is
+        §3.3, working: different import settings, different asset.</li>
+    <li>In the GPU demo (no flag), the mesh upload log now ends with
+        <code>[handle N:G]</code>, and the derived geometry is bound to it.</li>
+  </ul>
+
+  <!-- =================================================================
+       8 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">8</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">1 · The asset is definitely there and <code>find</code> says it is not</span>
+    <p><strong>Symptom.</strong> <code>insert_mesh("cube", …)</code> succeeded;
+       <code>find_mesh("cube")</code> returns null.</p>
+    <p><strong>Cause.</strong> Two key spaces. Whatever computes the key on the way in must be
+       the same function that computes it on the way out — and it is startlingly easy for it not
+       to be, because the two calls live in different functions with different parameters
+       (§4.4).</p>
+    <p><strong>Fix.</strong> One <code>asset_key()</code>, called by both, with the default
+       configuration encoding to nothing. When debugging, print the key rather than the name:
+       ours is readable on purpose for exactly this.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">2 · A stale handle survives an unload</span>
+    <p><strong>Symptom.</strong> You unloaded an asset and something still draws it, or a second
+       load returns the old handle.</p>
+    <p><strong>Cause.</strong> A name map treated as the truth. If <code>load</code> trusts its
+       map entry without asking the pool, an asset freed by handle leaves a live-looking entry
+       behind.</p>
+    <p><strong>Fix.</strong> The nested <code>contains</code> in §4.3. The map is a
+       <em>hint</em>; the pool is the truth. This is only possible because a generational handle
+       cannot lie, which is the dividend Lesson 5.4 pays here.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">3 · Memory climbs and every counter says zero</span>
+    <p><strong>Symptom.</strong> <code>live_count()</code> is small and steady; RSS is not.</p>
+    <p><strong>Cause.</strong> Almost always a derived asset with no edge recorded — something
+       inserted directly rather than through <code>derive_mesh</code>, so nothing owns it and no
+       cascade will ever reach it. The 5.4 version of this cache had exactly that shape and its
+       own comment admitted it.</p>
+    <p><strong>Fix.</strong> Anything the store produces <em>from</em> another asset goes in with
+       <code>derive_mesh</code>. If you find yourself wanting to insert it with a name, ask who
+       would ever ask for it by that name.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">4 · <code>remove</code> during a walk of the derivations</span>
+    <p><strong>Symptom.</strong> A crash or a missed release when unloading a source with two or
+       more dependents. Works perfectly with one.</p>
+    <p><strong>Cause.</strong> Recursing while iterating the vector the recursion erases from.</p>
+    <p><strong>Fix.</strong> Collect the children into a local first, then recurse (§4.5). Note
+       the shape of the bug: <em>correct for every case a small test would cover</em>. The demo
+       has one dependent per mesh, so the demo would never have found it.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">5 · Two log lines for one missing file</span>
+    <p><strong>Symptom.</strong> A refused or absent name produces a pair of errors, the second
+       less informative than the first.</p>
+    <p><strong>Cause.</strong> Both layers logged. Lesson 5.3's rule is that the point which
+       knows <em>why</em> logs, and callers propagate silently.</p>
+    <p><strong>Fix.</strong> Give the report enough shape to distinguish the cases —
+       <code>resolved_path::refused</code> — so the caller can tell "already reported" from
+       "mine to report". This lesson broke the rule on its first run; the flag is the fix.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">6 · It works from the build directory and nowhere else</span>
+    <p><strong>Symptom.</strong> <code>./build/demos/sandbox</code> finds its assets;
+       <code>cd /tmp &amp;&amp; /path/to/sandbox</code> does not.</p>
+    <p><strong>Cause.</strong> A root relative to the working directory rather than to the
+       executable. It is the oldest bug in asset loading and it is invisible to whoever wrote it,
+       because they always run it the same way.</p>
+    <p><strong>Fix.</strong> <code>search_path::beside_executable</code>, which is the only
+       caller of <code>SDL_GetBasePath()</code>. If <code>resolve</code> is failing, print
+       <code>paths().roots()</code> — the roots are the first thing to look at and the last thing
+       people check.</p>
+  </div>
+
+  <!-- =================================================================
+       9 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">9</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>9.1 — Ship a mod.</strong> Make a directory beside the executable, put a
+         different <code>torus.obj</code> in it (<code>save_obj(make_torus(8, 6, …))</code> will
+         do), and <code>prepend_root</code> it in <code>sandbox</code>. Confirm the demo draws
+         your torus without touching a single asset in <code>assets/</code>. Then move the root
+         to the end with <code>add_root</code> and confirm the shipped one wins again.</p>
+      <details><summary>Hint</summary>
+        <p><code>assets.store.paths().prepend_root(…)</code> before anything is loaded. If you do
+           it after, nothing happens — and <em>why</em> nothing happens is the more interesting
+           half of this exercise.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>It works, and doing it after the load does not, because the name is already resident:
+           resolution happens once, at acquire. That is the correct behaviour and it is also the
+           reason real engines make the search path immutable after start-up, or invalidate the
+           cache when it changes. Adding <code>asset_store::rescan()</code> — unload everything
+           whose resolved root has changed — is a genuinely good next step and is most of what
+           Module 9's hot reload needs.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.2 — Find the leak.</strong> Add a <code>~asset_store</code> (or an explicit
+         <code>report_leaks()</code>) that logs at <code>warn</code> if
+         <code>live_count()</code> is not zero, listing the names. Run the demos. Then decide
+         whether what it reports is a leak or a program that simply exits with assets loaded —
+         and what the difference is.</p>
+      <details><summary>Hint</summary>
+        <p>Every demo will report non-zero, because none of them unloads at shutdown. Is that a
+           bug?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>It is not a leak — the store owns everything and its destructor frees it — but it is
+           the <em>same shape</em> as one, and that is the point. A leak check is only useful with
+           a policy about when the count should be zero. The usual answer is a <em>level
+           boundary</em>: assets loaded during a level must be gone after it, and anything
+           surviving is either a bug or deliberately global. That distinction is what a real
+           engine's asset tags or bundles encode, and it is the honest reason
+           <code>unload_all()</code> exists.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.3 — Make the flip a real import setting.</strong> Add a second field to
+         <code>mesh_import</code> — a uniform scale, say, or "generate normals if absent" — and
+         make it part of the key. How much code has to change? Then measure: how many bytes does
+         a key cost at a thousand assets, and at what point would you hash it instead?</p>
+      <details><summary>Hint</summary>
+        <p><code>asset_key</code> and <code>mesh_import</code>. Nothing else should need
+           touching, and if it does, that is the finding.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>Two functions, because the defaulted <code>operator==</code> and the "default encodes
+           to nothing" rule do the rest. At a thousand assets with readable keys you are spending
+           a few tens of kilobytes on strings — nothing. The crossover is not size, it is
+           <em>settings count</em>: once a key would be forty characters of encoded booleans it
+           has stopped being readable, which was its only advantage over a hash, and Module 9's
+           on-disk cooked-asset cache is where that happens.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.4 — Unload during a frame.</strong> Call <code>unload_mesh</code> from
+         <em>inside</em> the object loop of <code>collect_triangles</code> (temporarily; a
+         non-const pool and a hack are fine). Predict what happens before you run it.</p>
+      <details><summary>Hint</summary>
+        <p>Lesson 5.4's one rule: <em>resolve late, use immediately, never store.</em> What does
+           the loop hold across the call?</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>The loop resolves once per object into a <code>const mesh_data*</code> and works
+           through it for the whole object — so unloading mid-object invalidates that pointer and
+           the rest of the object reads freed memory. The handle was fine; the resolved pointer
+           was not. This is the strongest possible demonstration that handles do not make
+           pointers safe, they make them <em>unnecessary to keep</em>, and it is why real engines
+           defer asset destruction to a frame boundary rather than doing it inline. Deferring is
+           a good thing to build next: queue the unload, drain the queue between frames.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>9.5 — Images are not textures.</strong> §4.2 says <code>image_data</code> is the
+         asset and <code>engine::texture</code> is something you make from one. Make one: write
+         <code>engine::texture to_texture(const image_data&amp;)</code>, store it as a
+         <strong>derived</strong> asset, and let the software rasterizer sample a loaded PNG for
+         the first time in this course.</p>
+      <details><summary>Hint</summary>
+        <p><code>image_data</code> is RGBA8 bytes, row-major, top row first;
+           <code>engine::texture</code> is <code>Uint32</code> ARGB. You will need a second
+           pool — and deciding whether a <code>pool&lt;texture&gt;</code> belongs in the store or
+           beside it is most of the exercise.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+        <p>The conversion is twenty lines. The design question is the real one, and the answer
+           this course would give is: in the store, as a derived asset, because it satisfies the
+           §3.2 test exactly — nobody asks for it by name, it exists only because its image does,
+           and it should die with it. Which means <code>derivation</code> needs to record kinds
+           as well as handles, and that is the honest limit of the v1 in this lesson: it derives
+           meshes from meshes only, and the header says so.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       10 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">10</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine can now <strong>find, share and free</strong> the things it draws. Concretely: an
+    ordered search path that turns a name into a path in one place (and is now the only caller of
+    <code>SDL_GetBasePath()</code>); a store that loads an asset once and hands the same handle
+    to every later request; derived assets whose lifetimes are bound to their sources,
+    transitively; and an unload you can press a key to perform while a scene is drawing, which
+    costs exactly one object and says so.
+  </p>
+
+  <p>
+    The two arguments worth carrying forward are both refusals. <strong>We did not
+    reference-count</strong>, because a count would have required a handle to stop being a value
+    — and being a value is the entire reason a handle is worth having. <strong>We did not make
+    the store global</strong>, because <code>sandbox</code> holds three of them and a singleton
+    would have made the second one the awkward case. In both, the argument was made from a
+    property the code actually has rather than from a preference.
+  </p>
+
+  <p>
+    And two honest limits, recorded rather than hidden. Derivations are mesh-to-mesh only; a
+    texture and its mipmaps need the edge to carry kinds, and Exercise 9.5 is where that starts.
+    And unloading is immediate rather than deferred to a frame boundary, so it is safe between
+    frames and Exercise 9.4 shows precisely what happens if you do it during one.
+  </p>
+
+  <p>
+    <strong>Next: 5.6 — Data-Oriented Design: Why Scene Trees Creak.</strong> Everything since
+    5.1 has been about <em>structure</em> — where code lives, who owns what, how things refer to
+    each other. 5.6 is the first lesson in the module that is about <em>speed</em>, and it makes
+    the argument the ECS will be built on: not with dogma, but with a cache-line diagram and a
+    measurement taken on our own engine. Lesson 5.4 already handed it two numbers to start from —
+    <code>scene_object</code> is 96 bytes, and <code>pool::items()</code> is a contiguous span of
+    exactly the live objects. 5.6 asks what those two facts are worth, in nanoseconds, and the
+    answer decides the storage design in 5.7.
+  </p>
+
+  <!-- =================================================================
+       11 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">11</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong><em>Game Engine Architecture</em>, Jason Gregory — §7 (Resources and the File
+        System) and §16.2.</strong> The standard treatment, and the one to read next: mount
+        points, resource GUIDs, the offline/online split, and the argument for a cooked format
+        that this lesson's measurement points straight at.</li>
+
+    <li><strong>Yosoygames, “The Resource Manager” / Ogre's <code>ResourceGroupManager</code>
+        docs.</strong> A production search-path implementation with named groups, worth reading
+        for how far the "ordered roots" idea scales before it needs more structure.</li>
+
+    <li><strong>Unity Manual — “Assets, Objects and serialization” and the <code>.meta</code>
+        file format.</strong> §3.3's argument in a shipping tool: import settings live beside the
+        asset, changes to them trigger a re-import, and the identity of an asset is
+        <em>file + settings</em>.</li>
+
+    <li><strong>Unreal Engine — the Derived Data Cache.</strong> The same idea as §3.2 at
+        industrial scale: everything computed from a source asset is keyed on a hash of the
+        source plus the settings, and invalidated together.</li>
+
+    <li><strong>Niklas Frykholm, “Managing Decoupling Part 2: Data Compilers.”</strong> Why the
+        expensive half of loading is parsing rather than reading, and what an offline compile
+        step buys — the natural sequel to §5's timing table.</li>
+
+    <li><strong>Sean Barrett, <code>stb_image.h</code>'s header comment.</strong> Still worth
+        reading for the "why we don't hand-roll this" argument, and for a decoder's-eye view of
+        what <code>load_image</code> is doing while a mesh parse dominates everything around it.</li>
+
+    <li><strong>SDL3 wiki — <code>SDL_GetPathInfo</code>, <code>SDL_GetBasePath</code>,
+        <code>SDL_GetPrefPath</code>.</strong> The last of those is the root this lesson does
+        <em>not</em> add: writable per-user storage, which is where saves and screenshots belong
+        and which Module 9 will want.</li>
+  </ul>

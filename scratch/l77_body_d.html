@@ -1,0 +1,354 @@
+  <h2 id="signs">8. The double cover, inside one track</h2>
+
+  <p>
+    Lesson 7.4 established that <code>q</code> and <code>−q</code> are the same orientation, and
+    Lesson 7.5 paid for it with one comparison inside <code>nearest</code>. Here is where the bill
+    actually arrives, because a clip is the first thing in this course whose quaternions were written
+    by <em>somebody else</em>.
+  </p>
+
+  <p>
+    An exporter has no obligation to keep signs consistent along a track. It computes each keyframe's
+    orientation independently, and half the time the four floats it produces are the antipode of the
+    ones before them. Both are correct. Both name the same pose. And they are not the same
+    <em>point</em>, which is all that an interpolation cares about.
+  </p>
+
+  @@FIG_SIGNS@@
+
+  <p>
+    The harness builds exactly that clip — the walk with every other rotation key negated — and then
+    measures three things, in an order that matters.
+  </p>
+
+  <p>
+    <strong>What <code>validate</code> sees.</strong> 690 adjacent pairs on opposite halves of the
+    sphere, against zero for the clean clip. It is counted and it is deliberately <em>not</em> part
+    of <code>ok()</code>, for the same reason <code>skeleton_report::nonuniform_binds</code> is not:
+    the data is legal. This is a measurement, not a verdict.
+  </p>
+
+  <p>
+    <strong>What this engine does about it: nothing, and it does not need to.</strong>
+  </p>
+
+  <pre>   sign flips reported: clean 0, flipped 690
+  [PASS] F.1  validate sees an inconsistent export
+   this engine's samples differ by  0.000e+00 deg
+  [PASS] F.2  nearest inside nlerp already pays for it</pre>
+
+  <p>
+    Sampling the flipped clip and the clean clip at four hundred times produces <em>bit-identical</em>
+    poses, because <code>quat_nlerp</code> calls <code>nearest</code> and <code>nearest</code> is the
+    whole fix. That is the honest half of this section and it is worth saying out loud: a correctly
+    built sampler is immune, and if you have one, the sign inconsistency in your content is not
+    hurting you.
+  </p>
+
+  <p>
+    <strong>What happens to anything that is not this engine.</strong> Written out rather than
+    described — five lines in the harness that lerp and normalise, with no comparison:
+  </p>
+
+  <pre>   CONTROL a lerp without nearest, worst error
+     on thigh.L   180.000 deg
+     across one flipped interval (t, error):
+       0.0333     0.000 deg
+       0.0400    61.148 deg
+       0.0500   120.000 deg
+       0.0600   155.279 deg
+       0.0666   180.000 deg</pre>
+
+  <p>
+    A hundred and eighty degrees, inside one keyframe interval — a thirtieth of a second. The
+    character's thigh takes the long way round between two poses a degree apart, arrives correctly at
+    the next key, and does it again two keys later. What that <em>looks</em> like is not a sign
+    error; it looks like the animation file is corrupt, and that is what makes it expensive. This is
+    the single most common quaternion bug in shipped animation code, and it is one dot product.
+  </p>
+
+  <h3>8.1 Paying once, at load</h3>
+
+  <p>
+    <code>canonicalise_rotations</code> walks every rotation channel and puts each key on the same
+    half of the sphere as its predecessor:
+  </p>
+
+  <pre>   canonicalise negated 345 keys; flips now 0
+  [PASS] F.4  one load-time pass, and the data is consistent
+  [PASS] F.5  and running it again changes nothing</pre>
+
+  <p>
+    345 negations to fix 690 reported flips, which is arithmetic rather than a coincidence: negating
+    every other key repairs the pair before it and the pair after it at once.
+  </p>
+
+  <p>
+    After it has run, <code>nearest</code> inside the sampler becomes a test that is never true. So
+    is it worth doing? The honest answer is that <strong>the cycles are not the point</strong>, and
+    the doc comment says so:
+  </p>
+
+  <ul>
+    <li>It makes the <em>count</em> available, which is a fact about your content pipeline that the
+        runtime cannot tell you. A track that needed a lot of flips came from a tool worth asking
+        about.</li>
+    <li>It fixes the data for every consumer that is <em>not</em> this sampler — a GPU vertex shader
+        doing the blend, a tool that re-exports the clip, a network packer that quantises components,
+        a colleague's reimplementation.</li>
+    <li>It is one dot product per key in the file, once, against one per rotation sampled per joint
+        per frame per character, forever.</li>
+  </ul>
+
+  <p>
+    And the sampler keeps calling <code>nearest</code> anyway. A clip can arrive from anywhere — a
+    procedural generator, a network stream, a tool that edited keys after the pass ran — and the cost
+    of being wrong is enormously out of proportion to the cost of a comparison that predicts
+    perfectly.
+  </p>
+
+  <h2 id="cost">9. What a clip weighs, and what reading it costs</h2>
+
+  <p>
+    §1 opened with 3.6 MB. Time to find out what the layout actually bought, and the first number is
+    not the one the argument predicted.
+  </p>
+
+  <h3>9.1 The per-channel layout loses, until something is elided</h3>
+
+  <pre>   23 joints, 31 frames at 30 Hz
+   layout                      bytes    of raw
+   pose array (40 B/joint)      28520     76.9%
+   per-channel, every key       37076   100.0%
+   per-channel, reduced          3716     10.0%</pre>
+
+  <p>
+    Read the first two rows again. A naive per-channel bake is <strong>30% bigger</strong> than the
+    pose array it was supposed to beat. And the reason is obvious once you count it: a pose array
+    spends 40 bytes per joint-frame, and three channels spend <code>16 + 20 + 16 = 52</code>, because
+    every key carries its own four-byte time.
+  </p>
+
+  <p>
+    <strong>The layout is not the saving. The layout is what makes the saving possible.</strong>
+    Independent times are what let a channel be reduced without dragging its neighbours along, and
+    an independent channel is what can be deleted outright. Bake everything and the format is a
+    liability; reduce, and it is 3,716 bytes against 28,520 — <strong>7.7× smaller</strong> — with
+    53 of 69 channels gone entirely.
+  </p>
+
+  <p>
+    Scaled to production density: a hundred joints, thirty seconds, the same proportion of channels
+    moving, and the pose array's <strong>3.60 MB</strong> becomes <strong>0.48 MB</strong>.
+  </p>
+
+  @@FIG_COST@@
+
+  <h3>9.2 Keyframe reduction</h3>
+
+  <p>
+    Elision handles channels that do nothing. Reduction handles channels that do something
+    <em>smoothly</em>, which is all of them: a baker at 30 Hz writes a key every frame whether or not
+    the curve needed one, and a straight line through three collinear keys reproduces the middle one
+    exactly.
+  </p>
+
+  <p>
+    The algorithm is a greedy fit-and-split. Keep the first key. Extend a candidate span as far as
+    it will go while every key strictly inside it is within tolerance of the value the sampler would
+    reconstruct from the span's two endpoints; the moment one is not, close the span at the previous
+    key and start again from there. The last key is always kept, because a clip that ends somewhere
+    other than where it was authored to end is a clip whose loop seam has moved.
+  </p>
+
+  @@FIG_REDUCE@@
+
+  <pre>   tol deg    keys   bytes   err deg   hdr/keys
+      0.00    2139   37076    0.1534      0.04x
+      0.05     386    7616    0.1534      0.22x
+      0.25     287    5636    0.2553      0.29x
+      0.50     191    3716    0.5102      0.45x
+      2.00     104    1976    3.0000      0.84x
+      8.00      62    1136    7.8921      1.46x</pre>
+
+  <p>
+    Three things in that table repay attention.
+  </p>
+
+  <p>
+    <strong>The first row is the floor, and it is not zero.</strong> The error column is measured
+    against the <em>closed form</em> the keys were baked from, so row one is what sampling a
+    continuous motion at 30 Hz costs before anything is thrown away at all: <strong>0.1534°</strong>.
+    Asking the reduction for 0.05° cannot get below it, which is why rows one and two have the same
+    error and wildly different key counts. Measured against the unreduced <em>clip</em> instead, the
+    half-degree reduction comes in at 0.4918° and keeps its promise.
+  </p>
+
+  <p>
+    <strong>The tolerance is in the animator's units.</strong> Not a percentage — "0.1%" means
+    something different on a joint two metres from the root than on one two centimetres from it, and
+    the thing a human can actually judge is "half a degree". Half a degree is about the smallest
+    rotation of a limb a viewer can see on a moving character at gameplay distance, which is why it
+    is the default.
+  </p>
+
+  <p>
+    <strong>The last column is a warning.</strong> <code>hdr/keys</code> is the ratio of
+    <code>std::vector</code> headers — three per joint, 72 bytes on a 64-bit toolchain — to the key
+    data they point at. It starts at 0.04× and climbs to <strong>1.46×</strong>, because the headers
+    are a fixed cost per joint and the keys are not. <em>The better the reduction works, the more of
+    the clip is container.</em> That is not an argument against reduction; it is an argument for a
+    flat arena with offsets instead of 69 separate heap blocks, which is Module 9's custom-allocator
+    lesson arriving early and uninvited. Named here, not fixed here.
+  </p>
+
+  <h3>9.3 Fitting against a curve you will not play</h3>
+
+  <p>
+    One detail in <code>reduce</code> is easy to get wrong in a way that is invisible until it is
+    expensive, and it is the reason the rotation fit calls <code>quat_nlerp</code>:
+  </p>
+
+  <pre><code class="lang-cpp">removed += reduce_channel(track.rotation,
+    [&amp;](const quat_key&amp; k0, const quat_key&amp; k1, const quat_key&amp; mid) {
+        const float u = segment_t(k0.time, k1.time, mid.time);
+        return near_rotation(quat_nlerp(k0.value, k1.value, u), mid.value);
+    });</code></pre>
+
+  <p>
+    <strong>Reduction manufactures long arcs on purpose.</strong> Its entire job is to replace many
+    small steps with one large one — which is exactly the regime where nlerp and slerp disagree. Fit
+    against a curve the sampler will not walk and the playback error can exceed the tolerance you
+    asked for, by more the better the reduction worked.
+  </p>
+
+  <p>
+    The harness makes that concrete with the worst case for it: one joint turning at a
+    <em>constant</em> rate about a fixed axis, which slerp reproduces exactly, so a slerp-fitted
+    reduction keeps two keys and claims zero error.
+  </p>
+
+  <pre>   a 120 deg constant-rate turn, tolerance 0.50:
+     fitted with nlerp   3 keys, plays  0.4651 deg out
+     fitted with slerp   2 keys, plays  2.2340 deg out
+     the slerp fit overshoots its budget   4.5x</pre>
+
+  <p>
+    One key saved, four and a half times the error budget spent, and nothing anywhere in the pipeline
+    reports it — the reducer thinks it succeeded and the sampler thinks it is doing its job. The rule
+    generalises past quaternions: <strong>a lossy transformation must be fitted with the exact
+    reconstruction its consumer will perform</strong>, not with the one the textbook describes.
+  </p>
+
+  <div class="callout">
+    <span class="label">Is greedy reduction idempotent? Measure, do not assume</span>
+    <p>
+      In principle a second pass fits against the first pass's output rather than against the
+      original curve, so the tolerances could add — and a pipeline that reduces on export and again
+      on import would be spending the budget twice, quietly. Run to convergence and it does not:
+      pass two removes <strong>4 more keys of 191</strong>, pass three removes none, and the playback
+      error stays at 0.4918° to four decimal places. The greedy anchors move; the curve they are
+      approximating does not. Worth knowing rather than worth fearing — but that is a measurement on
+      this content, not a proof, so check it on yours before chaining two reducers.
+    </p>
+  </div>
+
+  <h3>9.4 What a frame costs</h3>
+
+  <pre>   sampling 31 keys/track (unreduced):
+   (best of three)
+   sample, cursor        0.159 us  ( 6.89 ns/joint)
+   sample, binary        0.341 us  (14.84 ns/joint)
+   the cursor is          2.15x
+   compose + palette     0.240 us
+   the same clip 10x longer (301 keys/track):
+     cursor   0.172 us   binary   0.966 us    5.63x</pre>
+
+  <p>
+    Sampling 23 joints costs <strong>0.159 µs</strong>, which is two thirds of what composing the
+    pose and building the palette cost together and — as Lesson 7.6 measured — a rounding error
+    beside the 44.72 µs of skinning 4,840 vertices. Sampling is not where a frame goes. It is also
+    not free, and a game with forty characters on screen is doing it forty times, plus once more per
+    layer of every blend.
+  </p>
+
+  <p>
+    The cursor's margin over the binary search is 2.15× at 31 keys and 5.63× at 301, which is the
+    <code>log₂(n)</code> against 1 showing up exactly where it should.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Two confounds in one measurement, and the second one survived the first fix</span>
+    <p>
+      This timing block was wrong twice. First, both rows drove the sampler with a clock that climbed
+      to 666 seconds, and <code>std::fmod</code>'s quotient-dependence made the <em>short</em> clip
+      slower — so the 301-key row came out faster than the 31-key one, which is backwards. Wrapping
+      the driver's clock fixed that and the inversion <em>stayed</em>. The second cause was the
+      benchmark itself: §A's table is the first timing in the process, and on a laptop the first
+      hundred milliseconds run at a lower clock than everything after them, by about 30% —
+      <code>best_of_three</code> cannot help when all three attempts are inside the ramp. The harness
+      now spins for 150 ms before it measures anything. Two independent reasons for one wrong number
+      is the normal case, not the unlucky one.
+    </p>
+  </div>
+
+  <h2 id="limits">10. What this does not do</h2>
+
+  <p>
+    Every lesson simplifies; this one's simplifications are large enough to name individually,
+    because several of them are things a reader will reasonably expect to find here.
+  </p>
+
+  <p>
+    <strong>Nothing loads a clip from a file.</strong> The demo <em>bakes</em> its clips from
+    procedural functions, and the harness bakes its walk from a closed form. That is a deliberate
+    scoping decision, not an oversight: glTF animation import is a real piece of work — the importer
+    still flattens the node tree and ignores skins entirely, as
+    <code>gltf_primitive::world_from_local</code> says in its own doc comment — and doing it properly
+    means reordering the skeleton topologically and reordering the tracks in the same pass, or every
+    joint in the character is animated by its neighbour. It is Exercise 5, with the shape of the work
+    written out.
+  </p>
+
+  <p>
+    <strong>Root motion is measured and not applied.</strong> §6 split <code>root_travel</code> out
+    of the loop seam so that the instrument tells the truth, and that is as far as it goes. Nothing
+    subtracts the root's travel from the pose and adds it to the character's world transform, so a
+    looping clip snaps the character back to its origin on every wrap. Doing it properly means
+    deciding what happens when the blend weights change mid-stride, which is a design question and
+    not an arithmetic one.
+  </p>
+
+  <p>
+    <strong>There is no <code>STEP</code> and no <code>CUBICSPLINE</code>.</strong> glTF defines
+    three interpolation modes and this sampler implements one. <code>STEP</code> is four lines and is
+    genuinely needed — it is how you animate a discrete thing, a visibility flag or a texture index,
+    where interpolating between two values produces a value that means nothing. <code>CUBICSPLINE</code>
+    stores an in-tangent and an out-tangent beside each value and costs three times the storage; it
+    is what a curve editor's smooth handles export as.
+  </p>
+
+  <p>
+    <strong>There is no additive blending.</strong> A cross-fade replaces one pose with another; an
+    <em>additive</em> layer applies the difference between an animation and a reference on top of
+    whatever is already playing, which is how aim offsets and reaction flinches are built. The
+    machinery is already in the engine — Exercise 4 derives it, and the whole of it is
+    <code>quat_pow_unit</code>, which Lesson 7.5 wrote for slerp and which means precisely "a
+    fraction of this rotation".
+  </p>
+
+  <p>
+    <strong>There is no blend tree and no state machine.</strong> Deciding <em>what</em> to play, and
+    when to start fading, is gameplay logic that sits on top of this API and would not change a line
+    of it. That is the right boundary, and it is the same one Lesson 5.10 drew between an input
+    device and an action.
+  </p>
+
+  <p>
+    <strong>Component quantisation is named and not implemented.</strong> Three of a quaternion's
+    four components at 16 bits each, plus two bits saying which one was dropped and reconstructed
+    from the norm, takes a rotation key from 20 bytes to 12 — and shipped engines go further. The
+    reduction in §9.2 is the algorithmic half of compression; quantisation is the arithmetic half,
+    and it interacts with §8 in a way worth thinking about before implementing, since a quantised
+    <code>−q</code> and a quantised <code>q</code> do not round to negatives of each other.
+  </p>

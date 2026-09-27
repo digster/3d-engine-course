@@ -1,0 +1,404 @@
+  <h2 id="friction">7. Friction: the cone and the square</h2>
+
+  <p>
+    Friction is the same solve twice, in two directions perpendicular to the normal, with a clip on
+    the end. The arithmetic is short; the interesting part is the clip.
+  </p>
+
+  <p>
+    First we need the two directions. There is no canonical answer — <code>vec3.hpp</code> has said
+    since Lesson 1.7 that in three dimensions “perpendicular to this” names a whole circle of
+    directions — so any orthonormal pair spanning the contact plane will do. The standard
+    construction picks whichever coordinate axis the normal is <em>least</em> aligned with and
+    crosses with that:
+  </p>
+
+  <pre><code class="lang-cpp">const vec3 seed = (std::abs(n.x) &lt;= std::abs(n.y) &amp;&amp; std::abs(n.x) &lt;= std::abs(n.z))
+                      ? vec3{1.0f, 0.0f, 0.0f}
+                      : (std::abs(n.y) &lt;= std::abs(n.z) ? vec3{0.0f, 1.0f, 0.0f}
+                                                        : vec3{0.0f, 0.0f, 1.0f});
+t1 = normalised(cross(n, seed));
+t2 = cross(n, t1);</code></pre>
+
+  <p>
+    The “least aligned” part is the whole trick. A cross product of two nearly parallel vectors is
+    nearly zero, and normalising a nearly-zero vector amplifies whatever rounding error it carries,
+    so the construction must never take one. Choosing the smallest component guarantees the seed is
+    at least 54.7° away — the worst case being a normal pointing along a cube's diagonal, where all
+    three components are equal — so the cross product never has length below
+    <code>sin(54.7°) = 0.816</code>. And <code>t2</code> needs no <code>sqrt</code> at all: the
+    cross product of two perpendicular unit vectors is already unit. Over a million random normals
+    the harness measures the worst <code>|dot|</code> among the three pairs at
+    <strong>6.573 × 10⁻⁸</strong> and the worst <code>|length − 1|</code> at
+    <strong>2.384 × 10⁻⁷</strong>, without that second normalisation.
+  </p>
+
+  <h3>The clip</h3>
+
+  <p>
+    Solve each tangent exactly as the normal was solved, but with target zero — “stop sliding” —
+    and then enforce Coulomb. Both tangential components are computed from the <em>same</em> sample
+    of the relative velocity rather than one after the other, because solving them sequentially
+    would make the answer depend on which of the two arbitrary axes came first.
+  </p>
+
+  <p>
+    Then the clip, and there are two ways to write it:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[
+      \text{cone:}\quad \|\mathbf{j}_t\| \le \mu j_n
+      \qquad\qquad
+      \text{box:}\quad |j_{t_1}| \le \mu j_n \;\wedge\; |j_{t_2}| \le \mu j_n
+    \]</span>
+    <span class="eq-plain">
+      cone: the length of the tangential impulse is at most mu*j_n.
+      box: each component separately is at most mu*j_n.
+    </span>
+  </div>
+
+  <p>
+    The first is a disc. The second is the <em>square that circumscribes that disc</em>, so it
+    permits up to <code>√2 · μ·j_n</code> of friction — but only along the diagonals of a basis that
+    <code>tangent_basis</code> picked from the normal's smallest component. The box model is one
+    <code>clamp</code> per axis instead of a <code>sqrt</code>, which is why it is common; what it
+    buys is a physical anisotropy with no physical cause.
+  </p>
+
+  @@FIG_CONE@@
+
+  <p>
+    §F of the harness measures it the honest way: push a 5 kg crate along a flat floor at 4 m/s in
+    361 different directions and record how far it slides. Under the cone the answer cannot depend
+    on the direction, because a disc is round. Under the box it must, because a square is not. And
+    note that sliding at angle <em>θ</em> against a fixed basis is the same experiment as sliding
+    along a fixed direction with the basis rotated by <code>−θ</code>, so this sweep <em>is</em> the
+    measurement of basis dependence.
+  </p>
+
+  <pre><code class="lang-text">       theta        box model       cone model
+       0.0 deg         1.5977 m         1.5977 m
+      22.5 deg         1.3801 m         1.5977 m
+      45.0 deg         1.1202 m         1.5977 m
+      67.5 deg         1.3800 m         1.5977 m
+      90.0 deg         1.5977 m         1.5977 m
+
+  over 361 directions:
+    box  : 1.1202 m to 1.5983 m   spread 42.68%
+    cone : 1.5977 m to 1.5977 m   spread 0.00%</code></pre>
+
+  <p>
+    <strong>42.68% direction-dependence</strong> against <strong>0.00%</strong>. And the extremes
+    are where the geometry says: the ratio of shortest to longest stopping distance comes out
+    <strong>0.70085</strong> against a predicted <code>1/√2 = 0.70711</code>. A puck slid north
+    travels 43% further than one slid north-east, and which way is “north” was decided by the
+    floor's normal.
+  </p>
+
+  <p>
+    The two controls are what make that mean something. With <code>μ = 0</code> the crate travels
+    80.1 m and is still going, so the sweep is measuring friction rather than some settling
+    artifact; and with <code>μ = 2.0</code>, where the crate grips and the clip never binds, the two
+    models end <strong>2.6 × 10⁻⁷ m</strong> apart — so the box model is not wrong in some other
+    way, it is wrong in exactly this way.
+  </p>
+
+  <p>
+    §13 measures the price of the cone's <code>sqrt</code>: <strong>6.8%</strong> of a manifold's
+    prepare-and-solve. Six point eight per cent to remove a 43% anisotropy is not a close decision,
+    and the default is the cone.
+  </p>
+
+  <p class="aside">
+    The cone clip here scales both components by one factor, which is the projection onto the disc
+    in <em>impulse</em> space. The mathematically exact projection would be onto an ellipse, because
+    the two tangent effective masses differ whenever the lever arm is anisotropic. Every engine does
+    it this way; the error makes the friction slightly wrong in <em>direction</em> rather than wrong
+    in magnitude, and it disappears entirely on the contacts where it would matter most — a flat
+    face on a flat floor, where the two tangents are symmetric. This is the ninety-per-cent picture;
+    the missing ten per cent lives in the literature under “anisotropic friction”.
+  </p>
+
+  <h2 id="slope">8. The slope, and what μ actually means</h2>
+
+  <p>
+    <em>μ</em> is a ratio of impulses, which is not a thing anyone has intuition about. Here is the
+    thing it really says, and it is the only statement about friction that contains no mass, no
+    area and no speed: <strong>a body sits still on a slope up to <code>atan(μ)</code> and slides
+    past it.</strong>
+  </p>
+
+  <p>
+    The derivation is one line of statics. On a slope of angle <em>θ</em>, gravity resolves into
+    <code>mg·sin θ</code> down the slope and <code>mg·cos θ</code> into it. The normal force carries
+    the second, so friction has at most <code>μ·mg·cos θ</code> to offer against the first:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ mg\sin\theta \;\le\; \mu\, mg\cos\theta \qquad\Longrightarrow\qquad \tan\theta \le \mu \]</span>
+    <span class="eq-plain">m g sin(theta) is at most mu m g cos(theta), so tan(theta) is at most mu</span>
+  </div>
+
+  <p>
+    The mass cancels — a heavy crate and a light one let go at the same angle, which is
+    counter-intuitive until you notice that friction and weight scale together.
+  </p>
+
+  <p>
+    So the test writes itself: bisect the angle at which the engine's crate starts to drift, and
+    compare with <code>atan(μ)</code>. Here is what came back the first time:
+  </p>
+
+  <pre><code class="lang-text">        mu       atan(mu)       cube (1:1)
+      0.20    11.3099 deg     11.3063 deg
+      0.35    19.2900 deg     19.2494 deg
+      0.50    26.5651 deg     26.1909 deg
+      0.75    36.8699 deg     35.7921 deg
+      1.00    45.0000 deg     41.2495 deg</code></pre>
+
+  <p>
+    Four thousandths of a degree out at <code>μ = 0.2</code>, and <strong>3.75 degrees</strong> out
+    at <code>μ = 1.0</code>. That is not noise and it is not a tolerance: it is a
+    <em>systematic error that grows with the parameter</em>, and that shape is the clue. A wrong
+    constant somewhere in the friction code would have been wrong at <code>μ = 0.2</code> too.
+  </p>
+
+  @@FIG_SLOPE@@
+
+  <p>
+    The fixture was a <strong>cube</strong>, and a block on a slope has <em>two</em> critical
+    angles. It slides when <code>tan θ &gt; μ</code>, and it <strong>tips</strong> when its centre
+    of mass passes outside its base — which is <code>tan θ &gt; w/h</code>. It does whichever
+    happens first. A cube has <code>w/h = 1</code>, so it tips at exactly 45°, and
+    <code>μ = 1</code> wants to slide at exactly 45°: the two limits collide, and above about
+    <code>μ = 0.5</code> the measurement stops being about friction at all.
+  </p>
+
+  <p>
+    Rerun with a slab whose width is ten-thirds of its height, which tips at 73.3° and therefore
+    stays out of the way, and the column comes back:
+  </p>
+
+  <pre><code class="lang-text">        mu       atan(mu)       cube (1:1)      slab (10:3)
+      0.20    11.3099 deg     11.3063 deg     11.3026 deg
+      0.35    19.2900 deg     19.2494 deg     19.2760 deg
+      0.50    26.5651 deg     26.1909 deg     26.5471 deg
+      0.75    36.8699 deg     35.7921 deg     36.7552 deg
+      1.00    45.0000 deg     41.2495 deg     44.5711 deg
+
+  worst disagreement: cube 3.7505 deg, slab 0.4289 deg.</code></pre>
+
+  <p>
+    And then the control that turns a plausible story into a diagnosis: point the
+    <em>same instrument</em> at the other formula. Set <code>μ = 5.0</code>, so that sliding would
+    need 78.7° and is therefore impossible, and bisect again. The cube lets go at
+    <strong>45.0032°</strong> against a predicted tipping angle of <strong>45.0000°</strong>. The
+    fixture was never broken; it was measuring the wrong one of two things, and it can be made to
+    measure either.
+  </p>
+
+  <p class="callout">
+    <strong>A fixture that cannot express the quantity is not evidence about it.</strong> This is
+    the fourth time in Module 8 that a section's first instrument was the thing at fault — 8.6 §1
+    found a knob measuring zero, 8.7 §9 shipped a control that convicted the code of the test's own
+    mistake, 8.8 §4 found the famous bug losing nothing. The habit that catches them is asking what
+    the <em>shape</em> of an error is, not just its size.
+  </p>
+
+  <h3>Combining two materials, and a default this course does not inherit</h3>
+
+  <p>
+    One loose end from §3. <code>μ</code> is a property of a <em>pair</em> of surfaces: rubber on
+    rubber is 1.16, ice on ice is about 0.10, and rubber on ice is 0.15, which no function of 1.16
+    and 0.10 reproduces — because there is no such function. Every engine stores one number per body
+    and combines them anyway, because a pair table is <code>O(n²)</code> in materials and nobody
+    authors one. The combination is a modelling choice, and this course puts it in the call
+    (<code>combine_material</code>) rather than burying it in <code>rigid_body</code>, so that a
+    reader can see a choice was made.
+  </p>
+
+  <p>
+    No simulation can settle which rule is right. What can be checked is arithmetic, against the
+    surface pairs whose <em>three</em> coefficients — a on a, b on b, and a on b — are all
+    published:
+  </p>
+
+  <pre><code class="lang-text">  pair                    mu_a    mu_b    real       geo       min       max       avg
+  aluminium / steel       1.10    0.74    0.61     0.902     0.740     1.100     0.920
+  copper / steel          1.00    0.74    0.53     0.860     0.740     1.000     0.870
+  glass / nickel          0.94    1.10    0.78     1.017     0.940     1.100     1.020
+  rubber / ice            1.16    0.10    0.15     0.341     0.100     1.160     0.630
+  PTFE / steel            0.04    0.74    0.04     0.172     0.040     0.740     0.390
+
+  rule                  worst error     mean error
+  geometric mean            330.1%        119.6%
+  minimum                    39.6%         23.0%
+  maximum                  1750.0%        526.7%
+  average                   875.0%        268.1%</code></pre>
+
+  <p>
+    Published coefficients disagree between sources by tens of per cent, so that table on its own
+    settles nothing. The robustness sweep is what does: perturb <em>every</em> number in it by up to
+    ±30%, twenty thousand times, and count which rule has the smallest total error.
+  </p>
+
+  <pre><code class="lang-text">    geometric mean     wins   0.00% of the time
+    minimum            wins 100.00% of the time
+    maximum            wins   0.00% of the time
+    average            wins   0.00% of the time</code></pre>
+
+  <p>
+    <strong>So this engine's default is <code>minimum</code>, and Box2D, Bullet and PhysX all ship
+    <code>sqrt(a·b)</code>.</strong> The minimum has a physical story behind it — the interface is
+    governed by the more lubricious of the two surfaces, which is why PTFE on anything behaves like
+    PTFE, and why the geometric mean predicts steel on PTFE at 0.172 where the real number is 0.04.
+  </p>
+
+  <p>
+    What it costs is worth saying out loud, because it is the case for the rule we are not using:
+    <code>min</code> is <em>insensitive</em> to the grippier material. A designer raising rubber's
+    friction sees nothing at all change against ice. The geometric mean responds to both inputs,
+    which is a usability argument rather than a physical one — and it is a real argument. The knob
+    is in the call; §8's table is why the default points where it does.
+  </p>
+
+  <h2 id="rolling">9. Sliding becomes rolling</h2>
+
+  <p>
+    One more consequence of friction, and the prettiest closed form in the lesson. Drop a ball onto
+    the floor with forward speed and <em>no spin</em> — a bowling ball, before it starts rolling.
+  </p>
+
+  <p>
+    Friction acts at the contact point, which is below the centre of mass. So it does two things at
+    once: it slows the centre down, at <code>μg</code>, and it <em>spins the ball up</em>, because
+    <code>r × J</code> is not zero. The surface speed <code>ω·r</code> climbs from zero while the
+    centre speed falls. When they meet, the contact point is instantaneously stationary — that is
+    exactly what “rolling without slipping” means — and friction has nothing left to act on.
+  </p>
+
+  @@FIG_ROLL@@
+
+  <p>
+    Where do they meet? For a body with <code>I = c·m·r²</code>, friction's torque gives it angular
+    acceleration <code>μmg·r/(c m r²) = μg/(c r)</code>, so the surface speed climbs at
+    <code>μg/c</code>. The gap <code>v − ω r</code> therefore closes at <code>μg(1 + 1/c)</code>,
+    and setting <code>v₀ − μgt = (μg/c)t</code> gives
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ t_{\text{roll}} = \frac{v_0}{\mu g\,(1 + 1/c)}, \qquad v_{\text{roll}} = \frac{v_0}{1 + c} \]</span>
+    <span class="eq-plain">the transition takes v0 / (mu*g*(1 + 1/c)) and ends at v0/(1+c)</span>
+  </div>
+
+  <p>
+    <strong><code>μ</code> cancels out of the second one.</strong> The speed a sliding ball ends up
+    rolling at does not depend on how rough the floor is — friction decides only <em>how long</em>
+    the transition takes. For a solid sphere <code>c = 2/5</code>, so
+    <code>v_roll = v₀/(7/5) = <strong>5/7 · v₀</strong></code>; for a hollow shell
+    <code>c = 2/3</code> and it is 3/5.
+  </p>
+
+  <p class="worked">
+    <strong>Measured, and the controls are the point.</strong> A 2 kg ball landing at 6 m/s:
+  </p>
+
+  <pre><code class="lang-text">  body             mu   v/v0 exact     v/v0 sim      t exact        t sim
+  solid ball     0.20     0.714286     0.713877     0.8737 s     0.8833 s
+  solid ball     0.40     0.714286     0.713877     0.4369 s     0.4500 s
+  solid ball     0.80     0.714286     0.713877     0.2184 s     0.2333 s
+  hollow shell   0.20     0.600000     0.599519     1.2232 s     1.2333 s
+  hollow shell   0.40     0.600000     0.599519     0.6116 s     0.6167 s
+  hollow shell   0.80     0.600000     0.599519     0.3058 s     0.3167 s</code></pre>
+
+  <p>
+    Quadruple <code>μ</code> and the end speed moves by <strong>0.0000%</strong> while the
+    transition time goes from 0.8833 s to 0.2333 s, a factor of <strong>3.79</strong>. With
+    <code>μ = 0</code> the ball neither slows nor spins up at all, for four thousand steps. Nothing
+    but friction can do this, and friction does exactly the half of it the algebra says.
+  </p>
+
+  <h3>The 0.06% that is not noise</h3>
+
+  <p>
+    The simulated fraction is 0.713877 where 5/7 is 0.714286 — six hundredths of a per cent out, and
+    identical at every <code>μ</code>, which is the signature of something systematic. It is.
+  </p>
+
+  <p>
+    8.7 put <code>contact_point::position</code> <em>midway between the two surfaces</em>, so a ball
+    penetrating by <code>d</code> has its contact point at <code>R − d/2</code> from its centre, not
+    at <code>R</code>. That is the lever arm the solver actually uses, so the effective inertia
+    coefficient is <code>c·(R/r_c)²</code> rather than <code>c</code>. Put that into
+    <code>1/(1+c)</code> and sweep the penetration over a factor of 150:
+  </p>
+
+  <pre><code class="lang-text">         depth      r_contact v/v0 predicted  v/v0 measured   difference
+       0.20 mm     0.249900 m       0.714122       0.714122     3.58e-07
+       0.50 mm     0.249750 m       0.713877       0.713877     4.17e-07
+       2.00 mm     0.249000 m       0.712647       0.712647     3.58e-07
+      10.00 mm     0.245000 m       0.705969       0.705969    -5.96e-07
+      30.00 mm     0.235000 m       0.688376       0.688377    -7.75e-07</code></pre>
+
+  <p>
+    The corrected closed form tracks the measurement to <strong>8 × 10⁻⁷</strong> across the whole
+    sweep. The residual is the manifold's own convention, arriving in the mechanics — and because
+    the prediction was made <em>before</em> the sweep and holds across it, it is a prediction rather
+    than a fit.
+  </p>
+
+  <h2 id="order">10. The order of the two solves</h2>
+
+  <p>
+    §3 said friction's clip needs a normal impulse to clip against. Here is what happens if you do
+    not believe it.
+  </p>
+
+  <p>
+    Drop a 20 kg slab from 30 cm onto a 20° ramp with <code>μ = 0.5</code>. The critical angle is
+    26.57°, so the slab should grip on the frame it lands and not move again. Measure how far it
+    travels down the slope over the first ten frames of contact, solving friction first and the
+    normal impulse second:
+  </p>
+
+  <pre><code class="lang-text">                                       1 pass       4 passes      16 passes
+  normal then friction             18.9620 mm      3.2878 mm      0.0436 mm
+  friction then normal             51.2602 mm      6.0293 mm      0.0605 mm
+  friction then normal, warm        6.7872 mm      3.4705 mm      0.0120 mm
+  normal then friction, warm        3.3812 mm      0.3691 mm      0.0044 mm</code></pre>
+
+  <p>
+    Look at the first column, which is what this lesson ships. 51.26 mm against 18.96 mm — and
+    51.26 mm is <em>exactly</em> what the same slab does with <code>μ</code> set to zero. Not less
+    friction: <strong>no friction at all</strong>. Every frame starts with a zero accumulator, so
+    every frame's friction solve clips against a cone of radius zero, so no tangential impulse is
+    ever applied. The engine has a friction coefficient, a friction model, and a friction impulse
+    that is always the zero vector.
+  </p>
+
+  <p>
+    Two things make this bug survive, and both are visible in the table.
+  </p>
+
+  <p>
+    <strong>Iteration hides it.</strong> With sixteen passes the friction solve is starved only on
+    the first of them, and the two orders converge to 0.044 mm and 0.061 mm. A solver that iterates
+    enough gets away with the wrong order — and then somebody lowers the iteration count for
+    performance and the crates start sliding off the ramps.
+  </p>
+
+  <p>
+    <strong>Warm starting hides it too</strong>, and more interestingly. With warm starting the
+    accumulator arrives holding <em>last frame's</em> impulse, so the cone has a radius on every
+    frame but the first: the wrong order goes from 51.3 mm to 6.8 mm. It is an accident that the bug
+    is nearly fixed by an unrelated optimisation, and it means the failure only shows up on the
+    frame a contact is <em>born</em> — as a single lurch per landing rather than a continuous
+    creep, which is exactly the kind of thing that gets filed as “physics feels a bit loose”.
+  </p>
+
+  <p>
+    And the control: on a <em>flat</em> floor the two orders agree to <code>10⁻⁶ m</code>. With no
+    down-slope velocity there is nothing for friction to fail to resist, so every test written on
+    flat ground passes. That is the other reason this bug survives.
+  </p>

@@ -1,0 +1,358 @@
+  <h2 id="cost">10. What it costs, measured</h2>
+
+  <p>
+    Lesson 7.3 made a prediction about this section, in the plane, where the numbers were mild:
+    a complex number was cheaper to <em>store</em> and cheaper to <em>combine</em> and exactly as
+    expensive to <em>use</em>, because <code>z × v</code> and <code>M × v</code> are the same four
+    multiplies. It then said the same trade reappears one dimension up with the same shape and
+    different numbers. It does, and the difference is that here the third column is not a wash —
+    it is a loss.
+  </p>
+
+  @@FIG_COST@@
+
+  <h3>10.1 Composing: 1.57× cheaper</h3>
+
+  <pre>F. COST
+   compose  quat*quat   1.666 ns  (16 mul, 12 add)
+   compose  mat3*mat3   2.612 ns  (27 mul, 18 add)
+   ratio                 1.57x
+  [PASS] F.1  composing is cheaper as a quaternion</pre>
+
+  <p>
+    The operation counts predict 1.69×; the measurement says 1.57×, which is close enough that
+    nothing surprising is happening — unlike Lesson 7.2's closed-form Rodrigues, where a 3× count
+    produced a 1.3× measurement because most of the time was going on a <code>sin</code> that both
+    spellings paid for.
+  </p>
+
+  <p>
+    One bias in that row is worth stating rather than hiding. The rule for a timed loop in this
+    course is <em>consume the whole result</em>, and consuming a quaternion is 4 adds while
+    consuming a matrix is 9. The matrix row is therefore carrying five extra adds it would not pay
+    in a real caller, which overstates the quaternion's win slightly. The apply row below has no
+    such bias — both sides accumulate three floats — and it is the one to trust as a calibration.
+  </p>
+
+  <div class="callout">
+    <span class="label">The first draft of this measurement read 0.000 ns</span>
+    <p>
+      It wrote <code>acc = qs[i] * qs[j]</code> inside the loop, which overwrites <code>acc</code>
+      every iteration, so only the last product is needed and the compiler knows it. That is a
+      third distinct way to lose a timing in this course's harnesses, after 7.2's "read one element
+      of nine" and "hoist the whole loop". A measurement of exactly zero is at least loud; the
+      dangerous version of this mistake is the one that leaves a plausible small number behind.
+    </p>
+  </div>
+
+  <h3>10.2 Applying: 1.57× <em>dearer</em></h3>
+
+  <pre>   apply    quat*vec3   1.679 ns  (18 mul, 12 add)
+   apply    mat3*vec3   1.070 ns  ( 9 mul,  6 add)
+   ratio                 1.57x  (quaternion slower)
+  [PASS] F.2  applying is cheaper as a matrix</pre>
+
+  <p>
+    This is the honest row, and it is the one most treatments of quaternions omit. Rotating a
+    vector with a quaternion costs 18 multiplies; with a matrix it costs 9. The quaternion is
+    better at everything except the operation a renderer performs most.
+  </p>
+
+  <h3>10.3 So there is a crossover, and it is a number you can design with</h3>
+
+  <p>
+    Converting costs something, and each vector rotated saves something, so there is a break-even
+    count:
+  </p>
+
+  <pre>   convert  mat3_from_quat   4.619 ns
+   crossover: 7.58 vectors per rotation
+  [PASS] F.3  the crossover is a small number of vectors</pre>
+
+  <div class="eq">\[ N^{*} \;=\; \frac{t_{\text{convert}}}{t_{\text{quat}\cdot v} - t_{\text{mat}\cdot v}}
+                  \;=\; \frac{4.619}{1.679 - 1.070} \;=\; 7.6 \]</div>
+
+  <p class="eq-plain">
+    In prose: building the matrix costs 4.619 ns and each vector then saves 0.609 ns, so the
+    matrix pays for itself after about eight vectors.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule that falls out of one number</span>
+    <p>
+      <strong>Rotate a point, use the sandwich. Rotate a mesh, build the matrix.</strong> Eight is
+      a small number — a single skinned vertex influenced by four bones is already past it if each
+      bone's quaternion is used once — which is why every renderer that is handed quaternions
+      converts them before it draws anything, and why <code>mat3_from_quat</code> is not an
+      afterthought in this header. Note also which way this cuts against the folklore: "quaternions
+      are faster than matrices" is true of <em>storing</em> and <em>composing</em> and false of the
+      thing a frame spends its time on.
+    </p>
+  </div>
+
+  <h3>10.4 Drift, and an answer that is the opposite of the plane's</h3>
+
+  <p>
+    Lesson 7.3 ran this experiment in two dimensions and the complex number won by 6.15×. Here is
+    the same experiment in three, with both representations asked the <em>same</em> question —
+    <code>max |MᵀM − I|</code>, because "how big is the norm error" and "how non-orthonormal is the
+    matrix" are not comparable numbers:
+  </p>
+
+  <pre>   step    quat raw   mat3 raw   quat tidied
+    0.37   8.774e-02  1.780e-02  5.960e-08
+    1.00   2.940e-02  2.674e-02  1.192e-07
+    2.50   1.824e-01  5.681e-02  1.192e-07
+   (tidied = renormalised_fast every step, no sqrt)
+  [PASS] F.4  a tidied quaternion beats both raw walks</pre>
+
+  <p>
+    <strong>The raw quaternion loses, at every step size.</strong> That is not the result this
+    section was expecting, and the reason is better than the result would have been. An unrepaired
+    quaternion's norm error <em>compounds as a power</em>: if <code>|q_step| = 1 + ε</code>, then
+    after <code>n</code> compositions <code>|q| ≈ 1 + nε</code>, and the sandwich then squares it.
+    Three steps were measured rather than one precisely because the answer is set by how far one
+    particular step's norm happens to sit from 1 — a property of an input, not of a representation.
+  </p>
+
+  <p>
+    And the third column is what actually matters:
+  </p>
+
+  <pre>   repair   renormalised_fast   1.059 ns
+   repair   Gram-Schmidt        3.437 ns
+   ratio                         3.25x
+  [PASS] F.4b repairing a quaternion is much cheaper</pre>
+
+  <p>
+    One <code>renormalised_fast</code> per step — no square root, no divide, one subtract and five
+    multiplies — brings the walk to <code>6×10⁻⁸</code>, five orders of magnitude better than
+    either raw walk, at a third the cost of the Gram-Schmidt a matrix needs. <strong>That is the
+    real advantage, and "quaternions drift less" is not it.</strong> Quaternions are cheap to
+    <em>repair</em>, which means you can afford to repair them every frame, which means they never
+    drift.
+  </p>
+
+  @@FIG_DRIFT@@
+
+  <h3>10.5 And 7.3's sharpest warning inverts</h3>
+
+  <p>
+    Lesson 7.3 found that <code>renormalised_fast</code> at <code>|z| = 2</code> returns
+    <code>−z</code>: a <em>perfect</em> modulus wearing a 180° error, so a unit test on
+    <code>|z|</code> certified a function that turned the object the wrong way round. Its
+    conclusion was "choose the quantity before the threshold — test the rotation, not the modulus".
+  </p>
+
+  <p>
+    Carry the function up a dimension — it generalises without a character changing, being a Taylor
+    series about <code>|q|² = 1</code> that knows nothing about dimension — and run the same
+    experiment:
+  </p>
+
+  <pre>   |q|    norm after fix   pose error
+   1.000    5.960e-08        0.0000 deg
+   1.050    3.812e-03        0.3349 deg
+   1.250    1.016e-01        9.0135 deg
+   1.500    4.375e-01       34.7161 deg
+   1.750    9.453e-01       49.8686 deg
+   2.000    2.980e-07        0.0000 deg
+  [PASS] F.5  exact at |q| = 1 AND 2, wrong in between</pre>
+
+  <div class="callout warn">
+    <span class="label">The failure is not monotonic, and that is worse</span>
+    <p>
+      At <code>|q| = 2</code> the function returns <code>−q</code>, and <code>−q</code>
+      <em>is</em> <code>q</code> as a rotation (§8.1). So the worst input in two dimensions is a
+      <strong>perfect</strong> input in three: exactly unit, exactly the right turn, both bit for
+      bit. <strong>A test that sampled the two obvious points — 1.0 and 2.0 — would certify this
+      function completely.</strong> The damage is in the middle, where nobody thinks to look.
+    </p>
+    <p>
+      And the damage lands on the <em>pose</em> rather than on the scale, because of §6.4's
+      correction: <code>rotate</code>'s two-cross form equals <code>q v q̄</code> only on the unit
+      sphere, so a norm error becomes an orientation error. At <code>|q| = 1.5</code> the object is
+      34.7° wrong, which will not look like a normalisation problem when you meet it in a scene.
+    </p>
+  </div>
+
+  <p>
+    The transferable lesson is one level up from 7.3's. That lesson said <em>choose the
+    observable</em>. This one says <em>choose the sample points</em>, and it says that a failure
+    mode carried from one dimension to another is a hypothesis about the new dimension, not a fact
+    about it.
+  </p>
+
+  <h2 id="cannot">11. What a quaternion cannot hold</h2>
+
+  <p>
+    <code>math/transform.hpp</code> has carried this sentence since Module 2:
+  </p>
+
+  <div class="callout">
+    <span class="label">Written in Lesson 2.8, and wrong by Module 5</span>
+    <p>
+      "Everything downstream asks for a matrix, so the swap touches one line of
+      <code>parent_from_local()</code> and nothing else."
+    </p>
+  </div>
+
+  <p>
+    The plan was always that this lesson would perform the swap: <code>transform::rotation</code>
+    stops being a <code>mat3</code> and becomes a <code>quat</code>. It does not, and the reason is
+    a finding rather than a schedule.
+  </p>
+
+  <h3>11.1 The field is called <code>rotation</code> and one caller does not put one in it</h3>
+
+  <p>
+    <code>gfx/renderable.cpp</code> builds a <code>transform</code> out of an ECS
+    <code>world_transform</code>, which is the matrix the hierarchy (Lesson 5.9) produced by
+    composing an object's local transform with all of its ancestors':
+  </p>
+
+  <pre><code class="lang-cpp">.xform = {.position = translation_of(w.matrix),
+          .rotation = linear_of(w.matrix),
+          .scale    = {1.0f, 1.0f, 1.0f}},</code></pre>
+
+  <p>
+    Its comment says — correctly, today — that the recomposition "reproduces the original affine
+    matrix to the bit". And it does. It reproduces it <strong>because a <code>mat3</code> will hold
+    anything</strong>, including the scale that came down the hierarchy from a parent, which is then
+    silently carried in a field named <code>rotation</code> while the field named <code>scale</code>
+    says <code>1</code>.
+  </p>
+
+  <p>
+    A quaternion will not hold that. Narrowing the type turns this line into a compile error —
+    which is the type doing exactly the job it is here to do — and the repair is a
+    <em>decomposition</em> rather than a rename.
+  </p>
+
+  @@FIG_CANNOT@@
+
+  <h3>11.2 What actually happens if you ignore it, measured</h3>
+
+  <p>
+    The first draft of this section assumed the failure would be "the scale is silently dropped",
+    which would at least be an interpretable answer. The measurement refused it:
+  </p>
+
+  <pre>H. WHAT A QUATERNION CANNOT HOLD
+   det before 8.0000, det after 1.6531
+   |q| of the extraction: 1.333721
+   pose error vs the true rotation: 28.1519 deg
+  [PASS] H.1  a scaled rotation extracts to neither answer</pre>
+
+  <p>
+    Hand <code>quat_from_rotation</code> a matrix <code>2R</code> and it does <em>not</em> return
+    <code>R</code> with the 2 discarded. §9.2's four candidates are built from the diagonal, a
+    uniform scale of <code>s</code> moves them to <code>1 + s·(…)</code>, and they no longer sum to
+    4. What comes back has norm 1.334, its matrix has determinant 1.65, and the pose is
+    <strong>28.15° from the true rotation</strong>. That is neither 8 nor 1, neither the rotation
+    nor a scaled rotation — a failure with no clean interpretation, which is exactly why it must
+    not be reachable by accident.
+  </p>
+
+  <pre>   non-uniform scale: pose moves 1.2089 deg
+  [PASS] H.2  a non-uniform scale also ROTATES the result</pre>
+
+  <h3>11.3 The repair, and its honest limit</h3>
+
+  <p>
+    Six lines. Take the scale off as the three column lengths — each column of the matrix is where
+    a basis vector landed, and <code>T·R·S</code> scales column <code>k</code> by
+    <code>scale[k]</code> (Lesson 2.8) — then extract from what is left:
+  </p>
+
+  <pre><code class="lang-cpp">auto decompose = [](const mat3&amp; m, vec3&amp; out_scale) {
+    out_scale = {length(m.c0), length(m.c1), length(m.c2)};
+    return quat_from_rotation(mat3{m.c0 / out_scale.x,
+                                   m.c1 / out_scale.y,
+                                   m.c2 / out_scale.z});
+};</code></pre>
+
+  <pre>   after decomposing: scale (1.000, 0.400, 1.000)
+   pose error now 0.000e+00 deg
+  [PASS] H.3  taking the scale off first recovers the rotation</pre>
+
+  <p>
+    Exact, for uniform and non-uniform scale alike. And then the control, which states the limit
+    rather than letting a reader assume there isn't one:
+  </p>
+
+  <pre>   shear: column lengths (1.000, 1.000, 1.000)
+   worst entry error after repair: 0.1500
+  [PASS] H.4  CONTROL: a shear defeats the repair too</pre>
+
+  <p>
+    A <strong>shear</strong> survives neither route. Column lengths cannot see one, because a shear
+    does not change the lengths of the columns — it changes the angles between them. The honest
+    statement is that a <code>position + quat + vec3</code> transform can represent translation,
+    rotation and axis-aligned scale, and cannot represent shear, and that this is a limitation
+    essentially every engine accepts because artists do not author shear and hierarchies with
+    non-uniform scale in them are already a known source of grief.
+  </p>
+
+  <h3>11.4 So the swap is Lesson 7.5's, and here is the trade</h3>
+
+  <div class="callout">
+    <span class="label">What was decided, and why</span>
+    <p>
+      The swap touches roughly twenty-five call sites across ten files, and has the design decision
+      of §11.3 sitting inside one of them. Performing it here would have meant listing ten files in
+      full — this course does not ship a listing with <code>// ...</code> in it — and the
+      derivation that is this lesson's actual content would have been the smaller half of the page.
+    </p>
+    <p>
+      <strong>Lesson 7.5 makes it</strong>, with <code>quat_slerp</code> in hand, so that the call
+      sites that move get something in return rather than merely a different spelling. What 7.4
+      leaves behind is the type, fully derived and fully measured, and the finding above written
+      into <code>transform.hpp</code> where the next person to read that promise will meet it.
+    </p>
+  </div>
+
+  <p>
+    There is a general lesson in §11.1 worth taking away from the specific one. <strong>A narrower
+    type does not just prevent future mistakes; it finds existing ones.</strong> That assignment
+    has been correct, tested, and shipping since Lesson 5.11. It became visible the moment
+    something refused to accept a value it was never supposed to receive — and the "to the bit"
+    guarantee in its comment, which reads like a strength, was the symptom.
+  </p>
+
+  <h2 id="scorecard">12. Four representations, side by side</h2>
+
+  <p>
+    Module 7 has now built four ways to write down a rotation in four lessons. Here they are
+    together, which is the clearest statement of why the arc had to go in this order:
+  </p>
+
+  @@FIG_SCORECARD@@
+
+  <p>
+    Read the <code>quat</code> column down. It loses exactly one row — applying to a point — and
+    that row has a workaround costing 4.6 ns which is worth taking after eight vectors. Everything
+    else is either a win or a tie.
+  </p>
+
+  <p>
+    And read <em>across</em> the rows, because the table is not an argument for deleting three
+    things. All four are still in the engine and all four are still right for something:
+  </p>
+
+  <ul>
+    <li><strong>Euler angles</strong> are an <em>interface</em> — what a human types and what
+        somebody else's file format stores. Lesson 7.1 built <code>math/euler.hpp</code> and
+        deliberately did not put a <code>euler_angles</code> in any struct.</li>
+    <li><strong>Axis-angle</strong> is a <em>reading</em> — the answer to "what single turn is this
+        pose?", which is how you debug an orientation and how Euler's rotation theorem becomes
+        something you can print.</li>
+    <li><strong>A matrix</strong> is what the renderer multiplies by, and the crossover in §10.3 is
+        the reason.</li>
+    <li><strong>A quaternion</strong> is what the engine will <em>store</em>, from Lesson 7.5.</li>
+  </ul>
+
+  <p>
+    That is four representations doing four different jobs, with explicit conversions between them,
+    and it is the normal state of affairs in a real engine rather than a failure to pick a winner.
+  </p>

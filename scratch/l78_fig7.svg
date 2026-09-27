@@ -1,0 +1,48 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l78f7-t l78f7-d">
+  <title id="l78f7-t">A waveform across a buffer boundary with the gain stepped and ramped</title>
+  <desc id="l78f7-d">The stepped render jumps 0.100745 in one sample at the boundary, 7.7 times the largest step the waveform itself ever takes, while the ramped render is indistinguishable from the waveform's own motion. A table gives the measured jumps and notes that 98.8 percent of the difference between them is broadband.</desc>
+  <defs>
+    <marker id="e-i-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-amber-l78f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="56" y="62" width="470" height="230" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="56" y1="204.6" x2="526" y2="204.6" class="grid" stroke-width="1.0"/>
+<text x="56" y="46" class="xs muted" text-anchor="start">100 samples across one buffer boundary, 2 ms of a 200 Hz tone</text>
+<text x="48" y="208.6" class="xs muted" text-anchor="end">0</text>
+<line x1="244.0" y1="66.0" x2="244.0" y2="288.0" stroke="#8f918a" stroke-width="1.2" fill="none" stroke-dasharray="4 4"/>
+<text x="244.0" y="308" class="xs muted" text-anchor="middle">buffer boundary</text>
+<path d="M 56.00,198.89 L 60.70,197.19 L 65.40,195.50 L 70.10,193.82 L 74.80,192.14 L 79.50,190.48 L 84.20,188.82 L 88.90,187.17 L 93.60,185.54 L 98.30,183.92 L 103.00,182.31 L 107.70,180.72 L 112.40,179.14 L 117.10,177.58 L 121.80,176.04 L 126.50,174.52 L 131.20,173.02 L 135.90,171.54 L 140.60,170.09 L 145.30,168.66 L 150.00,167.25 L 154.70,165.87 L 159.40,164.51 L 164.10,163.19 L 168.80,161.89 L 173.50,160.62 L 178.20,159.38 L 182.90,158.17 L 187.60,156.99 L 192.30,155.85 L 197.00,154.74 L 201.70,153.66 L 206.40,152.62 L 211.10,151.61 L 215.80,150.64 L 220.50,149.71 L 225.20,148.82 L 229.90,147.96 L 234.60,147.14 L 239.30,146.36 L 244.00,145.62 L 248.70,144.95 L 253.40,144.31 L 258.10,143.72 L 262.80,143.17 L 267.50,142.67 L 272.20,142.20 L 276.90,141.78 L 281.60,141.40 L 286.30,141.07 L 291.00,140.78 L 295.70,140.53 L 300.40,140.33 L 305.10,140.17 L 309.80,140.06 L 314.50,139.99 L 319.20,139.96 L 323.90,139.98 L 328.60,140.05 L 333.30,140.16 L 338.00,140.31 L 342.70,140.50 L 347.40,140.74 L 352.10,141.03 L 356.80,141.35 L 361.50,141.72 L 366.20,142.13 L 370.90,142.59 L 375.60,143.09 L 380.30,143.63 L 385.00,144.21 L 389.70,144.83 L 394.40,145.49 L 399.10,146.19 L 403.80,146.93 L 408.50,147.71 L 413.20,148.53 L 417.90,149.39 L 422.60,150.28 L 427.30,151.21 L 432.00,152.17 L 436.70,153.18 L 441.40,154.21 L 446.10,155.28 L 450.80,156.38 L 455.50,157.52 L 460.20,158.68 L 464.90,159.88 L 469.60,161.10 L 474.30,162.36 L 479.00,163.64 L 483.70,164.95 L 488.40,166.28 L 493.10,167.65 L 497.80,169.03 L 502.50,170.44 L 507.20,171.87 L 511.90,173.32 L 516.60,174.79 L 521.30,176.29" fill="none" stroke="#5082e6" stroke-width="2.0"/>
+<path d="M 56.00,198.89 L 60.70,197.19 L 65.40,195.50 L 70.10,193.82 L 74.80,192.14 L 79.50,190.48 L 84.20,188.82 L 88.90,187.17 L 93.60,185.54 L 98.30,183.92 L 103.00,182.31 L 107.70,180.72 L 112.40,179.14 L 117.10,177.58 L 121.80,176.04 L 126.50,174.52 L 131.20,173.02 L 135.90,171.54 L 140.60,170.09 L 145.30,168.66 L 150.00,167.25 L 154.70,165.87 L 159.40,164.51 L 164.10,163.19 L 168.80,161.89 L 173.50,160.62 L 178.20,159.38 L 182.90,158.17 L 187.60,156.99 L 192.30,155.85 L 197.00,154.74 L 201.70,153.66 L 206.40,152.62 L 211.10,151.61 L 215.80,150.64 L 220.50,149.71 L 225.20,148.82 L 229.90,147.96 L 234.60,147.14 L 239.30,146.36 L 244.00,164.16 L 248.70,163.68 L 253.40,163.23 L 258.10,162.80 L 262.80,162.41 L 267.50,162.04 L 272.20,161.71 L 276.90,161.40 L 281.60,161.13 L 286.30,160.88 L 291.00,160.66 L 295.70,160.47 L 300.40,160.32 L 305.10,160.19 L 309.80,160.10 L 314.50,160.03 L 319.20,160.00 L 323.90,159.99 L 328.60,160.02 L 333.30,160.07 L 338.00,160.16 L 342.70,160.28 L 347.40,160.43 L 352.10,160.61 L 356.80,160.81 L 361.50,161.05 L 366.20,161.32 L 370.90,161.62 L 375.60,161.95 L 380.30,162.30 L 385.00,162.69 L 389.70,163.10 L 394.40,163.55 L 399.10,164.02 L 403.80,164.52 L 408.50,165.04 L 413.20,165.60 L 417.90,166.18 L 422.60,166.78 L 427.30,167.42 L 432.00,168.07 L 436.70,168.76 L 441.40,169.47 L 446.10,170.20 L 450.80,170.95 L 455.50,171.73 L 460.20,172.53 L 464.90,173.35 L 469.60,174.20 L 474.30,175.06 L 479.00,175.95 L 483.70,176.85 L 488.40,177.78 L 493.10,178.72 L 497.80,179.68 L 502.50,180.66 L 507.20,181.65 L 511.90,182.66 L 516.60,183.68 L 521.30,184.72" fill="none" stroke="#e05c5c" stroke-width="2.0"/>
+<line x1="364.00" y1="146.36" x2="248.00" y2="146.36" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-red-l78f7)"/>
+<line x1="364.00" y1="164.16" x2="248.00" y2="164.16" stroke="#e05c5c" stroke-width="1.1" marker-end="url(#e-red-l78f7)"/>
+<line x1="56.0" y1="330.0" x2="78.0" y2="330.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="86" y="334" class="xs" text-anchor="start">a STEP at the boundary: 0.100745 in ONE sample</text>
+<line x1="56.0" y1="348.0" x2="78.0" y2="348.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="86" y="352" class="xs" text-anchor="start">RAMPED across the buffer, which takes 800 — the shipping path</text>
+<text x="574" y="74" class="xs muted" text-anchor="start">largest jump between samples</text>
+<text x="820" y="74" class="xs muted" text-anchor="end"></text>
+<text x="880" y="74" class="xs muted" text-anchor="end"></text>
+<line x1="574" y1="82.0" x2="886" y2="82.0" class="grid" stroke-width="1.0"/>
+<text x="574" y="99.0" class="xs" text-anchor="start">the signal's own slope</text>
+<text x="820" y="99.0" class="xs mono" text-anchor="end">0.013088</text>
+<text x="880" y="99.0" class="xs mono" text-anchor="end">1.00x</text>
+<text x="574" y="116.0" class="xs" text-anchor="start">gain as a step</text>
+<text x="820" y="116.0" class="xs mono" text-anchor="end">0.100745</text>
+<text x="880" y="116.0" class="xs mono" text-anchor="end">7.70x</text>
+<text x="574" y="133.0" class="xs" text-anchor="start">gain as a ramp</text>
+<text x="820" y="133.0" class="xs mono" text-anchor="end">0.013072</text>
+<text x="880" y="133.0" class="xs mono" text-anchor="end">1.00x</text>
+<text x="574" y="163.5" class="xs muted" text-anchor="start">step minus ramp, over one second:</text>
+<text x="574" y="183.5" class="xs mono" text-anchor="start">rms 2.608e-02, of which only 1.2%</text>
+<text x="574" y="199.5" class="xs mono" text-anchor="start">sits at the tone's own 200 Hz.</text>
+<text x="574" y="221.5" class="xs" text-anchor="start">The other 98.8% is spread across every</text>
+<text x="574" y="237.5" class="xs" text-anchor="start">frequency there is. That is what a click</text>
+<text x="574" y="253.5" class="xs t-hi" text-anchor="start">IS, and it is why this is audible at all.</text>
+<text x="574" y="279.5" class="xs muted" text-anchor="start">CONTROL: constant gain, the two agree to</text>
+<text x="574" y="295.5" class="xs mono muted" text-anchor="start">8.941e-09.</text>
+</svg>

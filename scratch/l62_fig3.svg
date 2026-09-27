@@ -1,0 +1,57 @@
+<svg viewBox="0 0 720 450" role="img" aria-labelledby="l62f3-t l62f3-d">
+  <title id="l62f3-t">The cosine factor as projected area</title>
+  <desc id="l62f3-d">One beam of fixed width striking a surface at 0, 45 and 60 degrees. Below each, two bars to scale: the beam's own cross-section and the patch it lands on, which is 1 over cosine theta times larger.</desc>
+  <defs>
+    <marker id="e-i-l62f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l62f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l62f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l62f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l62f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The cosine is not a fudge for “less light”. The same beam lands on a LARGER patch, so each square metre gets less.</text>
+<path d="M 106.0 74 L 150.0 74 L 150.0 208.0 L 106.0 208.0 Z" fill="#f0961e" fill-opacity="0.16" stroke="none"/>
+<line x1="113.0" y1="78" x2="113.0" y2="203.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="143.0" y1="78" x2="143.0" y2="203.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="92.0" y1="208.0" x2="164.0" y2="208.0" class="grid" stroke-width="1.4"/>
+<line x1="106.0" y1="208.0" x2="150.0" y2="208.0" class="ink" stroke-width="2.6"/>
+<line x1="128" y1="208" x2="128.0" y2="156.0" class="ink" stroke-width="1.4" marker-end="url(#e-i-l62f3)"/>
+<text x="128.0" y="146.0" class="xs mono t-hi" text-anchor="middle">n</text>
+<text x="128" y="54" class="sm t-hi" text-anchor="middle">θ = 0°</text>
+<text x="128" y="274" class="xs muted" text-anchor="middle">the beam</text>
+<rect x="92.8" y="286" width="70.4" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="128" y="326" class="xs muted" text-anchor="middle">the patch it lands on</text>
+<rect x="92.8" y="332" width="70.4" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.4"/>
+<text x="128" y="366" class="xs mono" text-anchor="middle">1.0000× the area</text>
+<text x="128" y="382" class="xs mono t-ok" text-anchor="middle">so cos θ = 1.0000</text>
+<path d="M 338.0 74 L 382.0 74 L 382.0 186.0 L 338.0 230.0 Z" fill="#f0961e" fill-opacity="0.16" stroke="none"/>
+<line x1="345.0" y1="78" x2="345.0" y2="218.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="375.0" y1="78" x2="375.0" y2="188.0" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="328.1005050633883" y1="239.89949493661166" x2="391.8994949366117" y2="176.10050506338834" class="grid" stroke-width="1.4"/>
+<line x1="338.0" y1="230.0" x2="382.0" y2="186.0" class="ink" stroke-width="2.6"/>
+<line x1="360" y1="208" x2="396.7695526217005" y2="171.23044737829952" class="ink" stroke-width="1.4" marker-end="url(#e-i-l62f3)"/>
+<text x="402.42640687119285" y="163.57359312880715" class="xs mono t-hi" text-anchor="middle">n</text>
+<text x="360" y="54" class="sm t-hi" text-anchor="middle">θ = 45°</text>
+<text x="360" y="274" class="xs muted" text-anchor="middle">the beam</text>
+<rect x="324.8" y="286" width="70.4" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="360" y="326" class="xs muted" text-anchor="middle">the patch it lands on</text>
+<rect x="310.21968260446704" y="332" width="99.5606347910659" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.4"/>
+<text x="360" y="366" class="xs mono" text-anchor="middle">1.4142× the area</text>
+<text x="360" y="382" class="xs mono t-ok" text-anchor="middle">so cos θ = 0.7071</text>
+<path d="M 570.0 74 L 614.0 74 L 614.0 169.9 L 570.0 246.1 Z" fill="#f0961e" fill-opacity="0.16" stroke="none"/>
+<line x1="577.0" y1="78" x2="577.0" y2="228.98076211353316" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="607.0" y1="78" x2="607.0" y2="177.01923788646684" class="ink-soft" stroke-width="1.0" marker-end="url(#e-s-l62f3)"/>
+<line x1="563.0" y1="258.2294734194974" x2="621.0" y2="157.77052658050258" class="grid" stroke-width="1.4"/>
+<line x1="570.0" y1="246.1051177665153" x2="614.0" y2="169.8948822334847" class="ink" stroke-width="2.6"/>
+<line x1="592" y1="208" x2="637.0333209967908" y2="182.0" class="ink" stroke-width="1.4" marker-end="url(#e-i-l62f3)"/>
+<text x="643.9615242270663" y="176.0" class="xs mono t-hi" text-anchor="middle">n</text>
+<text x="592" y="54" class="sm t-hi" text-anchor="middle">θ = 60°</text>
+<text x="592" y="274" class="xs muted" text-anchor="middle">the beam</text>
+<rect x="556.8" y="286" width="70.4" height="13" rx="2" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="592" y="326" class="xs muted" text-anchor="middle">the patch it lands on</text>
+<rect x="521.6" y="332" width="140.79999999999998" height="13" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.4"/>
+<text x="592" y="366" class="xs mono" text-anchor="middle">2.0000× the area</text>
+<text x="592" y="382" class="xs mono t-ok" text-anchor="middle">so cos θ = 0.5000</text>
+<rect x="24" y="392" width="672" height="50" rx="4" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="412" class="sm t-hi" text-anchor="middle">1 / (footprint area) = dot(n, l) at every angle, to 1e−6 — verify_62 §B computes the two sides independently.</text>
+<text x="360.0" y="430" class="xs muted" text-anchor="middle">Which is why the cosine belongs on the LIGHT’s side of the shading equation: it says how much arrives, not what the surface does next.</text>
+</svg>

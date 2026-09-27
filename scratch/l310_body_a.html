@@ -1,0 +1,644 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="03-09-textures.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">3.9 — Texture Mapping and Bilinear Filtering</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="04-01-how-gpus-work.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">4.1 — How GPUs Actually Work</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 3 — Software Rasterizer II: Depth, Light, Texture · Lesson 3.10</div>
+    <h1>Profiling, and the Module 3 Capstone</h1>
+    <p class="deck">
+      Module 3 finishes by measuring what it built. You will get a prediction wrong on purpose,
+      discover that the two-triangle floor costs eight times what the two-thousand-triangle torus
+      does, find that the single most expensive thing in the fragment loop is not the texture
+      fetch or the depth test but <code>std::pow</code>, and fix it — with the error stated in
+      pixels, because a speedup quoted without its error is half a claim.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5–6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-03-delta-time.html">1.3 — Frames, Delta Time, and Why Naive Loops Lie</a>,
+          <a href="01-06-colour.html">1.6 — Colour, and an Honest Teaser of sRGB</a>,
+          <a href="03-08-shading-models.html">3.8 — Flat, Gouraud and Per-Pixel Shading</a>,
+          <a href="03-09-textures.html">3.9 — Texture Mapping and Bilinear Filtering</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd>
+          <code>src/core/profile.hpp</code> <em>(new)</em>,
+          <code>src/core/profile.cpp</code> <em>(new)</em>,
+          <code>src/gfx/colour.hpp</code>, <code>src/gfx/colour.cpp</code>,
+          <code>src/gfx/raster.hpp</code>, <code>src/gfx/raster.cpp</code>,
+          <code>src/main.cpp</code>, <code>CMakeLists.txt</code>
+        </dd>
+
+        <dt>Milestone</dt>
+        <dd>
+          <strong>Module 3 complete.</strong> A textured, lit, z-buffered, back-face-culled scene
+          rendered entirely on the CPU, with a frame budget on screen that accounts for every
+          microsecond of it — and the first optimisation in this course that has a measured
+          <em>before</em>.
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…name the three different instruments a performance question can need, and say which
+          question each one answers.</li>
+      <li>…find your machine's timer resolution, and compute from it the shortest interval you
+          are allowed to instrument.</li>
+      <li>…explain why timing one iteration of anything measures the clock, and why a batch does
+          not.</li>
+      <li>…say why a frame budget uses the <em>median</em> and a kernel benchmark uses the
+          <em>minimum</em>, and why swapping them is wrong in both directions.</li>
+      <li>…divide a frame into disjoint zones that sum to it, and explain why the unmeasured
+          remainder is the most important row in the table.</li>
+      <li>…reason in pixels per triangle rather than in triangle counts, and predict which of two
+          phases dominates from that number alone.</li>
+      <li>…use Amdahl's law as an arithmetic check on your own measurements, not as a slogan.</li>
+      <li>…build a differential benchmark with a control, and say what goes wrong without
+          one.</li>
+      <li>…judge an approximation by its error <em>before</em> rounding, and say why the obvious
+          "worst code" column hides the answer.</li>
+      <li>…recognise a benchmark that measured the wrong thing, and a hypothesis that the data
+          refused to support.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-three">Three instruments, three questions</a></li>
+          <li><a href="#intuition-clock">The clock is neither free nor fine</a></li>
+          <li><a href="#intuition-observer">Measuring changes what is measured</a></li>
+          <li><a href="#intuition-median">Median for a frame, minimum for a kernel</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-budget">A frame budget is a division</a></li>
+          <li><a href="#theory-remainder">The row everybody forgets</a></li>
+          <li><a href="#theory-axis">Pixels per triangle is the axis</a></li>
+          <li><a href="#theory-amdahl">Amdahl's law as arithmetic</a></li>
+          <li><a href="#theory-differential">The differential method, and its control</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-profiler">The profiler, and what it refuses to do</a></li>
+          <li><a href="#impl-median">The median, in one call</a></li>
+          <li><a href="#impl-zones">Cutting the frame into zones</a></li>
+          <li><a href="#impl-hud">The budget on screen</a></li>
+          <li><a href="#impl-prediction">The prediction, and getting it wrong</a></li>
+          <li><a href="#impl-ladder">Where the fill actually goes</a></li>
+          <li><a href="#impl-encode">Four candidates for one function</a></li>
+          <li><a href="#impl-failed">The hypothesis the data refused</a></li>
+          <li><a href="#impl-ship">Shipping it, and the default that changes nothing</a></li>
+          <li><a href="#impl-cache">Cache, first contact</a></li>
+          <li><a href="#impl-capstone">The capstone</a></li>
+        </ol>
+      </li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    The renderer works. Nine lessons have added depth testing, perspective-correct
+    interpolation, near-plane clipping, back-face culling, an OBJ loader, lighting, specular
+    highlights, per-pixel shading and textures, and every one of them ended with a picture that
+    was right. Here is a question none of them answered: <strong>is it fast?</strong>
+  </p>
+
+  <p>
+    Not "does it feel fast". The demo runs at several hundred frames per second on a small
+    framebuffer, which tells you almost nothing, because the framebuffer is 320×180 — about a
+    fortieth of a real one. Make it a real one and the same scene, the same geometry, the same
+    code, runs at <strong>43 frames per second</strong>. Something in there scales with the pixel
+    count by a factor of fifteen and something else does not move at all, and if you cannot say
+    which is which you cannot make a single defensible decision about what to change.
+  </p>
+
+  <p>
+    So try answering three questions from what you already know. They are not trick questions;
+    they are the questions you would actually have to answer to optimise this renderer.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Three predictions — write them down before you read on</span>
+    <ol>
+      <li>The scene contains a floor made of <strong>2 triangles</strong> and a torus made of
+          <strong>2,304</strong>. Which costs more to rasterize, and by roughly what factor?</li>
+      <li>Inside the fragment loop, rank these four by cost: the perspective divide (one division
+          per pixel, Lesson 3.2), the depth test, a bilinear texture fetch (four texels, Lesson
+          3.9), and converting the final colour to sRGB (Lesson 1.6).</li>
+      <li>If you made the rasterizer's inner loop 30% faster, how much faster would the frame
+          get?</li>
+    </ol>
+  </div>
+
+  <p>
+    The first draft of this lesson answered the first one with "the torus, by about a thousand."
+    The measured answer is that the <strong>two-triangle floor costs eight times more than the
+    two-thousand-triangle torus</strong> — 1,390 microseconds against 172. The second prediction
+    almost everybody gets wrong in the same direction: the texture fetch is expensive, but the
+    most expensive single item is the sRGB conversion, which costs more than coverage,
+    interpolation, the perspective divide and the depth test <em>put together</em>. The third has
+    an exact answer that you can compute before you touch anything, and it is the difference
+    between a week well spent and a week wasted.
+  </p>
+
+  <p>
+    None of that is knowable by reading the code. All of it is a ten-minute measurement. That
+    gap — between how obvious performance <em>feels</em> and how reliably intuition gets it
+    wrong — is what this lesson is about, and it is why the method matters more than any of the
+    numbers it produces.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Every number on this page is from this machine</span>
+    <p>
+      An Apple M4 Pro, clang, <code>-O2</code>, and <code>scratch/verify_310.cpp</code>, whose
+      full output is in <code>scratch/verify_310.log</code>. <strong>Your numbers will
+      differ</strong>, and some of them will differ in kind rather than degree — §3.3 flags one
+      finding that is genuinely a property of this CPU's cache and not of the code. That is not a
+      weakness of the lesson; it is the lesson. The method transfers. The constants do not, and
+      quoting somebody else's constants is the specific mistake this whole discipline exists to
+      prevent.
+    </p>
+  </div>
+
+  <!-- ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-three"><span class="num">2.1</span>Three instruments, three questions</h3>
+
+  <p>
+    "Profiling" is one word covering at least three different activities, and reaching for the
+    wrong one is how people spend a fortnight optimising three percent of a frame. Before writing
+    any code it is worth separating them, because each answers a question the others cannot.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Instrument</th><th>Answers</th><th>Granularity</th><th>Where it lives</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>The frame budget</strong></td>
+        <td>Which <em>phase</em> of the frame costs what?</td>
+        <td>Coarse — tens of microseconds and up</td>
+        <td>In the engine, always on</td>
+      </tr>
+      <tr>
+        <td><strong>The differential benchmark</strong></td>
+        <td>What does <em>this one line</em> cost?</td>
+        <td>Fine — sub-nanosecond, by subtraction</td>
+        <td>Offline, in a harness, with a control</td>
+      </tr>
+      <tr>
+        <td><strong>The counter</strong></td>
+        <td>How much <em>work</em> is there?</td>
+        <td>Exact — it is not a timing at all</td>
+        <td>Anywhere; it is free</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The counter is the one people undervalue, and this engine already has several: Lesson 3.3
+    counts clipped triangles, 3.4 counts culled ones, 3.9 counts differing pixels. A count is not
+    a time, but it is what <em>explains</em> a time — and it has the enormous advantage of being
+    exactly reproducible, which no timing ever is. When a phase gets slower, the first question
+    is not "why is this code slow" but "is it doing more work", and only a counter can answer
+    that.
+  </p>
+
+  <p>
+    The budget and the differential benchmark are different tools because they operate at
+    different scales, and the reason is not taste. It is the clock.
+  </p>
+
+  <h3 id="intuition-clock"><span class="num">2.2</span>The clock is neither free nor fine</h3>
+
+  <p>
+    A timer is a piece of hardware that counts. To use one you read it, do the thing, read it
+    again, and subtract. Two properties of that hardware decide everything about what you are
+    allowed to measure, and they are independent:
+  </p>
+
+  <ul>
+    <li><strong>How much a read costs.</strong> It is a function call, and possibly a trip into
+        the kernel.</li>
+    <li><strong>How often it ticks.</strong> The counter increments at some fixed rate, and
+        between two increments it reports the same number.</li>
+  </ul>
+
+  <p>
+    On this machine, <code>SDL_GetPerformanceFrequency()</code> reports <strong>24,000,000
+    Hz</strong> — so the counter ticks once every <strong>41.667 ns</strong> — while a single
+    <code>SDL_GetPerformanceCounter()</code> call costs <strong>5.42 ns</strong>. Read those two
+    numbers again, because their order is the surprise: <strong>reading the clock is nearly eight
+    times faster than the clock ticks.</strong> You can ask it what time it is far more often than
+    it has anything new to say.
+  </p>
+
+  @@FIG_CLOCK@@
+
+  <p>
+    Figure 1 draws that to scale, and the consequence falls straight out of the picture. One sRGB
+    encode takes about 9.3 ns. Four and a half of them fit inside a single tick. So if you bracket
+    exactly one encode with two clock reads, the difference between them is <strong>zero
+    ticks</strong> most of the time and <strong>one tick</strong> the rest of the time — which is
+    to say your timer reports either 0.00 ns or 41.67 ns for a thing that takes 9.3. Not
+    imprecise: <em>categorically unable to represent the answer</em>.
+  </p>
+
+  <p>
+    The table underneath is the way out, and it is the shape every microbenchmark in this course
+    has. <strong>Time a batch and divide by the count.</strong> At <em>N</em> = 1 the whole
+    measurement spans zero to sixteen ticks and the "answer" ranges over the entire scale. At
+    <em>N</em> = 1,000 the batch spans about 230 ticks, the quantisation error is under half a
+    percent, and twelve repeated trials agree to within 0.12 ns. Same code, same machine, same
+    second — the only thing that changed is that the question was asked in a form the clock can
+    answer.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The rule this gives you, in one line</span>
+    <p>
+      Let <em>r</em> be the clock's tick and <em>c</em> the cost of a timer. <strong>Never
+      instrument anything shorter than 100 × max(<em>r</em>, <em>c</em>)</strong>, which is the
+      duration at which quantisation and overhead are both under one percent. On this machine
+      that is <strong>4.17 µs</strong>, and note which of the two terms decided it: the tick,
+      41.667 ns, not the 13.46 ns timer. <em>The cheaper operation is the one that limits
+      you</em>, which is exactly backwards from what you would guess, and it is why
+      <code>profiler</code> exposes both numbers rather than either.
+    </p>
+  </div>
+
+  <h3 id="intuition-observer"><span class="num">2.3</span>Measuring changes what is measured</h3>
+
+  <p>
+    There is a tempting idea that survives right up until you try it: if coarse zones are not
+    detailed enough, put a timer inside the pixel loop and find out exactly where the fragment's
+    time goes. It does not work, and it is worth seeing the number rather than being told.
+  </p>
+
+  <p>
+    Take a loop doing one fragment's worth of final work — an sRGB encode and a store — 200,000
+    times. Bare, it runs at <strong>9.71 ns</strong> per iteration. Wrap each iteration in a
+    <code>scope_timer</code> and it runs at <strong>18.08 ns</strong>: an <strong>1.86×</strong>
+    slowdown, from an instrument whose whole job was to observe without disturbing.
+  </p>
+
+  <p>
+    And the damage is worse than the slowdown, because the reported number is also a fiction. The
+    timer reads the clock, runs the body, reads the clock, and adds the difference — but the
+    second read happens <em>inside</em> the interval it is trying to close, so it cannot be part
+    of what it measures. The instrument systematically under-reports by roughly its own cost
+    while making the program run nearly twice as slow. You end up with a set of per-line timings
+    that sum to less than a frame that is itself no longer the frame you wanted to profile.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">This is not an argument against fine-grained measurement</span>
+    <p>
+      It is an argument against getting it by <em>instrumentation</em>. Fine-grained answers come
+      from <strong>subtraction</strong> instead: build two versions that differ by exactly one
+      thing, time both coarsely, and take the difference (§2.5 and §4.6). The measurement stays
+      cheap because it stays outside the loop, and the resolution comes from the experiment's
+      design rather than from the clock's. A sampling profiler — <code>perf</code>, Instruments,
+      VTune — is the other honest route: it interrupts periodically and records where the program
+      was, which perturbs it barely at all. Module 9 uses both properly.
+    </p>
+  </div>
+
+  <h3 id="intuition-median"><span class="num">2.4</span>Median for a frame, minimum for a kernel</h3>
+
+  <p>
+    Timings are noisy, so you need a summary statistic — and the right one is different for the
+    two instruments, which is the sort of detail that sounds fussy until it silently ruins a
+    week.
+  </p>
+
+  <p>
+    Start by noticing that timing noise is <strong>one-sided</strong>. The machine can always be
+    slower than your code deserves: a context switch, a migration to another core, a page fault,
+    a frequency drop, another process waking up. It can never be <em>faster</em>. So the
+    distribution of measurements is a hard floor with a long tail to the right, which is not
+    remotely symmetric, and the mean — which assumes symmetry — is the one summary that is wrong
+    for both cases.
+  </p>
+
+  <dl class="deflist">
+    <dt><strong>A kernel benchmark: take the minimum.</strong></dt>
+    <dd>
+      There is one true cost for "how long does <code>linear_to_srgb</code> take", and everything
+      above it is interference. The smallest observation across several batches is the closest
+      you got to running uncontended, so it is the best estimate. That is what
+      <code>best_ns()</code> does in the harness.
+    </dd>
+
+    <dt><strong>A frame budget: take the median.</strong></dt>
+    <dd>
+      Here there is <em>no</em> single true cost. A frame genuinely varies — the camera moves,
+      more triangles survive the cull, a different number of pixels get covered — and the question
+      is "what does a typical frame cost", not "what is the best frame I ever had". A minimum
+      would report the emptiest view of the scene, which is a number you cannot budget against.
+      And the mean is worse than useless here: one 40 ms hitch moves the mean of 120 frames by a
+      third of a millisecond and moves the median by <em>nothing at all</em>.
+    </dd>
+  </dl>
+
+  <p>
+    The rule underneath both: <strong>pick the statistic that matches the question, and say which
+    one you used.</strong> A performance number quoted without saying whether it is a mean, a
+    median or a minimum is not a measurement, it is a rumour.
+  </p>
+
+  <!-- ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-budget"><span class="num">3.1</span>A frame budget is a division</h3>
+
+  <p>
+    At 60 Hz a frame is <strong>16.667 ms</strong>. That is not a target to aim near, it is a
+    quantity to be <em>divided up</em>: everything the engine does in a frame has to fit inside
+    it, and the moment the sum exceeds it, the frame rate halves — not degrades, halves, because
+    with vsync on you either make the deadline or wait for the next one.
+  </p>
+
+  <p>
+    So the useful object is not a frame <em>time</em> but a frame <em>budget</em>: a list of
+    disjoint phases whose costs sum to the whole. Ours has six, chosen so that each is a phase
+    a reader can name and each lasts long enough to measure honestly (§2.2):
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Zone</th><th>What it covers</th><th>Scales with</th></tr></thead>
+    <tbody>
+      <tr><td><code>build</code></td><td>Placing objects; building transforms</td><td>Object count</td></tr>
+      <tr><td><code>collect</code></td><td>Model → world → view → clip → NDC → screen, clipping, per-vertex lighting</td><td>Triangles</td></tr>
+      <tr><td><code>sort</code></td><td>The painter's-algorithm depth sort, when it runs at all</td><td>Triangles · log(triangles)</td></tr>
+      <tr><td><code>fill</code></td><td>Rasterization: coverage, depth, interpolation, texturing, shading</td><td>Covered pixels</td></tr>
+      <tr><td><code>overlay</code></td><td>Debug draw and HUD</td><td>How much you are drawing</td></tr>
+      <tr><td><code>present</code></td><td>The row-by-row copy into the streaming texture</td><td>Framebuffer pixels</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Two design constraints on that list are load-bearing, and both are about arithmetic rather
+    than taste. The zones must be <strong>disjoint</strong> — if two are ever running at once, the
+    same nanoseconds get counted twice and the total exceeds the frame, so
+    <code>profiler::zones_overlapped()</code> exists to catch it. And they must
+    <strong>cover</strong> the frame, or the sum means nothing. Nothing enforces coverage, which
+    is why §3.2 exists.
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    Figure 2 is that budget, measured, on the capstone scene at two resolutions. Read the
+    <code>fill</code> bar first — 96.1% of the frame at 320×180, and 99.2% at 720p — and then
+    read the thing the figure exists to show, which is the row above it. <code>collect</code>
+    measures <strong>53.08 µs</strong> at the small size and <strong>55.04 µs</strong> at the
+    large one. Sixteen times as many pixels moved it by 3.7%, which is noise. Over the same
+    change <code>fill</code> went from 1.55 ms to 23.24 ms.
+  </p>
+
+  <p>
+    That is one measurement carrying two facts. The obvious one is that the fill dominates. The
+    useful one is <em>why</em>: the two phases are not on the same axis at all, and §3.3 is what
+    that means.
+  </p>
+
+  <h3 id="theory-remainder"><span class="num">3.2</span>The row everybody forgets</h3>
+
+  <p>
+    Add up the six zones and subtract from the frame. Whatever is left is time your program spent
+    doing something you are not measuring: the event drain, the fixed-timestep loop, an
+    allocation, a cache miss on the way into a zone, a bit of glue between phases.
+  </p>
+
+  <p>
+    <strong>Display it.</strong> This is the single most common way a frame budget lies, and it
+    lies by omission: six honest bars adding to 60% of the frame look like a complete picture,
+    right up to the moment you make the biggest of them twice as fast and the frame improves by
+    nine percent. The 40% you never charted was always the ceiling on your work, and you could
+    have known that on day one.
+  </p>
+
+  <p>
+    Ours is 3.17 µs of 1,610.88 — 0.2%, which is a good remainder and means the six zones really
+    do cover the frame. But it is 0.2% <em>because it was checked</em>, and a remainder is the
+    kind of number that only stays small while somebody is looking at it.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A sum of medians is not the median of a sum</span>
+    <p>
+      <code>other_ns()</code> subtracts a sum of per-zone medians from the median frame, and those
+      two are not the same statistic — they differ whenever two zones peak on different frames. The
+      disagreement is small and it is honest; the alternative would be to <em>derive</em> one of
+      the numbers from the others so the table adds up perfectly, which is how a budget stops
+      being a measurement. If the arithmetic ever has to look tidy, measure the total separately
+      and let the discrepancy show.
+    </p>
+  </div>
+
+  <h3 id="theory-axis"><span class="num">3.3</span>Pixels per triangle is the axis</h3>
+
+  <p>
+    Here is the intuition that Figure 2 was quietly demolishing. Ask someone how expensive a mesh
+    is and they will tell you how many triangles it has. It is the number every modelling tool
+    displays, every asset pipeline reports, and every artist is asked to reduce. And for the
+    rasterizer it is close to <strong>irrelevant</strong>.
+  </p>
+
+  <p>
+    The reason is structural, and once seen it cannot be unseen. Work in a renderer happens at two
+    frequencies:
+  </p>
+
+  <div class="eq">
+    \[ T_{\text{frame}} \;\approx\; n_{\text{tri}} \cdot c_{\text{vertex}}
+                          \;+\; n_{\text{px}} \cdot c_{\text{pixel}} \]
+    <p class="eq-plain">
+      frame time ≈ (how many triangles × what a triangle costs) + (how many covered pixels
+      × what a pixel costs)
+    </p>
+  </div>
+
+  <p>
+    A triangle covering 200 pixels pays its vertex cost once and its pixel cost 200 times. A
+    triangle covering 0.3 of a pixel pays its vertex cost once and its pixel cost about a third of
+    a time. The ratio between those two costs is set entirely by one number, which has a name
+    worth using out loud: <strong>pixels per triangle</strong>.
+  </p>
+
+  @@FIG_AXIS@@
+
+  <p>
+    Figure 3 sweeps both axes independently, and the two panels are deliberately the same
+    experiment run in perpendicular directions. On the left, the same torus at increasing
+    resolution: <code>fill</code> is a straight line of slope 1 — double the pixels, double the
+    cost — and <code>collect</code> is <em>flat</em>, 61.75 µs to 63.75 µs across a 36× change in
+    pixel count. On the right, the same torus at the same size on screen, tessellated from 36 to
+    36,864 triangles: now <code>collect</code> climbs by a factor of 840 and the two lines
+    <strong>cross</strong>.
+  </p>
+
+  <p>
+    Everything about performance advice depends on which side of that crossing you are standing.
+    "Optimise the fill" is correct on the left of it and wrong on the right, and nothing about the
+    renderer changed to move from one to the other — only how finely the same object was cut up.
+    This is also the honest version of a folklore rule you will meet constantly: <em>small
+    triangles are expensive</em>. They are, and now you can say why in one sentence. Below about
+    one pixel per triangle you are paying full price for a vertex to produce a fragment you can
+    barely see, and on real GPUs it is worse than this chart shows, because they rasterize in 2×2
+    quads and a sub-pixel triangle wastes three of every four fragment lanes.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The number to quote, and the number not to</span>
+    <p>
+      <strong>Nanoseconds per covered pixel</strong> is a property of your fill loop.
+      <strong>Nanoseconds per triangle</strong> is a property of your vertex stage. Both transfer
+      between resolutions, scenes and machines well enough to be worth writing down. Total
+      milliseconds per frame transfers to nothing at all — it is a fact about one scene at one
+      resolution on one computer — and it is the only one of the three most people ever record.
+    </p>
+  </div>
+
+  <p>
+    Our two numbers, from Figure 2: <strong>45.47 ns per covered pixel</strong> and
+    <strong>23.0 ns per triangle</strong>. Multiply the first by 921,600 and you can predict the
+    720p frame before rendering it, which is a check worth doing — a prediction that comes out
+    right is how you know the model in your head matches the machine.
+  </p>
+
+  <h3 id="theory-amdahl"><span class="num">3.4</span>Amdahl's law as arithmetic</h3>
+
+  <p>
+    Now the third prediction from §1, which has an exact answer. Suppose a phase takes a fraction
+    <em>p</em> of your frame, and you make that phase <em>s</em> times faster. The frame was 1
+    unit; afterwards it is <span class="mono">(1 − p) + p/s</span>. So the whole-frame speedup is
+  </p>
+
+  <div class="eq">
+    \[ \text{speedup} = \frac{1}{(1 - p) + p/s} \]
+    <p class="eq-plain">
+      one, divided by (the part you did not touch, plus the part you did, shrunk by <em>s</em>)
+    </p>
+  </div>
+
+  <p>
+    That is <strong>Amdahl's law</strong>, and it is worth deriving rather than quoting because
+    the derivation is the whole content: the part you did not speed up <em>does not go away</em>.
+    Let <em>s</em> go to infinity and the expression does not go to infinity, it goes to
+    <span class="mono">1/(1 − p)</span>. Delete a phase entirely and that is all you get.
+  </p>
+
+  @@FIG_AMDAHL@@
+
+  <p>
+    Figure 4 is that formula plotted, with this lesson's own optimisation marked on it. Every
+    curve flattens against its own ceiling: a phase that is half your frame can never buy you more
+    than 2×, no matter what you do to it. Our fill is 96% of the frame, so its ceiling is 25× —
+    generous, and it is what makes the fill worth working on at all. If it had been 50% the
+    honest conclusion would have been to go and look somewhere else first.
+  </p>
+
+  <p>
+    Use it in two directions, and the second is the one people skip:
+  </p>
+
+  <ul>
+    <li><strong>Before</strong> — as a filter. Measure <em>p</em>, compute the ceiling, and decide
+        whether the work is worth doing at all. This is the calculation that saves fortnights.</li>
+    <li><strong>After</strong> — as a check on yourself. You measured <em>p</em>, you measured
+        <em>s</em>, and you measured the whole-frame speedup. Those three numbers are not
+        independent. If the frame improved by <em>more</em> than the formula allows, you did not
+        discover something wonderful; you mismeasured something. <code>verify_310</code> §H makes
+        exactly this check, and it holds: a ceiling of 1.284× against 1.287× measured, which is
+        agreement to within the noise.</li>
+  </ul>
+
+  <h3 id="theory-differential"><span class="num">3.5</span>The differential method, and its control</h3>
+
+  <p>
+    §2.3 ruled out instrumenting the inner loop, but the question it was trying to answer is still
+    a real one: <em>what does the depth test cost? what does the texture fetch cost?</em> The
+    answer is to get resolution from the experiment instead of from the clock.
+  </p>
+
+  <p>
+    Build a <strong>ladder</strong>. Take one fixed piece of geometry — same triangles, same
+    pixels, same everything — and render it repeatedly with fill styles that differ from each
+    other by exactly one thing. Coverage alone. Then coverage plus the perspective divide. Then
+    plus the depth test. Then plus the sRGB encode. Each rung is a coarse measurement, comfortably
+    above the 4.17 µs floor, and the <em>difference</em> between two adjacent rungs is the cost of
+    the one thing that changed.
+  </p>
+
+  <p>
+    Two disciplines make the difference mean something, and both are easier to state than to
+    remember at two in the morning:
+  </p>
+
+  <ol>
+    <li><strong>Change exactly one thing per rung.</strong> If a rung adds a texture fetch and
+        turns on lighting, its delta is the sum of two costs and you have learnt neither.</li>
+    <li><strong>Have a control.</strong> When you cannot isolate a feature by adding it, isolate it
+        by <em>removing</em> it from an otherwise identical loop. This is the one people skip, and
+        skipping it is how the first draft of §4.10 of this lesson reported that a texture fetch
+        costs 6.4× more in situ than in a microbenchmark — a number produced by adding an encode
+        and two stores alongside the fetch and then attributing all three to the fetch. With the
+        control in place the honest figure is <strong>2.27×</strong>, which is still a striking
+        result and has the advantage of being true.</li>
+  </ol>
+
+  <div class="callout verify">
+    <span class="label">A benchmark without a control is a story</span>
+    <p>
+      Lesson 3.9 §5.1 shipped a table that read "textured is 5.04× a procedural rule" and then a
+      second table, because the first one was measuring the sRGB encode that only one of the two
+      variants performed. This lesson repeated the same class of error in a different place and
+      caught it the same way. The pattern is worth naming, because you will make it again:
+      <strong>when a measured ratio is much larger than you can explain, the usual cause is that
+      the two sides differ in more than one way.</strong> Write down what else changed, and if you
+      cannot, build the control that holds it still.
+    </p>
+  </div>

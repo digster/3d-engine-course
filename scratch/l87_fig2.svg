@@ -1,0 +1,56 @@
+<svg viewBox="0 0 900 520" role="img" aria-labelledby="l87f2-t l87f2-d">
+  <title id="l87f2-t">A body rests exactly when its centre of mass projects inside the support polygon the manifold spans.</title>
+  <desc id="l87f2-d">Three panels showing a one-metre crate on a ledge at overhangs of 0, 0.40 and 0.55 metres. In each, a dashed vertical line drops from the crate's centre of mass, and a coloured bar under the contact marks the support polygon. At 0 and 0.40 metres the line falls inside the bar and the crate rests, tilting 0.071 and 0.026 degrees after two seconds. At 0.55 metres it falls outside and the crate topples, 156.650 degrees. Below, a table: the moment such a polygon can carry is predicted at 49.050 newton metres and measured by bisection at 47.869, 2.41 percent low.</desc>
+  <defs>
+    <marker id="e-i-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-purple-l87f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">A body rests exactly when its centre of mass projects INSIDE the support polygon.</text>
+<path d="M 52.00,274.90 L 170.00,274.90 L 170.00,210.00 L 52.00,210.00 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<path d="M 52.00,210.00 L 170.00,210.00 L 170.00,92.00 L 52.00,92.00 Z" fill="none" stroke="#5082e6" stroke-width="1.7"/>
+<circle cx="111.0" cy="151.0" r="3.6" fill="#8f918a"/>
+<line x1="111.00" y1="151.00" x2="111.00" y2="235.96" stroke="#9b7ede" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#e-purple-l87f2)"/>
+<line x1="52.0" y1="219.0" x2="170.0" y2="219.0" stroke="#5ac878" stroke-width="4.5" fill="none"/>
+<text x="170" y="62" class="xs" text-anchor="middle">overhang 0.00 m</text>
+<text x="170" y="300.9" class="xs" text-anchor="middle">com inside the polygon</text>
+<text x="170" y="318.9" class="xs mono " text-anchor="middle">tilt after 2 s: 0.071°</text>
+<path d="M 342.00,274.90 L 460.00,274.90 L 460.00,210.00 L 342.00,210.00 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<path d="M 389.20,210.00 L 507.20,210.00 L 507.20,92.00 L 389.20,92.00 Z" fill="none" stroke="#5082e6" stroke-width="1.7"/>
+<circle cx="448.2" cy="151.0" r="3.6" fill="#8f918a"/>
+<line x1="448.20" y1="151.00" x2="448.20" y2="235.96" stroke="#9b7ede" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#e-purple-l87f2)"/>
+<line x1="389.2" y1="219.0" x2="460.0" y2="219.0" stroke="#5ac878" stroke-width="4.5" fill="none"/>
+<text x="460" y="62" class="xs" text-anchor="middle">overhang 0.40 m</text>
+<text x="460" y="300.9" class="xs" text-anchor="middle">com inside the polygon</text>
+<text x="460" y="318.9" class="xs mono " text-anchor="middle">tilt after 2 s: 0.026°</text>
+<path d="M 632.00,274.90 L 750.00,274.90 L 750.00,210.00 L 632.00,210.00 Z" fill="none" stroke="#8f918a" stroke-width="1.6"/>
+<path d="M 696.90,210.00 L 814.90,210.00 L 814.90,92.00 L 696.90,92.00 Z" fill="none" stroke="#e05c5c" stroke-width="1.7"/>
+<circle cx="755.9" cy="151.0" r="3.6" fill="#8f918a"/>
+<line x1="755.90" y1="151.00" x2="755.90" y2="235.96" stroke="#9b7ede" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#e-purple-l87f2)"/>
+<line x1="696.9" y1="219.0" x2="750.0" y2="219.0" stroke="#e05c5c" stroke-width="4.5" fill="none"/>
+<text x="750" y="62" class="xs" text-anchor="middle">overhang 0.55 m</text>
+<text x="750" y="300.9" class="xs" text-anchor="middle">com OUTSIDE the polygon</text>
+<text x="750" y="318.9" class="xs mono t-hi" text-anchor="middle">tilt after 2 s: 156.650°</text>
+<line x1="20" y1="314" x2="880" y2="314" class="grid" stroke-width="1.0"/>
+<text x="24" y="340" class="xs" text-anchor="start">§1 also asks how much MOMENT a support polygon can carry, and the answer is derivable before it is measured.</text>
+<text x="24" y="366" class="xs muted" text-anchor="start">A polygon w = 1 m wide under a weight of m·g = 98.1 N can resist at most m·g·(w/2): the weight acting at the very lip.</text>
+<text x="24" y="400" class="xs muted" text-anchor="start"></text>
+<text x="458" y="400" class="xs muted" text-anchor="end">N·m</text>
+<line x1="24" y1="408.0" x2="464" y2="408.0" class="grid" stroke-width="1.0"/>
+<text x="24" y="425.0" class="xs" text-anchor="start">predicted  m·g·(w/2)</text>
+<text x="458" y="425.0" class="xs mono" text-anchor="end">49.050</text>
+<text x="24" y="442.0" class="xs" text-anchor="start">measured, bisected over 14 steps</text>
+<text x="458" y="442.0" class="xs mono" text-anchor="end">47.869</text>
+<text x="24" y="459.0" class="xs" text-anchor="start">difference</text>
+<text x="458" y="459.0" class="xs mono" text-anchor="end">−2.41%</text>
+<text x="470" y="406" class="xs muted" text-anchor="start">A prediction that survives three digits is a different kind of</text>
+<text x="470" y="423" class="xs muted" text-anchor="start">statement from one that survives a bracket. The 2.41% is the</text>
+<text x="470" y="440" class="xs muted" text-anchor="start">penetration the solver allows: the crate's real lip is a hair</text>
+<text x="470" y="457" class="xs muted" text-anchor="start">inside its geometric one.</text>
+<text x="470" y="490" class="xs t-hi" text-anchor="start">The manifold was never told where the ledge was.</text>
+</svg>

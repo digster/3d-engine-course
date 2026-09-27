@@ -1,0 +1,35 @@
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="l86f7-t l86f7-d">
+  <title id="l86f7-t">How often the textbook visibility test tears the horizon, by arrangement.</title>
+  <desc id="l86f7-d">Three horizontal bars. Crates standing on the same floor tear 2,086 times in 50,000, or 4.17 percent, with a worst case reporting 0.065 m against a true 0.171 m, 61.7 percent low. The same crates at free orientations tear 5 times, 0.01 percent. Two convex hulls built from random points never tear at all.</desc>
+  <defs>
+    <marker id="e-i-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-l86f7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">A random test suite would never find this.</text>
+<text x="238" y="78" class="xs" text-anchor="end">crates on a floor</text>
+<text x="238" y="94" class="xs muted" text-anchor="end">50,000 overlapping pairs</text>
+<rect x="250" y="66" width="275.21999999999997" height="20" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="535.22" y="81" class="xs mono" text-anchor="start">2,086 torn   (4.17%)</text>
+<text x="250" y="106" class="xs muted" text-anchor="start">worst: 0.065310 m reported against 0.170662 — 61.7% low</text>
+<text x="238" y="152" class="xs" text-anchor="end">free orientations</text>
+<text x="238" y="168" class="xs muted" text-anchor="end">50,000 overlapping pairs</text>
+<rect x="250" y="140" width="1.0" height="20" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="261.0" y="155" class="xs mono" text-anchor="start">5 torn   (0.01%)</text>
+<text x="250" y="180" class="xs muted" text-anchor="start">worst: 0.121198 m reported against 0.429087 — 71.8% low</text>
+<text x="238" y="226" class="xs" text-anchor="end">hull vs hull</text>
+<text x="238" y="242" class="xs muted" text-anchor="end">50,000 overlapping pairs</text>
+<rect x="250" y="214" width="1.0" height="20" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="261.0" y="229" class="xs mono" text-anchor="start">0 torn   (0.00%)</text>
+<text x="250" y="254" class="xs muted" text-anchor="start">never once, on 50,000 pairs</text>
+<text x="415.0" y="52" class="xs muted" text-anchor="middle">share of queries whose horizon tore, without the flood fill</text>
+<line x1="20" y1="292" x2="880" y2="292" class="grid" stroke-width="1.0"/>
+<text x="20" y="316" class="sm" text-anchor="start">Crates standing on a floor: 4.17%. The same crates at free orientations: 0.01% — four hundred times rarer. Two point-cloud</text>
+<text x="20" y="336" class="sm" text-anchor="start">hulls, which have no shared axes and no coplanar structure at all: never.</text>
+<text x="20" y="362" class="xs muted" text-anchor="start">This is the third lesson running in which the failure needs the structure a real scene is made of — axis alignment, shared up axes, faces resting</text>
+<text x="20" y="378" class="xs muted" text-anchor="start">on faces — and is invisible to uniform random input. 8.4 §F said it about box orientations, 8.5 §C said it about sliver triangles.</text>
+</svg>

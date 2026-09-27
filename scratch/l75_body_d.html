@@ -1,0 +1,321 @@
+  <h2 id="swap">8. The storage swap</h2>
+
+  <p>
+    <code>math/transform.hpp</code> has carried a promise since Lesson 2.8: the <code>mat3</code> in
+    the <code>rotation</code> field is honest but not final, and a quaternion replaces it. That
+    promise has moved three times — first to 7.1, then to 7.4, then to here — and the comment that
+    made it said, until this lesson, that the swap "touches one line of
+    <code>parent_from_local()</code> and nothing else".
+  </p>
+
+  <p>
+    That sentence was written in Module 2 and was wrong by Module 5. It is wrong for a reason worth
+    the whole section.
+  </p>
+
+  <h3>8.1 The change itself</h3>
+
+  <pre><code class="lang-cpp">struct transform
+{
+    vec3 position{0.0f, 0.0f, 0.0f};
+    quat rotation = quat::identity();     // was: mat3 rotation = mat3::identity();
+    vec3 scale{1.0f, 1.0f, 1.0f};
+};</code></pre>
+
+  <p>
+    And <code>parent_from_local</code> gains exactly one line — the Module 2 comment was right about
+    that much:
+  </p>
+
+  <pre><code class="lang-cpp">const mat3 basis = mat3_from_quat(t.rotation);
+
+const mat3 axes{basis.c0 * t.scale.x,
+                basis.c1 * t.scale.y,
+                basis.c2 * t.scale.z};
+
+return affine(axes, t.position);</code></pre>
+
+  @@FIG_SWAP@@
+
+  <p>
+    That one line is also <strong>engine policy arriving as a statement</strong>. Lesson 7.4 §10.3
+    measured the crossover: a quaternion is 1.57× <em>dearer</em> than a matrix at rotating a
+    vector, and converting costs 4.619 ns, so building the matrix first pays for itself after about
+    eight vectors. A mesh has thousands. So the engine <em>stores</em> quaternions, converts exactly
+    once per object per frame, right here, and multiplies every vertex by a matrix. "Quaternions are
+    faster than matrices" is true of storing and composing and false of the thing a frame spends its
+    time on.
+  </p>
+
+  <h3>8.2 Twenty-five call sites, and what the compiler said about three of them</h3>
+
+  <p>
+    Narrowing a type is a compile error at every site that was relying on the width. Most of the
+    twenty-five are a rename with a better function underneath — <code>rotation_y(a)</code> becomes
+    <code>quat_y(a)</code>, and composing two of them drops from 27 multiplies to 16. Several are a
+    basis the geometry genuinely speaks in, kept as a <code>mat3</code> and narrowed at the
+    assignment:
+  </p>
+
+  <pre><code class="lang-cpp">// demos/common/demo_scene.cpp — a plank's frame is "along the rail, across it, up"
+t.rotation = engine::quat_from_rotation(engine::mat3{axis_x, axis_y, axis_z});</code></pre>
+
+  <p>
+    That pattern is safe precisely because of Lesson 7.4 §9: Shepperd extraction has
+    <strong>no bad case anywhere</strong> — four candidates that sum to exactly 4, so the pivot is
+    never below 1 — which means there is no angle at which "construct as a matrix, store as a
+    quaternion" is less accurate than another.
+  </p>
+
+  <p>
+    Two sites are <em>stepped</em> rather than rebuilt, and those gained a repair:
+  </p>
+
+  <pre><code class="lang-cpp">// demos/collector/main.cpp — the carousel, one line per frame, for ever
+t.rotation = engine::renormalised_fast(t.rotation * engine::quat_y(c.rate * h));</code></pre>
+
+  <p>
+    This is the first place in the engine where drift is a real problem rather than a measurement.
+    The <code>mat3</code> it replaced had the same disease and a dearer cure — Gram-Schmidt, three
+    normalisations and two projections. <code>renormalised_fast</code> is one subtract and five
+    multiplies, no <code>sqrt</code> and no divide, and 7.4 §F.4 measured it holding a million
+    compositions at <code>6e−08</code> where the unrepaired walk reached <code>1e−03</code>. The
+    site next to it, <code>ecs_swarm</code>'s spin system, gets no repair and should not: it
+    <em>rebuilds</em> from an angle every frame, so the previous frame's answer is never an input.
+    The difference is not "rotation" versus "rotation" — it is whether the field is an accumulator.
+  </p>
+
+  <p>
+    And then there were three sites that did not compile for a more interesting reason.
+  </p>
+
+  <h3>8.3 The field called <code>rotation</code> with no rotation in it</h3>
+
+  <p>
+    Lesson 7.4 §11 found the first one and declined to fix it. <code>gfx/renderable.cpp</code> turns
+    an ECS <code>world_transform</code> — a composed 4×4 — into a <code>scene_object</code>, and it
+    did so like this:
+  </p>
+
+  <pre><code class="lang-cpp">.xform = {.position = translation_of(w.matrix),
+          .rotation = linear_of(w.matrix),      // the WHOLE upper-left 3x3
+          .scale    = {1.0f, 1.0f, 1.0f}},</code></pre>
+
+  <p>
+    Its comment said, correctly, that the recomposition "reproduces the original affine matrix to
+    the bit". It did. <strong>It did so because a <code>mat3</code> will hold anything</strong> —
+    including the scale that came down the hierarchy from a parent, sitting in a field named
+    <code>rotation</code>, since Lesson 5.11.
+  </p>
+
+  <p>
+    A quaternion will not hold a scale, so that line became a compile error, which is the type doing
+    exactly the job it is here to do. And once you go looking, the same trick is in
+    <code>demos/ecs_swarm</code> — and a third variant, which is the one worth the paper.
+  </p>
+
+  <h3>8.4 <code>collector</code>'s camera boom, sheared since 5.12</h3>
+
+  <p>
+    Lesson 5.12 built a checkpoint game with a rover and a chase camera, and §6 of that lesson made
+    a good argument: a camera parented to the player inherits the player's 22° of cosmetic roll, the
+    horizon see-saws, and the fix is not a special case in the renderer but <em>one more link in the
+    chain</em> — a boom that applies the inverse roll. It also has to undo the rover's non-uniform
+    scale, or "6.4 units back" means 3.97 metres.
+  </p>
+
+  <p>
+    The algebra it derived is right, and the demo's comment spells it out because getting it
+    backwards cost that file its first crash:
+  </p>
+
+  <div class="eq">\[ \text{boom local} \;=\; \big(H \cdot R_z(\text{bank}) \cdot S\big)^{-1} H
+      \;=\; S^{-1} \cdot R_z(-\text{bank}) \]</div>
+
+  <p>
+    <strong>Scale first, rotation second.</strong> And a <code>transform</code> builds
+    <code>T · R · S</code> — scale <em>innermost</em>. So a single node can say "rotate, then scale"
+    and cannot say "scale, then rotate", and those are different matrices whenever the scale is
+    non-uniform. The difference is a <strong>shear</strong>: the product <code>S⁻¹R</code> has
+    columns that are not perpendicular.
+  </p>
+
+  @@FIG_BOOM@@
+
+  <p>
+    So that line had been storing a sheared basis in a field called <code>rotation</code> for
+    thirteen lessons, and nothing complained, because a <code>mat3</code> will hold anything. Push
+    it through a quaternion and the error is <strong>0.5863</strong> of a matrix entry — not a
+    precision loss, a different basis.
+  </p>
+
+  <p>
+    The repair is not a wider type. It is one more link:
+  </p>
+
+  <pre><code class="lang-cpp">// rover  world       = H · Rz(bank) · S
+// unscale node local =                   S⁻¹        -> H · Rz(bank)
+// pivot   node local =                        Rz(−bank) -> H</code></pre>
+
+  <p>
+    Two entities, each holding something a <code>transform</code> can genuinely express, and the
+    hierarchy multiplies them parent-first — which is the order the derivation asked for in the
+    first place. The harness checks that the chain reproduces the old basis: worst entry difference
+    <strong>0.000e+00</strong>, and the camera is where it always was.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The general statement, which is worth carrying into Module 8</span>
+    <p>
+      <code>T · R · S</code> per node is a <em>restriction</em>, not a representation. The set of
+      matrices a scene graph can express is not the set of affine matrices — and when you need one
+      that is outside it, the answer is usually another node rather than a wider field. Real engines
+      do exactly this, and this is why.
+    </p>
+  </div>
+
+  <h3>8.5 One decomposition, derived once, instead of three</h3>
+
+  <p>
+    Three places in this repository were pulling an affine matrix apart. Two of them were doing it
+    with the <code>mat3</code> trick and one — <code>demos/gltf_view</code> — had been doing it
+    properly since Lesson 6.6. So the compile error did not just need fixing; it had found a
+    function the engine was missing, written out three times with three different sets of defects.
+    It is now in <code>math/transform.hpp</code>:
+  </p>
+
+  <pre><code class="lang-cpp">struct transform_extraction
+{
+    transform value;
+    float out_of_square = 0.0f;   ///< largest |cos| between two basis directions
+    bool mirrored = false;        ///< the matrix had negative determinant
+};
+
+[[nodiscard]] inline transform_extraction transform_from_affine(const mat4&amp; m);</code></pre>
+
+  <p>
+    The shape — a value plus what the recovery could not represent — is the one
+    <code>axis_angle_extraction</code> (7.2) and <code>euler_extraction</code> (7.1) already use, and
+    for the same reason: a recovery that can lose information should hand back the information about
+    what it lost, in the same breath.
+  </p>
+
+  <p><strong>Three steps, and the second is the one nobody writes down.</strong></p>
+
+  <ol>
+    <li><strong>The scale is the column lengths.</strong> <code>parent_from_local</code> builds the
+        matrix by scaling each basis column, and scaling a unit vector by <code>s</code> makes its
+        length <code>s</code>. Reading the lengths back is the <em>inverse of the construction</em>,
+        not an estimate of it.</li>
+    <li><strong>A negative determinant is a mirror, and no quaternion is one.</strong> Every rotation
+        has determinant <code>+1</code>; an object scaled by <code>(−1, 1, 1)</code> has determinant
+        <code>−1</code> and is a reflection, which is not in the rotation group at all. Column
+        lengths are non-negative by construction, so the sign has to be handed back deliberately.
+        Skip this and a mirrored object silently becomes an unmirrored one that is <em>rotated</em> —
+        the kind of bug that gets blamed on the artist.</li>
+    <li><strong>Divide the lengths out and extract.</strong></li>
+  </ol>
+
+  <h3>8.6 A zero column, and an inherited defect</h3>
+
+  <p>
+    A degenerate object — scale <code>0</code> on an axis, which is how a sheet of paper or a
+    collapsed node is authored — has no direction to read off that column. The version inherited
+    from <code>gltf_view</code> substituted the <em>parent's</em> axis and said, correctly, that this
+    "keeps the matrix finite instead of producing NaNs".
+  </p>
+
+  <p>
+    It does. It also produces a basis whose three columns are not perpendicular, and
+    <code>quat_from_rotation</code> of a non-orthonormal basis is wrong in <strong>every</strong>
+    column, not just the bad one. The harness measured it at <strong>0.399</strong> of absolute
+    entry error on a flattened object whose other two axes were perfectly recoverable. <em>The zero
+    column is the one that does not matter</em> — its scale multiplies it away. The two good ones
+    are the ones that got broken.
+  </p>
+
+  <p>
+    A cross product of the surviving pair is the right answer and costs six multiplies:
+    perpendicular to both by construction, unit because they are, and correctly handed because the
+    order is cyclic. With the repair, the probe table is exact:
+  </p>
+
+  <pre>   probe          worst entry   out of square  mirrored
+   uniform 1      0.000e+00     1.892e-08      no
+   uniform 2      0.000e+00     1.892e-08      no
+   non-uniform    0.000e+00     1.892e-08      no
+   mirrored x     0.000e+00     1.892e-08      yes
+   flat z         0.000e+00     1.892e-08      no</pre>
+
+  <div class="callout warn">
+    <span class="label">"Finite" is not "right"</span>
+    <p>
+      That comment had been in a published lesson's listing since 6.6, it was accurate about what it
+      claimed, and the claim was the wrong one. Guarding against <code>NaN</code> is necessary and
+      is not sufficient: a guard that returns a plausible wrong answer is harder to find than a
+      <code>NaN</code>, because a <code>NaN</code> spreads and announces itself and a wrong basis
+      just looks like the artist scaled something oddly.
+    </p>
+  </div>
+
+  <h3>8.7 What stays outside the struct, and is counted</h3>
+
+  <p>
+    One case genuinely cannot be decomposed: <strong>shear</strong>. A non-uniformly scaled parent
+    with a rotated child produces a world matrix whose columns are not perpendicular, and that is
+    not (rotation × axis-aligned scale) under any decomposition. Column lengths cannot even see it —
+    a shear changes the <em>angles</em> between the columns and not their lengths — which is why
+    <code>out_of_square</code> measures the angles instead.
+  </p>
+
+  <p>
+    <code>collect_renderables</code> counts those objects in <code>renderable_report::skewed</code>
+    and says so in its warning line. Nothing is dropped and nothing goes <code>NaN</code>: the object
+    draws in the nearest placement a <code>transform</code> can express, and the count turns "the
+    crate looks subtly wrong and I cannot see why" into a number. Measured on a deliberate example —
+    a parent scaled <code>(2, 0.5, 1)</code> with a child yawed 40° — the basis is
+    <strong>0.5941</strong> out of square and the best available repair still leaves
+    <strong>0.3922</strong> of entry error.
+  </p>
+
+  <p>
+    The honest fix is unchanged and unmade: <code>scene_object</code> should hold a
+    <code>mat4</code>, which is what Module 6's GPU path already does with
+    <code>gpu_draw_item::world_from_model</code> and what Lesson 5.9's hierarchy already computes.
+    Two functions in this repository now take a matrix apart only to hand the pieces to
+    <code>parent_from_local</code>, which puts it back together. That round trip <em>is</em> the
+    argument. It is a change to a published struct with a dozen callers, so this lesson names it and
+    does not smuggle it in — the same discipline 5.12 applied to <code>view&lt;const T&gt;</code>.
+  </p>
+
+  <h3>8.8 Did the picture move?</h3>
+
+  <p>
+    Every object in the software renderer now goes <code>mat3 → quat → mat3</code> where it used to
+    go nowhere. That is a real round trip with a <code>sqrt</code> and three divides in the middle,
+    and the honest question is whether it moved a pixel.
+  </p>
+
+  <p>
+    Measured over 20,000 random poses, the worst matrix entry to survive the round trip differs by
+    <strong>5.960e−07</strong>. Put that in the units that decide whether a picture moves: a vertex
+    3 units from the origin, in a 960-pixel frame about 12 units wide, displaces by
+    <strong>0.00014 pixels</strong>.
+  </p>
+
+  <p>
+    And then check it rather than trusting the arithmetic. <code>scratch/closure_75.py</code> walks
+    the include graph and reports that <code>math/transform.hpp</code>, <code>math/quat.hpp</code>,
+    <code>gfx/scene.hpp</code> and <code>demos/common/demo_scene.cpp</code> are all in the golden
+    render's closure — so the structural argument does not apply and the run is the only evidence
+    there is:
+  </p>
+
+  <pre>golden_75: rc=0  ours=1382416 bytes  reference=1382416 bytes
+golden_75: identical=YES</pre>
+
+  <p>
+    Eight frames, 1,382,400 bytes, hash <code>E917C06C</code> — <strong>byte-identical</strong>, and
+    identical to the reference Lesson 5.2 recorded. The engine changed how it stores every
+    orientation in the scene and not one pixel moved.
+  </p>

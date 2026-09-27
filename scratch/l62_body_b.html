@@ -1,0 +1,471 @@
+  <!-- =================================================================
+       4 — WHAT A BRDF IS
+       ================================================================= -->
+  <h2 id="brdf"><span class="num">4</span>What a BRDF Is</h2>
+
+  <h3 id="brdf-ratio">4.1 A ratio, per steradian</h3>
+
+  <p>
+    A surface is hit by light from one direction and sends some of it off in another. The
+    <strong>bidirectional reflectance distribution function</strong> — BRDF, and the name is worse
+    than the idea — is the number that relates those two directions. It is a
+    <em>ratio</em>, and stating it as a ratio is most of understanding it:
+  </p>
+
+  <div class="eq">
+    \[ f_r(\mathbf{l}, \mathbf{v}) \;=\;
+       \frac{dL_o(\mathbf{v})}{dE(\mathbf{l})} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the BRDF is the radiance leaving toward <strong>v</strong>, divided by the irradiance
+    arriving from <strong>l</strong>. Two directions in, one number out.
+  </p>
+
+  <p>
+    Radiance divided by irradiance. W/(m²·sr) divided by W/m². The watts and the square metres
+    cancel and the unit that survives is <strong>inverse steradians</strong>, sr⁻¹ — which looks
+    like a bookkeeping detail and is in fact the single most useful thing to know about a BRDF,
+    because it settles a question that confuses everybody once.
+  </p>
+
+  <div class="callout note">
+    <span class="label">"But a BRDF can be greater than 1 — doesn't that create energy?"</span>
+    <p>No, and the unit is why. A BRDF is a density <em>per steradian</em>. A surface that takes
+       everything arriving and sprays it evenly over the whole hemisphere has a small value per
+       steradian; a surface that funnels the same light into a narrow cone has a large one. Same
+       total energy, different concentration. A perfect mirror concentrates it into a single
+       direction — zero solid angle — so its BRDF is a Dirac delta: <em>unbounded</em>, and still
+       reflecting at most what arrived.</p>
+    <p>The quantity that is genuinely bounded by 1 is the <em>integral</em> of the BRDF over the
+       hemisphere, which is what §6 computes. Confusing the function with its integral is the
+       actual mistake behind the question.</p>
+  </div>
+
+  @@FIG_BRDF@@
+
+  <div class="worked">
+    <span class="label">Worked example — two surfaces that reflect exactly everything</span>
+    <p>Take a surface that reflects <em>all</em> arriving light uniformly into a cone of
+       half-angle α around the mirror direction. The projected solid angle of that cone is
+       π sin²α, so its BRDF is the reciprocal — one over the space the light is spread across.</p>
+    <p>At <strong>α = 90°</strong> the cone is the whole hemisphere, and this is Lambert:</p>
+    <p class="mono">f<sub>r</sub> = 1 / (π · sin²90°) = 1 / π = 0.3183 sr⁻¹</p>
+    <p>At <strong>α = 20°</strong>, a glossy surface:</p>
+    <p class="mono">f<sub>r</sub> = 1 / (π · sin²20°) = 1 / 0.3675 = 2.7210 sr⁻¹</p>
+    <p><strong>Both reflect 100% of the light that hits them.</strong> The second one's BRDF is
+       8.5× larger, and no energy has appeared from anywhere — it is the same light, in a cone
+       one eighth the size. Let α go to zero and the BRDF goes to infinity, which is the mirror.
+       Once you have done this arithmetic once, "a BRDF above 1" stops being alarming for good.</p>
+  </div>
+
+  <h3 id="brdf-pi">4.2 Deriving the π</h3>
+
+  <p>
+    Now the derivation this lesson exists for. Everybody writes the Lambert BRDF as
+    <em>albedo/π</em>; almost nobody says where the π came from, and a large fraction of graphics
+    code has it in the wrong place as a result — including, as §5 shows, this engine's.
+  </p>
+
+  <p>
+    Start from the definition of a Lambertian surface: it scatters light <strong>equally in every
+    direction</strong>, so that it looks the same brightness from every angle. In BRDF terms that
+    is the simplest possible statement — the BRDF is a <em>constant</em>. Call it <em>k</em>:
+  </p>
+
+  <div class="eq">
+    \[ f_r(\mathbf{l}, \mathbf{v}) = k \quad \text{for every } \mathbf{l}, \mathbf{v} \]
+  </div>
+
+  <p>
+    So what is <em>k</em>? Nothing in "scatters equally" fixes it. What fixes it is the demand that
+    the surface not invent light. Ask: of all the light arriving from one direction, what fraction
+    leaves — summed over every outgoing direction? That total is the surface's
+    <strong>reflectance</strong>, and it is what "albedo 0.8" is supposed to mean: eighty percent
+    comes back out.
+  </p>
+
+  <p>
+    To total it up we integrate the BRDF over the outgoing hemisphere — and the integral carries a
+    cos θ, for §3's reason: radiance leaving at a grazing angle spreads over more area than
+    radiance leaving straight up, so it contributes less to the flux actually leaving the patch.
+    That cosine is not optional and it is not decoration; it is the whole reason the answer is π
+    and not 2π.
+  </p>
+
+  <div class="eq">
+    \[ R \;=\; \int_{\Omega} f_r \cos\theta \, d\omega
+       \;=\; k \int_{\Omega} \cos\theta \, d\omega
+       \;=\; k\pi \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the total reflectance is the integral of the BRDF times cos θ over the hemisphere.
+    For a constant BRDF k the constant comes out of the integral, and what is left is §2.2's
+    cosine-weighted hemisphere, which measures π. So the reflectance is k times π.
+  </p>
+
+  <p>
+    Set that equal to the albedo — no more light out than the albedo promises, and no less — and
+    <em>k</em> is forced:
+  </p>
+
+  <div class="eq">
+    \[ k\pi = \text{albedo} \quad\Longrightarrow\quad
+       f_r = \frac{\text{albedo}}{\pi} \]
+  </div>
+
+  <p>
+    <strong>That is the entire derivation, and the π is the area of a disc.</strong> §2.2 got there
+    by integrating; Figure 5 gets there by looking, and the picture is worth having because it is
+    the one you will still remember in a year. Every patch of the hemisphere, projected straight
+    down onto the surface, casts a shadow of its own size times cos θ. Those shadows tile the unit
+    disc underneath, exactly once, with nothing left over and nothing double-covered. The
+    cosine-weighted hemisphere <em>is</em> the disc. Its area is π·1² = π.
+  </p>
+
+  @@FIG_THE_PI@@
+
+  <div class="worked">
+    <span class="label">Worked example — a real albedo through the real function</span>
+    <p>The demo's amber tint decodes to a linear albedo of about
+       <strong>(0.80, 0.55, 0.18)</strong>. Its Lambert BRDF is that divided by π:</p>
+    <p class="mono">f<sub>r</sub> = (0.80, 0.55, 0.18) / 3.14159 = (0.2546, 0.1751, 0.0573) sr⁻¹</p>
+    <p>Sanity-check the red channel by integrating back: 0.2546 × π = 0.7999, which is the albedo
+       we started from, so no light has gone missing. <code>verify_62</code> §C does exactly this
+       numerically for albedos 0.18, 0.50 and 0.80 — and for a white surface at increasing grid
+       resolutions, where the answer converges as</p>
+    <p class="mono">64×128 → 1.0001004   ·   256×512 → 1.0000062   ·   1024×2048 → 1.0000004</p>
+    <p>The residue shrinks with the grid, which is how you know you are looking at quadrature error
+       rather than at a wrong constant. A wrong constant does not converge to 1; it converges to
+       something else.</p>
+  </div>
+
+  <h3 id="brdf-directional">4.3 One light, and the integral collapses</h3>
+
+  <p>
+    The general statement of what leaves a surface is an integral over every direction light could
+    arrive from — the <strong>reflection equation</strong>:
+  </p>
+
+  <div class="eq">
+    \[ L_o(\mathbf{v}) \;=\; \int_{\Omega} f_r(\mathbf{l}, \mathbf{v})\,
+       L_i(\mathbf{l})\, \cos\theta \, d\omega \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the outgoing radiance toward <strong>v</strong> is the integral, over the hemisphere,
+    of the BRDF times the incoming radiance times the cosine.
+  </p>
+
+  <p>
+    An integral is not a thing a fragment shader wants to evaluate. Fortunately a
+    <em>directional</em> light is not spread over the hemisphere at all — it arrives from exactly
+    one direction, which is what "the sun, near enough" means. Its incoming radiance is a spike:
+    zero everywhere except one direction, where it is infinite in just the way that makes the
+    integral finite. The integral then collapses to a single evaluation:
+  </p>
+
+  <div class="eq">
+    \[ L_o(\mathbf{v}) \;=\; f_r(\mathbf{l}, \mathbf{v}) \; E_{\perp} \cos\theta \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: outgoing radiance equals the BRDF, times the light's irradiance measured
+    perpendicular to the beam, times the cosine of the angle between the surface normal and the
+    direction to the light.
+  </p>
+
+  <p>
+    <strong>That is the shading equation, and it is three factors with three separate meanings.</strong>
+    The BRDF is what the surface does. <em>E<sub>⊥</sub></em> is how strong the light is. The
+    cosine is how squarely this bit of surface faces it. Each can be got wrong independently, which
+    means each can be checked independently — and that is the practical payoff of the whole
+    section. The old code had one expression and one place to be wrong in an unfalsifiable way.
+  </p>
+
+  <h3 id="brdf-ambient">4.4 The ambient term, where the π cancels</h3>
+
+  <p>
+    The engine's <code>lighting</code> struct has carried an <code>ambient</code> constant since
+    Lesson 3.6, and that lesson called it "a fudge, and calling it anything else would be
+    dishonest". Now that we have the machinery, it is worth asking what it would be if it were not
+    a fudge — and the answer is a genuine surprise.
+  </p>
+
+  <p>
+    Give it the most charitable physical reading available: <em>a uniform radiance
+    L<sub>a</sub> arriving from every direction of the hemisphere at once</em>. That is a real
+    thing — it is what an overcast sky approximately is. Put it through the reflection equation
+    with the Lambert BRDF:
+  </p>
+
+  <div class="eq">
+    \[ L_o \;=\; \int_{\Omega} \frac{\text{albedo}}{\pi}\, L_a \cos\theta \, d\omega
+       \;=\; \frac{\text{albedo}}{\pi} L_a \int_{\Omega} \cos\theta \, d\omega
+       \;=\; \frac{\text{albedo}}{\pi} L_a \pi
+       \;=\; \text{albedo} \cdot L_a \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: constant radiance from the whole hemisphere, through a constant BRDF, gives the
+    albedo times that radiance — because the π from the hemisphere cancels the π in the BRDF
+    exactly.
+  </p>
+
+  <p>
+    <strong>The π cancels.</strong> Which means <code>albedo * ambient</code> — the expression
+    <code>shade()</code> has used since Lesson 3.6, chosen because it looked right — is not an
+    approximation of the correct answer. It <em>is</em> the correct answer for a uniform
+    environment, and the one term in the whole shading equation that needs no π is the one term
+    nobody thought to put a π in.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What is still wrong with it, now that we can say</span>
+    <p>The arithmetic is exactly right; the <em>assumption</em> is what fails. Real bounced light
+       is not uniform — it comes mostly from the sky above and the floor below, and a surface
+       facing up is lit quite differently from one facing sideways. Lesson 6.15 replaces the
+       constant L<sub>a</sub> with an environment map and a precomputed irradiance map, which is
+       the same integral with the "uniform" dropped. And the specular half of the ambient has no
+       term here at all, which is the other half of that lesson.</p>
+    <p>Notice that we can now state the defect precisely, in one sentence, instead of calling it a
+       fudge. That is what putting units on things buys you.</p>
+  </div>
+
+  <!-- =================================================================
+       5 — WHERE THE PI WAS HIDING
+       ================================================================= -->
+  <h2 id="hiding"><span class="num">5</span>Where the π Was Hiding</h2>
+
+  <h3 id="hiding-audit">5.1 The algebra, and what <code>intensity</code> meant</h3>
+
+  <p>
+    We now have a shading equation with units. The engine has one without. Put them side by side —
+    the diffuse channel only, to keep it readable:
+  </p>
+
+  <div class="eq">
+    \[ \underbrace{\text{albedo} \cdot (\text{key} \cdot \text{intensity} \cdot n{\cdot}l)}_{\text{what the engine computes}}
+       \qquad\text{vs}\qquad
+       \underbrace{\frac{\text{albedo}}{\pi} \cdot E_{\perp} \cdot n{\cdot}l}_{\text{what it should compute}} \]
+  </div>
+
+  <p class="eq-plain">
+    In prose: the engine multiplies the albedo by the light's colour, its intensity and the cosine.
+    The correct form multiplies the albedo over π by the light's irradiance and the cosine.
+  </p>
+
+  <p>
+    Set them equal and solve. The albedo and the cosine appear on both sides and cancel, leaving
+  </p>
+
+  <div class="eq">
+    \[ \text{intensity} = \frac{E_{\perp}}{\pi} \]
+  </div>
+
+  <p>
+    <strong>So <code>intensity</code> was never a free parameter.</strong> It was an irradiance
+    with a π already divided out of it — the Lambert BRDF's own constant, living inside the light
+    instead of inside the material, unlabelled, since Lesson 3.6. Every scene in this course has
+    been set up with <code>intensity = 1.0f</code>, which we can now read: an irradiance of π.
+  </p>
+
+  <p>
+    This is worth dwelling on because of how ordinary it is. Nothing was <em>wrong</em>: the
+    pictures were fine, the two renderers agreed to a float ULP, twelve lessons of golden images
+    matched. A constant in the wrong place produces correct output right up until the moment you
+    want to add a second thing that also needs it — and that moment is Lesson 6.4, where the
+    specular BRDF gets its own normalisation and the two would silently disagree about what the
+    light's units are.
+  </p>
+
+  <div class="callout note">
+    <span class="label">How to find this in code you did not write</span>
+    <p>The question that finds it is: <strong>what value of the light makes a perfect white
+       surface render at exactly full scale?</strong> If the answer is 1, the renderer's diffuse
+       BRDF has no π in it, and the π is hiding in the light. If the answer is π, the BRDF has it.
+       If the answer is something else, there is a third constant somewhere and it is worth
+       finding out what.</p>
+    <p>The question works because it is a <em>measurement</em> that does not depend on reading the
+       code correctly. Two minutes with a white quad and a slider settles it.</p>
+  </div>
+
+  <h3 id="hiding-exposure">5.2 π as an exposure, derived</h3>
+
+  <p>
+    Once the π moves into the BRDF, the light needs a real number. Ask the question from the
+    callout above, of our own renderer this time. A perfect white Lambertian surface (albedo 1)
+    facing the light square-on (cos θ = 1) emits
+  </p>
+
+  <div class="eq">
+    \[ L_o = \frac{1}{\pi} \cdot E_{\perp} \cdot 1 \]
+  </div>
+
+  <p>
+    For that to come out at exactly 1.0 — full scale, white on the display — the irradiance must be
+    π. Not approximately: exactly.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — and it is exact in floating point too</span>
+    <p>This is the kind of claim worth checking rather than assuming, because "the constants cancel"
+       is true in algebra and often false in IEEE single precision. They do cancel here:</p>
+    <p class="mono">std::numbers::pi_v&lt;float&gt;     = 3.14159274  (0x40490FDB)<br>
+                    std::numbers::inv_pi_v&lt;float&gt; = 0.318309873 (0x3EA2F983)<br>
+                    product                         = 1.00000000  — exactly 1.0f, 0 ULP</p>
+    <p>Both roundings happen to land favourably, so the re-parameterisation costs nothing
+       <em>at the constant itself</em>. It costs one to two ULP elsewhere, from re-associating the
+       multiplies, and §8 measures that separately rather than pretending it is zero.
+       <code>verify_62</code> §C asserts both facts, plus that <code>1.0f/π</code> has the same
+       bits as <code>inv_pi_v&lt;float&gt;</code>, so the two spellings cannot drift.</p>
+  </div>
+
+  <p>
+    So <code>k_reference_irradiance = π</code> goes into <code>light.hpp</code> with a name and a
+    derivation. It is worth being clear about what kind of decision this is:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">This is an exposure, and it is a choice</span>
+    <p>Nothing in physics says a fully-lit white surface should read 1.0. That is a statement about
+       our display and our lack of a tonemapper, and it is exactly the convention a photographer's
+       white card encodes. A real engine authors lights in <em>lux</em> — a sunny day is around
+       100,000 — and converts to display values through an explicit exposure and a tonemapping
+       curve. <strong>Lesson 6.12 builds that</strong>, at which point this constant stops being
+       the rule and becomes a default.</p>
+    <p>Naming it now is the point. The engine has <em>had</em> an exposure convention since Lesson
+       3.6; it simply had no name, no derivation, and no place to be written down. An unnamed
+       convention is one that gets contradicted by the next person to touch the code.</p>
+  </div>
+
+  <h3 id="hiding-rename">5.3 Why the field had to be renamed</h3>
+
+  <p>
+    <code>directional_light::intensity</code> becomes <code>directional_light::irradiance</code>,
+    and the rename is doing real work rather than tidying.
+  </p>
+
+  <p>
+    Consider the alternative. Keep the name, move the π into the BRDF, and every existing call site
+    still compiles — and every one of them is now wrong by a factor of 3.14, silently, producing a
+    scene that is uniformly too dark in a way that looks like an art direction decision. There is
+    no compiler diagnostic for "this number still has the same type but no longer means the same
+    thing".
+  </p>
+
+  <p>
+    A rename is the only tool that reaches every caller. It turns each one into a compile error
+    that a human has to look at and answer, which is exactly what you want when the correct new
+    value is not the old one. This is the same bargain Lesson 3.7 made when it gave
+    <code>shade()</code> a <code>to_eye</code> parameter with no default, and Lesson 3.1 made when
+    it inserted <code>z</code> ahead of <code>colour</code> in <code>vertex</code>.
+  </p>
+
+  <p>
+    Five call sites in the demos and one in <code>verify_48</code> broke, were looked at, and were
+    fixed. One of them was not a mechanical fix at all — see §8.
+  </p>
+
+  <p>
+    The <em>default</em> gets the same treatment from the other direction: it becomes
+    <code>k_reference_irradiance</code> rather than 1.0, so that code which never mentions the
+    field keeps working. A default of 1.0 would compile everywhere, mention nothing, and darken
+    every defaulted scene by π — which is the precise failure the rename exists to prevent, walked
+    back in through the constructor.
+  </p>
+
+  <!-- =================================================================
+       6 — ENERGY CONSERVATION AS A NUMBER
+       ================================================================= -->
+  <h2 id="energy"><span class="num">6</span>Energy Conservation as a Number</h2>
+
+  <h3 id="energy-r">6.1 Directional-hemispherical reflectance</h3>
+
+  <p>
+    "Energy conserving" gets used as a compliment in graphics writing, usually without a definition.
+    Here is the definition, and it is computable in about twenty lines.
+  </p>
+
+  <p>
+    For a BRDF and one outgoing direction <strong>v</strong>, the
+    <strong>directional-hemispherical reflectance</strong> is what fraction of the arriving light
+    comes back out — the same integral as §4.2, but for a BRDF that is not constant:
+  </p>
+
+  <div class="eq">
+    \[ R(\mathbf{v}) \;=\; \int_{\Omega} f_r(\mathbf{l}, \mathbf{v}) \cos\theta \, d\omega \]
+  </div>
+
+  <p>
+    A model conserves energy when <em>R</em>(<strong>v</strong>) ≤ 1 for every <strong>v</strong>.
+    Above 1 and the surface is a light source. That is the whole test, it needs no theory, and it
+    is a loop over a θ/φ grid — which is what <code>verify_62</code> does, at 512×1024 samples.
+  </p>
+
+  <p>
+    Run it on Lambert and you get the albedo back, to five decimal places, which is the sanity
+    check that the harness works. Then run it on the highlight this engine has shipped since
+    Lesson 3.7.
+  </p>
+
+  <h3 id="energy-lobe">6.2 What the highlight actually costs</h3>
+
+  <p>
+    The Blinn-Phong specular term is <em>cos<sup>s</sup></em> of the angle between the normal and
+    the halfway vector, and it has never had a normalising constant in this engine — Lesson 3.7
+    introduced it as a shape that looked right, and said so. Now we can price it.
+  </p>
+
+  @@FIG_ENERGY@@
+
+  <p>
+    <strong>The first finding is the one everybody expects.</strong> With no constant at all, the
+    raw lobe's reflectance exceeds 1 for every shininess below about 12, reaching
+    <strong>2.6650</strong> at shininess 1 — a matte-ish plastic that emits nearly three times the
+    light falling on it. That is a genuine defect and it is why the term needs <em>some</em>
+    constant.
+  </p>
+
+  <p>
+    <strong>The second finding is the one I got wrong before measuring</strong>, and it is the more
+    interesting half. Putting the lobe on the same 1/π scale as the diffuse term — which is what
+    this lesson does, so that one irradiance can multiply both — brings it comfortably under 1
+    across the whole useful range: 0.1386 at shininess 32, the engine's default. So the runaway is
+    fixed. And the model still fails, for a different reason:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Diffuse and specular are simply added, with no coupling</span>
+    <p>A white surface with a white highlight reflects <code>R_diffuse + R_specular</code>, and
+       since the first is already 1.0, the total is <strong>over 1 at every shininess</strong>:
+       1.1386 at 32, 1.7333 at 2. The light that bounced off the surface as a highlight is being
+       counted <em>again</em> as light that penetrated and scattered back out. Physically it can
+       only do one or the other.</p>
+    <p>This is exactly what Cook–Torrance fixes in <strong>Lesson 6.4</strong>, and it fixes it
+       with a mechanism rather than a constant: the Fresnel term says what fraction of the arriving
+       light reflects off the interface, and only the remainder — <em>1 − F</em> — is available to
+       scatter diffusely. The two terms stop being independent. Having the number 1.1386 in hand
+       first is what turns that from a formula into an answer.</p>
+  </div>
+
+  <p>
+    There is a third defect visible in the same measurement, and it is the one that most offends an
+    artist. The lobe's reflectance <em>depends on where the eye is</em>: at shininess 32 the same
+    surface reflects <strong>0.1386</strong> toward an eye 37° off the normal and
+    <strong>0.0259</strong> toward one at 75° — a factor of 5.36, which nobody asked for and no
+    parameter controls. A physical surface's reflectance does vary with view angle, but it varies
+    in a specific way (it goes <em>up</em> at grazing angles — that is Fresnel again), and this one
+    goes the wrong way.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why the engine has looked fine anyway</span>
+    <p>The demo's shiny surfaces use specular 0.30 at shininess 32, which spends
+       <strong>0.0416</strong> of the energy budget on the highlight and leaves room for an albedo
+       up to 0.9584. The scenes have been inside the limit the whole time — by luck, not by
+       construction, and the distinction only becomes visible when someone authors a bright white
+       glossy material and the picture starts to glow. <code>verify_62</code> §D asserts the demo's
+       number, so that if a future lesson raises it, something says so.</p>
+  </div>

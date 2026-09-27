@@ -1,0 +1,659 @@
+  <!-- =================================================================
+       5 — MATERIALS
+       ================================================================= -->
+  <h2 id="materials"><span class="num">5</span>The Payoff: Materials That Mean Something</h2>
+
+  <p>
+    Everything so far has been the cost of the format. Here is what it buys, and it is the reason
+    the curriculum puts this lesson where it does.
+  </p>
+
+  <p>
+    <code>usemtl Metal</code> tells you nothing. It is a string, in a file that does not define it,
+    pointing at a companion file in a format whose parameters describe a lighting model that has
+    been obsolete for thirty years. Importing it means guessing.
+  </p>
+
+  <p>
+    Here is what a glTF material says instead — this is the <code>"gold"</code> entry from
+    <code>assets/shapes.glb</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">assets/shapes.glb — materials[1]</span>
+      <span class="lang" data-lang="json">JSON</span>
+    </figcaption>
+    <pre><code class="lang-json">{ "name": "gold",
+  "pbrMetallicRoughness": {
+    "baseColorFactor": [1.00, 0.71, 0.29, 1.0],
+    "metallicFactor":  1.0,
+    "roughnessFactor": 0.45 } }</code></pre>
+  </figure>
+
+  <p>
+    Compare it with the struct Lesson 6.4 derived:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/microfacet.hpp — as it has stood since 6.4</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct microsurface
+{
+    float roughness = 0.5f;              // perceptual; alpha = roughness^2
+    float metallic  = 0.0f;              // 0 dielectric, 1 conductor
+    float f0        = k_dielectric_f0;   // 0.04, from an IOR of 1.5
+};</code></pre>
+  </figure>
+
+  <p>
+    The import is three assignments and there is <strong>no conversion anywhere in it</strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gltf.cpp — the whole of the surface import</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">desc.surface.metallic  = pbr.metallic_factor;
+desc.surface.roughness = pbr.roughness_factor;
+// f0 stays at k_dielectric_f0 = 0.04, which is exactly what glTF fixes it to.</code></pre>
+  </figure>
+
+  <p>
+    Three independent agreements make that possible, and none of them is a coincidence — they are
+    two people deriving from the same physics:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Three parameters where the glTF specification and this
+        engine's derivation agree exactly</caption>
+      <thead>
+        <tr><th>Parameter</th><th>glTF says</th><th>Lesson</th><th>This engine says</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>roughness → alpha</td><td><code>alpha = roughness²</code> (Burley's remap)</td>
+            <td>6.3</td><td><code>alpha_from_roughness</code> — the same square</td></tr>
+        <tr><td>dielectric F0</td><td>fixed IOR 1.5, so F0 = 0.04</td>
+            <td>6.4</td><td><code>k_dielectric_f0</code>, from <code>f0_from_ior(1.5)</code></td></tr>
+        <tr><td>metallic</td><td>base colour becomes F0; no diffuse lobe</td>
+            <td>6.4</td><td><code>f0_of</code> and <code>diffuse_albedo_of</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Take a moment over the third row, because it is the one where you can watch a derivation pay
+    off. In Lesson 6.4 the metallic workflow arrived as a <em>consequence</em>: a conductor absorbs
+    what crosses its interface, so there is no subsurface scattering to come back out, so the only
+    light leaving it is the mirrored part, so the colour has to live in F0 instead of in the albedo.
+    We wrote <code>f0_of</code> and <code>diffuse_albedo_of</code> out of that argument, without
+    reference to any file format.
+  </p>
+
+  <p>
+    And now a file arrives saying <code>baseColorFactor = (1.00, 0.71, 0.29)</code> with
+    <code>metallicFactor = 1</code>, and <code>f0_of</code> returns
+    <code>(1.00, 0.71, 0.29)</code> verbatim while <code>diffuse_albedo_of</code> returns exactly
+    black. <code>verify_66</code> §D asserts both. The engine was already speaking the format's
+    language before it had ever read the format.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The one number in a glTF material that everybody gets wrong</span>
+    <p><strong>The factor is linear. The texture is sRGB-encoded.</strong> They are multiplied
+       together after the texture is decoded.</p>
+    <p>So <code>gltf_material_desc::base_colour</code> is a <code>linear_rgb</code> and there is no
+       <code>to_linear</code> call anywhere near it — while <code>material::tint</code> <em>is</em>
+       encoded, because Lesson 6.5 decided a tint is authored data that decodes at the input edge.
+       The one conversion in the whole importer therefore runs in the direction nobody expects:
+       <em>linear → encoded</em>, in <code>load_model</code>.</p>
+    <p>Get it backwards and gold's green channel comes in at <strong>0.4624</strong> instead of
+       <strong>0.7100</strong>, every imported asset is darkened by the gamma curve, and the result
+       looks like a plausible lighting problem for years. <code>verify_66</code> §D asserts the
+       0.71 and prints the 0.4624 beside it, so the failure mode is in the test output rather than
+       in somebody's memory.</p>
+  </div>
+
+  <p>
+    One more thing the file says that we can honour immediately: <code>doubleSided</code>. Lesson
+    6.5 split back-face culling into two questions — <em>is this mesh closed?</em>, a fact about the
+    geometry that <code>validate()</code> answers, and <em>do we want it culled?</em>, an intent
+    the caller supplies. <code>doubleSided</code> is exactly that second half, arriving from the
+    person who authored the asset. <code>cull_of(mesh_is_closed, want_two_sided)</code> already had
+    the parameter waiting.
+  </p>
+
+  <!-- =================================================================
+       6 — THE VERIFY
+       ================================================================= -->
+  <h2 id="brdf"><span class="num">6</span>The ⚠ VERIFY, Discharged</h2>
+
+  <p>
+    Lesson 6.4 shipped this comment, and it has sat in the engine for two lessons:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/microfacet.hpp — as 6.4 left it</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">/// `1 - F(v.h)` — what most real-time renderers ship, including the glTF 2.0
+/// reference BRDF. (⚠ VERIFY against Khronos glTF 2.0 specification,
+/// Appendix B "BRDF Implementation", before relying on this for asset
+/// interchange in Lesson 6.6.)
+half_vector</code></pre>
+  </figure>
+
+  <p>
+    This is that lesson, so the marker gets discharged. Here is Appendix B's complete model, quoted
+    from the specification:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Khronos glTF 2.0, Appendix B — "The full code is given below"</span>
+      <span class="lang" data-lang="c">pseudocode</span>
+    </figcaption>
+    <pre><code class="lang-c">fresnel_w = (1 - abs(VdotH))^5
+
+diffuse_brdf  = (1 / π) * baseColor.rgb
+specular_brdf = D(roughness^2) * G(roughness^2) / (4 * abs(VdotN) * abs(LdotN))
+
+dielectric_f0      = 0.04
+dielectric_fresnel = dielectric_f0 + (1 - dielectric_f0) * fresnel_w
+dielectric_brdf    = mix(diffuse_brdf, specular_brdf, dielectric_fresnel)
+
+metal_fresnel = baseColor.rgb + (1 - baseColor.rgb) * fresnel_w
+metal_brdf    = metal_fresnel * specular_brdf
+
+material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
+  </figure>
+
+  <p>
+    The claim in the comment turns out to be <strong>true in substance and imprecise in a way that
+    matters</strong>. <code>mix(a, b, F)</code> is <code>(1−F)·a + F·b</code>, so the diffuse really
+    is scaled by <code>1 − F(v·h)</code>. But the <em>same</em> F scales the specular <em>up</em>,
+    and our <code>cook_torrance_specular</code> already carries it. Reading "the glTF reference uses
+    <code>1 − F(v·h)</code>" as a statement about the diffuse alone misses half the sentence.
+  </p>
+
+  <p>
+    Laid out term by term against what Lessons 6.3 and 6.4 derived:
+  </p>
+
+  @@FIG_BRDF@@
+
+  <h3>The metallic blend is not even a difference</h3>
+
+  <p>
+    Look at the fifth row of the figure. The spec lerps <em>two whole BRDFs</em> by
+    <code>metallic</code>; this engine lerps the <em>F0</em> and evaluates one BRDF
+    (<code>f0_of</code>). Those look like two different models. They are the same model, and the
+    reason is one line of algebra.
+  </p>
+
+  <p>
+    Schlick's approximation is <strong>affine in F0</strong>. Write <em>w</em> for
+    <em>(1 − |v·h|)<sup>5</sup></em>:
+  </p>
+
+  <div class="eq">
+    \[ F(f_0) \;=\; f_0 + (1 - f_0)\,w \;=\; f_0\,(1 - w) \;+\; w \]
+  </div>
+
+  <p>
+    That is a straight line in <em>f<sub>0</sub></em>, so lerping the inputs and lerping the outputs
+    commute. Work the spec's specular coefficient through, writing <em>m</em> for
+    <code>metallic</code> and <em>c</em> for the base colour:
+  </p>
+
+  <div class="eq">
+    \[
+      \begin{aligned}
+      (1-m)\,F(0.04) + m\,F(c)
+        &= (1-m)\big[0.04(1-w) + w\big] + m\big[c(1-w) + w\big] \\
+        &= \big[(1-m)\,0.04 + m\,c\big](1-w) + w \\
+        &= F\big((1-m)\,0.04 + m\,c\big)
+      \end{aligned}
+    \]
+  </div>
+
+  <p>
+    And <code>(1−m)·0.04 + m·c</code> is exactly what <code>f0_of</code> computes. The specular
+    halves of the two models are not close; they are <em>the same expression</em>.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Measured, because a derivation that has not been run is a conjecture</span>
+    <p><code>verify_66</code> §E evaluates both routes over 21 metallic values × 11 base colours ×
+       21 view angles = <strong>4,851 points</strong>. Worst difference:
+       <strong>1.192 × 10<sup>−7</sup></strong>, which is float rounding and nothing else.</p>
+    <p>So <code>f0_of</code> is not an approximation of the spec's mix. It <em>is</em> the spec's
+       mix, rearranged into one Fresnel evaluation instead of two.</p>
+  </div>
+
+  <h3>The one factor that does differ</h3>
+
+  <p>
+    Everything reduces to a single term. The spec applies <strong>one</strong> Fresnel crossing, at
+    the half vector; this engine applies <strong>two</strong>, at the light angle and the eye angle:
+  </p>
+
+  <div class="eq">
+    \[
+      k_d^{\text{glTF}} = 1 - F(v \cdot h)
+      \qquad\text{against}\qquad
+      k_d^{\text{ours}} = \big(1 - F(n \cdot l)\big)\big(1 - F(n \cdot v)\big)
+    \]
+  </div>
+
+  <p>
+    Lesson 6.4 §7 gave the physical argument for two: light crosses the interface on the way in
+    <em>and</em> on the way out, and each crossing reflects its own Fresnel fraction. The one-sided
+    form describes what got <em>in</em> and says nothing about the light that fails to get
+    <em>out</em>, so at grazing angles it lets out more than went in.
+  </p>
+
+  <p>
+    How much does that matter in practice? That is the question two lessons never asked, and it is
+    the number <code>verify_66</code> §E exists to produce. Sweeping the light and eye over a
+    quadrant on <code>shapes.glb</code>'s own red plastic:
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Measured difference between the glTF diffuse coupling and
+        this engine's, at three configurations</caption>
+      <thead>
+        <tr><th>Configuration</th><th>glTF ÷ ours</th><th>What that means</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>normal incidence</td><td><strong>1.036×</strong></td>
+            <td>one crossing of a 4% interface. Invisible.</td></tr>
+        <tr><td>view 88°, worst over the sweep</td><td><strong>5.62×</strong></td>
+            <td>0.2058 sr<sup>−1</sup> absolute. Very visible — at a silhouette.</td></tr>
+        <tr><td>white furnace, hemispherical reflectance</td>
+            <td><strong>1.3395</strong> vs <strong>0.9255</strong></td>
+            <td>the spec's form emits a third more light than it receives (6.4 §E)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    That first row explains why the imprecision survived two lessons: the difference hides in the
+    middle of every surface and only appears at the rim, which is exactly where nobody checks.
+  </p>
+
+  <h3>So which do we ship?</h3>
+
+  <p>
+    The specification answers this itself, in two places, and the answers point the same way.
+  </p>
+
+  <p>
+    On variation, §3.9.6: <em>"Implementations of the bidirectional reflectance distribution
+    function (BRDF) itself <strong>MAY</strong> vary based on device performance and resource
+    constraints."</em> The BRDF is explicitly not the conformance surface — the material
+    <em>parameters</em> are.
+  </p>
+
+  <p>
+    On correctness, Appendix B's "Complete Model": <em>"In a physically accurate light simulation,
+    the BRDFs <strong>MUST</strong> follow some basic principles: the BRDF <strong>MUST</strong> be
+    positive, reciprocal, and energy conserving."</em>
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The resolution, and it is not the one Lesson 6.4 expected</span>
+    <p>Lesson 6.4 kept <code>half_vector</code> around on the assumption that asset interchange
+       might one day <em>require</em> it. It does not. The spec permits the variation outright, and
+       the property it actually requires — energy conservation — is the one
+       <code>two_crossing</code> has at 0.9255 and <code>half_vector</code> lacks at 1.3395.</p>
+    <p><strong>So the engine loads glTF materials and shades them with its own coupling, and is
+       conformant in doing so.</strong> <code>half_vector</code> stays in the enum, named, measured,
+       and selectable — because it is what the student will find in every engine they read next,
+       and because 6.3's two geometry terms set the precedent: a choice you can run beats a choice
+       you can read about.</p>
+  </div>
+
+  <div class="callout">
+    <span class="label">And the design question 6.5's rule turns into a real one</span>
+    <p>The obvious alternative is to let each material carry its own coupling, so an imported glTF
+       could be shaded the spec's way and everything else ours.</p>
+    <p>Lesson 6.5's membership rule refuses it, and the refusal is instructive: <em>can this be a
+       number in a buffer?</em> A coupling is a <strong>branch in the shader</strong>. Two objects
+       differing in it need two pipelines and a sort between them — it is pipeline state by
+       definition, so it does not belong on <code>material</code> however convenient that would
+       be.</p>
+    <p>Which leaves exactly one honest place for it: a renderer-wide choice, measured and
+       documented. That is where it is.</p>
+  </div>
+
+  <!-- =================================================================
+       7 — LAYERS
+       ================================================================= -->
+  <h2 id="layers"><span class="num">7</span>Where a Reference Stops Being a String</h2>
+
+  <p>
+    Now the architecture question, and it is the one that decides whether this code is still useful
+    in Module 9.
+  </p>
+
+  <p>
+    A glTF material says <code>"uri": "uv_grid.png"</code>. A <code>engine::material</code> holds a
+    <code>texture_handle</code>. Somewhere between those two a string becomes a handle. Where?
+  </p>
+
+  @@FIG_LAYERS@@
+
+  <p>
+    The tempting answer is "in the loader" — <code>parse_gltf</code> could take an
+    <code>asset_store&amp;</code> and hand back finished materials. It would be fewer types and
+    fewer lines.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Three things that answer would cost, and none of them is style</span>
+    <p><strong>1. The parser could no longer be tested without a filesystem.</strong> Lesson 3.5
+       split <code>parse_obj</code> from <code>load_obj</code> for exactly this reason and §8 of
+       that lesson used the split to test a dozen malformed inputs from string literals. A parser
+       that needs a search path needs a disk.</p>
+    <p><strong>2. Module 9's asset cooker could not use it.</strong> An offline importer runs at
+       build time and writes its output to a cache. A handle is meaningless outside the pool that
+       issued it, so a parser that returns handles produces output that cannot be serialised.</p>
+    <p><strong>3. The policy would end up in two places.</strong> "Is this the same image we already
+       loaded?" and "where do images live?" are questions <code>asset_store</code> already answers
+       for OBJ and PNG. A second answer inside the glTF loader is a second answer that will
+       eventually disagree.</p>
+  </div>
+
+  <p>
+    So the layers are as the figure shows them. <code>gltf.cpp</code> turns bytes into
+    <em>descriptions</em> — a <code>gltf_material_desc</code> holds a
+    <code>std::string base_colour_uri</code> and an <code>int material</code> index, and knows
+    nothing about pools, handles, caches or search paths. <code>asset_store::load_model</code> turns
+    descriptions into <em>handles</em>. And the renderer turns a handle into a
+    <em>pointer</em>, once per draw, through <code>bind_albedo</code> — which is Lesson 6.5's rule,
+    unchanged.
+  </p>
+
+  <!-- =================================================================
+       8 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">8</span>Implementation</h2>
+
+  <h3>8.1 — cgltf, wired in the same way stb was</h3>
+
+  <p>
+    Three lines in the root <code>CMakeLists.txt</code> and one in the engine's, matching the shape
+    Lesson 4.7 established for stb_image. Pinned to a <em>tag</em> this time, because
+    <code>cgltf</code> has releases — stb has none, which is why it had to be pinned to a commit.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt — the declaration (comment block abridged; see the listing)</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG        v1.15   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(cgltf)</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes &lt;cgltf.h&gt;, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})</code></pre>
+  </figure>
+
+  <p>
+    <code>PRIVATE</code> is the whole of the boundary argument, and it is checkable rather than
+    aspirational: no demo can include <code>&lt;cgltf.h&gt;</code>, because the directory is not on
+    its include path. Swapping to <code>tinygltf</code> would be a one-file change.
+  </p>
+
+  <div class="callout">
+    <span class="label">One macro, in exactly one place</span>
+    <p><code>#define CGLTF_IMPLEMENTATION</code> before the include compiles the parser into that
+       translation unit. Putting it in a header would compile a copy into every file that included
+       it and then fail to link on the duplicate symbols — which is the <em>good</em> outcome. The
+       bad one is a build system that quietly picks one.</p>
+    <p>Same rule as <code>STB_IMAGE_IMPLEMENTATION</code> in <code>image.cpp</code>. Worth noticing
+       that the whole cgltf implementation compiled clean at <code>-Wall -Wextra</code> on the
+       first try, which stb did not — and that the macro is what confines the difference.</p>
+  </div>
+
+  <h3>8.2 — Reading a primitive</h3>
+
+  <p>
+    The heart of the loader is forty lines. Attributes first, and they are iterated <em>by name</em>
+    rather than fetched by index, because a glTF primitive's attributes are a dictionary whose order
+    carries no meaning:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gltf.cpp — finding the three attributes we understand</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">for (std::size_t a = 0; a &lt; prim.attributes_count; ++a)
+{
+    const cgltf_attribute&amp; attr = prim.attributes[a];
+    if (attr.type == cgltf_attribute_type_position &amp;&amp; positions == nullptr)
+    {
+        positions = attr.data;
+    }
+    else if (attr.type == cgltf_attribute_type_normal &amp;&amp; normals == nullptr)
+    {
+        normals = attr.data;
+    }
+    else if (attr.type == cgltf_attribute_type_texcoord &amp;&amp; attr.index == 0)
+    {
+        uvs = attr.data;
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    A real file may also carry <code>TANGENT</code>, <code>COLOR_0</code>, <code>JOINTS_0</code>,
+    <code>WEIGHTS_0</code> and four texture coordinate sets. We take three and ignore the rest
+    without complaint, which is the correct behaviour for a format designed to be extended — and
+    the loop shape is what makes it correct rather than accidental.
+  </p>
+
+  <p>
+    Then the read itself, which is the function that justified taking the library:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gltf.cpp — one function, forty encodings</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">out.resize(accessor-&gt;count * components);
+for (std::size_t i = 0; i &lt; accessor-&gt;count; ++i)
+{
+    if (!cgltf_accessor_read_float(accessor, i, &amp;out[i * components], components))
+    {
+        return false;
+    }
+}</code></pre>
+  </figure>
+
+  <p>
+    Float, normalized uint16, interleaved at a stride, sparse — every case, one call. And it
+    returns <code>false</code> rather than reading past the end when an accessor points outside its
+    buffer view, which is the failure a hand-rolled version gets wrong on somebody else's file.
+  </p>
+
+  <h3>8.3 — The ceiling, and why it is reported rather than fixed</h3>
+
+  <p>
+    <code>mesh_data::indices</code> is <code>std::uint16_t</code>, decided in Lesson 2.12. So a
+    primitive can name at most 65,536 distinct vertices.
+  </p>
+
+  <p>
+    OBJ never made this fire, because the files this course ships are small. glTF will, because real
+    exported assets routinely exceed it — a single <code>.glb</code> out of Blender may hold one
+    200,000-vertex primitive.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gltf.cpp — the ceiling</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const int vertex_count = static_cast&lt;int&gt;(positions-&gt;count);
+report.max_primitive_vertices = std::max(report.max_primitive_vertices, vertex_count);
+
+if (vertex_count &gt; k_max_primitive_vertices)
+{
+    ++report.skipped_too_large;
+    return false;
+}</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">Why a counter and not a narrowing cast</span>
+    <p>The lazy version is <code>static_cast&lt;uint16_t&gt;(index)</code> and let it wrap. That
+       version <em>renders</em>: you get a spray of triangles connecting the wrong corners of the
+       model, which looks like a corrupt file rather than like a loader limit, and there is nothing
+       anywhere saying what happened.</p>
+    <p>Widening the index type is a real answer and it costs real bytes on every mesh in the engine.
+       Splitting the primitive is the other real answer and it costs real code. Both are exercises;
+       neither is a thing to guess at inside a loader. What the loader owes you is
+       <code>skipped_too_large = 1, max 197,346</code> — a number you can act on.</p>
+  </div>
+
+  <h3>8.4 — Walking the node tree</h3>
+
+  <p>
+    A glTF scene is a forest, so the walk is a recursion, and there is one decision inside it worth
+    arguing.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gltf.cpp — the recursion</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">if (node-&gt;mesh != nullptr)
+{
+    float world[16];
+    cgltf_node_transform_world(node, world);
+
+    for (std::size_t p = 0; p &lt; node-&gt;mesh-&gt;primitives_count; ++p)
+    {
+        gltf_primitive built;
+        if (!build_geometry(node-&gt;mesh-&gt;primitives[p], built.geometry, report)) { continue; }
+        built.world_from_local = to_mat4_column_major(world);
+        …
+    }
+}
+
+for (std::size_t c = 0; c &lt; node-&gt;children_count; ++c)
+{
+    walk_node(node-&gt;children[c], data, out, report);
+}</code></pre>
+  </figure>
+
+  <p>
+    <strong>The transform is not baked into the vertices.</strong> A loader that bakes produces a
+    scene that can never be re-parented, instanced or animated, and the loss is silent — the
+    picture is identical on frame one and the capability is simply gone. Lesson 5.9 built a
+    transform hierarchy precisely so that placement stays data, so the geometry is what the file
+    said and <code>world_from_local</code> is what the node tree said, kept apart.
+  </p>
+
+  <p>
+    <code>verify_66</code> §C checks both halves. <code>shapes.glb</code>'s <code>"group"</code>
+    node translates by (1, 0, 0) and its child <code>"gold octahedron"</code> by (0, 2, 0), so the
+    octahedron's world translation must be (1, 2, 0) — a product down the tree, not the local
+    transform. Two levels deeper, the tetrahedron lands at (1, 3.5, 0). And the octahedron's own
+    vertices still top out at y = 0.60 rather than 2.60, which is the assertion that nothing was
+    baked.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">A layout agreement worth noticing</span>
+    <p><code>cgltf_node_transform_world</code> writes sixteen floats <strong>column-major</strong>,
+       which is exactly <code>mat4</code>'s own storage (Lesson 2.5). So
+       <code>to_mat4_column_major</code> is a copy and not a transpose.</p>
+    <p>Three independent decisions landed on one layout: glTF stores matrices column-major because
+       its <code>matrix</code> property says so; <code>mat4</code> is column-major because its
+       columns are where the basis vectors land; and HLSL constant buffers want the same, which is
+       why Module 4 uploads a <code>mat4</code> with a plain <code>memcpy</code>. The transpose that
+       catches out every second importer never arises.</p>
+  </div>
+
+  <h3>8.5 — The bridge that had never been built</h3>
+
+  <p>
+    Here is a gap this lesson found by walking into it, and it is a good example of a hole that no
+    test could see because no code path crossed it.
+  </p>
+
+  <p>
+    The engine has been able to decode a PNG since Lesson 5.3: <code>load_image</code> produces an
+    <code>image_data</code> of RGBA bytes. It has been able to sample a texture since Lesson 3.9:
+    <code>sample(texture, sampler, u, v)</code> returns linear light. <strong>Nothing has ever
+    joined them.</strong>
+  </p>
+
+  <p>
+    Every CPU texture in this engine was <em>generated</em> — <code>make_checker</code>,
+    <code>make_uv_grid</code> — and every <em>loaded</em> image went straight to the GPU as bytes
+    through <code>gpu_texture::create_sampled</code>. Two complete halves with no middle. glTF is
+    what forces the join, because a material names an image file and the software renderer has to
+    be able to sample it.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/texture.cpp — twelve lines that should have existed since 5.3</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">for (int y = 0; y &lt; src.height; ++y)
+{
+    for (int x = 0; x &lt; src.width; ++x)
+    {
+        const std::size_t at = (y * src.width + x) * 4u;
+        out.set_texel(x, y, pack_argb(src.pixels[at + 0], src.pixels[at + 1],
+                                      src.pixels[at + 2], src.pixels[at + 3]));
+    }
+}</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">It is a channel shuffle, not a memcpy</span>
+    <p><code>image_data::pixels</code> is R, G, B, A in that byte order, as stb hands it over.
+       <code>texture</code> stores <code>Uint32</code> in ARGB8888 — the framebuffer's own format
+       (Lesson 1.5) — which on a little-endian machine is the bytes B, G, R, A.</p>
+    <p>Copy the buffer wholesale and red and blue swap, which is the single most recognisable
+       wrong-looking texture there is. Writing it through <code>pack_argb</code> means the memcpy
+       version is not even expressible. <code>verify_66</code> §F asserts texel (3,3) comes out
+       <code>0xFFDE463C</code> and prints <code>0xFF3C46DE</code> beside it as the shape of the
+       failure.</p>
+  </div>
+
+  <p>
+    There is no vertical flip in that loop, and there must not be: <code>image_data</code> stores
+    the file's rows top-first (5.3) and <code>texture</code> puts row 0 at the top (3.9). Those are
+    the same convention. The <code>v</code> flip that OBJ needs lives in the <em>geometry</em>
+    import, which is the only place it can be decided from — it is the format of the mesh that
+    disagrees about which way <code>v</code> points, not the image.
+  </p>

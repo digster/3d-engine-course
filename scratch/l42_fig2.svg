@@ -1,0 +1,45 @@
+<svg viewBox="0 0 720 376" role="img" aria-labelledby="l42f2-t l42f2-d">
+  <title id="l42f2-t">Recording against executing, drawn to scale</title>
+  <desc id="l42f2-d">Two horizontal lanes on a shared time axis. The CPU lane shows a very narrow block labelled record, 0.1879 milliseconds wide, which is every SDL call needed to describe the work, followed by a wide block showing the CPU free for the rest of the time. An arrow marked SDL_SubmitGPUCommandBuffer drops from the record block to the GPU lane, where a block 4.7815 milliseconds wide, 25 times wider, shows the work actually happening. A dashed arrow returns from the end of the GPU block to the CPU lane: the fence, the only moment at which the result may be read.</desc>
+  <defs>
+    <marker id="e-i-l42f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l42f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l42f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+<text x="24" y="26" class="sm">one command buffer, drawn to scale in time</text>
+<text x="24" y="46" class="xs muted">measured: 0.1879 ms of CPU calls describing 4.7815 ms of GPU work &#8212; 25.4&#215;</text>
+<rect x="104.0" y="118.0" width="556.0" height="44.0" rx="3" class="fill-soft"/>
+<text x="92.0" y="145.0" class="sm mono" text-anchor="end">CPU</text>
+<rect x="104.0" y="232.0" width="556.0" height="44.0" rx="3" class="fill-soft"/>
+<text x="92.0" y="259.0" class="sm mono" text-anchor="end">GPU</text>
+<rect x="104.0" y="124.0" width="9.5" height="32.0" rx="2" fill="#5acdd7" opacity="0.85"/>
+<text x="104.0" y="96.0" class="xs">record</text>
+<text x="104.0" y="110.0" class="xs mono t-hi">0.1879 ms</text>
+<rect x="116.5" y="124.0" width="238.7" height="32.0" rx="2" fill="#5ac878" opacity="0.85"/>
+<text x="126.5" y="145.0" class="xs t-inv">free &#8212; the next frame&#8217;s work</text>
+<rect x="113.5" y="238.0" width="241.7" height="32.0" rx="2" fill="#5082e6" opacity="0.85"/>
+<text x="234.3" y="259.0" class="xs t-inv" text-anchor="middle">execute</text>
+<text x="234.3" y="292.0" class="xs mono muted" text-anchor="middle">4.7815 ms</text>
+<line x1="113.5" y1="162.0" x2="113.5" y2="228.0" class="hi" stroke-width="2" marker-end="url(#e-h-l42f2)"/>
+<text x="121.5" y="220.0" class="xs mono t-hi">SDL_SubmitGPUCommandBuffer</text>
+<line x1="355.2" y1="228.0" x2="355.2" y2="166.0" class="ink" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#e-i-l42f2)"/>
+<text x="363.2" y="184.0" class="xs mono">the fence signals here &#8212; and only here</text>
+<text x="363.2" y="198.0" class="xs mono">is the result readable</text>
+<line x1="104.0" y1="328.0" x2="660.0" y2="328.0" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l42f2)"/>
+<line x1="104.0" y1="324.0" x2="104.0" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="104.0" y="346.0" class="xs mono muted" text-anchor="middle">0</text>
+<line x1="205.1" y1="324.0" x2="205.1" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="205.1" y="346.0" class="xs mono muted" text-anchor="middle">2</text>
+<line x1="306.2" y1="324.0" x2="306.2" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="306.2" y="346.0" class="xs mono muted" text-anchor="middle">4</text>
+<line x1="407.3" y1="324.0" x2="407.3" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="407.3" y="346.0" class="xs mono muted" text-anchor="middle">6</text>
+<line x1="508.4" y1="324.0" x2="508.4" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="508.4" y="346.0" class="xs mono muted" text-anchor="middle">8</text>
+<line x1="609.5" y1="324.0" x2="609.5" y2="332.0" class="ink-soft" stroke-width="1"/>
+<text x="609.5" y="346.0" class="xs mono muted" text-anchor="middle">10</text>
+<text x="104.0" y="360.0" class="xs muted">milliseconds</text>
+</svg>

@@ -1,0 +1,41 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l61f3-t l61f3-d">
+  <title id="l61f3-t">The sRGB encoding curve near zero, showing the linear toe</title>
+  <desc id="l61f3-d">A zoomed plot over linear 0 to 0.02. The sRGB curve is a straight line of slope 12.92 below linear 0.0031308 and a shifted power above it. A pow(x, 1/2.2) approximation departs from it sharply near zero.</desc>
+  <defs>
+    <marker id="e-i-l61f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l61f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l61f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l61f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l61f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The definition is piecewise, and the small straight piece is the part people leave out.</text>
+<line x1="80" y1="306" x2="380" y2="306" class="grid" stroke-width="1.2"/>
+<line x1="80" y1="56" x2="80" y2="306" class="grid" stroke-width="1.2"/>
+<text x="230.0" y="338" class="xs muted" text-anchor="middle">linear light (0 to 0.02)</text>
+<text x="24" y="48" class="xs muted" text-anchor="start">encoded</text>
+<polyline points="80.0,306.0 83.0,303.4 86.0,300.8 89.0,298.2 92.0,295.7 95.0,293.1 98.0,290.5 101.0,287.9 104.0,285.3 107.0,282.7 110.0,280.2 113.0,277.6 116.0,275.0 119.0,272.4 122.0,269.8 125.0,267.2 128.0,264.7 131.0,262.2 134.0,259.8 137.0,257.5 140.0,255.3 143.0,253.1 146.0,251.0 149.0,249.0 152.0,246.9 155.0,245.0 158.0,243.1 161.0,241.2 164.0,239.4 167.0,237.6 170.0,235.8 173.0,234.1 176.0,232.4 179.0,230.8 182.0,229.1 185.0,227.5 188.0,226.0 191.0,224.4 194.0,222.9 197.0,221.4 200.0,219.9 203.0,218.4 206.0,217.0 209.0,215.6 212.0,214.2 215.0,212.8 218.0,211.4 221.0,210.1 224.0,208.8 227.0,207.4 230.0,206.1 233.0,204.9 236.0,203.6 239.0,202.3 242.0,201.1 245.0,199.9 248.0,198.7 251.0,197.5 254.0,196.3 257.0,195.1 260.0,193.9 263.0,192.8 266.0,191.6 269.0,190.5 272.0,189.4 275.0,188.3 278.0,187.2 281.0,186.1 284.0,185.0 287.0,183.9 290.0,182.8 293.0,181.8 296.0,180.7 299.0,179.7 302.0,178.7 305.0,177.6 308.0,176.6 311.0,175.6 314.0,174.6 317.0,173.6 320.0,172.6 323.0,171.7 326.0,170.7 329.0,169.7 332.0,168.8 335.0,167.8 338.0,166.9 341.0,165.9 344.0,165.0 347.0,164.1 350.0,163.2 353.0,162.3 356.0,161.4 359.0,160.5 362.0,159.6 365.0,158.7 368.0,157.8 371.0,156.9 374.0,156.0 377.0,155.2 380.0,154.3" fill="none" stroke="#f0961e" stroke-width="2.2"/>
+<polyline points="80.0,306.0 83.0,285.2 86.0,277.5 89.0,271.7 92.0,266.9 95.0,262.7 98.0,259.0 101.0,255.6 104.0,252.4 107.0,249.5 110.0,246.7 113.0,244.1 116.0,241.6 119.0,239.2 122.0,236.9 125.0,234.7 128.0,232.6 131.0,230.5 134.0,228.5 137.0,226.6 140.0,224.7 143.0,222.9 146.0,221.1 149.0,219.4 152.0,217.7 155.0,216.0 158.0,214.4 161.0,212.8 164.0,211.3 167.0,209.8 170.0,208.3 173.0,206.8 176.0,205.4 179.0,203.9 182.0,202.5 185.0,201.2 188.0,199.8 191.0,198.5 194.0,197.2 197.0,195.9 200.0,194.6 203.0,193.3 206.0,192.1 209.0,190.9 212.0,189.7 215.0,188.5 218.0,187.3 221.0,186.1 224.0,185.0 227.0,183.8 230.0,182.7 233.0,181.6 236.0,180.5 239.0,179.4 242.0,178.3 245.0,177.3 248.0,176.2 251.0,175.1 254.0,174.1 257.0,173.1 260.0,172.1 263.0,171.1 266.0,170.1 269.0,169.1 272.0,168.1 275.0,167.1 278.0,166.1 281.0,165.2 284.0,164.2 287.0,163.3 290.0,162.3 293.0,161.4 296.0,160.5 299.0,159.6 302.0,158.7 305.0,157.8 308.0,156.9 311.0,156.0 314.0,155.1 317.0,154.2 320.0,153.4 323.0,152.5 326.0,151.6 329.0,150.8 332.0,149.9 335.0,149.1 338.0,148.3 341.0,147.4 344.0,146.6 347.0,145.8 350.0,145.0 353.0,144.1 356.0,143.3 359.0,142.5 362.0,141.7 365.0,141.0 368.0,140.2 371.0,139.4 374.0,138.6 377.0,137.8 380.0,137.1" fill="none" stroke="#e05c5c" stroke-width="1.8" stroke-dasharray="5 4"/>
+<line x1="126.96199999999999" y1="56" x2="126.96199999999999" y2="306" class="ink-soft" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="126.96199999999999" y="48" class="xs mono" text-anchor="middle">0.0031308</text>
+<text x="206.0" y="236.0" class="xs mono" text-anchor="middle">12.92 x</text>
+<text x="296.0" y="131.0" class="xs mono" text-anchor="middle">1.055 x^(1/2.4) - 0.055</text>
+<text x="260.0" y="71.0" class="xs t-bad" text-anchor="middle">pow(x, 1/2.2)</text>
+<text x="426" y="76" class="xs t-hi" text-anchor="start">WHY A STRAIGHT PIECE AT ALL</text>
+<text x="426" y="96" class="xs muted" text-anchor="start">The slope of x^(1/2.4) at zero is</text>
+<text x="426" y="112" class="xs muted" text-anchor="start">INFINITE. A curve with infinite</text>
+<text x="426" y="128" class="xs muted" text-anchor="start">gain at the origin turns sensor</text>
+<text x="426" y="144" class="xs muted" text-anchor="start">noise into visible banding and</text>
+<text x="426" y="160" class="xs muted" text-anchor="start">cannot be inverted stably.</text>
+<text x="426" y="184" class="xs muted" text-anchor="start">So the definition replaces it with</text>
+<text x="426" y="200" class="xs muted" text-anchor="start">a line of slope 12.92, and picks</text>
+<text x="426" y="216" class="xs muted" text-anchor="start">the join so the two pieces meet.</text>
+<text x="426" y="250" class="xs t-bad" text-anchor="start">AND THE COST OF SKIPPING IT</text>
+<text x="426" y="270" class="xs muted" text-anchor="start">pow(x, 1/2.2) is off by up to</text>
+<text x="426" y="286" class="xs muted" text-anchor="start">8 codes, worst near linear 0.0010.</text>
+<text x="426" y="302" class="xs muted" text-anchor="start">Close in the midtones; wrong</text>
+<text x="426" y="318" class="xs muted" text-anchor="start">exactly where the toe is.</text>
+<line x1="24" y1="344" x2="696" y2="344" class="grid" stroke-width="1.2"/>
+<text x="24" y="366" class="xs mono" text-anchor="start">encode(x) = 12.92 x                       for x &lt;= 0.0031308</text>
+<text x="24" y="384" class="xs mono" text-anchor="start">          = 1.055 x^(1/2.4) - 0.055       otherwise</text>
+<text x="24" y="408" class="xs t-hi" text-anchor="start">Four constants, and all four matter. Two implementations that disagree about any of them differ by a code somewhere.</text>
+</svg>

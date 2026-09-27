@@ -1,0 +1,382 @@
+  <h2 id="swing-twist">3. Swing and twist</h2>
+
+  <p>
+    A shoulder joint is a ball-socket, and 8.11's ball-socket already holds the arm's top to the
+    torso. What it cannot say is "not like that". To limit a rotation you need numbers that describe
+    it — angles — and a limit is only as good as the angles it is a limit on. The first choice most
+    engines make is the one this course made for a camera in 7.2: three Euler angles, each with a
+    range. 7.2 also measured why that fails: when the middle angle reaches 90° the first and third
+    rotate about the same axis, the split into three stops being unique, and the angles jump.
+  </p>
+
+  <p>
+    For a camera, 90° of pitch means looking straight up, and a game can simply forbid it. For a
+    shoulder in the engine's YXZ convention, the middle angle is the rotation about <em>x</em> — and
+    an arm raised straight forward is exactly 90° of it. That is not an edge of the shoulder's range.
+    It is the middle of it: reaching for a door handle.
+  </p>
+
+  <h3>Two angles that describe a limb</h3>
+
+  <p>
+    Look at what a limb actually does, instead of at three axes. The arm has a bone — a direction,
+    <code>t</code> at rest. Any rotation <code>q</code> sends it somewhere, to <code>c = q t</code>. The
+    angle between <code>t</code> and <code>c</code> is how far the arm has swung away from rest, and
+    that is a single, perfectly well-defined number however the arm got there. What is left, once the
+    bone's direction is accounted for, is how far the arm has turned about <em>itself</em>. So split
+    the rotation in two:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ q \;=\; \underbrace{s}_{\text{swing}}\;\underbrace{\tau}_{\text{twist}}, \qquad \tau\ \text{turns about}\ t, \qquad s\ \text{turns about an axis}\ \perp t \]</span>
+    <span class="eq-plain">q = swing * twist: the twist turns about the bone axis t, the swing about an axis perpendicular to it</span>
+  </div>
+
+  <p>
+    Read right to left, 7.4's convention: first twist the arm about its own bone, which leaves the
+    bone where it was, then swing the bone to its new direction. Because the twist leaves
+    <code>t</code> alone, <code>q t = s t</code>: the swing alone decides where the bone points. And
+    because the swing's axis is perpendicular to <code>t</code>, it is the <strong>smallest</strong>
+    rotation that carries <code>t</code> to <code>c</code> — any other would add a turn about the bone,
+    which is the twist's job.
+  </p>
+
+  <p>
+    7.4 already built the smallest rotation between two directions, without knowing it. A reflection
+    in the plane perpendicular to a unit vector <code>n</code> is <code>n v n</code>, and two
+    reflections make a rotation by twice the angle between the mirrors, about the line they share.
+    Reflect first in the plane perpendicular to <code>t</code>, then in the plane perpendicular to the
+    <strong>half-way</strong> vector <code>h = (t + c)/|t + c|</code>: the mirrors are
+    <code>∠(t,&nbsp;h) = φ/2</code> apart, so the rotation is by <code>φ</code>, about an axis
+    perpendicular to both — and it carries <code>t</code> to <code>c</code>. That is the swing, as a
+    product of two pure quaternions:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ s \;=\; \pm\, h\,t, \qquad h \;=\; \frac{t + c}{\lvert t + c\rvert} \]</span>
+    <span class="eq-plain">swing = +/- (h t): the rotor of two mirrors, first perpendicular to t, then to the half-way vector h</span>
+  </div>
+
+  <p>
+    — the sign is 7.4's double cover, and the engine keeps the <code>w ≥ 0</code> representative.
+    §5 is going to differentiate this form, and it is the reason the twist's rate comes out the way it
+    does. For computing, there is a shorter route. The twist's quaternion has its imaginary part along
+    <code>t</code>, so take <code>q</code>, keep only the part of <code>q.v</code> along <code>t</code>,
+    and renormalise; the swing is whatever turns that into <code>q</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \tau \;=\; \frac{\bigl(q_w,\;(q_v\cdot t)\,t\bigr)}{\sqrt{q_w^2 + (q_v\cdot t)^2}}, \qquad s \;=\; q\,\tau^{*} \]</span>
+    <span class="eq-plain">twist = normalise(q.w, (q.v . t) t), swing = q * conjugate(twist)</span>
+  </div>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> An upper arm with its bone along <code>+x</code>,
+    twisted 30° about itself and then raised 60° about <code>+z</code>. The two rotations are
+    <code>(cos 15°, sin 15°, 0, 0) = (0.9659, 0.2588, 0, 0)</code> and
+    <code>(cos 30°, 0, 0, sin 30°) = (0.8660, 0, 0, 0.5000)</code>, and 7.4's product gives
+    <code>q = (0.8365, 0.2241, 0.1294, 0.4830)</code> — every component mixed. Now split it about
+    <code>x</code>: the part of <code>q.v</code> along <code>x</code> is 0.2241, so the twist is
+    <code>(0.8365, 0.2241, 0, 0)</code> divided by <code>√(0.8365² + 0.2241²) = √0.7500 = 0.8660</code>,
+    which is <code>(0.9659, 0.2588, 0, 0)</code> — 30° about <code>x</code>, recovered. And
+    <code>q τ*</code> is <code>(0.8660, 0, 0, 0.5000)</code>, 60° about <code>z</code>. The harness
+    prints both, to four decimals.
+  </p>
+
+  <p>
+    Over twenty thousand random rotations and axes the harness finds <code>s τ</code> rebuilding
+    <code>q</code> to 4.956&nbsp;×&nbsp;10⁻⁷, the swing's axis perpendicular to the bone to
+    1.461&nbsp;×&nbsp;10⁻⁷, the swing sending the bone where <code>q</code> does to
+    8.663&nbsp;×&nbsp;10⁻⁷, and the two-mirror rotor agreeing with the projected swing to
+    1.272&nbsp;×&nbsp;10⁻⁵ — the last number larger than the others for a reason worth a sentence: the
+    mirror form divides by <code>|t + c| = 2&nbsp;cos(φ/2)</code>, and the harness includes swings up to
+    179°, where that is 0.017.
+  </p>
+
+  <h3>Where each split breaks</h3>
+
+  <p>
+    That division is the swing–twist split's one weakness. When <code>c = −t</code> — the bone swung
+    a full 180° — there is no half-way vector, every axis perpendicular to <code>t</code> is equally
+    "smallest", and the twist is undefined. So the honest comparison with Euler angles is: where does
+    each one lose its conditioning? The harness perturbs a rotation by a milliradian in 400 random
+    directions and reports the largest change in any extracted angle, per radian of nudge, for a
+    hanging arm raised forward by increasing amounts:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§A — the largest angle change per radian of random perturbation</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     raised    Euler (yaw/pitch/roll)   swing-twist
+        0.0               1.0              1.00      1/cos(pitch)      1.0   1/cos(swing/2)    1.00
+       45.0               1.4              1.10      1/cos(pitch)      1.4   1/cos(swing/2)    1.08
+       80.0               5.8              1.41      1/cos(pitch)      5.8   1/cos(swing/2)    1.31
+       89.0              57.3              1.53      1/cos(pitch)     57.3   1/cos(swing/2)    1.40
+       89.9             609.9              1.55      1/cos(pitch)    573.0   1/cos(swing/2)    1.41
+      135.0               1.4              3.28      1/cos(pitch)        -   1/cos(swing/2)    2.61
+      170.0               1.0             16.81      1/cos(pitch)        -   1/cos(swing/2)   11.47
+      179.0               1.0            176.33      1/cos(pitch)        -   1/cos(swing/2)  114.59</code></pre>
+  </div>
+
+  <p>
+    Euler angles track <code>1/cos(pitch)</code> to the digit until 89°, and at 89.9° a milliradian of
+    nudge moves an angle by 0.61 radians — 35° of output from a sixteenth of a degree of input. A
+    limit tested on those angles does not fail at the lock; it fails in a band around it, by jittering
+    the arm between two poses that are both legal. Swing–twist reads 1.55 at the same pose. It does
+    blow up, as the control rows show — 16.8 at 170°, 176 at 179° — and it tracks the
+    <code>1/cos(φ/2)</code> that §5 is about to derive, with a factor of about 1.5 on top that comes
+    from reporting the swing as a rotation vector, whose direction is itself poorly defined near 180°.
+  </p>
+
+  @@FIG_SWING@@
+
+  <p>
+    So the useful statement is about <em>where</em> the singularity is, and figure 2 draws it: Euler's
+    sits in the middle of the range an arm uses; swing–twist's sits at the <strong>antipode</strong> of
+    the axis the swing is measured from. That last clause decides a design choice. Measure the swing
+    from the bind pose's bone and an arm raised straight overhead from a hanging rest is near its
+    antipode — the 170° row. Measure it from the <strong>middle of the cone</strong> the arm is allowed
+    to move in, and the antipode is by construction outside the cone: a limit never has to evaluate
+    its angles anywhere near the singularity, because it stops the limb long before. That is why the
+    engine's cone-twist joint stores a cone axis separately from the bone, and §6's shoulder tilts it
+    to point between "out" and "down".
+  </p>
+
+  <h2 id="cone">4. The swing cone is a limit like any other</h2>
+
+  <p>
+    The swing angle is the angle between two unit vectors: the cone's axis as the parent body carries
+    it, <code>a₁</code>, and the bone as the child carries it, <code>b₁</code>. So
+    <code>cos φ = a₁ · b₁</code>, and a limit is <code>C = φ_max − φ ≥ 0</code> — a one-sided
+    constraint of exactly 8.11's shape. What it needs is a Jacobian row: the direction in the
+    relative angular velocity along which <code>φ</code> changes. Differentiate the cosine. The parent's
+    axis turns at <code>ω_a × a₁</code> and the child's at <code>ω_b × b₁</code>, so
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \frac{d}{dt}(a_1\cdot b_1) \;=\; (\omega_a\times a_1)\cdot b_1 + a_1\cdot(\omega_b\times b_1) \;=\; (\omega_a - \omega_b)\cdot(a_1\times b_1) \]</span>
+    <span class="eq-plain">d(a1 . b1)/dt = (w_a - w_b) . (a1 x b1), by the scalar triple product twice</span>
+  </div>
+
+  <p>
+    and the left side is <code>−sin φ · φ̇</code>, while <code>|a₁ × b₁| = sin φ</code>. Divide:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \dot\varphi \;=\; (\omega_b - \omega_a)\cdot \hat n, \qquad \hat n \;=\; \frac{a_1\times b_1}{\lvert a_1\times b_1\rvert} \]</span>
+    <span class="eq-plain">dphi/dt = (w_b - w_a) . n, with n = a1 x b1 normalised</span>
+  </div>
+
+  <p>
+    <strong>Exactly</strong> — no approximation, no correction factor. So <code>Ċ = −(ω_b − ω_a) · n̂</code>,
+    which is 8.11's <code>angular_row(−n̂)</code>: the hinge's upper stop, with <code>n̂</code> for its
+    axis. Bounds <code>[0, ∞)</code>; speculative when <code>C &gt; 0</code>, with target
+    <code>−C/h</code>; bias when violated. Everything 8.11 built for a stop applies unchanged. The
+    only new case is on the cone's axis itself, where <code>n̂</code> does not exist — and that is the
+    one place the limb is as far from its limit as it can be, so the row is simply left out.
+    Speculation then misses only a cone the limb could cross from dead centre in a single step, which
+    at 60&nbsp;Hz is a spin faster than <code>φ_max/h</code>: 31&nbsp;rad/s for a 30° cone.
+  </p>
+
+  <p>
+    The harness checks the row against a central difference of <code>swing_angle</code> over two
+    thousand random joints, and they agree to 1.097&nbsp;×&nbsp;10⁻³ of the rate (a float difference's
+    resolution); the same row with its sign flipped is off by 2.001, which is the control. Then it
+    puts the row in the solver.
+  </p>
+
+  @@FIG_CONE@@
+
+  <p>
+    <strong>Speculation works on a cone exactly as on a hinge.</strong> A rod socketed through its
+    centre of mass — 8.11's turnstile, where an angular row has no pin to converge against — spun at
+    3&nbsp;rad/s into a 40° cone, over two hundred arrival phases (8.11's lesson: sample the phase,
+    not the parameter): the speculative cone's worst overshoot is 1.19&nbsp;×&nbsp;10⁻⁷ rad, and the
+    reactive one overshoots by a fraction of <code>ω·h</code> with mean 0.4977 — uniform on [0,&nbsp;1],
+    8.10's arrival depth once again.
+  </p>
+
+  <p>
+    <strong>And it rebounds like a hinge stop.</strong> Socket the rod at its end, as a limb is, and the
+    cone row — which sees only the rod's inertia about its own centre — converges against the pin at
+    8.11's <code>ρ = m·d²/I_pivot</code> per sweep, 0.7614 for this rod. With restitution zero, the
+    rod comes back off the cone at:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§B — rebound off the cone, as a fraction of the arrival speed</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     sweeps   rho^n     rebound
+        1    0.7614    1.0693
+        2    0.5797    0.5365
+        4    0.3360    0.1850
+        8    0.1129    0.0834
+       16    0.0128    0.0119
+       32    0.0002    0.0000</code></pre>
+  </div>
+
+  <p>
+    — below <code>ρⁿ</code> and closing on it: 0.55 of it at four sweeps, 0.74 at eight, 0.93 at sixteen,
+    the same shape 8.11 found on a door, where eight sweeps gave 0.0753 against
+    <code>ρ⁸</code> = 0.0981. At the shipped eight sweeps a ragdoll's arm hitting its shoulder cone
+    comes back at 8% of its speed. That is visible, and it is the handover's second limit,
+    confirmed on the new row: a limb striking its swing limit bounces at about <code>ρ⁸</code>, and
+    the fix that would remove it at any sweep count is still the limit-and-pin block 8.11 named. The
+    one-sweep row is the odd one out — 1.07, faster than it arrived — because with one sweep the
+    position pass's push out of the overshoot is most of what the rod feels.
+  </p>
+
+  <h2 id="twist">5. The twist row, and Codman's paradox</h2>
+
+  <p>
+    The twist is the other limit. The engine already measures it: 8.11's <code>hinge_angle</code>
+    projects the relative rotation onto the hinge axis, which is exactly the twist of a swing–twist
+    split — a hinge's angle <em>is</em> a twist whose swing the alignment rows hold at zero. So a
+    twist range is two one-sided rows, lower and upper, and the only question is their axis. The
+    obvious answer is the bone: the twist is a turn about the bone, so the row should be
+    <code>angular_row(b₁)</code>. For a hinge that is right, because the swing is zero. For a shoulder
+    it is wrong, and the reason is worth doing properly.
+  </p>
+
+  <h3>The twist's rate, derived</h3>
+
+  <p>
+    Work in the parent's frame, where the cone's axis is a constant <code>t</code> and the relative
+    rotation is <code>r = s τ</code>. The relative angular velocity <code>Ω</code> drives it by 8.3's
+    rule, <code>ṙ = ½ Ω r</code>. Differentiate the product:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \tfrac12\,\Omega\,s\,\tau \;=\; \dot s\,\tau + s\,\dot\tau \;=\; \dot s\,\tau + \tfrac12\,\dot\theta\, s\,t\,\tau \quad\Longrightarrow\quad \Omega \;=\; \underbrace{2\,\dot s\, s^{*}}_{\omega_s} \;+\; \dot\theta\,\underbrace{s\,t\,s^{*}}_{c} \]</span>
+    <span class="eq-plain">Omega = w_s + theta_dot * c, where w_s = 2 s_dot conj(s) is the swing's own angular velocity and c = s t s* is the bone</span>
+  </div>
+
+  <p>
+    The relative spin is the swing's own angular velocity plus the twist rate about the <em>bone</em>.
+    So <code>Ω · c = ω_s · c + θ̇</code>, and the bone row would be right if the swing's angular
+    velocity had no component along the bone. It does. Here is where the two-mirror form pays: the
+    swing is <code>s = h t</code> with <code>t</code> constant, so <code>ṡ = ḣ t</code> and
+    <code>s* = t h</code>, and
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \omega_s \;=\; 2\,\dot h\,t\,t\,h \;=\; -2\,\dot h\,h \;=\; 2\,h\times\dot h \]</span>
+    <span class="eq-plain">w_s = 2 h_dot t t h = -2 h_dot h = 2 h x h_dot, because t t = -1 and h_dot is perpendicular to the unit h</span>
+  </div>
+
+  <p>
+    — which is perpendicular to <code>h</code>, and therefore to <code>t + c</code>. That is the
+    direction along which the swing contributes nothing, so take the component of <code>Ω</code> along
+    it, and use <code>c · (t + c) = 1 + t · c</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \dot\theta \;=\; \frac{\Omega\cdot(t + c)}{1 + t\cdot c} \;=\; \frac{\Omega\cdot h}{\cos(\varphi/2)} \]</span>
+    <span class="eq-plain">theta_dot = Omega . (t + c) / (1 + t . c) = Omega . h / cos(phi/2): the half-way axis, over cos(phi/2)</span>
+  </div>
+
+  <p>
+    The twist row is the <strong>half-way axis divided by <code>cos(φ/2)</code></strong>. At zero swing
+    <code>h = t = c</code> and it is the bone, which is why 8.11's hinge limit was right. As the swing
+    grows the row tilts back toward the parent and lengthens — √2 at 90° — and at 180° it divides by
+    zero, which is the singularity §3 found in the angles now found in their rate. And the bone row's
+    error, <code>ω_s · c</code>, comes out in closed form: it is <code>−(Ω⊥ · t)/(1 + cos φ)</code>, at
+    most <code>|Ω⊥| tan(φ/2)</code>, with <code>Ω⊥</code> the relative spin across the bone.
+  </p>
+
+  <p class="worked">
+    <strong>Worked, with real numbers.</strong> A limb at a swing of 90° from a cone axis
+    <code>t = (0, −1, 0)</code>, its bone <code>c = (1, 0, 0)</code>. The twist row's axis is
+    <code>(t + c)/(1 + t·c) = (1, −1, 0)/1</code>, of length √2 = 1/cos 45°. Spin the limb about the
+    cone's axis only — <code>Ω = (0, −2, 0)</code>, the arm sweeping round the rim of its cone at
+    2&nbsp;rad/s with no spin about itself in the parent's frame. The bone row reads
+    <code>Ω · c = 0</code>: no twist. The correct row reads <code>Ω · (1, −1, 0) = 2</code>&nbsp;rad/s
+    of twist, and the formula agrees: <code>Ω⊥ = Ω</code> here, so the bone row's error is
+    <code>−(Ω⊥ · t)/(1 + cos 90°) = −2/1</code>, and <code>0 − 2 = −2</code>. An arm circling its shoulder cone <em>is</em> twisting, relative to
+    the swing–twist frame, while turning about nothing — which is the paradox this section is named
+    for, one derivative early.
+  </p>
+
+  @@FIG_TWIST@@
+
+  <p>
+    The harness checks the three candidate rows against a central difference of the twist over forty
+    thousand random joints, binned by swing. The half-way row agrees everywhere to the difference's
+    own resolution — 6.3&nbsp;×&nbsp;10⁻⁴ near zero swing, growing to 5.8&nbsp;×&nbsp;10⁻³ near 175° as the
+    <code>1/cos(φ/2)</code> amplifies float noise. The bone and the cone-axis rows are wrong by
+    <em>more than the rate itself</em> beyond a degree of swing — 1.6 to 6 times it. The bone row's
+    error never exceeds 1.0045 of the <code>|Ω⊥| tan(φ/2)</code> bound, and at exactly zero swing, the
+    control, all three rows agree to 9.5&nbsp;×&nbsp;10⁻⁷, because they are the same row.
+  </p>
+
+  <h3>Codman's paradox</h3>
+
+  <p>
+    Integrate the bone row's error round a loop and it has a name. In 1934 the surgeon Ernest Codman
+    described it: hold your arm down by your side, palm in; raise it forward to the horizontal; swing
+    it out to the side, still horizontal; lower it. You never turned your arm about itself, and your
+    palm now faces forward — a quarter-turn of twist from nowhere. Biomechanics has argued about it
+    since, and the lesson's derivation settles it in a line. "Not turning about itself" means
+    <code>Ω · c = 0</code> throughout. The twist then changes at <code>−ω_s · c</code>, and for a bone
+    that goes round a closed loop that integrates to the <strong>solid angle</strong> the loop
+    encloses on the unit sphere — the same geometric phase that turns a Foucault pendulum's plane of
+    swing. The harness carries a body round loops with no spin about its bone, eight thousand steps
+    each, and reads the swing–twist twist when it gets home:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — a limb carried round a loop with no spin about itself</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     loop                              twist after     solid angle
+     Codman: forward, sideways, down     -90.000 deg       90.000 deg
+     circle at swing  30.0                48.231 deg       48.231 deg
+     circle at swing  60.0               180.000 deg      180.000 deg
+     circle at swing  90.0               360.000 deg      360.000 deg
+     circle at swing 120.0               540.000 deg      540.000 deg</code></pre>
+  </div>
+
+  <p>
+    Codman's octant — three quarter great circles, enclosing one eighth of the sphere, π/2 — leaves a
+    quarter-turn to three decimals. A circle at swing <code>φ</code> encloses a cap of
+    <code>2π(1&nbsp;−&nbsp;cos&nbsp;φ)</code>: 48.231° at 30°, half a turn at 60°, a whole turn at 90°. Nothing
+    in the harness computes a solid angle; it steps a body and reads a twist. The agreement is the
+    derivation.
+  </p>
+
+  @@FIG_CODMAN@@
+
+  <h3>What the bone row does in a solver</h3>
+
+  <p>
+    The consequence is sharpest in a limb that circles its cone. The harness puts a rod on a fixed
+    socket with a 60° cone and a ±20° twist range, sets it on the rim with no spin about itself and a
+    velocity along the rim, and lets it go with no gravity. A great circle tangent to a small one
+    leaves it outward, so the cone holds the rod on its rim and it goes round — and by the table above
+    its twist must change by 180° a loop. The twist stop is at 20°.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">§C — ten seconds circling the rim, twist range ±20°</span>
+      <span class="lang" data-lang="text">measured</span></figcaption>
+<pre><code class="lang-text">     twist rows             position pass   loops   worst |twist|   final swing
+     half-way / cos         split impulse   4.49      20.00 deg      60.23 deg
+     about the bone         split impulse   4.56      29.08 deg      60.15 deg
+     about the bone         none            4.39     179.93 deg      73.33 deg
+     predicted lag past the stop, naive rows: alpha'(1 - cos phi) h / beta = 9.55 deg</code></pre>
+  </div>
+
+  <p>
+    With the half-way rows the twist sits on its stop at 20.00° for four and a half loops. With the
+    bone rows the section's first draft predicted that the twist would walk straight through the
+    stop — the bone row reads <code>Ω · c</code>, which is zero for a rod with no spin about itself, so
+    the row never sees the twist moving. <strong>The measurement refused it:</strong> 29.08°, and
+    steady. The draft had forgotten the position pass. Split impulse measures the violation with the
+    <em>true</em> twist — <code>hinge_angle</code>, not the row — and pushes back along the bone axis,
+    which does move the twist, at unit rate. So the rod lags past its stop by the balance of two
+    rates: the circling adds <code>α̇(1&nbsp;−&nbsp;cos&nbsp;φ)·h</code> of twist a step and the correction
+    removes <code>β</code> of the violation, which settles at
+    <code>4 × 0.5 / 60 / 0.2 = 0.1667</code>&nbsp;rad = 9.55° predicted, against 9.08° measured (the rod
+    slows as its joint dissipates, 8.11 §5). Only with the position pass turned off does the twist
+    walk through, to 179.93°. The bone row is not a missing limit; it is a limit that holds a limb
+    9° wrong for as long as the limb keeps circling — which an arm windmilling in a fall does.
+  </p>

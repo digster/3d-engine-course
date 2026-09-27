@@ -1,0 +1,76 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f74a-t f74a-d">
+  <title id="f74a-t">Isotropy forces the multiplication table</title>
+  <desc id="f74a-d">Three panels. On the left, the three coordinate axes drawn as red, green and blue arrows with a fourth gold arrow labelled u pointing in a generic direction, and the statement that u squared is minus one for every unit u, measured over twenty thousand axes at three times ten to the minus seven. In the middle, three lines of algebra: expanding i plus j squared gives minus two plus the quantity ij plus ji, and demanding that the unit imaginary square to minus one forces ij plus ji to be zero. On the right, the four by four multiplication table with ij equals k and ji equals minus k highlighted, and Hamilton's ijk equals minus one below it as a consequence rather than a definition.</desc>
+  <defs>
+    <marker id="e-i-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-gold-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f8d678"/></marker></defs>
+<defs><marker id="e-teal-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<defs><marker id="e-kblue-f74a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="178" y="42" class="sm" text-anchor="middle">the one demand</text>
+<text x="178" y="58" class="xs muted" text-anchor="middle">space has no preferred direction</text>
+<line x1="178.0" y1="168.0" x2="239.35" y2="183.5" stroke="#e05c5c" stroke-width="1.6" marker-end="url(#e-b-f74a)"/>
+<text x="252.84551205026918" y="190.91161503445448" class="xs mono" text-anchor="middle">i</text>
+<line x1="178.0" y1="168.0" x2="178.0" y2="99.39" stroke="#5ac878" stroke-width="1.6" marker-end="url(#e-g-f74a)"/>
+<text x="178.0" y="88.29384160971044" class="xs mono" text-anchor="middle">j</text>
+<line x1="178.00" y1="168.00" x2="136.62" y2="190.98" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-kblue-f74a)"/>
+<text x="127.51606467466097" y="200.03762230162093" class="xs mono" text-anchor="middle">k</text>
+<line x1="178.00" y1="168.00" x2="187.57" y2="143.16" stroke="#f8d678" stroke-width="2.0" marker-end="url(#e-gold-f74a)"/>
+<text x="199.38533127419936" y="138.4371809084179" class="xs mono" text-anchor="middle">u</text>
+<path d="M 223.30,219.36 L 227.66,215.62 L 231.64,211.51 L 235.22,207.08 L 238.36,202.35 L 241.04,197.35 L 243.24,192.14 L 244.94,186.73 L 246.14,181.19 L 246.81,175.55 L 246.96,169.85 L 246.59,164.13 L 245.70,158.44 L 244.29,152.83 L 242.37,147.33 L 239.97,141.99 L 237.09,136.85 L 233.77,131.94 L 230.02,127.31 L 225.87,122.99 L 221.36,119.01 L 216.52,115.41 L 211.39,112.20 L 206.00,109.42 L 200.40,107.08 L 194.63,105.21 L 188.73,103.82 L 182.75,102.91 L 176.74,102.50 L 170.73,102.59 L 164.78,103.18 L 158.93,104.26 L 153.23,105.82 L 147.71,107.86 L 142.42,110.36 L 137.41,113.29 L 132.70,116.64 L 128.34,120.38 L 124.36,124.49 L 120.78,128.92 L 117.64,133.65 L 114.96,138.65 L 112.76,143.86 L 111.06,149.27 L 109.86,154.81 L 109.19,160.45 L 109.04,166.15 L 109.41,171.87 L 110.30,177.56 L 111.71,183.17 L 113.63,188.67 L 116.03,194.01 L 118.91,199.15 L 122.23,204.06 L 125.98,208.69 L 130.13,213.01 L 134.64,216.99 L 139.48,220.59 L 144.61,223.80 L 150.00,226.58 L 155.60,228.92 L 161.37,230.79 L 167.27,232.18 L 173.25,233.09 L 179.26,233.50 L 185.27,233.41 L 191.22,232.82 L 197.07,231.74 L 202.77,230.18 L 208.29,228.14 L 213.58,225.64 L 218.59,222.71 L 223.30,219.36 Z" fill="none" stroke="#7884a8" stroke-width="1.0" stroke-dasharray="3 3"/>
+<text x="178" y="266" class="sm t-hi" text-anchor="middle">u² = −1  for EVERY unit u</text>
+<text x="178" y="282" class="xs mono muted" text-anchor="middle">measured over 20,000 axes: 2.980e−07</text>
+<line x1="346" y1="60" x2="346" y2="330" class="grid" stroke-width="1.0"/>
+<text x="372" y="82" class="xs mono" text-anchor="start">u = (i + j)/√2 has |u| = 1,</text>
+<text x="372" y="101" class="xs mono" text-anchor="start">so the demand gives u² = −1.</text>
+<text x="372" y="120" class="xs mono" text-anchor="start"></text>
+<text x="372" y="139" class="xs mono" text-anchor="start">Therefore (i + j)² = 2u² = −2.</text>
+<text x="372" y="158" class="xs mono" text-anchor="start"></text>
+<text x="372" y="177" class="xs mono" text-anchor="start">Now expand the left side:</text>
+<text x="372" y="196" class="xs mono" text-anchor="start">   i² + ij + ji + j²</text>
+<text x="372" y="215" class="xs mono" text-anchor="start">   = −2 + (ij + ji)</text>
+<text x="372" y="234" class="xs mono" text-anchor="start"></text>
+<text x="372" y="253" class="xs mono" text-anchor="start">Match the two:</text>
+<text x="372" y="272" class="xs mono" text-anchor="start">   ⇒  ij + ji = 0,   ji = −ij.</text>
+<text x="372" y="300" class="xs t-hi" text-anchor="start">ANTICOMMUTATIVITY IS NOT ASSUMED.</text>
+<text x="372" y="316" class="xs muted" text-anchor="start">It is what isotropy costs.</text>
+<line x1="600" y1="60" x2="600" y2="330" class="grid" stroke-width="1.0"/>
+<text x="698" y="58" class="sm" text-anchor="middle">the table, forced</text>
+<text x="698" y="74" class="xs muted" text-anchor="middle">from associativity alone</text>
+<text x="662" y="90" class="xs mono t-hi" text-anchor="middle">1</text>
+<text x="632" y="114" class="xs mono t-hi" text-anchor="start">1</text>
+<text x="690" y="90" class="xs mono t-hi" text-anchor="middle">i</text>
+<text x="632" y="140" class="xs mono t-hi" text-anchor="start">i</text>
+<text x="718" y="90" class="xs mono t-hi" text-anchor="middle">j</text>
+<text x="632" y="166" class="xs mono t-hi" text-anchor="start">j</text>
+<text x="746" y="90" class="xs mono t-hi" text-anchor="middle">k</text>
+<text x="632" y="192" class="xs mono t-hi" text-anchor="start">k</text>
+<text x="662" y="114" class="xs mono" text-anchor="middle">1</text>
+<text x="690" y="114" class="xs mono" text-anchor="middle">i</text>
+<text x="718" y="114" class="xs mono" text-anchor="middle">j</text>
+<text x="746" y="114" class="xs mono" text-anchor="middle">k</text>
+<text x="662" y="140" class="xs mono" text-anchor="middle">i</text>
+<text x="690" y="140" class="xs mono" text-anchor="middle">−1</text>
+<text x="718" y="140" class="xs mono t-hi" text-anchor="middle">k</text>
+<text x="746" y="140" class="xs mono" text-anchor="middle">−j</text>
+<text x="662" y="166" class="xs mono" text-anchor="middle">j</text>
+<text x="690" y="166" class="xs mono t-hi" text-anchor="middle">−k</text>
+<text x="718" y="166" class="xs mono" text-anchor="middle">−1</text>
+<text x="746" y="166" class="xs mono" text-anchor="middle">i</text>
+<text x="662" y="192" class="xs mono" text-anchor="middle">k</text>
+<text x="690" y="192" class="xs mono" text-anchor="middle">j</text>
+<text x="718" y="192" class="xs mono" text-anchor="middle">−i</text>
+<text x="746" y="192" class="xs mono" text-anchor="middle">−1</text>
+<line x1="648" y1="100" x2="760" y2="100" class="grid" stroke-width="1.0"/>
+<line x1="648" y1="100" x2="648" y2="204" class="grid" stroke-width="1.0"/>
+<text x="700" y="240" class="xs mono t-hi" text-anchor="middle">ij = k   ji = −k</text>
+<text x="698" y="262" class="sm t-hi" text-anchor="middle">ijk = −1</text>
+<text x="698" y="278" class="xs muted" text-anchor="middle">Hamilton's bridge formula,</text>
+<text x="698" y="292" class="xs muted" text-anchor="middle">here a consequence</text>
+<text x="380.0" y="358" class="xs muted" text-anchor="middle">Nothing on this page was postulated except that a direction of space is like any other direction of space.</text>
+<text x="380.0" y="376" class="xs muted" text-anchor="middle">The fourth component was already forced in Lesson 7.3 §12; this is what its arithmetic has to be.</text>
+</svg>

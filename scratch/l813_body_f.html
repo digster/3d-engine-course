@@ -1,0 +1,590 @@
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/cast.hpp</code></td><td>new</td>
+          <td>The shape cast: <code>cast_status</code>, <code>cast_config</code> (skin, tolerance,
+              <code>min_approach</code>), <code>cast_result</code>, and <code>cast</code>.</td></tr>
+      <tr><td><code>engine/src/phys/cast.cpp</code></td><td>new</td>
+          <td>Conservative advancement from GJK's certified lower bound.</td></tr>
+      <tr><td><code>engine/include/engine/phys/character.hpp</code></td><td>new</td>
+          <td>The controller's config (and the knobs §4–§10 measure), state, world view, the sweep, the
+              policy functions, the carry, <code>move_character</code>, <code>steer_proxy</code>, and eight
+              closed forms.</td></tr>
+      <tr><td><code>engine/src/phys/character.cpp</code></td><td>new</td>
+          <td>The five stages: carry, recover, sideways (with the step-up), vertical, ground and snap.</td></tr>
+      <tr><td><code>engine/include/engine/phys/convex.hpp</code></td><td>modified</td>
+          <td><code>placed_shape</code> and <code>place</code>: the dispatch five scenes had copied, moved
+              into the engine.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>Two includes.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>Two source files.</td></tr>
+      <tr><td><code>demos/character/main.cpp</code></td><td>new</td>
+          <td>The course, Newton beside the design, and three corners.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>One executable.</td></tr>
+      <tr><td><code>scratch/verify_813.cpp</code></td><td>new</td>
+          <td>Eleven measured sections, 90 checks, each with a control. It keeps a private copy of the
+              cast stepped from GJK's upper bound, for §3.</td></tr>
+      <tr><td><code>scratch/build_verify_813.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, and refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Nothing else in <code>phys/</code> changed. <code>solver.hpp</code>, <code>rigid_body.hpp</code>,
+    <code>gjk.hpp</code> and <code>epa.hpp</code> are exactly as 8.12 left them. The five scenes that
+    carried their own copy of <code>placed_shape</code> (8.10's and 8.11's and 8.12's demos, 8.11's and
+    8.12's harnesses) are left as they shipped, and their pages still print them exactly.
+  </p>
+
+  @@LISTING:engine/include/engine/phys/cast.hpp@@
+
+  @@LISTING:engine/src/phys/cast.cpp@@
+
+  @@LISTING:engine/include/engine/phys/character.hpp@@
+
+  @@LISTING:engine/src/phys/character.cpp@@
+
+  @@LISTING:engine/include/engine/phys/convex.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/character/main.cpp@@
+
+  @@LISTING:demos/CMakeLists.txt@@
+
+  @@LISTING:scratch/verify_813.cpp@@
+
+  @@LISTING:scratch/build_verify_813.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target character -j
+./build/demos/character</code></pre>
+  </div>
+
+  <div class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug --target character
+.\build\demos\Debug\character.exe</code></pre>
+  </div>
+
+  <p>
+    And the harness, which times library code and so needs an optimised library. The script refuses to
+    run against one without a <code>CMAKE_BUILD_TYPE</code>, for the reason 7.6 measured at 18×:
+  </p>
+
+  <div class="listing shell">
+    <figcaption><span class="path">the measurements</span>
+      <span class="lang" data-lang="bash">shell</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_813.sh
+sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
+./build/demos/character --scene 1 --auto --t 6.5 --shot course.ppm</code></pre>
+  </div>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on the course, in a three-quarter view that follows an orange capsule. Orange means
+    grounded, and a short yellow line at its feet is the ground normal it stands on. Press <kbd>O</kbd>
+    for the autopilot, or walk with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. At 3&nbsp;m/s it
+    rolls over an 8&nbsp;cm curb with no step-up, climbs five stairs one step-up at a time, and is pulled
+    down a 30&nbsp;cm drop by the snap without once turning blue (airborne). It walks down a 30° ramp
+    without a bounce and shoves two light green crates ahead of it; they slide on and stop when it
+    stops. It passes a heavy brown one that it cannot push, crosses a turntable that turns it as it
+    walks, and dashes into a 1&nbsp;cm wall at 40&nbsp;m/s and stops dead against it. The panel reads a
+    microsecond or two a move.
+  </p>
+
+  <p>
+    Then break it. <kbd>K</kbd> cycles the clip rule; walk into the obtuse corner off to the side and the
+    two remainder rules walk the capsule back and forth. <kbd>N</kbd> turns the snap off, and the drop and
+    the ramp's end become little falls. <kbd>T</kbd> turns the step-up off, and the stairs become a wall,
+    though the curb does not. <kbd>C</kbd> switches the turntable to velocity carry, and the character
+    drifts outward on it a few centimetres a turn. <kbd>P</kbd> teleports the proxy instead of steering
+    it: walk into the crates once they have gone to sleep, and the character walks straight through
+    them.
+  </p>
+
+  <p>
+    Press <kbd>2</kbd>: a magenta rigid capsule and an orange controller run the same script side by side.
+    Both walk at a 20&nbsp;cm ledge at 3&nbsp;m/s, and only the controller goes up. At 2.2&nbsp;s both jump
+    at a tall wall and keep pushing into it. The magenta one hangs there, held by friction; the orange one
+    slides down it and lands. Press <kbd>3</kbd>: three controllers pressed into three 120° corners, one per
+    clip rule. One is still, and two walk back and forth.
+  </p>
+
+  <p>
+    The harness prints eleven sections and ends with <code>PASS: 90 checks, 0 failures</code> in about
+    two and a half seconds. Every number in this lesson is in that output except two, which were
+    observed on first drafts of the engine and are told as such: the 175&nbsp;mm stair lurch of a
+    tangent-plane snap (§7), and the boulder that carried the character 2.94&nbsp;m (§11). Two other
+    first-draft behaviours, clipping the remainder (§4) and stepping from GJK's upper bound (§3), are
+    kept in the harness as controls, so their numbers are in the output too.
+  </p>
+
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <dl class="pitfalls">
+    <dt>The character creeps downhill while standing still.</dt>
+    <dd>
+      <strong>Symptom:</strong> on a gentle slope with the stick released, the character slides slowly and
+      steadily down: centimetres a second, the same speed every time.<br>
+      <strong>Cause:</strong> gravity's one-step drop is being slid along the ground instead of stopped by
+      it, <code>g·h·sin&nbsp;α</code> a second (§5: 8.2&nbsp;cm/s on 30°).<br>
+      <strong>Fix:</strong> a downward move that lands on walkable ground stops there. Keep the vertical
+      pass separate from the sideways one.
+    </dd>
+
+    <dt>The character jitters in a corner.</dt>
+    <dd>
+      <strong>Symptom:</strong> pushed into an obtuse corner, it walks back and forth along one wall and
+      then the other, forever.<br>
+      <strong>Cause:</strong> the rest of the move is clipped from what was <em>left</em> after the first
+      wall, which that wall had already bent. The other wall's projection of it points out of the corner
+      (§4: 575&nbsp;mm/s).<br>
+      <strong>Fix:</strong> clip the <em>original</em> motion, scaled to the time left, against every
+      surface hit so far.
+    </dd>
+
+    <dt>The character sticks to a wall it is running along.</dt>
+    <dd>
+      <strong>Symptom:</strong> running parallel to a wall, touching it, the character stops dead or
+      stutters.<br>
+      <strong>Cause:</strong> the cast reads a closing speed of 10⁻⁸ from rounding and calls it a hit
+      (§4: 0.0000&nbsp;m/s).<br>
+      <strong>Fix:</strong> a motion closing at less than a small fraction of its length is not
+      approaching; the separating-plane argument bounds what that costs.
+    </dd>
+
+    <dt>A cast ends inside something, or the next one starts inside.</dt>
+    <dd>
+      <strong>Symptom:</strong> the character occasionally overlaps a wall by a fraction of a millimetre,
+      or a slide reports "started inside" and the character stops.<br>
+      <strong>Cause:</strong> the Newton step was taken from GJK's <code>distance</code>, an upper bound
+      (§3: up to 0.17&nbsp;mm inside); or the skin is thinner than GJK's contact margin (7.3% of slides
+      start inside at 0.1&nbsp;mm).<br>
+      <strong>Fix:</strong> step from <code>certify(...).lower</code>, and keep the skin at a millimetre or
+      more.
+    </dd>
+
+    <dt>The character goes through a wall that a cast should have seen.</dt>
+    <dd>
+      <strong>Symptom:</strong> fast motion past one obstacle toward another passes straight through the
+      second.<br>
+      <strong>Cause:</strong> one cast against the nearest of several obstacles, whose separating plane
+      says nothing about the rest (§3: 11,194 of 20,000).<br>
+      <strong>Fix:</strong> one cast per obstacle, keep the smallest <code>t</code>.
+    </dd>
+
+    <dt>The step-up never climbs a stair.</dt>
+    <dd>
+      <strong>Symptom:</strong> with <code>step_height</code> well above the riser, the character still
+      stands at the foot of the stairs.<br>
+      <strong>Cause:</strong> the step moves across only by this frame's motion, a few centimetres, and
+      the round bottom lands on the stair's edge at a tilt too steep to count as ground.<br>
+      <strong>Fix:</strong> move across by at least <code>(r&nbsp;+&nbsp;skin)(1&nbsp;−&nbsp;sin&nbsp;θ)</code>,
+      90.8&nbsp;mm at the defaults (§8).
+    </dd>
+
+    <dt>Walking down stairs, the character hops.</dt>
+    <dd>
+      <strong>Symptom:</strong> each stair is a small fall, and the landing animation fires on every
+      step.<br>
+      <strong>Cause:</strong> the snap's cast down hits the edge the capsule is resting on, at a steep
+      tilt, and gives up; or it slides down the edge's tangent and lurches forward.<br>
+      <strong>Fix:</strong> roll off the edge sideways by <code>(r&nbsp;+&nbsp;skin)&nbsp;−&nbsp;overhang</code>, then
+      cast straight down (§7).
+    </dd>
+
+    <dt>The character drifts off a turntable.</dt>
+    <dd>
+      <strong>Symptom:</strong> standing still on a rotating platform, the character slowly spirals
+      outward.<br>
+      <strong>Cause:</strong> it is carried by the point velocity under it, which is a tangent
+      (§10: <code>e<sup>πωh</sup></code> per revolution, 11% at 2&nbsp;rad/s).<br>
+      <strong>Fix:</strong> carry by the platform's step as a transform, read back with the integrator
+      the platform was actually moved by.
+    </dd>
+
+    <dt>Crates the character walks into do not move, or sink it in.</dt>
+    <dd>
+      <strong>Symptom:</strong> the character walks through a crate that has been still for a while; or
+      it pushes the crate while standing a hand's width inside it, and the crate stops the instant it
+      does.<br>
+      <strong>Cause:</strong> the proxy is being teleported. Its velocity is zero, so a sleeping crate is
+      never woken, and an awake one is moved only by the position pass (§11: 138&nbsp;mm deep).<br>
+      <strong>Fix:</strong> <code>steer_proxy</code>, every step, and never write its position.
+    </dd>
+
+    <dt>The character stands a couple of millimetres above a big floor.</dt>
+    <dd>
+      <strong>Symptom:</strong> on a very large ramp or ground plane the feet float slightly, and by a
+      different amount from frame to frame.<br>
+      <strong>Cause:</strong> the certified lower bound is loose by about the obstacle's size times GJK's
+      angular error (§6: up to 2.3&nbsp;mm off a 60&nbsp;m ramp, 0.07 off a 6&nbsp;m one). A tighter GJK
+      tolerance changes nothing.<br>
+      <strong>Fix:</strong> author collision geometry in pieces of sensible size.
+    </dd>
+  </dl>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>Warm-up: the round bottom, by hand.</strong> For a capsule of radius 0.4, a 2&nbsp;cm skin
+        and a 40° slope limit, compute the free curb, the overhang it can stand at, and the least forward
+        move a step-up needs. Then change <code>character_config</code> in §E and §G and check all three.
+      </p>
+      <details><summary>Hint</summary>
+        <p>Use <code>r&nbsp;+&nbsp;skin</code>, not <code>r</code>, in all three: every cast stops a skin short, so
+           it is the inflated capsule that touches.</p>
+      </details>
+      <details><summary>Solution</summary>
+        <p>
+          <code>r&nbsp;+&nbsp;s&nbsp;=&nbsp;0.42</code>. Free curb <code>0.42(1&nbsp;−&nbsp;cos&nbsp;40°)&nbsp;=&nbsp;0.42&nbsp;×&nbsp;0.23396&nbsp;=&nbsp;98.3&nbsp;mm</code>;
+          overhang <code>0.42&nbsp;sin&nbsp;40°&nbsp;=&nbsp;270.0&nbsp;mm</code>; least forward
+          <code>0.42(1&nbsp;−&nbsp;sin&nbsp;40°)&nbsp;=&nbsp;0.42&nbsp;×&nbsp;0.35721&nbsp;=&nbsp;150.0&nbsp;mm</code>. A
+          shallower limit makes the capsule stand further past edges and lurch further up stairs, which is
+          why 45° is the common default.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Coyote time and a jump buffer.</strong> Players press jump a few frames after walking off a
+        ledge, and a few frames before landing, and expect both to work. Add both, for 0.1&nbsp;s each, to the
+        demo. Decide, and justify, whether they belong in <code>character.cpp</code> or in the game.
+      </p>
+      <details><summary>Hint</summary>
+        <p>The controller reports <code>grounded</code> and <code>landed</code> honestly. Both features are
+           about what the <em>player</em> meant, so they are the game's, and they need two timers, not a
+           change to the controller.</p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>The other slope policy.</strong> Change <code>along_ground</code> to keep the step's
+        <em>length</em> (the speed along the slope) instead of its horizontal part. Predict, then measure
+        with §D, the horizontal speed up a 30° ramp at 3&nbsp;m/s, and the time to climb 10&nbsp;m of height.
+      </p>
+      <details><summary>Solution</summary>
+        <p>
+          Horizontal speed <code>3&nbsp;cos&nbsp;30°&nbsp;=&nbsp;2.598&nbsp;m/s</code>. Ten metres of height is
+          <code>10/sin&nbsp;30°&nbsp;=&nbsp;20&nbsp;m</code> along the ramp: 6.67&nbsp;s, against 5.77&nbsp;s when the
+          horizontal part is kept (17.3&nbsp;m horizontally at 3&nbsp;m/s). Neither is physics; the first
+          slows a character on a hill, the second keeps map speed constant.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Weight and knockback: close the coupling.</strong> (a) While grounded on a dynamic body,
+        apply the character's weight, <code>m·g</code> down at <code>ground_point</code>, with
+        <code>add_force_at</code>, and build a see-saw that tips when the character walks onto one end.
+        (b) After each solve, sum the normal impulses the proxy's manifolds received (8.10's
+        <code>write_back</code> leaves them in the manifolds) and give the character a knockback velocity of
+        that impulse over a chosen character mass. Measure §J's boulder again.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          For (b) the character's mass is a design number, not a physical one; 80&nbsp;kg makes the boulder
+          push the character, and a very large number reproduces today's wall. Feed the knockback into the
+          game's velocity, not into <code>character::position</code>, so that <code>move_character</code>
+          still sweeps it.
+        </p>
+      </details>
+    </li>
+
+    <li>
+      <p>
+        <strong>Engine challenge: a region query.</strong> §12's cull tests every body on every sweep. Give
+        8.8's <code>uniform_grid</code> a <code>query(const aabb&amp;, std::vector&lt;std::uint32_t&gt;&amp;)</code>
+        that returns the bodies in the cells a box covers, pass the grid to <code>sweep</code> through
+        <code>character_world</code>, and re-measure the 10,000-box corridor.
+      </p>
+      <details><summary>Hint</summary>
+        <p>
+          The grid already hashes each proxy's cell range; a query is the same range walk for one box,
+          with 8.8's owner-cell rule replaced by a "seen" mark, because a query wants each body once rather
+          than each pair once. The cost should become flat in N, near the 10-box figure.
+        </p>
+      </details>
+    </li>
+  </ol>
+
+  <h2 id="recap">18. Recap &amp; next — and Module 8's project tree</h2>
+
+  <p>
+    The engine has a <strong>character controller</strong>, and underneath it a <strong>shape cast</strong>
+    that any gameplay code can use. The character left the simulation because the simulation is right:
+    friction is one number, momentum is kept, and a step is an instant. In its place is a capsule that
+    asks one question and makes decisions about the answer. It clips the original motion against every
+    surface it meets. It lays a step along walkable ground and never climbs anything steeper. It stands on
+    what a short probe finds, and snaps down to ground that dropped away, rolling off edges first. It steps
+    up what is shorter than a stair, and moves with whatever it stands on by exactly what that thing just
+    did. It meets the rest of the world through a proxy with one owner, steered and never teleported.
+  </p>
+
+  <p>
+    The query turned out to be the deep part. A cast is <strong>Newton's method on a convex
+    distance</strong>, which is why it converges in two or three steps. It is safe because each step stops
+    at a <strong>separating plane</strong>, which is why it must be stepped from GJK's certified lower
+    bound and never from its <code>distance</code>. And the capsule's <strong>round bottom</strong> gave the
+    lesson its recurring number, <code>(r&nbsp;+&nbsp;skin)</code> times a trigonometric function of the slope
+    limit, four times: a free curb, an overhang, the least forward move up a stair, and the roll off one
+    going down.
+  </p>
+
+  <p>
+    Eight claims refused their sections: that no skin is merely inconvenient; that Newton on a convex
+    function cannot overshoot, which was true only of the exact distance; that the plane list alone fixes
+    corners; that flattening a wall's normal matters on the ground; that a tighter GJK tolerance buys
+    precision; that a crest launches a character at a jog; that <code>step_height</code> is the tallest
+    ledge; and that a teleported proxy's crate merely stops dead. Each refusal is in the lesson in place of
+    the claim, as it has been all module.
+  </p>
+
+  <h3>Module 8, complete</h3>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What each lesson of Module 8 added to the engine</caption>
+    <thead>
+      <tr><th>lesson</th><th>the engine gained</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="08-01-integrators.html">8.1</a></td><td>semi-implicit Euler, and the determinant that says why the obvious rule explodes</td></tr>
+      <tr><td><a href="08-02-forces-and-bodies.html">8.2</a></td><td>bodies with mass, forces, gravity, and the <code>body_world</code></td></tr>
+      <tr><td><a href="08-03-angular-dynamics.html">8.3</a></td><td>torque, the inertia tensor and the parallel-axis theorem; bodies that spin correctly</td></tr>
+      <tr><td><a href="08-04-collision-primitives.html">8.4</a></td><td>shapes, and the Separating Axis Theorem's fifteen axes</td></tr>
+      <tr><td><a href="08-05-gjk.html">8.5</a></td><td>distance from a support function, for any convex pair</td></tr>
+      <tr><td><a href="08-06-epa.html">8.6</a></td><td>penetration depth, from the simplex GJK leaves behind</td></tr>
+      <tr><td><a href="08-07-contact-manifolds.html">8.7</a></td><td>contact manifolds with feature ids, persistent across frames</td></tr>
+      <tr><td><a href="08-08-broadphase.html">8.8</a></td><td>a uniform-grid broadphase</td></tr>
+      <tr><td><a href="08-09-impulse-response.html">8.9</a></td><td>impulses: restitution and Coulomb friction</td></tr>
+      <tr><td><a href="08-10-sequential-impulses.html">8.10</a></td><td>the sequential-impulse solver: warm starting, islands, sleeping</td></tr>
+      <tr><td><a href="08-11-constraints-and-joints.html">8.11</a></td><td>constraints as Jacobian rows: rods, ropes, sockets, hinges, limits, motors</td></tr>
+      <tr><td><a href="08-12-ragdolls.html">8.12</a></td><td>ragdolls: swing–twist limits, and a character handed to the solver and back</td></tr>
+      <tr><td>8.13</td><td>a shape cast, and a character controller that is not a body</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That is the physics the course set out to build, whole. There is a rigid-body engine with angular dynamics,
+    GJK/EPA convex collision, persistent contact manifolds, a warm-started sequential-impulse solver with
+    islands and sleeping, joints, ragdolls, and a character controller, all built here and none imported.
+    It has open defects, named in STATE and not fixed on purpose. Eight sweeps do not hold a tall stack
+    or a hanging load, and sub-stepping is the measured answer three times over. There are no speculative
+    contacts, so props still tunnel at 8.10's odds. The sleep thresholds are per-body speeds tuned on
+    crates. Module 9 prices sub-stepping with contacts in the loop.
+  </p>
+
+  <p>
+    The repository after Module 8. Every file is named: directories outside Module 8 are listed compactly
+    with the lesson that opened them, and <code>phys/</code> and <code>demos/</code> get a line and a lesson
+    each.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">the repository after Module 8</span>
+      <span class="lang" data-lang="text">tree</span></figcaption>
+<pre><code class="lang-text">3d-engine-course/
+├── CMakeLists.txt              top level: engine, demos, shaders (0.4, 5.1)
+├── cmake/                      EngineHelpers.cmake  Shaders.cmake
+├── shaders/                    HLSL, cross-compiled by SDL_shadercross (4.3) — 26 files
+├── assets/                     meshes, a texture and a font the demos load
+│   cube.bin  cube.gltf  cube.obj  fonts/Karla-Regular.ttf
+│   fonts/OFL.txt  quirks.obj  shapes.glb  torus.obj  twisted.obj
+│   uv_grid.png
+├── engine/                     the static library (5.1)
+│   ├── CMakeLists.txt          sources, warnings, the umbrella lint
+│   ├── include/engine/         the public API — the only thing demos may include
+│   │   ├── engine.hpp          the umbrella: every public header
+│   │   ├── anim/               7.5–7.7: skeletons, clips, sampling and blending  (3)
+│   │   │   clip.hpp  skeleton.hpp  skin.hpp
+│   │   ├── asset/              5.5: the asset system — images, OBJ, glTF, handles  (2)
+│   │   │   asset_store.hpp  search_path.hpp
+│   │   ├── audio/              7.8: devices, sounds, the mixer  (3)
+│   │   │   mixer.hpp  sound.hpp  spatial.hpp
+│   │   ├── core/               Modules 1 and 5: clock, input, log, assert, pools, actions  (10)
+│   │   │   actions.hpp  assert.hpp  bench.hpp  clock.hpp  fixed_step.hpp
+│   │   │   handle.hpp  input.hpp  log.hpp  pool.hpp  profile.hpp
+│   │   ├── ecs/                5.6–5.9: the archetype ECS and the transform hierarchy  (6)
+│   │   │   camera.hpp  entity.hpp  hierarchy.hpp  pool.hpp  registry.hpp
+│   │   │   view.hpp
+│   │   ├── gfx/                Modules 2–6: the rasterizer, then SDL_GPU and the renderer  (48)
+│   │   │   antialias.hpp  blend.hpp  bloom.hpp  cascade.hpp  clip.hpp
+│   │   │   colour.hpp  cubemap.hpp  cull.hpp  debug_draw.hpp
+│   │   │   debug_lines.hpp  depth_buffer.hpp  draw_order.hpp  font.hpp
+│   │   │   frame_graph.hpp  framebuffer.hpp  frustum.hpp  gltf.hpp
+│   │   │   gpu_buffer.hpp  gpu_debug.hpp  gpu_device.hpp  gpu_mesh.hpp
+│   │   │   gpu_overlay.hpp  gpu_pipeline.hpp  gpu_post.hpp  gpu_present.hpp
+│   │   │   gpu_scene.hpp  gpu_shader.hpp  gpu_shadow.hpp  gpu_texture.hpp
+│   │   │   gpu_uniform.hpp  hdr.hpp  image.hpp  instancing.hpp  light.hpp
+│   │   │   material.hpp  mesh.hpp  microfacet.hpp  mipmap.hpp  obj.hpp
+│   │   │   overlay.hpp  projector.hpp  raster.hpp  renderable.hpp
+│   │   │   scene.hpp  shadow.hpp  soft_renderer.hpp  texture.hpp
+│   │   │   viewport.hpp
+│   │   ├── math/               Modules 1–7: vectors, matrices, bounds, rotations — header-only  (13)
+│   │   │   axis_angle.hpp  bounds.hpp  complex.hpp  euler.hpp  mat2.hpp
+│   │   │   mat3.hpp  mat4.hpp  quat.hpp  rotation.hpp  transform.hpp
+│   │   │   vec2.hpp  vec3.hpp  vec4.hpp
+│   │   ├── phys/               Module 8: physics  (15)
+│   │   │   integrate.hpp       8.1   semi-implicit Euler, and why explicit Euler explodes
+│   │   │   rigid_body.hpp      8.2   bodies, forces, the body_world; 8.10 split the step in two
+│   │   │   inertia.hpp         8.3   the inertia tensor, the parallel-axis theorem
+│   │   │   shape.hpp           8.4   sphere, box, capsule, hull; support and support_face
+│   │   │   collide.hpp         8.4   the Separating Axis Theorem; 8.5 and 8.6 generalised it
+│   │   │   convex.hpp          8.5   a shape as its support function; 8.13 placed_shape
+│   │   │   gjk.hpp             8.5   distance, from a support function
+│   │   │   epa.hpp             8.6   penetration depth
+│   │   │   manifold.hpp        8.7   contact manifolds, feature ids, the persistence cache
+│   │   │   broadphase.hpp      8.8   the uniform grid
+│   │   │   solver.hpp          8.9   impulses; 8.10 sequential impulses, islands, sleep
+│   │   │   constraint.hpp      8.11  Jacobian rows and joints; 8.12 swing-twist
+│   │   │   ragdoll.hpp         8.12  a skeleton handed to the solver and back
+│   │   │   cast.hpp            8.13  a shape cast: conservative advancement
+│   │   │   character.hpp       8.13  the character controller
+│   │   ├── platform/           5.2: the app, the platform, ENGINE_MAIN  (3)
+│   │   │   app.hpp  main.hpp  platform.hpp
+│   │   └── ui/                 5.11: the ImGui debug UI and debug draw  (1)
+│   │       debug_ui.hpp
+│   └── src/                    the implementations, one directory per include/ one
+│       ├── anim/               (3)
+│       │   clip.cpp  skeleton.cpp  skin.cpp
+│       ├── asset/              (2)
+│       │   asset_store.cpp  search_path.cpp
+│       ├── audio/              (3)
+│       │   mixer.cpp  sound.cpp  spatial.cpp
+│       ├── core/               (6)
+│       │   actions.cpp  clock.cpp  fixed_step.cpp  input.cpp  log.cpp
+│       │   profile.cpp
+│       ├── gfx/                (40)
+│       │   antialias.cpp  blend.cpp  bloom.cpp  cascade.cpp  clip.cpp
+│       │   colour.cpp  cubemap.cpp  debug_draw.cpp  debug_lines.cpp
+│       │   depth_buffer.cpp  draw_order.cpp  font.cpp  frame_graph.cpp
+│       │   framebuffer.cpp  frustum.cpp  gltf.cpp  gpu_buffer.cpp
+│       │   gpu_debug.cpp  gpu_device.cpp  gpu_mesh.cpp  gpu_overlay.cpp
+│       │   gpu_pipeline.cpp  gpu_post.cpp  gpu_present.cpp  gpu_scene.cpp
+│       │   gpu_shader.cpp  gpu_shadow.cpp  gpu_texture.cpp  hdr.cpp
+│       │   image.cpp  instancing.cpp  mesh.cpp  mipmap.cpp  obj.cpp
+│       │   overlay.cpp  raster.cpp  renderable.cpp  shadow.cpp
+│       │   soft_renderer.cpp  texture.cpp
+│       ├── phys/               (14)
+│       │   broadphase.cpp  cast.cpp  character.cpp  collide.cpp
+│       │   constraint.cpp  epa.cpp  gjk.cpp  inertia.cpp  integrate.cpp
+│       │   manifold.cpp  ragdoll.cpp  rigid_body.cpp  shape.cpp  solver.cpp
+│       ├── platform/           (2)
+│       │   app.cpp  platform.cpp
+│       └── ui/                 (1)
+│           debug_ui.cpp
+├── demos/                      executables: the public API only (5.1)
+│   ├── CMakeLists.txt
+│   ├── audio/                  7.8   a listener and three emitters
+│   ├── bodies/                 8.2   three masses, three ways to fall
+│   ├── broadphase/             8.8   the cheap question
+│   ├── character/              8.13  a capsule that obeys the design
+│   ├── collector/              5.12  the Module 5 checkpoint game
+│   ├── collide/                8.4   fifteen candidate axes
+│   ├── common/                 4.6   shared content (demo_scene, pong)
+│   ├── ecs_swarm/              5.8   a world built of components
+│   ├── epa/                    8.6   the balloon in the dark room
+│   ├── gimbal/                 7.1   three rings and a number
+│   ├── gjk/                    8.5   the Minkowski difference, searched
+│   ├── gltf_view/              6.6   the asset system's acceptance test
+│   ├── hello_cube/             5.1   the smallest program past the boundary
+│   ├── impulse/                8.9   one contact, resolved
+│   ├── integrate/              8.1   three rules on one spring
+│   ├── joints/                 8.11  rods, ropes, sockets, hinges
+│   ├── manifold/               8.7   one contact is not a contact
+│   ├── plane/                  7.3   the complex plane
+│   ├── pong/                   1.8   the Module 1 checkpoint
+│   ├── ragdoll/                8.12  a skeleton handed to the solver
+│   ├── rig/                    7.6   one surface, six joints
+│   ├── sandbox/                2.1   every rasterizer demo, Modules 2–4
+│   ├── spin/                   8.3   a box that flips with nothing touching it
+│   └── stack/                  8.10  a pile of crates
+├── docs/                       this course: index, conventions, math toolbox, lessons (no build step)
+├── scratch/                    gitignored: harnesses, builders, figures, pins
+├── memory/                     a summary of each session's work
+└── ARCHITECTURE.md  README.md  STATE.md  LEARNINGS.md  PROMPT.md  CLAUDE.md  LICENSE</code></pre>
+  </div>
+  <p>
+    <strong>Next:</strong> <em>9.1 — Multithreading: Data Hazards and Safety Rules</em>, which opens
+    Module 9, <em>Professional Polish &amp; Capstone</em>. Everything so far has run on one thread.
+    8.10's islands are already independent pieces of work waiting for a job system, and 8.8's broadphase
+    and the character's casts are embarrassingly parallel. Module 9 starts with what makes shared data
+    unsafe to touch from two threads at once.
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Kasper Fauerby, “Improved Collision Detection and Response” (2003).</strong> The classic
+      collide-and-slide for an ellipsoid against triangles, with the swept-sphere tests written out; the
+      reference most hobby controllers start from, and the reason "collide and slide" is the name.
+    </li>
+    <li>
+      <strong>id Software, Quake (1996) and Quake III Arena (1999) source, <code>SV_FlyMove</code> and
+      <code>PM_SlideMove</code>.</strong> The clip-plane list of §4, and in Quake 1 the rule that clips the
+      <em>original</em> velocity; Quake III's version adds the crease and the overbounce.
+    </li>
+    <li>
+      <strong>Brian Mirtich, “Timewarp Rigid Body Simulation” (SIGGRAPH 2000), and
+      <em>Impulse-based Dynamic Simulation of Rigid Body Systems</em> (PhD thesis, 1996).</strong>
+      Conservative advancement's origin, with the bound on rotational motion this lesson avoids by never
+      turning the capsule.
+    </li>
+    <li>
+      <strong>Gino van den Bergen, “Ray Casting against General Convex Objects with Application to
+      Continuous Collision Detection” (2004).</strong> GJK turned into a ray and shape cast directly: the
+      other road to §3's query, trading conservative advancement's simplicity for fewer support calls.
+    </li>
+    <li>
+      <strong>Erwin Coumans, “Continuous Collision Detection and Physics” (2005).</strong> Where
+      conservative advancement sits among the continuous methods, and why rotation is the hard part.
+    </li>
+    <li>
+      <strong>Jorrit Rouwé, Jolt Physics, <code>CharacterVirtual</code>.</strong> A production kinematic
+      controller: stair walking with a forward test probe (the alternative to §8's minimum forward move), a
+      mass for pushing dynamic bodies, and ground snapping. Read it after writing your own, not instead.
+    </li>
+    <li>
+      <strong>NVIDIA PhysX documentation, “Character Controllers”.</strong> The step offset, the slope
+      limit and the contact offset (PhysX's skin) as one vendor names and documents them, including the
+      same round-bottom caveat about steps.
+    </li>
+    <li>
+      <strong>John C. Hart, “Sphere Tracing: A Geometric Method for the Antialiased Ray Tracing of Implicit
+      Surfaces” (1996).</strong> The other conservative step of §3, and why it needs no convexity.
+    </li>
+    <li>
+      <strong>Glenn Fiedler, “Fix Your Timestep!” (Gaffer on Games).</strong> Why §2's controller runs in
+      the fixed step and not per frame, and what to interpolate when it draws.
+    </li>
+  </ul>

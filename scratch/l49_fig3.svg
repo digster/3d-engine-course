@@ -1,0 +1,90 @@
+<svg viewBox="0 0 720 470" role="img" aria-labelledby="f49c-t f49c-d">
+  <title id="f49c-t">One frame, as an event tree</title>
+  <desc id="f49c-d">The output of engine --trace: four debug groups (upload, clear, blit, scene), a render pass, the per-frame and per-draw uniform pushes, the binds, and three draw calls. The annotations name what each part is called in a capture. 33 events, 3 draws, 560 uniform bytes — all numbers Lesson 4.8 already reported.</desc>
+  <defs>
+    <marker id="e-i-f49c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f49c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f49c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">one frame of <tspan class="mono">engine --trace</tspan>, and what a capture calls each part</text>
+  <rect x="24" y="36" width="400" height="17" fill="#5acdd7" fill-opacity="0.14" stroke="none"/>
+  <text x="30" y="48" class="xs mono">group</text>
+  <text x="118" y="48" class="xs mono">upload</text>
+  <text x="46" y="65" class="xs mono">copy</text>
+  <text x="134" y="65" class="xs mono">framebuffer -> texture</text>
+  <text x="418" y="65" class="xs mono muted" text-anchor="end">230400 bytes</text>
+  <rect x="24" y="70" width="400" height="17" fill="#5acdd7" fill-opacity="0.14" stroke="none"/>
+  <text x="30" y="82" class="xs mono">group</text>
+  <text x="118" y="82" class="xs mono">clear</text>
+  <text x="46" y="99" class="xs mono">pass</text>
+  <text x="134" y="99" class="xs mono">clear (no draws)</text>
+  <rect x="24" y="104" width="400" height="17" fill="#5acdd7" fill-opacity="0.14" stroke="none"/>
+  <text x="30" y="116" class="xs mono">group</text>
+  <text x="118" y="116" class="xs mono">blit (software picture)</text>
+  <text x="46" y="133" class="xs mono">blit</text>
+  <text x="134" y="133" class="xs mono">framebuffer -> swapchain</text>
+  <text x="418" y="133" class="xs mono muted" text-anchor="end">921600 bytes</text>
+  <rect x="24" y="138" width="400" height="17" fill="#5acdd7" fill-opacity="0.14" stroke="none"/>
+  <text x="30" y="150" class="xs mono">group</text>
+  <text x="118" y="150" class="xs mono">scene</text>
+  <text x="46" y="167" class="xs mono">pass</text>
+  <text x="134" y="167" class="xs mono">colour + depth</text>
+  <text x="46" y="184" class="xs mono muted">uniform</text>
+  <text x="134" y="184" class="xs mono muted">camera (vertex)</text>
+  <text x="418" y="184" class="xs mono muted" text-anchor="end">slot 0, 64 bytes</text>
+  <text x="46" y="201" class="xs mono muted">uniform</text>
+  <text x="134" y="201" class="xs mono muted">lighting (fragment)</text>
+  <text x="418" y="201" class="xs mono muted" text-anchor="end">slot 0, 64 bytes</text>
+  <text x="46" y="218" class="xs mono">pipeline</text>
+  <text x="134" y="218" class="xs mono">solid (cull back)</text>
+  <text x="46" y="235" class="xs mono muted">sampler</text>
+  <text x="134" y="235" class="xs mono muted">white 1x1</text>
+  <text x="418" y="235" class="xs mono muted" text-anchor="end">slot 0</text>
+  <text x="46" y="252" class="xs mono muted">uniform</text>
+  <text x="134" y="252" class="xs mono muted">object matrices</text>
+  <text x="418" y="252" class="xs mono muted" text-anchor="end">slot 1, 112 bytes</text>
+  <text x="46" y="269" class="xs mono muted">uniform</text>
+  <text x="134" y="269" class="xs mono muted">material</text>
+  <text x="418" y="269" class="xs mono muted" text-anchor="end">slot 1, 32 bytes</text>
+  <text x="46" y="286" class="xs mono muted">vertex buf</text>
+  <text x="134" y="286" class="xs mono muted">mesh vertices</text>
+  <text x="418" y="286" class="xs mono muted" text-anchor="end">slot 0</text>
+  <text x="46" y="303" class="xs mono muted">index buf</text>
+  <text x="134" y="303" class="xs mono muted">mesh indices</text>
+  <text x="418" y="303" class="xs mono muted" text-anchor="end">slot 0</text>
+  <rect x="24" y="308" width="400" height="17" fill="#eb786e" fill-opacity="0.14" stroke="none"/>
+  <text x="46" y="320" class="xs mono">DRAW</text>
+  <text x="134" y="320" class="xs mono">scene object</text>
+  <text x="418" y="320" class="xs mono muted" text-anchor="end">60 indices, 20 triangles</text>
+  <text x="46" y="337" class="xs mono muted">…</text>
+  <text x="134" y="337" class="xs mono muted">(the same nine events, twice more)</text>
+  <rect x="24" y="342" width="400" height="17" fill="#eb786e" fill-opacity="0.14" stroke="none"/>
+  <text x="46" y="354" class="xs mono">DRAW</text>
+  <text x="134" y="354" class="xs mono">scene object</text>
+  <text x="418" y="354" class="xs mono muted" text-anchor="end">36 indices, 12 triangles</text>
+  <rect x="24" y="359" width="400" height="17" fill="#eb786e" fill-opacity="0.14" stroke="none"/>
+  <text x="46" y="371" class="xs mono">DRAW</text>
+  <text x="134" y="371" class="xs mono">scene object</text>
+  <text x="418" y="371" class="xs mono muted" text-anchor="end">36 indices, 12 triangles</text>
+  <text x="448" y="56" class="xs t-hi">DEBUG GROUPS</text>
+  <text x="448" y="74" class="xs muted">collapsible headings in a capture;</text>
+  <text x="448" y="89" class="xs muted">four per frame, and the reason the</text>
+  <text x="448" y="104" class="xs muted">tree reads instead of scrolls</text>
+  <text x="448" y="136" class="xs ">RENDER PASSES</text>
+  <text x="448" y="154" class="xs muted">a capture's outline is passes;</text>
+  <text x="448" y="169" class="xs muted">everything hangs off one</text>
+  <text x="448" y="200" class="xs ">BINDS AND PUSHES</text>
+  <text x="448" y="218" class="xs muted">RenderDoc's Pipeline State panel;</text>
+  <text x="448" y="233" class="xs muted">the bytes of every push are</text>
+  <text x="448" y="248" class="xs muted">inspectable</text>
+  <text x="448" y="280" class="xs t-bad">DRAW CALLS</text>
+  <text x="448" y="298" class="xs muted">the events you actually stop at.</text>
+  <text x="448" y="313" class="xs muted">Select one and the tool replays the</text>
+  <text x="448" y="328" class="xs muted">frame UP TO IT, so every buffer and</text>
+  <text x="448" y="343" class="xs muted">attachment is shown as it was then.</text>
+  <text x="24" y="436" class="xs"><tspan class="t-hi">33 events, 3 draws, 560 uniform bytes</tspan> &#8212; and every one of those numbers was already in Lesson 4.8&#8217;s log before any tool was opened.</text>
+  <text x="24" y="454" class="xs muted">Which is the point of the ordering: you are checking a tool against a frame you already understand, not the other way round.</text>
+</svg>

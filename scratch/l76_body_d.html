@@ -1,0 +1,412 @@
+  <h2 id="lbs">7. Implementation: four multiply-adds</h2>
+
+  <p>
+    Everything so far runs once per <em>joint</em>. This runs once per <em>vertex</em>, and on real
+    content those differ by two to three orders of magnitude. That asymmetry is the whole reason the
+    palette exists: it is a place to hoist work to where it is nearly free.
+  </p>
+
+  <pre><code class="lang-cpp">vec3 sum{0.0f, 0.0f, 0.0f};
+for (int k = 0; k &lt; k_max_influences; ++k)
+{
+    sum = sum + blend_point(palette[inf.joints[k]],
+                            v, inf.weights[k]);
+}
+out[i] = sum;</code></pre>
+
+  <p>
+    No branch on the weight being zero, and that is deliberate rather than lazy. A zero weight costs
+    one multiply; a predictable branch costs about the same, and an <em>unpredictable</em> one costs
+    far more. The index is always valid by construction (§6), so there is nothing to guard and the
+    loop body is straight-line code a compiler can vectorise.
+  </p>
+
+  <h3 id="points-vs-directions">7.1 A point is not a direction, and <code>w</code> is why</h3>
+
+  <p>
+    Lesson 2.7 introduced the fourth coordinate as the answer to "is this a position or a
+    direction", and this is the place it earns its keep for the second time. Positions get the
+    translation column; directions do not:
+  </p>
+
+  <pre><code class="lang-cpp">vec3 blend_point(const mat4&amp; m, vec3 v, float w)      // …+ m.c3
+vec3 blend_direction(const mat4&amp; m, vec3 v, float w)  // …no m.c3</code></pre>
+
+  <p>
+    Skip that distinction and every normal is offset by wherever its joint happens to be standing.
+    The harness's control does exactly that — skins the normals with <code>skin_positions</code>
+    instead of <code>skin_directions</code> on a posed skeleton — and measures the worst tilt at
+    <strong>156.108°</strong>. That is not a subtly wrong surface; it is lighting computed from
+    numbers that are not normals.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A control that could not fail, and how it announced itself</span>
+    <p>
+      The first version of that control ran at the <em>bind pose</em> and reported
+      <strong>0.020°</strong>, which reads as "the two rules basically agree". They do agree there,
+      necessarily: at the bind pose every palette matrix is the identity (§3.1), so its translation
+      column is zero and the wrong rule gives the right answer. The check was passing because its
+      fixture could not fail.
+    </p>
+    <p>
+      That is the second instance in two lessons of the same shape — 7.5's §G table printed a clean
+      zero for a function returning <code>NaN</code> — and the two together sharpen into one
+      question worth asking of every control you write: <strong>what would this fixture do if the
+      thing being tested were completely broken?</strong> If the answer is "pass", the fixture is
+      the bug.
+    </p>
+  </div>
+
+  <h3 id="static-half">7.2 Only two arrays change</h3>
+
+  <p>
+    A skinned mesh has five parallel arrays and a pose moves two of them. Texture coordinates do not
+    care where the elbow is; a triangle list does not change when a character walks. So
+    <code>skin_into</code> copies uvs, tangents and indices exactly once — when the destination is
+    the wrong shape — and never again.
+  </p>
+
+  <p>
+    That is not a micro-optimisation, it is the observation the entire GPU path is built on. The
+    static arrays live in a vertex buffer uploaded once; the pose arrives as a hundred matrices. §10
+    puts the ratio at <strong>28.4×</strong> on this lesson's own fixture, and it grows with the
+    mesh.
+  </p>
+
+  <h2 id="candy">8. The candy wrapper, derived and measured</h2>
+
+  <p>
+    Now the artifact, and it is the reason linear blend skinning has a reputation. Twist a forearm
+    against its elbow and the skin pinches. Twist it far enough and the limb becomes a wasp waist.
+    Twist it 180° and it vanishes to a line.
+  </p>
+
+  <p>
+    That is not a bug in an implementation and it is not fixable by weighting. It is what averaging
+    two rotations does, and it has an exact closed form you can derive with a ruler.
+  </p>
+
+  <h3 id="candy-derive">8.1 The derivation is one isoceles triangle</h3>
+
+  <p>
+    Two joints at the same place, one rotated <code>θ</code> from the other about the limb's own
+    axis. A vertex weighted half to each. The blend sends it to the midpoint of
+    <code>R₀v</code> and <code>R₁v</code>:
+  </p>
+
+  <div class="eq">\[ v' \;=\; \tfrac{1}{2}\big(R_0 v + R_1 v\big) \]</div>
+
+  <p>
+    Both <code>R₀v</code> and <code>R₁v</code> have length <code>|v|</code> — rotations preserve
+    length — and they are <code>θ</code> apart. So the origin, <code>R₀v</code> and
+    <code>R₁v</code> form an isoceles triangle with apex angle <code>θ</code>. The midpoint of the
+    base lies on the bisector of that apex, and the bisector of an isoceles triangle meets its base
+    at a right angle. That right triangle gives the answer immediately:
+  </p>
+
+  <div class="eq">\[ |v'| \;=\; |v|\,\cos(\theta/2) \]</div>
+
+  @@FIG_CANDY@@
+
+  <p>
+    <strong>Nothing in that derivation mentions skinning, a joint, or a matrix.</strong> It is a
+    fact about averaging two points on a circle, and it is the same half-angle Lesson 7.3 found
+    between two mirrors and Lesson 7.4 found inside a quaternion — arrived at here for a third
+    independent reason.
+  </p>
+
+  <p>
+    The numbers you can check in your head: at 60° the radius is <code>cos 30° = 0.866</code>; at
+    120° it is <code>cos 60° = 0.500</code> exactly; at 180° it is <code>cos 90° = 0</code>. Not
+    "small". <strong>Zero.</strong> The limb collapses to a mathematical point, because the average
+    of two antipodal points is the origin.
+  </p>
+
+  <pre>   twist   measured   cos(t/2)    gap
+     0.0   1.000000   1.000000   0.00e+00
+    30.0   0.965926   0.965926   0.00e+00
+    60.0   0.866025   0.866025   0.00e+00
+    90.0   0.707107   0.707107   0.00e+00
+   120.0   0.500000   0.500000   0.00e+00
+   150.0   0.258819   0.258819   0.00e+00
+   179.0   0.008727   0.008727   0.00e+00
+   180.0   0.000000  -0.000000   8.74e-08
+   worst gap over the sweep                   8.742e-08</pre>
+
+  <p>
+    The control is the same vertex weighted <code>1.0</code> to a single joint, which comes back at
+    <strong>1.000000</strong> at the same 180° twist. A rigid vertex cannot collapse — so the
+    artifact belongs to the <em>blend</em> and not to the twist, which is the distinction the whole
+    section rests on.
+  </p>
+
+  <h3 id="twist-bones">8.2 What a forearm twist bone is</h3>
+
+  <p>
+    The formula also contains its own remedy, and it is the one every rigger already uses without
+    necessarily having seen the cosine.
+  </p>
+
+  <p>
+    The collapse depends on the angle <em>between two adjacent joints</em>, not on the total twist.
+    Spread a total twist <code>θ</code> over <code>n</code> joints and each adjacent pair differs by
+    <code>θ/n</code>, so the pinch opens to
+  </p>
+
+  <div class="eq">\[ \frac{|v'|}{|v|} \;=\; \cos\!\big(\theta / 2n\big) \]</div>
+
+  <p>
+    At a 180° twist: 0.000 with one joint, <strong>0.707</strong> with two, 0.866 with three,
+    <strong>0.924</strong> with four. That is what a forearm twist bone <em>is</em> — not a
+    modelling nicety but a direct attack on a half-angle — and it is why a production rig carries
+    considerably more joints than a skeleton does.
+  </p>
+
+  @@FIG_TWIST_RENDER@@
+
+  <h3 id="bend-ellipse">8.3 A bend obeys the same cosine, on an ellipse</h3>
+
+  <p>
+    A twist rotates about the limb's own axis, so the whole ring of vertices lies in the plane the
+    collapse happens in and every one of them moves inward by the same factor. A <em>bend</em>
+    rotates about an axis <strong>across</strong> the limb — and the vertices that lie on that axis
+    do not move at all, because a rotation fixes its own axis.
+  </p>
+
+  <p>
+    So a bent ring does not shrink. It <strong>flattens</strong>: it becomes an ellipse with
+    semi-minor axis <code>r cos(θ/2)</code> and semi-major axis <code>r</code>. Same cosine, spent
+    on one direction instead of two.
+  </p>
+
+  @@FIG_BEND_ELLIPSE@@
+
+  <pre>   bend    min radius   r cos(d/2)   max radius
+     0.0     1.000000     1.000000     1.000000
+    30.0     0.965926     0.965926     1.000000
+    60.0     0.866025     0.866025     1.000000
+    90.0     0.707107     0.707107     1.000000
+   120.0     0.500000     0.500000     1.000000
+   worst gap on the minor axis                1.192e-07</pre>
+
+  <p>
+    That is why the two artifacts look so different in practice and are so often described as
+    unrelated. A twisted forearm loses its whole cross-section — the candy wrapper. A bent elbow
+    loses volume on one axis and keeps it on the other, which reads as a crease and a flat patch
+    rather than as a pinch. One cosine, two geometries.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The demo prints both numbers, and they agree in both modes</span>
+    <p>
+      <code>rig</code>'s panel shows the smallest ring radius it can find alongside
+      <code>r cos(δ/2)</code>, where <code>δ</code> is the angle between the two joints that ring is
+      weighted between. At a 90° bend spread over five joints: <strong>0.37532</strong> measured
+      against <strong>0.37532</strong> predicted. At a 180° twist over two joints:
+      <strong>0.26870</strong> against <strong>0.26870</strong>. A prediction that survives being
+      pointed at two different deformations is a prediction about the blend, which is what it
+      claimed to be.
+    </p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Two instruments that both reported a pinch that was not there</span>
+    <p>
+      Measuring "how much did this ring shrink" looks trivial and took three attempts. The first two
+      measured the radius <strong>perpendicular to the chain</strong>, which sounds obviously right:
+      a ring on a bent limb is not perpendicular to anything else, so measure against the bone and
+      the foreshortening cancels.
+    </p>
+    <p>
+      Version one had no bone to measure against at the tip ring — it is weighted entirely to the
+      last joint, so there is no segment through it — and the axis fell back to world <code>+y</code>.
+      On a limb bent 90° that ring is edge-on to <code>+y</code>, and the perpendicular radius read
+      <strong>0.241 instead of 0.380</strong>: a pinch reported at the one place on the tube where
+      there are not two joints to pinch between. Version two clamped the axis to the last real
+      segment and left a smaller copy of the same error — the tip ring is rigidly rotated one joint
+      angle further than the segment below it, so its plane is tilted against the measuring axis,
+      and at 120° it read 0.364.
+    </p>
+    <p>
+      The fix is to stop needing an axis. A rigid rotation does not change the distance between two
+      points, so a distance from the ring's <em>own centroid</em> is invariant under every rotation
+      the skeleton can apply and drops only when the blend actually pulls the vertices in.
+      <strong>Both wrong versions reported a smaller number</strong> — which is the direction this
+      measurement is hunting in, so both of them looked like a discovery.
+    </p>
+  </div>
+
+  <h2 id="normals">9. Normals, and the rule we are not using</h2>
+
+  <p>
+    Lesson 3.6 established that a normal is not transformed by the matrix that transforms positions.
+    It is transformed by the <strong>inverse transpose</strong> of the linear part, because a normal
+    is defined by being perpendicular to the surface and a non-uniform scale does not preserve
+    perpendicularity.
+  </p>
+
+  <p>
+    <code>skin_directions</code> uses the linear part anyway, and it is worth being exact about when
+    that is correct and when it is not.
+  </p>
+
+  <ul>
+    <li><strong>For a rotation the two rules are the same rule.</strong> <code>R</code> is
+        orthonormal, so <code>(R⁻¹)ᵀ = (Rᵀ)ᵀ = R</code>. Measured over 4,000 random rotations, the
+        worst chord between the two answers is <strong>3.817e−07</strong>.</li>
+    <li><strong>For a uniform scale they differ by a positive scalar</strong>, which a renormalise
+        removes. Measured at a scale of 2.5: <strong>0.000e+00</strong>.</li>
+    <li><strong>For a non-uniform scale they diverge, and not gently.</strong></li>
+  </ul>
+
+  <pre>   joint scale        normal error   d(N.L)
+   (1.00, 1.00, 1.00)     0.0000 deg   0.0000
+   (1.10, 1.00, 1.00)     5.4526 deg   0.0202
+   (1.25, 1.00, 1.00)    12.6804 deg   0.0469
+   (1.50, 1.00, 1.00)    22.6199 deg   0.0833
+   (2.00, 1.00, 1.00)    36.8699 deg   0.1342</pre>
+
+  <p>
+    The last column is what the error <em>costs</em> rather than how big it is — the change in
+    Lambert brightness for a light 30° off the surface — which is Lesson 7.5's rule about reporting
+    consequences applied to a lighting quantity. A tenth of the shading range is not a subtlety.
+  </p>
+
+  <p>
+    The engine keeps the cheap rule, and <strong>the justification is not that the error is
+    small</strong>: it is that non-uniform scale on a <em>skinning joint</em> is a rig defect rather
+    than a renderer's problem to absorb. Joints rotate and translate; a rig that squashes one is
+    describing a deformation that the four-influence linear blend cannot represent honestly anyway.
+    So <code>skeleton_report::nonuniform_binds</code> counts the authored half of the problem at load
+    time — the half a check can see — and §12's fourth exercise builds the second palette that would
+    fix the other half, and measures what it costs.
+  </p>
+
+  <h2 id="cost">10. What it costs, and a flag that did not reach</h2>
+
+  <p>
+    64 joints, 4,840 vertices, 9,600 triangles:
+  </p>
+
+  <pre>   palette for 64 joints       0.99 us
+   skin 4840 vertices         41.20 us  (8.51 ns/vertex)
+   the palette is 2.34% of the two
+   per frame: palette 4096 bytes, deformed
+   positions + normals 116160 bytes  (28.4x)</pre>
+
+  @@FIG_COST@@
+
+  <p>
+    The first row is the design in one number. <strong>The per-joint work is 2.34% of the per-vertex
+    work</strong>, so everything that can be hoisted to a joint should be, and what remains per
+    vertex is four multiply-adds. The second is the GPU-skinning argument in one number: animating
+    this mesh costs 4 KB of matrices per frame, or 113 KB of deformed vertices. At 50,000 vertices
+    it is 6 KB against 1.2 MB.
+  </p>
+
+  <h3 id="build-type">10.1 The measurement that nearly did not mean anything</h3>
+
+  <p>
+    This is the first harness in Module 7 that has to link something. 7.1 through 7.5 link nothing —
+    everything they test is <code>inline</code> in a header — so the <code>-O2</code> on the
+    harness's own command line covered every instruction they timed. Skinning is not header-only:
+    <code>anim/skeleton.cpp</code> and <code>anim/skin.cpp</code> are real loops over arrays and
+    live in <code>libengine.a</code>.
+  </p>
+
+  <p>
+    <strong>And <code>cmake -S . -B build</code> leaves <code>CMAKE_BUILD_TYPE</code> empty</strong>,
+    which means the library is compiled with no <code>-O</code> flag at all. The first version of
+    these numbers was:
+  </p>
+
+  <pre>   palette for 64 joints      26.32 us
+   skin 4840 vertices        744.86 us  (153.90 ns/vertex)</pre>
+
+  <p>
+    …which is <strong>18.1× slower per vertex</strong> and 26.6× slower per palette, on the same
+    machine in the same minute. 153.9 ns is about five hundred cycles to do four multiply-adds, and
+    that implausibility is the tell: ARCHITECTURE.md §6's measuring rule says to ask whether a
+    number is physically possible before believing it, and this one is not.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A flag reaches the translation units it is on, and no further</span>
+    <p>
+      The rule in ARCHITECTURE.md — "<code>-O2</code>, never a debug build" — was written about
+      harnesses, and for five lessons a harness <em>was</em> the whole program. The moment one links
+      a library, the flag on its command line stops covering the code being measured, and nothing in
+      the build says so: an unoptimised static library links exactly as quietly as an optimised one.
+    </p>
+    <p>
+      So <code>build_verify_76.sh</code> now refuses rather than measuring. It reads
+      <code>CMAKE_BUILD_TYPE</code> out of the cache, prints which library it is about to link and
+      at what build type, and exits with an error if there is no build type set —
+      <code>ENGINE_ALLOW_UNOPTIMISED=1</code> is how the slow row above was produced, deliberately.
+      A measurement tool that cannot describe its own configuration is a measurement tool you have
+      to remember things about.
+    </p>
+  </div>
+
+  <h3 id="lbs-vs-nlerp">10.2 Linear blend skinning is not nlerp without the normalise</h3>
+
+  <p>
+    There is a one-line summary of linear blend skinning that circulates widely and that this lesson
+    was expecting to repeat: it is <code>nlerp</code> with the normalise deleted. Lesson 7.5 built
+    <code>quat_nlerp</code>, which takes the straight chord between two quaternions and pushes it
+    back onto the sphere; linear blend skinning takes the straight chord and does not. Same
+    operation, one step missing.
+  </p>
+
+  <p>
+    Measured, that summary is wrong in both directions.
+  </p>
+
+  @@FIG_LBS_VS@@
+
+  <p>
+    <strong>It is worse than nlerp.</strong> Both get the schedule wrong — they move too fast
+    through the middle of the blend — but they are wrong by the same function evaluated at
+    different arguments. nlerp's error is governed by the arc between the two <em>quaternions</em>,
+    which is <em>half</em> the rotation angle (and then doubled on the way back out to a pose);
+    the matrix blend's is governed by the whole rotation angle directly. Lesson 7.3 showed that
+    schedule error grows much faster than linearly, so halving the argument buys more than the
+    doubling gives back — measured, a factor of about four at every arc. At a 120° twist:
+    <strong>10.95° of pose for the matrix blend against 2.23° for nlerp</strong>, and at 179° it is
+    76.63° against 8.00°.
+  </p>
+
+  <p>
+    <strong>And it is better than nlerp</strong>, at the one thing Lesson 7.5 spent half a lesson
+    on. A rotation matrix is <em>unique</em>: there is exactly one matrix per rotation, so there is
+    no double cover, no long way round, and no <code>nearest</code> to forget. The 359° spin that
+    7.5's figure 4 is about cannot be written here. The harness checks it over 20,000 random pairs
+    and finds the blended point never further from the endpoints than they are from each other:
+    excess <strong>1.192e−07</strong>.
+  </p>
+
+  <p>
+    The midpoint isolates the two failures from each other. At <code>t = 0.5</code> the schedule
+    error vanishes by symmetry for both, and what is left is only the collapse: the matrix blend
+    puts the vertex at the right <em>angle</em> — 60.0000° against slerp's 60.0000° — and at
+    <strong>0.500000</strong> of the radius, which is §8's cosine and nothing else.
+  </p>
+
+  <div class="callout">
+    <span class="label">So what would fix it, and why it is not here</span>
+    <p>
+      The fix that works is to blend something that <em>is</em> closed under normalisation.
+      <strong>Dual quaternion skinning</strong> blends the joints' rigid transforms as dual
+      quaternions and normalises, which cannot collapse — it preserves the cross-section exactly —
+      at the cost of a bulge on the outside of a bent joint, roughly twice the arithmetic per
+      vertex, and a rig authored for one of the two methods looking wrong under the other. It is
+      genuinely a different technique rather than a patch, and it is named here with a reference
+      (§14) rather than built. This is the ninety-percent picture; the missing ten percent is
+      Kavan's paper.
+    </p>
+    <p>
+      The other fix is the one in §8.2 — more joints — and it is the one shipped content actually
+      uses, because it costs nothing at runtime and the rigger was going to be involved anyway.
+    </p>
+  </div>

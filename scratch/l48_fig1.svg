@@ -1,0 +1,104 @@
+<svg viewBox="0 0 720 532" role="img" aria-labelledby="f48a-t f48a-d">
+  <title id="f48a-t">The port, stage by stage</title>
+  <desc id="f48a-d">A fifteen-row table comparing each stage of the software rasterizer with its GPU counterpart. Two stages call the same C++ function from both sides; eight became fixed-function hardware; the shading equation was translated to HLSL; the view and projection matrices were folded into one; and back-face culling and the material could not cross at all, because both are pipeline state.</desc>
+  <defs>
+    <marker id="e-i-f48a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f48a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f48a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">Module 3&#8217;s pipeline and Module 4&#8217;s, stage for stage &#8212; <tspan class="t-hi">and what each move actually cost</tspan></text>
+  <text x="30" y="50" class="xs muted">stage</text>
+  <text x="222" y="50" class="xs muted">Modules 2&#8211;3, on the CPU</text>
+  <text x="424" y="50" class="xs muted">Module 4, on the GPU</text>
+  <text x="600" y="50" class="xs muted">what moved</text>
+  <rect x="24" y="60" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="77" class="xs">model &#8594; world</text>
+  <text x="222" y="77" class="xs mono muted">parent_from_local(t)</text>
+  <text x="424" y="77" class="xs mono muted">mul(world_from_model, p)</text>
+  <rect x="592" y="65" width="8" height="15" fill="#5ac878"/>
+  <text x="606" y="77" class="xs t-ok">the same function</text>
+  <text x="30" y="102" class="xs">the normal matrix</text>
+  <text x="222" y="102" class="xs mono muted">normal_matrix(M)</text>
+  <text x="424" y="102" class="xs mono muted">c0*n.x + c1*n.y + c2*n.z</text>
+  <rect x="592" y="90" width="8" height="15" fill="#5ac878"/>
+  <text x="606" y="102" class="xs t-ok">the same function</text>
+  <rect x="24" y="110" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="127" class="xs">world &#8594; view</text>
+  <text x="222" y="127" class="xs mono muted">view_from_world * p</text>
+  <text x="424" y="127" class="xs mono muted">folded into</text>
+  <rect x="592" y="115" width="8" height="15" fill="#5acdd7"/>
+  <text x="606" y="127" class="xs muted">folded, on the CPU</text>
+  <text x="30" y="152" class="xs">view &#8594; clip</text>
+  <text x="222" y="152" class="xs mono muted">proj * point(v)</text>
+  <text x="424" y="152" class="xs mono muted">clip_from_world</text>
+  <rect x="592" y="140" width="8" height="15" fill="#5acdd7"/>
+  <text x="606" y="152" class="xs muted">folded, on the CPU</text>
+  <rect x="24" y="160" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="177" class="xs">the divide</text>
+  <text x="222" y="177" class="xs mono muted">xyz(clip) / clip.w</text>
+  <text x="424" y="177" class="xs mono muted">fixed function</text>
+  <rect x="592" y="165" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="177" class="xs muted">now the hardware&#8217;s</text>
+  <text x="30" y="202" class="xs">near clipping</text>
+  <text x="222" y="202" class="xs mono muted">clip_polygon_near()</text>
+  <text x="424" y="202" class="xs mono muted">fixed function</text>
+  <rect x="592" y="190" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="202" class="xs muted">now the hardware&#8217;s</text>
+  <rect x="24" y="210" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="227" class="xs">the viewport</text>
+  <text x="222" y="227" class="xs mono muted">viewport::to_screen</text>
+  <text x="424" y="227" class="xs mono muted">SDL_SetGPUViewport</text>
+  <rect x="592" y="215" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="227" class="xs muted">now the hardware&#8217;s</text>
+  <text x="30" y="252" class="xs">back-face culling</text>
+  <text x="222" y="252" class="xs mono muted">is_front_facing()</text>
+  <text x="424" y="252" class="xs mono muted">a PIPELINE object</text>
+  <rect x="592" y="240" width="8" height="15" fill="#eb786e"/>
+  <text x="606" y="252" class="xs t-bad">could not survive</text>
+  <rect x="24" y="260" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="277" class="xs">coverage + interpolation</text>
+  <text x="222" y="277" class="xs mono muted">fill_triangle()</text>
+  <text x="424" y="277" class="xs mono muted">fixed function</text>
+  <rect x="592" y="265" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="277" class="xs muted">now the hardware&#8217;s</text>
+  <text x="30" y="302" class="xs">perspective correction</text>
+  <text x="222" y="302" class="xs mono muted">interpolate a/w, 1/w</text>
+  <text x="424" y="302" class="xs mono muted">fixed function</text>
+  <rect x="592" y="290" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="302" class="xs muted">now the hardware&#8217;s</text>
+  <rect x="24" y="310" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="327" class="xs">the depth test</text>
+  <text x="222" y="327" class="xs mono muted">depth_buffer</text>
+  <text x="424" y="327" class="xs mono muted">an ATTACHMENT</text>
+  <rect x="592" y="315" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="327" class="xs muted">now the hardware&#8217;s</text>
+  <text x="30" y="352" class="xs">the texture sample</text>
+  <text x="222" y="352" class="xs mono muted">texture::sample()</text>
+  <text x="424" y="352" class="xs mono muted">albedo.Sample()</text>
+  <rect x="592" y="340" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="352" class="xs muted">now the hardware&#8217;s</text>
+  <rect x="24" y="360" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="377" class="xs">the shading equation</text>
+  <text x="222" y="377" class="xs mono muted">engine::shade()</text>
+  <text x="424" y="377" class="xs mono muted">scene.frag.hlsl</text>
+  <rect x="592" y="365" width="8" height="15" fill="#f0961e"/>
+  <text x="606" y="377" class="xs t-hi">translated to HLSL</text>
+  <text x="30" y="402" class="xs">the material</text>
+  <text x="222" y="402" class="xs mono muted">on a raster_triangle</text>
+  <text x="424" y="402" class="xs mono muted">a per-DRAW push</text>
+  <rect x="592" y="390" width="8" height="15" fill="#eb786e"/>
+  <text x="606" y="402" class="xs t-bad">could not survive</text>
+  <rect x="24" y="410" width="672" height="25" class="fill-soft" stroke="none"/>
+  <text x="30" y="427" class="xs">the sRGB encode</text>
+  <text x="222" y="427" class="xs mono muted">to_encoded()</text>
+  <text x="424" y="427" class="xs mono muted">the _SRGB target</text>
+  <rect x="592" y="415" width="8" height="15" fill="#5082e6"/>
+  <text x="606" y="427" class="xs muted">now the hardware&#8217;s</text>
+  <text x="24" y="461" class="xs">Fifteen stages. <tspan class="t-ok">Two are literally the same C++ function, called from both sides</tspan>; eight became the hardware&#8217;s job;</text>
+  <text x="24" y="479" class="xs">one was translated line for line; two were folded into a single matrix &#8212; and <tspan class="t-bad">two could not cross at all</tspan>.</text>
+  <text x="24" y="503" class="xs muted">The last two are the lesson. A cull mode and a material are not values a triangle can carry on a GPU,</text>
+  <text x="24" y="519" class="xs muted">and that is what turns one loop into N draw calls.</text>
+</svg>

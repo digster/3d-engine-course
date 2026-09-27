@@ -1,0 +1,460 @@
+  <!-- =================================================================
+       8 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">8</span>Complete Code Listings</h2>
+
+  <p>
+    Twelve files. Three are new pairs of header and source, three are edits to files that have
+    been in the engine for lessons, and two are build files. The manifest first:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/debug_lines.hpp</code></td><td>new</td>
+          <td>the queue: world-space segments with lifetimes, and nothing that can draw</td></tr>
+      <tr><td><code>engine/src/gfx/debug_lines.cpp</code></td><td>new</td>
+          <td>shapes into segments, and the ageing sweep</td></tr>
+      <tr><td><code>engine/include/engine/ui/debug_ui.hpp</code></td><td>new</td>
+          <td>the ImGui lifecycle and the capture flags; does <em>not</em> include imgui.h</td></tr>
+      <tr><td><code>engine/src/ui/debug_ui.cpp</code></td><td>new</td>
+          <td>the only engine translation unit that speaks ImGui</td></tr>
+      <tr><td><code>engine/include/engine/gfx/debug_draw.hpp</code></td><td>modified</td>
+          <td>gains <code>draw_debug_lines</code>; <code>line3</code> now reports survival</td></tr>
+      <tr><td><code>engine/src/gfx/debug_draw.cpp</code></td><td>modified</td>
+          <td>the software backend; axis colours now read from one home</td></tr>
+      <tr><td><code>engine/include/engine/core/actions.hpp</code></td><td>modified</td>
+          <td><code>masked_input</code> — the concept's second implementor</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>the umbrella: two more headers, and one deliberate omission</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>fetches ImGui and declares the target ImGui does not ship</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>two sources, and the <code>PUBLIC</code> link that §2.3 argued for</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td>
+          <td>the client: a debug system, two panels, and the seam</td></tr>
+      <tr><td><code>scratch/verify_511.cpp</code></td><td>new</td>
+          <td>60 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The public header count goes 54 → 56 and the engine's source count 30 → 32. Everything else
+    in the engine is untouched.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/debug_lines.hpp@@
+
+  @@LISTING:engine/src/gfx/debug_lines.cpp@@
+
+  @@LISTING:engine/include/engine/ui/debug_ui.hpp@@
+
+  @@LISTING:engine/src/ui/debug_ui.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/debug_draw.hpp@@
+
+  @@LISTING:engine/src/gfx/debug_draw.cpp@@
+
+  @@LISTING:engine/include/engine/core/actions.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:CMakeLists.txt@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+
+  @@LISTING:scratch/verify_511.cpp@@
+
+  <!-- =================================================================
+       9 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">9</span>Build &amp; Run</h2>
+
+  <p>
+    The configure step now clones ImGui, so the first build after this lesson is slower than
+    usual and needs a network connection. After that it is cached in <code>build/_deps</code>
+    like SDL3 and stb.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+./build/demos/ecs_swarm</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\demos\Debug\ecs_swarm.exe</code></pre>
+  </figure>
+
+  <p>
+    And the harness, which needs one extra library on its link line —
+    <code>build/libimgui.a</code> — because §F touches <code>engine::debug_ui</code>, the one
+    engine translation unit that calls into ImGui. Every earlier harness still links without it,
+    because a static library only contributes the objects somebody actually references:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the checks</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_511.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_511.sh</code></pre>
+  </figure>
+
+  <h3>9.1 What you should see</h3>
+
+  <p>
+    A window with the swarm in it, as before — and now a bright blue line from every one of 152
+    entities to its parent, converging on the sun. Two ImGui windows sit on top: a
+    <strong>world</strong> panel with a stats table, checkboxes and buttons, and an
+    <strong>input</strong> panel with a filter box and the live binding table.
+  </p>
+
+  @@FIG_RESULT@@
+
+  <p>
+    That figure is the headless <code>--shot</code>, run-length encoded — a real render rather
+    than a mock, which is why the line count in it is checkable:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">./build/demos/ecs_swarm --shot swarm.ppm</span></figcaption>
+    <pre><code class="lang-bash">ecs_swarm: 154 entities, 906 components, 10 pools, 129 drawn, 3776 triangles
+ecs_swarm: hierarchy 154 rows, 2 roots, 3 levels, 0 orphans, 0 cycles
+ecs_swarm: debug lines queued 152, drawn 152, dropped 0, ui off</code></pre>
+  </figure>
+
+  <div class="worked">
+    <span class="label">Worked example — why 152, and not 154</span>
+    <p>The debug system queues one line per entity that <em>has a <code>parent</code>
+       component</em>. Count them from <code>build_world()</code>: 96 ring members, plus 2 moons
+       for each of the 16 ring members whose index is divisible by six (32), plus 24 waypoints.
+       <strong>96 + 32 + 24 = 152.</strong></p>
+    <p>The two missing entities are the sun and the camera, which are never given a parent — and
+       the hierarchy report agrees, independently, that there are exactly <strong>2 roots</strong>.
+       Two different subsystems counting the same structure two different ways and arriving at
+       154 = 152 + 2 is a much stronger statement than either number alone.</p>
+    <p><code>drawn</code> equals <code>queued</code> because no line crosses the near plane from
+       this camera. Dolly in with <code>[</code> until the sun is at your nose and watch
+       <code>drawn</code> fall below <code>queued</code> — that gap is Lesson 3.3's clipper,
+       reached through the queue, reported honestly.</p>
+    <p>And <code>ui off</code>: a headless run has no window, so <code>debug_ui::start</code>
+       declined. Every UI call in the program became a no-op and the picture is unaffected —
+       which is the property that keeps the golden byte-identical.</p>
+  </div>
+
+  <h3>9.2 The controls, and the one to try first</h3>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Key</th><th>Does</th><th>Why it is interesting</th></tr></thead>
+    <tbody>
+      <tr><td><code>[L]</code></td><td>hierarchy links on/off</td>
+          <td>the tree, drawn — the same checkbox is in the panel</td></tr>
+      <tr><td><code>[G]</code></td><td>axis triads on/off</td>
+          <td>152 triads is a hedge; that is a real lesson about debug views</td></tr>
+      <tr><td><code>[H]</code></td><td>detach the outer half</td>
+          <td>48 links vanish, and each leaves a 2-second box behind</td></tr>
+      <tr><td><code>[F]</code></td><td>drift the sun</td>
+          <td>every line follows, because following is what parenting means</td></tr>
+      <tr><td><code>[Space]</code></td><td>spawn sparks</td>
+          <td>leaves a timed sphere at the burst's origin</td></tr>
+      <tr><td><code>[F1]</code></td><td>panels on/off</td>
+          <td>an action like any other, so it works while the UI has focus</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>Then do this, because it is the whole of §6 in five seconds.</strong> Click into the
+    filter box in the <em>input</em> panel and type <code>spawn</code>. Nothing spawns. No
+    material toggles. The two lines under the box flip to <code>keyboard: UI</code>. Click out
+    again and every key works. Then hold <code>[Left]</code> so the camera is yawing, and click
+    into the box while still holding it: the camera stops, because the mask produced a release
+    edge rather than freezing a level.
+  </p>
+
+  <p>
+    Finally, drag the <em>marker seconds</em> slider while watching the cursor-offset readout. It
+    counts up while you drag — that is the virtual cursor of §6.2 absorbing the movement — and
+    when you let go, the camera does not jump.
+  </p>
+
+  <!-- =================================================================
+       10 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">10</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The debug view draws nothing at all</span>
+    <p><strong>Symptom.</strong> The queue reports a sensible <code>size()</code> in the
+       debugger, the flush runs, and the screen is unchanged.</p>
+    <p><strong>Cause.</strong> Almost always the order: <code>advance()</code> is running before
+       the flush, so every default-lifetime line is deleted on the frame it was queued. It reads
+       exactly like "my queueing code never ran", which is why people go and instrument the
+       queueing code.</p>
+    <p><strong>Fix.</strong> <code>advance()</code> is the <em>last</em> thing in the frame.
+       Diagnose it in one step by queueing something with <code>seconds = 5</code>: if the
+       five-second line appears and the default ones do not, it is the order and nothing
+       else.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Debug lines pile up and the drop counter climbs</span>
+    <p><strong>Symptom.</strong> <code>dropped()</code> is non-zero and rising; older markers
+       stay on screen forever.</p>
+    <p><strong>Cause.</strong> Either a real overflow — you are queueing more than the capacity
+       every frame — or <code>advance()</code> is not being called on some path. The
+       <code>--shot</code> path is the classic one: it returns early, and a queue aged only
+       inside the "we have a camera" branch never ages on a frame with no active camera.</p>
+    <p><strong>Fix.</strong> Age unconditionally, outside every branch. In this lesson's demo
+       <code>advance()</code> sits outside the camera check for exactly this reason.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A key stays held after using the panel</span>
+    <p><strong>Symptom.</strong> The camera keeps yawing after you interact with the UI. Tapping
+       the key once fixes it.</p>
+    <p><strong>Cause.</strong> The action map stopped being updated while the UI had focus —
+       either by an <code>if (!ui.wants_keyboard())</code> around <code>update()</code>, or by
+       events being routed to ImGui and not passed on. Both leave a <em>level</em> stuck true,
+       and a level is only corrected by the event that contradicts it.</p>
+    <p><strong>Fix.</strong> Always update, always through the mask. Never withhold an event from
+       <code>engine::input</code>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The camera whips round when you let go of a slider</span>
+    <p><strong>Symptom.</strong> Dragging an ImGui widget is fine; releasing it snaps the view by
+       roughly the distance you dragged.</p>
+    <p><strong>Cause.</strong> The mouse position was frozen during the block rather than
+       rebased, so the first unblocked frame differences against a position from several hundred
+       milliseconds ago.</p>
+    <p><strong>Fix.</strong> The virtual cursor of §6.2 — and note that the diagnostic is already
+       on screen: the offset readout should stop growing the instant you release, and the delta
+       the frame after should be small.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">One frame of input leaks into the game after clicking a text field</span>
+    <p><strong>Symptom.</strong> The first character you type after clicking into a field also
+       triggers whatever that key does in the game. Only the first.</p>
+    <p><strong>Cause.</strong> <code>begin_frame()</code> is running after the capture flags are
+       read — usually because it was placed next to the panels in <code>on_overlay</code>, which
+       is where it looks like it belongs. Every read then answers about the previous frame.</p>
+    <p><strong>Fix.</strong> <code>begin_frame()</code> first in <code>on_input()</code>. It is
+       one line, and moving it is the entire fix.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">ImGui asserts inside <code>ProcessEvent</code> on start-up or shutdown</span>
+    <p><strong>Symptom.</strong> An <code>IM_ASSERT</code> firing with "Context or backend not
+       initialized!"</p>
+    <p><strong>Cause.</strong> Events arrive before <code>on_start()</code> has run and after
+       <code>on_stop()</code> has torn the backends down. ImGui's backend functions are not
+       total: they assume a live context.</p>
+    <p><strong>Fix.</strong> The <code>if (!running_) return;</code> guard at the top of every
+       forwarding function in <code>debug_ui</code>. That guard is not defensive
+       decoration — it is what makes the class usable on a surface that never starts one.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The panel is invisible, or draws under the scene</span>
+    <p><strong>Symptom.</strong> ImGui reports no errors and nothing is on screen.</p>
+    <p><strong>Cause.</strong> <code>render()</code> is being called before
+       <code>blit_framebuffer()</code> — so the framebuffer blit paints over it — or the render
+       scale was left at something other than 1 by a previous overlay call.</p>
+    <p><strong>Fix.</strong> <code>on_overlay()</code> is the hook, and it exists precisely
+       because "after the blit, before the present" is a moment nothing else has. Restore any
+       <code>SDL_SetRenderScale</code> you set before returning from it.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">11</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>11.1 — Draw the thing you cannot see.</strong> Add a
+         <code>debug_lines::frustum(const mat4&amp; view_projection, Uint32, float)</code> that
+         draws the camera's own frustum, and call it for the <em>inactive</em> camera in
+         <code>ecs_swarm</code> — the one you are not looking through. Press <code>[C]</code> and
+         watch the other camera's frustum swing past.</p>
+      <details><summary>Hint</summary>
+         <p>The eight corners of a frustum are the eight corners of the NDC cube pushed through
+            the inverse of the view-projection matrix, then divided by <var>w</var>. The cube is
+            <code>x, y ∈ [−1, 1]</code> and <code>z ∈ [0, 1]</code> — Lesson 4.2's depth range,
+            not OpenGL's. Then reuse <code>k_box_edges</code>.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>Build the eight corners, transform, divide, and emit the twelve edges. The perspective
+            divide is what makes it a frustum rather than a box, and it is worth stopping to
+            notice: you have just run Module 2's pipeline <em>backwards</em>, and the shape that
+            comes out is the shape that was mapped to a cube.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.2 — A panel that edits the world.</strong> Add a table of entities with a
+         selectable row, and an inspector that shows the selected entity's local
+         <code>placement</code> with three <code>DragFloat3</code> widgets writing straight into
+         the component. Queue an axis triad on the selection so you can see what you are
+         editing.</p>
+      <details><summary>Hint</summary>
+         <p>Store the selected <code>entity</code>, not a pointer to its components — the pointer
+            dangles the moment a pool reallocates. <code>registry::alive()</code> is your check
+            each frame, and it is exactly why Lesson 5.4 built generational handles.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>This is Module 9's inspector in miniature, and the shape you arrive at is the right
+            one: the panel holds an <em>id</em>, re-resolves it every frame, and shows nothing
+            when the resolve fails. That is the whole reason a handle is not a pointer.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.3 — Depth-tested debug lines.</strong> Add a <code>bool depth_tested</code> to
+         <code>debug_line</code> and honour it in the software backend, so a hierarchy line
+         passing behind geometry is hidden. Then draw the same scene with the flag on and off and
+         decide which you actually prefer.</p>
+      <details><summary>Hint</summary>
+         <p><code>draw_line</code> does not consult a depth buffer, so the interesting work is
+            deciding what a line's depth even <em>is</em> — it varies along the segment, so a
+            per-pixel test needs the interpolated <code>1/w</code> the rasterizer already
+            computes for triangles (Lesson 3.2).</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>Two passes: depth-tested lines first, overlaid lines second, so an overlaid line is
+            never hidden by a tested one. That ordering requirement is the real content of the
+            exercise — it is the first time the queue's <em>order</em> becomes part of its
+            contract rather than an implementation detail.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.4 — The other backend.</strong> Bring the debug UI up on
+         <code>surface::gpu</code> in <code>sandbox</code>, using
+         <code>imgui_impl_sdlgpu3</code>. §7.1 has the signatures.</p>
+      <details><summary>Hint</summary>
+         <p><code>debug_ui</code> needs a second <code>start()</code> taking an
+            <code>SDL_GPUDevice*</code> and the swapchain's texture format, and a
+            <code>render()</code> taking a command buffer and a render pass. The platform backend
+            does not change; only the renderer half does.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The awkward part is not ImGui, it is that <code>PrepareDrawData</code> must be called
+            with the command buffer <em>before</em> the render pass begins and
+            <code>RenderDrawData</code> <em>inside</em> it. Your <code>render()</code> therefore
+            splits into two functions, and the demo has to call them at two different points —
+            which is a fair description of the difference between the two surfaces generally.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>11.5 — Break the seam on purpose.</strong> Replace the mask with the two wrong
+         designs from §6, one at a time: first skip <code>actions_.update()</code> while the UI
+         has the keyboard, then freeze the reported cursor position instead of rebasing it.
+         Reproduce both symptoms deliberately and write down the sequence of actions that exposes
+         each.</p>
+      <details><summary>Hint</summary>
+         <p>The first needs a key held <em>across</em> the moment focus is taken. The second needs
+            a long drag — the bug is proportional to how far you dragged, so a small drag hides
+            it, which is exactly why it survives testing.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>Both are one-line changes and both produce a bug that a casual test passes. That is
+            the point of the exercise: these are not mistakes you avoid by being careful, they are
+            mistakes you avoid by knowing that a level and a delta fail in different ways.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       12 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">12</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine gained a debug-draw <em>system</em> and a tooling UI, and Module 5 is finished.
+  </p>
+
+  <ul>
+    <li><strong>A queue that anybody can fill.</strong> <code>debug_lines</code> holds world-space
+        segments with lifetimes, bounded and counted, and includes nothing that can draw — so a
+        collision system in Module 8 will be able to queue a contact normal without compiling the
+        renderer.</li>
+    <li><strong>A backend, not a replacement.</strong> Everything in <code>debug_draw.hpp</code>
+        survived; the queue was put in front of it. <code>draw_debug_lines</code> is four lines
+        because six lessons of clipping were already correct.</li>
+    <li><strong>Lifetimes, because events are invisible without them.</strong> A single-frame
+        marker is on screen for 16.7 ms and a person needs about 250. The expiry rule tests before
+        it subtracts, so a paused clock cannot leak.</li>
+    <li><strong>Dear ImGui, taken publicly and contained.</strong> 41,385 lines we did not write,
+        182 lines that own the lifecycle, and a rule about which code is allowed to speak it.</li>
+    <li><strong>An input seam that changed nothing it did not have to.</strong>
+        <code>masked_input</code> is a new type satisfying 5.10's concept; <code>action_map</code>
+        is unchanged to the character. The arbitration is on levels, never on events.</li>
+    <li><strong>A virtual cursor</strong>, because a delta cannot be masked by masking one of its
+        endpoints — the subtlest thing in the lesson and the one most likely to ship broken.</li>
+  </ul>
+
+  <p>
+    60 checks green in debug and release; <code>verify_45</code> through <code>verify_510</code>
+    still green; and the reference shot from Lesson 5.1 byte-identical for the eleventh
+    consecutive lesson, which is now a slightly stronger statement than usual: this lesson
+    changed a function signature in the middle of the reference render's own call path and the
+    output did not move by one bit.
+  </p>
+
+  <p>
+    <strong>Next: Module 6.</strong> The renderer stops being adequate and starts being correct.
+    It opens with the lesson every graphics programmer needs exactly once and then has forever —
+    linear versus sRGB — and the reason it opens there is that every lighting result in the
+    module is wrong until it is settled. Lesson 1.6 promised that payment would come due; it is
+    due now.
+  </p>
+
+  <p>
+    Both halves of this lesson get their return in that module and the two after it. The debug
+    queue becomes the thing that makes shadow-map frustums, tangent frames and culling bounds
+    visible instead of theoretical; the panel becomes how a BRDF's three terms get separate
+    sliders. And Module 9's editor — hierarchy, inspector, gizmos — is built on exactly the two
+    files this lesson added.
+  </p>
+
+  <!-- =================================================================
+       13 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">13</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>Omar Cornut, <em>Dear ImGui</em> — the repository's <code>docs/FAQ.md</code> and
+        <code>docs/BACKENDS.md</code>.</strong> The FAQ is unusually good and answers the two
+        questions this lesson raises next: how to handle multiple contexts, and what
+        <code>WantCaptureKeyboard</code> means precisely.</li>
+    <li><strong><code>imgui_demo.cpp</code>, in your own <code>build/_deps</code>.</strong> Not a
+        document — the source of the demo window, and the fastest way to find out how a widget is
+        used is to find it in there. Read it beside the running
+        <code>ImGui::ShowDemoWindow()</code>.</li>
+    <li><strong>Casey Muratori, "Immediate-Mode Graphical User Interfaces" (2005).</strong> The
+        talk that named the idea, and worth reading for the derivation rather than the API: it
+        arrives at immediate mode by asking what a UI's state is actually <em>for</em>.</li>
+    <li><strong>Sean Barrett, "IMGUI" notes and <code>stb</code> philosophy.</strong> The other
+        source of the idea, and useful next to §2.3's argument about wrapping a concept versus
+        wrapping a vocabulary.</li>
+    <li><strong>Mike Acton's and Jason Gregory's material on tools in shipped engines</strong> —
+        <em>Game Engine Architecture</em>, chapter on tooling. The claim that debug visualisation
+        belongs in the engine rather than beside it, argued from production experience.</li>
+    <li><strong>Lesson 3.3 (near-plane clipping)</strong>, which is what
+        <code>draw_debug_lines</code> is quietly reusing, and Lesson 5.10, whose concept turned
+        out to have a second customer.</li>
+  </ul>

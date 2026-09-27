@@ -331,6 +331,12 @@ Run silently before emitting any lesson (master prompt §11):
 - [ ] Did this lesson's listings get **pinned** (`LISTING_SOURCE`) before the next
       one starts editing those files (§15)? A pin costs a minute now and is
       unrecoverable later.
+- [ ] **`python3 docs/_template/check-continuity.py` green** — every file this
+      lesson's commit changed is listed *whole* on its page, and a student who
+      copies every listing in course order ends with HEAD (§16)? Run it after
+      committing the lesson; it reads the lesson's own commit.
+- [ ] New pins, fragments and figures **`git add -f`ed**? `scratch/` is ignored,
+      and `check-builders.py` builds from tracked files only (§15).
 
 ## 13. Verifying a page
 
@@ -474,15 +480,26 @@ sheet that loaded and applied perfectly. Judge it by computed style instead, the
 ## 15. Reproducibility: a builder must still make its page
 
 ```sh
-python3 docs/_template/check-builders.py              # all of them, ~10 s
+python3 docs/_template/check-builders.py              # all of them, ~25 s
 python3 docs/_template/check-builders.py 51 66        # just these
 python3 docs/_template/check-builders.py --diff 51    # show the first diff hunks
 python3 docs/_template/check-builders.py --figures    # also regenerate the SVGs first
 ```
 
-Every `build_NN.py` runs in a throwaway copy-on-write clone of the tree and its
-output is compared with the published page. Exit status is 0 only when every one
-of them is byte-identical.
+Every `build_NN.py` runs in a throwaway clone and its output is compared with the
+published page. Exit status is 0 only when every one of them is byte-identical.
+
+**The clone holds tracked files only.** `scratch/` is gitignored, but everything a
+builder reads is **force-added** (`git add -f`) — the builders, their prose
+fragments, SVGs, pins and harness sources, plus the generators behind them
+(`figs_NN.py`, the `gen*` scripts) and the repair tools below: 1,383 files, 30 MB,
+traced on 2026-09-26 with an audit hook on `open`. `.gitignore` itself is not
+changed, because it is Lesson 3.5's listing. So a new pin or fragment must be
+`git add -f`ed like any other source — a builder that reads one you forgot
+**crashes** here, with a hint, instead of passing on your machine only.
+`--worktree` clones everything on disk, to tell a forgotten `add` from a real bug.
+Render captures (`.ppm`/`.png`), logs, probes and previews stay untracked: they
+are output.
 
 **Why this is a standing check and not a one-off.** On 2026-09-12 an audit found
 **27 of 37 builders could no longer make their own page** — and the pages were
@@ -556,3 +573,46 @@ SVGs are correct and the pages rebuild from them** — it is the SVGs' own input
 that are lost, and recovering them would mean re-rendering Module 4 demos on a
 Module 6 engine. `figs_511.py` reads `build/swarm511.ppm`, which is why
 `--figures` keeps `build/` in the clone.
+
+## 16. Continuity: a student who follows the pages must end with the engine
+
+```sh
+python3 docs/_template/check-continuity.py            # R1 + R2, ~2 s
+python3 docs/_template/check-continuity.py -v         # every finding, with its size
+python3 docs/_template/check-continuity.py --replay   # + per-lesson drift from its commit
+python3 -m unittest discover docs/_template/tests     # the checkers' own tests
+```
+
+`check-builders.py` proves a page is what its builder says. It cannot prove the
+page says *enough*. On 2026-09-26 a replay found 23 lessons (5.2–6.16, 8.4, 8.8)
+whose commits changed files the page never lists whole — 6.15 adds 156 lines of
+image-based lighting to `shaders/scene.frag.hlsl` and lists only the skybox
+shaders — so a student following Modules 5–6 could not reach the engine as
+shipped. Every page looked complete.
+
+The checker replays the course the way a student would: in course order
+(inserted `b` lessons included), copy every listing tagged `new`, `modified` or
+`unchanged` over the tree; at 5.1, first run that lesson's move script, replayed
+exactly (its unit test pins the script's text). Then:
+
+| Check | Question | Fails when |
+|---|---|---|
+| **R1** | Does the replay *end* at HEAD? | A course-owned source (`engine/`, `demos/`, `shaders/`, `cmake/`, root `CMakeLists.txt`) is missing or differs. `-v` says whether the difference is code or comments only. |
+| **R2** | Did each lesson list what it changed? | A file its `Add Lesson` commit added, modified or renamed is not listed whole on its page (5.1's scripted moves excepted). |
+
+**Known defects are a ratchet.** `continuity-known.txt` holds the defects that
+exist and are scheduled for repair. The check fails on any defect *not* in it (a
+regression) and on any entry that no longer fails — delete the line when you
+repair it. The list can only shrink, and every run prints how many remain.
+
+**Repairing an R2 omission.** Pin the file from the lesson's commit
+(`git show <sha>:<path> > scratch/lNN_<path with / as _>`), add it to the
+builder's `LISTING_META`/`LISTING_SOURCE`, fix its manifest row, `git add -f` the
+pin, rebuild, and delete the `R2` line. A file shown only as a snippet keeps the
+snippet in Implementation and gains the whole file in Code Listings.
+
+**Consequence for inserted lessons.** A `6.17b` sits *before* 6.18–8.13 in course
+order, so any file it adds must also appear in every later full listing of
+`engine/CMakeLists.txt`, `engine/include/engine/engine.hpp` and
+`demos/CMakeLists.txt`. R1 enforces that: a later listing without the insertion's
+lines leaves the replay short of HEAD.

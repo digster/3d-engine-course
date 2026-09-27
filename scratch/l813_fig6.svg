@@ -1,0 +1,104 @@
+<svg viewBox="0 0 980 440.5" role="img" aria-labelledby="h6-t h6-d">
+  <title id="h6-t">Slopes: laying a step along the ground, standing still on it, and what is too steep</title>
+  <desc id="h6-d">Left: a 30-degree ramp with the stick's horizontal step, the step laid along the ramp keeping its horizontal part, and the shorter plain projection; a table shows the horizontal speed is exactly 3 m/s on every walkable ramp. Middle: a table of creep speeds when gravity is slid along the slope instead of stopped, matching g h sin alpha. Right: how far a character hopping into a steep slope gets with and without flattening the wall normal.</desc>
+  <defs>
+    <marker id="e-i-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<defs><marker id="e-blue-h6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">A step laid along a 30° ramp, horizontal part kept</text>
+<line x1="47.5" y1="257.2" x2="322.5" y2="98.4" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<line x1="110.00" y1="221.13" x2="260.00" y2="221.13" stroke="#8f918a" stroke-width="1.6" marker-end="url(#e-grey-h6)"/>
+<text x="266.0" y="225.13248654051873" class="xs" text-anchor="start">d: the stick</text>
+<line x1="110.00" y1="221.13" x2="260.00" y2="134.53" stroke="#5ac878" stroke-width="2.2" marker-end="url(#e-green-h6)"/>
+<line x1="260.0" y1="221.1" x2="260.0" y2="134.5" stroke="#5ac878" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<line x1="115.62" y1="230.88" x2="228.13" y2="165.92" stroke="#e05c5c" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#e-red-h6)"/>
+<text x="176.25" y="162.67577178506912" class="xs" text-anchor="end">laid: all of it</text>
+<text x="171.875" y="210.40893863441062" class="xs" text-anchor="start">slid: cos²α of it</text>
+<line x1="247.50" y1="141.75" x2="225.00" y2="102.78" stroke="#5082e6" stroke-width="1.4" marker-end="url(#e-blue-h6)"/>
+<text x="215.0" y="93.44555433772325" class="xs" text-anchor="middle">n</text>
+<text x="26" y="280" class="xs mono" text-anchor="start">t = d − ŷ·(d·n)/n.y   keeps d's horizontal part exactly</text>
+<text x="26" y="295" class="xs" text-anchor="start">d − (d·n)·n, the slide, keeps only cos²α of it: 2.25 of 3 m/s</text>
+<text x="26" y="324" class="xs muted" text-anchor="start">walking up at 3 m/s, measured</text>
+<text x="26" y="344" class="xs muted" text-anchor="start">ramp</text>
+<text x="160" y="344" class="xs muted" text-anchor="end">horizontal</text>
+<text x="240" y="344" class="xs muted" text-anchor="end">along it</text>
+<text x="314" y="344" class="xs muted" text-anchor="end">rise / m</text>
+<text x="380" y="344" class="xs muted" text-anchor="end">tan α</text>
+<line x1="26" y1="352.0" x2="386" y2="352.0" class="grid" stroke-width="1.0"/>
+<text x="26" y="369.0" class="xs" text-anchor="start">10°</text>
+<text x="160" y="369.0" class="xs mono" text-anchor="end">3.0000</text>
+<text x="240" y="369.0" class="xs mono" text-anchor="end">3.0463</text>
+<text x="314" y="369.0" class="xs mono" text-anchor="end">0.1763</text>
+<text x="380" y="369.0" class="xs mono" text-anchor="end">0.1763</text>
+<text x="26" y="386.0" class="xs" text-anchor="start">20°</text>
+<text x="160" y="386.0" class="xs mono" text-anchor="end">3.0000</text>
+<text x="240" y="386.0" class="xs mono" text-anchor="end">3.1925</text>
+<text x="314" y="386.0" class="xs mono" text-anchor="end">0.3640</text>
+<text x="380" y="386.0" class="xs mono" text-anchor="end">0.3640</text>
+<text x="26" y="403.0" class="xs" text-anchor="start">30°</text>
+<text x="160" y="403.0" class="xs mono" text-anchor="end">3.0000</text>
+<text x="240" y="403.0" class="xs mono" text-anchor="end">3.4641</text>
+<text x="314" y="403.0" class="xs mono" text-anchor="end">0.5773</text>
+<text x="380" y="403.0" class="xs mono" text-anchor="end">0.5774</text>
+<text x="26" y="420.0" class="xs" text-anchor="start">40°</text>
+<text x="160" y="420.0" class="xs mono" text-anchor="end">3.0000</text>
+<text x="240" y="420.0" class="xs mono" text-anchor="end">3.9162</text>
+<text x="314" y="420.0" class="xs mono" text-anchor="end">0.8391</text>
+<text x="380" y="420.0" class="xs mono" text-anchor="end">0.8391</text>
+<text x="440" y="30" class="sm" text-anchor="start">Standing still: stop gravity, or slide it</text>
+<text x="440" y="50" class="xs muted" text-anchor="start">creep speed, m/s, over 2 s</text>
+<text x="440" y="70" class="xs muted" text-anchor="start">slope</text>
+<text x="558" y="70" class="xs muted" text-anchor="end">stopped</text>
+<text x="630" y="70" class="xs muted" text-anchor="end">slid</text>
+<text x="706" y="70" class="xs muted" text-anchor="end">g·h·sin α</text>
+<line x1="440" y1="78.0" x2="712" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="440" y="95.0" class="xs" text-anchor="start">10°</text>
+<text x="558" y="95.0" class="xs mono t-ok" text-anchor="end">0.000000</text>
+<text x="630" y="95.0" class="xs mono t-bad" text-anchor="end">0.028389</text>
+<text x="706" y="95.0" class="xs mono" text-anchor="end">0.028391</text>
+<text x="440" y="112.0" class="xs" text-anchor="start">20°</text>
+<text x="558" y="112.0" class="xs mono t-ok" text-anchor="end">0.000000</text>
+<text x="630" y="112.0" class="xs mono t-bad" text-anchor="end">0.055916</text>
+<text x="706" y="112.0" class="xs mono" text-anchor="end">0.055920</text>
+<text x="440" y="129.0" class="xs" text-anchor="start">30°</text>
+<text x="558" y="129.0" class="xs mono t-ok" text-anchor="end">0.000000</text>
+<text x="630" y="129.0" class="xs mono t-bad" text-anchor="end">0.081746</text>
+<text x="706" y="129.0" class="xs mono" text-anchor="end">0.081750</text>
+<text x="440" y="146.0" class="xs" text-anchor="start">40°</text>
+<text x="558" y="146.0" class="xs mono t-ok" text-anchor="end">0.000000</text>
+<text x="630" y="146.0" class="xs mono t-bad" text-anchor="end">0.105092</text>
+<text x="706" y="146.0" class="xs mono" text-anchor="end">0.105096</text>
+<text x="440" y="174.5" class="xs muted" text-anchor="start">A grounded character still falls g·h² a step</text>
+<text x="440" y="189.5" class="xs muted" text-anchor="start">before the ground stops it. Slid along the</text>
+<text x="440" y="204.5" class="xs muted" text-anchor="start">slope instead of stopped by it, that drop</text>
+<text x="440" y="219.5" class="xs muted" text-anchor="start">has a downhill part g·h²·sin α — every step,</text>
+<text x="440" y="234.5" class="xs muted" text-anchor="start">forever: 8.2 cm/s on 30°, five metres a</text>
+<text x="440" y="249.5" class="xs muted" text-anchor="start">minute.</text>
+<text x="740" y="30" class="sm" text-anchor="start">Too steep to walk (limit 45°)</text>
+<text x="740" y="50" class="xs muted" text-anchor="start">hopping 0.5 m into it: how far in, m</text>
+<text x="740" y="70" class="xs muted" text-anchor="start">slope</text>
+<text x="864" y="70" class="xs muted" text-anchor="end">flattened</text>
+<text x="938" y="70" class="xs muted" text-anchor="end">not</text>
+<line x1="740" y1="78.0" x2="944" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="740" y="95.0" class="xs" text-anchor="start">50°</text>
+<text x="864" y="95.0" class="xs mono t-ok" text-anchor="end">+0.257</text>
+<text x="938" y="95.0" class="xs mono t-bad" text-anchor="end">+0.638</text>
+<text x="740" y="112.0" class="xs" text-anchor="start">60°</text>
+<text x="864" y="112.0" class="xs mono t-ok" text-anchor="end">+0.099</text>
+<text x="938" y="112.0" class="xs mono t-bad" text-anchor="end">+0.328</text>
+<text x="740" y="140.5" class="xs muted" text-anchor="start">On the ground, laying the move</text>
+<text x="740" y="155.5" class="xs muted" text-anchor="start">along the floor already throws the</text>
+<text x="740" y="170.5" class="xs muted" text-anchor="start">climb away; in the air only the</text>
+<text x="740" y="185.5" class="xs muted" text-anchor="start">flattened normal does. And a slope</text>
+<text x="740" y="200.5" class="xs muted" text-anchor="start">too steep to stand on is slid down</text>
+<text x="740" y="215.5" class="xs muted" text-anchor="start">at 4.3897 m/s after 0.5 s on 60°:</text>
+<text x="740" y="230.5" class="xs muted" text-anchor="start">g·t·sin α = 4.3895, a frictionless</text>
+<text x="740" y="245.5" class="xs muted" text-anchor="start">incline, from a projection alone.</text>
+</svg>

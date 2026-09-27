@@ -1,0 +1,380 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-02-axis-angle.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.2 — Axis-Angle and Rodrigues' Rotation Formula</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-04-quaternions.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.4 — Quaternions, Derived</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.3</div>
+    <h1>Complex Numbers Rotate the Plane</h1>
+    <p class="deck">
+      Lesson 7.2 finished with a list of things axis-angle cannot do, and the first item on it
+      was fatal: <strong>there is no usable formula for composing two turns.</strong> Given one
+      axis and angle and another, "do both" means building two matrices, multiplying them, and
+      extracting again — three trigonometric round trips to answer a question that ought to be
+      one multiplication. This lesson goes down a dimension and finds a representation where it
+      <em>is</em> one multiplication. Not by cleverness: the arithmetic of complex numbers,
+      invented for unrelated reasons two centuries before anyone drew a polygon, turns out to be
+      the arithmetic of turning and scaling the plane, and we derive that rather than announce
+      it. The single input is a measurement anyone can make with a piece of paper — a quarter
+      turn, done twice, reverses direction — and <code>i² = −1</code> falls out of it as a
+      consequence rather than an axiom. From there: the product as a spiral similarity, with
+      <code>(3+4i)(1+2i)</code> pushed through by hand; the proof that complex numbers
+      <em>are</em> the 2×2 rotation-and-scale matrices, which is also the proof that a
+      <code>mat2</code> holding a rotation stores <code>cos θ</code> and <code>sin θ</code> twice;
+      and Euler's formula derived from a differential equation you can see, because the velocity
+      of a point going round a circle is perpendicular to where it is, and perpendicular
+      <em>is</em> multiplication by <code>i</code>. Then the part that pays for the whole module.
+      <strong>Two reflections make a rotation of twice the angle between the mirrors</strong> —
+      which means the object you build a rotation out of carries <em>half</em> its angle. That is
+      the <code>θ/2</code> in every quaternion, visible here in the plane with a protractor, and
+      it brings the double cover with it: two mirrors-apart objects per rotation, exactly, for
+      the same reason. We measure all of it — <strong>1.88× cheaper to compose, 1.05× (a wash) to
+      apply, 6.15× less drift</strong>, and a renormalise so cheap it has no square root and a
+      failure mode so quiet that a unit test on <code>|z|</code> certifies a function that turns
+      the object 180° the wrong way. Interpolation gets the treatment 7.5 will inherit: nlerp
+      travels <strong>exactly the right path at exactly the wrong speed</strong>, and the speed
+      ratio is <code>sec²(Ω/2)</code>, derived and then measured at seven arcs. And we end by
+      proving the fourth dimension is <em>forced</em>: assume a three-dimensional number system
+      with <code>i² = j² = −1</code>, ask where <code>ij</code> goes, and three lines of algebra
+      demand a real number whose square is −1. Hamilton took thirteen years. Lesson 7.4 starts
+      where those three lines finish.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="01-07-vectors-2d.html">1.7 — 2D Vectors, Geometrically</a>,
+          <a href="02-05-matrices.html">2.5 — Matrices as Basis Transforms</a>,
+          <a href="07-01-euler-angles.html">7.1 — Euler Angles and Their Pathologies</a>,
+          <a href="07-02-axis-angle.html">7.2 — Axis-Angle and Rodrigues' Rotation Formula</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/math/complex.hpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>demos/plane/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>scratch/verify_73.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_73.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine gains a rotation representation that <strong>composes by multiplication</strong>
+            — four multiplies and two adds, no trigonometry — and that can be interpolated, which a
+            matrix cannot. <code>complex_slerp</code> is three lines and is the same three lines
+            Lesson 7.5's quaternion slerp will be. <strong>43 checks green</strong>, twelve of them
+            controls. A new demo, <code>plane</code>, draws the four arguments this lesson makes,
+            and the one you should play with is <kbd>3</kbd>: two mirrors, and a point that moves
+            through twice the angle between them.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive <code>i² = −1</code> from a fact about the plane rather than accept it as a
+          definition, and explain why that makes complex arithmetic <em>inevitable</em> rather
+          than useful.</li>
+      <li>…state what multiplying by a complex number does geometrically, prove it, and check the
+          proof against real numbers you pushed through by hand.</li>
+      <li>…explain the exact sense in which complex numbers and 2×2 matrices are the same thing,
+          and say which two floats of a rotation matrix are redundant.</li>
+      <li>…derive Euler's formula from the velocity of a point on a circle, in three lines,
+          without a power series.</li>
+      <li>…explain where the <code>θ/2</code> in a quaternion comes from — and predict the double
+          cover before you have met a quaternion — using only reflections in the plane.</li>
+      <li>…tell a representation that is cheaper to <em>use</em> from one that is cheaper to
+          <em>keep and combine</em>, and say which of the two this is.</li>
+      <li>…distinguish a blend that takes the wrong <em>path</em> from one that takes the right
+          path on the wrong <em>schedule</em>, and put a closed form on the second.</li>
+      <li>…prove that no three-dimensional number system can do this job, in four lines you can
+          check yourself.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: three representations, none of which composes</a></li>
+      <li><a href="#intuition">Building intuition: what if turning were a number?</a></li>
+      <li><a href="#quarter">The quarter turn, and what it forces</a></li>
+      <li><a href="#product">The product, derived — and what it does geometrically</a></li>
+      <li><a href="#matrices">Complex numbers <em>are</em> 2×2 matrices</a></li>
+      <li><a href="#euler">Euler's formula, from a picture</a></li>
+      <li><a href="#mirrors">Reflections, rotors, and where <code>θ/2</code> comes from</a></li>
+      <li><a href="#implementation">Implementation: the type</a></li>
+      <li><a href="#cost">What it costs, measured</a></li>
+      <li><a href="#interpolation">Interpolation: the path and the schedule</a></li>
+      <li><a href="#circle">A circle without trigonometry</a></li>
+      <li><a href="#forced">Where the plane runs out, and what that predicts</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: three representations, none of which composes</h2>
+
+  <p>
+    The engine now has three ways to write down a rotation, and it is worth laying them next to
+    each other before adding a fourth, because the fourth exists to fix something the other three
+    share.
+  </p>
+
+  <p>
+    A <code>mat3</code> (Lesson 2.5) stores nine floats and composes beautifully: multiply two
+    matrices and you have the composite rotation, no trigonometry involved. It is also the thing
+    the renderer actually wants, which is why it is what the engine stores. But nine floats hold
+    three degrees of freedom, so six of them are redundant, and redundancy in floating point means
+    <em>drift</em>: compose a million rotations and the result is measurably no longer a rotation.
+    Worse, you cannot interpolate one. Average two rotation matrices entrywise and the answer is
+    not a rotation at all — it is some squashed thing that collapses space a little.
+  </p>
+
+  <p>
+    <code>euler_angles</code> (Lesson 7.1) stores three floats and is the only representation a
+    human can type. It is also the one with twenty-four incompatible readings, a singularity that
+    no choice of axis order escapes, and an interpolation that wastes between 14% and 209% of its
+    turning depending on where the pose happens to sit.
+  </p>
+
+  <p>
+    <code>axis_angle</code> (Lesson 7.2) stores four floats, has exactly one reading, and
+    interpolates along the exact geodesic — <strong>0.00% wasted turning at every pose</strong>,
+    which was that lesson's payoff. And then §10 of that lesson listed what it costs, and the
+    first item was not about speed:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What Lesson 7.2 §10 actually said</span>
+    <p>
+      "There is no usable formula for composing two axis-angle rotations. Given
+      <code>(n₁, θ₁)</code> and <code>(n₂, θ₂)</code>, the axis and angle of the composite is not
+      a short expression in them — the standard route is to build both matrices, multiply, and
+      extract, which is two <code>sin</code>/<code>cos</code> pairs, nine multiply-adds, an
+      <code>atan2</code>, a <code>sqrt</code> and a division, to answer a question that in a
+      better representation would be one multiplication."
+    </p>
+  </div>
+
+  <p>
+    Composition is not an exotic operation. It is what a scene graph does every frame
+    (Lesson 5.7's transform hierarchy is a tree of compositions), what animation blending does
+    between every pair of keyframes, and what a physics solver does when it integrates angular
+    velocity. A representation that cannot compose cheaply is a representation you convert
+    <em>out of</em> constantly, and every conversion is trigonometry.
+  </p>
+
+  <p>
+    So the question for this lesson is precise: <strong>is there a way of writing down a rotation
+    such that composing two of them is arithmetic — no trigonometry, no matrix product, no
+    extraction?</strong> And 7.2 §10 sharpened it into four requirements: compose without
+    trigonometry, interpolate along the geodesic, fit in four floats or fewer, and renormalise
+    cheaply.
+  </p>
+
+  <p>
+    In three dimensions the answer is a quaternion, and it is the subject of Lesson 7.4. We are
+    not going there yet, and the reason is not that quaternions are hard. It is that in the plane
+    the same question has an answer that is <em>completely elementary</em>, that you can check
+    with a ruler, and that turns out — this is the part that matters — to contain every idea the
+    four-dimensional version needs. Every one. The half-angle, the double cover, the
+    conjugate-as-inverse, the slerp formula, the drift and its cheap fix. All of it is visible in
+    two dimensions, where nothing is mysterious.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why a whole lesson in the plane</span>
+    <p>
+      Because the plane is the only place in this course where <strong>your eye is a valid
+      instrument</strong>. There is no camera, no projection, no foreshortening: a length on the
+      page <em>is</em> the length in the maths and an angle on the page <em>is</em> the angle. You
+      can put a protractor on Figure 5 and check the central claim of Lesson 7.4 with it.
+    </p>
+    <p>
+      Everything Module 7 does from here is the same set of ideas in a space you cannot draw.
+      Spending five hours where you can draw it is the cheapest five hours in the module.
+    </p>
+  </div>
+
+  <h2 id="intuition">2. Building intuition: what if turning were a number?</h2>
+
+  <p>
+    Here is a childish question that turns out not to be childish at all.
+  </p>
+
+  <p>
+    Multiplication by a positive real number does something geometric: multiplying every point of
+    the plane by 3 pushes everything three times further from the origin. It is a
+    <em>transformation</em>, and it is one we already think of as a number. Multiplying by
+    <code>−1</code> is also a transformation — every point goes to the opposite side of the
+    origin — and that is a half turn. So the number line already contains one rotation:
+    <strong><code>−1</code> is the number that turns the plane by 180°.</strong>
+  </p>
+
+  <p>
+    Nobody finds that strange. And yet it is a peculiar thing when you look at it directly,
+    because "multiply by <code>−1</code>" is not obviously about turning; it is about sign. The
+    turning interpretation is available only because the plane happens to be there. So: what
+    happens if we take it seriously and ask for the rest?
+  </p>
+
+  <p>
+    If <code>−1</code> is a half turn, is there a number that is a <em>quarter</em> turn? There
+    had better be, because doing a quarter turn twice is a half turn, so this hypothetical number
+    <code>q</code> would have to satisfy <code>q · q = −1</code>. On the number line there is no
+    such <code>q</code>: squares of reals are never negative. But we have not been asking about
+    the number line. We have been asking about the plane, and a quarter turn of the plane
+    manifestly exists — you can do it with your hand.
+  </p>
+
+  <p>
+    That is the whole idea, and it is worth sitting with for a moment before the algebra starts.
+    <strong>The obstruction is not that the quarter turn does not exist. It is that the number
+    line is too small to hold it.</strong> The plane is not. And if the plane's points are going
+    to be numbers, then the transformations of the plane and the points of the plane are the same
+    set of things — which means "rotate by this much and scale by that much" becomes a single
+    multiplication, exactly as we asked for in §1.
+  </p>
+
+  <p>
+    Two more observations before we build anything, because they set expectations that the rest
+    of the lesson has to meet.
+  </p>
+
+  <p>
+    <strong>Rotations of the plane commute, and rotations of space do not.</strong> Turn a piece
+    of paper 30° and then 50° or 50° and then 30°, and it is in the same place both times.
+    Now do the same with a book in three dimensions — 90° about one axis, then 90° about another
+    — and the two orders give visibly different results. So whatever algebra describes plane
+    rotations is allowed to be commutative, and whatever algebra describes space rotations
+    <em>cannot be</em>. That is a prediction about Lesson 7.4 that we can make before starting.
+  </p>
+
+  <p>
+    <strong>And a rotation of the plane needs exactly one number.</strong> One angle, one degree
+    of freedom. A rotation of space needs three. So the plane's answer will be smaller than the
+    one we eventually want, and the interesting question is which parts survive the move up. The
+    answer, spoiled now because the surprise is better used elsewhere: <em>all of them</em>. Every
+    structural fact in this lesson holds in four dimensions with one word changed.
+  </p>
+
+  <h2 id="quarter">3. The quarter turn, and what it forces</h2>
+
+  <p>
+    Let us do the thing properly. We will define one operator geometrically, and derive every
+    piece of algebra from it, so that at no point is anything postulated.
+  </p>
+
+  <p>
+    <strong>The definition.</strong> Let <code>i</code> be the operation "turn the plane a quarter
+    circle anticlockwise about the origin". That is a definition of a <em>transformation</em>, not
+    of a number, and it involves no algebra whatsoever.
+  </p>
+
+  <p>
+    <strong>The measurement.</strong> Apply <code>i</code> to the point <code>(1, 0)</code>. It
+    lands on <code>(0, 1)</code>. Apply it again: <code>(−1, 0)</code>. So performing
+    <code>i</code> twice takes every point to the point opposite it through the origin, which is
+    exactly what multiplying by <code>−1</code> does. In the compact form:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ i^2 = -1 \]</span>
+    <span class="eq-plain">i squared = -1</span>
+  </div>
+
+  <p>
+    That equation is normally introduced as a definition — "let <code>i</code> be a number whose
+    square is <code>−1</code>" — and it sounds like a licence somebody granted themselves. It is
+    not. Read the two paragraphs above again: nothing was granted. A quarter turn was performed
+    twice and the result was observed. <strong><code>i² = −1</code> is a measurement of the
+    plane.</strong> Figure 1 is that measurement, drawn.
+  </p>
+
+  @@FIG_QUARTER@@
+
+  <p>
+    The harness checks it, and checks it in a way worth noticing: not by asserting
+    <code>i * i == -1</code> on a type that was built to make that true, but by running the
+    <em>geometric</em> definition — build the rotation by 90° out of <code>cos</code> and
+    <code>sin</code>, apply it twice to <code>(1, 0)</code> — and seeing where the point lands.
+  </p>
+
+  <pre><code>A. THE QUARTER TURN
+   quarter turn of (1,0):        (-0.0000000, 1.0000000)
+   and again:                    (-1.0000000, -0.0000001)
+  [PASS] A.1  a quarter turn twice is multiplication by -1
+   i * i =                       -1.0 +0.0i
+  [PASS] A.2  i * i == -1 exactly</code></pre>
+
+  <p>
+    The <code>-0.0000000</code> in the first line is <code>cos(π/2)</code>, which is
+    <code>−4.37e−8</code> rather than zero because <code>π/2</code> is not exactly representable
+    in a <code>float</code>. It is worth a glance because it is the first appearance of something
+    §11 will make a great deal of: <strong>the trigonometric route to a rotation carries a small
+    error, and the algebraic route does not.</strong> The second line, <code>i * i</code> computed
+    from the exact pair <code>(0, 1)</code>, is <code>−1</code> to the last bit.
+  </p>
+
+  <h3>3.1 Now derive the rest, and postulate nothing</h3>
+
+  <p>
+    We have one operator. To get an algebra we need to know what every combination of operators
+    does, and each one is a geometric question with a geometric answer.
+  </p>
+
+  <p>
+    <strong>What is <code>a + bi</code>?</strong> If <code>a</code> means "scale by
+    <code>a</code>" and <code>i</code> means "quarter turn", then <code>a + bi</code> should mean
+    "scale by <code>a</code>, <em>plus</em> quarter-turn-and-scale-by-<code>b</code>" — which is
+    to say, apply both and add the results as vectors. Apply it to <code>(1, 0)</code>:
+    the first part gives <code>(a, 0)</code>, the second gives <code>b</code> times the quarter
+    turn of <code>(1, 0)</code>, which is <code>(0, b)</code>. Sum: <code>(a, b)</code>. So
+    <strong>the transformation <code>a + bi</code> sends <code>(1, 0)</code> to
+    <code>(a, b)</code></strong>, and the natural way to name a transformation is by where it
+    sends <code>(1, 0)</code>. Numbers and points of the plane are now the same objects, and that
+    was not arranged — it fell out.
+  </p>
+
+  <p>
+    <strong>What is <code>i · i · i</code>?</strong> Three quarter turns, which is a
+    three-quarter turn, which sends <code>(1, 0)</code> to <code>(0, −1)</code>, which is the
+    number <code>−i</code>. And four quarter turns is a full turn, which is the transformation
+    that does nothing, which is <code>1</code>. Both are also what you get by pushing
+    <code>i² = −1</code> through algebraically, and that agreement is not a coincidence —
+    it is the content of the claim that the geometry <em>is</em> the algebra.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The control that makes the checks above mean something</span>
+    <p>
+      Every check so far would also pass on a type whose multiplication was <em>componentwise</em>
+      — the operation a reader might reasonably assume from the way addition works. Under that
+      rule <code>i · i</code> would be <code>(0·0, 1·1) = (0, 1) = i</code>, which is wrong, but
+      <code>1 · i = i</code> and the identity checks would still pass.
+    </p>
+    <p>
+      So the harness computes a product whose answer separates the two:
+      <code>(2 + 3i)(4 + 5i) = −7 + 22i</code>, where componentwise would give
+      <code>8 + 15i</code>. A check whose degenerate case is a pass is not a check — Lesson 7.1
+      §6, and it has not stopped being true.
+    </p>
+  </div>

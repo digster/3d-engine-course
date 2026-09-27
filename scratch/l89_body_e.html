@@ -1,0 +1,328 @@
+  <h2 id="implementation">11. Writing it</h2>
+
+  <p>
+    Everything above is now four short functions. We build them in the order a caller uses them.
+  </p>
+
+  <h3>The material, and where it lives</h3>
+
+  <p>
+    8.8's handover predicted that this lesson would put <code>restitution</code> and
+    <code>friction</code> on <code>rigid_body</code>. It does not, for §8's reason: friction belongs
+    to a <em>pair</em>, and a per-body field with a hidden combine rule makes an approximation look
+    like a lookup. So the material is an argument, and the rule is named in the call.
+  </p>
+
+  <pre><code class="lang-cpp">struct contact_material
+{
+    float restitution = 0.0f;   // e, dimensionless
+    float friction = 0.5f;      // mu, dimensionless
+};
+
+[[nodiscard]] contact_material combine_material(
+    contact_material a, contact_material b,
+    combine_rule restitution_rule = combine_rule::minimum,
+    combine_rule friction_rule = combine_rule::minimum);</code></pre>
+
+  <p>
+    (8.6 §12's rule applies to handover predictions as much as to knobs: a prediction that turns out
+    wrong is worth recording, because the reason it was wrong is the content. This is the second
+    time in three lessons — 8.6 predicted that 8.7 would widen <code>epa_result</code>, and 8.7
+    widened <code>shape.hpp</code> instead.)
+  </p>
+
+  <h3>The effective mass</h3>
+
+  <p>
+    §4's rearranged form, transcribed. Note that it takes raw inverse masses and tensors rather than
+    bodies — that is not generality for its own sake, it is what lets <code>prepare_contacts</code>
+    hoist the basis change, and §13 measures why that matters.
+  </p>
+
+  <pre><code class="lang-cpp">float effective_mass(float inv_mass_a, const mat3&amp; inv_inertia_a, vec3 r_a,
+                     float inv_mass_b, const mat3&amp; inv_inertia_b, vec3 r_b,
+                     vec3 direction)
+{
+    const vec3 wa = cross(r_a, direction);
+    const vec3 wb = cross(r_b, direction);
+
+    const float k = inv_mass_a + inv_mass_b
+                    + dot(wa, inv_inertia_a * wa)
+                    + dot(wb, inv_inertia_b * wb);
+
+    return k &gt; 0.0f ? 1.0f / k : 0.0f;
+}</code></pre>
+
+  <p>
+    The <code>k &gt; 0</code> guard is not defensive programming against a case that cannot happen —
+    §4 established that <code>k</code> is zero exactly when both bodies are immovable, which is a
+    thing a level can contain. Returning zero means the impulse computed from it is zero, which is
+    the right answer, with no branch anywhere downstream.
+  </p>
+
+  <h3>Prepare: everything that does not change during the solve</h3>
+
+  <p>
+    The split between <code>contact_point</code> and <code>contact_constraint</code> is the split
+    between <em>geometry</em> and <em>solving</em>. A contact point says where the surfaces touch; a
+    constraint says what an impulse there would do, which needs both bodies' masses and tensors.
+    8.10 will call the solve many times against one prepare, so everything constant across
+    iterations belongs here — and the orientations do not change during a solve, so the tensors and
+    therefore all three effective masses are constant.
+  </p>
+
+  <pre><code class="lang-cpp">batch.inv_mass_a = a.inv_mass;
+batch.inv_mass_b = b.inv_mass;
+batch.inv_inertia_a = world_inv_inertia(a);   // two matrix products, ONCE
+batch.inv_inertia_b = world_inv_inertia(b);
+
+tangent_basis(batch.normal, batch.tangent[0], batch.tangent[1]);</code></pre>
+
+  <p>
+    One basis per manifold rather than one per point: every point shares the normal, so every point
+    shares the plane.
+  </p>
+
+  <p>
+    Restitution is decided <em>once for the manifold</em>, from the deepest-approaching point, and
+    that is a decision rather than an economy. Per-point restitution sounds more careful and is
+    worse: the four corners of a crate landing flat approach at slightly different speeds, so a
+    per-point threshold makes two corners bouncy and two dead on whichever frame the speed straddles
+    it, and the crate takes off sideways.
+  </p>
+
+  <pre><code class="lang-cpp">// The step's own contribution to the RELATIVE normal velocity. Note the
+// subtraction: two dynamic bodies both got the same gravity, so the relative
+// velocity it produced is exactly zero and this expression says so.
+const float bias_n = dot(step_bias_of(b, cfg.restitution_bias)
+                             - step_bias_of(a, cfg.restitution_bias),
+                         batch.normal);
+
+const float arrival = worst_approach - bias_n;
+batch.restitution_used = (arrival &lt; -cfg.restitution_threshold) ? material.restitution : 0.0f;</code></pre>
+
+  <h3>Solve: the normal</h3>
+
+  <p>
+    Three lines and a <code>max</code>, and one of those lines is where the classic bug lives.
+  </p>
+
+  <pre><code class="lang-cpp">const float vn = dot(relative_at(a, b, c.r_a, c.r_b), batch.normal);
+float delta = (c.target_normal_velocity - vn) * c.normal_mass;
+
+// *** CLAMP THE ACCUMULATED IMPULSE, NOT THE INCREMENT. ***
+const float total = std::max(0.0f, c.normal_impulse + delta);
+delta = total - c.normal_impulse;
+c.normal_impulse = total;
+
+apply_impulse_pair(a, b, batch, c, batch.normal * delta);</code></pre>
+
+  <p>
+    A contact may push and may not pull, so the <em>total</em> must be non-negative — but an
+    individual increment is allowed to be negative, because a later point may have overshot and this
+    point is entitled to take some of its own impulse back. Clamping <code>delta</code> instead
+    makes every increment a push, the accumulator ratchets upward, and a stack of boxes slowly
+    launches itself.
+  </p>
+
+  <p>
+    On the single pass this lesson makes, with the accumulator starting at zero, the two are
+    identical. The file is written for the version that is coming anyway — that is what it means to
+    design a type for a caller you have not written yet, and it costs two lines.
+  </p>
+
+  <h3>Solve: friction</h3>
+
+  <pre><code class="lang-cpp">const float limit = batch.material.friction * c.normal_impulse;
+const vec3 u = relative_at(a, b, c.r_a, c.r_b);
+
+float total[2];
+for (int t = 0; t &lt; 2; ++t)
+{
+    total[t] = c.tangent_impulse[t] - dot(u, batch.tangent[t]) * c.tangent_mass[t];
+}
+
+if (model == friction_model::cone)
+{
+    const float magnitude = std::sqrt(total[0] * total[0] + total[1] * total[1]);
+    if (magnitude &gt; limit)
+    {
+        const float scale = magnitude &gt; 0.0f ? limit / magnitude : 0.0f;
+        total[0] *= scale;
+        total[1] *= scale;
+        c.sliding = true;
+    }
+}</code></pre>
+
+  <p>
+    Coulomb's radius is <code>μ</code> times <em>this point's</em> accumulated normal impulse. Not
+    the manifold's total, and not last frame's: a corner that is barely touching gets barely any
+    friction, which is what stops a tilting crate gripping on the corner that has just left the
+    floor.
+  </p>
+
+  <h3>Where warm starting goes, and where it does not</h3>
+
+  <p>
+    <code>prepare_contacts</code> seeds the accumulators from the manifold when
+    <code>warm_start</code> is set — <code>carry_impulses</code> put last frame's values there, on
+    matching ids, back in 8.7. Something then has to apply them to the bodies. It is a separate
+    function, and that is load-bearing:
+  </p>
+
+  <pre><code class="lang-cpp">void warm_start_contacts(rigid_body&amp; a, rigid_body&amp; b, contact_batch&amp; batch);</code></pre>
+
+  <p class="callout">
+    <strong>The first draft of this file put that loop at the top of
+    <code>solve_contacts</code>,</strong> which is the obvious place and is wrong. With sixteen
+    iterations the inherited impulse was applied sixteen times. The symptom did not look like “warm
+    starting runs too often”: it looked like <em>friction had stopped working</em>, because the
+    spurious normal impulses launched the crate off the ramp — §10's table showed the warm-started
+    rows sliding <strong>810 mm</strong> down a slope they should have gripped, while the cold rows
+    behaved. Warm starting is a once-per-step action, and a once-per-step action inside an iteration
+    loop is a multiplication.
+  </p>
+
+  <h2 id="leftover">12. What one pass leaves behind</h2>
+
+  <p>
+    A lesson could stop here, and it would be lying by omission. Put a crate on a floor and leave it
+    for fifteen seconds.
+  </p>
+
+  @@FIG_LEFTOVER@@
+
+  <p>
+    <strong>One pass over a four-point manifold does not hold a crate up.</strong> It leaves a
+    couple of centimetres per second of residual approach speed, and the crate sinks for as long as
+    you care to watch: 275 mm in fifteen seconds, more than a quarter of its own height. Thirty-two
+    passes converge and the depth freezes.
+  </p>
+
+  <pre><code class="lang-text">    passes    depth at 15 s              creep         residual
+         1      274.5697 mm       15.48667 mm/s     2.633e-02 m/s
+         2       61.1845 mm        3.40328 mm/s     2.898e-02 m/s
+         4       22.5282 mm        0.76687 mm/s     5.506e-03 m/s
+         8       10.2386 mm        0.20159 mm/s     2.347e-04 m/s
+        16        7.2457 mm        0.00138 mm/s     1.585e-06 m/s
+        32        7.2252 mm        0.00001 mm/s     9.866e-09 m/s</code></pre>
+
+  <p>
+    There are <em>two</em> different problems in that table, and they need different machinery.
+  </p>
+
+  <h3>The first: one pass is not a converged solve</h3>
+
+  <p>
+    Each point's own solve lands its velocity exactly on target. Then the next point's impulse moves
+    it again, because the two share a body and an impulse at one point changes the angular velocity
+    that the other point's velocity depends on. One pass is one sweep of Gauss–Seidel over a system
+    that has not been solved.
+  </p>
+
+  <p>
+    And the coupling is not only between points, which is the part worth measuring separately:
+  </p>
+
+  <pre><code class="lang-text">    points      1 pass, no mu   1 pass, mu = 0.5 4 passes, mu = 0.5
+         1       3.576e-07 m/s       8.457e-01 m/s       8.017e-02 m/s
+         2       4.822e-01 m/s       8.712e-01 m/s       2.642e-01 m/s
+         3       1.372e+00 m/s       1.708e+00 m/s       3.866e-01 m/s
+         4       7.410e-01 m/s       1.356e+00 m/s       2.600e-01 m/s</code></pre>
+
+  <p>
+    Read the first row. With friction off, <em>one</em> point has no residual at all — nothing
+    disturbs it. Turn friction on and the same single point has one, because the tangential impulse
+    acts through a lever arm, changes the angular velocity, and thereby changes the normal velocity
+    at the very point that was just solved. The coupling that makes a solver iterate exists
+    <em>within a single contact</em>, between its normal and its friction.
+  </p>
+
+  <h3>The second: velocity cannot undo position</h3>
+
+  <p>
+    Look at where the converged column stops: <strong>7.23 mm</strong>, and it does not improve with
+    more passes. That is the penetration the crate <em>arrived with</em> on the frame it was first
+    detected, and no velocity solve will ever repair it. The manifold is produced from the
+    positions; the solve sets the velocity to zero; the position then does not change. The overlap
+    is frozen, not fixed.
+  </p>
+
+  <p>
+    How big is it? One step of approach travel. A crate arriving at <em>v</em> has moved
+    <code>v·h</code> since the last time anything looked, and <code>collide_manifold</code> reports
+    nothing at all until the shapes actually overlap — <code>manifold.hpp</code> says so explicitly:
+    “a pair that is a micron short of touching produces nothing”. That is why §1's table shows the
+    impulse solver at 12.55 mm for a 1.2 m drop and 46.6 mm for a 5 m one. It is a statement about
+    the <em>time step</em>, not about the solver, and the fixes are 8.10's: a position correction to
+    push the overlap out, and 8.8's <code>broadphase_config::margin</code> plus 8.7's
+    <code>keep_slop</code> to see the contact one frame early.
+  </p>
+
+  <h3>And a third thing, which is free to get right</h3>
+
+  <p>
+    Where the solve sits inside the step is not a detail. Put it after the position update instead of
+    before, and:
+  </p>
+
+  <pre><code class="lang-text">  seconds      mid, 1 pass   mid, 16 passes      end, 1 pass  end, 16 passes
+     1.0 s        33.153 mm         7.226 mm       190.669 mm      151.651 mm
+     2.0 s        55.822 mm         7.228 mm       395.092 mm      315.151 mm
+     5.0 s       119.703 mm         7.232 mm       996.443 mm      805.652 mm
+    10.0 s       207.218 mm         7.239 mm     FELL THROUGH     FELL THROUGH</code></pre>
+
+  <p>
+    The end-of-step arm sinks by <code>g·h²</code> every step <em>no matter how well the solve
+    converges</em> — predicted <strong>2.7250 mm</strong> per step, measured
+    <strong>2.7250 mm</strong> — because the position half has already travelled at the velocity the
+    solver is about to cancel. At 60 Hz that is 16 cm a second, and the crate is through a
+    half-metre floor in four. The order is:
+  </p>
+
+  <pre><code class="lang-text">  1. integrate velocities   (gravity, forces)
+  2. collide and SOLVE      &lt;- here
+  3. integrate positions</code></pre>
+
+  <h2 id="budget">13. The budget</h2>
+
+  <p>
+    A thousand manifolds off a realistic scene of settling crates, 2,163 contact points, timed as a
+    minimum over sixty repetitions with five discarded warm-ups. (The warm-ups are not decoration:
+    the first run measures 173 ns where every later one measures 139.5, a 24% difference that is the
+    instruction cache and the CPU's clock ramp rather than the solver.)
+  </p>
+
+  <pre><code class="lang-text">                                             per manifold    per point
+  prepare + solve, cone friction                 139.4 ns      64.4 ns
+  prepare + solve, box friction                  130.5 ns      60.3 ns
+  prepare + solve, no friction                    89.8 ns      41.5 ns
+  prepare only, tensors hoisted                   52.3 ns      24.2 ns
+  the same three effective masses, unhoisted     134.1 ns      62.0 ns</code></pre>
+
+  <p>
+    Three things fall out of that table.
+  </p>
+
+  <p>
+    <strong>The cone costs 6.8% more than the box</strong>, which §7 already spent. Friction at all
+    costs 55% of a solve without it, which is the honest price of the feature.
+  </p>
+
+  <p>
+    <strong>The hoist is the whole of <code>prepare_contacts</code>.</strong> Computing the same
+    three effective masses per point through the convenience overload — which recomputes both world
+    inverse inertia tensors inside every call, six basis changes per point instead of two per
+    manifold — costs <strong>2.56×</strong> the entire prepare, and 96% of prepare and solve
+    together. The convenience overload exists and is documented as not being what the solver calls;
+    this is the measurement behind that sentence.
+  </p>
+
+  <p>
+    <strong>And the stage fits.</strong> 8.8's frame was 2,000 bodies reduced to 983 candidate
+    pairs, with 0.091 ms of broadphase and 0.426 ms of narrow phase. Putting 983 manifolds through
+    this solver costs <strong>0.137 ms</strong>, so collision detection plus one solver pass is
+    <strong>0.654 ms</strong> of a 16.67 ms frame — under four per cent. Which is worth holding on
+    to, because §12 just established that one pass is not enough: there is room in the budget for
+    the iterations 8.10 is going to want.
+  </p>

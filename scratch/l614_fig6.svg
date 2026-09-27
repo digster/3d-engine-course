@@ -1,0 +1,61 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f614f-t f614f-d">
+  <title id="f614f-t">Accuracy against stability for NDF filtering</title>
+  <desc id="f614f-d">Paired bars at four roughnesses comparing per-pixel RMS error and sub-pixel swing, unfiltered against NDF-filtered.</desc>
+  <defs>
+    <marker id="e-i-f614f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f614f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f614f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f614f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f614f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="380.0" y="22" class="sm" text-anchor="middle">What filtering the NDF actually buys, and what it does not</text>
+<text x="191.0" y="52" class="xs" text-anchor="middle">per-pixel ACCURACY (RMS error)</text>
+<text x="531.0" y="52" class="xs" text-anchor="middle">STABILITY (sub-pixel swing)</text>
+<text x="82" y="96" class="xs" text-anchor="end">0.30</text>
+<rect x="96" y="82" width="2.216666666666667" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="104.21666666666667" y="92" class="xs" text-anchor="start">2.8%</text>
+<rect x="96" y="97" width="6.4125" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="108.4125" y="107" class="xs" text-anchor="start">8.1%</text>
+<rect x="436" y="82" width="2.1833645744371233" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="444.1833645744371" y="92" class="xs" text-anchor="start">1.1x</text>
+<rect x="436" y="97" width="2.1833645744371233" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="444.1833645744371" y="107" class="xs" text-anchor="start">1.1x</text>
+<text x="82" y="138" class="xs" text-anchor="end">0.20</text>
+<rect x="96" y="124" width="8.3125" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="110.3125" y="134" class="xs" text-anchor="start">10.5%</text>
+<rect x="96" y="139" width="22.5625" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="124.5625" y="149" class="xs" text-anchor="start">28.5%</text>
+<rect x="436" y="124" width="10.766838086538296" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="452.7668380865383" y="134" class="xs" text-anchor="start">1.6x</text>
+<rect x="436" y="139" width="6.010237750181839" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="448.01023775018183" y="149" class="xs" text-anchor="start">1.3x</text>
+<text x="82" y="180" class="xs" text-anchor="end">0.10</text>
+<rect x="96" y="166" width="64.3625" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="166.3625" y="176" class="xs" text-anchor="start">81.3%</text>
+<rect x="96" y="181" width="61.354166666666664" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="163.35416666666666" y="191" class="xs" text-anchor="start">77.5%</text>
+<rect x="436" y="166" width="72.80282298366878" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="514.8028229836688" y="176" class="xs" text-anchor="start">24.0x</text>
+<rect x="436" y="181" width="14.703581924939481" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="456.7035819249395" y="191" class="xs" text-anchor="start">1.9x</text>
+<text x="82" y="222" class="xs" text-anchor="end">0.05</text>
+<rect x="96" y="208" width="182.1625" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="284.1625" y="218" class="xs" text-anchor="start">230.1%</text>
+<rect x="96" y="223" width="74.97083333333333" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="176.97083333333333" y="233" class="xs" text-anchor="start">94.7%</text>
+<rect x="436" y="208" width="189.97994673482214" height="12" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="631.9799467348221" y="218" class="xs" text-anchor="start">3,996.5x</text>
+<rect x="436" y="223" width="15.878608161401063" height="12" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="457.8786081614011" y="233" class="xs" text-anchor="start">2.0x</text>
+<text x="191.0" y="258" class="xs" text-anchor="middle">linear scale</text>
+<text x="531.0" y="258" class="xs" text-anchor="middle">LOG scale</text>
+<rect x="96" y="274" width="14" height="10" rx="1" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="116" y="283" class="xs" text-anchor="start">unfiltered</text>
+<rect x="196" y="274" width="14" height="10" rx="1" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="216" y="283" class="xs" text-anchor="start">NDF filtered</text>
+<rect x="80" y="308" width="600" height="62" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="380" y="328" class="xs" text-anchor="middle">At roughness 0.05 the filter improves ACCURACY by 2.4x and STABILITY by 2,034x. At 0.30 and 0.20 it makes the</text>
+<text x="380" y="344" class="xs" text-anchor="middle">accuracy WORSE. That is not a defect — it is what antialiasing is: the removal of frequencies the grid</text>
+<text x="380" y="360" class="xs" text-anchor="middle">cannot carry, paid for in detail. The artefact was never a wrong pixel; it was a pixel that moved.</text>
+<text x="380.0" y="392" class="xs" text-anchor="middle">Which is why the question to ask of an AA technique is not "how accurate is it".</text>
+</svg>

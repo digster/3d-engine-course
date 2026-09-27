@@ -1,0 +1,55 @@
+<svg viewBox="0 0 760 430" role="img" aria-labelledby="l617f1-t l617f1-d">
+  <title id="l617f1-t">The engine's frame today: seventeen render passes across four owners</title>
+  <desc id="l617f1-d">A strip of seventeen render passes grouped by the type that records them, above a list of the four facts a human currently maintains by hand: the pass order, every load op, every store op, and which passes run at all.</desc>
+  <defs>
+    <marker id="e-i-l617f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">One frame, seventeen render passes, and nothing that knows the order.</text>
+<rect x="34" y="74" width="158.8235294117647" height="34" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="34" y="74" width="158.8235294117647" height="34" rx="3" fill="none" stroke="#f0961e" stroke-width="1.1"/>
+<text x="113.41176470588235" y="64" class="xs t-hi" text-anchor="middle">4</text>
+<rect x="196.8235294117647" y="74" width="36.705882352941174" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="196.8235294117647" y="74" width="36.705882352941174" height="34" rx="3" fill="none" stroke="#5082e6" stroke-width="1.1"/>
+<text x="215.17647058823528" y="64" class="xs t-hi" text-anchor="middle">1</text>
+<rect x="237.52941176470586" y="74" width="443.7647058823529" height="34" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="237.52941176470586" y="74" width="443.7647058823529" height="34" rx="3" fill="none" stroke="#9b7ede" stroke-width="1.1"/>
+<text x="459.4117647058823" y="64" class="xs t-hi" text-anchor="middle">11</text>
+<rect x="685.2941176470588" y="74" width="36.705882352941174" height="34" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<rect x="685.2941176470588" y="74" width="36.705882352941174" height="34" rx="3" fill="none" stroke="#5ac878" stroke-width="1.1"/>
+<text x="703.6470588235294" y="64" class="xs t-hi" text-anchor="middle">1</text>
+<line x1="113.41176470588235" y1="110" x2="113.41176470588235" y2="108" class="grid" stroke-width="1.0"/>
+<line x1="113.41176470588235" y1="108" x2="113.41176470588235" y2="114" class="grid" stroke-width="1.0"/>
+<text x="113.41176470588235" y="126" class="xs mono" text-anchor="middle">gpu_shadow_map::render</text>
+<text x="113.41176470588235" y="138" class="xs muted" text-anchor="middle">begins its own</text>
+<line x1="215.17647058823528" y1="110" x2="215.17647058823528" y2="138" class="grid" stroke-width="1.0"/>
+<line x1="215.17647058823528" y1="138" x2="215.17647058823528" y2="144" class="grid" stroke-width="1.0"/>
+<text x="215.17647058823528" y="156" class="xs mono" text-anchor="middle">gpu_scene_renderer::render</text>
+<text x="215.17647058823528" y="168" class="xs muted" text-anchor="middle">handed one</text>
+<line x1="459.4117647058823" y1="110" x2="459.4117647058823" y2="108" class="grid" stroke-width="1.0"/>
+<line x1="459.4117647058823" y1="108" x2="459.4117647058823" y2="114" class="grid" stroke-width="1.0"/>
+<text x="459.4117647058823" y="126" class="xs mono" text-anchor="middle">gpu_bloom::render</text>
+<text x="459.4117647058823" y="138" class="xs muted" text-anchor="middle">begins eleven</text>
+<line x1="703.6470588235294" y1="110" x2="703.6470588235294" y2="138" class="grid" stroke-width="1.0"/>
+<line x1="703.6470588235294" y1="138" x2="653.2" y2="144" class="grid" stroke-width="1.0"/>
+<text x="653.2" y="156" class="xs mono" text-anchor="middle">gpu_post_stack::resolve_into</text>
+<text x="653.2" y="168" class="xs muted" text-anchor="middle">handed one</text>
+<text x="34" y="202" class="xs t-bad" text-anchor="start">FOUR FACTS, EACH WRITTEN DOWN BY A HUMAN AND CHECKED BY NOTHING</text>
+<rect x="34" y="211" width="150" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="109" y="224" class="xs" text-anchor="middle">the ORDER</text>
+<text x="196" y="224" class="xs muted" text-anchor="start">lives in whichever function assembles the frame, plus prose in three headers</text>
+<rect x="34" y="245" width="150" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="109" y="258" class="xs" text-anchor="middle">every LOAD OP</text>
+<text x="196" y="258" class="xs muted" text-anchor="start">DONT_CARE / CLEAR / LOAD, chosen per attachment; 6.13 called one 'load-bearing'</text>
+<rect x="34" y="279" width="150" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="109" y="292" class="xs" text-anchor="middle">every STORE OP</text>
+<text x="196" y="292" class="xs muted" text-anchor="start">4.7 chose DONT_CARE for the scene depth; 6.8 had to choose STORE for the map</text>
+<rect x="34" y="313" width="150" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="109" y="326" class="xs" text-anchor="middle">which passes RUN</text>
+<text x="196" y="326" class="xs muted" text-anchor="start">gpu_post.cpp:562 — `if (!s.enabled) { return; }`, a second copy of a dependency</text>
+<line x1="34" y1="366" x2="726" y2="366" class="grid" stroke-width="1.2"/>
+<text x="34" y="386" class="xs t-ok" text-anchor="start">All four are consequences of ONE thing each pass could say instead: what it reads, and what it writes.</text>
+</svg>

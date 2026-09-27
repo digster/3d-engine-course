@@ -1,0 +1,109 @@
+<svg viewBox="0 0 900 469" role="img" aria-labelledby="f88a-t f88a-d">
+  <title id="f88a-t">The quadratic wall</title>
+  <desc id="f88a-d">Log-log plot of frame cost against scene size for three strategies.</desc>
+  <defs>
+    <marker id="e-i-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grn-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-blu-f88a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<rect x="70" y="40" width="520" height="300" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="330.0" y="26" class="sm" text-anchor="middle">the cost of testing every pair, against a 16.67 ms frame</text>
+<line x1="70.0" y1="40" x2="70.0" y2="340" class="grid" stroke-width="0.6"/>
+<text x="70.0" y="356" class="xs muted" text-anchor="middle">10</text>
+<line x1="219.54899812429008" y1="40" x2="219.54899812429008" y2="340" class="grid" stroke-width="0.6"/>
+<text x="219.54899812429008" y="356" class="xs muted" text-anchor="middle">100</text>
+<line x1="369.09799624858016" y1="40" x2="369.09799624858016" y2="340" class="grid" stroke-width="0.6"/>
+<text x="369.09799624858016" y="356" class="xs muted" text-anchor="middle">1,000</text>
+<line x1="518.6469943728703" y1="40" x2="518.6469943728703" y2="340" class="grid" stroke-width="0.6"/>
+<text x="518.6469943728703" y="356" class="xs muted" text-anchor="middle">10,000</text>
+<line x1="70" y1="340.0" x2="590" y2="340.0" class="grid" stroke-width="0.6"/>
+<text x="62" y="344.0" class="xs muted" text-anchor="end">0.001</text>
+<line x1="70" y1="304.61062771362697" x2="590" y2="304.61062771362697" class="grid" stroke-width="0.6"/>
+<text x="62" y="308.61062771362697" class="xs muted" text-anchor="end">0.01</text>
+<line x1="70" y1="269.2212554272539" x2="590" y2="269.2212554272539" class="grid" stroke-width="0.6"/>
+<text x="62" y="273.2212554272539" class="xs muted" text-anchor="end">0.1</text>
+<line x1="70" y1="233.83188314088085" x2="590" y2="233.83188314088085" class="grid" stroke-width="0.6"/>
+<text x="62" y="237.83188314088085" class="xs muted" text-anchor="end">1</text>
+<line x1="70" y1="198.4425108545078" x2="590" y2="198.4425108545078" class="grid" stroke-width="0.6"/>
+<text x="62" y="202.4425108545078" class="xs muted" text-anchor="end">10</text>
+<line x1="70" y1="163.05313856813473" x2="590" y2="163.05313856813473" class="grid" stroke-width="0.6"/>
+<text x="62" y="167.05313856813473" class="xs muted" text-anchor="end">100</text>
+<line x1="70" y1="127.66376628176167" x2="590" y2="127.66376628176167" class="grid" stroke-width="0.6"/>
+<text x="62" y="131.66376628176167" class="xs muted" text-anchor="end">1000</text>
+<line x1="70" y1="92.2743939953886" x2="590" y2="92.2743939953886" class="grid" stroke-width="0.6"/>
+<text x="62" y="96.2743939953886" class="xs muted" text-anchor="end">10000</text>
+<line x1="70" y1="56.885021709015575" x2="590" y2="56.885021709015575" class="grid" stroke-width="0.6"/>
+<text x="62" y="60.885021709015575" class="xs muted" text-anchor="end">100000</text>
+<text x="330.0" y="374" class="xs muted" text-anchor="middle">n, bodies in the scene</text>
+<text x="24" y="190.0" class="xs muted" text-anchor="middle">ms</text>
+<path d="M 70.00,294.38 L 79.08,289.86 L 88.15,285.38 L 97.23,280.92 L 106.31,276.48 L 115.39,272.06 L 124.46,267.66 L 133.54,263.28 L 142.62,258.90 L 151.70,254.54 L 160.77,250.18 L 169.85,245.84 L 178.93,241.50 L 188.00,237.16 L 197.08,232.83 L 206.16,228.51 L 215.24,224.19 L 224.31,219.87 L 233.39,215.55 L 242.47,211.24 L 251.55,206.93 L 260.62,202.62 L 269.70,198.32 L 278.78,194.01 L 287.86,189.71 L 296.93,185.40 L 306.01,181.10 L 315.09,176.80 L 324.16,172.50 L 333.24,168.20 L 342.32,163.90 L 351.40,159.60 L 360.47,155.30 L 369.55,151.00 L 378.63,146.71 L 387.71,142.41 L 396.78,138.11 L 405.86,133.81 L 414.94,129.52 L 424.01,125.22 L 433.09,120.92 L 442.17,116.62 L 451.25,112.33 L 460.32,108.03 L 469.40,103.73 L 478.48,99.44 L 487.56,95.14 L 496.63,90.84 L 505.71,86.55 L 514.79,82.25 L 523.87,77.96 L 532.94,73.66 L 542.02,69.36 L 551.10,65.07 L 560.17,60.77 L 569.25,56.47 L 578.33,52.18 L 587.41,47.88" fill="none" stroke="#e05c5c" stroke-width="2.2"/>
+<path d="M 169.85,336.45 L 178.93,332.11 L 188.00,327.77 L 197.08,323.44 L 206.16,319.12 L 215.24,314.80 L 224.31,310.48 L 233.39,306.16 L 242.47,301.85 L 251.55,297.54 L 260.62,293.23 L 269.70,288.93 L 278.78,284.62 L 287.86,280.32 L 296.93,276.01 L 306.01,271.71 L 315.09,267.41 L 324.16,263.11 L 333.24,258.81 L 342.32,254.51 L 351.40,250.21 L 360.47,245.91 L 369.55,241.61 L 378.63,237.31 L 387.71,233.02 L 396.78,228.72 L 405.86,224.42 L 414.94,220.12 L 424.01,215.83 L 433.09,211.53 L 442.17,207.23 L 451.25,202.94 L 460.32,198.64 L 469.40,194.34 L 478.48,190.05 L 487.56,185.75 L 496.63,181.45 L 505.71,177.16 L 514.79,172.86 L 523.87,168.56 L 532.94,164.27 L 542.02,159.97 L 551.10,155.68 L 560.17,151.38 L 569.25,147.08 L 578.33,142.79 L 587.41,138.49" fill="none" stroke="#5082e6" stroke-width="2.2"/>
+<path d="M 190.56,329.35 L 235.58,315.26 L 280.60,306.23 L 325.62,295.58 L 370.64,284.92 L 415.66,273.64 L 460.68,260.10 L 505.69,243.85" fill="none" stroke="#5ac878" stroke-width="2.4"/>
+<circle cx="190.6" cy="329.3" r="2.6" fill="#5ac878"/>
+<circle cx="235.6" cy="315.3" r="2.6" fill="#5ac878"/>
+<circle cx="280.6" cy="306.2" r="2.6" fill="#5ac878"/>
+<circle cx="325.6" cy="295.6" r="2.6" fill="#5ac878"/>
+<circle cx="370.6" cy="284.9" r="2.6" fill="#5ac878"/>
+<circle cx="415.7" cy="273.6" r="2.6" fill="#5ac878"/>
+<circle cx="460.7" cy="260.1" r="2.6" fill="#5ac878"/>
+<circle cx="505.7" cy="243.9" r="2.6" fill="#5ac878"/>
+<line x1="70.0" y1="190.6" x2="590.0" y2="190.6" stroke="#f0961e" stroke-width="1.6" fill="none" stroke-dasharray="6 4"/>
+<circle cx="286.0" cy="190.6" r="4" fill="none" stroke="#e05c5c" stroke-width="1.8"/>
+<text x="285.95545247614325" y="210.5920376517281" class="xs" text-anchor="middle">n = 278</text>
+<circle cx="477.3" cy="190.6" r="4" fill="none" stroke="#5082e6" stroke-width="1.8"/>
+<text x="477.32688943562545" y="210.5920376517281" class="xs" text-anchor="middle">n = 5,293</text>
+<line x1="630.0" y1="50.0" x2="650.0" y2="50.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="658" y="54" class="xs" text-anchor="start">every pair to the narrow phase — 432 ns each</text>
+<line x1="630.0" y1="67.0" x2="650.0" y2="67.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="658" y="71" class="xs" text-anchor="start">every pair, AABB only — 1.190 ns each</text>
+<line x1="630.0" y1="84.0" x2="650.0" y2="84.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="658" y="88" class="xs" text-anchor="start">the uniform grid, measured (§2)</text>
+<line x1="630.0" y1="101.0" x2="650.0" y2="101.0" stroke="#f0961e" stroke-width="2.4" fill="none"/>
+<text x="658" y="105" class="xs" text-anchor="start">one 60 Hz frame — 16.67 ms</text>
+<text x="630" y="140" class="xs muted" text-anchor="start">§2 — same scene, same pairs (ms)</text>
+<text x="630" y="160" class="xs muted" text-anchor="start">n</text>
+<text x="748" y="160" class="xs muted" text-anchor="end">brute</text>
+<text x="810" y="160" class="xs muted" text-anchor="end">grid</text>
+<text x="862" y="160" class="xs muted" text-anchor="end">×</text>
+<line x1="630" y1="168.0" x2="868" y2="168.0" class="grid" stroke-width="1.0"/>
+<text x="630" y="185.0" class="xs" text-anchor="start">64</text>
+<text x="748" y="185.0" class="xs mono" text-anchor="end">0.001</text>
+<text x="810" y="185.0" class="xs mono" text-anchor="end">0.002</text>
+<text x="862" y="185.0" class="xs mono" text-anchor="end">0.5×</text>
+<text x="630" y="202.0" class="xs" text-anchor="start">128</text>
+<text x="748" y="202.0" class="xs mono" text-anchor="end">0.007</text>
+<text x="810" y="202.0" class="xs mono" text-anchor="end">0.005</text>
+<text x="862" y="202.0" class="xs mono" text-anchor="end">1.4×</text>
+<text x="630" y="219.0" class="xs" text-anchor="start">256</text>
+<text x="748" y="219.0" class="xs mono" text-anchor="end">0.050</text>
+<text x="810" y="219.0" class="xs mono" text-anchor="end">0.009</text>
+<text x="862" y="219.0" class="xs mono" text-anchor="end">5.6×</text>
+<text x="630" y="236.0" class="xs" text-anchor="start">512</text>
+<text x="748" y="236.0" class="xs mono" text-anchor="end">0.312</text>
+<text x="810" y="236.0" class="xs mono" text-anchor="end">0.018</text>
+<text x="862" y="236.0" class="xs mono" text-anchor="end">17.3×</text>
+<text x="630" y="253.0" class="xs" text-anchor="start">1,024</text>
+<text x="748" y="253.0" class="xs mono" text-anchor="end">1.284</text>
+<text x="810" y="253.0" class="xs mono" text-anchor="end">0.036</text>
+<text x="862" y="253.0" class="xs mono" text-anchor="end">35.7×</text>
+<text x="630" y="270.0" class="xs" text-anchor="start">2,048</text>
+<text x="748" y="270.0" class="xs mono" text-anchor="end">4.586</text>
+<text x="810" y="270.0" class="xs mono" text-anchor="end">0.075</text>
+<text x="862" y="270.0" class="xs mono" text-anchor="end">61.1×</text>
+<text x="630" y="287.0" class="xs" text-anchor="start">4,096</text>
+<text x="748" y="287.0" class="xs mono" text-anchor="end">18.276</text>
+<text x="810" y="287.0" class="xs mono" text-anchor="end">0.181</text>
+<text x="862" y="287.0" class="xs mono" text-anchor="end">101.0×</text>
+<text x="630" y="304.0" class="xs" text-anchor="start">8,192</text>
+<text x="748" y="304.0" class="xs mono" text-anchor="end">71.696</text>
+<text x="810" y="304.0" class="xs mono" text-anchor="end">0.521</text>
+<text x="862" y="304.0" class="xs mono" text-anchor="end">137.6×</text>
+<text x="70" y="402" class="xs muted" text-anchor="start">The narrow phase is 363× the price of the AABB test that stands in for it, so substituting one for the other moves the</text>
+<text x="70" y="419" class="xs muted" text-anchor="start">wall from 278 bodies to 5,293 — and does not remove it, because both curves are the same quadratic with different</text>
+<text x="70" y="436" class="xs muted" text-anchor="start">constants. Only the green one changes shape, and it is the only one that is not testing every pair.</text>
+</svg>

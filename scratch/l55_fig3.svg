@@ -1,0 +1,46 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="l55f3-t l55f3-d">
+  <title id="l55f3-t">Why handles are not reference counted</title>
+  <desc id="l55f3-d">Left: the three things a refcounted handle would need and the four properties it would lose. Right: explicit unload, whose two failure modes are a leak and a null rather than undefined behaviour, plus the one place a lifetime rule is unavoidable.</desc>
+  <defs>
+    <marker id="e-i-l55f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l55f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l55f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l55f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l55f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">The obvious answer to “when may I free this?”, and why it is the wrong one HERE.</text>
+<text x="24" y="52" class="xs t-hi" text-anchor="start">IF A HANDLE WERE REFCOUNTED, it would need…</text>
+<rect x="36" y="62" width="190" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.13"/>
+<text x="131" y="76" class="xs" text-anchor="middle">a copy constructor</text>
+<text x="240" y="76" class="xs muted" text-anchor="start">so copying has a side effect</text>
+<rect x="36" y="86" width="190" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.13"/>
+<text x="131" y="100" class="xs" text-anchor="middle">a destructor</text>
+<text x="240" y="100" class="xs muted" text-anchor="start">so going out of scope has one too</text>
+<rect x="36" y="110" width="190" height="20" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.13"/>
+<text x="131" y="124" class="xs" text-anchor="middle">a pointer to its store</text>
+<text x="240" y="124" class="xs muted" text-anchor="start">so it knows whose count to touch</text>
+<line x1="24" y1="154" x2="440" y2="154" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="174" class="xs t-bad" text-anchor="start">…AND IT WOULD LOSE EVERY PROPERTY 5.4 BOUGHT:</text>
+<text x="36" y="194" class="xs t-bad" text-anchor="start">✗  4 bytes</text>
+<text x="36" y="210" class="xs t-bad" text-anchor="start">✗  trivially copyable</text>
+<text x="36" y="226" class="xs t-bad" text-anchor="start">✗  memcpy-able into a component</text>
+<text x="36" y="242" class="xs t-bad" text-anchor="start">✗  serializable with no fixups</text>
+<line x1="452" y1="40" x2="452" y2="300" class="grid" stroke-width="1.0"/>
+<text x="472" y="52" class="xs t-ok" text-anchor="start">SO: EXPLICIT UNLOAD</text>
+<text x="472" y="70" class="xs" text-anchor="start">and it is safe to get wrong precisely</text>
+<text x="472" y="84" class="xs" text-anchor="start">because 5.4 made staleness</text>
+<text x="472" y="98" class="xs" text-anchor="start">detectable.</text>
+<rect x="472" y="116" width="216" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="580" y="129" class="xs" text-anchor="middle">forget to unload  →  a leak</text>
+<text x="580" y="141" class="xs muted" text-anchor="middle">which a total finds</text>
+<rect x="472" y="154" width="216" height="30" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.15"/>
+<text x="580" y="167" class="xs" text-anchor="middle">unload too early  →  a null</text>
+<text x="580" y="179" class="xs muted" text-anchor="middle">and a counter</text>
+<text x="472" y="204" class="xs t-ok" text-anchor="start">Neither is a crash. That is the trade.</text>
+<line x1="472" y1="220" x2="696" y2="220" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="472" y="240" class="xs t-hi" text-anchor="start">ONE PLACE NEEDS A RULE:</text>
+<text x="472" y="256" class="xs" text-anchor="start">DERIVED ASSETS. The dependency is</text>
+<text x="472" y="270" class="xs" text-anchor="start">internal — nobody outside asked for</text>
+<text x="472" y="284" class="xs" text-anchor="start">it by name — so it can be tracked</text>
+<text x="472" y="298" class="xs" text-anchor="start">without exposing anything.</text>
+</svg>

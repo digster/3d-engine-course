@@ -1,0 +1,57 @@
+<svg viewBox="0 0 720 446" role="img" aria-labelledby="f615d-t f615d-d">
+  <title id="f615d-t">Mip level against roughness: derived and shipped</title>
+  <desc id="f615d-d">A plot of prefiltered mip level against roughness. The derived curve, from matching the GGX lobe's solid angle to a texel's, runs above the straight line of the linear mapping over most of the range and below it near zero, never differing by more than 0.77 of a level.</desc>
+  <defs>
+    <marker id="e-i-f615d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f615d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f615d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f615d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f615d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Which mip level a roughness should read — derived from the lobe, and the mapping everybody ships</text>
+<rect x="92" y="56" width="470" height="250" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<line x1="92" y1="306.0" x2="562" y2="306.0" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="310.0" class="xs" text-anchor="end">0</text>
+<line x1="92" y1="270.2857142857143" x2="562" y2="270.2857142857143" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="274.2857142857143" class="xs" text-anchor="end">1</text>
+<line x1="92" y1="234.57142857142856" x2="562" y2="234.57142857142856" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="238.57142857142856" class="xs" text-anchor="end">2</text>
+<line x1="92" y1="198.85714285714286" x2="562" y2="198.85714285714286" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="202.85714285714286" class="xs" text-anchor="end">3</text>
+<line x1="92" y1="163.14285714285714" x2="562" y2="163.14285714285714" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="167.14285714285714" class="xs" text-anchor="end">4</text>
+<line x1="92" y1="127.42857142857142" x2="562" y2="127.42857142857142" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="131.42857142857142" class="xs" text-anchor="end">5</text>
+<line x1="92" y1="91.71428571428572" x2="562" y2="91.71428571428572" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="95.71428571428572" class="xs" text-anchor="end">6</text>
+<line x1="92" y1="56.0" x2="562" y2="56.0" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="82" y="60.0" class="xs" text-anchor="end">7</text>
+<line x1="92.0" y1="56" x2="92.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="92.0" y="324" class="xs" text-anchor="middle">0.0</text>
+<line x1="186.0" y1="56" x2="186.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="186.0" y="324" class="xs" text-anchor="middle">0.2</text>
+<line x1="280.0" y1="56" x2="280.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="280.0" y="324" class="xs" text-anchor="middle">0.4</text>
+<line x1="374.0" y1="56" x2="374.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="374.0" y="324" class="xs" text-anchor="middle">0.6</text>
+<line x1="468.0" y1="56" x2="468.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="468.0" y="324" class="xs" text-anchor="middle">0.8</text>
+<line x1="562.0" y1="56" x2="562.0" y2="306" class="grid" stroke-width="0.8" stroke-dasharray="3 4"/>
+<text x="562.0" y="324" class="xs" text-anchor="middle">1.0</text>
+<text x="52" y="181.0" class="xs" text-anchor="middle">level</text>
+<text x="327.0" y="344" class="xs" text-anchor="middle">roughness</text>
+<polyline points="92.0,306.0 139.0,306.0 186.0,250.7 233.0,208.8 280.0,178.6 327.0,154.5 374.0,133.6 421.0,113.7 468.0,92.2 515.0,60.1 562.0,56.0" fill="none" stroke="#5ac878" stroke-width="2.2"/>
+<line x1="92.0" y1="306.0" x2="562.0" y2="56.0" stroke="#f0961e" stroke-width="2.0" fill="none" stroke-dasharray="6 4"/>
+<line x1="303.5" y1="166.0" x2="303.5" y2="193.5" stroke="#e05c5c" stroke-width="2.6" fill="none"/>
+<line x1="303.5" y1="193.5" x2="574.0" y2="236.0" stroke="#e05c5c" stroke-width="1.0" fill="none" stroke-dasharray="3 3"/>
+<text x="578" y="240" class="xs" text-anchor="start">0.77 levels</text>
+<rect x="578" y="56" width="128" height="74" rx="4" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<line x1="592.0" y1="78.0" x2="616.0" y2="78.0" stroke="#5ac878" stroke-width="2.2" fill="none"/>
+<text x="622" y="82" class="xs" text-anchor="start">derived</text>
+<line x1="592.0" y1="104.0" x2="616.0" y2="104.0" stroke="#f0961e" stroke-width="2.0" fill="none" stroke-dasharray="6 4"/>
+<text x="622" y="108" class="xs" text-anchor="start">shipped</text>
+<rect x="52" y="354" width="652" height="82" rx="4" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="360.0" y="376" class="xs" text-anchor="middle">k = ½·log₂( lobe solid angle / texel solid angle ) — 6.14’s closed-form lobe width, cashed.</text>
+<text x="360.0" y="396" class="xs" text-anchor="middle">The two never differ by more than 0.77 of a level (at roughness 0.45). THE FOLKLORE IS NOT ARBITRARY.</text>
+<text x="360.0" y="416" class="xs" text-anchor="middle">For comparison √roughness, also seen in the wild, is off by 2.21 levels. And note the direction: a near-mirror is OVER-blurred.</text>
+</svg>

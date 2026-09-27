@@ -1,0 +1,64 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l86f11-t l86f11-d">
+  <title id="l86f11-t">What EPA costs beside the SAT and GJK, and how the cost grows with penetration depth.</title>
+  <desc id="l86f11-d">Left, three bars: the SAT's full box test at 84.2 ns, GJK's distance query at 77.9 ns, and GJK followed by EPA at 1146.1 ns, of which EPA is 1068.1. Deleting default member initialisers on two internal structs took that from 1344.0 ns, measured back to back. Right, a table showing expansions rising from 6.3 to 16.5 and cost from 627 to 1886 ns as two crates are driven from a shallow overlap to a deep one.</desc>
+  <defs>
+    <marker id="e-i-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-green-l86f11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">EPA is fourteen times GJK, and that is the shape of the answer rather than a defect.</text>
+<text x="180" y="83" class="xs" text-anchor="end">SAT  collide(obb, obb)</text>
+<rect x="190" y="70" width="13.954034221295386" height="19" rx="2" fill="#8f918a" stroke="#8f918a" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="213.9540342212954" y="84" class="xs mono" text-anchor="start">84.2 ns</text>
+<text x="180" y="127" class="xs" text-anchor="end">GJK  gjk_distance</text>
+<rect x="190" y="114" width="12.917884596926891" height="19" rx="2" fill="#5082e6" stroke="#5082e6" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="212.91788459692688" y="128" class="xs mono" text-anchor="start">77.9 ns</text>
+<text x="180" y="171" class="xs" text-anchor="end">GJK + EPA</text>
+<rect x="190" y="158" width="190.0" height="19" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="0.8" fill-opacity="0.85"/>
+<text x="390.0" y="172" class="xs mono" text-anchor="start">1146.1 ns</text>
+<text x="285.0" y="56" class="xs muted" text-anchor="middle">20,000 box pairs, release build</text>
+<text x="20" y="226" class="xs" text-anchor="start">EPA's share: 1068.1 ns, and over a thousand queries it allocated 0 times —</text>
+<text x="20" y="242" class="xs" text-anchor="start">measured by replacing the global `operator new` and counting, as 6.17 §9 did.</text>
+<text x="20" y="272" class="xs t-hi" text-anchor="start">AND TWO STRUCT DEFINITIONS WERE WORTH 20.5%.</text>
+<text x="20" y="290" class="xs" text-anchor="start">1344.0 ns → 1068.1 ns, measured back to back, from deleting the</text>
+<text x="20" y="306" class="xs" text-anchor="start">default member initialisers on `face` and `edge`. One on any</text>
+<text x="20" y="322" class="xs" text-anchor="start">member makes the whole type non-trivially-default-</text>
+<text x="20" y="338" class="xs" text-anchor="start">constructible, which made `polytope p;` write four kilobytes of</text>
+<text x="20" y="354" class="xs" text-anchor="start">zeroes the next line overwrote, and `expand`'s horizon array three</text>
+<text x="20" y="370" class="xs" text-anchor="start">more — once per pass. The third array was left alone: removing</text>
+<text x="20" y="386" class="xs" text-anchor="start">its initialisers measured 1054.3 against 1053.1, inside the noise.</text>
+<text x="690" y="54" class="xs" text-anchor="middle">and it costs more the deeper they are</text>
+<text x="500" y="80" class="xs muted" text-anchor="start">centre offset</text>
+<text x="729" y="80" class="xs muted" text-anchor="end">expansions</text>
+<text x="819" y="80" class="xs muted" text-anchor="end">vertices</text>
+<text x="889" y="80" class="xs muted" text-anchor="end">ns</text>
+<line x1="500" y1="88.0" x2="895" y2="88.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="105.0" class="xs" text-anchor="start">0.95 m</text>
+<text x="729" y="105.0" class="xs mono" text-anchor="end">6.26</text>
+<text x="819" y="105.0" class="xs mono" text-anchor="end">9.26</text>
+<text x="889" y="105.0" class="xs mono" text-anchor="end">627</text>
+<text x="500" y="122.0" class="xs" text-anchor="start">0.75 m</text>
+<text x="729" y="122.0" class="xs mono" text-anchor="end">7.28</text>
+<text x="819" y="122.0" class="xs mono" text-anchor="end">10.29</text>
+<text x="889" y="122.0" class="xs mono" text-anchor="end">740</text>
+<text x="500" y="139.0" class="xs" text-anchor="start">0.50 m</text>
+<text x="729" y="139.0" class="xs mono" text-anchor="end">8.48</text>
+<text x="819" y="139.0" class="xs mono" text-anchor="end">11.48</text>
+<text x="889" y="139.0" class="xs mono" text-anchor="end">861</text>
+<text x="500" y="156.0" class="xs" text-anchor="start">0.25 m</text>
+<text x="729" y="156.0" class="xs mono" text-anchor="end">11.71</text>
+<text x="819" y="156.0" class="xs mono" text-anchor="end">14.72</text>
+<text x="889" y="156.0" class="xs mono" text-anchor="end">1282</text>
+<text x="500" y="173.0" class="xs" text-anchor="start">0.05 m</text>
+<text x="729" y="173.0" class="xs mono" text-anchor="end">16.53</text>
+<text x="819" y="173.0" class="xs mono" text-anchor="end">19.57</text>
+<text x="889" y="173.0" class="xs mono" text-anchor="end">1886</text>
+<text x="500" y="207.5" class="xs muted" text-anchor="start">A deeper overlap is a bigger difference set with the origin</text>
+<text x="500" y="223.5" class="xs muted" text-anchor="start">further from its boundary, so there is more polytope to</text>
+<text x="500" y="239.5" class="xs muted" text-anchor="start">build. Which is one more argument for a solver that keeps</text>
+<text x="500" y="255.5" class="xs muted" text-anchor="start">objects from getting deep in the first place — 8.10's job.</text>
+</svg>

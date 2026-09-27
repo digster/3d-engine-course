@@ -1,0 +1,56 @@
+<svg viewBox="0 0 760 398" role="img" aria-labelledby="f73b-t f73b-d">
+  <title id="f73b-t">Complex multiplication is a spiral similarity</title>
+  <desc id="f73b-d">Two panels. The left draws the triangle with vertices at the origin, at 1, and at w = 1 + 2i. The right draws the triangle with vertices at the origin, at z = 3 + 4i, and at zw = -5 + 10i, at one fifth the scale so that the two appear the same size on the page. They are the same shape: multiplying by z scales by its modulus, 5, and turns by its argument, 53.13 degrees, and an arc in each panel marks that same angle. Underneath, the arithmetic: 5 times 2.2360680 is 11.1803398, and 53.13010 plus 63.43495 is 116.56505 degrees.</desc>
+  <defs>
+    <marker id="e-i-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-blue-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-amber-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-teal-f73b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60ded0"/></marker></defs>
+<text x="150" y="28" class="sm" text-anchor="middle">the triangle 0, 1, w</text>
+<text x="150" y="45" class="xs muted" text-anchor="middle">before</text>
+<line x1="88.0" y1="302.1" x2="88.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="212.0" y1="302.1" x2="212.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="274.0" y1="302.1" x2="274.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="1.2" y1="206.0" x2="298.8" y2="206.0" class="grid" stroke-width="0.8"/>
+<line x1="1.2" y1="144.0" x2="298.8" y2="144.0" class="grid" stroke-width="0.8"/>
+<line x1="1.2" y1="268.0" x2="298.8" y2="268.0" class="ink-soft" stroke-width="1.0"/>
+<line x1="150.0" y1="302.1" x2="150.0" y2="122.3" class="ink-soft" stroke-width="1.0"/>
+<path d="M 150.00,268.00 L 212.00,268.00 L 212.00,144.00 Z" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="4 3"/>
+<circle cx="212.00" cy="268.00" r="3.0" fill="#8f918a"/>
+<text x="223.2" y="260.0" class="xs mono" text-anchor="start">1</text>
+<line x1="150.00" y1="268.00" x2="212.00" y2="144.00" stroke="#5082e6" stroke-width="1.9" marker-end="url(#e-blue-f73b)"/>
+<circle cx="212.00" cy="144.00" r="3.0" fill="#5082e6"/>
+<text x="223.2" y="135.5" class="xs mono" text-anchor="start">w = 1 + 2i</text>
+<path d="M 243.00,268.00 L 242.86,262.93 L 242.45,257.87 L 241.76,252.85 L 240.80,247.87 L 239.56,242.95 L 238.06,238.10 L 236.30,233.35 L 234.28,228.69 L 232.02,224.16 L 229.50,219.75 L 226.76,215.49 L 223.78,211.38 L 220.58,207.44 L 217.18,203.68 L 213.57,200.12 L 209.77,196.75 L 205.80,193.60" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<text x="550" y="28" class="sm" text-anchor="middle">the triangle 0, z, zw</text>
+<text x="550" y="45" class="xs muted" text-anchor="middle">after — drawn at one fifth the scale</text>
+<line x1="488.0" y1="302.1" x2="488.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="612.0" y1="302.1" x2="612.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="674.0" y1="302.1" x2="674.0" y2="122.3" class="grid" stroke-width="0.8"/>
+<line x1="401.2" y1="206.0" x2="698.8" y2="206.0" class="grid" stroke-width="0.8"/>
+<line x1="401.2" y1="144.0" x2="698.8" y2="144.0" class="grid" stroke-width="0.8"/>
+<line x1="401.2" y1="268.0" x2="698.8" y2="268.0" class="ink-soft" stroke-width="1.0"/>
+<line x1="550.0" y1="302.1" x2="550.0" y2="122.3" class="ink-soft" stroke-width="1.0"/>
+<path d="M 550.00,268.00 L 587.20,218.40 L 488.00,144.00 Z" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<line x1="550.00" y1="268.00" x2="587.20" y2="218.40" stroke="#f0961e" stroke-width="1.9" marker-end="url(#e-amber-f73b)"/>
+<circle cx="587.20" cy="218.40" r="3.0" fill="#f0961e"/>
+<text x="597.9" y="211.4" class="xs mono" text-anchor="start">z = 3 + 4i</text>
+<line x1="550.00" y1="268.00" x2="488.00" y2="144.00" stroke="#60ded0" stroke-width="1.9" marker-end="url(#e-teal-f73b)"/>
+<circle cx="488.00" cy="144.00" r="3.0" fill="#60ded0"/>
+<text x="476.8" y="135.5" class="xs mono" text-anchor="end">zw = −5 + 10i</text>
+<path d="M 588.82,190.36 L 584.53,188.36 L 580.13,186.60 L 575.65,185.08 L 571.09,183.80 L 566.47,182.78 L 561.80,182.01 L 557.09,181.49 L 552.37,181.23 L 547.63,181.23 L 542.91,181.49 L 538.20,182.01 L 533.53,182.78 L 528.91,183.80 L 524.35,185.08 L 519.87,186.60 L 515.47,188.36 L 511.18,190.36" fill="none" stroke="#60ded0" stroke-width="1.6"/>
+<text x="380" y="180" class="sm mono t-hi" text-anchor="middle">× |z| = 5</text>
+<text x="380" y="200" class="xs muted" text-anchor="middle">and turned</text>
+<text x="380" y="216" class="xs mono t-hi" text-anchor="middle">by arg z = 53.130°</text>
+<text x="380" y="248" class="xs muted" text-anchor="middle">the two arcs</text>
+<text x="380" y="264" class="xs muted" text-anchor="middle">are equal</text>
+<rect x="150" y="316" width="460" height="58" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="380" y="336" class="xs mono t-hi" text-anchor="middle">5 × 2.2360680 = 11.1803398</text>
+<text x="380" y="356" class="xs mono t-hi" text-anchor="middle">53.13010° + 63.43495° = 116.56505°</text>
+<text x="380" y="388" class="xs muted" text-anchor="middle">moduli multiply, arguments add — and neither fact was put into the multiplication rule on purpose</text>
+</svg>

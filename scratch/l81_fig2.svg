@@ -1,0 +1,90 @@
+<svg viewBox="0 0 900 496" role="img" aria-labelledby="l81f2-t l81f2-d">
+  <title id="l81f2-t">Two log-log plots: error against step size, and error against simulated time</title>
+  <desc id="l81f2-d">On the left the error after one period falls as the step shrinks, and all three rules look respectable. On the right the step is held at 1/60 and time is varied instead: explicit Euler's error multiplies while the other two only add.</desc>
+  <defs>
+    <marker id="e-i-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l81f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<rect x="62" y="56" width="340" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="62" y="40" class="xs muted" text-anchor="start">A.1  error after ONE PERIOD, against h</text>
+<line x1="62.0" y1="56" x2="62.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="62.0" y="322" class="xs mono" text-anchor="middle">1/60</text>
+<line x1="129.99999999999994" y1="56" x2="129.99999999999994" y2="306" class="grid" stroke-width="1.0"/>
+<text x="129.99999999999994" y="322" class="xs mono" text-anchor="middle">1/120</text>
+<line x1="197.99999999999997" y1="56" x2="197.99999999999997" y2="306" class="grid" stroke-width="1.0"/>
+<text x="197.99999999999997" y="322" class="xs mono" text-anchor="middle">1/240</text>
+<line x1="266.0" y1="56" x2="266.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="266.0" y="322" class="xs mono" text-anchor="middle">1/480</text>
+<line x1="334.0" y1="56" x2="334.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="334.0" y="322" class="xs mono" text-anchor="middle">1/960</text>
+<line x1="402.0" y1="56" x2="402.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="402.0" y="322" class="xs mono" text-anchor="middle">1/1920</text>
+<line x1="62" y1="306.0" x2="402" y2="306.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="310.0" class="xs muted" text-anchor="end">1e-6</text>
+<line x1="62" y1="264.3333333333333" x2="402" y2="264.3333333333333" class="grid" stroke-width="1.0"/>
+<text x="54" y="268.3333333333333" class="xs muted" text-anchor="end">1e-5</text>
+<line x1="62" y1="222.66666666666669" x2="402" y2="222.66666666666669" class="grid" stroke-width="1.0"/>
+<text x="54" y="226.66666666666669" class="xs muted" text-anchor="end">1e-4</text>
+<line x1="62" y1="181.0" x2="402" y2="181.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="185.0" class="xs muted" text-anchor="end">1e-3</text>
+<line x1="62" y1="139.33333333333334" x2="402" y2="139.33333333333334" class="grid" stroke-width="1.0"/>
+<text x="54" y="143.33333333333334" class="xs muted" text-anchor="end">1e-2</text>
+<line x1="62" y1="97.66666666666666" x2="402" y2="97.66666666666666" class="grid" stroke-width="1.0"/>
+<text x="54" y="101.66666666666666" class="xs muted" text-anchor="end">1e-1</text>
+<line x1="62" y1="56.0" x2="402" y2="56.0" class="grid" stroke-width="1.0"/>
+<text x="54" y="60.0" class="xs muted" text-anchor="end">1e0</text>
+<text x="232.0" y="342" class="xs muted" text-anchor="middle">step size</text>
+<path d="M 62.00,73.13 L 130.00,87.17 L 198.00,100.46 L 266.00,113.37 L 334.00,126.11 L 402.00,138.75" fill="none" stroke="#eb6060" stroke-width="2.0"/>
+<path d="M 62.00,161.84 L 130.00,186.98 L 198.00,212.07 L 266.00,237.12 L 334.00,261.40 L 402.00,286.03" fill="none" stroke="#78dca0" stroke-width="3.2"/>
+<path d="M 62.00,161.92 L 130.00,187.00 L 198.00,212.08 L 266.00,237.12 L 334.00,261.52 L 402.00,304.93" fill="none" stroke="#aa96ff" stroke-width="1.8" stroke-dasharray="5 4"/>
+<line x1="62.0" y1="306.0" x2="402.0" y2="306.0" stroke="#f0961e" stroke-width="1.6" fill="none" stroke-dasharray="4 3"/>
+<text x="70" y="296.0" class="xs mono" text-anchor="start">float's own floor</text>
+<rect x="520" y="56" width="340" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="520" y="40" class="xs muted" text-anchor="start">A.3  error against TIME, at h = 1/60</text>
+<line x1="520.0" y1="56" x2="520.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="520.0" y="322" class="xs mono" text-anchor="middle">1</text>
+<line x1="583.8866204010966" y1="56" x2="583.8866204010966" y2="306" class="grid" stroke-width="1.0"/>
+<text x="583.8866204010966" y="322" class="xs mono" text-anchor="middle">2</text>
+<line x1="668.3401387967103" y1="56" x2="668.3401387967103" y2="306" class="grid" stroke-width="1.0"/>
+<text x="668.3401387967103" y="322" class="xs mono" text-anchor="middle">5</text>
+<line x1="732.2267591978068" y1="56" x2="732.2267591978068" y2="306" class="grid" stroke-width="1.0"/>
+<text x="732.2267591978068" y="322" class="xs mono" text-anchor="middle">10</text>
+<line x1="796.1133795989035" y1="56" x2="796.1133795989035" y2="306" class="grid" stroke-width="1.0"/>
+<text x="796.1133795989035" y="322" class="xs mono" text-anchor="middle">20</text>
+<line x1="860.0" y1="56" x2="860.0" y2="306" class="grid" stroke-width="1.0"/>
+<text x="860.0" y="322" class="xs mono" text-anchor="middle">40</text>
+<line x1="520" y1="306.0" x2="860" y2="306.0" class="grid" stroke-width="1.0"/>
+<text x="512" y="310.0" class="xs muted" text-anchor="end">1e-3</text>
+<line x1="520" y1="278.22222222222223" x2="860" y2="278.22222222222223" class="grid" stroke-width="1.0"/>
+<line x1="520" y1="250.44444444444446" x2="860" y2="250.44444444444446" class="grid" stroke-width="1.0"/>
+<text x="512" y="254.44444444444446" class="xs muted" text-anchor="end">1e-1</text>
+<line x1="520" y1="222.66666666666669" x2="860" y2="222.66666666666669" class="grid" stroke-width="1.0"/>
+<line x1="520" y1="194.8888888888889" x2="860" y2="194.8888888888889" class="grid" stroke-width="1.0"/>
+<text x="512" y="198.8888888888889" class="xs muted" text-anchor="end">1e1</text>
+<line x1="520" y1="167.11111111111111" x2="860" y2="167.11111111111111" class="grid" stroke-width="1.0"/>
+<line x1="520" y1="139.33333333333334" x2="860" y2="139.33333333333334" class="grid" stroke-width="1.0"/>
+<text x="512" y="143.33333333333334" class="xs muted" text-anchor="end">1e3</text>
+<line x1="520" y1="111.55555555555554" x2="860" y2="111.55555555555554" class="grid" stroke-width="1.0"/>
+<line x1="520" y1="83.7777777777778" x2="860" y2="83.7777777777778" class="grid" stroke-width="1.0"/>
+<text x="512" y="87.7777777777778" class="xs muted" text-anchor="end">1e5</text>
+<line x1="520" y1="56.0" x2="860" y2="56.0" class="grid" stroke-width="1.0"/>
+<text x="690.0" y="342" class="xs muted" text-anchor="middle">simulated seconds</text>
+<path d="M 520.00,234.09 L 583.89,223.59 L 668.34,205.52 L 732.23,183.65 L 796.11,143.74 L 860.00,64.78" fill="none" stroke="#eb6060" stroke-width="2.0"/>
+<path d="M 520.00,293.23 L 583.89,284.86 L 668.34,273.81 L 732.23,265.44 L 796.11,257.07 L 860.00,248.70" fill="none" stroke="#78dca0" stroke-width="3.2"/>
+<path d="M 520.00,293.28 L 583.89,284.92 L 668.34,273.87 L 732.23,265.50 L 796.11,257.14 L 860.00,248.78" fill="none" stroke="#aa96ff" stroke-width="1.8" stroke-dasharray="5 4"/>
+<line x1="62.0" y1="356.0" x2="82.0" y2="356.0" stroke="#eb6060" stroke-width="2.4" fill="none"/>
+<text x="90" y="360" class="xs" text-anchor="start">explicit Euler — slope 1.089</text>
+<line x1="62.0" y1="373.0" x2="82.0" y2="373.0" stroke="#78dca0" stroke-width="2.4" fill="none"/>
+<text x="90" y="377" class="xs" text-anchor="start">semi-implicit Euler — slope 2.002</text>
+<line x1="62.0" y1="390.0" x2="82.0" y2="390.0" stroke="#aa96ff" stroke-width="2.4" fill="none"/>
+<text x="90" y="394" class="xs" text-anchor="start">velocity Verlet — slope 2.000</text>
+<text x="520" y="360" class="xs" text-anchor="start">Order is a statement about h → 0 at fixed t.</text>
+<text x="520" y="377" class="xs t-hi" text-anchor="start">A game asks the opposite: t → ∞ at fixed h.</text>
+<text x="520" y="394" class="xs muted" text-anchor="start">Explicit MULTIPLIES by 1.9 a second. The other two</text>
+<text x="520" y="411" class="xs muted" text-anchor="start">are straight on a log axis, which is ADDING.</text>
+<text x="520" y="434" class="xs muted" text-anchor="start">Nothing measured on the left can see any of it.</text>
+</svg>

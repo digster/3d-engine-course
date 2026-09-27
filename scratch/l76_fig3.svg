@@ -1,0 +1,69 @@
+<svg viewBox="0 0 760 420" role="img" aria-labelledby="f76c-t f76c-d">
+  <title id="f76c-t">The forward chain and the inverse chain</title>
+  <desc id="f76c-d">Two rows of four joints, both walked from index zero upward. The forward composition multiplies the parent on the left and the inverse composition on the right. A table of depth against error follows.</desc>
+  <defs>
+    <marker id="e-i-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="44.0" y="52.0" class="xs mono" text-anchor="start">model_from_joint[j]  =  model_from_joint[p] · parent_from_local(j)</text>
+<text x="44.0" y="67.0" class="xs muted" text-anchor="start">forward — the parent's matrix multiplies on the LEFT</text>
+<rect x="44.0" y="78.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#f2ba5c" stroke-width="1.3"/>
+<text x="96.0" y="103.0" class="xs" text-anchor="middle">joint 0</text>
+<defs><marker id="e-c0f-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2ba5c"/></marker></defs>
+<line x1="152.00" y1="98.00" x2="186.00" y2="98.00" stroke="#f2ba5c" stroke-width="1.5" marker-end="url(#e-c0f-f76c)"/>
+<rect x="192.0" y="78.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#ec7a8c" stroke-width="1.3"/>
+<text x="244.0" y="103.0" class="xs" text-anchor="middle">joint 1</text>
+<defs><marker id="e-c1f-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<line x1="300.00" y1="98.00" x2="334.00" y2="98.00" stroke="#ec7a8c" stroke-width="1.5" marker-end="url(#e-c1f-f76c)"/>
+<rect x="340.0" y="78.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#9e84e8" stroke-width="1.3"/>
+<text x="392.0" y="103.0" class="xs" text-anchor="middle">joint 2</text>
+<defs><marker id="e-c2f-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9e84e8"/></marker></defs>
+<line x1="448.00" y1="98.00" x2="482.00" y2="98.00" stroke="#9e84e8" stroke-width="1.5" marker-end="url(#e-c2f-f76c)"/>
+<rect x="488.0" y="78.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#60c4ce" stroke-width="1.3"/>
+<text x="540.0" y="103.0" class="xs" text-anchor="middle">joint 3</text>
+<text x="44.0" y="190.0" class="xs mono" text-anchor="start">joint_from_model[j]  =  local_from_parent(j) · joint_from_model[p]</text>
+<text x="44.0" y="205.0" class="xs muted" text-anchor="start">inverse — the same parent multiplies on the RIGHT</text>
+<rect x="44.0" y="216.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#f2ba5c" stroke-width="1.3"/>
+<text x="96.0" y="241.0" class="xs" text-anchor="middle">joint 0</text>
+<defs><marker id="e-c0i-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2ba5c"/></marker></defs>
+<line x1="152.00" y1="236.00" x2="186.00" y2="236.00" stroke="#f2ba5c" stroke-width="1.5" marker-end="url(#e-c0i-f76c)"/>
+<rect x="192.0" y="216.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#ec7a8c" stroke-width="1.3"/>
+<text x="244.0" y="241.0" class="xs" text-anchor="middle">joint 1</text>
+<defs><marker id="e-c1i-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<line x1="300.00" y1="236.00" x2="334.00" y2="236.00" stroke="#ec7a8c" stroke-width="1.5" marker-end="url(#e-c1i-f76c)"/>
+<rect x="340.0" y="216.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#9e84e8" stroke-width="1.3"/>
+<text x="392.0" y="241.0" class="xs" text-anchor="middle">joint 2</text>
+<defs><marker id="e-c2i-f76c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9e84e8"/></marker></defs>
+<line x1="448.00" y1="236.00" x2="482.00" y2="236.00" stroke="#9e84e8" stroke-width="1.5" marker-end="url(#e-c2i-f76c)"/>
+<rect x="488.0" y="216.0" width="104.0" height="40.0" rx="3" fill="none" stroke="#60c4ce" stroke-width="1.3"/>
+<text x="540.0" y="241.0" class="xs" text-anchor="middle">joint 3</text>
+<text x="380.0" y="166" class="xs muted" text-anchor="middle">both walks visit the array in the SAME order, index 0 upward — one flat loop, no sorting</text>
+<text x="44.0" y="306.0" class="xs muted" text-anchor="start">joints</text>
+<text x="334.0" y="306.0" class="xs muted" text-anchor="end">vs a general inverse</text>
+<text x="484.0" y="306.0" class="xs muted" text-anchor="end">bind residual</text>
+<line x1="44.0" y1="314.0" x2="490.0" y2="314.0" class="grid" stroke-width="1.0"/>
+<text x="44.0" y="331.0" class="xs" text-anchor="start">2</text>
+<text x="334.0" y="331.0" class="xs mono" text-anchor="end">2.384e-07</text>
+<text x="484.0" y="331.0" class="xs mono" text-anchor="end">1.192e-07</text>
+<text x="44.0" y="348.0" class="xs" text-anchor="start">4</text>
+<text x="334.0" y="348.0" class="xs mono" text-anchor="end">2.384e-07</text>
+<text x="484.0" y="348.0" class="xs mono" text-anchor="end">2.384e-07</text>
+<text x="44.0" y="365.0" class="xs" text-anchor="start">8</text>
+<text x="334.0" y="365.0" class="xs mono" text-anchor="end">4.768e-07</text>
+<text x="484.0" y="365.0" class="xs mono" text-anchor="end">6.557e-07</text>
+<text x="44.0" y="382.0" class="xs" text-anchor="start">16</text>
+<text x="334.0" y="382.0" class="xs mono" text-anchor="end">1.907e-06</text>
+<text x="484.0" y="382.0" class="xs mono" text-anchor="end">2.027e-06</text>
+<text x="44.0" y="399.0" class="xs" text-anchor="start">32</text>
+<text x="334.0" y="399.0" class="xs mono" text-anchor="end">1.550e-06</text>
+<text x="484.0" y="399.0" class="xs mono" text-anchor="end">6.676e-06</text>
+<text x="514.0" y="312.0" class="xs muted" text-anchor="start">the control is a Gauss-Jordan</text>
+<text x="514.0" y="328.0" class="xs muted" text-anchor="start">inverse written in the harness,</text>
+<text x="514.0" y="344.0" class="xs muted" text-anchor="start">sharing no code with the engine.</text>
+<text x="514.0" y="368.0" class="xs muted" text-anchor="start">Error grows with depth and stays</text>
+<text x="514.0" y="384.0" class="xs muted" text-anchor="start">five orders below anything a rig's</text>
+<text x="514.0" y="400.0" class="xs muted" text-anchor="start">own dimensions would notice.</text>
+</svg>

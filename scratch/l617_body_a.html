@@ -1,0 +1,508 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-16-frustum-culling.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.16 — Frustum Culling and Instanced Submission</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-18-text-overlay.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.17</div>
+    <h1>A Lightweight Frame Graph</h1>
+    <p class="deck">
+      The engine can now record seventeen render passes in a frame, and there is no single place
+      where a frame happens. Three types begin their own passes, two are handed one, and the rules
+      that keep them in the right order live in <em>prose</em>, in three different headers, checked
+      by nothing. This lesson makes the frame a <strong>declaration</strong> instead of a sequence
+      of calls — and the interesting part is what that buys, because the usual sales pitch turns out
+      not to apply. Frame graphs are sold on <em>memory aliasing</em>. We measure it on this engine's
+      own frame and find that perfect aliasing would save <strong>14.3%</strong>, that SDL_GPU 3.4.12
+      has no primitive capable of expressing any of it, and that even with one the frame is a
+      <em>chain</em> and a chain has almost nothing to alias. What the graph actually buys is
+      sharper: <strong>four facts that a human currently maintains by hand become derived from one
+      statement each</strong> — the pass order, every load op, every store op, and which passes run
+      at all. The load op is the case that stings, because Lesson 6.13 wrote a whole paragraph
+      warning what happens when you get one wrong and described the symptom as looking "like a
+      tuning problem rather than a load op". Here it is not a decision. Then eleven bloom passes
+      disappear because nothing reads them, five currently-silent mistakes become named compile
+      errors, and the compiled frame comes out <strong>bit-identical</strong> to the hand-written one
+      across 262,144 channels — with a control proving the comparison can tell the difference.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-13-bloom-post-stack.html">6.13 — Bloom and the Post-Processing Stack</a>,
+          <a href="06-08-shadow-mapping.html">6.8 — Shadow Mapping: Bias, Acne, and PCF</a>,
+          <a href="06-12-hdr-tonemapping.html">6.12 — HDR and Tonemapping</a>,
+          <a href="06-14-antialiasing.html">6.14 — Antialiasing: Geometric and Shading</a>,
+          <a href="04-04-first-triangle.html">4.4 — The First Triangle</a>,
+          <a href="05-04-handles.html">5.4 — Handles, Not Pointers</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/frame_graph.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/frame_graph.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gpu_shadow.hpp</code>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_post.hpp</code>,
+            <code>engine/src/gfx/gpu_post.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>scratch/verify_617.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The frame becomes data. <strong>40 checks green</strong>; the compiled schedule matches
+            the hand-written order name for name; every derived load and store op matches what the
+            engine chose by hand; eleven bloom passes culled by a dependency rather than a flag;
+            five silent mistakes turned into named errors; a compile that costs
+            <strong>8.62&nbsp;µs</strong> and <strong>zero heap allocations</strong>; and the
+            compiled frame <strong>bit-identical</strong> across 262,144 channels. The reference
+            render is unchanged for the <strong>twenty-sixth</strong> lesson — and §11 explains,
+            again, why that is a null result.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…enumerate the render passes in a real frame, and say which type begins each one.</li>
+      <li>…explain why a render target is better modelled as a sequence of <em>versions</em> than as
+          a mutable texture.</li>
+      <li>…derive a pass ordering, a load op, a store op and a resource lifetime from a single
+          dataflow statement.</li>
+      <li>…cull passes from a frame by backward reachability, and say what the roots are and
+          why.</li>
+      <li>…topologically sort a pass graph deterministically, and explain why determinism is a
+          correctness requirement rather than a nicety.</li>
+      <li>…measure what memory aliasing would save on a real frame, and tell the two reasons it may
+          not be collectable apart.</li>
+      <li>…say precisely what a frame graph must <em>not</em> be allowed to reorder, and why.</li>
+      <li>…justify a plain function pointer over <code>std::function</code> in a per-frame data
+          structure.</li>
+      <li>…build an instrument that proves two implementations agree, <em>and</em> prove the
+          instrument can disagree.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: seventeen passes and no author</a></li>
+      <li><a href="#inventory">Count the passes before proposing anything</a></li>
+      <li><a href="#intuition">Building intuition: a resource is a sequence of values</a></li>
+      <li><a href="#deduce">One statement, four derived facts</a></li>
+      <li><a href="#cull">Culling: what feeds the outside world</a></li>
+      <li><a href="#order">The schedule, and why determinism is correctness</a></li>
+      <li><a href="#memory">The memory claim, measured</a></li>
+      <li><a href="#forbidden">What a frame graph must never reorder</a></li>
+      <li><a href="#implement">Implementation: the compiler</a></li>
+      <li><a href="#splits">Two functions that had to be cut in half</a></li>
+      <li><a href="#golden">The instrument, and proving it can fail</a></li>
+      <li><a href="#limits">The ninety-percent picture</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: seventeen passes and no author</h2>
+
+  <p>
+    Sixteen lessons of Module 6 have each added a capability and, quietly, a render pass. Lesson 6.8
+    added a depth-only pass that begins itself. Lesson 6.9 turned that one into four, one per
+    cascade. Lesson 6.12 added a full-screen resolve that is handed a pass by its caller. Lesson 6.13
+    added eleven more and put them inside a single <code>render()</code> call. Every one of those
+    decisions was right at the time, and the result is that this engine can record a modern frame
+    and has nowhere that a modern frame is recorded.
+  </p>
+
+  <p>
+    That is not rhetoric. Run <code>verify_617</code> and the first thing it does is count:
+  </p>
+
+  @@FIG_TODAY@@
+
+  <p>
+    Seventeen passes across four owners, two of which open their own attachments and two of which
+    expect somebody else to. And the count is the less interesting half. The interesting half is the
+    list of things that have to be true for that frame to be correct, none of which any compiler,
+    validation layer or test currently checks:
+  </p>
+
+  <ul>
+    <li>The shadow passes run <em>before</em> the scene pass, because the scene pass samples what
+        they wrote. <code>gpu_shadow.hpp</code> says so in a comment.</li>
+    <li><code>render_bloom</code> runs <em>outside</em> a render pass — it begins eleven of its own —
+        and <code>resolve_into</code> runs <em>inside</em> one. <code>gpu_post.hpp</code> says so in
+        a comment, and it has to, because the two functions look interchangeable from their names.</li>
+    <li>The bloom runs <em>before</em> the tonemap curve, because it is looking for values above 1
+        and the curve is what removes them. <code>gpu_post.hpp</code> says so in a comment, at
+        length, and correctly.</li>
+    <li>The scene's depth attachment stores <code>DONT_CARE</code>; the shadow map's stores
+        <code>STORE</code>. Lesson 4.7 reasoned the first out in a comment and explicitly predicted
+        the second, which Lesson 6.8 then wrote — also in a comment.</li>
+  </ul>
+
+  <div class="callout warn">
+    <p>
+      <strong>A comment is not a mechanism.</strong> Every rule above is correct, well argued, and
+      invisible to the program. Get one wrong and the failure is not a compile error: it is a
+      picture that is subtly wrong, or a driver validation message emitted from inside a function
+      three call levels below the mistake. Lesson 6.13's own comment says it best about the one it
+      was most worried about — the symptom "looks like a tuning problem rather than a load op".
+    </p>
+  </div>
+
+  <p>
+    So the question this lesson asks is not "how do we schedule passes efficiently". It is:
+    <strong>which of these facts is a decision, and which is a consequence?</strong> That turns out
+    to be a much better question, because almost all of them are consequences, and a consequence
+    that is written down by hand is a second copy of the truth.
+  </p>
+
+  <h3>And a warning about the sales pitch</h3>
+
+  <p>
+    If you have read about frame graphs before, you have read about <strong>memory aliasing</strong>:
+    two transient targets whose lifetimes do not overlap can share one allocation, so a frame with
+    twenty intermediates pays for the peak rather than the sum. That is the headline in every talk on
+    the subject, and it is genuinely why Frostbite built theirs.
+  </p>
+
+  <p>
+    We are going to measure it, in §7, on this engine's own frame — and it is going to come out at
+    <strong>zero</strong>. Not "small". Zero. The reasons are worth knowing before you build one of
+    these for the wrong motive, and they are two separate reasons that must be told apart. Building
+    the thing anyway is still right, and §4 is why.
+  </p>
+
+  <!-- =================================================================
+       2 — THE INVENTORY
+       ================================================================= -->
+  <h2 id="inventory"><span class="num">2</span>Count the passes before proposing anything</h2>
+
+  <p>
+    There is a failure mode in architecture lessons where the architecture arrives first and the
+    problem is retrofitted to fit it. The defence is cheap: <em>enumerate what exists, with numbers,
+    before proposing anything</em>. Lesson 6.13 did this when it counted its own eleven passes and
+    said plainly that the bloom issues more render passes than the entire rest of the frame. That
+    sentence is the reason this lesson has something concrete to justify itself against.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Recorded by</th><th>Passes</th><th>Who begins the pass</th><th>Since</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>gpu_shadow_map::render</code></td><td>4 (one per cascade)</td>
+          <td>itself</td><td>6.8, 6.9</td></tr>
+      <tr><td><code>gpu_scene_renderer::render</code></td><td>1</td>
+          <td>the caller</td><td>4.8</td></tr>
+      <tr><td>the skybox draw</td><td>0 — shares the scene pass</td>
+          <td>—</td><td>6.15</td></tr>
+      <tr><td><code>gpu_bloom::render</code></td><td>11 (<code>2n − 1</code> for 6 levels)</td>
+          <td>itself, eleven times</td><td>6.13</td></tr>
+      <tr><td><code>gpu_post_stack::resolve_into</code></td><td>1</td>
+          <td>the caller</td><td>6.12</td></tr>
+      <tr><td><strong>Total</strong></td><td><strong>17</strong></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Two things jump out of that table and neither is the seventeen.
+  </p>
+
+  <p>
+    The first is the <strong>split ownership</strong>. Two entries begin their own passes and two do
+    not, and there is a real reason for each: <code>gpu_shadow_map</code> owns an attachment nothing
+    else can ever share, while <code>gpu_scene_renderer</code> draws into a target the caller chose
+    and might want to share with a skybox or a debug overlay. Both arguments are sound and the
+    result is an API where you cannot tell, from a call site, whether you are inside a render pass
+    or not. That is exactly the condition under which people write
+    <code>SDL_BeginGPURenderPass</code> inside a render pass and get a null back.
+  </p>
+
+  <p>
+    The second is <strong>eleven</strong>. Lesson 6.13 derived that number — a pyramid of
+    <em>n</em> levels needs one bright pass, <em>n−1</em> downsamples and <em>n−1</em> upsamples,
+    because a render pass writes one set of colour targets and no pass may read the texture it
+    writes. Eleven passes for one effect is the number any proposed architecture has to earn its
+    keep against, and it is also the reason this lesson has a real test case: eleven passes with
+    genuine dependencies between them is enough structure to be wrong in interesting ways.
+  </p>
+
+  <!-- =================================================================
+       3 — INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">3</span>Building intuition: a resource is a sequence of values</h2>
+
+  <p>
+    Here is the observation the whole lesson rests on, and it is worth sitting with before any code,
+    because everything else is bookkeeping once you have it.
+  </p>
+
+  <p>
+    When we say "the HDR target", what do we mean? Today we mean an
+    <code>SDL_GPUTexture*</code> — one object, written by the scene pass, then written again by the
+    skybox, then read by the bloom and the resolve. And that is why we cannot say anything precise
+    about it. "The bloom reads the HDR target" is ambiguous: does it read the image the scene
+    produced, or the image after the skybox filled in the background? Both are "the HDR target".
+    They are different pictures.
+  </p>
+
+  @@FIG_VERSIONS@@
+
+  <p>
+    So stop letting the name mean a texture. Let it mean a <strong>variable</strong>, and let a
+    variable have <em>values over time</em>:
+  </p>
+
+  <p class="eq-plain">
+    <code>hdr@0</code> — undefined.<br>
+    <code>hdr@1</code> — what the scene pass produced.<br>
+    <code>hdr@2</code> — what the skybox produced <em>from</em> <code>hdr@1</code>.
+  </p>
+
+  <p>
+    Now "the bloom samples <code>hdr@2</code>" is unambiguous, and — this is the part that pays —
+    it is a statement with <em>consequences a program can compute</em>. It says the bloom must run
+    after whoever produced <code>hdr@2</code>. It says <code>hdr@2</code> must be written out to
+    memory rather than discarded, since somebody reads it. It says the resource is alive from the
+    skybox pass through the bloom. None of those three facts had to be stated; all three follow.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong>If this feels familiar, it should.</strong> This is <em>single static assignment</em>
+      — the form every optimising compiler converts your code into before it does anything clever
+      with it — applied to render targets instead of to registers. A variable that is assigned once
+      and never mutated makes "who produced this value" a question with exactly one answer, and
+      almost every dataflow analysis becomes easy once that is true. Frame graphs are, structurally,
+      a tiny SSA compiler whose instructions are render passes. Yuriy O'Donnell's 2017 GDC talk on
+      Frostbite's is where this framing entered graphics, and it is the single best thing to read
+      after this lesson.
+    </p>
+  </div>
+
+  <h3>The one rule that makes it work</h3>
+
+  <p>
+    A version is produced by <strong>exactly one pass</strong>. That is not an implementation
+    restriction, it is what makes the model mean anything: if two passes both claimed to produce
+    <code>hdr@2</code>, then "reads <code>hdr@2</code>" would not identify a picture. So when the
+    API sees two passes both writing from <code>hdr@1</code>, it does not pick one and it does not
+    schedule around it. It reports that the author has said something ambiguous, names both passes,
+    and refuses. §5 of <code>verify_617</code> is that check firing.
+  </p>
+
+  <h3>Why not simply "pass B depends on pass A"?</h3>
+
+  <p>
+    You could imagine a simpler API: let each pass name the passes it must follow. It would be less
+    machinery, and it would be worse, for a reason worth stating because it is the same reason
+    Lesson 5.10 gave for actions over keycodes and Lesson 6.16 gave for extracting planes from the
+    matrix rather than from the camera.
+  </p>
+
+  <p>
+    A hand-written dependency is a <em>second copy of a fact</em> that already exists in the code.
+    The bloom's bright pass reads the scene target; that is true in the shader, in the binding, and
+    in the author's head. Writing "bright depends on scene" beside it creates something that can
+    disagree with it — and when it does, the symptom is a correct-looking declaration and a wrong
+    picture. Declaring reads and writes states the fact <em>once</em>, in the place the pass already
+    had to know it, and the ordering is then derived rather than asserted. Everything in §4 is
+    downstream of that choice.
+  </p>
+
+  <!-- =================================================================
+       4 — THE DEDUCTION
+       ================================================================= -->
+  <h2 id="deduce"><span class="num">4</span>One statement, four derived facts</h2>
+
+  <p>
+    Take the single hardest line in the engine's existing post stack — the upsample's load op — and
+    watch what happens to it. Here is how it reads today, in <code>gpu_post.cpp</code>, with Lesson
+    6.13's comment attached:
+  </p>
+
+  <div class="callout warn">
+    <p>
+      "<strong>LOAD, NOT DONT_CARE</strong>, and this is the one load op in the chain that is
+      load-bearing. The upsample blends <code>src + dst</code>, so the destination's existing
+      contents <em>are</em> an operand; discard them and the additive blend has nothing to add to,
+      which turns the pyramid from a sum of every level into just the widest one. The symptom is a
+      bloom that is far too soft and far too dim, and it looks like a tuning problem rather than a
+      load op."
+    </p>
+  </div>
+
+  <p>
+    Every word of that is right, and it is a warning rather than a mechanism. Under the graph, the
+    upsample pass says one thing instead:
+  </p>
+
+  <pre><code class="lang-cpp">level[i - 1] = fg.keep(up_pass, level[i - 1]);</code></pre>
+
+  <p>
+    <code>keep</code> means: <em>my output depends on what was already in this target</em>. It is a
+    statement about data, not about SDL — a pass author can answer it without knowing what a load op
+    is. And four separate facts fall out of it.
+  </p>
+
+  @@FIG_DEDUCTION@@
+
+  <h3>4.1 — The ordering edge</h3>
+
+  <p>
+    <code>keep</code> consumes the incoming version and produces the next one. Consuming a version
+    means depending on whoever produced it, so an edge appears from that pass to this one. Nobody
+    wrote "the upsample runs after the downsample"; the upsample said it reads what the downsample
+    wrote, which is the same fact stated where it is actually known.
+  </p>
+
+  <h3>4.2 — The load op</h3>
+
+  <p class="eq-plain">
+    <code>keep</code> → <code>SDL_GPU_LOADOP_LOAD</code><br>
+    <code>clear</code> → <code>SDL_GPU_LOADOP_CLEAR</code><br>
+    <code>discard_write</code> → <code>SDL_GPU_LOADOP_DONT_CARE</code>
+  </p>
+
+  <p>
+    Three spellings, one per answer to "what does this pass do with what was already there?" — build
+    on it, replace it with a known value, or overwrite every texel of it. Note that this has not
+    abolished the decision; it has <em>moved</em> it, from an API enum to a dataflow statement. That
+    is the honest description and it is still a large win, because the dataflow statement is one the
+    author can answer correctly without knowing the API, and because the same statement then pays
+    for the three facts below.
+  </p>
+
+  <div class="callout note">
+    <p>
+      <strong><code>discard_write</code> is a promise, and it is the one spelling that can still
+      betray you.</strong> <code>DONT_CARE</code> means "I write every texel", and a pass that
+      writes only some of them reads undefined memory in the rest. The graph cannot check that — it
+      would have to know what the shader covers. What it <em>can</em> check, and does, is the other
+      half: a <code>keep</code> on a version nobody produced is caught at compile time (§9's
+      validation rule (a)), which is the mistake that actually happens.
+    </p>
+  </div>
+
+  <h3>4.3 — The store op of the <em>other</em> pass</h3>
+
+  <p>
+    This is the one that surprises people, because it is a consequence for a pass other than the one
+    that made the statement. If the upsample reads <code>level[i]@1</code>, then whoever produced
+    <code>level[i]@1</code> must actually write it out to memory rather than discarding it at the
+    end of its pass. So:
+  </p>
+
+  <p class="eq-plain">
+    <strong>STORE</strong> if and only if some live pass consumes this version, or the resource is
+    imported. <strong>DONT_CARE</strong> otherwise.
+  </p>
+
+  <p>
+    One rule, and it reproduces two decisions this course argued about at length, four lessons and
+    nine lessons apart. Lesson 4.7 gave the scene's depth buffer <code>DONT_CARE</code> and wrote:
+    "nothing reads this buffer after the pass ends… Module 6's shadow maps and depth-based
+    post-processing are where this has to become <code>STORE</code>." Lesson 6.8 duly wrote
+    <code>STORE</code> and cited that prediction. Both sentences are now unnecessary:
+    <code>verify_617</code> §D checks the derived ops against the hand-written ones and every one
+    matches, including those two.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Pass</th><th>Attachment</th><th>Derived load</th><th>Derived store</th>
+          <th>Written by hand as</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>shadow</td><td>shadow</td><td>CLEAR</td><td>STORE</td>
+          <td>CLEAR / STORE — <code>gpu_shadow.cpp</code></td></tr>
+      <tr><td>scene</td><td>hdr</td><td>CLEAR</td><td>STORE</td><td>CLEAR / STORE</td></tr>
+      <tr><td>scene</td><td>depth</td><td>CLEAR</td><td>DONT_CARE</td>
+          <td>CLEAR / DONT_CARE — <code>gpu_scene.cpp</code></td></tr>
+      <tr><td>bloom bright</td><td>bloom 0</td><td>DONT_CARE</td><td>STORE</td>
+          <td>DONT_CARE / STORE — <code>gpu_post.cpp</code></td></tr>
+      <tr><td>bloom down 5</td><td>bloom 5</td><td>DONT_CARE</td><td>STORE</td>
+          <td>DONT_CARE / STORE</td></tr>
+      <tr><td>bloom up 5</td><td>bloom 4</td><td><strong>LOAD</strong></td><td>STORE</td>
+          <td>LOAD / STORE — the load-bearing one</td></tr>
+      <tr><td>bloom up 1</td><td>bloom 0</td><td><strong>LOAD</strong></td><td>STORE</td>
+          <td>LOAD / STORE</td></tr>
+      <tr><td>resolve</td><td>backbuffer</td><td>CLEAR</td><td>STORE</td><td>CLEAR / STORE</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>4.4 — The lifetime</h3>
+
+  <p>
+    A resource is alive from the first scheduled pass that touches it to the last. That interval is
+    what §7 colours, and it is also what tells the pool whether a texture can be handed to somebody
+    else. It is the fourth thing you get for free from the same sentence.
+  </p>
+
+  <h3>A worked example, small enough to check by reading</h3>
+
+  <p>
+    Three passes and two resources. <code>out</code> is <em>imported</em> — a texture somebody
+    outside the graph owns, such as the swapchain image.
+  </p>
+
+  <pre><code class="lang-cpp">const fg_texture tmp0 = fg.create("tmp", desc);
+const fg_texture out0 = fg.import("out", swapchain, desc);
+
+const int blur    = fg.add_pass("blur",    &amp;exec_blur,    &amp;blur_ctx);
+const int combine = fg.add_pass("combine", &amp;exec_combine, &amp;comb_ctx);
+const int unused  = fg.add_pass("unused",  &amp;exec_unused,  &amp;un_ctx);
+
+const fg_texture tmp1 = fg.discard_write(blur, tmp0);      // tmp@0 -> tmp@1
+fg.sample(combine, tmp1);                                  // reads tmp@1
+const fg_texture out1 = fg.clear(combine, out0, black);    // out@0 -> out@1
+const fg_texture tmp2 = fg.discard_write(unused, tmp1);    // tmp@1 -> tmp@2</code></pre>
+
+  <p>
+    Push the numbers through by hand before reading the answer. <code>blur</code> produces
+    <code>tmp@1</code>. <code>unused</code> consumes <code>tmp@1</code> and produces
+    <code>tmp@2</code>. <code>combine</code> consumes <code>tmp@1</code> and produces
+    <code>out@1</code>. Nobody consumes <code>tmp@2</code>.
+  </p>
+
+  @@FIG_WORKED@@
+
+  <p>
+    So: <code>combine</code> writes an imported resource, which makes it a root.
+    <code>blur</code> produced a version <code>combine</code> reads, so <code>blur</code> is
+    reachable. <code>unused</code> is reachable from nothing — it produces a value that nothing
+    consumes — so it does not run, and neither would anything that existed only to feed it.
+    The schedule is <code>blur</code>, <code>combine</code>, and the frame issues two render passes
+    for three declared ones.
+  </p>
+
+  <p>
+    That is the entire compiler, on three passes. The real one runs on fourteen and does the same
+    four things.
+  </p>

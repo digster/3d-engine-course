@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="l52f6-t l52f6-d">
+  <title id="l52f6-t">The layering rule</title>
+  <desc id="l52f6-d">A four-tier dependency diagram: demos above engine::app, above engine::platform, above SDL3, with sandbox bypassing app and a crossed-out arrow for app reaching around platform to SDL.</desc>
+  <defs>
+    <marker id="e-i-l52f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l52f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l52f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l52f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">app is built ON platform — never beside it</text>
+<rect x="155.0" y="58" width="90" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="200.0" y="79" class="xs mono" text-anchor="middle">hello_cube</text>
+<rect x="285.0" y="58" width="60" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="315.0" y="79" class="xs mono" text-anchor="middle">pong</text>
+<rect x="385.0" y="58" width="80" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="425.0" y="79" class="xs mono" text-anchor="middle">sandbox</text>
+<rect x="235.0" y="128" width="150" height="34" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2"/>
+<text x="310.0" y="149" class="xs mono t-inv" text-anchor="middle">engine::app</text>
+<rect x="225.0" y="198" width="170" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2"/>
+<text x="310.0" y="219" class="xs mono t-inv" text-anchor="middle">engine::platform</text>
+<rect x="240.0" y="268" width="140" height="34" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="310.0" y="289" class="xs mono" text-anchor="middle">SDL3::SDL3</text>
+<line x1="200.0" y1="95" x2="310.0" y2="123" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l52f6)"/>
+<line x1="315.0" y1="95" x2="310.0" y2="123" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l52f6)"/>
+<line x1="310.0" y1="165" x2="310.0" y2="193" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l52f6)"/>
+<line x1="310.0" y1="235" x2="310.0" y2="263" class="ink-soft" stroke-width="1.2" marker-end="url(#e-s-l52f6)"/>
+<line x1="425.0" y1="95" x2="370.0" y2="193" class="hi" stroke-width="1.4" marker-end="url(#e-h-l52f6)"/>
+<text x="452" y="116" class="xs t-hi" text-anchor="start">sandbox skips engine::app</text>
+<text x="452" y="130" class="xs muted" text-anchor="start">and keeps its own main().</text>
+<text x="452" y="144" class="xs muted" text-anchor="start">That has to stay possible,</text>
+<text x="452" y="158" class="xs muted" text-anchor="start">or the library is a lie.</text>
+<path d="M 232 148 L 132 214 L 236 280" fill="none" stroke="#e05c5c" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#e-b-l52f6)"/>
+<line x1="112" y1="200" x2="140" y2="228" stroke="#e05c5c" stroke-width="2.2"/>
+<line x1="140" y1="200" x2="112" y2="228" stroke="#e05c5c" stroke-width="2.2"/>
+<text x="20" y="252" class="xs t-bad" text-anchor="start">app reaching around</text>
+<text x="20" y="266" class="xs t-bad" text-anchor="start">platform, straight to SDL</text>
+<line x1="20" y1="308" x2="700" y2="308" class="grid" stroke-width="1"/>
+<text x="20" y="328" class="xs" text-anchor="start">verify_52 §E renders six frames down each path and compares the framebuffers: byte-identical. The framework is the library, called differently.</text>
+</svg>

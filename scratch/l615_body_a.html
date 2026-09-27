@@ -1,0 +1,597 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-14-antialiasing.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.14 — Antialiasing: Geometric and Shading</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-16-frustum-culling.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.16 — Frustum Culling and Instanced Submission</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.15</div>
+    <h1>Skybox and Image-Based Lighting</h1>
+    <p class="deck">
+      Since Lesson 3.6 the engine has carried an apology called <code>ambient</code>: one constant
+      radiance standing in for the sky, the floor, the walls and every bounce off all of them. Two
+      things are wrong with it. It has <strong>no direction</strong>, so a face turned to the sky and
+      one turned to the floor receive identical fill and nothing in the scene is ever grounded. And
+      it has <strong>no specular half at all</strong> — a sentence shipped in this engine since 6.4,
+      naming this lesson by number as the fix. An environment map replaces it with radiance as a
+      <em>function of direction</em>, and the honest part of the technique is that the sky you see
+      and the sky that lights you are one texture. Getting there means two integrals, and only one of
+      them is exact: the diffuse half factors <em>perfectly</em> and reproduces Lesson 6.2's
+      <code>albedo × ambient</code> to six decimals on a uniform sky, while the specular half does
+      not factor and we pretend it does — at a price this lesson measures rather than hedges.
+      <strong>0.08% at roughness 0.10, 29.0% dark at roughness 1 seen edge-on, 73.0% once the sky has
+      a sun in it.</strong> And the mapping from roughness to mip level, which every engine picks by
+      taste, turns out to be <em>derivable</em> from 6.14's closed-form lobe width — to within 0.77
+      of a level of what everybody ships.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 6 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-14-antialiasing.html">6.14 — Antialiasing: Geometric and Shading</a>,
+          <a href="06-10-mipmaps.html">6.10 — Mipmaps, LOD, and Anisotropic Filtering</a>,
+          <a href="06-04-cook-torrance.html">6.4 — Cook–Torrance: Assembling the BRDF</a>,
+          <a href="06-02-what-a-brdf-is.html">6.2 — What a BRDF Is</a>,
+          <a href="06-12-hdr-tonemapping.html">6.12 — HDR and Tonemapping</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/cubemap.hpp</code> <em>(new)</em>,
+            <code>engine/src/gfx/cubemap.cpp</code> <em>(new)</em>,
+            <code>shaders/skybox.vert.hlsl</code> <em>(new)</em>,
+            <code>shaders/skybox.frag.hlsl</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/microfacet.hpp</code>,
+            <code>engine/include/engine/gfx/hdr.hpp</code>,
+            <code>engine/src/gfx/hdr.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code>,
+            <code>engine/include/engine/gfx/light.hpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>engine/CMakeLists.txt</code>, <code>CMakeLists.txt</code>,
+            <code>cmake/EngineHelpers.cmake</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_615.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>An environment lights the scene and is the sky behind it, on the CPU and on the GPU.
+            <strong>54 checks green</strong>, a uniform environment reproducing Lesson 6.2's ambient
+            term to <strong>1.3 × 10⁻⁵</strong>, the split sum's error measured and
+            <em>decomposed</em> rather than quoted, and the reference render byte-identical for the
+            <strong>twenty-fourth</strong> lesson — with the argument checked, and found to be
+            structural six times over, before a line of code was written.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…say precisely what is wrong with a constant ambient term, in two independent ways.</li>
+      <li>…map a direction onto a cube face and back, and explain every sign in the table.</li>
+      <li>…derive the solid angle of a cube-map texel, and say what ignoring it costs.</li>
+      <li>…explain why the diffuse half of image-based lighting is <em>exact</em> and the specular
+          half is not.</li>
+      <li>…state the split-sum approximation, name both of its assumptions, and measure the error
+          of each separately.</li>
+      <li>…derive which mip level of a prefiltered chain a given roughness should read, rather than
+          picking one.</li>
+      <li>…importance-sample a GGX distribution, and say why <code>rand()</code> is the wrong
+          sampler.</li>
+      <li>…create and upload a cube map in SDL_GPU, including the half-float encoding HDR data needs
+          to get there.</li>
+      <li>…recognise a Monte Carlo estimate that has not converged, before you publish it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an apology called <code>ambient</code></a></li>
+      <li><a href="#intuition">Building intuition: light as a function of direction</a></li>
+      <li><a href="#cube">The cube, and the texel that is worth five others</a></li>
+      <li><a href="#split">The two integrals, and only one of them is exact</a></li>
+      <li><a href="#level">Which level? Deriving what everybody guesses</a></li>
+      <li><a href="#impl">Implementation</a></li>
+      <li><a href="#gpu">Cube maps in SDL_GPU</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: an apology called <code>ambient</code></h2>
+
+  <p>
+    Open <code>engine/include/engine/gfx/light.hpp</code> and scroll to the bottom of
+    <code>shade()</code>. The last statement in the function has looked like this since Lesson 3.6:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/light.hpp</span><span class="tag">excerpt</span></figcaption>
+<pre><code class="lang-cpp">return {f_r.r * er + albedo.r * lights.ambient.r,
+        f_r.g * eg + albedo.g * lights.ambient.g,
+        f_r.b * eb + albedo.b * lights.ambient.b};</code></pre>
+  </figure>
+
+  <p>
+    <code>f_r * E</code> is everything this module has built — a microfacet BRDF fed by a
+    directional light, with Fresnel coupling the two lobes and a shadow map deciding whether the
+    light arrives at all. And then there is <code>albedo * ambient</code>, which is a constant.
+  </p>
+
+  <p>
+    Lesson 6.2 did that term a real service. It took the word <em>ambient</em>, gave it a physical
+    reading — <em>a uniform radiance <span class="eq-plain">L<sub>a</sub></span> arriving from every
+    direction of the hemisphere</em> — and pushed it through the Lambert BRDF:
+  </p>
+
+  <div class="eq">\[ L_o = \int_\Omega \frac{\text{albedo}}{\pi} \, L_a \cos\theta \, d\omega
+         = \frac{\text{albedo}}{\pi} L_a \pi = \text{albedo} \cdot L_a \]</div>
+
+  <div class="eq-plain">
+    (The integral of <code>albedo/π · L_a · cos θ</code> over the hemisphere is
+    <code>albedo/π · L_a · π</code>, which is <code>albedo · L_a</code>. The π cancels exactly.)
+  </div>
+
+  <p>
+    That is a genuinely nice result and it is why the expression above is not a fudge: it is the
+    <em>right answer</em> for a uniform environment. What 6.2 also said, and what we are here to
+    cash, is that the arithmetic was never the problem. <strong>The assumption was.</strong>
+  </p>
+
+  <h3>1.1 What the assumption costs, twice</h3>
+
+  @@FIG_PROBLEM@@
+
+  <p>
+    The first failure is the one you can state in a sentence: <strong>a constant has no
+    direction</strong>. Real bounced light does not arrive equally from everywhere. Outdoors,
+    most of it comes from the sky, some from the ground, and the two are different colours and
+    different brightnesses by an order of magnitude. Indoors it comes from whichever walls are lit.
+    A surface facing up should receive more fill than one facing down, and in this engine, today,
+    they receive exactly the same.
+  </p>
+
+  <p>
+    You have seen the consequence without necessarily naming it. Objects in our renders do not look
+    <em>placed</em>. They look like they were cut out and laid on top of the scene, because nothing
+    about their shading knows which way is up.
+  </p>
+
+  <p>
+    The second failure is worse and it has been on record for eleven lessons. Here is the comment
+    that sits directly above that return statement, shipped in the engine since Lesson 6.4:
+  </p>
+
+  <blockquote>
+    <p>
+      THE AMBIENT TERM IS STILL WRONG IN THE SAME WAY IT ALWAYS WAS, and Lesson 6.4 deliberately did
+      not touch it: it has no specular counterpart, so a mirror in a bright uniform room still
+      renders black except where the key light hits it. That missing term is the specular half of
+      image-based lighting, and it is Lesson 6.15's subject.
+    </p>
+  </blockquote>
+
+  <p>
+    Look at the expression again and you can see exactly why. <code>albedo * ambient</code> passes
+    through no BRDF — it <em>is</em> the Lambert answer, with the π already cancelled. So the ambient
+    fill is purely diffuse. And Lesson 6.4 established the metallic workflow: a conductor has
+    <strong>no diffuse lobe at all</strong>, because it absorbs whatever crosses its interface within
+    a few atoms. Its <code>diffuse_albedo</code> is zero by construction.
+  </p>
+
+  <p>
+    Put those two facts together. <em>In this engine, a metal receives no ambient light whatsoever.</em>
+    Chrome standing in the middle of a brightly lit room is black except for one reflected lamp. That
+    is not a subtle inaccuracy; it is the single largest error in the renderer, and Lesson 6.12 made
+    it worse by introducing four polished metals to look at it with.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why 6.4 left it alone on purpose.</strong> It would have been easy to give the ambient
+      term a specular half by guessing — multiply <code>f0</code> by <code>ambient</code> and move
+      on. That would have produced a plausible picture and an unfalsifiable one. The reason to wait
+      is that <em>the specular half of ambient light is an integral over the environment</em>, and
+      until there is an environment to integrate, any expression you write is a number chosen to
+      look right. 6.4 named the gap and left it; this lesson fills it with something that can be
+      checked against a reference.
+    </p>
+  </div>
+
+  <h3>1.2 What we are going to build</h3>
+
+  <p>
+    Everything below follows from one change of representation. Instead of a single
+    <code>linear_rgb ambient</code>, the engine will hold
+  </p>
+
+  <div class="eq">\[ L_i(\mathbf{d}) \quad \text{— the radiance arriving from direction } \mathbf{d} \]</div>
+
+  <div class="eq-plain">
+    (a function from a direction to a quantity of light), sampled on the six faces of a cube.
+  </div>
+
+  <p>
+    That single object does two jobs, and the fact that it is the <em>same</em> object for both is
+    the honest part of the whole technique:
+  </p>
+
+  <ul>
+    <li><strong>It is the background.</strong> A ray through each pixel that hits no geometry reads
+        the environment directly. That is the skybox.</li>
+    <li><strong>It is the light.</strong> Every shaded point integrates it over the hemisphere. That
+        is image-based lighting.</li>
+  </ul>
+
+  <p>
+    Because they are one texture, a reflection <em>cannot</em> disagree with its surroundings. You
+    have seen games where a puddle reflects a sky that is not the sky above it; that happens when the
+    two are authored separately. Here it is structurally impossible.
+  </p>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: light as a function of direction</h2>
+
+  <p>
+    Stand outside on an overcast day and look around slowly. In every direction you look, some amount
+    of light is arriving at your eye. Straight up it is bright; toward the horizon it is brighter
+    still and warmer; below the horizon it is whatever the ground is doing. If you could record the
+    brightness in every direction, you would have a complete description of the light in that place —
+    complete for the purpose of shading an object standing there, anyway.
+  </p>
+
+  <p>
+    That recording is an <strong>environment map</strong>. It is a function on the sphere of
+    directions, and the entire subject is (a) how to store such a function and (b) how to integrate
+    against it fast enough to do per pixel.
+  </p>
+
+  <h3>2.1 The integral we cannot afford</h3>
+
+  <p>
+    Lesson 6.2 wrote down what a shaded point owes. Here it is again, now with an environment rather
+    than a single light on the right-hand side:
+  </p>
+
+  <div class="eq">\[ L_o(\mathbf{v}) = \int_\Omega f_r(\mathbf{l}, \mathbf{v}) \; L_i(\mathbf{l})
+                       \; (\mathbf{n} \cdot \mathbf{l}) \; d\omega \]</div>
+
+  <div class="eq-plain">
+    (The light leaving toward the eye is the integral, over the hemisphere above the surface, of the
+    BRDF times the arriving radiance times the cosine.)
+  </div>
+
+  <p>
+    Put a number on that. A modest environment is 128×128 on each of six faces, which is 98,304
+    texels; half of them are in the hemisphere above any given normal. At 1920×1080 with one shaded
+    fragment per pixel, evaluating this integral honestly is
+  </p>
+
+  <p style="text-align:center">
+    2,073,600 pixels × 49,152 directions ≈ <strong>1.0 × 10<sup>11</sup></strong> BRDF evaluations
+    per frame.
+  </p>
+
+  <p>
+    At a generous ten per nanosecond that is about ten seconds a frame. This is not a per-frame
+    budget problem; it is a per-frame <em>impossibility</em>, and it does not become possible on
+    better hardware — it is five orders of magnitude away.
+  </p>
+
+  <p>
+    So the whole technique is two different ways of <strong>moving the integral offline</strong>. And
+    the two halves of the BRDF permit that to very different degrees, which is the most important
+    structural fact in this lesson and the thing most treatments blur.
+  </p>
+
+  <h3>2.2 A worked example before any formalism</h3>
+
+  <p>
+    Take the simplest environment there is: <em>uniform</em>, radiance 1 in every direction. A white
+    Lambertian surface, albedo 0.8, facing anywhere at all.
+  </p>
+
+  <p>
+    What should come out? The surface reflects 0.8 of the light that hits it, diffusely. The light
+    that hits it is the hemisphere's worth of radiance 1, projected by the cosine, which is the
+    integral of <code>cos θ</code> over the hemisphere, which is exactly π. So the irradiance is π,
+    the BRDF is 0.8/π, and the outgoing radiance is
+  </p>
+
+  <div class="eq">\[ \frac{0.8}{\pi} \times \pi = 0.8 \]</div>
+
+  <p>
+    Now notice what just happened: <strong>that is the number
+    <code>albedo × ambient</code> has been producing since Lesson 3.6.</strong> The old term is not
+    something the new machinery replaces; it is the special case the new machinery reduces to.
+  </p>
+
+  <p>
+    This gives us the single best test in the lesson, and it is the first one we will write:
+    <em>build a uniform environment, run the whole precomputation over it, shade a point, and the
+    answer must be the old one.</em> A new subsystem that reproduces the old one on the old one's own
+    input is a subsystem you can trust with a new input. When we run it, the agreement is
+    <strong>1.3 × 10⁻⁵</strong> relative.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is the ninety-percent picture and here is the missing ten.</strong> An environment
+      map records light arriving <em>at one point in space</em> — the point it was captured from.
+      Using it everywhere assumes the environment is infinitely far away, which is exactly right for
+      a sky and exactly wrong for a lamp two metres off. Real engines place many probes and blend
+      between them, and add parallax correction so a reflection of a nearby wall moves as you do.
+      Everything in this lesson is the single-distant-probe case; §11 points at the rest.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       3 — THE CUBE
+       ================================================================= -->
+  <h2 id="cube"><span class="num">3</span>The cube, and the texel that is worth five others</h2>
+
+  <p>
+    Before any integral, we need somewhere to put <span class="eq-plain">L<sub>i</sub>(<b>d</b>)</span>.
+    The obvious answer is a rectangle: longitude across, latitude down, the way a world map works.
+    That is called an <strong>equirectangular</strong> or lat-long map, it is easy to author, and
+    most downloadable HDR environments come in that form.
+  </p>
+
+  <p>
+    It is also a bad container, for the same reason a Mercator projection makes Greenland the size of
+    Africa. Every texel in the top row of a lat-long image covers the same point — the pole — so a
+    2:1 image spends an entire scanline on one direction, and roughly a quarter of its texels on the
+    two polar caps. The distortion is <em>unbounded</em>: as you approach the pole, the solid angle
+    per texel goes to zero.
+  </p>
+
+  <p>
+    A cube is better. Six flat squares wrapped around the sphere, each covering 90° by 90°. Its worst
+    distortion is at a corner, and — as we are about to derive — that corner texel is about a fifth
+    of a centre one. A factor of five is a bounded, knowable, correctable amount; an unbounded one is
+    not. The hardware also samples cube maps natively, with filtering that works <em>across face
+    edges</em>, which a lat-long lookup does not get.
+  </p>
+
+  <h3>3.1 Direction to face, and every sign in the table</h3>
+
+  <p>
+    The algorithm is one sentence: <strong>the largest component of the direction picks the face, and
+    dividing the other two by its magnitude projects the direction onto that face.</strong>
+  </p>
+
+  <p>
+    Take <span class="eq-plain"><b>d</b> = (0.4, 0.3, −0.866)</span>. The magnitudes are 0.4, 0.3 and
+    0.866, so <em>z</em> is largest and it is negative: the −Z face. Dividing the other two by 0.866
+    gives (0.462, 0.346) on that face's plane — a point in [−1, 1]² — and mapping that to [0, 1]
+    gives the texture coordinates.
+  </p>
+
+  <p>
+    Everything else is a sign convention, and the sign convention is the part that costs people a
+    day. Here it is in full, exactly as the D3D and OpenGL specifications give it, where
+    <code>sc</code> runs along the face's <em>u</em> axis, <code>tc</code> along its <em>v</em> axis,
+    and <code>ma</code> is the major axis:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>face</th><th><code>sc</code> (u axis)</th><th><code>tc</code> (v axis)</th><th><code>ma</code></th></tr></thead>
+    <tbody>
+      <tr><td>+X</td><td>−z</td><td>−y</td><td>x</td></tr>
+      <tr><td>−X</td><td>+z</td><td>−y</td><td>x</td></tr>
+      <tr><td>+Y</td><td>+x</td><td>+z</td><td>y</td></tr>
+      <tr><td>−Y</td><td>+x</td><td>−z</td><td>y</td></tr>
+      <tr><td>+Z</td><td>+x</td><td>−y</td><td>z</td></tr>
+      <tr><td>−Z</td><td>−x</td><td>−y</td><td>z</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    then <code>u = 0.5·(sc/|ma| + 1)</code> and <code>v = 0.5·(tc/|ma| + 1)</code>.
+  </p>
+
+  <p>
+    Two things in that table are worth stopping on.
+  </p>
+
+  <p>
+    <strong><code>tc = −y</code> on four of the six faces is where <em>v grows downward</em> comes
+    from</strong>, and it is the same top-left texel origin every other image in this engine has used
+    since Lesson 3.9 (<code>texel_origin::top_left</code>). That is not a coincidence — both
+    conventions descend from the same lineage — but it is worth noticing that they agree, because it
+    means a cube face and an ordinary texture are stored the same way round.
+  </p>
+
+  <p>
+    <strong>And the table was written for a LEFT-handed coordinate system, while conventions §2 pins
+    this engine's world as right-handed, Y-up, −Z forward.</strong> This is exactly the class of
+    silent bug §10 of the course spec warns about, so let us not assume — let us measure it. Look
+    along +X in a right-handed Y-up world: your right hand points along
+    <span class="eq-plain">forward × up = X × Y = +Z</span>. The table puts the +X face's
+    <em>u</em> axis along <code>−z</code>. The harness computes both and takes their dot product:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_615 §A</span><span class="tag">output</span></figcaption>
+<pre><code class="lang-text">[PASS] THE MIRROR IS REAL AND MEASURED: looking along +X, a right-handed world's
+       'right' is +0+0+1 and the cube's u axis is +0+0-1 — they are OPPOSITE
+       (dot -1.000). Faces baked with a right-handed camera come out left-right
+       flipped</code></pre>
+  </figure>
+
+  <p>
+    So: <strong>a cube map whose faces were photographed or rendered with a right-handed camera and
+    then sampled by this table comes out mirrored.</strong> On a sky that is almost invisible; on
+    anything with writing in it, unmistakable. The fix is <em>not</em> to "correct" the table — the
+    hardware implements it and we cannot change it — but to generate each face with the axes the
+    table names. Our procedural sky does that by construction, because it evaluates a function of
+    whatever direction <code>cube_to_direction</code> hands it, so the bake and the lookup agree by
+    construction rather than by agreement.
+  </p>
+
+  <h3>3.2 The solid angle of a texel, derived</h3>
+
+  @@FIG_CUBE@@
+
+  <p>
+    Here is the fact that every integral in this lesson depends on, and that is easy to skip: <strong>the
+    texels of a cube face do not subtend equal solid angles.</strong>
+  </p>
+
+  <p>
+    Picture one face as a flat square at distance 1 from the origin, spanning [−1, 1] in each of its
+    two axes. A texel at face coordinates <span class="eq-plain">(x, y)</span> is at distance
+  </p>
+
+  <div class="eq">\[ r = \sqrt{1 + x^2 + y^2} \]</div>
+
+  <p>
+    from the origin — further away than the centre texel, which is at exactly 1. Two separate things
+    follow, and they compound:
+  </p>
+
+  <ol>
+    <li><strong>Inverse square.</strong> Solid angle falls as <span class="eq-plain">1/r²</span>,
+        because that is what solid angle is.</li>
+    <li><strong>Foreshortening.</strong> The texel's own little patch of plane is tilted away from
+        the line of sight. The face's normal is the major axis, and the angle between it and the
+        direction has <span class="eq-plain">cos θ = 1/r</span> — because the major-axis component of
+        the un-normalised direction <span class="eq-plain">(x, y, 1)</span> is 1 and its length is
+        <span class="eq-plain">r</span>.</li>
+  </ol>
+
+  <p>
+    Multiply them:
+  </p>
+
+  <div class="eq">\[ d\omega = \frac{dA \cos\theta}{r^2} = \frac{dA}{r^3} \]</div>
+
+  <div class="eq-plain">
+    (the solid angle of a texel is its area divided by the cube of its distance)
+  </div>
+
+  <p>
+    <strong>Now the worked number.</strong> At the centre of a face, <span class="eq-plain">x = y = 0</span>,
+    so <span class="eq-plain">r = 1</span> and <span class="eq-plain">r³ = 1</span>. At a corner,
+    <span class="eq-plain">x = y = 1</span>, so <span class="eq-plain">r = √3 = 1.7321</span> and
+  </p>
+
+  <div class="eq">\[ r^3 = 3\sqrt{3} = 5.196 \]</div>
+
+  <p>
+    <strong>The centre texel is worth 5.196 corner texels.</strong> That is the whole argument, and
+    it is not a rounding detail — it is a factor of five sitting inside every sum you might write
+    over a cube map.
+  </p>
+
+  <p>
+    The harness checks the asymptote directly, by measuring the ratio at increasing resolutions and
+    watching it converge:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>face size</th><th>Σ solid angles (6 faces)</th><th>relative error vs 4π</th><th>corner / centre</th></tr></thead>
+    <tbody>
+      <tr><td>8</td><td>12.566370495</td><td>9.53 × 10⁻⁹</td><td>0.264514</td></tr>
+      <tr><td>32</td><td>12.566370643</td><td>2.26 × 10⁻⁹</td><td>0.205772</td></tr>
+      <tr><td>128</td><td>12.566370622</td><td>6.05 × 10⁻¹⁰</td><td>0.195535</td></tr>
+      <tr><td>512</td><td>—</td><td>—</td><td>0.193210</td></tr>
+      <tr><td>∞ (derived)</td><td>4π exactly</td><td>0</td><td><strong>0.192450</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Two independent confirmations there. The ratio converges to
+    <span class="eq-plain">1/(3√3) = 0.19245</span>, which is the number we derived on paper. And the
+    six faces' solid angles sum to <strong>4π</strong> — the whole sphere — to within double-precision
+    round-off, which is the one check that says the implementation transcribes the formula correctly.
+    A sum that came to 4.01π would mean a sign or an index was wrong somewhere, and nothing else in
+    the lesson would catch it.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Why the code uses a closed form and not <code>dA/r³</code>.</strong> The derivation
+      above is exact <em>in the limit of a small texel</em>, and a texel at 8×8 is 22.5° across, which
+      is not small. The implementation uses Lambert's formula for the solid angle of an axis-aligned
+      rectangle,
+      <span class="eq-plain">f(x, y) = atan2(xy, √(x²+y²+1))</span>, differenced at the four corners
+      — which is what a two-dimensional integral's antiderivative looks like. That is why the 4π check
+      passes at 8×8 and not merely at 512.
+    </p>
+  </div>
+
+  <h3>3.3 What ignoring it costs, and why that is a bug and not an error</h3>
+
+  <p>
+    Suppose you write the obvious loop: walk every texel of every face, multiply by the cosine, add
+    it up, divide by the number of texels. What do you get?
+  </p>
+
+  <p>
+    The harness measures it against the solid-angle-weighted answer, whose true value is known
+    exactly: the mean of <span class="eq-plain">cos θ</span> over a hemisphere is the integral of the
+    cosine divided by the hemisphere's area, <span class="eq-plain">π / 2π = 0.5</span>.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>face size</th><th>equal weights</th><th>solid-angle weighted</th><th>ratio</th></tr></thead>
+    <tbody>
+      <tr><td>16</td><td>0.50505299</td><td>0.50005004</td><td>1.010005</td></tr>
+      <tr><td>64</td><td>0.50503636</td><td>0.50000320</td><td>1.010066</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    One per cent. That is small — smaller than you might fear from a factor of 5.196, because the
+    over-weighted corners are relatively few and the cosine partly compensates. It is also worth
+    being honest that one per cent of an ambient term is not going to be the thing you notice.
+  </p>
+
+  <p>
+    <strong>But look at the second row.</strong> Sixteen times as many texels, and the error did not
+    move: 1.010005 became 1.010066. It got very slightly <em>worse</em>. That is the signature of a
+    <strong>bias</strong> rather than a discretisation error, and the distinction is the whole point:
+    a discretisation error is a number you can buy down with memory, and a bias is a number that
+    will still be there when you have spent all the memory you own.
+  </p>
+
+  <p>
+    Which is exactly why <code>cube_texel_solid_angle</code> exists as a named public function
+    rather than as an expression inside one loop. Every integral in the file calls it, and a reader
+    can tell at a glance which ones do.
+  </p>

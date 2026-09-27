@@ -1,0 +1,444 @@
+  <h2 id="basis">6. Carrying a tensor: R I Rᵀ</h2>
+
+  <p>
+    Every tensor so far is expressed in <strong>body axes</strong> — a frame glued to the body, that
+    turns with it. That is the only frame in which it is constant: a box's <code>Ixx</code> is
+    <code>m(b² + c²)/3</code> forever, whatever the box is doing. In world space the same tensor
+    changes the instant the body moves, because the mass that was far from the world <code>x</code>
+    axis a moment ago is now somewhere else.
+  </p>
+
+  <p>
+    So the tensor lives in body space and everything else in this engine — position, velocity,
+    force, torque, angular velocity — lives in world space. That asymmetry is forced rather than
+    chosen, and the bridge between the two is one line of code that is worth understanding rather
+    than memorising.
+  </p>
+
+  <h3>6.1 Deriving the sandwich</h3>
+
+  <p>
+    Let <code>R</code> be the body's orientation as a rotation matrix — the map that carries body
+    axes to world axes. We know <code>L_body = I_body ω_body</code>, and we want the world-space
+    version. Three substitutions:
+  </p>
+
+  <div class="eq">
+    \[
+    \boldsymbol{\omega}_{\text{body}} = \mathbf{R}^{\!\top}\boldsymbol{\omega}_{\text{world}},
+    \qquad
+    \mathbf{L}_{\text{world}} = \mathbf{R}\,\mathbf{L}_{\text{body}}
+    \]
+  </div>
+
+  <div class="eq">
+    \[
+    \mathbf{L}_{\text{world}}
+      = \mathbf{R}\,\mathbf{I}_{\text{body}}\,\mathbf{R}^{\!\top}\,\boldsymbol{\omega}_{\text{world}}
+    \qquad\Longrightarrow\qquad
+    \mathbf{I}_{\text{world}} = \mathbf{R}\,\mathbf{I}_{\text{body}}\,\mathbf{R}^{\!\top}
+    \]
+  </div>
+
+  <p>
+    Read it right to left, which is the order the matrices apply in.
+    <code>Rᵀ</code> carries the angular velocity <em>into</em> the frame the tensor is written in;
+    <code>I</code> acts there, where it is constant and where its meaning was defined; and
+    <code>R</code> carries the result back <em>out</em>. A quantity that eats a vector and produces a
+    vector has to be converted on both sides, which is the whole reason a tensor transforms with
+    <code>R … Rᵀ</code> where a plain vector transforms with <code>R</code> alone.
+  </p>
+
+  @@FIG_SANDWICH@@
+
+  <p>
+    Two things follow immediately and both get used.
+  </p>
+
+  <p>
+    <strong>The inverse sandwiches too.</strong> <code>(R I Rᵀ)⁻¹ = R⁻ᵀ I⁻¹ R⁻¹</code>, and for a
+    rotation <code>R⁻¹ = Rᵀ</code>, so this is just <code>R I⁻¹ Rᵀ</code>. Which means a body can
+    invert its tensor <em>once</em>, when it is created, and never invert again — every step just
+    sandwiches the stored inverse. The harness checks the two routes against each other and gets
+    5.9605e−08, which is one ulp at that magnitude.
+  </p>
+
+  <p>
+    <strong>A zero tensor survives the sandwich unchanged.</strong> Which is 8.2's inverse-mass
+    argument arriving again, nine floats wide: a body that must not rotate stores all zeros, and
+    <code>R · 0 · Rᵀ = 0</code>, so every torque applied to a wall produces exactly no angular
+    acceleration with no branch and no sentinel anywhere in the step.
+  </p>
+
+  <h3>6.2 The plausible wrong one</h3>
+
+  <p>
+    Now the part that costs people a day. Write the sandwich the other way round —
+    <code>Rᵀ I R</code> — and ask what goes wrong.
+  </p>
+
+<pre><code class="lang-text">  E.2  R^T I R instead of R I R^T:
+       trace           9.333333  (same)
+       determinant    24.074076  (same)
+       asymmetry     1.1921e-07  (still symmetric)
+       max element difference from R I R^T  1.569413</code></pre>
+
+  <p>
+    Every cheap test passes. It is symmetric, so <code>asymmetry()</code> is clean. It has the same
+    trace, the same determinant, and the same principal moments. It satisfies the triangle
+    inequality. <code>inspect_inertia</code> calls it usable, and it is: it is the inertia tensor of
+    a real body, because <code>Rᵀ I R</code> is the basis change in the <em>other direction</em> and
+    describes the same body rotated the opposite way.
+  </p>
+
+  <p>
+    It is just not this body, and the tensor is out by 1.57 in its largest element on a body whose
+    moments run from 1.67 to 4.33. That is not a rounding difference, it is a different object — and
+    nothing structural will tell you.
+  </p>
+
+  <p>
+    The test that does is behavioural rather than structural: put the body in a known orientation and
+    ask what the world tensor <em>does</em>. And there is a trap even here, which the harness
+    deliberately walks into and reports:
+  </p>
+
+<pre><code class="lang-text">  E.3  a 90-degree turn about z. The box's x and y axes
+       swap, so world Ixx must equal body Iyy.
+       body    Ixx 4.333333  Iyy 3.333333
+       R I R^T Ixx 3.333333  &lt;- matches body Iyy
+       R^T I R Ixx 3.333333
+       For THIS rotation the two happen to agree, because
+       a 90-degree turn is its own inverse up to a sign on
+       a diagonal tensor.</code></pre>
+
+  <p>
+    A test built on a right angle passes with the transpose in either place. Which is why E.2's
+    rotation is a deliberately awkward one — 0.7π about <code>(1, 2, 3)</code> normalised — and why
+    "test it with a 90° rotation" is advice that will let this bug through. <strong>Convention bugs
+    hide behind symmetric test data.</strong> Module 4's conventions page made the same point about
+    winding order; here it is again, in a different subsystem, for the same reason.
+  </p>
+
+  <p>
+    And the section's last measurement is 8.2 §8's frame question in its rotational form. Put a
+    <em>scale</em> in the sandwich instead of a rotation:
+  </p>
+
+<pre><code class="lang-text">  E.5  CONTROL identity rotation: identical  yes
+       a SCALE of (2,1,1) in the sandwich:
+         trace 9.333334 -&gt; 22.333334, and the body it
+         describes is a different body.</code></pre>
+
+  <p>
+    The trace is invariant under rotations and not under scales, so it moves — and what comes out is
+    not the tensor of the body you started with. This is the deeper reason 8.2 insisted that bodies
+    live in world space: a non-uniformly scaled parent does not merely tilt a body's gravity, it
+    turns a sphere into an ellipsoid and an inertia tensor into something that is not one.
+  </p>
+
+  <h2 id="orientation">7. Integrating an orientation is not an addition</h2>
+
+  <p>
+    We can now compute an angular acceleration: <code>α = I_world⁻¹ τ</code>, which is
+    <code>a = F/m</code> with a matrix in place of the scalar. Multiply by <code>h</code>, add to
+    <code>ω</code>, done — that half is genuinely the same as the linear case.
+  </p>
+
+  <p>
+    The other half is not. A position advances by <code>x += v h</code> because positions live in a
+    vector space and adding a displacement to one is the definition of moving it. An orientation does
+    not live in a vector space, and that single sentence is the whole of this section.
+  </p>
+
+  <h3>7.1 Why the obvious thing is not merely inaccurate</h3>
+
+  <p>
+    Angular velocity <em>is</em> a vector — a direction (the axis) and a magnitude (radians per
+    second) — so it looks as though a rotation ought to advance by <code>ω h</code> the way a
+    position advances by <code>v h</code>. Here is why it cannot.
+  </p>
+
+  <p>
+    Take two rotations of 90°, one about <code>x</code> and one about <code>y</code>, and apply them
+    in both orders to the probe vector <code>(0, 0, 1)</code>:
+  </p>
+
+<pre><code class="lang-text">  F.1  90 deg about x, then y — and the other order
+
+       (0,0,1) -&gt; x then y:  1.000  0.000  0.000
+       (0,0,1) -&gt; y then x:  0.000 -1.000  0.000
+       angle between the two results: 120.000 deg</code></pre>
+
+  <p>
+    A hundred and twenty degrees apart. Now: the two "rotation vectors" you would be summing are
+    <code>(π/2, 0, 0)</code> and <code>(0, π/2, 0)</code>, and their sum is
+    <code>(π/2, π/2, 0)</code> <em>either way round</em>, because addition commutes.
+  </p>
+
+  <p>
+    So no vector can be the running total of a sequence of rotations. There is nothing to fix with a
+    smaller step size: the quantity you would be accumulating is order-blind and rotations are not.
+    <code>q += ω h</code> is not an approximation to a rotation. It is not a rotation.
+  </p>
+
+  @@FIG_SPIN@@
+
+  <h3>7.2 What <em>is</em> true: the quaternion derivative</h3>
+
+  <p>
+    The quaternion itself does have a derivative, and deriving it needs nothing beyond Lesson 7.4.
+  </p>
+
+  <p>
+    Over a small time <code>h</code>, a body turning at <code>ω</code> rotates by an angle
+    <code>|ω| h</code> about the axis <code>ω̂</code>. By 7.4, the quaternion for that is
+  </p>
+
+  <div class="eq">
+    \[
+    \Delta q = \left(\cos\tfrac{|\boldsymbol{\omega}| h}{2},\; \hat{\boldsymbol{\omega}}\sin\tfrac{|\boldsymbol{\omega}| h}{2}\right)
+    \;\approx\;\left(1,\; \tfrac{h}{2}\boldsymbol{\omega}\right)
+    \quad\text{for small } h
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — using <code>cos x ≈ 1</code> and <code>sin x ≈ x</code>, so that
+    <code>ω̂ sin(|ω|h/2) ≈ ω̂ |ω| h/2 = ω h/2</code>. The <code>½</code> is
+    <em>7.3's half-angle</em>, which has been in every quaternion in this course since complex
+    numbers, arriving here as a factor in a derivative.
+  </p>
+
+  <p>
+    Composing that with the current orientation and taking the limit:
+  </p>
+
+  <div class="eq">
+    \[
+    q(t + h) = \Delta q \cdot q(t) \approx q + \tfrac{h}{2}\,\boldsymbol{\omega}_{\text{pure}}\,q
+    \qquad\Longrightarrow\qquad
+    \dot q = \tfrac{1}{2}\,\boldsymbol{\omega}_{\text{pure}}\, q
+    \]
+  </div>
+
+  <p>
+    where <code>ω_pure</code> is the quaternion <code>(0, ω)</code>. Note the <em>side</em>: the
+    delta multiplies from the <strong>left</strong>, because 7.4 fixed the convention that
+    <code>a·b</code> applies <code>b</code> first, so a delta expressed in world axes is the outer
+    one. A body-space angular velocity would multiply from the right. Same arithmetic, other side,
+    and §16 has the pitfall.
+  </p>
+
+  <h3>7.3 Two failure modes, both predictable before they are measured</h3>
+
+  <p>
+    Take that derivative literally — <code>q += ½ ω_pure q h</code> — and two things go wrong. Both
+    are computable in advance, which is what makes them worth measuring.
+  </p>
+
+  <p>
+    <strong>First, the length inflates.</strong> The step <code>½ ω_pure q h</code> is
+    <em>orthogonal</em> to <code>q</code> in 4-D — a fact worth checking once rather than believing,
+    and the note in <code>spin_inflation</code> does the four lines. So adding it is a right-angled
+    triangle, and Pythagoras gives the new length directly:
+  </p>
+
+  <div class="eq">
+    \[
+    |q_{\text{new}}| = \sqrt{1 + \left(\tfrac{|\boldsymbol{\omega}| h}{2}\right)^{2}}
+      \;\approx\; 1 + \frac{(|\boldsymbol{\omega}| h)^2}{8}
+    \]
+  </div>
+
+<pre><code class="lang-text">  F.2  the linearised update inflates. |q| after one
+       step, before renormalising:
+
+      omega   omega*h    measured      predicted
+       1.0   0.0167   1.000034690   1.000034690
+      10.0   0.1667   1.003466249   1.003466249
+      30.0   0.5000   1.030776381   1.030776381
+
+       Compounded without renormalising, 10 rad/s for
+       one second (60 steps) gives |q| = 1.2307</code></pre>
+
+  <p>
+    At 10 rad/s and 60 Hz that is 0.35% per step, compounding to <strong>23% in one second</strong>.
+    A non-unit quaternion is not a rotation — <code>mat3_from_quat</code> on one produces a matrix
+    with a scale in it — so the body visibly shears and then collapses. Renormalising every step is
+    not defensive programming here; it is load-bearing.
+  </p>
+
+  <p>
+    <strong>Second, and this one survives the renormalisation.</strong> After you divide by the
+    length, the result is the unit quaternion whose imaginary part points along <code>ω</code> with
+    <code>tan(θ/2) = |ω|h/2</code> — so the angle it actually turned through is
+    <code>2 arctan(|ω|h/2)</code>, not <code>|ω|h</code>. Expanding the arctangent:
+  </p>
+
+  <div class="eq">
+    \[
+    2\arctan\!\left(\tfrac{x}{2}\right) = x - \frac{x^3}{12} + O(x^5)
+    \qquad\Longrightarrow\qquad
+    \frac{\theta_{\text{achieved}}}{\theta_{\text{asked}}} - 1 \approx -\frac{(|\boldsymbol{\omega}| h)^2}{12}
+    \]
+  </div>
+
+<pre><code class="lang-text">  F.3  ...and what renormalising does NOT fix: the angle.
+
+      omega*h    asked      achieved    rel. err   -(wh)^2/12
+     0.0167   0.016667   0.016666  -2.313e-05  -2.315e-05
+     0.1667   0.166667   0.166282  -2.305e-03  -2.315e-03
+     0.5000   0.500000   0.489957  -2.009e-02  -2.083e-02
+
+  F.4  the exponential map, 3,600 steps at 10 rad/s
+       linearised   |q| 0.9999999   error   79.2459 deg
+       exponential  |q| 1.0000000   error    0.0019 deg</code></pre>
+
+  <p>
+    The update always turns <em>short</em>. It is a lag, not a random walk, so it accumulates
+    linearly: 2.305e−03 per radian, times 600 radians of turning in a minute, is 1.383 radians —
+    <strong>79.2°</strong>, which is exactly what F.4 measures. Predicted before it was run.
+  </p>
+
+  <p>
+    The alternative has neither problem. Build the delta rotation <em>exactly</em>, with the real
+    <code>sin</code> and <code>cos</code>, and compose it:
+    <code>quat_from_axis_angle(ω̂, |ω|h) · q</code>. This is the <strong>exponential map</strong>,
+    and for a constant <code>ω</code> it is not an approximation at all — it is the closed-form
+    answer, and it needs no renormalisation because a unit quaternion times a unit quaternion is a
+    unit quaternion. 0.0019° after a minute, against 79.2459°.
+  </p>
+
+  <p>
+    It costs a <code>sqrt</code> and a <code>sin</code>/<code>cos</code> pair per body per step.
+    Whether that is worth paying is §12's measurement, not an opinion — and the honest answer turns
+    out to be "it depends on what you are simulating", which is why <code>body_world</code> has a
+    switch rather than a decision.
+  </p>
+
+  <h2 id="momentum">8. Angular momentum, and what is actually conserved</h2>
+
+  <p>
+    We have <code>L = I ω</code> and we have a way to advance <code>ω</code> and <code>q</code>.
+    Before wiring it together, one question that decides how the rest of the module is written:
+    <strong>when nothing is acting on a body, what stays the same?</strong>
+  </p>
+
+  <p>
+    In the linear case the answer is so obvious it is barely worth asking. Nothing acting means
+    <code>F = 0</code> means <code>a = 0</code> means the velocity is constant. Newton's first law,
+    and both <code>v</code> and <code>p = mv</code> are conserved because the mass is a constant
+    scalar that never moves.
+  </p>
+
+  <p>
+    Rotationally, the two come apart, and they come apart for a reason that is visible in the
+    algebra. <code>τ = 0</code> gives <code>dL/dt = 0</code>, so <strong><code>L</code> is
+    conserved</strong>. But <code>L = I_world ω</code>, and <code>I_world = R I_body Rᵀ</code>
+    <em>changes as the body turns</em>. If <code>L</code> is fixed and <code>I_world</code> is moving,
+    then <code>ω</code> cannot be fixed.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is the single most important sentence in the lesson.</strong> A body with nothing
+      acting on it does <em>not</em> keep spinning about the same axis at the same rate. Its angular
+      momentum is constant; its angular velocity wanders, changes magnitude, and — for a body with
+      three different moments — can reverse entirely. It looks exactly like something is acting on
+      it, and nothing is.
+    </p>
+  </div>
+
+  <h3>8.1 How far can it wander? Derive it.</h3>
+
+  <p>
+    This is measurable, and better than measurable: <em>derivable</em>, which means the simulation
+    can be checked against a number that owes it nothing.
+  </p>
+
+  <p>
+    A torque-free rigid body conserves exactly two things: <code>|L|²</code>, and twice its
+    rotational kinetic energy, which in body axes is <code>2T = Σ Lᵢ²/Iᵢ</code>. Write
+    <code>uᵢ = Lᵢ²</code> and look at what those two constraints are:
+  </p>
+
+  <div class="eq">
+    \[
+    u_x + u_y + u_z = |\mathbf{L}|^2,
+    \qquad
+    \frac{u_x}{I_x} + \frac{u_y}{I_y} + \frac{u_z}{I_z} = 2T
+    \]
+  </div>
+
+  <p>
+    Both are <strong>linear in <code>u</code></strong>. Two linear constraints in three unknowns
+    leave a line, and intersecting it with the positive octant leaves a
+    <em>segment</em>. And the quantity we want —
+    <code>|ω|² = Σ (Lᵢ/Iᵢ)² = Σ uᵢ/Iᵢ²</code> — is linear on that segment too.
+  </p>
+
+  <p>
+    A linear function on a segment takes its extreme values at the <em>ends</em>. The ends are where
+    one <code>uᵢ</code> reaches zero. So there are only three candidate answers, at most two of them
+    feasible, and finding them is solving a 2×2 system three times.
+  </p>
+
+  @@FIG_TUMBLE@@
+
+  <p>
+    For our 1 kg box with half-extents <code>(0.5, 1.0, 1.5)</code> — moments 1.083333, 0.833333 and
+    0.416667 — launched at <code>ω = (0.6, 4.0, 0.3)</code>:
+  </p>
+
+<pre><code class="lang-text">  G.2  the reachable range of |omega|, DERIVED from the
+       two conserved quantities and then measured
+
+       |L|^2 = 11.549237    2T = 13.760834
+
+       Lx = 0  infeasible
+       Ly = 0  gives |omega| = 4.4880
+       Lz = 0  gives |omega| = 4.0524
+
+       predicted  4.0524 .. 4.4880
+       measured   4.0527 .. 4.4924
+       a swing of 10.85% with NOTHING acting on it.</code></pre>
+
+  <p>
+    Four digits of agreement between a hand derivation and sixty seconds of simulation. That is the
+    strongest kind of check this course has: not "the number looked plausible", and not "it matched a
+    second implementation of the same code", but "an argument that knows nothing about the
+    implementation predicted where it would go, and it went there".
+  </p>
+
+  <p>
+    It also tells you something the simulation alone could not. The
+    <code>Lx = 0</code> row is <strong>infeasible</strong> — that combination of energy and momentum
+    cannot be reached by any real motion — so a simulation that ever produced it would be telling
+    you it had gone wrong, without you needing a reference to compare against.
+  </p>
+
+  <h3>8.2 Two more things the body now knows</h3>
+
+  <p>
+    Two functions arrive with <code>L</code> and are worth naming because 8.9 is written entirely in
+    terms of them.
+  </p>
+
+  <p>
+    <strong><code>kinetic_energy</code></strong> is <code>½ m v² + ½ ω·(I ω)</code>, and the shape of
+    the second term is the price of the resistance being a tensor: it is a <em>quadratic form</em> in
+    <code>ω</code> rather than a product of two scalars. Like <code>|L|</code>, it should be flat on
+    a torque-free body, and §9 uses it as the instrument that catches what <code>|L|</code> cannot.
+  </p>
+
+  <p>
+    <strong><code>point_velocity</code></strong> is <code>v + ω × r</code>, the world velocity of a
+    point rigidly attached to the body. This is the formula that makes a rigid body rigid, and every
+    contact in 8.9 is written against it — because a collision does not happen at a body's centre, it
+    happens at a point on its surface which may be moving very differently. The standard
+    demonstration is a rolling wheel: its centre moves forward at <code>v</code>, and the contact
+    patch touching the road is instantaneously <strong>stationary</strong>, because
+    <code>ω × r</code> there exactly cancels <code>v</code>. That is why a tyre grips rather than
+    sliding, and it is one line of code we now have.
+  </p>

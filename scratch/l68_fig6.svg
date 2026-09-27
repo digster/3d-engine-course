@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 372" role="img" aria-labelledby="l68f6-t l68f6-d">
+  <title id="l68f6-t">The three bias policies</title>
+  <desc id="l68f6-d">Three panels. A constant bias lifts every surface by the same amount and causes peter-panning. A slope-scaled bias lifts each surface by what its own tilt requires. A normal-offset moves the sample point along the geometric normal instead of moving its depth.</desc>
+  <defs>
+    <marker id="e-i-l68f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l68f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l68f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l68f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l68f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="372" class="bg"/>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Three ways to make the comparison pass, and three prices</text>
+<rect x="18" y="40" width="224" height="300" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="130" y="62" class="sm" text-anchor="middle">constant</text>
+<line x1="44" y1="168.0" x2="216" y2="106.1" class="ink" stroke-width="2"/>
+<circle cx="130.0" cy="137.0" r="4" fill="#8f918a"/>
+<line x1="130.0" y1="137.04" x2="130.0" y2="107.03999999999999" stroke="#e05c5c" stroke-width="1.6" marker-end="url(#e-b-l68f6)"/>
+<text x="130" y="224" class="xs" text-anchor="middle">one number everywhere</text>
+<text x="130" y="241" class="xs" text-anchor="middle">sized for the steepest</text>
+<text x="130" y="258" class="xs" text-anchor="middle">surface in the scene, so</text>
+<text x="130" y="275" class="xs" text-anchor="middle">every flatter one is lifted</text>
+<text x="130" y="292" class="xs" text-anchor="middle">too far  →  PETER-PANNING</text>
+<rect x="248" y="40" width="224" height="300" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="360" y="62" class="sm" text-anchor="middle">slope-scaled</text>
+<line x1="274" y1="168.0" x2="446" y2="106.1" class="ink" stroke-width="2"/>
+<circle cx="360.0" cy="137.0" r="4" fill="#8f918a"/>
+<line x1="360.0" y1="137.04" x2="360.0" y2="120.03999999999999" stroke="#5ac878" stroke-width="1.6" marker-end="url(#e-g-l68f6)"/>
+<text x="360" y="224" class="xs" text-anchor="middle">reach x texel x tan(theta)</text>
+<text x="360" y="241" class="xs" text-anchor="middle">each surface gets exactly</text>
+<text x="360" y="258" class="xs" text-anchor="middle">what its own geometry</text>
+<text x="360" y="275" class="xs" text-anchor="middle">needs  —  and diverges as</text>
+<text x="360" y="292" class="xs" text-anchor="middle">tan(theta) does, so it clamps</text>
+<rect x="478" y="40" width="224" height="300" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3" stroke-dasharray="4 4"/>
+<text x="590" y="62" class="sm" text-anchor="middle">normal-offset</text>
+<line x1="504" y1="168.0" x2="676" y2="106.1" class="ink" stroke-width="2"/>
+<circle cx="590.0" cy="137.0" r="4" fill="#8f918a"/>
+<line x1="590.0" y1="137.04" x2="596.7743893654548" y2="118.22225176262546" class="ink" stroke-width="1.6" marker-end="url(#e-i-l68f6)"/>
+<text x="590" y="224" class="xs" text-anchor="middle">move the POINT, not the depth</text>
+<text x="590" y="241" class="xs" text-anchor="middle">along the GEOMETRIC normal</text>
+<text x="590" y="258" class="xs" text-anchor="middle">(6.7 made that different</text>
+<text x="590" y="275" class="xs" text-anchor="middle">from the shading one). Trades</text>
+<text x="590" y="292" class="xs" text-anchor="middle">depth error for lateral error</text>
+<text x="360.0" y="362" class="xs" text-anchor="middle">Measured: 50.1% of an unoccluded plane shadows itself with no bias; 0.0% with slope-scaled.</text>
+</svg>

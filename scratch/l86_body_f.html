@@ -1,0 +1,336 @@
+  <h2 id="listings">14. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest first.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/epa.hpp</code></td><td>new</td>
+          <td>The status, the result, the config, the query, and
+              <code>depth_along</code> — the certificate in one line.</td></tr>
+      <tr><td><code>engine/src/phys/epa.cpp</code></td><td>new</td>
+          <td>The polytope, the beneath-and-beyond expansion, the seed that has to build itself,
+              and the loop.</td></tr>
+      <tr><td><code>engine/include/engine/phys/collide.hpp</code></td><td>modified</td>
+          <td>The general <code>collide</code>'s doc comment loses its placeholder.</td></tr>
+      <tr><td><code>engine/src/phys/collide.cpp</code></td><td>modified</td>
+          <td>The façade hands GJK's terminal simplex to EPA rather than returning
+              <code>+0</code>.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One more physics header in the umbrella.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>src/phys/epa.cpp</code> joins the library.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>epa</code> target.</td></tr>
+      <tr><td><code>demos/epa/main.cpp</code></td><td>new</td>
+          <td>The polytope growing beside a ghost of the shape it is about to push free.</td></tr>
+      <tr><td><code>scratch/verify_86.cpp</code></td><td>new</td>
+          <td>Nine sections, 2,028 checks.</td></tr>
+      <tr><td><code>scratch/build_verify_86.sh</code></td><td>new</td>
+          <td>Which refuses an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/phys/epa.hpp@@
+@@LISTING:engine/src/phys/epa.cpp@@
+@@LISTING:engine/include/engine/phys/collide.hpp@@
+@@LISTING:engine/src/phys/collide.cpp@@
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/CMakeLists.txt@@
+@@LISTING:demos/epa/main.cpp@@
+@@LISTING:scratch/verify_86.cpp@@
+@@LISTING:scratch/build_verify_86.sh@@
+
+  <h2 id="build">15. Build &amp; run</h2>
+
+  <p>
+    Nothing new is fetched and no shaders are compiled, so the usual configure is enough.
+  </p>
+
+  <pre><code class="lang-bash"># Linux and macOS
+cmake -S . -B build
+cmake --build build --target epa -j
+./build/demos/epa
+
+# Windows (Visual Studio generator)
+cmake -S . -B build
+cmake --build build --target epa --config Debug
+.\build\demos\Debug\epa.exe</code></pre>
+
+  <p>
+    <strong>What you should see.</strong> A 960×540 window split down the middle. On the left, two
+    wireframe crates on a one-metre grid, the second drifting slowly into the first and back out;
+    while they overlap, a green ghost outline shows where the minimum translation would put it and
+    a gold arrow runs from its centre to the ghost's. On the right, the Minkowski difference
+    outlined in grey with a white cross at the origin — <em>inside</em> the outline this time — the
+    expanding polytope drawn as a gold mesh, and a pink line from the origin to its closest face.
+    When the crates come apart the ghost and the arrow vanish and the panel says so: there is no
+    penetration to measure, and that was 8.5's question.
+  </p>
+
+  <p>
+    Things to do with it, in order:
+  </p>
+
+  <ul>
+    <li>Press <strong>[R]</strong> then <strong>[S]</strong> a few times. The gold mesh grows, the
+        pink line <em>lengthens</em>, and the green ghost climbs out of the blue crate one step at
+        a time. Compare with <code>demos/gjk</code>, where the pink line only ever shortened.</li>
+    <li>Press <strong>[2]</strong>: a capsule inside a fourteen-vertex hull. Neither shape has a
+        finite face list, so 8.4's test cannot be applied to either of them and 8.5 could only say
+        <em>yes, they touch</em>. This one says how deep and which way.</li>
+    <li>Press <strong>[3]</strong>, the two crates on a floor, and read the panel:
+        <code>seed vertices: 2 extra</code>. That is §5's finding on screen — GJK handed over a
+        flat triangle and the seed had to leave the plane itself.</li>
+    <li>Still on preset 3, press <strong>[F]</strong>. The flood fill is off, the status flips to
+        <code>stalled</code> on a good fraction of positions, and the ghost stops short of coming
+        free. That is §7, live. Press <strong>[F]</strong> again to fix it.</li>
+    <li>Press <strong>[G]</strong> to hide the mesh if you want to see the difference set's
+        silhouette on its own.</li>
+  </ul>
+
+  <p>
+    And the headless form, which is byte-for-byte reproducible because the demo loads nothing:
+  </p>
+
+  <pre><code class="lang-bash">./build/demos/epa --preset 2 --t 0.9 --steps 2 --shot two-steps.ppm
+./build/demos/epa --preset 2 --t 0.9 --shot converged.ppm
+./build/demos/epa --preset 2 --t 0.9 --no-flood --shot torn.ppm</code></pre>
+
+  <p>
+    The harness is a separate build, and it wants a release library because §I quotes nanoseconds
+    and §I.2's finding is about a stack frame:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine -j
+sh scratch/build_verify_86.sh</code></pre>
+
+  <p>
+    It prints nine lettered sections and finishes with <code>2028 checks, 0 failures</code>. If it
+    refuses to run at all, read what it says: a tree configured without
+    <code>CMAKE_BUILD_TYPE</code> carries no <code>-O</code> flag, and a debug library would
+    measure something else entirely.
+  </p>
+
+  <h2 id="pitfalls">16. Common pitfalls &amp; debugging</h2>
+
+  <p>
+    Four of these are bugs this lesson actually shipped and then removed, which is why the symptoms
+    are described so precisely.
+  </p>
+
+  <h3>The depth is always about 58% of the truth</h3>
+  <p>
+    <strong>Symptom.</strong> Two axis-aligned boxes overlapping by <code>d</code> report
+    <code>d / √3</code>, with a normal like <code>(0.577, −0.577, 0.577)</code> and a status of
+    <code>stalled</code>.<br>
+    <strong>Cause.</strong> The horizon tore, so the expansion stopped early on an octahedron face
+    — the polytope's vertices are face centres and edge midpoints of the difference box rather than
+    its corners, and the octahedron they span has faces at exactly <code>d / √3</code>.<br>
+    <strong>Fix.</strong> §7. Flood fill the visible set from the closest face instead of taking
+    every candidate. If you want to see the failure first, set
+    <code>epa_config::flood_fill_visible</code> to <code>false</code>.
+  </p>
+
+  <h3>The depth is zero on everything that rests on a floor</h3>
+  <p>
+    <strong>Symptom.</strong> <code>proven</code>, depth exactly <code>0</code>, a plausible
+    normal, and a stack of crates that never separates.<br>
+    <strong>Cause.</strong> The seed used one apex. The origin is in the plane of GJK's terminal
+    triangle, so a single support call out of that plane leaves it on the tetrahedron's
+    <em>base</em>, and the closest face is at distance zero.<br>
+    <strong>Fix.</strong> §6. Two apexes, one on each side.
+  </p>
+
+  <h3>The lower bound goes negative</h3>
+  <p>
+    <strong>Symptom.</strong> <code>stalled</code>, with a closest-face distance below zero on a
+    pair that is definitely overlapping. Rare — a couple of per cent — and only on flat seeds.<br>
+    <strong>Cause.</strong> The starting bipyramid was stitched by hand and is not convex, because
+    an apex projected outside the triangle.<br>
+    <strong>Fix.</strong> §6.1. Build the tetrahedron on the first apex and add the second through
+    the same expansion the main loop uses.
+  </p>
+
+  <h3>A deeply buried sphere reports a depth of zero</h3>
+  <p>
+    <strong>Symptom.</strong> <code>touching</code>, depth <code>0</code>, on a ball 70 cm inside a
+    crate. 19 in 20,000, and the rate <em>rises</em> as you tighten the tolerance.<br>
+    <strong>Cause.</strong> A containment check on the seed's face offsets, run before the
+    expansion. GJK can terminate on a segment through the origin on a deep overlap, which puts the
+    origin on an edge of the seed where the offsets are zero to within a few ulps.<br>
+    <strong>Fix.</strong> §8.4. Do not ask. Let the expansion run and read <code>lower</code> at
+    the end.
+  </p>
+
+  <h3>The normal is right but the contact points are not on the shapes</h3>
+  <p>
+    <strong>Symptom.</strong> <code>point_a</code> and <code>point_b</code> float slightly off the
+    surfaces, and <code>point_a − point_b</code> is not quite <code>normal × depth</code>.<br>
+    <strong>Cause.</strong> The barycentric weights of the projected origin came out slightly
+    negative at the rim of the winning face and were used as they stood.<br>
+    <strong>Fix.</strong> Clamp to non-negative and renormalise. In exact arithmetic the projection
+    is inside the globally closest face, so a negative weight is rounding of order the tolerance.
+  </p>
+
+  <h3>Everything works and it is inexplicably slow</h3>
+  <p>
+    <strong>Symptom.</strong> A narrow phase whose profile shows time in a function with no obvious
+    hot loop.<br>
+    <strong>Cause.</strong> A default member initialiser on a struct you hold an array of, so every
+    declaration of the containing type memsets kilobytes.<br>
+    <strong>Fix.</strong> §12.2, and measure it back to back: 1344.04 ns to 1068.14 ns here, from
+    deleting four initialisers.
+  </p>
+
+  <h3>It hits the iteration cap on spheres</h3>
+  <p>
+    <strong>Symptom.</strong> <code>iteration_limit</code>, on about 1% of deep sphere overlaps.<br>
+    <strong>Cause.</strong> Not a bug. A ball has no faces, so EPA converges rather than
+    terminates and a cap will always be reached sometimes.<br>
+    <strong>Fix.</strong> Use 8.4's closed forms for spheres, which is why they are still there.
+    Raising the cap does not help: §G.2 measures 48 against 32 as 1.6 microns of accuracy.
+  </p>
+
+  <h2 id="exercises">17. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Do the arithmetic by hand.</strong> Box A is the unit cube at the origin. Box B is
+      the unit cube centred at <code>(0.7, 0.4, 0)</code>. Write down the Minkowski difference (it
+      is another axis-aligned box — say which), list the distances from the origin to its six
+      faces, and give the penetration depth and the MTV. Then check it against
+      <code>collide(obb, obb)</code>.</p>
+      <p class="hint"><em>Hint.</em> The difference of two axis-aligned boxes has half extents
+      <code>h<sub>A</sub> + h<sub>B</sub></code> and centre
+      <code>c<sub>A</sub> − c<sub>B</sub></code>. The answer is 0.3 along <code>−x</code> — note
+      the sign, and say what it means for which box you would move.</p>
+    </li>
+
+    <li>
+      <p><strong>Break it on purpose, then measure the break.</strong> Set
+      <code>epa_config::flood_fill_visible</code> to <code>false</code> and run §F.3 with a fourth
+      population of your own: two capsules. Predict, before you run it, whether the tear rate will
+      look more like the crates-on-a-floor row or the hulls row, and say why.</p>
+      <p class="hint"><em>Hint.</em> The tear needs the new support point to be exactly coplanar
+      with existing faces. What does a capsule's support function return for a direction
+      perpendicular to its axis, and is it ever the same point twice?</p>
+    </li>
+
+    <li>
+      <p><strong>Add a second termination test and find out it is free.</strong> The upper bound
+      <code>min<sub>n</sub> h(n)</code> over the directions tried is already tracked. Add an
+      early-out when <code>upper</code> stops improving for three consecutive passes, and measure
+      what it saves on §I.1's mix. Report the answer even if it is “nothing”.</p>
+      <p class="hint"><em>Hint.</em> Think about what the expansion does to a face whose support
+      point is already on it. §10's duplicate check may be getting there first.</p>
+    </li>
+
+    <li>
+      <p><strong>Make the closest-face search sub-linear, or show it does not matter.</strong>
+      <code>closest_face</code> scans every live face on every pass. Replace it with a binary heap
+      keyed on <code>d</code>, and measure. You will need to handle the fact that expansion deletes
+      arbitrary faces.</p>
+      <p class="hint"><em>Hint.</em> §F measured the worst polytope at 60 faces and the mean far
+      below it. A heap has a constant factor and a scan of 30 contiguous 32-byte structs is one
+      cache line every other element. Predict the sign of the result before you measure it.</p>
+    </li>
+
+    <li>
+      <p><strong>Engine challenge: the shallow-contact shortcut.</strong> A resting contact has a
+      depth of microns, and EPA still builds a whole polytope for it. When GJK exits through its
+      contact-margin test rather than by enclosing the origin, the answer is nearly the last search
+      direction. Implement that shortcut, measure how much of §I.1's cost it removes on a fixture
+      of stacked crates, and — the real question — measure how much accuracy it costs by comparing
+      against the full path. Then decide, with the numbers in front of you, whether an engine
+      should ship it.</p>
+      <p class="hint"><em>Hint.</em> §H.2's table is the accuracy half, already written. The
+      honest answer may well be that the shortcut is a bad trade, because 8.10's solver is about to
+      keep every contact in exactly this regime, and a systematically wrong normal on the
+      commonest contact in the scene is worse than a slow correct one.</p>
+    </li>
+  </ol>
+
+  <h2 id="recap">18. Recap &amp; next</h2>
+
+  <p>
+    The engine can now answer the question a solver asks. Given any two convex shapes it has — box,
+    sphere, capsule, arbitrary point set, in any combination — it returns how deeply they overlap,
+    the shortest direction that separates them, and a contact point on each surface. The
+    <code>+0</code> 8.5 shipped with an apology is gone, and so is the branch that produced it.
+  </p>
+
+  <p>
+    What made it possible was that 8.5 designed the handoff a lesson early:
+    <code>gjk.hpp</code> needed no change at all, because <code>cso_support</code>,
+    <code>simplex</code> and <code>gjk_result::terminal</code> were already public and already had
+    doc comments explaining that they existed for this. The two algorithms share a set, a support
+    function and a sandwich of bounds; only the direction of travel differs.
+  </p>
+
+  <p>
+    And four of this lesson's findings are worth carrying forward rather than filing:
+  </p>
+
+  <ul>
+    <li><strong>The seed is the algorithm's hard part, not its preamble.</strong> Three of the four
+        bugs lived there, and the literature does not mention it, because the literature assumes a
+        tetrahedron that on the commonest arrangement in a game never arrives.</li>
+    <li><strong>A comparison whose two sides are mathematically equal has no correct answer in
+        floating point.</strong> Do not ask it. Ask a question whose answer is stable — “reachable
+        from a face I am certain about” — and the scatter disappears.</li>
+    <li><strong>The failures need the structure real scenes are made of.</strong> Three lessons
+        running, now: axis alignment, shared up axes, faces resting on faces. A uniform random
+        fixture destroys exactly the property that triggers the bug, and reports green.</li>
+    <li><strong>Count how your code finishes, not only what it returns.</strong> The non-convex
+        seed was invisible in the answers and obvious in a status histogram, because nineteen in
+        twenty broken seeds repaired themselves by accident.</li>
+  </ul>
+
+  <p>
+    <strong>Next</strong> is Lesson 8.7, <em>Contact Manifolds and Persistence</em>, and §13 named
+    the reason it has to come immediately. One contact point is not enough to rest a box on a
+    floor: give the solver a single corner and the box rocks on it. A resting box needs four
+    points, and it needs them to be the <em>same</em> four next frame, or they swap and the box
+    judders. 8.7 clips the two contacting faces against each other to generate the full manifold,
+    keys each point on a feature id so it survives into the next frame, and thereby makes possible
+    the warm starting that 8.10's solver needs to settle a stack instead of sinking it.
+  </p>
+
+  <h2 id="reading">19. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Gino van den Bergen, <em>Proximity Queries and Penetration Depth Computation on 3D
+        Game Objects</em> (GDC 2001).</strong> The paper that introduced the expanding polytope
+        algorithm. Short, and worth reading for the framing as much as the method: it presents EPA
+        explicitly as GJK's dual rather than as a separate technique.</li>
+    <li><strong>Gino van den Bergen, <em>Collision Detection in Interactive 3D Environments</em>
+        (2003), chapter 4.</strong> The fullest treatment of GJK and EPA together, including the
+        support-function algebra that makes both of them shape-agnostic.</li>
+    <li><strong>Christer Ericson, <em>Real-Time Collision Detection</em> (2004), §9.5 and
+        chapter 5.</strong> §9.5 is the practical account of convex-hull incremental construction —
+        beneath-and-beyond, the horizon, and the degeneracies — which is exactly §7's subject seen
+        from the hull-building side.</li>
+    <li><strong>Erin Catto, <em>Computing Distance</em> and <em>Continuous Collision</em> (GDC
+        2010, 2013).</strong> The clearest available explanation of why the contact normal's
+        discontinuity matters to a solver, and what a manifold is for — which is 8.7.</li>
+    <li><strong>Preparata and Shamos, <em>Computational Geometry: An Introduction</em> (1985),
+        §3.4.</strong> Where beneath-and-beyond comes from, and the proof that the visible set of
+        a convex polytope from an exterior point is connected — the theorem §7 relies on and then
+        has to defend against floating point.</li>
+    <li><strong>Dirk Gregorius, <em>The Separating Axis Test between Convex Polyhedra</em> (GDC
+        2013).</strong> Read with §3.3 in hand: it makes explicit that the SAT's minimum-overlap
+        axis is the minimum translation for polytopes, which is the fact that turns 8.4 into this
+        lesson's reference.</li>
+    <li><strong>Jorge Rodríguez, <em>Video 11: EPA</em> (Dirty Coding / GJK lecture series).</strong>
+        A careful whiteboard walkthrough of the polytope expansion, useful if §7's horizon
+        bookkeeping did not land the first time.</li>
+  </ul>

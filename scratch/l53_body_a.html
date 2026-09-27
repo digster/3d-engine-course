@@ -1,0 +1,698 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="05-02-platform-layer.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">5.2 — The Platform and Application Layer</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="05-04-handles.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">5.4 — Handles: Generational Indices</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 5 — Becoming an Engine · Lesson 5.3</div>
+    <h1>Logging, Assertions, and Errors Without Exceptions</h1>
+    <p class="deck">
+      This engine has 197 logging calls and every single one of them is <code>SDL_Log</code> —
+      one category, one level, no way to turn any of it down. It also has <em>five different
+      answers</em> to "how does a function report failure", each defensible on its own and none
+      of them the same. Today we fix both, and the two turn out to be one problem: <strong>a
+      message and a return value are the same statement told to two audiences.</strong> Along the
+      way we will measure exactly what a release build removes — and find a real bug in a macro
+      written earlier in this very lesson.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-05-obj-loader.html">3.5 — A Hand-Rolled OBJ Loader</a>,
+          <a href="04-02-sdl-gpu-model.html">4.2 — The SDL_GPU Mental Model</a>,
+          <a href="04-07-textures-and-depth.html">4.7 — Textures, Samplers, and Depth</a>,
+          <a href="05-01-the-refactor.html">5.1 — The Refactor</a>,
+          <a href="05-02-platform-layer.html">5.2 — The Platform and Application Layer</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/core/log.hpp</code>,
+            <code>engine/src/core/log.cpp</code>,
+            <code>engine/include/engine/core/assert.hpp</code>,
+            <code>engine/include/engine/gfx/image.hpp</code>,
+            <code>engine/src/gfx/image.cpp</code>,
+            <code>engine/include/engine/platform/platform.hpp</code>,
+            <code>engine/src/platform/platform.cpp</code>,
+            <code>engine/src/platform/app.cpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/sandbox/main.cpp</code>, and 76 converted call sites</dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine is <strong>silent by default and one flag away from verbose</strong>;
+            assertions that survive a release build are the ones you chose; and
+            <code>load_image</code> reports like the rest of the engine. Golden still
+            byte-identical.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…separate the two axes a log message has — <em>who is speaking</em> and <em>how much it
+          matters</em> — and say why collapsing them into one is the mistake that makes logs
+          useless.</li>
+      <li>…use SDL3's logging system properly: categories above
+          <code>SDL_LOG_CATEGORY_CUSTOM</code>, per-category priorities, and an output hook that
+          <em>adds</em> a destination rather than replacing one.</li>
+      <li>…state a rule for <em>who</em> logs a failure, and defend it against the obvious
+          alternative.</li>
+      <li>…tell an assertion from an error with one question, and pick between three assertion
+          macros with a second.</li>
+      <li>…explain what a release build actually removes — and measure it, rather than believing
+          the documentation.</li>
+      <li>…recognise the pattern a codebase has already converged on, and prefer naming it to
+          inventing a fourth.</li>
+      <li>…design a small parser that <strong>changes nothing when it rejects its input</strong>,
+          and say why that matters more than the parsing.</li>
+    </ul>
+  </section>
+
+  <details class="toc" open>
+    <summary>Contents</summary>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#intuition">Building Intuition</a>
+        <ol>
+          <li><a href="#intuition-future">A log is a letter to your future self</a></li>
+          <li><a href="#intuition-axes">Two axes, not one</a></li>
+          <li><a href="#intuition-assert">An assertion is not an error</a></li>
+        </ol>
+      </li>
+      <li><a href="#theory">The Theory</a>
+        <ol>
+          <li><a href="#theory-levels">Levels as promises, and who makes them</a></li>
+          <li><a href="#theory-free">Why the default costs nothing</a></li>
+          <li><a href="#theory-assert">SDL's assertions, and the loop inside them</a></li>
+          <li><a href="#theory-report">The shape the engine already had</a></li>
+        </ol>
+      </li>
+      <li><a href="#implementation">Implementation</a>
+        <ol>
+          <li><a href="#impl-categories">Categories, based where SDL says</a></li>
+          <li><a href="#impl-floor">The compile-time floor, and why not <code>#if</code></a></li>
+          <li><a href="#impl-parser">A parser that changes nothing when it fails</a></li>
+          <li><a href="#impl-sink">A file sink that tees</a></li>
+          <li><a href="#impl-verify">Three macros, and a bug in one of them</a></li>
+          <li><a href="#impl-convert">76 call sites, by rule rather than by mood</a></li>
+          <li><a href="#impl-image">One subsystem, converted end to end</a></li>
+        </ol>
+      </li>
+      <li><a href="#cost">What It Cost, and What It Bought</a></li>
+      <li><a href="#listings">Complete Code Listings</a></li>
+      <li><a href="#build">Build &amp; Run</a></li>
+      <li><a href="#pitfalls">Common Pitfalls &amp; Debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; Next</a></li>
+      <li><a href="#reading">Further Reading</a></li>
+    </ol>
+  </details>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The Problem</h2>
+
+  <p>
+    Run this in the repository root:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">counting the engine's voice</span></figcaption>
+    <pre><code class="lang-bash">grep -rho "SDL_Log[A-Za-z]*(" engine demos | sort | uniq -c</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the answer, before this lesson</span></figcaption>
+    <pre><code class="lang-bash"> 197 SDL_Log(</code></pre>
+  </figure>
+
+  <p>
+    One hundred and ninety-seven calls, and <em>one function</em>. Not one
+    <code>SDL_LogError</code>. Not one <code>SDL_LogDebug</code>. Not one category. And
+    <code>SDL_Log</code> is not a neutral choice — it is a specific one, made for us, in
+    <code>src/SDL_log.c</code>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">build/_deps/sdl3-src/src/SDL_log.c</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">void SDL_Log(SDL_PRINTF_FORMAT_STRING const char *fmt, ...)
+{
+    /* … */
+    SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, ap);
+}</code></pre>
+  </figure>
+
+  <p>
+    So every message this engine emits claims to be <strong>the application speaking, at
+    information level</strong>. Look at what that flattens. Here are four consecutive lines from
+    <code>platform::start</code>, as Lesson 5.2 left them:
+  </p>
+
+  <figure class="listing nofold">
+    <figcaption><span class="path">engine/src/platform/platform.cpp — four kinds of statement, one volume</span>
+                <span class="lang" data-lang="cpp">C++</span></figcaption>
+    <pre><code class="lang-cpp">SDL_Log("SDL_Init(0x%08x) failed: %s", flags, SDL_GetError());       // fatal. We are done.
+SDL_Log("vsync %s refused: %s — continuing unsynchronised", …);      // we recovered
+SDL_Log("platform: SDL %d.%d.%d, surface=%s", …);                    // a fact
+SDL_Log("SDL_SetAppMetadata failed: %s — continuing", SDL_GetError()); // a curiosity</code></pre>
+  </figure>
+
+  <p>
+    A fatal error and a curiosity, printed identically. Now consider what a user of this engine
+    can actually do about that. Nothing — because there is no dimension along which to filter.
+    <strong>The only two settings are "all of it" and "none of it",</strong> and since "none of
+    it" means losing the fatal error too, everybody picks "all of it" and then stops reading.
+    That is the real failure: not noise, but the <em>habit of ignoring the output</em> that noise
+    trains.
+  </p>
+
+  <p>
+    Figure 1 shows the before and after in one picture, and the "before" half is the honest shape
+    of what we built.
+  </p>
+
+  @@FIG_ONE_VOICE@@
+
+  <h3 id="problem-five">1.1 &nbsp; …and the other half: five answers to one question</h3>
+
+  <p>
+    While we are counting, count something else. How does a function in this engine tell its
+    caller that it failed?
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption>Every failure-reporting convention in the engine, before this lesson.</caption>
+    <thead><tr><th>Shape</th><th>Where</th><th>Since</th></tr></thead>
+    <tbody>
+      <tr><td>a bare status enum, value in an out-param</td><td><code>image_status load_image(path, out)</code></td><td>4.7</td></tr>
+      <tr><td>a status enum <em>inside</em> a report struct</td><td><code>obj_report load_obj(path, out)</code></td><td>3.5</td></tr>
+      <tr><td>the same, with different fields</td><td><code>gpu_report gpu_device::create(window, debug)</code></td><td>4.2</td></tr>
+      <tr><td><code>bool</code>, with a log line inside</td><td><code>gpu_buffer::upload</code>, and 60 others</td><td>4.4</td></tr>
+      <tr><td><code>bool</code>, with "…and it has <em>already logged</em>" as an unwritten contract</td><td><code>platform::start</code>, <code>app::on_start</code></td><td><strong>5.2</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Five. The resume note that scheduled this lesson said four, which is itself the point:
+    <strong>you do not know how many conventions you have until you count them.</strong> The
+    fifth is the newest and the least examined — it arrived last lesson, in code written to be
+    exemplary.
+  </p>
+
+  <p>
+    Each of these is defensible in isolation. None of them is the same. And a caller who has to
+    remember which one a given function uses is a caller who will eventually get it wrong in the
+    quiet direction — ignoring a status, or logging a failure the callee already logged.
+  </p>
+
+  <div class="callout note">
+    <span class="label">What this lesson is not going to do</span>
+    <p>
+      It is not going to invent a sixth. §3.4 is about noticing that the engine already converged
+      on a good answer <em>twice, independently</em>, and that naming that answer is cheaper and
+      truer than designing a new one. The road not taken — a hand-rolled <code>result&lt;T&gt;</code>
+      in the shape of C++23's <code>std::expected</code> — is discussed honestly and then made
+      Exercise 9.5, with the argument for why this codebase does not need it yet.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       2 — BUILDING INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building Intuition</h2>
+
+  <h3 id="intuition-future">2.1 &nbsp; A log is a letter to your future self</h3>
+
+  <p>
+    Here is the situation logging exists for, and it is worth picturing concretely because every
+    design decision below follows from it.
+  </p>
+
+  <p>
+    Somebody you have never met runs your engine on hardware you do not own. Something looks
+    wrong — a texture is black, the frame rate halves after ten minutes, the program exits
+    immediately on their machine and never on yours. They cannot attach a debugger, you cannot
+    reproduce it, and the only channel between the two of you is <em>whatever the program said
+    while it was running</em>.
+  </p>
+
+  <p>
+    That is the audience. Not you, at your desk, with a breakpoint available. <strong>You, in six
+    months, reading a paste from a stranger.</strong> And it changes what a good message is:
+  </p>
+
+  <ul>
+    <li><strong>Facts beat narration.</strong> "Loading texture…" tells you nothing.
+        "<code>uv_grid.png 256×256, 3→4 channels, 262144 bytes from 1359 on disk</code>" tells
+        you the file was found, was a PNG, had no alpha, and cost a quarter of a megabyte.</li>
+    <li><strong>The reason travels with the failure.</strong> A line that says "could not create
+        texture" and a line that says <em>which</em> texture, at what size, and what the driver
+        said, are different tools.</li>
+    <li><strong>Volume destroys value.</strong> A thousand lines a frame is not a log, it is a
+        haystack. The stranger will paste the last twenty lines, and if those twenty are all
+        "drew a triangle" you have learned nothing.</li>
+  </ul>
+
+  <p>
+    The last one is why this lesson exists at all. Everything else about logging is a detail; the
+    thing that makes a log useful is <strong>being able to choose what is in it</strong>, at run
+    time, without a rebuild, by somebody who is not you.
+  </p>
+
+  <h3 id="intuition-axes">2.2 &nbsp; Two axes, not one</h3>
+
+  <p>
+    So we need to filter. Filter on what?
+  </p>
+
+  <p>
+    The instinct is a single dial: a "verbosity level" from 0 to 5. Turn it up, get more. That
+    works for a program with one subsystem, and it breaks the moment you have two — because the
+    interesting question is almost never "how much output do I want in total". It is <em>"I am
+    debugging the GPU path; show me everything it says and nothing else."</em> A single dial
+    cannot express that. Turn it up for the GPU and you get the asset system's chatter too.
+  </p>
+
+  <p>
+    So there are two independent questions about every message, and they are genuinely
+    independent:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Question</th><th>Answer is a…</th><th>Ours</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Who is speaking?</strong></td><td>category</td><td><code>core</code>, <code>platform</code>, <code>gfx</code>, <code>gpu</code>, <code>asset</code></td></tr>
+      <tr><td><strong>How much does it matter?</strong></td><td>priority / level</td><td><code>trace</code> … <code>critical</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A filter is then a <em>table</em>: one threshold per category. "Show me GPU at debug, and
+    everything else only if it is an error" is
+    <code>gpu=debug,*=error</code> — a sentence a person can type, and one that a single dial
+    cannot say at all.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">The mistake that looks like the answer</span>
+    <p>
+      The classic failure is to put severity into the category list: <code>LOG_ERROR</code>,
+      <code>LOG_WARNING</code>, <code>LOG_DEBUG</code> as <em>categories</em>. It feels tidy and
+      it destroys the whole mechanism, because you can then never say "errors from the GPU but
+      not from assets" — the two axes have been collapsed back into one and you are holding a
+      dial again.
+    </p>
+    <p>
+      A category answers <em>who</em>. It is a noun, and it names a part of your program. If one
+      of your categories is an adjective, it is a level wearing a disguise.
+    </p>
+  </div>
+
+  <h3 id="intuition-assert">2.3 &nbsp; An assertion is not an error</h3>
+
+  <p>
+    The third piece, and the one most often muddled. Two things go wrong in a program and they
+    are different in kind:
+  </p>
+
+  <p>
+    <strong>An error is something the world does to you.</strong> A file is missing. A GPU
+    refuses a format. A user typed a path that does not exist. None of this is your program being
+    wrong — it is your program meeting a world that is under no obligation to cooperate. Errors
+    are <em>expected</em>: not welcome, but anticipated, and the correct response is to hand the
+    caller a failure they can act on. They survive into release builds, because the world does
+    not become friendlier when you ship.
+  </p>
+
+  <p>
+    <strong>An assertion is a claim about your own code.</strong> This index is in range. This
+    pointer is not null. This function was called after <code>start()</code>. If one of these is
+    false, the program is in a state its author did not anticipate — and there is nothing
+    sensible to do about it, because the code that would do the sensible thing was written by the
+    same person who was already wrong.
+  </p>
+
+  <p>
+    One question separates them, and it settles almost every case:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">The test</span>
+    <p>
+      <strong>Could a correct program, running on a working machine, encounter this?</strong>
+    </p>
+    <p>
+      Yes → it is an <em>error</em>. Return it. &nbsp;·&nbsp; No → it is an <em>assertion</em>.
+      Stop.
+    </p>
+  </div>
+
+  <p>
+    <code>load_image("missing.png")</code> — yes, of course a correct program can ask for a file
+    that is not there. Error. <code>framebuffer::row(-1)</code> — no correct caller does that;
+    the only way to get there is a bug above. Assertion.
+  </p>
+
+  <p>
+    The reason this matters practically is that the two want <em>opposite</em> treatment in a
+    shipping build. An error path must stay: delete it and your program corrupts data instead of
+    reporting a bad file. An assertion may go: it is a development tool, its cost is paid on
+    every call, and by the time you ship you have either fixed the bug or you have not. Figure 4,
+    later, is this decision as a picture.
+  </p>
+
+  <!-- =================================================================
+       3 — THE THEORY
+       ================================================================= -->
+  <h2 id="theory"><span class="num">3</span>The Theory</h2>
+
+  <h3 id="theory-levels">3.1 &nbsp; Levels as promises, and who makes them</h3>
+
+  <p>
+    A level is only useful if it means the same thing everywhere. "Warning" that sometimes means
+    "fatal" and sometimes means "hmm" is a level nobody can filter on, because filtering it out
+    might lose something important. So a level is a <strong>promise</strong>, and the promise has
+    to be written down. Figure 2 is ours, with the count of how many of the engine's 92 messages
+    landed at each:
+  </p>
+
+  @@FIG_LEVELS@@
+
+  <p>
+    Read the six meanings in that figure carefully; two of them do real work.
+  </p>
+
+  <p>
+    <strong><code>warn</code> means we recovered.</strong> That is the whole distinction from
+    <code>error</code>. If the operation happened — perhaps differently, perhaps worse — it is a
+    warning. If it did not happen, it is an error. This is a mechanical test, not a judgement
+    call, which is exactly what you want from a rule that 92 call sites have to follow.
+  </p>
+
+  <p>
+    <strong><code>debug</code> means "what I did", <code>info</code> means "what I am".</strong>
+    A texture reporting its size once at load is <code>info</code> — it is a fact about the
+    program that somebody might want on a bug report. A texture reporting <em>each</em> load in a
+    level with four hundred of them is <code>debug</code>: correct, useful when you are
+    investigating loading, and intolerable otherwise.
+  </p>
+
+  <h4 id="theory-who">3.1.1 &nbsp; Who logs a failure?</h4>
+
+  <p>
+    Now the question that is genuinely contested, and which the engine had been answering
+    inconsistently. A failure happens deep — <code>SDL_CreateGPUTexture</code> returns null — and
+    is reported upward through three or four layers. <em>Which of them writes the log line?</em>
+  </p>
+
+  <p>There are two coherent answers, and it is worth stating both before choosing.</p>
+
+  <p>
+    <strong>Answer A: the caller logs.</strong> Whoever decides what the failure <em>means</em>
+    writes the line. Low-level code returns quietly. The argument: only the caller knows whether
+    a missing texture is fatal or a fallback, so only the caller can pick a level honestly.
+  </p>
+
+  <p>
+    <strong>Answer B: the deepest point that knows why logs, and callers propagate
+    silently.</strong> The argument: only the deepest point has the <em>reason</em> — the path,
+    the byte count, the string in <code>SDL_GetError()</code> that is about to be overwritten by
+    the next SDL call. Push the logging upward and every layer boundary loses detail, until the
+    top-level line reads "startup failed" and helps nobody.
+  </p>
+
+  <p>
+    We take <strong>B</strong>, and the deciding argument is about which failure mode is worse.
+    Under A, detail is lost quietly — you cannot tell from the log that it is missing, because
+    the line you are reading looks fine. Under B, the cost is that a caller who <em>recovers</em>
+    from a failure still gets an error line it did not deserve — which is visible, annoying, and
+    fixable by demoting that particular call to <code>debug</code>. <strong>A cost you can see
+    beats a cost you cannot.</strong>
+  </p>
+
+  <div class="callout note">
+    <span class="label">The rule, and its corollary</span>
+    <p>
+      <strong>Log the failure once, at the deepest point that knows why. Callers propagate
+      silently, and add only the <em>consequence</em> — the thing they know that the callee does
+      not.</strong>
+    </p>
+    <p>
+      In practice that reads like this, and the second line is the whole of what the demo adds:
+    </p>
+    <p class="mono">
+      load_image:&nbsp; ERROR &nbsp;"load_image: cannot read assets/uv_grid.png (No such file)"<br>
+      the&nbsp;demo:&nbsp;&nbsp; INFO&nbsp;&nbsp; "texture: uv_grid.png did not load — [T] will do nothing"
+    </p>
+    <p>
+      Two lines, no repetition, and each says something the other could not. Compare the version
+      where four layers each log "failed": four lines, one problem, and the informative one is at
+      the top of a scroll.
+    </p>
+  </div>
+
+  <h3 id="theory-free">3.2 &nbsp; Why the default costs nothing</h3>
+
+  <p>
+    Here is the part that decided the whole design, and it came from reading SDL rather than from
+    a design meeting.
+  </p>
+
+  <p>
+    SDL keeps a per-category priority table, and it initialises that table from a documented
+    default (<code>SDL_HINT_LOGGING</code> in <code>SDL3/SDL_hints.h</code>, implemented in
+    <code>src/SDL_log.c</code>):
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_hints.h — the documented default</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">/*
+ * If this hint isn't set, the default log levels are equivalent to:
+ *
+ * `app=info,assert=warn,test=verbose,*=error`
+ */
+#define SDL_HINT_LOGGING "SDL_LOGGING"</code></pre>
+  </figure>
+
+  <p>
+    Read <code>*=error</code> again. <strong>Every category SDL does not know about defaults to
+    error</strong> — and SDL does not know about ours, because
+    <code>SDL_LOG_CATEGORY_CUSTOM</code> is precisely where SDL stops and applications begin.
+  </p>
+
+  <p>
+    So the behaviour we want — engine quiet, game loud — is not something we have to build. It
+    falls out of moving the engine's messages off <code>SDL_LOG_CATEGORY_APPLICATION</code>.
+    Figure 3 is the whole mechanism.
+  </p>
+
+  @@FIG_DEFAULTS@@
+
+  <p>
+    This is worth dwelling on because of what it says about the wrapper question. Lesson 5.2
+    settled a policy — <em>a wrapper that hides a library you have no intention of replacing is
+    cost with no benefit</em> — and here is that policy paying out. A hand-rolled logging layer
+    would have had to reimplement per-category thresholds, an environment-variable override, and
+    a default table. It would have got a <em>different</em> default table, and the free behaviour
+    above would have been a feature somebody had to think of.
+  </p>
+
+  <p>
+    What is left for us is genuinely small: names for our own categories, a compile-time floor
+    SDL cannot provide, and a flag parser. That is the entire content of
+    <code>log.hpp</code> and <code>log.cpp</code>.
+  </p>
+
+  <h3 id="theory-assert">3.3 &nbsp; SDL's assertions, and the loop inside them</h3>
+
+  <p>
+    Figure 4 is §2.3's test drawn as a decision, together with the three macros that follow from
+    it.
+  </p>
+
+  @@FIG_ERROR_OR_ASSERT@@
+
+  <p>
+    C's <code>assert()</code> prints a message and calls <code>abort()</code>. SDL's does
+    something considerably more interesting, and it is worth understanding before using it,
+    because one of its behaviours will otherwise look like a bug.
+  </p>
+
+  <p>
+    An SDL assertion asks a handler what to do, and the handler may answer five ways
+    (<code>SDL3/SDL_assert.h</code>):
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th><code>SDL_AssertState</code></th><th>What SDL then does</th></tr></thead>
+    <tbody>
+      <tr><td><code>SDL_ASSERTION_RETRY</code></td><td>re-evaluate the condition, right now</td></tr>
+      <tr><td><code>SDL_ASSERTION_BREAK</code></td><td>trip the debugger's breakpoint</td></tr>
+      <tr><td><code>SDL_ASSERTION_ABORT</code></td><td>terminate</td></tr>
+      <tr><td><code>SDL_ASSERTION_IGNORE</code></td><td>carry on, this once</td></tr>
+      <tr><td><code>SDL_ASSERTION_ALWAYS_IGNORE</code></td><td>carry on, and never ask about <em>this</em> assertion again</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <code>RETRY</code> is the surprising one, and it is not a metaphor. Look at what the macro
+    actually expands to:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_assert.h — <code>SDL_enabled_assert</code></span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">#define SDL_enabled_assert(condition) \
+    do { \
+        while ( !(condition) ) { \
+            static struct SDL_AssertData sdl_assert_data = { false, 0, #condition, NULL, 0, NULL, NULL }; \
+            const SDL_AssertState sdl_assert_state = SDL_ReportAssertion(&amp;sdl_assert_data, SDL_FUNCTION, SDL_ASSERT_FILE, SDL_LINE); \
+            if (sdl_assert_state == SDL_ASSERTION_RETRY) { \
+                continue; /* go again. */ \
+            } else if (sdl_assert_state == SDL_ASSERTION_BREAK) { \
+                SDL_AssertBreakpoint(); \
+            } \
+            break; /* not retrying. */ \
+        } \
+    } while (SDL_NULL_WHILE_LOOP_CONDITION)</code></pre>
+  </figure>
+
+  <p>
+    It is a <code>while</code> loop over the condition. So <code>RETRY</code> genuinely re-tests:
+    stop in a debugger, fix the state by hand, continue, and the program proceeds as though the
+    bug had not happened. On an assertion that fires on frame 40,000 of a session you cannot
+    reproduce, that is worth a great deal.
+  </p>
+
+  <p>
+    And note the <code>static struct SDL_AssertData</code>. It is <em>per expansion site</em>, it
+    carries <code>always_ignore</code> and <code>trigger_count</code>, and SDL threads every one
+    of them onto a list you can walk with <code>SDL_GetAssertionReport()</code>. Two consequences
+    follow, one convenient and one to be careful about:
+  </p>
+
+  <ul>
+    <li><strong>Assertions are testable.</strong> Install a handler that returns
+        <code>IGNORE</code>, run the code that should trip, and read the report. §7's harness
+        does exactly this — it proves an assertion fires on the input that should fire it, which
+        most people assume is impossible and therefore never check.</li>
+    <li><strong><code>ALWAYS_IGNORE</code> latches.</strong> It sets a flag in that static, so the
+        assertion fires once and then goes quiet for the rest of the run. That is a feature when
+        you are grinding through a level with a known glitch, and a trap when you are counting.</li>
+  </ul>
+
+  <h4 id="theory-level">3.3.1 &nbsp; Which survive a release build — and the gate that decides</h4>
+
+  <p>
+    SDL picks an assertion level for you unless you set one, and <strong>the condition it picks
+    on is not <code>NDEBUG</code></strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">SDL3/SDL_assert.h</span>
+                <span class="lang" data-lang="c">C</span></figcaption>
+    <pre><code class="lang-c">#elif !defined(SDL_ASSERT_LEVEL)
+#ifdef SDL_DEFAULT_ASSERT_LEVEL
+#define SDL_ASSERT_LEVEL SDL_DEFAULT_ASSERT_LEVEL
+#elif defined(_DEBUG) || defined(DEBUG) || \
+      (defined(__GNUC__) && !defined(__OPTIMIZE__))
+#define SDL_ASSERT_LEVEL 2
+#else
+#define SDL_ASSERT_LEVEL 1
+#endif
+#endif</code></pre>
+  </figure>
+
+  <p>
+    <code>__OPTIMIZE__</code> is defined by GCC and Clang whenever any <code>-O</code> above zero
+    is in effect. So <strong><code>-O2</code> alone takes you to level 1</strong>, where
+    <code>SDL_assert</code> is disabled and only <code>SDL_assert_release</code> survives — with
+    no <code>-DNDEBUG</code> anywhere in sight.
+  </p>
+
+  <p>
+    That is the correct behaviour and it is also a trap, because most projects gate their
+    <em>own</em> debug machinery on <code>NDEBUG</code>. Two gates, two different switches. §4.5
+    is where that mismatch produced an actual bug in this lesson's own code, and §5 measures the
+    four resulting build configurations rather than reasoning about them.
+  </p>
+
+  <h3 id="theory-report">3.4 &nbsp; The shape the engine already had</h3>
+
+  <p>
+    Back to §1.1's five conventions. The temptation is to design a sixth and convert everything
+    to it. Before doing that, it is worth looking at the five properly, because two of them are
+    the same thing — and they were written a module apart, by nobody trying to match the other.
+  </p>
+
+  @@FIG_REPORT@@
+
+  <p>
+    <code>obj_report</code> (Lesson 3.5) and <code>gpu_report</code> (Lesson 4.2) are both: a
+    <strong>status enum</strong> that names the failure precisely, plus <strong>the facts you ask
+    for next</strong>, plus a <strong><code>bool ok()</code></strong>. That convergence is
+    evidence. Two independent attempts at the same problem reached the same shape because the
+    shape fits the problem, and a design that a codebase keeps rediscovering is a design worth
+    naming rather than replacing.
+  </p>
+
+  <p>
+    So the plan is not a new error type. It is:
+  </p>
+
+  <ol>
+    <li><strong>Name the pattern</strong> — status enum, facts, <code>ok()</code> — and write it
+        down as the engine's answer for anything whose failure a caller might branch on.</li>
+    <li><strong>Convert the odd one out.</strong> <code>image_status</code> is the same problem
+        solved worse: a bare enum, with the interesting numbers thrown away. It becomes
+        <code>image_report</code>, and that is this lesson's one end-to-end conversion.</li>
+    <li><strong>Leave <code>bool</code> alone where it is honest.</strong>
+        <code>platform::set_vsync</code> has exactly one failure mode and the caller's only sane
+        response is to log and carry on. A report there is ceremony. <em>A <code>bool</code> is
+        honest when there is nothing more to say.</em></li>
+    <li><strong>Kill the fifth convention</strong> — "returns false and has already logged" — by
+        making it a <em>documented rule</em> (§3.1.1) rather than a per-function surprise.</li>
+  </ol>
+
+  <div class="callout note">
+    <span class="label">The road not taken, honestly</span>
+    <p>
+      C++23 has <code>std::expected&lt;T, E&gt;</code>: a value <em>or</em> an error, in one
+      return, with no out-parameter and no way to read the value without checking. It is the
+      right long-term answer for a codebase with no exceptions, and we are on C++20, so we would
+      hand-roll it — about 120 lines.
+    </p>
+    <p>
+      We are not going to, and the reason is not difficulty. It is that the engine has two
+      working instances of a pattern that already solves the problem, and replacing them would
+      mean touching 61 <code>bool</code>-returning functions to gain a type-system guarantee we
+      can get today by reading a <code>[[nodiscard]]</code> warning. <strong>Adopt a new
+      abstraction when the old one has failed you, not when the new one is elegant.</strong>
+      Exercise 9.5 builds it anyway, because you should know what it costs — and because the day
+      the engine <em>does</em> need it, you will want to have written one.
+    </p>
+  </div>

@@ -1,0 +1,57 @@
+<svg viewBox="0 0 720 410" role="img" aria-labelledby="f614d-t f614d-d">
+  <title id="f614d-t">Specular lobe width against normal variation per pixel</title>
+  <desc id="f614d-d">A log-log plot of GGX lobe half-width against roughness, crossed by the constant normal variation per pixel, with the crossover marked.</desc>
+  <defs>
+    <marker id="e-i-f614d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f614d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f614d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f614d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f614d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="360.0" y="22" class="sm" text-anchor="middle">Where shading aliasing begins: the lobe against the pixel</text>
+<rect x="110" y="58" width="360" height="210" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<line x1="139.66402854733616" y1="268" x2="139.66402854733616" y2="273" class="grid" stroke-width="1.0"/>
+<text x="139.66402854733616" y="288" class="xs" text-anchor="middle">0.05</text>
+<line x1="231.80891747886977" y1="268" x2="231.80891747886977" y2="273" class="grid" stroke-width="1.0"/>
+<text x="231.80891747886977" y="288" class="xs" text-anchor="middle">0.10</text>
+<line x1="323.95380641040333" y1="268" x2="323.95380641040333" y2="273" class="grid" stroke-width="1.0"/>
+<text x="323.95380641040333" y="288" class="xs" text-anchor="middle">0.20</text>
+<line x1="445.7627238892731" y1="268" x2="445.7627238892731" y2="273" class="grid" stroke-width="1.0"/>
+<text x="445.7627238892731" y="288" class="xs" text-anchor="middle">0.50</text>
+<text x="290.0" y="310" class="xs" text-anchor="middle">roughness</text>
+<line x1="105" y1="268.0" x2="110" y2="268.0" class="grid" stroke-width="1.0"/>
+<text x="100" y="272.0" class="xs" text-anchor="end">0.001</text>
+<line x1="105" y1="183.22417419014644" x2="110" y2="183.22417419014644" class="grid" stroke-width="1.0"/>
+<text x="100" y="187.22417419014644" class="xs" text-anchor="end">0.01</text>
+<line x1="105" y1="98.44834838029288" x2="110" y2="98.44834838029288" class="grid" stroke-width="1.0"/>
+<text x="100" y="102.44834838029288" class="xs" text-anchor="end">0.1</text>
+<text x="64" y="163.0" class="xs" text-anchor="middle">radians</text>
+<polyline points="445.8,79.6 377.9,118.4 324.0,148.4 231.8,199.4 139.7,250.5" fill="none" stroke="#f0961e" stroke-width="2.4"/>
+<circle cx="445.8" cy="79.6" r="3.2" fill="#f0961e"/>
+<circle cx="377.9" cy="118.4" r="3.2" fill="#f0961e"/>
+<circle cx="324.0" cy="148.4" r="3.2" fill="#f0961e"/>
+<circle cx="231.8" cy="199.4" r="3.2" fill="#f0961e"/>
+<circle cx="139.7" cy="250.5" r="3.2" fill="#f0961e"/>
+<line x1="110.0" y1="132.9" x2="470.0" y2="132.9" stroke="#5082e6" stroke-width="2.0" fill="none"/>
+<text x="118" y="124.86217070360087" class="xs" text-anchor="start">the normal turns 0.0393 rad per pixel</text>
+<line x1="351.9052576586639" y1="58" x2="351.9052576586639" y2="268" class="grid" stroke-width="1.2" stroke-dasharray="2 4"/>
+<text x="351.9052576586639" y="50" class="xs" text-anchor="middle">crossover 0.2468</text>
+<rect x="110" y="252" width="241.9052576586639" height="14" rx="2" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="230.95262882933196" y="263" class="xs" text-anchor="middle">ALIASES</text>
+<rect x="351.9052576586639" y="252" width="118.09474234133609" height="14" rx="2" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="410.95262882933196" y="263" class="xs" text-anchor="middle">resolved</text>
+<rect x="490" y="68" width="182" height="96" rx="4" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="581" y="88" class="xs" text-anchor="middle">THE MODULE'S OWN</text>
+<text x="581" y="104" class="xs" text-anchor="middle">ROUGHNESSES</text>
+<text x="581" y="122" class="xs" text-anchor="middle">the demo: 0.49  resolved</text>
+<text x="581" y="138" class="xs" text-anchor="middle">6.12's metals: 0.20, 0.10,</text>
+<text x="581" y="152" class="xs" text-anchor="middle">0.05  all alias</text>
+<rect x="490" y="180" width="182" height="78" rx="4" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="581" y="200" class="xs" text-anchor="middle">THE LOBE, EXACTLY</text>
+<text x="581" y="216" class="xs" text-anchor="middle">sin(t) = alpha x</text>
+<text x="581" y="230" class="xs" text-anchor="middle">sqrt((sqrt2-1)/(1-alpha^2))</text>
+<text x="581" y="248" class="xs" text-anchor="middle">= 0.6436 alpha, not alpha</text>
+<text x="360.0" y="366" class="xs" text-anchor="middle">A highlight is safely sampled while the lobe is WIDER than the normal's variation across a pixel. Below the crossover it</text>
+<text x="360.0" y="384" class="xs" text-anchor="middle">can fall between sample points entirely — and no amount of COVERAGE sampling reaches it, because MSAA shades once.</text>
+<text x="360.0" y="402" class="xs" text-anchor="middle">The folklore 'the lobe is about alpha wide' overstates it by 55%.</text>
+</svg>

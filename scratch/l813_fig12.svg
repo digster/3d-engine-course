@@ -1,0 +1,70 @@
+<svg viewBox="0 0 980 518" role="img" aria-labelledby="h12-t h12-d">
+  <title id="h12-t">A crate pushed by a steered proxy and by a teleported one</title>
+  <desc id="h12-d">Left: two diagrams of a character's proxy pushing a crate — steered, overlapping it by the solver's 5 mm slop at 2 m/s; teleported, sunk 138 mm into it with zero velocity — and the derivation of the 138 mm. Right: a table of the crate's velocity, apparent speed, overlap and coast for four proxy modes, and notes on the heavy crate and the boulder.</desc>
+  <defs>
+    <marker id="e-i-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-green-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-grey-h12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="26" y="30" class="sm" text-anchor="start">A crate pushed through a proxy, seen from above</text>
+<text x="26" y="58" class="xs" text-anchor="start">STEERED: velocity = the chord</text>
+<circle cx="156.0" cy="138.0" r="66.0" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<circle cx="156.0" cy="138.0" r="2.5" fill="#5ac878"/>
+<path d="M 220.90,72.00 L 352.90,72.00 L 352.90,204.00 L 220.90,204.00 Z" fill="#f0961e" fill-opacity="0.15" stroke="#f0961e" stroke-width="1.2"/>
+<line x1="156.00" y1="138.00" x2="206.00" y2="138.00" stroke="#5ac878" stroke-width="2.0" marker-end="url(#e-green-h12)"/>
+<text x="286.9" y="220.0" class="xs" text-anchor="middle">crate v = 2 m/s; overlap 5 mm: the slop</text>
+<text x="26" y="246" class="xs" text-anchor="start">TELEPORTED: velocity = 0, position written</text>
+<circle cx="156.0" cy="326.0" r="66.0" fill="none" stroke="#5ac878" stroke-width="1.4"/>
+<circle cx="156.0" cy="326.0" r="2.5" fill="#5ac878"/>
+<path d="M 191.57,260.00 L 323.57,260.00 L 323.57,392.00 L 191.57,392.00 Z" fill="#f0961e" fill-opacity="0.15" stroke="#f0961e" stroke-width="1.2"/>
+<line x1="156.00" y1="326.00" x2="206.00" y2="326.00" stroke="#e05c5c" stroke-width="2.0" marker-end="url(#e-red-h12)"/>
+<text x="257.574" y="408.0" class="xs" text-anchor="middle">crate v = 0; overlap 138 mm</text>
+<text x="26" y="446" class="xs" text-anchor="start">Teleported, only the position pass moves the crate: β·(d − slop)</text>
+<text x="26" y="461" class="xs" text-anchor="start">a step. To move it v·h a step the proxy must start each step</text>
+<text x="26" y="476" class="xs" text-anchor="start">v·h/β + slop deep, and ends it v·h shallower:</text>
+<text x="26" y="491" class="xs mono" text-anchor="start">0.005 + 0.0333/0.2 − 0.0333 = 138.33 mm, measured 138.20.</text>
+<text x="470" y="30" class="sm" text-anchor="start">20 kg, pushed at 2 m/s for 1.5 s, then left</text>
+<text x="470" y="70" class="xs muted" text-anchor="start">the proxy</text>
+<text x="694" y="70" class="xs muted" text-anchor="end">crate v</text>
+<text x="770" y="70" class="xs muted" text-anchor="end">moves at</text>
+<text x="858" y="70" class="xs muted" text-anchor="end">overlap mm</text>
+<text x="928" y="70" class="xs muted" text-anchor="end">coast m</text>
+<line x1="470" y1="78.0" x2="934" y2="78.0" class="grid" stroke-width="1.0"/>
+<text x="470" y="95.0" class="xs" text-anchor="start">steered (the chord)</text>
+<text x="694" y="95.0" class="xs mono" text-anchor="end">2.0000</text>
+<text x="770" y="95.0" class="xs mono" text-anchor="end">2.0000</text>
+<text x="858" y="95.0" class="xs mono" text-anchor="end">5.00</text>
+<text x="928" y="95.0" class="xs mono" text-anchor="end">0.3562</text>
+<text x="470" y="112.0" class="xs" text-anchor="start">teleported, asleep</text>
+<text x="694" y="112.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="770" y="112.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="858" y="112.0" class="xs mono" text-anchor="end">0.00</text>
+<text x="928" y="112.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="470" y="129.0" class="xs" text-anchor="start">teleported, awake</text>
+<text x="694" y="129.0" class="xs mono" text-anchor="end">0.0000</text>
+<text x="770" y="129.0" class="xs mono" text-anchor="end">1.9941</text>
+<text x="858" y="129.0" class="xs mono" text-anchor="end">138.20</text>
+<text x="928" y="129.0" class="xs mono" text-anchor="end">0.1649</text>
+<text x="470" y="146.0" class="xs" text-anchor="start">teleported, Baumgarte</text>
+<text x="694" y="146.0" class="xs mono" text-anchor="end">1.9998</text>
+<text x="770" y="146.0" class="xs mono" text-anchor="end">1.9998</text>
+<text x="858" y="146.0" class="xs mono" text-anchor="end">138.28</text>
+<text x="928" y="146.0" class="xs mono" text-anchor="end">0.3565</text>
+<text x="470" y="174.5" class="xs" text-anchor="start">steered: the coast is the discrete v²/(2μg), plus ONE step at v — the</text>
+<text x="470" y="189.5" class="xs" text-anchor="start">proxy follows the character a step late: predicted 0.3566 m.</text>
+<text x="470" y="204.5" class="xs" text-anchor="start">teleported, asleep: a teleported proxy moves at zero speed, so 8.12's</text>
+<text x="470" y="219.5" class="xs" text-anchor="start">wake rule never wakes the crate — the character walks THROUGH it.</text>
+<text x="470" y="234.5" class="xs" text-anchor="start">teleported, awake: moved, with a velocity of zero; on release it is</text>
+<text x="470" y="249.5" class="xs" text-anchor="start">pushed out of the overlap (≈ v·h/β = 0.1667 m) and stops dead.</text>
+<text x="470" y="264.5" class="xs" text-anchor="start">Baumgarte gives the velocity back, and leaves the character 138 mm in.</text>
+<text x="470" y="294.5" class="xs" text-anchor="start">a 100 kg crate (limit 40): a wall — it moves 0.00000 m/s.</text>
+<text x="470" y="309.5" class="xs" text-anchor="start">a 200 kg boulder at 5 m/s into a standing character: 0.0688 m/s after</text>
+<text x="470" y="324.5" class="xs" text-anchor="start">1.5 s. The proxy is kinematic: infinitely heavy. A draft recover()</text>
+<text x="470" y="339.5" class="xs" text-anchor="start">that also pushed out of heavy DYNAMIC bodies let it carry the character</text>
+<text x="470" y="354.5" class="xs" text-anchor="start">2.94 m — the solver moving a body the controller owns.</text>
+</svg>

@@ -1,0 +1,80 @@
+<svg viewBox="0 0 640 340" role="img" aria-labelledby="f411-t f411-d">
+  <title id="f411-t">A 2x2 quad grid over a small triangle</title>
+  <desc id="f411-d">An 8 by 8 pixel grid divided into 2 by 2 quads, with a triangle drawn over it. Lanes the triangle covers are blue and lanes it does not are red; the red ones still run the fragment shader. Arrows on one quad show ddx as the difference between the two lanes in x and ddy as the difference in y, which is why the uncovered lanes have to run at all.</desc>
+  <defs>
+    <marker id="e-i-f411" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f411" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f411" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="16" y="26" class="sm muted">one triangle, one 2&#215;2 quad grid &#8212; lanes the shader runs on</text>
+  <rect x="60.0" y="56.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="86.0" y="56.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="60.0" y="82.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="86.0" y="82.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="112.0" y="56.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="138.0" y="56.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="112.0" y="82.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="138.0" y="82.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="112.0" y="108.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="138.0" y="108.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="112.0" y="134.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="138.0" y="134.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="164.0" y="108.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="190.0" y="108.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="164.0" y="134.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="190.0" y="134.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="112.0" y="160.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="138.0" y="160.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="112.0" y="186.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="138.0" y="186.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="164.0" y="160.0" width="26.0" height="26.0" fill="#78b4eb" opacity="0.85"/>
+  <rect x="190.0" y="160.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="164.0" y="186.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <rect x="190.0" y="186.0" width="26.0" height="26.0" fill="#eb786e" opacity="0.85"/>
+  <line x1="60.0" y1="56.0" x2="60.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="56.0" x2="268.0" y2="56.0" class="grid" stroke-width="0.7"/>
+  <line x1="86.0" y1="56.0" x2="86.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="82.0" x2="268.0" y2="82.0" class="grid" stroke-width="0.7"/>
+  <line x1="112.0" y1="56.0" x2="112.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="108.0" x2="268.0" y2="108.0" class="grid" stroke-width="0.7"/>
+  <line x1="138.0" y1="56.0" x2="138.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="134.0" x2="268.0" y2="134.0" class="grid" stroke-width="0.7"/>
+  <line x1="164.0" y1="56.0" x2="164.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="160.0" x2="268.0" y2="160.0" class="grid" stroke-width="0.7"/>
+  <line x1="190.0" y1="56.0" x2="190.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="186.0" x2="268.0" y2="186.0" class="grid" stroke-width="0.7"/>
+  <line x1="216.0" y1="56.0" x2="216.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="212.0" x2="268.0" y2="212.0" class="grid" stroke-width="0.7"/>
+  <line x1="242.0" y1="56.0" x2="242.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="238.0" x2="268.0" y2="238.0" class="grid" stroke-width="0.7"/>
+  <line x1="268.0" y1="56.0" x2="268.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="264.0" x2="268.0" y2="264.0" class="grid" stroke-width="0.7"/>
+  <line x1="60.0" y1="56.0" x2="60.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="60.0" y1="56.0" x2="268.0" y2="56.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="112.0" y1="56.0" x2="112.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="60.0" y1="108.0" x2="268.0" y2="108.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="164.0" y1="56.0" x2="164.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="60.0" y1="160.0" x2="268.0" y2="160.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="216.0" y1="56.0" x2="216.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="60.0" y1="212.0" x2="268.0" y2="212.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="268.0" y1="56.0" x2="268.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <line x1="60.0" y1="264.0" x2="268.0" y2="264.0" class="ink-soft" stroke-width="1.6"/>
+  <polygon points="96.4,87.2 231.6,118.4 127.6,222.4" fill="none" class="ink" stroke-width="2.4"/>
+  <line x1="125.0" y1="121.0" x2="145.0" y2="121.0" class="hi" stroke-width="2" marker-end="url(#e-h-f411)"/>
+  <line x1="125.0" y1="121.0" x2="125.0" y2="141.0" class="hi" stroke-width="2" marker-end="url(#e-h-f411)"/>
+  <rect x="294.0" y="60.0" width="14" height="14" fill="#78b4eb"/>
+  <text x="314.0" y="71.0" class="xs">covered &#8212; 14</text>
+  <rect x="294.0" y="82.0" width="14" height="14" fill="#eb786e"/>
+  <text x="314.0" y="93.0" class="xs">helper &#8212; 10</text>
+  <text x="294.0" y="120.0" class="xs mono">6 quads issued</text>
+  <text x="294.0" y="136.0" class="xs mono">24 lanes shaded</text>
+  <text x="294.0" y="152.0" class="xs mono t-hi">58% efficient</text>
+  <text x="294.0" y="184.0" class="xs mono t-hi">&#8594;  ddx = lane 1 &#8722; lane 0</text>
+  <text x="294.0" y="200.0" class="xs mono t-hi">&#8595;  ddy = lane 2 &#8722; lane 0</text>
+  <text x="16" y="292.0" class="sm">The red lanes run the fragment shader and their results are thrown away.</text>
+  <text x="16" y="308.0" class="sm muted">They have to: <tspan class="mono">ddx</tspan> is lane 1 minus lane 0 and <tspan class="mono">ddy</tspan> is lane 2 minus lane 0, so a lane needs its neighbours to</text>
+  <text x="16" y="324.0" class="sm muted">have run the same code &#8212; whether or not the triangle covers them. That is where mipmap selection comes from.</text>
+</svg>

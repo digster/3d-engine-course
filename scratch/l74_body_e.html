@@ -1,0 +1,391 @@
+  <h2 id="listings">13. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/math/quat.hpp</code></td><td>new</td>
+          <td>The type, written as a diff against <code>complex.hpp</code>: product, conjugate,
+              norm, inverse, the sandwich, reflections, axis-angle both ways, the Euler bridge,
+              and Shepperd extraction.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One include. The configure-time lint refused to configure until it existed — the
+              fifth catch in four lessons.</td></tr>
+      <tr><td><code>engine/include/engine/math/transform.hpp</code></td><td>modified</td>
+          <td>Comments only. The promise made in Module 2 moves to 7.5 and gains §11's measured
+              reason.</td></tr>
+      <tr><td><code>demos/gimbal/main.cpp</code></td><td>modified</td>
+          <td>Two new modes: <kbd>C</kbd> the two orders, <kbd>D</kbd> the double cover, plus
+              <code>--commute</code> and <code>--cover</code> for reproducible stills.</td></tr>
+      <tr><td><code>docs/shared/course.css</code></td><td>modified</td>
+          <td>One rule, <code>.fill-shot</code>: a render figure keeps the program's own dark
+              background. §15 explains what went wrong without it.</td></tr>
+      <tr><td><code>scratch/verify_74.cpp</code></td><td>new</td>
+          <td>Forty-two checks in eight sections, ten of them controls.</td></tr>
+      <tr><td><code>scratch/build_verify_74.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness. It links nothing.</td></tr>
+      <tr><td><code>scratch/golden_74.cpp</code></td><td>new</td>
+          <td>The reference render, byte-compared. The first time in seven lessons that it was
+              <em>not</em> a null instrument.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/math/quat.hpp@@
+
+  @@LISTING:engine/include/engine/math/transform.hpp@@
+
+  @@LISTING:engine/include/engine/engine.hpp@@
+
+  @@LISTING:demos/gimbal/main.cpp@@
+
+  @@LISTING:scratch/verify_74.cpp@@
+
+  @@LISTING:scratch/build_verify_74.sh@@
+
+  @@LISTING:scratch/golden_74.cpp@@
+
+  <h2 id="run">14. Build &amp; run</h2>
+
+  <h3>14.1 The engine and the demo</h3>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --target gimbal
+
+# Windows (MSVC), from a Developer Command Prompt
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo --target gimbal</code></pre>
+
+  <p>
+    The configure step prints one line you should read:
+  </p>
+
+  <pre>-- engine: umbrella lists 82 of 83 public headers
+--   (1 documented exception)</pre>
+
+  <p>
+    If <code>quat.hpp</code> is missing from <code>engine.hpp</code>, configure <em>fails</em> with
+    the header named. That check was written in Lesson 5.12 and it has now fired on five headers in
+    four lessons, every one of them written by somebody who knew the check existed.
+  </p>
+
+  <h3>14.2 The demo</h3>
+
+  <pre><code class="lang-bash"># play with it
+./build/demos/gimbal
+
+# both orders, frozen at a chosen angle
+./build/demos/gimbal --commute 90 --shot out.ppm
+
+# past the first return, where w has gone negative
+./build/demos/gimbal --cover 405 --shot out.ppm</code></pre>
+
+  <p><strong>What you should see.</strong> The demo opens exactly as Lesson 7.2 left it: a craft,
+    three rings, and a panel of numbers. Then:</p>
+
+  <ul>
+    <li>Press <kbd>C</kbd>. The rings disappear and two coloured journeys sweep out from a common
+        nose, opening and closing as <code>φ</code> runs from 0 to 180° and back. The panel prints
+        the gap three ways. <strong>Stop reading and watch the quadrilateral fail to close.</strong></li>
+    <li>Press <kbd>D</kbd>. The craft turns steadily about a tilted teal axis, and a dial appears
+        to its left with two hands. <strong>The gold hand moves at exactly half the rate of the
+        teal one</strong>, for as long as you watch. When the craft is back where it started — the
+        panel says <code>the craft is 0.000 deg from where it started</code> — the gold hand is
+        pointing at the mark on the far left, and the printed quaternion is
+        <code>(−1.00000, …)</code>.</li>
+    <li>Press <kbd>D</kbd> again to leave, then <kbd>B</kbd> for Lesson 7.2's blend, <kbd>G</kbd>
+        for the rings. The three comparison modes are mutually exclusive and each restores its own
+        camera.</li>
+  </ul>
+
+  <h3>14.3 The harness</h3>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_74.sh</code></pre>
+
+  <p>
+    It links nothing — everything <code>quat.hpp</code> adds is <code>inline</code> in a header —
+    and takes about six seconds, most of it in §F.4's three million-step walks. The last two lines
+    should read:
+  </p>
+
+  <pre>42 / 42 checks passed</pre>
+
+  <h3>14.4 The golden, and this time it is a real instrument</h3>
+
+  <p>
+    Seven lessons running, this harness has been run to confirm an argument that had already proved
+    the picture could not move. Not this time: <code>transform.hpp</code> is <em>in</em> the
+    transitive include closure of <code>demos/common/demo_scene.cpp</code>, so the structural
+    argument does not apply and the run is the only evidence there is.
+  </p>
+
+  <pre><code class="lang-bash">python3 scratch/closure_74.py \
+    engine/include/engine/math/quat.hpp \
+    engine/include/engine/engine.hpp \
+    demos/gimbal/main.cpp \
+    engine/include/engine/math/transform.hpp</code></pre>
+
+  <pre>closure: 66 files reachable from demo_scene.cpp
+         plus the software render path
+  outside        engine/include/engine/math/quat.hpp
+  outside        engine/include/engine/engine.hpp
+  outside        demos/gimbal/main.cpp
+  IN CLOSURE &lt;-- engine/include/engine/math/transform.hpp
+VERDICT: golden must be run as a real instrument</pre>
+
+  <pre>golden_74: rc=0  ours=1382416 bytes  reference=1382416 bytes
+golden_74: identical=YES</pre>
+
+  <p>
+    Eight frames, <code>hash=E917C06C</code>, byte-identical to the reference shot Lesson 5.2 saved
+    — the twenty-third consecutive lesson that has not moved a pixel of it.
+  </p>
+
+  <h2 id="pitfalls">15. Common pitfalls &amp; debugging</h2>
+
+  <h3>15.1 The object spins all the way round between two adjacent keyframes</h3>
+  <p>
+    <strong>Cause:</strong> a metric or a blend that has not handled the double cover. The two poses
+    are the same orientation and the two quaternions are antipodal, so the naive angle between them
+    is 360° rather than 0°.<br>
+    <strong>Fix:</strong> <code>std::fabs</code> on the dot product, or negate one input when the
+    dot product is negative. §8.2, and Lesson 7.5 in full.
+  </p>
+
+  <h3>15.2 Everything is rotated backwards, and consistently</h3>
+  <p>
+    <strong>Cause:</strong> the sandwich is <code>q̄ v q</code> rather than <code>q v q̄</code>, or the
+    product is spelled with the operands swapped. Both produce genuine rotations, so a single-object
+    test passes.<br>
+    <strong>Symptom that separates them:</strong> composition. <code>M(qp)</code> comes out equal to
+    <code>M(p)M(q)</code> instead of <code>M(q)M(p)</code>, so a parent-child hierarchy applies its
+    transforms in the wrong order while each individual object looks fine. §C.6 is that test.
+  </p>
+
+  <h3>15.3 The scene slowly inflates</h3>
+  <p>
+    <strong>Cause:</strong> quaternions accumulating without repair. <code>mat3_from_quat</code>
+    scales by <code>|q|²</code>, so a norm that has drifted to 1.01 produces a matrix with
+    determinant <code>1.01⁶ ≈ 1.06</code>, and every object is 6% too big.<br>
+    <strong>Fix:</strong> <code>renormalised_fast</code> wherever a rotation is stepped
+    incrementally — it costs 1.06 ns. §10.4.
+  </p>
+
+  <h3>15.4 An object is wrong by a large angle and normalising does not help</h3>
+  <p>
+    <strong>Cause:</strong> <code>rotate</code> called on a non-unit quaternion. §6.4: the
+    two-cross form equals <code>q v q̄</code> only on the unit sphere, so off it you get neither a
+    rotation nor a scaled one. At <code>|q| = 1.5</code> the error is 34.7°.<br>
+    <strong>Why it is hard to spot:</strong> it does not look like a scale problem, so nobody
+    checks the norm.
+  </p>
+
+  <h3>15.5 <code>quat::i()</code> does not do what you expected</h3>
+  <p>
+    <strong>Cause:</strong> arriving from complex numbers, where <code>i</code> is a quarter turn.
+    <code>quat::i()</code> has <code>w = cos(θ/2) = 0</code>, so it is a <strong>half</strong> turn.
+    The quarter turn about <code>x</code> is <code>(0.707107, 0.707107, 0, 0)</code>.
+  </p>
+
+  <h3>15.6 A quaternion from another library is a 180° error about a diagonal</h3>
+  <p>
+    <strong>Cause:</strong> component order. This engine stores <code>w, x, y, z</code>; a great
+    deal of published code and most GPU packing uses <code>x, y, z, w</code>. A blind
+    <code>memcpy</code> across that boundary rotates <code>w</code> into <code>x</code> and produces
+    exactly that symptom. Conventions §8e.
+  </p>
+
+  <h3>15.7 An extraction is fine in testing and wrong in the field</h3>
+  <p>
+    <strong>Cause:</strong> the naive trace route (§9.1). It is indistinguishable from Shepperd's up
+    to about 120°, which is where a hand-written test suite lives, and it is off by 180° at 179.99°.
+    Rotations near a half-turn are not exotic — a character facing away from the camera is one.
+  </p>
+
+  <h3>15.8 A process pitfall, from writing this lesson</h3>
+  <p>
+    <strong>A figure that measures an angle with <code>acos</code> reports exactly zero.</strong>
+    §9.4's first draft compared two recovered axes with <code>acos(|a·b|)</code> and printed
+    <code>0.000e+00</code> in every row — not a pass, a blind instrument. An axis error of
+    <code>5.7×10⁻⁵</code> rad puts the dot product at <code>1 − 1.6×10⁻⁹</code>, which rounds to
+    exactly <code>1.0f</code>, and <code>acos</code> of exactly 1 is exactly 0. That is Lesson 7.1
+    §6.4's finding arriving from a third direction. Measure the <strong>chord</strong>
+    <code>|a − b|</code>, which is of the size of the answer, and turn it back into an angle with
+    <code>2 asin(chord/2)</code>.
+  </p>
+
+  <h3>15.9 And one about drawing</h3>
+  <p>
+    <strong>A render figure on the page's own pale panel loses the colours the program chose.</strong>
+    Every screenshot figure in this course before now sat on <code>.fill-soft</code>, which is
+    near-white in light mode. That is fine for a lit solid and destroys a thin bright line: §8.3's
+    gold dial hand — <em>the entire content of that figure</em> — was at 1.8:1 against it. The fix
+    is one CSS rule, <code>.fill-shot</code>, giving a render panel the program's own background.
+    The alternative, changing the demo's palette to suit the page, would have been the page telling
+    a lie about the program.
+  </p>
+
+  <h2 id="exercises">16. Exercises</h2>
+
+  <h3>Exercise 7.4.1 — The other convention <span class="ex-tag">guided</span></h3>
+  <p>
+    Write <code>quat_from_xyzw(const float* p)</code> and <code>quat_to_xyzw(quat q, float* p)</code>,
+    and a round-trip test. Then deliberately break it: read a <code>w,x,y,z</code> buffer as
+    <code>x,y,z,w</code> and measure, in degrees, how far the resulting orientation is from the
+    intended one for a 30° turn about <code>ŷ</code>.
+  </p>
+  <p class="hint"><strong>Hint.</strong> Use <code>angle_between_rotations</code> on the two
+    matrices. The answer is large and it is not 180° — work out why before you run it.</p>
+
+  <h3>Exercise 7.4.2 — <code>is_rotation</code>, finally <span class="ex-tag">guided</span></h3>
+  <p>
+    Lesson 7.1's Exercise 5 asked for a predicate that says whether a <code>mat3</code> is a
+    rotation, and it has been open ever since — §11 is the fourth place in this course to note its
+    absence. Write it: <code>bool is_rotation(const mat3&amp; m, float tol)</code>, checking both
+    <code>MᵀM = I</code> and <code>det M = +1</code>. Then answer the design question with a
+    measurement rather than an opinion: what tolerance passes every matrix
+    <code>mat3_from_quat</code> produces from a unit quaternion, over 20,000 random ones, and does
+    it reject the 1.65-determinant matrix of §11.2?
+  </p>
+  <p class="hint"><strong>Hint.</strong> Both halves are needed. <code>MᵀM = I</code> alone accepts
+    a reflection, whose determinant is −1 — and a reflection composed into a scene graph turns a
+    model inside out while every normal still looks unit.</p>
+
+  <h3>Exercise 7.4.3 — The crossover on your machine <span class="ex-tag">measurement</span></h3>
+  <p>
+    §10.3 measured the break-even at 7.6 vectors. Reproduce it, then change the experiment: write
+    the <em>closed-form</em> <code>mat3_from_quat</code> (the nine entries are in the header's doc
+    comment) and measure it against the three-calls-to-<code>rotate</code> version. Does the
+    crossover move? By how much, and is the closed form worth the loss of checkability?
+  </p>
+  <p class="hint"><strong>Hint.</strong> Lesson 7.2 ran the identical experiment on
+    <code>rotation_from_axis_angle</code> and found the closed form 1.3–1.6× faster, never the 3×
+    its multiply count predicted, because both spellings paid for one <code>sin</code>. There is no
+    trigonometry here at all, so predict the answer first.</p>
+
+  <h3>Exercise 7.4.4 — Where does the gap grow fastest? <span class="ex-tag">derivation</span></h3>
+  <p>
+    §7.1 derived the gap between the two composition orders as
+    <code>2 arccos|c⁴ + 2c²s² − s⁴|</code> for two equal perpendicular turns of <code>φ</code>.
+    Expand it for small <code>φ</code> and show the gap goes as <code>φ²</code>. Then find the
+    <code>φ</code> at which the gap is largest, and check it against the demo.
+  </p>
+  <p class="hint"><strong>Hint.</strong> <code>c⁴ + 2c²s² − s⁴ = (c² + s²)² − 2s⁴ = 1 − 2s⁴</code>,
+    which makes both questions easy. The gap is maximal where <code>1 − 2s⁴</code> is most
+    negative, and <code>s ≤ 1</code> bounds that.</p>
+
+  <h3>Exercise 7.4.5 — A rotation from one vector to another <span class="ex-tag">engine challenge</span></h3>
+  <p>
+    Write <code>quat quat_from_to(vec3 from, vec3 to)</code>: the shortest rotation carrying one
+    unit vector onto another. The obvious construction is the axis <code>from × to</code> and the
+    angle <code>acos(from · to)</code>, which needs two transcendentals and dies when the vectors
+    are nearly parallel <em>or</em> nearly opposite. There is a construction with <strong>no
+    trigonometry at all</strong> that handles the parallel case gracefully — find it, and then
+    handle the opposite case explicitly, because it genuinely has no shortest rotation and any
+    perpendicular axis is correct.
+  </p>
+  <p class="hint"><strong>Hint.</strong> §5 says a quaternion is built from two mirrors. What are
+    the two mirror planes whose composite carries <code>from</code> to <code>to</code>? One of them
+    is the plane bisecting the two vectors, which you can write down with an addition and a
+    normalise. For the opposite case, <code>from</code> and any vector not parallel to it give you a
+    perpendicular by one cross product — and choosing "any vector" robustly means choosing the
+    coordinate axis <code>from</code> is <em>least</em> aligned with.</p>
+
+  <h3>Exercise 7.4.6 — Integrate an angular velocity <span class="ex-tag">engine challenge</span></h3>
+  <p>
+    Module 8 will need this. Given an orientation <code>q</code> and an angular velocity
+    <code>ω</code> in radians per second (a vector whose direction is the axis and whose length is
+    the rate), advance the orientation by <code>h</code> seconds. Do it two ways — the exact way,
+    with <code>quat_from_axis_angle(normalised(ω), |ω|h)</code>, and the cheap way, using the
+    derivative <code>q̇ = ½ ω q</code> as a Euler step followed by <code>renormalised_fast</code> —
+    and measure how far apart they drift over ten seconds at 60 Hz for a few rates.
+  </p>
+  <p class="hint"><strong>Hint.</strong> Derive <code>q̇ = ½ ω q</code> first, and the ½ should now
+    be unsurprising: differentiate <code>cos(θ/2) + sin(θ/2) n̂</code> with respect to time at
+    <code>θ = 0</code>. The cheap way is what a physics engine actually does, and finding the rate
+    at which it stops being acceptable is the point of the exercise. Guard <code>|ω| = 0</code> in
+    the exact version — <code>normalised</code> of a zero vector is the reason
+    <code>normalised_or</code> exists.</p>
+
+  <h2 id="recap">17. Recap &amp; next</h2>
+
+  <p>
+    The engine can now write down a rotation in four floats that compose in sixteen multiplies with
+    no trigonometry, have no singularity anywhere, extract from a matrix with no bad case, and
+    repair in one Taylor step. More to the point, <strong>nothing in this lesson was asserted.</strong>
+  </p>
+
+  <ul>
+    <li><strong>The multiplication table was forced by isotropy.</strong> One demand — that space
+        has no preferred direction, so every unit imaginary squares to −1 — gives
+        <code>ji = −ij</code> in three lines, and associativity gives the other eleven entries.
+        <code>ijk = −1</code> arrives as a consequence.</li>
+    <li><strong>The dot product and the cross product are inside the quaternion product</strong>,
+        and the cross product is exactly the term that changes sign under a swap. "Quaternions do
+        not commute" and "rotations of space do not commute" are the same sentence.</li>
+    <li><strong>The sandwich and the half-angle came out of the same calculation</strong> —
+        composing two reflections in planes — and so did the double cover, as a sign nobody could
+        determine. Three facts usually presented separately, from one derivation, and Lesson 7.3
+        had already drawn all of it in the plane with a protractor.</li>
+    <li><strong>Four candidates that sum to 4 leave the largest at least 1</strong>, so extraction
+        has no threshold, no crossover and no bad case — where Lesson 7.2's three candidates needed
+        a derived crossover at 120°.</li>
+    <li><strong>1.57× cheaper to compose, 1.57× dearer to apply, crossing over at 7.6 vectors.</strong>
+        That single number is why renderers convert quaternions to matrices before drawing.</li>
+    <li><strong>Two measurements refused the claims they were written to confirm.</strong> A
+        quaternion's better conditioning turns out to be a property of <em>holding</em> one, not of
+        extracting one; and <code>renormalised_fast</code> is exact at <code>|q| = 1</code>
+        <em>and</em> at <code>|q| = 2</code> and catastrophic between, so a test at the two obvious
+        points certifies a broken function.</li>
+  </ul>
+
+  <p>
+    <strong>Next: Lesson 7.5 — Slerp.</strong> The formula is already written: Lesson 7.3's
+    <code>a·(a⁻¹b)^t</code> is not specific to the plane and not specific to complex numbers — it is
+    the definition of a geodesic on any group with those three operations, which is why 7.3's
+    three-line <code>complex_slerp</code> and 7.2's <code>rotation_slerp</code> for
+    <code>mat3</code> turned out to be the same three steps in different notation. What is genuinely
+    new is the sign: §8 proved there are two quaternions per rotation, so there are two arcs between
+    any two poses, and one of them is the long way round. 7.5 also performs the storage swap §11
+    declined, with the decomposition of §11.3 in the one place that needs it.
+  </p>
+
+  <h2 id="reading">18. Further reading</h2>
+
+  <ul>
+    <li><strong>Hamilton's 1865 letter to his son Archibald</strong>, widely reprinted and easy to
+        find. Two pages, disarmingly frank about the thirteen years, and best read immediately after
+        §3 — the difference between knowing the derivation and understanding what it cost to find
+        it the first time.</li>
+    <li><strong>Ken Shoemake, <em>"Animating Rotation with Quaternion Curves"</em>, SIGGRAPH
+        1985.</strong> The paper that brought quaternions into graphics. §3's table and §5's
+        sandwich are its section 2; everything after that is Lesson 7.5's.</li>
+    <li><strong>Stanley Shepperd, <em>"Quaternion from Rotation Matrix"</em>, Journal of Guidance
+        and Control 1(3), 1978.</strong> One page, and it is §9.2. Worth reading for how carefully a
+        1978 aerospace note reasons about a division that might be small.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th edition, §4.3.</strong> The standard engineering
+        treatment, including the component-order warning of §15.6 and a compact table of the
+        conversions. Keep it open beside Lesson 7.5.</li>
+    <li><strong>Marc ten Bosch, <em>"Let's remove Quaternions from every 3D Engine"</em>.</strong>
+        An argument that <em>rotors</em> — §5's object, stated in geometric algebra rather than in
+        Hamilton's notation — are the right primitive and that quaternions obscure them. Read it
+        now rather than before: its central construction is §5.2, and having just derived that,
+        you are in a position to judge the claim rather than to be persuaded by it.</li>
+    <li><strong>John Vince, <em>Quaternions for Computer Graphics</em>.</strong> A whole short book,
+        and the place to go if §4's expansion went past too quickly — it multiplies everything out
+        by hand, repeatedly, which is exactly what is wanted the first time.</li>
+    <li><strong>Jim Blinn, <em>"Consider the Lowly 2×2 Matrix"</em> and the quaternion columns in
+        <em>Notation, Notation, Notation</em>.</strong> Blinn is the best available writer on
+        <em>why the notation matters</em>, which is §4.1's whole argument about storage.</li>
+    <li><strong>3Blue1Brown and Ben Eater, the interactive quaternion videos.</strong> A
+        stereographic projection of the unit 3-sphere that lets you drag a quaternion around and
+        watch the rotation it performs. It is the one visualisation that makes the double cover of
+        §8 something you can feel rather than verify.</li>
+  </ul>

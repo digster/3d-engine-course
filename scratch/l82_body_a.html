@@ -1,0 +1,589 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-01-integrators.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.1 — Integrators: Why One Explodes</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-03-angular-dynamics.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.3 — Angular Dynamics: Torque and the Inertia Tensor</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.2</div>
+    <h1>Forces, Gravity, and Linear Rigid Bodies</h1>
+    <p class="deck">
+      Lesson 8.1 taught this engine to advance a state through time, and left it unable to tell a
+      crate from a pebble. You hand <code>integrate</code> an acceleration and it believes you —
+      which is enough to drop a cube and enough for nothing else, because an acceleration
+      <em>cannot be added up</em> and <em>does not know what anything weighs</em>. Four systems that
+      each want to push the same body will overwrite one another, and a thruster that shoves a
+      pebble will shove a truck exactly as hard. The fix is one equation old enough to be furniture,
+      <code>F = ma</code>, and the interesting part is everything the engine has to decide to make it
+      usable: an <strong>accumulator</strong> rather than a setter, because forces add and Newton's
+      second law is linear in <code>F</code>; the <strong>reciprocal</strong> of the mass rather than
+      the mass, because the common case in a real scene is <em>immovable</em> and that is a clean
+      exact zero where infinity is a NaN waiting to happen; and an impulse as a separate entry point,
+      because a jump written as a force for one step is <strong>23× higher at 30 Hz than at 144</strong>
+      while the same jump written as an impulse varies by 6%. Then two questions that look like
+      pedantry until they cost a week. <strong>Where “one unit is one metre” stops being a
+      convention</strong>: <code>9.81</code> is in metres per second squared, a world modelled at
+      scale <code>s</code> runs every duration in it by <code>√s</code>, and that single square root
+      is why miniatures look like miniatures, why film crews overcrank by <strong>2.83× for a 1/8
+      model</strong>, and why “the jumping feels floaty” is a <em>measurement</em> rather than an
+      opinion. And <strong>where a scaled parent quietly stops meaning it</strong>: a body integrated
+      under a parent scaled by 2 falls at <strong>2 g</strong>, a body merely <em>turned</em> under a
+      non-uniformly scaled one falls at <strong>1.5811 g, 63.435° off vertical</strong>, and a
+      spinning parent passes every test a matrix is capable of answering while putting a force-free
+      body <strong>3.7963 m</strong> from the straight line it was obliged to travel. Along the way:
+      why a sweep of a million masses finds <strong>16% of them</strong> fail a round trip that seven
+      hand-picked ones all passed, and what that costs; why <code>damping</code> and <code>drag</code>
+      sit next to each other in the header with different names and produce
+      <strong>identical pictures for three masses 1000× apart</strong> until one of them does not;
+      and a budget in which the honest arrangement of gravity turns out to cost a float divide worth
+      <strong>15% of the whole update</strong>, more than 8.1's entire integrator step.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 5 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="02-07-homogeneous.html">2.7 — Homogeneous Coordinates</a>,
+          <a href="05-04-handles.html">5.4 — Handles: Generational Indices</a>,
+          <a href="07-05-slerp.html">7.5 — Slerp, and the Storage Swap</a>,
+          <a href="08-01-integrators.html">8.1 — Integrators: Why One Explodes</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/rigid_body.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/rigid_body.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/bodies/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_82.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_82.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine has <strong>bodies</strong>. <code>engine::phys::body_world</code> is a
+            <code>pool&lt;rigid_body&gt;</code> and about eight lines of policy: gravity, a choice of
+            integrator, and a walk that turns a force accumulator into a step. A
+            <code>rigid_body</code> <em>has</em> 8.1's <code>motion</code> rather than being one, so
+            every function in <code>integrate.hpp</code> works on it unchanged and §3 can step a bare
+            <code>motion</code> beside a body and compare them bit for bit. <strong>Nine measured
+            sections, thirteen of them controls</strong>, including one that sums four forces that
+            are exact powers of two — where the spread across all 24 orderings must be exactly zero,
+            which is what makes the <em>other</em> spread a fact about the values rather than about
+            addition — and one that drops a million-kilogram body beside a ten-gram one to show that
+            “heavy” and “immovable” are not the same word. The <code>bodies</code> demo launches
+            three masses on identical trajectories and draws them under three resistance models, two
+            of which produce the same picture.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…explain why a physics engine accumulates forces instead of setting accelerations, and name
+          the property of <code>F = ma</code> that licenses it.</li>
+      <li>…give three reasons a body stores <code>1/m</code>, and say which one is about arithmetic
+          the solver has not been written yet.</li>
+      <li>…distinguish the two questions <code>body_kind</code> and <code>inv_mass</code> answer, and
+          name the bug that follows from conflating them.</li>
+      <li>…state why gravity is the one force whose mass cancels, and where routing it through the
+          accumulator anyway costs something measurable.</li>
+      <li>…tell velocity damping from a drag force by looking at a graph, and predict both terminal
+          speeds from the formulas.</li>
+      <li>…decide whether a given effect is a force or an impulse, and say what the wrong choice does
+          to a player on a 144 Hz monitor.</li>
+      <li>…derive the <code>√s</code> law relating a world's length scale to its clock, and use it to
+          diagnose “floaty” from a screenshot.</li>
+      <li>…say why a rigid body's position must be in world space, and measure what a scaled,
+          sheared or spinning parent would have done to it.</li>
+      <li>…read a per-body budget and tell an optimisation that paid from one that was a tie.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: an engine that cannot tell a crate from a pebble</a></li>
+      <li><a href="#intuition">Building intuition: a shove is not an acceleration</a></li>
+      <li><a href="#accumulator">F = ma, and the accumulator that makes it usable</a></li>
+      <li><a href="#invmass">Inverse mass, and the question it does not answer</a></li>
+      <li><a href="#gravity">Gravity, and the round trip that is not exact</a></li>
+      <li><a href="#damping">Damping is not drag</a></li>
+      <li><a href="#impulse">An impulse has no h in it</a></li>
+      <li><a href="#units">Units: the square root under every miniature</a></li>
+      <li><a href="#frames">Frames: where a scaled parent stops meaning it</a></li>
+      <li><a href="#implementation">The implementation</a></li>
+      <li><a href="#budget">The budget</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: an engine that cannot tell a crate from a pebble</h2>
+
+  <p>
+    Lesson 8.1 ended with a working stepper and a deliberately small type. A <code>motion</code> is a
+    position and a velocity, and <code>integrate</code> advances one under an acceleration you supply.
+    That is genuinely the heart of a physics engine, and everything in this module runs through it.
+    It is also, right now, unusable for anything but a demo — and the reason is not that it is
+    missing features. It is that the <em>interface</em> is wrong in two specific ways, and both of
+    them are interesting.
+  </p>
+
+  <p>
+    <strong>An acceleration cannot be added up.</strong> Picture a crate in a real scene for one
+    frame. Gravity wants to pull it down. A conveyor belt under it wants to drag it sideways. Wind
+    from a designer-placed volume wants to push it east. A player has just shot it. Air resistance
+    wants to slow it. Each of those is a separate system that knows nothing whatever about the
+    others, written by different people, running in whatever order the frame happens to run them.
+    Every one of them wants to tell the crate what its acceleration is.
+  </p>
+
+  <p>
+    With a single acceleration field, the last one to write it wins and the rest of the physics
+    silently does not happen. You will not get a crash, or a warning, or a wrong-looking number in a
+    debugger — you will get a crate that ignores gravity on the frames the wind system happened to
+    run last. That is a bug with no symptom except “it feels wrong sometimes”, which is the worst
+    kind there is.
+  </p>
+
+  <p>
+    <strong>And an acceleration does not know about mass.</strong> Put the same thruster on a pebble
+    and on a truck and, in 8.1's world, both accelerate identically, because the only thing the
+    stepper was told is how fast the velocity should change. That is not a small inaccuracy; it is
+    the absence of the entire concept a player is using when they decide whether something looks
+    heavy.
+  </p>
+
+  <p>
+    You might reasonably propose to fix the second one at the call site — have the wind system pass
+    <code>F/m</code> instead of <code>F</code> — and that proposal is exactly what makes the first
+    problem visible. The division can only happen <em>once</em>, after everything has been added, or
+    it is not the same arithmetic. So the two problems have one answer, and it is the oldest
+    equation in the subject.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Sum the forces. Divide by the mass. Once.</strong> Everything in this lesson is a
+      consequence of taking that sentence literally.
+    </p>
+  </div>
+
+  <p>
+    And then two questions that sound like pedantry and are not. <code>9.81</code> is a number in
+    <em>metres</em> per second squared, and <code>conventions.html</code> §3 has said “one unit is
+    one metre” since Module 2, back when nothing in the engine could tell the difference. This is the
+    lesson where something can. §8 derives what a mis-scaled world actually does — it is a square
+    root, and it is why miniatures look like miniatures — and §9 asks where a body's position
+    <em>lives</em>, which turns out to be a restriction rather than a feature and to have three
+    separate ways of going wrong.
+  </p>
+
+  <h2 id="intuition">2. Building intuition: a shove is not an acceleration</h2>
+
+  <p>
+    Stand behind a shopping trolley and push it. Push exactly as hard on an empty one and on one full
+    of bricks. What is the same in those two pushes, and what is different?
+  </p>
+
+  <p>
+    What is the same is <em>you</em>. Your arms are doing the same thing; the sensation in your
+    shoulders is the same; if there were a scale between your hands and the handle it would read the
+    same number. What is different is everything that happens next. The empty trolley leaps away; the
+    full one grudgingly creeps. The quantity that was the same is the <strong>force</strong>, and the
+    quantity that differed is the <strong>acceleration</strong>, and the thing that converted one
+    into the other is the mass.
+  </p>
+
+  <p>
+    That is genuinely all Newton's second law says, and stated this way it is almost a tautology: we
+    define force as the thing that is the same in the two pushes. What makes it a law rather than a
+    definition is the second half — that <em>forces add</em>. If a friend pushes the trolley from the
+    side while you push from behind, the trolley does not choose one of you. It goes in the direction
+    of the sum of the two pushes, and the sum is the ordinary vector sum you would draw with a ruler.
+    Nothing about that is obvious in advance; a universe in which the second push had half its effect
+    while the first was already acting would be perfectly imaginable, and would make physics engines
+    far harder to write.
+  </p>
+
+  <p>
+    It is worth sitting with how much the engine gets for free from that one property. Because forces
+    add, gravity does not need to know that wind exists. Because forces add, the order of the four
+    systems above does not matter. Because forces add, there is no interface to implement, no
+    registry to sign up for, no visitor to write — the crate has a <code>vec3</code>, and everything
+    that wants to push it does <code>+=</code>. <strong>An engine's simplest subsystems are the ones
+    whose physics is linear</strong>, and this is the cleanest example in the whole course.
+  </p>
+
+  <p>
+    Now the other half of the picture, and it is the one people find genuinely strange the first
+    time. Drop a hammer and a feather. On Earth the hammer wins, which everybody knows; on the Moon,
+    famously, they land together, which David Scott demonstrated on camera in 1971 for exactly this
+    reason. If mass converts force into acceleration, and the hammer has more mass, why does more
+    mass not mean <em>less</em> acceleration under gravity?
+  </p>
+
+  <p>
+    Because gravity is the one force that scales with the mass it is pulling on. The hammer is a
+    hundred times heavier, so gravity pulls on it a hundred times harder, so the two hundreds cancel
+    and every object falls at the same rate. It is the only force in this lesson with that property,
+    and it means gravity is simultaneously the most familiar force and the least representative one —
+    the intuition you have built over a lifetime of watching things fall is intuition about the one
+    case where mass does not matter. §5 makes that a design decision and §6 shows what happens when a
+    <em>second</em> force turns up and the cancellation stops.
+  </p>
+
+  <h2 id="accumulator">3. F = ma, and the accumulator that makes it usable</h2>
+
+  <p>
+    Write the law down, in the direction the engine actually needs it:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{F} = m\,\mathbf{a}
+    \qquad\Longrightarrow\qquad
+    \mathbf{a} = \frac{\mathbf{F}}{m} = \mathbf{F}\cdot\frac{1}{m}
+    \]
+  </div>
+  <p class="eq-plain">
+    Force equals mass times acceleration; so acceleration is the total force divided by the mass, or
+    — as the engine will actually spell it — the total force multiplied by the <em>reciprocal</em> of
+    the mass.
+  </p>
+
+  <p>
+    The <strong>total</strong> force. That word is doing all the work, and it is what turns one
+    equation into a piece of architecture. A body carries a <code>vec3</code> that starts each step
+    at zero; every system that wants to push adds to it; and at the moment the step runs, that vector
+    is divided by the mass exactly once. Nothing else in the design has to exist.
+  </p>
+
+  <h3>3.1 A worked sum, with four real systems</h3>
+
+  <p>
+    Take a 2 kg body and let four systems have their say, in whatever order the frame runs them.
+    Gravity contributes its weight, <code>m·g</code> — 2 kg at 9.81 m/s² is 19.62 N, downward. A
+    thruster pushes 14 N along <code>+x</code>. A wind volume contributes
+    <code>(−4.5, 1.25, 3.0)</code> N. A crude drag model contributes <code>(−2.25, 0.5, −1.5)</code> N.
+    Add them componentwise:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{F} = (0, -19.62, 0) + (14, 0, 0) + (-4.5, 1.25, 3) + (-2.25, 0.5, -1.5)
+    = (7.25,\; -17.87,\; 1.5)\ \text{N}
+    \]
+  </div>
+
+  <p>
+    and divide once by 2 kg:
+  </p>
+
+  <div class="eq">
+    \[
+    \mathbf{a} = (7.25,\; -17.87,\; 1.5) \times 0.5 = (3.625,\; -8.935,\; 0.75)\ \text{m/s}^2
+    \]
+  </div>
+  <p class="eq-plain">
+    The four forces sum to 7.25 newtons east, 17.87 down and 1.5 forward; dividing by the two-kilogram
+    mass gives an acceleration of 3.625, −8.935 and 0.75 metres per second squared.
+  </p>
+
+  <p>
+    Notice the y component: <strong>−8.935, not −9.81</strong>. The wind and the drag both had a small
+    upward contribution, and the body is now falling slightly slower than gravity alone would have
+    it. That number is the one thing you could not have got from a design where each system sets the
+    acceleration, and it is what the accumulator buys.
+  </p>
+
+  @@FIG_ACCUMULATOR@@
+
+  <p>
+    Figure 1 draws the same four forces tip to tail, at one scale on both axes, with the sum spanning
+    from the body to the final tip. It is worth pausing on the right-hand half, because the failure
+    mode is so quiet. Replace the four <code>+=</code> with four <code>=</code> and the harness
+    reports <code>F = (14.000, 0.000, 0.000) N</code>: gravity, wind and drag are simply gone. No
+    error, no warning, no <code>nan</code>. Just a body that this frame has decided is in space.
+  </p>
+
+  <h3>3.2 Why the accumulator is cleared <em>after</em> the step, not before</h3>
+
+  <p>
+    A force is an <strong>input</strong> to a step, not a property of a body. Next frame every one of
+    those systems will speak again; what the crate “has” is a velocity and a position, and what it
+    was <em>handed</em> was a force. So the accumulator has to be emptied once per step, and the
+    single most common bug in a first physics engine is forgetting — which presents as objects that
+    accelerate away forever after being touched once, because a thruster fired for one frame keeps
+    firing for the rest of the level.
+  </p>
+
+  <p>
+    Less obvious is <em>when</em>. Clearing at the start of the step is the arrangement that first
+    occurs to you and it is wrong in a way you will not notice for months: every tool that wants to
+    ask “what was pushing on this body?” then reads zero. A debug overlay drawing force arrows draws
+    nothing. An assertion checking that nothing exceeded a sane magnitude has nothing to check.
+    Lesson 8.10's solver, which reads what the contact generator asked for, reads an empty vector.
+    <code>step</code> therefore clears the accumulator <strong>last</strong>, after the integration
+    it fed, so that anything looking at a body between two steps sees the forces that produced the
+    state it is looking at.
+  </p>
+
+  <h3>3.3 The measurement: a is proportional to 1/m, exactly</h3>
+
+  <p>
+    Section A of the harness pushes three bodies with the same 50 N and steps them once at 60 Hz:
+  </p>
+
+<pre><code class="lang-text">    mass      inv_mass        a       v after 1 step
+      1.0 kg  1.000000   50.0000      0.833333 m/s
+     10.0 kg  0.100000    5.0000      0.083333 m/s
+   1000.0 kg  0.001000    0.0500      0.000833 m/s
+
+  A.1  m*a recovers the force at every mass:
+           1.0 kg -&gt; m*a =    50.0000 N   (F = 50 N)
+          10.0 kg -&gt; m*a =    50.0000 N   (F = 50 N)
+        1000.0 kg -&gt; m*a =    50.0000 N   (F = 50 N)
+
+  A.2  v(1 kg) / v(1000 kg) = 999.9999  (expect 1000)
+
+  A.3  CONTROL same mass, same push: identical  yes</code></pre>
+
+  <p>
+    A.1 is the check worth having: multiplying the acceleration back by the mass must return the
+    force you put in, at every mass, and it does. A.2 is the same statement as a ratio, and it reads
+    999.9999 rather than 1000 for the reason §5 is about — <code>1/1000</code> is not exactly
+    representable in <code>float</code>, so neither is the number you get back by dividing into it.
+    That is a one-part-in-ten-million discrepancy and it is <em>not</em> nothing; hold on to it.
+  </p>
+
+  <h3>3.4 …and the one way in which forces do not commute</h3>
+
+  <p>
+    Vector addition is commutative and associative. Floating-point addition is commutative and
+    <strong>not associative</strong>, and since an accumulator is a running sum, the order in which
+    systems call <code>add_force</code> can in principle change the answer. Section B tries all 24
+    orderings of four forces chosen to be awkward:
+  </p>
+
+<pre><code class="lang-text">  B.2  same four forces, 24 orders, x component only
+         [1e6, -1e6, 0.125, 0.0037] N
+    24 orders   lo 0.125000000   hi 0.128700003
+    spread 3.7000e-03 = 2.9% of the answer
+    the smallest of the four forces is 3.7000e-03
+
+  B.3  CONTROL exactly representable, partial sums exact
+         [4, 2, 1, 0.5] N
+    24 orders   lo 7.500000000   hi 7.500000000
+    spread 0.0000e+00 = 0.0% of the answer</code></pre>
+
+  <p>
+    Read the two numbers in B.2 together: the spread across orderings is
+    <code>3.7000e−03</code>, and the smallest of the four forces is <code>3.7000e−03</code>. They are
+    not similar, they are <em>the same number</em>. What happened is not a gradual loss of precision;
+    it is that in some orderings the fourth force was added to a partial sum of a million, where one
+    ulp is 0.0625, and it <strong>vanished completely</strong>. Whether a whole force applies at all
+    came down to which system ran first.
+  </p>
+
+  <p>
+    B.3 is the control, and it is written against the second half of 7.8's rule — ask what the check
+    would say if the thing were completely <em>fine</em>. Four forces that are exact powers of two
+    have exact partial sums in every order, and the spread is exactly zero. So B.2's spread is a fact
+    about those particular values and not a fact about addition, which is the distinction that makes
+    it actionable.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>Two honest conclusions, and they point in different directions.</strong> For a normal
+      game this is a non-issue: real forces on a real body are within a few orders of magnitude of
+      each other and the spread is a last-bit affair. For a <em>deterministic</em> game — a replay, a
+      lockstep multiplayer session, a golden-image test — it is fatal, because bit-identical is the
+      requirement and a differing last bit compounds. The mitigation is not a smarter sum; it is that
+      the accumulator is a field written by systems in a <strong>fixed order fixed by the code</strong>,
+      not a list summed in arrival order. Our design already has that property, and it is worth
+      knowing that it is a property rather than an accident.
+    </p>
+  </div>
+
+  <h2 id="invmass">4. Inverse mass, and the question it does not answer</h2>
+
+  <p>
+    Every physics engine you will ever read stores <code>1/m</code> rather than <code>m</code>, and
+    the reason usually given — “it turns a divide into a multiply” — is the least of it. A divide is
+    about four times a multiply on modern hardware and it happens once per body per step; nobody
+    restructures a public API for that. There are three real reasons, and they get better as they go.
+  </p>
+
+  @@FIG_INVMASS@@
+
+  <h3>4.1 Immovable is representable, and it is the common case</h3>
+
+  <p>
+    Count the bodies in a real level. The floor is immovable. So is every wall, every staircase,
+    every rock, every piece of static geometry an artist placed — which is to say, most of the
+    bodies. Their mass is not large. It is <em>infinite</em>, in exactly the sense that no force you
+    can apply will accelerate them, and <code>inv_mass = 0</code> says so precisely, in a
+    <code>float</code>, with no sentinel value and no branch anywhere.
+  </p>
+
+  <p>
+    Store the mass instead and you need either a magic value or a parallel flag. The magic value is
+    <code>HUGE_VALF</code>, and it works right up until two of them meet:
+  </p>
+
+<pre><code class="lang-text">  F.2  two immovable bodies:
+       mass_of  = inf and inf
+       m_a - m_b        = nan   (NaN: yes)
+       inv_a + inv_b    = 0.000000   (the solver's term)
+       1/(inv_a+inv_b)  = inf   (reduced mass)</code></pre>
+
+  <p>
+    <code>inf − inf</code> is NaN, and a NaN in a physics engine is not a local problem — it
+    propagates through every subsequent operation, out through the position, into the transform, and
+    onto the screen as an object that has disappeared. The inverse masses subtract to a clean zero.
+  </p>
+
+  <h3>4.2 The solver wants this quantity, and not mass</h3>
+
+  <p>
+    This is the reason that will look like foresight in eight lessons' time. Every contact in 8.9 and
+    every joint in 8.11 computes an <strong>effective mass</strong> for the pair, and it is built
+    from the sum of the inverse masses:
+  </p>
+
+  <div class="eq">
+    \[
+    m_{\text{eff}} = \frac{1}{\frac{1}{m_a} + \frac{1}{m_b}} = \frac{m_a m_b}{m_a + m_b}
+    \]
+  </div>
+  <p class="eq-plain">
+    The effective mass of a colliding pair is one over the sum of their inverse masses, which is also
+    the product of the masses over their sum.
+  </p>
+
+  <p>
+    That quantity is the <em>reduced mass</em>, and it has a physical meaning: it is the mass a single
+    body would need to have for the pair's relative motion to look the same. Written in terms of
+    masses it needs a special case at every infinity; written in terms of inverse masses it is
+    <code>1/(w_a + w_b)</code> and a fixed body simply contributes nothing to the sum, which gives
+    exactly the right answer — a crate bouncing off a wall behaves as though only the crate has a
+    mass, which is what happens. <strong>The storage is chosen to match the arithmetic the hot loop
+    will actually perform</strong>, and the hot loop has not been written yet.
+  </p>
+
+  <h3>4.3 The degenerate case moves somewhere harmless</h3>
+
+  <p>
+    With mass stored, <code>mass = 0</code> is a divide by zero on the hot path. With the reciprocal
+    stored, a massless body is <code>inv_mass = ∞</code>: still nonsense, but nonsense that does not
+    divide, and nonsense that can be refused at the one place it can be created.
+  </p>
+
+<pre><code class="lang-text">  F.3  set_mass(0) refused   set_mass(-2) refused
+       set_mass(inf) accepted
+       inv_mass after inf = 0.0</code></pre>
+
+  <p>
+    <code>set_mass</code> is written as <code>if (!(kilograms &gt; 0.0f))</code> rather than
+    <code>if (kilograms &lt;= 0.0f)</code>, and that is the one place in the file where the negated
+    comparison is load-bearing: <code>NaN &lt;= 0</code> is <em>false</em>, so the second form lets a
+    NaN mass straight through, while <code>!(NaN &gt; 0)</code> is true and catches it. A negative
+    mass is refused too, and not out of fastidiousness — a body with negative mass accelerates
+    <em>towards</em> a push, which breaks assumptions the solver will make from 8.9 onward in ways
+    that are essentially impossible to trace back to here.
+  </p>
+
+  <h3>4.4 …and now the question inverse mass does <em>not</em> answer</h3>
+
+  <p>
+    “Can a force move it?” is answered by <code>inv_mass</code>, completely. There is a second
+    question that looks like the same one and is not: <strong>“does it move at all?”</strong>
+  </p>
+
+  <p>
+    A lift is immovable by forces — a crate landing on it must not push it down, however heavy the
+    crate is — and it also moves, because that is its entire job. A floor is immovable by forces and
+    does not move. Both have <code>inv_mass = 0</code> and they are not the same kind of object, so
+    the bottom half of figure 2 is a 2×2 rather than a switch, and three of its four cells are the
+    three values of <code>body_kind</code>:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th></th><th>does not move</th><th>moves</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">a force cannot move it</th>
+          <td><code>fixed</code> — the ground, a wall</td>
+          <td><code>kinematic</code> — a lift, a door</td></tr>
+      <tr><th scope="row">a force can move it</th>
+          <td><em>nothing is this</em></td>
+          <td><code>dynamic</code> — a crate, a ragdoll</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Conflate the two and you get the two classic bugs, one from each direction. Make the lift dynamic
+    and very heavy, and it sags under load and — as we are about to measure — drifts downward under
+    gravity anyway. Make it static and teleport it every frame, and anything standing on it is left
+    behind, because a body with no velocity imparts none to whatever it is carrying.
+  </p>
+
+  <p>
+    A C++ note in passing, because the enumerator name is odd. Every other engine calls the first of
+    those <code>static</code>, and <code>static</code> is a keyword — it cannot be an enumerator even
+    inside an <code>enum class</code>, where the name is otherwise scoped and cannot collide with
+    anything. Ours is <code>fixed</code>, and the doc comment says the other word so that somebody
+    searching for it lands in the right place.
+  </p>
+
+  <h3>4.5 “Just make the floor very heavy”</h3>
+
+  <p>
+    This is the proposal that every engine receives, and it deserves a measurement rather than an
+    argument. Section F drops a dynamic body of one million kilograms beside a ten-gram pebble for
+    one second:
+  </p>
+
+<pre><code class="lang-text">  F.4  CONTROL a 1,000,000 kg DYNAMIC 'floor', 1 s:
+       y = -4.986749 m   a 10 g pebble: y = -4.986749 m
+
+  F.1  fixed body, 10 s of gravity + 10 kN:
+       position 0.0  velocity 0.0   moved: no</code></pre>
+
+  @@FIG_HEAVY@@
+
+  <p>
+    The two numbers are identical to the last decimal place, and figure 3 draws them as two arrows of
+    exactly the same length. A hundred million times the mass buys precisely nothing, because
+    <em>gravity does not ask what anything weighs</em> — which is §2's hammer and feather arriving as
+    a line in a test log. Making something heavy makes it hard to <em>push</em>, and the floor's
+    problem was never that somebody was pushing it.
+  </p>
+
+  <p>
+    <code>inv_mass = 0</code> is not a very large number. It is a different kind of answer, and F.1 is
+    what it buys: ten seconds of gravity plus a ten-kilonewton shove, and the position and velocity
+    are still exactly zero. Not “small”. Zero, because <code>x · 0</code> is zero and there is nothing
+    for the arithmetic to round.
+  </p>

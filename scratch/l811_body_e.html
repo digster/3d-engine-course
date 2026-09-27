@@ -1,0 +1,392 @@
+  <h2 id="implementation">13. Writing it</h2>
+
+  <p>
+    The code arrived in the order the sections did, and it is worth following in that order,
+    because each layer is short once the one beneath it exists. There is one new pair of files,
+    <code>phys/constraint.hpp</code> and <code>.cpp</code>, and it sits <em>below</em> the solver:
+    it knows what a body's velocity and inverse inertia are and nothing about contacts, manifolds
+    or the loop that will visit it. <code>solver.hpp</code> includes it; it includes nothing from
+    the solver. That dependency direction is the physical shape of §3's claim — a contact is a
+    special case of a row, not the other way round.
+  </p>
+
+  <h3>Step 1: a row</h3>
+
+  <p>
+    A row is the Jacobian's four blocks, the angular half of <code>M⁻¹Jᵀ</code> precomputed, an
+    effective mass, and the two bounds that say what kind of constraint it is. Nothing in it knows
+    whether it is a contact, a rope or a motor:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/include/engine/phys/constraint.hpp — the row, abridged to its fields</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">struct jacobian_row
+{
+    vec3 linear_a{};
+    vec3 angular_a{};
+    vec3 linear_b{};
+    vec3 angular_b{};
+
+    vec3 inv_inertia_angular_a{};
+    vec3 inv_inertia_angular_b{};
+
+    float mass = 0.0f;
+    float target = 0.0f;
+    float bias = 0.0f;
+    float error = 0.0f;
+    float lower = -k_unbounded;
+    float upper = k_unbounded;
+    float impulse = 0.0f;
+    float pseudo_impulse = 0.0f;
+
+    std::uint8_t role = 0;
+    std::uint8_t component = 0;
+};</code></pre>
+  </div>
+
+  <p>
+    The four blocks are four <code>vec3</code>s rather than a <code>float[12]</code> because each is
+    a quantity with a meaning — a direction, or a lever arm crossed with one — and every operation on
+    a row is four dot products or four scaled adds, never a twelve-long loop that hides which half
+    is which. Two constructors cover every row in the lesson, and §2 derived both:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — the two shapes a row can have</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">jacobian_row point_row(vec3 direction, vec3 r_a, vec3 r_b)
+{
+    jacobian_row row;
+    row.linear_a = -direction;
+    row.angular_a = -cross(r_a, direction);
+    row.linear_b = direction;
+    row.angular_b = cross(r_b, direction);
+    return row;
+}
+
+jacobian_row angular_row(vec3 axis)
+{
+    jacobian_row row;
+    row.angular_a = -axis;
+    row.angular_b = axis;
+    return row;
+}</code></pre>
+  </div>
+
+  <p>
+    The minus signs are the whole of the correctness here. <code>J·V</code> is to be the rate at
+    which <code>C</code> <em>grows</em>, and <code>a</code>'s point velocity is subtracted; get one
+    of them backwards and §3's second control describes the result.
+  </p>
+
+  <h3>Step 2: prepare a row, and solve it</h3>
+
+  <p>
+    <code>prepare_row</code> multiplies each angular half through by its body's world inverse
+    inertia tensor and sums the four non-negative terms of <code>J M⁻¹ Jᵀ</code>. Then the solve,
+    which is 8.9's three lines with the contact removed — and the one function in the file every
+    other one calls:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — solve_row</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">float solve_row(jacobian_row&amp; row, float inv_mass_a, float inv_mass_b, vec3&amp; v_a, vec3&amp; w_a,
+                vec3&amp; v_b, vec3&amp; w_b, float extra)
+{
+    const float jv = row_velocity(row, v_a, w_a, v_b, w_b);
+
+    float delta = row.mass * (row.target + extra - jv);
+
+    const float total = std::clamp(row.impulse + delta, row.lower, row.upper);
+    delta = total - row.impulse;
+    row.impulse = total;
+
+    v_a = v_a + row.linear_a * (inv_mass_a * delta);
+    w_a = w_a + row.inv_inertia_angular_a * delta;
+    v_b = v_b + row.linear_b * (inv_mass_b * delta);
+    w_b = w_b + row.inv_inertia_angular_b * delta;
+    return delta;
+}</code></pre>
+  </div>
+
+  <p>
+    Three things about it. <strong>It clamps the accumulated impulse, never the increment</strong>
+    — 8.9's rule, and with <code>[0, ∞)</code> it is 8.9's clamp exactly, with
+    <code>(−∞, ∞)</code> it is no clamp at all, and with <code>[−τh, τh]</code> it is a motor running
+    out of torque. <strong><code>extra</code> is added to the target</strong>, and the solver passes
+    the row's bias there under Baumgarte and zero otherwise; that one argument is the entire
+    difference between the corrections on the velocity side. And <strong>it takes four
+    <code>vec3&amp;</code> and no bodies</strong>. The velocity pass hands it a body's real velocities
+    and the position pass hands it the pseudo ones, and a row cannot tell which it has — 8.10's
+    <code>solve_positions</code>, which already took no bodies, finished.
+  </p>
+
+  <h3>Step 3: a joint is authored in the bodies' own frames</h3>
+
+  <p>
+    A joint's anchors and axes are stored in each body's own frame, because that is what a joint
+    is: the hinge pin is screwed to the door, not to a place in the world. The <code>make_*</code>
+    functions take the pose you want in world terms and convert it. A hinge stores its axis
+    <em>twice</em>, once per body, because the whole job of its two alignment rows is to notice when
+    those two copies stop agreeing:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — make_hinge</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">joint make_hinge(const rigid_body&amp; a, const rigid_body&amp; b, vec3 world_anchor, vec3 world_axis)
+{
+    joint j = make_ball_socket(a, b, world_anchor);
+    j.kind = joint_kind::hinge;
+
+    const vec3 axis = normalised(world_axis);
+    j.axis_a = local_direction_of(a, axis);
+    j.axis_b = local_direction_of(b, axis);
+    return j;
+}</code></pre>
+  </div>
+
+  <p>
+    <code>make_ball_socket</code>, which it builds on, also records
+    <code>rest = conjugate(q_a) * q_b</code> — the relative orientation at which the hinge angle
+    reads zero — so a door authored half open reads zero half open, and its limits are measured
+    from the pose a level designer placed it in. The second half of the <code>joint</code> struct is
+    its warm-start state, and every field of it is in a frame that cannot rotate out from under it:
+    the point and perpendicular impulses as world vectors, and the limit and motor impulses as
+    scalars along an axis fixed in body <code>a</code>.
+  </p>
+
+  <h3>Step 4: prepare a joint — rows, blocks, and one lambda for every one-sided row</h3>
+
+  <p>
+    <code>prepare_joint</code> is a switch on three kinds that mostly differs in which rows it emits.
+    Every one-sided row — a rope's long end, a distance joint's short end, each end of a hinge limit
+    — goes through one lambda, and it is §10's argument in eight lines:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — inside prepare_joint</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">const auto one_sided = [&amp;](jacobian_row row, float c, row_role role, float warm) {
+    if (c &gt; 0.0f &amp;&amp; !cfg.speculative_limits) { return; }
+    row.error = c;
+    row.lower = 0.0f;
+    row.upper = k_unbounded;
+    row.target = c &gt; 0.0f ? -c * inv_h : 0.0f;
+    row.bias = c &lt; 0.0f ? std::min(-cfg.baumgarte * c * inv_h, cfg.max_correction_speed) : 0.0f;
+    finish(row, role, 0, warm);
+};</code></pre>
+  </div>
+
+  <p>
+    <code>C</code> is the gap left. If it is still positive, the row exists anyway (speculation) with
+    a target of <code>−C/h</code>; if it has closed, the target is zero and a bias pushes back out.
+    Which is why the rope is two lines and the hinge limit is two lines:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — a rope, and a hinge limit</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">one_sided(point_row(-u, batch.r_a, batch.r_b), j.max_length - len,
+          row_role::limit_upper, j.limit_impulse[1]);
+
+one_sided(angular_row(a1), batch.angle - j.limit.lower, row_role::limit_lower,
+          j.limit_impulse[0]);
+one_sided(angular_row(-a1), j.limit.upper - batch.angle, row_role::limit_upper,
+          j.limit_impulse[1]);</code></pre>
+  </div>
+
+  <p>
+    The point constraint — a socket's whole content and a hinge's pin — is where the block is built.
+    Everything <code>K</code> needs is already in the batch, and 8.3 wrote <code>skew</code> for
+    exactly this moment ("8.9's contact Jacobian is written in terms of <code>[r]ₓ</code>", its doc
+    comment says, waiting):
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — the 3×3 block</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">const mat3 sa = skew(batch.r_a);
+const mat3 sb = skew(batch.r_b);
+const float im = batch.inv_mass_a + batch.inv_mass_b;
+const mat3 k = diagonal(vec3{im, im, im}) - sa * batch.inv_inertia_a * sa
+               - sb * batch.inv_inertia_b * sb;
+
+batch.point_mass = inverse(k);</code></pre>
+  </div>
+
+  <p>
+    <code>inverse</code> returns zeros for a singular matrix — 2.6's contract — and a singular
+    <code>K</code> means two immovable bodies, for which zero is the right effective mass, exactly as
+    8.9's scalar version returned zero. The hinge's 2×2 alignment block is the same idea with no
+    linear terms and an explicit inverse of a symmetric 2×2, and its perpendiculars come from
+    <code>perpendicular_pair</code> applied to the axis in <code>a</code>'s frame, then rotated
+    out — §9's design, in three lines.
+  </p>
+
+  <p>
+    The rows are emitted in a deliberate order, and it is solved in that order: <strong>motor, then
+    limits, then the alignment block, then the pin</strong>. The rows that may give way — a motor out
+    of torque, a limit that lets go — go first, so the last thing each sweep satisfies is the thing
+    that must never give way. A motor pushing into its own limit then loses to the limit, and a limit
+    and a pin that disagree are settled in the pin's favour.
+  </p>
+
+  <h3>Step 5: solve a joint</h3>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — solve_joint's three stages, abridged</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">for (int i = 0; i &lt; batch.row_count; ++i)
+{
+    jacobian_row&amp; row = batch.rows[i];
+    report.impulse += std::abs(solve_row(row, batch.inv_mass_a, batch.inv_mass_b, va, wa, vb,
+                                         wb, use_bias ? row.bias : 0.0f));
+}
+
+if (batch.angular_block)
+{
+    const vec3 w_rel = wb - wa;
+    const float r0 = (use_bias ? batch.angular_bias[0] : 0.0f) - dot(batch.perp[0], w_rel);
+    const float r1 = (use_bias ? batch.angular_bias[1] : 0.0f) - dot(batch.perp[1], w_rel);
+    const float l0 = batch.angular_mass[0] * r0 + batch.angular_mass[1] * r1;
+    const float l1 = batch.angular_mass[1] * r0 + batch.angular_mass[2] * r1;
+    batch.angular_impulse[0] += l0;
+    batch.angular_impulse[1] += l1;
+    apply_angular_impulse(batch, wa, wb, l0, l1);
+    report.impulse += std::abs(l0) + std::abs(l1);
+}
+
+if (batch.point_block)
+{
+    const vec3 cdot = anchor_velocity(batch, va, wa, vb, wb);
+    const vec3 lambda = batch.point_mass * ((use_bias ? batch.point_bias : vec3{}) - cdot);
+    batch.point_impulse = batch.point_impulse + lambda;
+    apply_point_impulse(batch, va, wa, vb, wb, lambda);
+    report.impulse += length(lambda);
+}</code></pre>
+  </div>
+
+  <p>
+    No clamp on either block: a pin may push in any direction, which is what makes a block a linear
+    solve. <code>solve_joint_positions</code> is the same three stages against the pseudo velocities
+    and the bias, with the motor skipped — a motor has no position error, only a speed — and
+    <code>write_back</code> copies every accumulator into the joint, zeroing the fields this step had
+    no row for, so that a limit that was left is a limit that is forgotten.
+  </p>
+
+  <h3>Step 6: the solver holds joints</h3>
+
+  <p>
+    Four changes to 8.10's <code>solver.hpp</code>, and none of them touches the contact solve:
+  </p>
+
+  <ul>
+    <li>
+      <strong><code>pseudo_velocity</code> moved down</strong> into <code>constraint.hpp</code>,
+      unchanged, because joints need it and joints sit below the loop. 8.10's comment on it had
+      predicted the move: "8.11's joints will want the same array and will get it for free".
+    </li>
+    <li>
+      <strong>The class was renamed <code>constraint_solver</code></strong>, with
+      <code>using contact_solver = constraint_solver;</code> so that 8.10's demo and harness compile
+      unchanged. It gained <code>add(a, b, joint&amp;)</code> beside <code>add(a, b, manifold&amp;, material)</code>,
+      a <code>joint_pair</code> beside <code>contact_pair</code>, and a range of joints on each
+      <code>island</code>.
+    </li>
+    <li>
+      <strong><code>union_edge</code> was lifted out of the contact loop</strong> so that joints could
+      call it. There is exactly one statement of the rule "an edge is an edge only when both ends can
+      move", and a contact and a joint cannot come to disagree about it.
+    </li>
+    <li>
+      <strong>Every stage that visits a manifold now visits the island's joints first</strong>:
+      prepared and warm-started once, visited in each velocity sweep, visited in each position sweep
+      under split impulse, written back at the end.
+    </li>
+  </ul>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — one velocity sweep of one island</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">for (int k = 0; k &lt; isl.joint_count; ++k)
+{
+    const int ji = island_joints_[static_cast&lt;std::size_t&gt;(isl.first_joint + k)];
+    const joint_pair&amp; p = joints_[static_cast&lt;std::size_t&gt;(ji)];
+    const joint_report r = solve_joint(bodies_[p.body_a], bodies_[p.body_b],
+                                       joint_batches_[static_cast&lt;std::size_t&gt;(ji)],
+                                       joint_bias);
+    stats_.joint_residual = std::max(stats_.joint_residual, r.max_residual);
+}
+
+for (int k = 0; k &lt; isl.contact_count; ++k)
+{
+    const int ci = island_contacts_[static_cast&lt;std::size_t&gt;(isl.first_contact + k)];
+    const contact_pair&amp; p = pairs_[static_cast&lt;std::size_t&gt;(ci)];
+    const solve_report r = solve_contacts(bodies_[p.body_a], bodies_[p.body_b],
+                                          batches_[static_cast&lt;std::size_t&gt;(ci)], cfg);
+    stats_.max_residual = std::max(stats_.max_residual, r.max_residual);
+    stats_.normal_impulse += r.normal_impulse;
+    stats_.friction_impulse += r.friction_impulse;
+}</code></pre>
+  </div>
+
+  <p>
+    Joints before contacts is Box2D's order, and in this engine it is argued rather than measured:
+    a contact is the constraint whose violation is least forgivable on screen — a limb through a floor
+    is worse than a limb a millimetre off its socket — so it gets the last word in each sweep.
+    Measuring the other order is §18's fourth exercise. The joint's correction follows
+    <code>solver_config::correction</code>, one setting for the whole scene, and
+    <code>solver_config</code> gained a nested <code>joint_config</code> for the joints' own knobs.
+  </p>
+
+  <h3>Step 7: the caller's step, and the pairs a joint excuses</h3>
+
+  <p>
+    From outside, a scene with joints is 8.10's step with one more loop, and one more test in the
+    narrow phase. Two bodies a joint connects overlap at the joint by construction — two links of a
+    chain, two hinged planks — and a contact solver that sees that overlap spends every step pushing
+    apart two bodies the joint is pulling together. The engine does not run the narrow phase, the
+    caller does, so the engine provides the tool: <code>collision_filter</code>, a sorted vector of
+    8.7's pair keys with a binary search per broadphase pair.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">demos/joints/main.cpp — inside the step</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">for (const broadphase_pair&amp; p : grid_.pairs())
+{
+    if (bodies[p.a].kind != body_kind::dynamic &amp;&amp; bodies[p.b].kind != body_kind::dynamic) { continue; }
+
+    // Lesson 8.11: a joint's two bodies do not collide with each other.
+    if (filter_.excluded(p.a, p.b)) { continue; }
+
+    contact_manifold m = collide_pair(p.a, p.b);
+    if (m.count == 0) { continue; }
+    const std::uint64_t key = pair_key(p.a, p.b);
+    if (const contact_manifold* previous = cache_.find(key)) { carry_impulses(m, *previous); }
+    manifolds_.push_back(m);
+    keys_.push_back(key);
+    pair_a_.push_back(p.a);
+    pair_b_.push_back(p.b);
+}
+
+solver_.begin(world_.bodies());
+for (std::size_t i = 0; i &lt; manifolds_.size(); ++i)
+{
+    solver_.add(pair_a_[i], pair_b_[i], manifolds_[i], material_);
+}
+for (link&amp; l : links_) { solver_.add(l.a, l.b, l.j); }
+stats_ = solver_.solve(h, cfg, sleep_);</code></pre>
+  </div>
+
+  <p>
+    The joint does not know which bodies it joins; the caller hands the two indices to
+    <code>add</code> every step, exactly as for a manifold, because <code>body_world::bodies()</code>
+    is dense and its order is not stable, so an index is only meaningful for one step.
+    <code>engine/CMakeLists.txt</code> and <code>engine.hpp</code> gained one line each — the first
+    new translation unit since 8.9 — and the umbrella header's include was written in the same edit
+    as the file it names, which the configure-time lint would have insisted on anyway.
+  </p>

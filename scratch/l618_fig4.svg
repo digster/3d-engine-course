@@ -1,0 +1,41 @@
+<svg viewBox="0 0 760 478" role="img" aria-labelledby="l618f4-t l618f4-d">
+  <title id="l618f4-t">The glyph atlas: six shelves, a solid block, and two ways to measure the packer</title>
+  <desc id="l618f4-d">A 128 by 128 atlas with six horizontal shelves of decreasing height, a small red solid block at the top left, and 61 unused rows at the bottom. Below, two boxed measurements: a misleading occupancy figure and the shelf efficiency that actually measures the packer.</desc>
+  <defs>
+    <marker id="e-i-l618f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618f4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Six shelves, tallest first, and the number that looks like a verdict on the packer but is not.</text>
+<rect x="40" y="56" width="281.6" height="281.6" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.06"/>
+<rect x="40" y="56" width="281.6" height="281.6" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="42.2" y="58.2" width="277.20000000000005" height="30.800000000000004" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="77.6" class="xs mono" text-anchor="start">14 px tall, 17 glyphs</text>
+<rect x="42.2" y="91.2" width="277.20000000000005" height="24.200000000000003" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="107.30000000000001" class="xs mono" text-anchor="start">11 px tall, 14 glyphs</text>
+<rect x="42.2" y="117.60000000000001" width="277.20000000000005" height="22.0" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="132.60000000000002" class="xs mono" text-anchor="start">10 px tall, 17 glyphs</text>
+<rect x="42.2" y="141.8" width="277.20000000000005" height="19.8" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="155.7" class="xs mono" text-anchor="start">9 px tall, 15 glyphs</text>
+<rect x="42.2" y="163.8" width="277.20000000000005" height="19.8" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="177.7" class="xs mono" text-anchor="start">9 px tall, 16 glyphs</text>
+<rect x="42.2" y="185.8" width="277.20000000000005" height="15.400000000000002" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="333.6" y="197.5" class="xs mono" text-anchor="start">7 px tall, 15 glyphs</text>
+<rect x="40.0" y="56.0" width="8.8" height="8.8" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.9"/>
+<line x1="48.8" y1="64.8" x2="329.6" y2="42" class="grid" stroke-width="1.0"/>
+<text x="333.6" y="46" class="xs t-hi" text-anchor="start">the 2x2 solid block</text>
+<line x1="40" y1="203.4" x2="321.6" y2="203.4" class="grid" stroke-width="1.4"/>
+<text x="180.8" y="274.5" class="xs muted" text-anchor="middle">61 rows the packer never reached</text>
+<line x1="20" y1="359.6" x2="740" y2="359.6" class="grid" stroke-width="1.2"/>
+<rect x="20" y="371.6" width="350" height="62" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.09"/>
+<text x="32" y="389.6" class="xs mono" text-anchor="start">"occupancy" = 7145 / 128x128 = 43.6%</text>
+<text x="32" y="407.6" class="xs t-bad" text-anchor="start">The denominator is a power of two, fixed before the</text>
+<text x="32" y="421.6" class="xs t-bad" text-anchor="start">packer runs. A perfect packer scores the same.</text>
+<rect x="392" y="371.6" width="348" height="62" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.09"/>
+<text x="404" y="389.6" class="xs mono" text-anchor="start">shelf efficiency = 7145 / 128x67 = 83.3%</text>
+<text x="404" y="407.6" class="xs t-ok" text-anchor="start">Of the rows it reached for, how much did it use?</text>
+<text x="404" y="421.6" class="xs t-ok" text-anchor="start">Both halves now depend on what the packer did.</text>
+<text x="20" y="459.6" class="xs muted" text-anchor="start">The atlas is 128 square because 7145 texels of glyph will not fit in 64x64 = 4096. That is a fact about the FONT.</text>
+</svg>

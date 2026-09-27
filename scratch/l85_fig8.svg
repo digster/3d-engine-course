@@ -1,0 +1,252 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l85f8-t l85f8-d">
+  <title id="l85f8-t">With a shared up axis GJK never produces a tetrahedron; tilting one box one degree produces 77,326 of them.</title>
+  <desc id="l85f8-d">Two bar charts of the terminal simplex size, one to four points. On the left, two boxes sharing an up axis: the four-point bar is empty. On the right, the same pairs with one box tilted by one degree: the four-point bar holds 77,326 of 100,000.</desc>
+  <defs>
+    <marker id="e-i-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-grey-l85f8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f918a"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Two boxes standing on the same floor, at any yaw.</text>
+<text x="20" y="42" class="xs muted" text-anchor="start">100,000 pairs, and what GJK hands 8.6 when it stops.</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+2
+0
+"
+ 
+y
+=
+"
+6
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+0
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+5
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="32" y="80" class="xs muted" text-anchor="start">shared up axis</text>
+<
+r
+e
+c
+t
+ 
+x
+=
+"
+4
+7
+0
+"
+ 
+y
+=
+"
+6
+2
+"
+ 
+w
+i
+d
+t
+h
+=
+"
+4
+0
+0
+"
+ 
+h
+e
+i
+g
+h
+t
+=
+"
+2
+5
+0
+"
+ 
+r
+x
+=
+"
+3
+"
+ 
+f
+i
+l
+l
+=
+"
+n
+o
+n
+e
+"
+ 
+s
+t
+r
+o
+k
+e
+=
+"
+#
+8
+f
+9
+1
+8
+a
+"
+ 
+s
+t
+r
+o
+k
+e
+-
+w
+i
+d
+t
+h
+=
+"
+1
+.
+1
+"
+/
+>
+<text x="482" y="80" class="xs muted" text-anchor="start">CONTROL · one box tilted 1°</text>
+<rect x="74" y="258.0" width="58" height="2.0" fill="#8f918a" fill-opacity="0.85"/>
+<text x="103.0" y="276" class="xs mono muted" text-anchor="middle">1</text>
+<text x="103.0" y="252.02073783298687" class="xs mono" text-anchor="middle">958</text>
+<rect x="158" y="215.4" width="58" height="44.6" fill="#8f918a" fill-opacity="0.85"/>
+<text x="187.0" y="276" class="xs mono muted" text-anchor="middle">2</text>
+<text x="187.0" y="209.37569567294656" class="xs mono" text-anchor="middle">21,599</text>
+<rect x="242" y="100.0" width="58" height="160.0" fill="#8f918a" fill-opacity="0.85"/>
+<text x="271.0" y="276" class="xs mono muted" text-anchor="middle">3</text>
+<text x="271.0" y="94.0" class="xs mono" text-anchor="middle">77,443</text>
+<line x1="326" y1="260" x2="384" y2="260" class="grid" stroke-width="2.0"/>
+<text x="355.0" y="276" class="xs mono muted" text-anchor="middle">4</text>
+<text x="355.0" y="254.0" class="xs mono" text-anchor="middle">0</text>
+<line x1="60" y1="260" x2="400" y2="260" class="grid" stroke-width="1.0"/>
+<text x="220.0" y="294" class="xs muted" text-anchor="middle">terminal simplex size</text>
+<line x1="524" y1="260" x2="582" y2="260" class="grid" stroke-width="2.0"/>
+<text x="553.0" y="276" class="xs mono muted" text-anchor="middle">1</text>
+<text x="553.0" y="253.96487739369599" class="xs mono" text-anchor="middle">17</text>
+<rect x="608" y="257.6" width="58" height="2.4" fill="#8f918a" fill-opacity="0.85"/>
+<text x="637.0" y="276" class="xs mono muted" text-anchor="middle">2</text>
+<text x="637.0" y="251.55174773704533" class="xs mono" text-anchor="middle">1,185</text>
+<rect x="692" y="215.6" width="58" height="44.4" fill="#8f918a" fill-opacity="0.85"/>
+<text x="721.0" y="276" class="xs mono muted" text-anchor="middle">3</text>
+<text x="721.0" y="209.638082202394" class="xs mono" text-anchor="middle">21,472</text>
+<rect x="776" y="100.2" width="58" height="159.8" fill="#f0961e" fill-opacity="0.85"/>
+<text x="805.0" y="276" class="xs mono muted" text-anchor="middle">4</text>
+<text x="805.0" y="94.24172617279805" class="xs mono" text-anchor="middle">77,326</text>
+<line x1="510" y1="260" x2="850" y2="260" class="grid" stroke-width="1.0"/>
+<text x="670.0" y="294" class="xs muted" text-anchor="middle">terminal simplex size</text>
+<text x="20" y="336" class="xs" text-anchor="start">EVERY vertex of the difference set has y exactly 0 in the left case, because both boxes share an up axis and `support_local`</text>
+<text x="20" y="352" class="xs" text-anchor="start">picks the same sign on it for both. The search is confined to a plane, so it can never build a tetrahedron: 0 of 100,000,</text>
+<text x="20" y="368" class="xs" text-anchor="start">against 77,326 once one box is tilted by a single degree. Of the 65,633 pairs overlapping by more than 10 cm, 0 produce one.</text>
+<text x="20" y="388" class="xs t-hi" text-anchor="start">8.6's EPA is always described as starting from the tetrahedron GJK left behind. On the commonest arrangement in a game there is none.</text>
+</svg>

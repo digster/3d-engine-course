@@ -1,0 +1,412 @@
+
+  <h2 id="voices">9. The voice table, and a thread you do not own</h2>
+
+  <p>
+    A <strong>voice</strong> is one sound currently playing: a pointer to the sound, a cursor, a
+    step, four gains and two flags. Fifty-six bytes. The mixer holds up to 64 of them and walks the
+    live ones once per buffer.
+  </p>
+
+  <h3>9.1 Twenty-five lessons later, the case handles were built for</h3>
+
+  <p>
+    Lesson 5.4 built generational handles and justified them on meshes and textures, which was
+    honest but not compelling — a mesh lives for the whole level, and a raw pointer to one is wrong
+    only in the abstract. A voice is the opposite, and it is the case that makes the design
+    inevitable:
+  </p>
+
+  <ul>
+    <li>It exists for as long as a footstep — a third of a second.</li>
+    <li>It ends <strong>on a thread you do not control</strong>, at a moment you did not choose.</li>
+    <li>Its slot is immediately reused by the next footstep, because footsteps are the most common
+        thing in the game.</li>
+  </ul>
+
+  <p>
+    A caller holding a <code>voice*</code> across a second is holding a pointer to a different sound.
+    The symptom is the kind that gets filed as unreproducible: <em>turning down the explosion made
+    the music quiet</em>. There is no plausible mechanism, it happens minutes later, and it depends
+    on how many sounds played in between.
+  </p>
+
+  <p>
+    With a <code>voice_id</code>, the stale handle simply stops resolving, and every function that
+    takes one returns <code>false</code> rather than acting on the wrong voice. That is not defensive
+    programming — "the sound you are asking about has finished" is a true and useful answer, and it
+    is the <em>normal</em> answer for a fire-and-forget effect:
+  </p>
+
+  <pre><code class="lang-cpp">/// Fire and forget. The handle returned here is DROPPED — which is the
+/// normal way to play a sound effect and is exactly the case generational
+/// handles exist for: the slot is reused within a second, and nothing that
+/// kept this id can ever act on the sound that replaces it.
+void ping()
+{
+    const transform placement{.position = listener_pos_, .rotation = listener_rot_};
+    const voice_id id = mixer_.play_spatial(ping_, listener_from(placement),
+                                            sources_[0].e, {});
+    pings_ += id.valid() ? 1 : 0;
+}</code></pre>
+
+  <p>
+    The declaration in the public header is the other half of the trick, and it is
+    <code>handle&lt;T&gt;</code>'s phantom parameter used for exactly what it is for:
+  </p>
+
+  <pre><code class="lang-cpp">struct voice;                    // never defined in any header
+using voice_id = handle&lt;voice&gt;;  // four bytes, and T is never stored</code></pre>
+
+  <p>
+    A caller may hold, copy, compare and store handles to voices without the layout of one ever being
+    public. <code>voice</code> is completed in <code>mixer.cpp</code> and nowhere else.
+  </p>
+
+  <h3>9.2 The one shared mutable thing, and the mutex on it</h3>
+
+  <p>
+    SDL runs the mix on its own thread. The game calls <code>play</code>, <code>set_gain</code> and
+    <code>stop</code> on the main thread. The voice table is touched by both, which makes it the only
+    shared mutable state in the subsystem — the sounds themselves are immutable (§4's asset/playhead
+    split, for the third lesson running) and everything else is a counter.
+  </p>
+
+  <p>
+    This engine guards it with one mutex, and the header says so rather than pretending otherwise:
+  </p>
+
+  <blockquote>
+    <p>
+      <strong>A mutex on a real-time thread is a compromise and this comment is where it is
+      admitted.</strong> If the main thread is inside <code>play()</code> when the callback fires,
+      the callback <em>waits</em> — and on a machine under load the OS can descend into priority
+      inversion, where the audio thread blocks on a lock held by a thread that has been descheduled.
+    </p>
+  </blockquote>
+
+  <p>
+    The correct answer is a lock-free command queue: the main thread pushes "start voice 7" into a
+    ring buffer and the audio thread drains it, so neither ever waits. That needs the memory-ordering
+    vocabulary of Module 9's job system, which is why it is there and not here. What makes the mutex
+    acceptable in the meantime is that the critical sections on the main thread are a handful of
+    stores, and that we can <em>measure</em> them:
+  </p>
+
+  <pre>I.2  set_gain (lock, resolve, two stores): 9.0 ns</pre>
+
+  <p>
+    Nine nanoseconds, uncontended, and bounded — there is no loop in there and no allocation. Against
+    a 10,667 µs deadline that is a rounding error even if every voice's gain is set in the same
+    microsecond the callback fires.
+  </p>
+
+  <p>
+    Two smaller decisions follow from the same constraint, and both are worth naming because they
+    look like sloppiness and are not:
+  </p>
+
+  <p>
+    <strong>The audio thread never removes a voice.</strong> When a non-looping sound runs off its
+    end, <code>mix_into</code> sets <code>finished = true</code> and moves on;
+    <code>mixer::update()</code> does the actual <code>pool::remove</code> on the main thread, next
+    frame. No container is mutated on the real-time path, so no reallocation can happen there.
+  </p>
+
+  <p>
+    <strong><code>report()</code> does not take the lock</strong> — except for one field. The
+    counters are <code>std::atomic</code> and are read with <code>memory_order_relaxed</code>, so a
+    debug panel drawing at 60 Hz cannot stall the audio thread. A relaxed read of a counter can be
+    one increment out of date, which for a diagnostic is exactly right. <code>live_voices</code> is
+    the exception and takes the lock, because it is a container's size rather than a counter, and
+    reading a size while another thread inserts is a race rather than a stale number.
+  </p>
+
+  <h3>9.3 The hard rule, and the one thing in this file that is undefined behaviour</h3>
+
+  <p>
+    A voice holds <code>const sound*</code>. Non-owning, raw, and deliberate: a four-megabyte sound
+    is not going to be copied per voice, and a <code>shared_ptr</code> would put a refcount decrement
+    — and therefore possibly a <code>free</code> — on the audio thread.
+  </p>
+
+  <p>
+    So the rule is: <strong>the sound must outlive the voice</strong>, and the discipline that makes
+    it true is <code>stop_sound()</code> immediately before releasing any sound. It is the one rule
+    in this subsystem whose violation is undefined behaviour rather than a counter, and
+    <code>devcheck_78.cpp</code> demonstrates it in code that is meant to be copied:
+  </p>
+
+  <pre><code class="lang-cpp">// The lifetime rule, obeyed: `tone` is about to go out of scope and the
+// mixer holds a pointer into it. `close()` would do this too; saying it
+// explicitly is what the rule looks like in code you are meant to copy.
+mix.stop_sound(tone);
+mix.close();</code></pre>
+
+  <h3>9.4 Offline, because real-time code you cannot call from a test is undebuggable</h3>
+
+  <p>
+    <code>mix_into</code> is <strong>public</strong>, and <code>mixer::open_offline()</code> builds
+    the voice table with no device at all. Everything works afterwards except making a noise.
+  </p>
+
+  <p>
+    That is not a testing convenience bolted on afterwards; it is what makes the subsystem legible.
+    Offline, the real-time path is a pure function from a voice table to an array of floats, and an
+    array of floats can be diffed, plotted and asserted on. Every waveform in this lesson and every
+    number in <code>verify_78.cpp</code> was produced this way, on a machine that was never asked
+    whether it had speakers. The demo uses it too: <code>--shot</code> opens no device, so a
+    screenshot is silent, deterministic, and reproducible on a build machine.
+  </p>
+
+@@FIG_DEMO@@
+
+  <h3>9.5 …which leaves exactly one thing untested, and it found a bug</h3>
+
+  <p>
+    An offline mix never opens a device, never runs SDL's callback, never resumes a stream and never
+    shuts one down. Those are precisely the paths that are either completely right or completely
+    silent, so <code>devcheck_78.cpp</code> exists to exercise them: four lines of setup, a tone, 700
+    milliseconds, and a report.
+  </p>
+
+  <p>
+    Its first run said this:
+  </p>
+
+  <pre>freq 44100  buffers 58  frames 29696  starved 28  clipped 0
+live 1  peak 0.0141  mix max 25.83 us of 11609.98 us (0.223%)</pre>
+
+  <p>
+    <strong>Twenty-eight of fifty-eight buffers starved</strong>, on a mix using 0.2% of its budget,
+    on a quiet machine, with nothing audibly wrong. That is not a dropout problem; that is the shape
+    of a counter measuring the wrong event.
+  </p>
+
+  <p>
+    And it was. The counter incremented when <code>SDL_GetAudioStreamQueued()</code> returned zero as
+    the callback began, on the reasoning that an empty queue means the device has already run out of
+    what we last gave it. The reasoning is wrong for SDL3's pull model: <em>the callback is invoked
+    because the device wants more</em>, so finding the queue drained at that instant is the steady
+    state, not a failure.
+  </p>
+
+  <p>
+    The counter is now called <code>queue_empty</code> and says what it observes. The question it was
+    meant to answer is answered by <code>late</code>, which compares the mixer's own time against the
+    mixer's own deadline and needs nothing from the driver at all:
+  </p>
+
+  <pre><code class="lang-cpp">// The deadline for THIS chunk, not for a full buffer: the callback is
+// free to ask for a partial one, and charging a 64-frame chunk with a
+// 512-frame budget would hide exactly the overrun this counter exists to
+// find.
+const double chunk_budget_us = cfg_.freq &gt; 0
+    ? 1e6 * static_cast&lt;double&gt;(frames) / static_cast&lt;double&gt;(cfg_.freq)
+    : 0.0;
+if (chunk_budget_us &gt; 0.0 &amp;&amp; us &gt; chunk_budget_us)
+{
+    st_-&gt;late.fetch_add(1, std::memory_order_relaxed);
+}</code></pre>
+
+  <p>
+    A healthy run now prints <code>late 0</code>, which is a check whose degenerate case is a
+    <em>failure</em>. That is the general lesson, and it is 7.7's arriving in a new subsystem for the
+    fourth lesson running: <strong>a control that fires on the healthy case tells you nothing about
+    the sick one</strong>. The old counter would have been "working" — printing non-zero — for the
+    entire life of the project, and the day a real dropout happened it would have said nothing new.
+  </p>
+
+  <h2 id="budget">10. The budget</h2>
+
+  <p>
+    Everything above has been about correctness. This section is about the deadline, and the numbers
+    are unexpectedly comfortable — which is itself the finding, because it relocates the danger.
+  </p>
+
+@@FIG_BUDGET@@
+
+  <pre>I.1  buffer 512 frames at 48000 Hz = 10.667 ms of audio.
+     voices    us/buffer   % of budget   ns/voice/frame
+          0       0.619         0.01%           0.00
+          1       1.032         0.01%           2.01
+          4       2.304         0.02%           1.13
+         16       7.957         0.07%           0.97
+         32      15.056         0.14%           0.92
+         64      29.761         0.28%           0.91</pre>
+
+  <p>
+    Sixty-four simultaneous voices — each one a fractional-step read with a linear interpolation, two
+    multiplies, two adds and two gain increments — cost <strong>29.76 µs of a 10,667 µs budget</strong>.
+    That is 0.28%, and the per-voice-per-frame column settles at 0.91 ns, which on this machine is
+    about three cycles.
+  </p>
+
+  <p>
+    Two things in that table are worth a sentence each. The zero-voice row is <em>not</em> zero: 0.62
+    µs goes on clearing the buffer and on the master-gain-and-clip pass, which touches all 1,024
+    samples whatever is playing. And the per-voice cost <em>falls</em> from 2.01 ns to 0.91 ns as
+    voices are added, because that fixed cost is being amortised — the first voice is charged for the
+    whole scan.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>These are the only numbers in this lesson that move.</strong> Run the harness twice
+      and diff the two transcripts: every section from A to H comes back byte for byte identical —
+      the round-trip error, the &radic;N table, the pan powers, the distance curves, the injected
+      step, the resampler's SNR — because all of them are arithmetic on the same inputs. Section I
+      moves by two or three per cent, because it is a <em>timing</em>, and a timing on a
+      general-purpose machine is a measurement of the machine as much as of the code. Quote it to
+      three decimals if you like; believe the first two.
+    </p>
+    <p>
+      That split is worth noticing as a property of the harness rather than as a caveat. Nine
+      sections and only one of them needs a warm-up spin, a best-of-three and a control for the
+      clock's own overhead &mdash; and it is the only one whose claims are about the machine.
+    </p>
+  </div>
+
+  <h3>10.1 So the danger is not the mixing</h3>
+
+  <p>
+    If sixty-four voices are 0.28% of the budget, the thing that will cause a dropout is not the
+    mixing. It is <em>anything unbounded that happens on that thread</em>, and the list is short and
+    absolute:
+  </p>
+
+  <ul>
+    <li><strong>No allocation.</strong> <code>new</code>, <code>push_back</code>,
+        <code>std::string</code> — all of them can take a global heap lock that the main thread is
+        holding, for an unbounded time. The scratch buffer is sized in <code>open()</code> and never
+        grows.</li>
+    <li><strong>No logging and no <code>printf</code>.</strong> Both do I/O.</li>
+    <li><strong>No unbounded waiting.</strong> One mutex, held for the length of the mix, with the
+        compromise stated in §9.2.</li>
+    <li><strong>No exceptions and no RTTI.</strong> The engine-core rule from 5.3, which here is also
+        a latency rule.</li>
+  </ul>
+
+  <p>
+    The second one is the one people argue about, so it is measured:
+  </p>
+
+  <pre>I.3  one log line from inside the mix:
+       format only, output discarded        82.0 ns
+       format + write + flush             1021.6 ns</pre>
+
+  <p>
+    A single log line costs <strong>1.02 µs — more than mixing four voices</strong>. But the number
+    is not the argument, and this is the part worth carrying away: 1,022 ns is a <em>mean</em>, taken
+    on an idle machine writing to a local file. It is a syscall, and a syscall has no upper bound.
+    The same line costs milliseconds when the terminal is a pipe nobody is reading, or the file is on
+    a network share, or the disk is busy. Sixty-four voices cost 29.8 µs and cannot cost more; one
+    unlucky log line can cost more than the whole buffer's deadline.
+  </p>
+
+  <p>
+    Which is why everything the audio thread wants to say, it says by incrementing a counter —
+    <code>clipped</code>, <code>late</code>, <code>voices_finished</code>, <code>peak</code> — and
+    the main thread reads them through <code>report()</code> and logs them if it likes.
+  </p>
+
+  <h3>10.2 And on real hardware</h3>
+
+  <pre>device   44100 Hz   512 frames   budget 11609.98 us
+buffers  58   frames 29696   live voices 1
+late     0   queue_empty 28   clipped 0
+peak     0.0141   worst mix 11.29 us (0.097% of budget)</pre>
+
+  <p>
+    Note the device rate: <strong>44,100 Hz</strong>, not the 48,000 this engine defaults to. That is
+    the machine this was written on, and it is why <code>mixer_config::freq</code> defaults to 0
+    meaning "ask the device" — a mixer that assumed 48 kHz here would have had SDL resample every
+    buffer, silently, adding a filter to the path that no measurement in this lesson accounts for.
+  </p>
+
+  <h2 id="limits">11. What this does not do</h2>
+
+  <p>
+    The honest list, because every one of these is a thing a shipping game has and this engine does
+    not:
+  </p>
+
+  <ul>
+    <li><strong>Streaming.</strong> Every sound is fully decoded in memory, so a four-minute music
+        track costs 44 MB. Module 9's job system is where a decode-a-buffer-at-a-time path belongs,
+        because it needs a worker thread that is not the audio thread.</li>
+    <li><strong>Compressed formats.</strong> WAV only. Ogg Vorbis and Opus are what games actually
+        ship, and both are decoder libraries with the same "why we don't hand-roll this" argument as
+        <code>stb_image</code>.</li>
+    <li><strong>Effects.</strong> No filters, no reverb, no submix buses, no compressor. A distance
+        low-pass — air absorbs treble, so distant sounds are duller as well as quieter — is two lines
+        and is an exercise.</li>
+    <li><strong>Voice stealing.</strong> A <code>play</code> past <code>max_voices</code> is refused
+        and counted. §5.1's arithmetic is why that is less brutal than it sounds: the 65th
+        simultaneous sound contributes <code>1/√65</code> of the level, which is 0.6 dB. A real
+        engine steals the quietest voice instead, which is an exercise.</li>
+    <li><strong>Front/back and elevation.</strong> §6.2 — two speakers cannot express it. HRTFs are
+        where the next ten percent begins.</li>
+    <li><strong>Doppler.</strong> A pitch ratio computed from relative velocity along the line of
+        sight. The machinery is already here (<code>set_pitch</code>); it is an exercise.</li>
+    <li><strong>A lock-free voice queue.</strong> §9.2, and Module 9.</li>
+  </ul>
+
+  <h2 id="listings">12. Complete code listings</h2>
+
+  <p>
+    Every file created or modified this lesson, in full. The manifest:
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead><tr><th>Path</th><th>Status</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/audio/sound.hpp</code></td><td>new</td>
+          <td>Decoded PCM, the load/generate API, and the asset half of the split.</td></tr>
+      <tr><td><code>engine/src/audio/sound.cpp</code></td><td>new</td>
+          <td>WAV loading, six formats widened to float, linear resampling.</td></tr>
+      <tr><td><code>engine/include/engine/audio/spatial.hpp</code></td><td>new</td>
+          <td>Listener, emitter, the four falloff laws, the two pan laws, decibels.</td></tr>
+      <tr><td><code>engine/src/audio/spatial.cpp</code></td><td>new</td>
+          <td>The distance curves and the constant-power law, eighty lines.</td></tr>
+      <tr><td><code>engine/include/engine/audio/mixer.hpp</code></td><td>new</td>
+          <td>Voices behind handles, the device, the report, and <code>mix_into</code>.</td></tr>
+      <tr><td><code>engine/src/audio/mixer.cpp</code></td><td>new</td>
+          <td>The real-time path, the gain ramp, the lock, and SDL's callback.</td></tr>
+      <tr><td><code>engine/include/engine/core/log.hpp</code></td><td>modified</td>
+          <td>A sixth log category, with the argument for it written down.</td></tr>
+      <tr><td><code>engine/src/core/log.cpp</code></td><td>modified</td>
+          <td>Its name, which a <code>static_assert</code> makes compulsory.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>Three lines the umbrella lint insisted on.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>The fourth new directory since the refactor.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>audio</code> target.</td></tr>
+      <tr><td><code>demos/audio/main.cpp</code></td><td>new</td>
+          <td>A listener, three emitters, and a map of why it sounds like that.</td></tr>
+      <tr><td><code>scratch/verify_78.cpp</code></td><td>new</td>
+          <td>Nine sections, twelve controls, no audio device.</td></tr>
+      <tr><td><code>scratch/build_verify_78.sh</code></td><td>new</td>
+          <td>Build and run it, refusing an unoptimised library.</td></tr>
+      <tr><td><code>scratch/devcheck_78.cpp</code></td><td>new</td>
+          <td>The four lines that do open a device, and what they found.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/audio/sound.hpp@@
+@@LISTING:engine/src/audio/sound.cpp@@
+@@LISTING:engine/include/engine/audio/spatial.hpp@@
+@@LISTING:engine/src/audio/spatial.cpp@@
+@@LISTING:engine/include/engine/audio/mixer.hpp@@
+@@LISTING:engine/src/audio/mixer.cpp@@
+@@LISTING:engine/include/engine/core/log.hpp@@
+@@LISTING:engine/src/core/log.cpp@@
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/CMakeLists.txt@@
+@@LISTING:demos/audio/main.cpp@@
+@@LISTING:scratch/verify_78.cpp@@
+@@LISTING:scratch/build_verify_78.sh@@
+@@LISTING:scratch/devcheck_78.cpp@@

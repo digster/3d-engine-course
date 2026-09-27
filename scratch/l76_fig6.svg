@@ -1,0 +1,66 @@
+<svg viewBox="0 0 760 452" role="img" aria-labelledby="f76f-t f76f-d">
+  <title id="f76f-t">Why the blend collapses to cos(theta/2)</title>
+  <desc id="f76f-d">A circle with two rotated copies of a vertex theta apart and their midpoint on the bisector, inside the circle, at cos(theta/2) of the radius. A measured table of the sweep is beside it.</desc>
+  <defs>
+    <marker id="e-i-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f2ba5c"/></marker></defs>
+<defs><marker id="e-rose-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ec7a8c"/></marker></defs>
+<defs><marker id="e-teal-f76f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#60c4ce"/></marker></defs>
+<circle cx="186.00" cy="196.00" r="128.00" fill="none" class="grid" stroke-width="1.1" stroke-dasharray="3 5"/>
+<circle cx="186.00" cy="196.00" r="2.6" fill="var(--dia-ink)"/>
+<line x1="186.00" y1="196.00" x2="296.85" y2="132.00" stroke="#f2ba5c" stroke-width="1.8" marker-end="url(#e-amber-f76f)"/>
+<line x1="186.00" y1="196.00" x2="75.15" y2="132.00" stroke="#ec7a8c" stroke-width="1.8" marker-end="url(#e-rose-f76f)"/>
+<line x1="296.9" y1="132.0" x2="75.1" y2="132.0" stroke="#f8d678" stroke-width="1.5" fill="none" stroke-dasharray="4 4"/>
+<line x1="186.00" y1="196.00" x2="186.00" y2="132.00" stroke="#60c4ce" stroke-width="2.2" marker-end="url(#e-teal-f76f)"/>
+<text x="322.85125168440817" y="136.0" class="xs mono" text-anchor="start">R₀ v</text>
+<text x="49.148748315591845" y="136.0" class="xs mono" text-anchor="end">R₁ v</text>
+<text x="186.0" y="120.0" class="xs mono" text-anchor="middle">½(R₀v + R₁v)</text>
+<text x="186.0" y="350.0" class="xs muted" text-anchor="middle">the blend leaves the circle INWARD</text>
+<path d="M 157.42,179.50 A 33.00,33.00 0 0 1 214.58,179.50" fill="none" class="ink-soft" stroke-width="1.1"/>
+<text x="160.0" y="180.0" class="sm mono" text-anchor="middle">θ</text>
+<text x="372.0" y="58" class="sm" text-anchor="start">the isoceles triangle does the whole job</text>
+<text x="372.0" y="84" class="xs muted" text-anchor="start">R₀v and R₁v are both length |v| and θ apart.</text>
+<text x="372.0" y="102" class="xs muted" text-anchor="start">Their midpoint lies on the BISECTOR, and the</text>
+<text x="372.0" y="120" class="xs muted" text-anchor="start">bisector of an isoceles triangle meets the base</text>
+<text x="372.0" y="138" class="xs muted" text-anchor="start">at a right angle — so the midpoint is at</text>
+<text x="372.0" y="156" class="xs muted" text-anchor="start">|v| · cos(θ/2).</text>
+<text x="372.0" y="174" class="xs muted" text-anchor="start"></text>
+<text x="372.0" y="192" class="xs muted" text-anchor="start">Nothing in that sentence mentions skinning,</text>
+<text x="372.0" y="210" class="xs muted" text-anchor="start">a joint, or a matrix. It is the same half-angle</text>
+<text x="372.0" y="228" class="xs muted" text-anchor="start">Lesson 7.3 found between two mirrors and</text>
+<text x="372.0" y="246" class="xs muted" text-anchor="start">Lesson 7.4 found inside a quaternion.</text>
+<text x="372.0" y="274.0" class="xs muted" text-anchor="start">twist</text>
+<text x="568.0" y="274.0" class="xs muted" text-anchor="end">measured</text>
+<text x="696.0" y="274.0" class="xs muted" text-anchor="end">cos(θ/2)</text>
+<line x1="372.0" y1="279.0" x2="702.0" y2="279.0" class="grid" stroke-width="1.0"/>
+<text x="372.0" y="294.0" class="xs" text-anchor="start">0°</text>
+<text x="568.0" y="294.0" class="xs mono" text-anchor="end">1.000000</text>
+<text x="696.0" y="294.0" class="xs mono" text-anchor="end">1.000000</text>
+<text x="372.0" y="309.0" class="xs" text-anchor="start">30°</text>
+<text x="568.0" y="309.0" class="xs mono" text-anchor="end">0.965926</text>
+<text x="696.0" y="309.0" class="xs mono" text-anchor="end">0.965926</text>
+<text x="372.0" y="324.0" class="xs" text-anchor="start">60°</text>
+<text x="568.0" y="324.0" class="xs mono" text-anchor="end">0.866025</text>
+<text x="696.0" y="324.0" class="xs mono" text-anchor="end">0.866025</text>
+<text x="372.0" y="339.0" class="xs" text-anchor="start">90°</text>
+<text x="568.0" y="339.0" class="xs mono" text-anchor="end">0.707107</text>
+<text x="696.0" y="339.0" class="xs mono" text-anchor="end">0.707107</text>
+<text x="372.0" y="354.0" class="xs" text-anchor="start">120°</text>
+<text x="568.0" y="354.0" class="xs mono" text-anchor="end">0.500000</text>
+<text x="696.0" y="354.0" class="xs mono" text-anchor="end">0.500000</text>
+<text x="372.0" y="369.0" class="xs" text-anchor="start">150°</text>
+<text x="568.0" y="369.0" class="xs mono" text-anchor="end">0.258819</text>
+<text x="696.0" y="369.0" class="xs mono" text-anchor="end">0.258819</text>
+<text x="372.0" y="384.0" class="xs" text-anchor="start">179°</text>
+<text x="568.0" y="384.0" class="xs mono" text-anchor="end">0.008727</text>
+<text x="696.0" y="384.0" class="xs mono" text-anchor="end">0.008727</text>
+<text x="372.0" y="399.0" class="xs" text-anchor="start">180°</text>
+<text x="568.0" y="399.0" class="xs mono" text-anchor="end">0.000000</text>
+<text x="696.0" y="399.0" class="xs mono" text-anchor="end">0.000000</text>
+<text x="186.0" y="386" class="xs mono" text-anchor="middle">worst gap over the sweep 8.742e-08</text>
+</svg>

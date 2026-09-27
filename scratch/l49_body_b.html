@@ -1,0 +1,790 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <p>
+    All of it lands in one new pair of files, <code>src/gfx/gpu_debug.{hpp,cpp}</code>, plus a
+    correction applied across four existing ones.
+  </p>
+
+  <h3 id="impl-names"><span class="num">4.1</span>Names, at creation</h3>
+
+  <p>
+    Attaching a name at creation costs three lines — create a properties object, set a string,
+    destroy it — and the destroy is the one you forget on the early-return path. Same problem as
+    every other resource in this engine, same answer:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_debug.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">class scoped_properties
+{
+public:
+    scoped_properties() : id_(SDL_CreateProperties()) {}
+    ~scoped_properties() { if (id_ != 0) { SDL_DestroyProperties(id_); } }
+    // …movable, not copyable
+};</code></pre>
+  </figure>
+
+  <p>
+    Then three thin wrappers — <code>create_named_buffer</code>,
+    <code>create_named_texture</code>, <code>create_named_transfer_buffer</code> — which take the
+    create-info the caller already built and supply only <code>props</code>. Note the ordering
+    inside them:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_debug.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    info.props = (name != nullptr) ? props.id() : 0;
+    return SDL_CreateGPUBuffer(device, &amp;info);</code></pre>
+  </figure>
+
+  <p>
+    A zero properties id is what SDL means by "none", and <code>scoped_properties</code> holds
+    zero if the allocation failed. So a failed allocation silently costs the <em>name</em> and
+    never the <em>buffer</em>. <strong>A debugging aid must not be able to break the thing it is
+    aiding</strong>, and that is a property worth checking deliberately rather than getting by
+    luck.
+  </p>
+
+  <h4>What changed, across the engine</h4>
+
+  <p>
+    Every <code>SDL_SetGPU*Name</code> call is gone, replaced by the creation path — and the
+    transfer buffers, which had <em>never</em> been named at all, got names for the first time.
+    That last one matters more than it sounds: a load-time capture of this engine used to show
+    four identical anonymous transfer buffers, and working out which upload was which is exactly
+    the time a debugger is supposed to save you.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — a doc comment is code that cannot be tested</span>
+    <p>
+      Two comments in this codebase asserted the wrong reason for the naming asymmetry (§3.3) and
+      survived four lessons, a full code listing on a published page, and several readings. They
+      survived because <strong>nothing depends on a comment being right</strong> — there is no
+      compiler, no test, and no reviewer whose job it is.
+      <code>gpu_shader.cpp</code>'s version is now rewritten to quote the wrong version first,
+      which is the only form of correction that inoculates the reader.
+    </p>
+    <p>
+      The practical rule: be most suspicious of comments that explain <em>why an API is shaped
+      the way it is</em>. Comments about what your own code does are checked constantly by people
+      reading the code beside them. Comments about somebody else's design are checked by nobody.
+    </p>
+  </div>
+
+  <h3 id="impl-groups"><span class="num">4.2</span>A group that is a scope</h3>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_debug.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">class debug_group
+{
+public:
+    debug_group(SDL_GPUCommandBuffer* cb, const char* name, frame_log* log = nullptr);
+    ~debug_group();
+
+    debug_group(const debug_group&amp;) = delete;
+    debug_group&amp; operator=(const debug_group&amp;) = delete;
+    debug_group(debug_group&amp;&amp;) = delete;          // NOT movable, on purpose
+    debug_group&amp; operator=(debug_group&amp;&amp;) = delete;
+};</code></pre>
+  </figure>
+
+  <p>
+    Deleting the move constructor is unusual in this engine — every resource type so far has been
+    movable — and it is the §3.4 rule expressed in the type system. A movable group could be
+    returned from a function, stored in a container, or handed across a pass boundary, and on
+    Metal that produces a capture whose tree is quietly wrong. Making it immovable means the pop
+    happens in the same block as the push, which on every backend is the safe case.
+  </p>
+
+  <p>Using it is a line:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">{
+    const engine::debug_group g(cb, "upload", &amp;flog);
+    if (want_cpu) { present.upload(cb, fb); }
+}</code></pre>
+  </figure>
+
+  <p>
+    A null <code>cb</code> is legal and does nothing, so a caller never has to branch on whether
+    it has a command buffer this frame — which is what lets <code>verify_49</code> §C turn the
+    groups off without a second code path to keep in sync with the first.
+  </p>
+
+  <h3 id="impl-log"><span class="num">4.3</span>The frame log</h3>
+
+  <p>
+    <code>frame_log</code> records the events a capture would show. Three decisions in it are
+    worth defending, because they are what separate instrumentation that helps from
+    instrumentation that lies.
+  </p>
+
+  <p>
+    <strong>A fixed name buffer, not a <code>std::string</code>.</strong> This is not premature
+    optimisation: the log runs inside the frame it is measuring, and an allocation per event would
+    make the thing being measured different from the thing that ships. Forty-eight bytes holds
+    every name this engine uses; longer ones truncate, which is the right failure for a debugging
+    aid. Note the copy uses <code>SDL_strlcpy</code>, which always null-terminates —
+    <code>strncpy</code> famously does not, and that one-line difference is how a truncated name
+    becomes a buffer overrun.
+  </p>
+
+  <p>
+    <strong>Fixed capacity, and full is not an error.</strong> It stops recording and sets
+    <code>overflowed()</code>, which <code>print()</code> reports. Silently dropping events would
+    be worse than truncating a name, because a missing event is indistinguishable from a call you
+    forgot to make.
+  </p>
+
+  <p>
+    <strong>Recorded from inside <code>render()</code>, not described from outside.</strong> The
+    tempting design is a function that walks the draw list and prints what it believes the
+    renderer will do. That design drifts the first time somebody changes the renderer, and it
+    drifts <em>silently</em>, and the result is a log that is believed and wrong. So the events
+    are emitted from the same statements that issue the calls:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_scene.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        item.mesh-&gt;draw(pass, 1);
+        ++stats.draws;
+
+        if (log != nullptr)
+        {
+            log-&gt;record(gpu_event_kind::draw, "scene object",
+                        item.mesh-&gt;index_count(), 1u, tris);
+        }</code></pre>
+  </figure>
+
+  <p>
+    Which is what makes §D of the harness possible, and it is the test a capture cannot give you:
+    <code>draw_stats</code> and the frame log are two counters incremented from the same
+    statements, so asserting they agree catches an instrumentation bug that would otherwise be
+    invisible.
+  </p>
+
+  <h3 id="impl-wire"><span class="num">4.4</span>Wiring it in, and <code>--trace</code></h3>
+
+  <p>
+    Four groups per frame — <code>upload</code>, <code>clear</code>, <code>blit</code>,
+    <code>scene</code> — chosen to match the phases Lesson 4.8 already thinks in. Note where the
+    scene's group opens:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">const engine::debug_group g(cb, "scene", &amp;flog);
+
+SDL_GPURenderPass* pass =
+    SDL_BeginGPURenderPass(cb, &amp;over, 1, have_depth ? &amp;depth_info : nullptr);</code></pre>
+  </figure>
+
+  <p>
+    <strong>Before</strong> the pass, closing after it. That is legal everywhere and is the shape
+    §3.4's Metal caveat is happiest with; a group that begins inside a pass must also end inside
+    it, and a group that spans a pass boundary is the case to avoid.
+  </p>
+
+  <p>
+    Recording is armed by <kbd>P</kbd> for exactly one frame and disarms itself as soon as it
+    prints. That is not laziness about a toggle — it is how a capture works, and for the same
+    reason: an instrument that runs continuously is one you stop reading and keep paying for.
+  </p>
+
+  <p>And one flag, which is the piece that outlives the lesson:</p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shell</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">./build/engine --trace</code></pre>
+  </figure>
+
+  <p>
+    Arms the log on the first frame, prints it, and exits. A headless frame dump — no window to
+    click, no GUI, no driver hooks — which means it runs in CI, and the output can be diffed
+    between commits. "This commit added a draw call" is a thing a build can now notice.
+  </p>
+
+  <!-- =================================================================
+       5 — TAKING A CAPTURE
+       ================================================================= -->
+  <h2 id="capture"><span class="num">5</span>Taking a Capture</h2>
+
+  <div class="callout warn">
+    <span class="label">An honest note about this section</span>
+    <p>
+      This course is written on a Mac, so the RenderDoc walkthrough below is assembled from
+      RenderDoc's own documentation rather than from a session the author ran. The steps and the
+      panel names are quoted from its Quick Start guide; the <em>judgements</em> about what to look
+      at are transferable and are the part that matters. The Xcode walkthrough follows
+      <code>SDL_gpu.h</code>'s own instructions.
+    </p>
+    <p>
+      Where a UI detail may have moved since, treat the panel <em>names</em> as reliable and the
+      menu paths as a starting point. ⚠ VERIFY against your installed version.
+    </p>
+  </div>
+
+  <h3 id="capture-renderdoc"><span class="num">5.1</span>RenderDoc, on Windows or Linux</h3>
+
+  <ol>
+    <li><strong>Build with debug mode on.</strong> The engine passes <code>true</code> to
+        <code>gpu_device::create</code>, which is what you want here: validation messages and a
+        capture are complementary, and §3.5 measured the cost at 1.17× on a three-draw frame.</li>
+    <li><strong>File → Launch Application.</strong> Fill in the Executable field (browse, or drag
+        the binary in). Leave Working Directory empty — it defaults to the executable's directory,
+        which is where <code>assets/</code> and <code>shaders/</code> live, so this is the right
+        default for us. Add command-line arguments if you want a particular mode.</li>
+    <li><strong>Click Launch.</strong> The engine starts with RenderDoc underneath it.</li>
+    <li><strong>Press F12</strong> (or Print Screen) to capture the next frame. Take the capture
+        on a frame you have arranged deliberately — orbit so that two objects overlap, or press
+        <kbd>C</kbd> to a scene that is misbehaving.</li>
+    <li><strong>Close the application.</strong> The capture opens in the RenderDoc UI
+        automatically; several captures give you thumbnails to choose from.</li>
+  </ol>
+
+  <p>The panels you will use, by their documented names:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">RenderDoc's main panels and what each answers</caption>
+    <thead><tr><th>panel</th><th>the question it answers</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Event Browser</strong></td>
+          <td>what happened, in order — your debug groups are the tree here</td></tr>
+      <tr><td><strong>Texture Viewer</strong></td>
+          <td>what any texture or render target contained at this event</td></tr>
+      <tr><td><strong>Pipeline State</strong></td>
+          <td>everything bound at this event: shaders, buffers, uniforms, cull mode, depth state</td></tr>
+      <tr><td><strong>Mesh Viewer</strong></td>
+          <td>your geometry, before and after the vertex shader</td></tr>
+      <tr><td>API Inspector</td>
+          <td>the individual API calls behind one event</td></tr>
+      <tr><td>Timeline Bar</td>
+          <td>the frame's events laid out by time</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="capture-xcode"><span class="num">5.2</span>Xcode's Metal Debugger, on macOS</h3>
+
+  <p>
+    <code>SDL_gpu.h</code> gives the procedure directly, and it is worth quoting because it is
+    the one place a Mac reader is likely to give up:
+  </p>
+
+  <blockquote>
+    <p>
+      "Open XCode, go to Debug &gt; Debug Executable…, select your application, set 'GPU Frame
+      Capture' to 'Metal' in scheme 'Options' window, run your app, and click the small Metal icon
+      on the bottom to capture a frame."
+    </p>
+  </blockquote>
+
+  <p>
+    You do not need an Xcode <em>project</em> — <em>Debug Executable…</em> attaches to a binary
+    CMake already built, which is the whole reason that menu item exists. The header adds one more
+    thing for Mac readers: "For Metal, it should be enough just to run the application from XCode
+    to receive detailed errors or warnings in the output" — which is the Metal equivalent of a
+    validation layer, and is free.
+  </p>
+
+  <p>
+    The Metal Debugger's vocabulary differs and its concepts do not. Its <em>navigator</em> is the
+    event browser and your debug groups are its tree; selecting a draw shows bound resources,
+    attachments and pipeline state; it has a geometry viewer and a shader profiler. If you have
+    read §3.7's table, you know what to expect from it.
+  </p>
+
+  <h3 id="capture-read"><span class="num">5.3</span>Four questions to ask a capture</h3>
+
+  <p>
+    Opening a capture and browsing is how people conclude the tool did not help. Arrive with
+    questions. These four cover most of what goes wrong, and each one has an expected answer you
+    already know from the frame log.
+  </p>
+
+  <p>
+    <strong>1. Is my draw there at all?</strong> Count the draws in the event browser against the
+    frame log's count. If the draw is missing, the problem is on the CPU and happened before
+    submission — a bad conditional, a null mesh, a skipped item. If it is <em>present</em> and
+    nothing changed on screen, the geometry was culled, clipped, depth-rejected, or drawn
+    somewhere you are not looking. Those are two completely different searches, and one glance
+    separates them.
+  </p>
+
+  <p>
+    <strong>2. Is the right thing bound?</strong> Select the draw, open Pipeline State, and read
+    the resource names — which exist now. This is where a missing sampler binding shows up as a
+    blank slot, and it is the fastest possible answer to the failure that has cost this project
+    three debugging sessions (Lessons 4.6, 4.7 and 4.8's harness).
+  </p>
+
+  <p>
+    <strong>3. Are the bytes what I think?</strong> Inspect the uniform buffer contents at
+    <code>b0</code> and <code>b1</code>. Lesson 4.6 had to build an entire probe shader to read a
+    matrix back one component at a time; the tool shows all sixteen floats. If your matrix is
+    transposed, this is where it is visibly transposed.
+  </p>
+
+  <p>
+    <strong>4. Where did the geometry go?</strong> The Mesh Viewer shows your vertices before and
+    after the vertex shader. Post-transform positions outside the clip volume mean a projection
+    problem; positions that are NaN mean an uninitialised uniform; a correct-looking mesh that
+    does not appear means the fragment stage or the depth test.
+  </p>
+
+  <div class="callout note">
+    <span class="label">The habit worth forming</span>
+    <p>
+      <strong>Predict, then look.</strong> Before you inspect anything, say out loud what you
+      expect: "b1 should be a model matrix with 1.4 in the translation column". Then look. If it
+      matches, you have eliminated something; if it does not, you have found it. Browsing without
+      a prediction generates the feeling of investigating and no information, and it is the
+      difference between people who find frame debuggers useful and people who do not.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       6 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">6</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption class="visually-hidden">Every file this lesson creates or modifies</caption>
+    <thead><tr><th>path</th><th></th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td>src/gfx/gpu_debug.hpp</td><td><span class="badge new">new</span></td>
+          <td><code>scoped_properties</code>, the three named-create helpers,
+              <code>debug_group</code>, <code>frame_log</code></td></tr>
+      <tr><td>src/gfx/gpu_debug.cpp</td><td><span class="badge new">new</span></td>
+          <td>…and the event tree it prints</td></tr>
+      <tr><td>src/gfx/gpu_buffer.hpp</td><td><span class="badge mod">modified</span></td>
+          <td>the doc comment that reasoned wrongly, corrected in place</td></tr>
+      <tr><td>src/gfx/gpu_buffer.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>named at creation; both staging buffers named for the first time</td></tr>
+      <tr><td>src/gfx/gpu_texture.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>likewise, for the sampled and depth paths</td></tr>
+      <tr><td>src/gfx/gpu_present.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>likewise, for the framebuffer mirror and its staging</td></tr>
+      <tr><td>src/gfx/gpu_shader.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>the wrong explanation, quoted and corrected</td></tr>
+      <tr><td>src/gfx/gpu_scene.hpp</td><td><span class="badge mod">modified</span></td>
+          <td><code>render()</code> takes an optional <code>frame_log*</code></td></tr>
+      <tr><td>src/gfx/gpu_scene.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>…recorded from the statements that issue the calls</td></tr>
+      <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>four debug groups, <kbd>P</kbd>, and <code>--trace</code></td></tr>
+      <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td>
+          <td>one source file</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:src/gfx/gpu_debug.hpp@@
+@@LISTING:src/gfx/gpu_debug.cpp@@
+@@LISTING:src/gfx/gpu_buffer.hpp@@
+@@LISTING:src/gfx/gpu_buffer.cpp@@
+@@LISTING:src/gfx/gpu_texture.cpp@@
+@@LISTING:src/gfx/gpu_present.cpp@@
+@@LISTING:src/gfx/gpu_shader.cpp@@
+@@LISTING:src/gfx/gpu_scene.hpp@@
+@@LISTING:src/gfx/gpu_scene.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       7 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">7</span>Build &amp; Run + Expected Result</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span><span class="lang" data-lang="bash">shell</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build
+./build/engine --trace</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span><span class="lang" data-lang="bash">shell</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\Debug\engine.exe --trace</code></pre>
+  </figure>
+
+  <p>
+    <strong>What you should see.</strong> The frame in Figure 3, printed to the terminal, and then
+    the program exits. Thirty-three events, four groups, three draws, 560 uniform bytes — followed
+    by the line that makes the whole thing worth trusting:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">stdout</span><span class="lang" data-lang="text">log</span></figcaption>
+    <pre><code class="lang-text">---- 3 draw(s), 560 uniform bytes ----
+  cross-check: log says 3 draw(s) / 560 uniform bytes; draw_stats says 3 / 560  AGREE</code></pre>
+  </figure>
+
+  <p>
+    Run <code>./build/engine</code> with no flag for the interactive scene and press <kbd>P</kbd>
+    to dump any frame you like — orbit somewhere interesting first, press <kbd>C</kbd> to a
+    different scene, turn the wireframe on with <kbd>W</kbd> and watch the pipeline name in the
+    log change. Then take a real capture and check it against what you just printed.
+  </p>
+
+  <h3>Running the harness</h3>
+
+  <figure class="listing">
+    <figcaption><span class="path">from the repository root</span><span class="lang" data-lang="bash">shell</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_49.sh</code></pre>
+  </figure>
+
+  <p>
+    Five sections, all printing <code>ok</code>, ending in <code>ALL PASS</code>. §B and §C take a
+    few seconds each — they render several hundred frames apiece, which is what it takes to get a
+    median worth quoting.
+  </p>
+
+  <!-- =================================================================
+       8 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">8</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The capture is a flat list with no tree</span>
+    <p>
+      <strong>Symptom:</strong> your debug groups are nowhere in the event browser, though the
+      draws are all there.
+    </p>
+    <p>
+      <strong>Cause:</strong> on <strong>D3D12</strong>, <code>SDL_PushGPUDebugGroup</code>,
+      <code>SDL_PopGPUDebugGroup</code> and <code>SDL_InsertGPUDebugLabel</code> all require
+      <code>WinPixEventRuntime.dll</code>. Without it they are inert — not an error, just silence.
+    </p>
+    <p>
+      <strong>Fix:</strong> put the DLL in your PATH or beside the executable. SDL's header says
+      so on each of the three functions, and this is the only cross-platform difference in this
+      lesson that produces no diagnostic at all.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The tree is wrong: groups nest where they should not</span>
+    <p>
+      <strong>Symptom:</strong> events appear under the wrong heading, or a group swallows the
+      rest of the frame. Usually on Metal.
+    </p>
+    <p>
+      <strong>Cause:</strong> a push and its pop straddle a render-pass boundary. On Metal a group
+      pushed <em>inside</em> a pass is scoped to that pass, so popping it outside leaves the tree
+      inconsistent.
+    </p>
+    <p>
+      <strong>Fix:</strong> open the group either entirely outside the pass (what this engine
+      does) or entirely inside it. An RAII scope makes the second case automatic and the first
+      case a matter of where you put the brace.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The capture is enormous, or capturing takes forever</span>
+    <p>
+      <strong>Symptom:</strong> pressing F12 hangs the application for several seconds and
+      produces a file measured in gigabytes.
+    </p>
+    <p>
+      <strong>Cause:</strong> a capture serialises <em>the full contents of every live
+      resource</em> so the frame can be replayed (§2.2). It is proportional to how much you have
+      allocated, not to how much you drew.
+    </p>
+    <p>
+      <strong>Fix:</strong> expected behaviour, not a bug — but capture a small window and a small
+      scene when you can. It is also the reason capturing is a keypress rather than something you
+      leave running.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your instrumentation says one thing and the renderer says another</span>
+    <p>
+      <strong>Symptom:</strong> the frame log reports two draws and <code>draw_stats</code>
+      reports three.
+    </p>
+    <p>
+      <strong>Cause:</strong> a code path that issues a call without recording it — almost always
+      an early <code>continue</code> or a second draw added later next to a <code>record()</code>
+      that was not.
+    </p>
+    <p>
+      <strong>Fix:</strong> record from the same statement that issues, and keep the cross-check.
+      Note the failure mode you are protecting against: the log would have been <em>wrong and
+      believed</em>, which is worse than having no log — and the assertion costs one line.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Measuring instrumentation and getting a negative cost</span>
+    <p>
+      <strong>Symptom:</strong> adding debug groups makes the frame measurably faster.
+    </p>
+    <p>
+      <strong>Cause:</strong> the effect is below the noise floor, and you measured a fluctuation.
+    </p>
+    <p>
+      <strong>Fix:</strong> measure the floor first — run the identical workload several times and
+      take the spread — then require any claimed effect to beat it by a factor of two. If it does
+      not, scale the work up until it does and divide (§3.5). A negative cost for added work is
+      the clearest possible signal that a measurement has nothing to say, and it is worth learning
+      to recognise as good news rather than as a puzzle.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is named, and the capture still shows "Buffer 12"</span>
+    <p>
+      <strong>Symptom:</strong> names appear for some resources and not others.
+    </p>
+    <p>
+      <strong>Cause:</strong> the unnamed ones are created somewhere that never took a name —
+      transfer buffers were the whole of this category in our engine until this lesson.
+    </p>
+    <p>
+      <strong>Fix:</strong> grep for every creation call rather than every named one; the ones
+      that never had a name parameter will not show up in a search for names. And remember there
+      is no getter (§3.3), so this cannot be asserted in a test — a capture is the only place it
+      is visible, which is an argument for looking at one early rather than once.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       9 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">9</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>4.9.1 — Break something, then find it.</strong> Pick one: bind no texture, use the
+        wrong pitch (<kbd>8</kbd> in <code>--probe</code> still does this), reverse the winding, or
+        push the camera matrix transposed. Do not tell yourself which. Capture a frame and find it
+        using only §5.3's four questions.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> time yourself, and do it again a week later. The value of a frame
+        debugger is almost entirely in how quickly you reach for it, and the only way to make that
+        reflex is to use it on a bug whose answer you already know.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.9.2 — Diff a frame in CI.</strong> <code>engine --trace</code> is deterministic.
+        Commit its output, add a script that re-runs it and diffs, and make an unexpected change
+        fail. Then add a draw call and watch it fail.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> strip the timestamps <code>SDL_Log</code> prepends. The interesting
+        design question is what <em>should</em> be allowed to change: a golden file that fails on
+        every legitimate edit gets deleted within a month. Consider asserting on the counts rather
+        than the whole tree.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.9.3 — Name everything, then check.</strong> Take a capture and list every object
+        in it that still has no name. Fix them. There are more than you think — the swapchain
+        textures, for instance, belong to SDL rather than to you.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the honest finding here may be that some cannot be named because you
+        did not create them. Report that rather than working around it; knowing which objects in a
+        capture are yours is itself worth having.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.9.4 — Groups that mean something.</strong> Four groups is the minimum. Add one
+        per <em>object</em> inside the scene group, named from
+        <code>scene_object::name</code>, and re-take the capture.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> §3.5 measured a group triple at ~183 ns, so a hundred objects is
+        ~18 µs — about 0.1% of a 60 Hz frame. That is affordable and it is not free, which is
+        exactly the sort of judgement this lesson is trying to make routine. Consider making it
+        conditional on a debug build and then argue with yourself about whether that is wise.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.9.5 — Pay the debt this lesson could not.</strong> On hardware RenderDoc or PIX
+        can capture, read the real vertex-shader invocation count for the torus draw and compare
+        it against §3.6's simulated table. Report how far off the model is.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the prediction is 2,400 against a best case of 1,225 and a worst of
+        6,912. If the hardware beats 2,400 substantially, its cache is bigger or smarter than FIFO;
+        if it is worse, the batching assumption is the suspect. Either way you will have learned
+        something about your GPU that no documentation states, which is the whole reason the
+        counters exist.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.9.6 — Optimise the index order.</strong> §3.6 showed reuse collapsing 2.83× when
+        triangle order is shuffled. Go the other way: implement Tom Forsyth's linear-speed
+        vertex-cache optimiser and re-run the simulation on the reordered indices.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the torus is already emitted in a good order, so expect a small win
+        — which makes it a poor test. Optimise the <em>shuffled</em> indices instead and see how
+        much of the 2.83× you recover; that is the number that tells you whether your
+        implementation works.
+      </p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       10 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">10</span>Recap &amp; Next</h2>
+
+  <ul>
+    <li>
+      <strong>A breakpoint cannot catch a GPU bug</strong>, and the reason is when work happens
+      rather than any deficiency in the debugger. Recording and executing are separated by a
+      submit, and the bug lives on the far side of it.
+    </li>
+    <li>
+      <strong>A frame debugger records inputs and replays them</strong>, which is why it can show
+      you any resource at any event — and why captures are large, capturing is slow, and the tool
+      must sit at the driver level.
+    </li>
+    <li>
+      <strong>RenderDoc does not support Metal.</strong> Vulkan, D3D11, D3D12, GL and GLES on
+      Windows, Linux, Android and Switch. On macOS the tool is Xcode's Metal Debugger, and every
+      concept transfers.
+    </li>
+    <li>
+      <strong>Name resources at creation, not with the setter.</strong> SDL's own docs say so, and
+      a comment in this codebase spent four lessons confidently explaining an asymmetry that did
+      not exist. A confident explanation of somebody else's API is a hypothesis; the documentation
+      of the function you are already calling is where to test it.
+    </li>
+    <li>
+      <strong>Debug groups are a scope</strong> — literally, because Metal scopes a group pushed
+      inside a pass to that pass, and an RAII type is how you never get that wrong. On D3D12 they
+      need <code>WinPixEventRuntime.dll</code> and are silent without it.
+    </li>
+    <li>
+      <strong>Measure the noise floor before you measure anything against it.</strong> The first
+      version of §3.5 reported a negative cost for adding work. Scaling the workload until the
+      effect clears the floor turned "unmeasurable" into 183 ns per group triple, converging across
+      two independent estimates. The validation layer costs 1.17× <em>on a three-draw frame</em>,
+      which is a per-call figure wearing a misleading ratio.
+    </li>
+    <li>
+      <strong>Some numbers you cannot measure, and saying so is the job.</strong> Lesson 4.5's
+      vertex-invocation debt is unpayable on this machine, so §3.6 models it instead, states every
+      assumption, and points at the counter that answers it. The model turned up something better
+      anyway: reuse is a property of the index <em>order</em>, and shuffling triangle order costs
+      2.83× with nothing about the geometry changed.
+    </li>
+    <li>
+      <strong>Your own instrumentation earns its place where the tools cannot go</strong> — every
+      backend, CI, and a cross-check against a second counter. It stops exactly where replay
+      begins.
+    </li>
+  </ul>
+
+  <p>
+    <strong>Next: Module 5 — Becoming an Engine.</strong> Module 4 is finished, and so is the
+    excuse for what <code>src/main.cpp</code> has become: seven thousand lines holding five demos,
+    a GPU probe, a ported scene, a mesh cache and a scene description that four separate test
+    harnesses have now had to copy out by hand because they cannot link to it. Module 5 opens with
+    a refactor arc that splits the tree into an engine library with public headers and demos that
+    may only use them — and it is taught as an architecture lesson, because deciding what belongs
+    in a public API is the most consequential design work in the whole course.
+  </p>
+
+  <p>
+    Before that, look at what Module 4 built. A device, a swapchain, shaders cross-compiled from
+    one HLSL source to three binaries, pipelines, vertex and index buffers, uniform pushes at four
+    rates, textures, samplers, a depth buffer, a scene renderer — and Module 3's scene running on
+    all of it, agreeing with the software rasterizer to one float ULP. Every piece of it is code
+    you can read and defend.
+  </p>
+
+  <!-- =================================================================
+       11 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading">
+    <span class="num">11</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong><code>SDL3/SDL_gpu.h</code>, the "Debugging" section.</strong> A page long, on your
+      disk, and the authoritative answer to "which tool do I use" for every platform SDL supports.
+      It is the first place to look and the last place most people do.
+    </li>
+    <li>
+      <strong>RenderDoc's documentation</strong> — the Quick Start, and then the
+      <em>How do I…?</em> pages. Short, well written, and the source of §5.1's steps and panel
+      names.
+    </li>
+    <li>
+      <strong>Apple, "Metal debugger" and "Optimizing GPU performance"</strong> (WWDC sessions and
+      the Xcode documentation). The macOS half of this lesson, from the people who wrote the tool.
+    </li>
+    <li>
+      <strong>Tom Forsyth, "Linear-Speed Vertex Cache Optimisation"</strong> (2006). The algorithm
+      behind Exercise 4.9.6, and still the standard reference — notable for being a heuristic that
+      beats more principled approaches and for the author being clear about why he thinks that is.
+    </li>
+    <li>
+      <strong><code>meshoptimizer</code></strong> (Arseny Kapoulkine). The library everyone
+      actually uses for index-order optimisation, and its README is a good short course in what
+      else a mesh can be optimised for — overdraw, vertex fetch, quantisation.
+    </li>
+    <li>
+      <strong>Fabian Giesen, "A trip through the Graphics Pipeline 2011"</strong>, part 3, on the
+      post-transform cache. What §3.6's model is modelling, from somebody who has read the
+      hardware documentation you have not.
+    </li>
+    <li>
+      <strong>Aras Pranckevičius, "Every Possible Way to Debug Graphics"</strong> and similar
+      practitioner write-ups. Worth reading for the techniques that are <em>not</em> a frame
+      debugger — printf-to-a-buffer, colour-coding intermediate values, bisecting a frame by
+      commenting out draws — several of which are faster than a capture when you already have a
+      hypothesis.
+    </li>
+  </ul>

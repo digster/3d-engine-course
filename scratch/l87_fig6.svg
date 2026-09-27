@@ -1,0 +1,74 @@
+<svg viewBox="0 0 900 516" role="img" aria-labelledby="l87f6-t l87f6-d">
+  <title id="l87f6-t">Choosing the reference face, and what the parallelism tolerance buys and costs.</title>
+  <desc id="l87f6-d">Left: a crate tilted nine degrees resting on a floor, with two arrows marking the two candidate face normals — the floor's, exactly along the contact normal, and the crate's, nine degrees off. The floor wins and becomes the reference. Right: a table sweeping face_cos over five values, showing the fraction of contacts classified as face contacts falling from 100 to 52.8 percent, the mean contact count falling from 3.285 to 2.213, and the worst normal error tracking the arc cosine of the tolerance exactly, from 44.8 degrees down to 0.26. Below, a second table comparing the manifold's normal with EPA's against the exact minimum translation.</desc>
+  <defs>
+    <marker id="e-i-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-purple-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9b7ede"/></marker></defs>
+<defs><marker id="e-green-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-red-l87f6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">One of the two faces supplies the clipping planes. Which one changes every contact id.</text>
+<path d="M 81.20,246.00 L 338.80,246.00 L 338.80,190.00 L 81.20,190.00 Z" fill="none" stroke="#5082e6" stroke-width="1.7"/>
+<path d="M 154.69,192.60 L 265.31,175.08 L 247.79,64.46 L 137.17,81.98 Z" fill="none" stroke="#e05c5c" stroke-width="1.7"/>
+<line x1="106.96" y1="190.00" x2="106.96" y2="142.96" stroke="#5ac878" stroke-width="2.2" marker-end="url(#e-green-l87f6)"/>
+<text x="106.96" y="131.76" class="xs" text-anchor="middle">A's face normal</text>
+<line x1="210.00" y1="183.84" x2="218.06" y2="234.73" stroke="#e05c5c" stroke-width="2.2" marker-end="url(#e-red-l87f6)"/>
+<text x="262.5123960507035" y="260.2126564879933" class="xs" text-anchor="middle">B's face normal, 9° off</text>
+<text x="210" y="62" class="xs mono" text-anchor="middle">cos_a = 1.00000,  cos_b = 0.98769</text>
+<text x="210" y="318" class="xs muted" text-anchor="middle">A is the REFERENCE: its face supplies the side</text>
+<text x="210" y="334" class="xs muted" text-anchor="middle">planes and the plane every depth is measured from.</text>
+<line x1="430" y1="60" x2="430" y2="340" class="grid" stroke-width="1.0"/>
+<text x="460" y="74" class="xs muted" text-anchor="start">§6 — 40,000 box pairs, against 8.4's exact MTV</text>
+<text x="460" y="94" class="xs muted" text-anchor="start">face_cos</text>
+<text x="679" y="94" class="xs muted" text-anchor="end">face %</text>
+<text x="764" y="94" class="xs muted" text-anchor="end">mean pts</text>
+<text x="874" y="94" class="xs muted" text-anchor="end">worst normal</text>
+<line x1="460" y1="102.0" x2="880" y2="102.0" class="grid" stroke-width="1.0"/>
+<text x="460" y="119.0" class="xs" text-anchor="start">0.50000</text>
+<text x="679" y="119.0" class="xs mono" text-anchor="end">100.0</text>
+<text x="764" y="119.0" class="xs mono" text-anchor="end">3.285</text>
+<text x="874" y="119.0" class="xs mono" text-anchor="end">44.8024°</text>
+<text x="460" y="136.0" class="xs" text-anchor="start">0.90000</text>
+<text x="679" y="136.0" class="xs mono" text-anchor="end">93.9</text>
+<text x="764" y="136.0" class="xs mono" text-anchor="end">3.177</text>
+<text x="874" y="136.0" class="xs mono" text-anchor="end">25.8336°</text>
+<text x="460" y="153.0" class="xs" text-anchor="start">0.99000</text>
+<text x="679" y="153.0" class="xs mono" text-anchor="end">71.7</text>
+<text x="764" y="153.0" class="xs mono" text-anchor="end">2.689</text>
+<text x="874" y="153.0" class="xs mono" text-anchor="end">8.1094°</text>
+<text x="460" y="170.0" class="xs" text-anchor="start">0.99900  (default)</text>
+<text x="679" y="170.0" class="xs mono" text-anchor="end">59.3</text>
+<text x="764" y="170.0" class="xs mono" text-anchor="end">2.381</text>
+<text x="874" y="170.0" class="xs mono" text-anchor="end">2.5611°</text>
+<text x="460" y="187.0" class="xs" text-anchor="start">0.99999</text>
+<text x="679" y="187.0" class="xs mono" text-anchor="end">52.8</text>
+<text x="764" y="187.0" class="xs mono" text-anchor="end">2.213</text>
+<text x="874" y="187.0" class="xs mono" text-anchor="end">0.2576°</text>
+<text x="460" y="232" class="xs muted" text-anchor="start">The worst error is acos(face_cos) EXACTLY, which is what makes</text>
+<text x="460" y="248" class="xs muted" text-anchor="start">this a knob rather than a magic number: choose the largest</text>
+<text x="460" y="264" class="xs muted" text-anchor="start">normal error a solver can live with, and take its cosine.</text>
+<text x="460" y="290" class="xs" text-anchor="start">Too loose calls a face 60° from the contact direction the</text>
+<text x="460" y="306" class="xs" text-anchor="start">normal. Too tight refuses a real face contact and the mean</text>
+<text x="460" y="322" class="xs" text-anchor="start">contact count falls with it.</text>
+<line x1="20" y1="356" x2="880" y2="356" class="grid" stroke-width="1.0"/>
+<text x="24" y="384" class="xs muted" text-anchor="start">the manifold's normal is the REFERENCE FACE's</text>
+<text x="528" y="384" class="xs muted" text-anchor="end">EPA's</text>
+<text x="638" y="384" class="xs muted" text-anchor="end">the face's</text>
+<line x1="24" y1="392.0" x2="644" y2="392.0" class="grid" stroke-width="1.0"/>
+<text x="24" y="409.0" class="xs" text-anchor="start">a 0.4 m ball on a floor, 4,000 frames, worst off +y</text>
+<text x="528" y="409.0" class="xs mono" text-anchor="end">0.001172°</text>
+<text x="638" y="409.0" class="xs mono" text-anchor="end">0.000000°</text>
+<text x="24" y="426.0" class="xs" text-anchor="start">random box pairs, against the SAT's exact MTV, worst</text>
+<text x="528" y="426.0" class="xs mono" text-anchor="end">0.0163°</text>
+<text x="638" y="426.0" class="xs mono" text-anchor="end">2.5600°</text>
+<text x="24" y="443.0" class="xs" text-anchor="start">…restricted to where the two agree (36,113 of 39,403)</text>
+<text x="528" y="443.0" class="xs mono" text-anchor="end">0.0163°</text>
+<text x="638" y="443.0" class="xs mono" text-anchor="end">0.0000°</text>
+<text x="24" y="470" class="xs muted" text-anchor="start">On a flat contact the face normal IS the answer and EPA's is an approximation to it. Off one it is deliberately</text>
+<text x="24" y="487" class="xs muted" text-anchor="start">SNAPPED — which is the trade a solver wants, because a normal that is piecewise constant does not shake a stack and</text>
+<text x="24" y="504" class="xs muted" text-anchor="start">one that is merely accurate does.</text>
+</svg>

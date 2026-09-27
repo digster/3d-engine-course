@@ -1,0 +1,398 @@
+  <h2 id="primitives">4. Three primitives, and what each of them knows</h2>
+
+  <p>
+    Before any tests, the shapes. We ship three, and they are not an arbitrary starter set — they
+    are three points on one curve, and the curve is <em>how much does this shape know about which
+    way round it is?</em>
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>Primitive</th><th>Storage</th><th>Knows about rotation</th><th>Overlap test</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Sphere</strong></td>
+        <td>4 floats</td>
+        <td>Nothing, and does not need to</td>
+        <td>One comparison</td>
+      </tr>
+      <tr>
+        <td><strong>AABB</strong></td>
+        <td>6 floats</td>
+        <td>The world's axes only</td>
+        <td>Three interval comparisons</td>
+      </tr>
+      <tr>
+        <td><strong>OBB</strong></td>
+        <td>6 floats + an orientation</td>
+        <td>Its own axes, exactly</td>
+        <td>The SAT, fifteen candidates</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A <strong>sphere</strong> is rotation-invariant: turn it and it is the same sphere, so its test
+    stays correct however wildly the body tumbles, and its bounding volume needs no rebuilding. It
+    is the cheapest true answer in collision detection and the reason every broadphase in every
+    engine starts with one.
+  </p>
+
+  <p>
+    An <strong>AABB</strong> knows the world's axes and nothing else. Its test is three comparisons,
+    its storage is two corners, and it is what a uniform grid, a BVH and a frustum culler all
+    actually index — because "which cells does this occupy?" is a question about world axes.
+    Its weakness is precisely its strength: it <em>cannot turn</em>. Rotate the object inside it and
+    the box has to be rebuilt, larger. Lesson 6.8 wrote that down when the type was born:
+    <code>transformed()</code> returns the box around the transformed <em>box</em>, which under a
+    45° rotation is up to √2 wider and under a general one up to √3.
+  </p>
+
+  <p>
+    An <strong>OBB</strong> is an AABB that brought its own axes. It is exactly as tight as the
+    object under any rotation, and the price is that its overlap test is no longer three
+    comparisons. That price is §7.
+  </p>
+
+  <h3>4.1 The type already existed, in the wrong folder</h3>
+
+  <p>
+    We do not need to write an AABB. <code>engine::aabb</code> has existed since Lesson 6.8, where a
+    directional light's shadow frustum needed something to be fitted to, and 6.16 taught it to be
+    culled against. It has an inside-out empty representation, an <code>expand</code> that needs no
+    first-point special case, eight corners in a fixed order, and a bounding sphere conversion.
+  </p>
+
+  <p>
+    It lives at <code>engine/include/engine/<strong>gfx</strong>/bounds.hpp</code>, and physics
+    wanting it exposes that as a mistake. Open the file: it includes <code>math/vec3.hpp</code> and
+    <code>math/mat4.hpp</code> and nothing else. Every line of it is geometry. It sits under
+    <code>gfx/</code> because 6.8 is who needed it first, which is how most headers end up where
+    they are.
+  </p>
+
+  <p>
+    That was free until now. Today <code>phys/</code> wants the same type, and
+    <code>#include &lt;engine/gfx/bounds.hpp&gt;</code> from a physics header would be the engine's
+    <strong>first dependency from simulation on rendering</strong> — backwards, and entrenched two
+    lessons later by 8.6's broadphase and 8.7's manifold cache. Check it for yourself: every
+    <code>#include</code> in <code>engine/phys/</code> today names <code>math/</code> or
+    <code>core/</code>, and that is a property worth keeping.
+  </p>
+
+  <p>
+    The alternative is a second <code>aabb</code> in <code>phys/</code>, which is exactly the
+    duplication this file was created to end — 6.8 promoted it into a type because the same struct
+    had been hand-written three times. So the file moves to
+    <code>engine/include/engine/<strong>math</strong>/bounds.hpp</code>: six include lines and an
+    include guard, once, against a layering inversion that would have been quoted as precedent
+    forever. Nothing about the type changes, and the umbrella header's lint catches the move
+    immediately if you forget a caller.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>This is what §8's “physical design” means in practice, and it is why Module 5's
+      refactor was taught as architecture rather than chores.</strong> The question is never “where
+      would this file be nice?” — it is “which direction do I want the arrows to point?”. Here the
+      arrows say simulation may depend on maths, and rendering may depend on maths, and neither of
+      them may depend on the other. A header in the wrong folder is not a tidiness problem; it is a
+      dependency waiting to be created by the next person who needs it.
+    </p>
+  </div>
+
+  <h3>4.2 A shape knows what it weighs</h3>
+
+  <p>
+    <code>shape.hpp</code>'s one dependency on the rest of physics is a function:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] mat3 inertia_of(const shape&amp; s, float mass);</code></pre>
+
+  <p>
+    which dispatches to 8.3's closed forms. The direction matters and must keep mattering:
+    <code>inertia.hpp</code> was written knowing nothing about collision geometry and must go on
+    knowing nothing about it, because plenty of bodies get their tensor from an artist's number or a
+    compound assembly rather than from a primitive.
+  </p>
+
+  <p>
+    What it buys is that <code>make_box</code>'s two arguments stop being two independent facts a
+    caller has to keep in agreement. Before it, a crate's tensor and a crate's collider were set
+    separately — and setting one without the other gives you something that collides like a crate
+    and spins like something else, a bug with no symptom at all until something lands on a corner.
+  </p>
+
+  <h3>4.3 Where the shape is <em>not</em> stored</h3>
+
+  <p>
+    You will notice that <code>rigid_body</code> gains no <code>shape</code> member this lesson,
+    and that is a decision rather than an omission.
+  </p>
+
+  <p>
+    Collision detection is a query over <em>geometry</em>. Every function in
+    <code>collide.hpp</code> takes shapes and placements and returns an answer, and none of them has
+    any business knowing what the geometry weighs or which way it is moving. Keeping the arrow
+    pointed that way is what lets 8.5's GJK take the support function it needs, 8.6's broadphase
+    take the bounds it needs, and 8.7's manifold take the contact it needs, without any of them
+    dragging the dynamics along.
+  </p>
+
+  <p>
+    The thing that pairs a shape with a body is a <strong>collider</strong>, and it arrives in 8.6,
+    because a pair is only useful once something walks a list of them looking for candidates — and
+    because a real collider also carries an offset from the centre of mass, a material, and a
+    filter mask, none of which has a caller yet.
+  </p>
+
+  <h2 id="spheres">5. Two spheres, and the shape of an answer</h2>
+
+  <p>
+    Start with the easy case, because it settles a question that has nothing to do with spheres:
+    what should a collision test <em>return</em>?
+  </p>
+
+  <p>
+    Two spheres, centres <code>c<sub>a</sub></code> and <code>c<sub>b</sub></code>, radii
+    <code>r<sub>a</sub></code> and <code>r<sub>b</sub></code>. They touch exactly when the distance
+    between the centres is at most the sum of the radii, which is one subtraction:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      depth = (r<sub>a</sub> + r<sub>b</sub>) − |c<sub>b</sub> − c<sub>a</sub>|
+    </p>
+  </div>
+
+  <p>
+    Positive means overlapping by that much; negative means apart by that much. Our unit spheres
+    1.5 m apart give <code>2.0 − 1.5 = +0.500000</code>, which the harness prints and which you can
+    do in your head — the point of including it.
+  </p>
+
+  <p>
+    Now notice something. Project both spheres onto the <code>x</code> axis and you get the
+    intervals <code>[−1.0000, +1.0000]</code> and <code>[+0.5000, +2.5000]</code>. Their overlap,
+    <code>min(hi) − max(lo)</code>, is <code>+0.500000</code> — <em>bit-identical</em> to the
+    distance formula's answer, which the harness checks rather than asserts. The sphere test is not
+    a special case sitting beside the SAT. It <strong>is</strong> the SAT, on the one direction that
+    can possibly matter for two spheres, and the algebra collapses because a sphere's projected
+    radius is its radius in every direction.
+  </p>
+
+  <h3>5.1 Why the answer is not a <code>bool</code></h3>
+
+  <p>
+    Every test in this file returns a <code>separation</code>: a direction, a signed distance along
+    it, and which candidate produced it. That is a lot more than "are they touching", and each part
+    earns its place somewhere downstream.
+  </p>
+
+  <ul>
+    <li>
+      <strong>When they are apart, the axis is a certificate.</strong> Anyone handed the two shapes
+      and the axis can check the claim in four dot products, without re-running the algorithm, and
+      without trusting whoever produced it. This turns out to be the single most useful property in
+      the lesson, and §10 builds the entire verification strategy on it.
+    </li>
+    <li>
+      <strong>When they overlap, the axis and depth are the fix.</strong> The shortest translation
+      that ends the overlap — Lesson 8.7 turns it into a contact normal and 8.9 pushes along it.
+      "They are touching" without a direction is a fact a solver can do nothing with.
+    </li>
+    <li>
+      <strong>The axis index is what makes caching possible.</strong> Two crates resting on each
+      other separate — or fail to — on the same axis frame after frame, so 8.6 can try last frame's
+      axis first and 8.7 can key a persistent manifold on it. That is temporal coherence, and it is
+      worth more than any micro-optimisation in this lesson.
+    </li>
+  </ul>
+
+  <p>
+    One field carries both cases, and that is deliberate: <code>depth</code> is positive for
+    penetration and negative for a gap, with <code>hit()</code> derived from its sign rather than
+    stored beside it. It is not a trick to save four bytes. A separating axis and a penetration axis
+    are the same object measured in two directions, which is why the same fifteen candidates answer
+    both questions and why the search does not change shape when two objects touch.
+  </p>
+
+  <h3>5.2 The degenerate case, and a made-up answer that is correct</h3>
+
+  <p>
+    Two spheres at exactly the same point have no direction between them. The subtraction gives a
+    zero vector, and normalising it gives <code>0/0</code>.
+  </p>
+
+  <p>
+    We return <code>+y</code> with the full depth. That is invented, and it is the right thing to
+    do: every caller downstream will multiply by this vector and some will divide by its length, so
+    a legal unit vector pointing <em>somewhere</em> keeps the whole chain finite, while a zero or a
+    NaN poisons it silently three functions later. A made-up direction is the correct answer to a
+    question that has no answer, provided it is made up in one place, on purpose, with a comment.
+  </p>
+
+  <p>
+    And the case is not hypothetical — two objects spawned at the same transform is the most common
+    way a level designer produces it, and "the physics NaN'd on level load" is a genuinely awful
+    afternoon.
+  </p>
+
+  <h3>5.3 Exactly touching, and a sign change you cannot straddle</h3>
+
+  <p>
+    The harness's control here is the pair at exactly <code>2.0</code> m: depth
+    <code>+0.0000000</code>, and <code>hit()</code> reports <em>yes</em>, because the comparison is
+    <code>depth &gt;= 0</code>. Move them a tenth of a millimetre further and it is
+    <code>−0.0000999</code> and <em>no</em>.
+  </p>
+
+  <p>
+    That is a choice, not a fact — "touching" has to fall on one side or the other and we put it
+    with "colliding" — and the reason to point at it is that <strong>the exact boundary is not
+    decidable in floating point anyway</strong>. Two objects a nanometre apart will be reported
+    either way depending on rounding, and the sensible engineering answer is not to try harder but
+    to stop asking the question exactly: real engines test against a small positive margin, so
+    contacts are created slightly <em>before</em> objects touch and the solver has a frame to react.
+    That is speculative contact, and 8.6 builds it.
+  </p>
+
+  <h2 id="projection">6. Projecting a box: the radius of its shadow</h2>
+
+  <p>
+    Everything past this point needs one formula, so let us derive it properly rather than quote it.
+  </p>
+
+  <p>
+    A box is a centre <code>c</code>, three unit axes <code>u₀, u₁, u₂</code> and three half extents
+    <code>h₀, h₁, h₂</code>. Every point of it can be written
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      p = c + s₀ h₀ u₀ + s₁ h₁ u₁ + s₂ h₂ u₂,  with each sᵢ in [−1, 1]
+    </p>
+  </div>
+
+  <p>
+    — which is worth reading slowly, because it is the whole definition of a box and it is where the
+    formula comes from. Walk from the centre, at most <code>h₀</code> along the first axis, at most
+    <code>h₁</code> along the second, at most <code>h₂</code> along the third. The corners are the
+    eight points where every <code>sᵢ</code> is <code>±1</code>.
+  </p>
+
+  <p>
+    Now project onto a unit direction <code>L</code>, which means dotting with it — and the dot
+    product distributes over the sum:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      p · L = c · L + s₀ h₀ (u₀ · L) + s₁ h₁ (u₁ · L) + s₂ h₂ (u₂ · L)
+    </p>
+  </div>
+
+  <p>
+    The first term is fixed: it is where the centre lands, the middle of the shadow. The other three
+    are each free to range over <code>±hᵢ|uᵢ · L|</code> and — here is the step that matters —
+    <strong>they are independent</strong>. Choosing <code>s₀</code> does not constrain
+    <code>s₁</code>. So the largest value of the whole expression is obtained by choosing each
+    <code>sᵢ</code> to match the sign of its own term, and the shadow's <em>radius</em> — half its
+    width — is
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      r(L) = h₀|u₀ · L| + h₁|u₁ · L| + h₂|u₂ · L|
+    </p>
+  </div>
+
+  <p>
+    Three dot products, three absolute values, three multiply-adds. The box's shadow is
+    <code>[c·L − r, c·L + r]</code>, and that is the only fact about boxes this lesson needs.
+  </p>
+
+  <h3>6.1 A worked example, by hand</h3>
+
+  <p>
+    Take a box with half extents <code>(2, 1, 0.5)</code>, turned 30° about <code>z</code>, and
+    project it onto the world <code>x</code> axis. Its axes are then
+    <code>u₀ = (cos30, sin30, 0)</code>, <code>u₁ = (−sin30, cos30, 0)</code>,
+    <code>u₂ = (0, 0, 1)</code>, so the three dot products with <code>L = (1, 0, 0)</code> are
+    <code>0.866025</code>, <code>−0.500000</code> and <code>0.000000</code>:
+  </p>
+
+  <div class="eq-plain">
+    <p>
+      r = 2 × 0.866025 + 1 × 0.500000 + 0.5 × 0 = 1.732051 + 0.500000 = <strong>2.232051</strong>
+    </p>
+  </div>
+
+  <p>
+    The harness prints exactly that, and prints <code>bounds_of()</code>'s half width for the same
+    box as <code>2.232051</code> too — because computing an AABB around an OBB is this formula run
+    three times, once per world axis, and nothing else. Figure 2 does the arithmetic on the page.
+  </p>
+
+  @@FIG_PROJECT@@
+
+  <p>
+    Two things are worth pulling out of that example. The second term contributes
+    <code>+0.5</code> even though <code>u₁ · L</code> is <em>negative</em>: the absolute value is
+    doing its job, picking the corner on the helpful side. And the third term is zero because
+    <code>u₂</code> is perpendicular to <code>L</code>, not because the box is flat — turn it out of
+    the page and that <code>0.5</code> starts contributing.
+  </p>
+
+  <h3>6.2 What the absolute values are worth, measured</h3>
+
+  <p>
+    Drop them and you get <code>|Σ hᵢ (uᵢ · L)|</code>, which is a perfectly sensible-looking
+    expression and is <em>the projection of one particular corner</em> — the
+    <code>(+,+,+)</code> one — rather than the radius of the shadow. It is right only for
+    directions that happen to point at that corner.
+  </p>
+
+  <p>
+    The harness measures it over 20,000 random boxes: <strong>wrong on 15,089 of them</strong>, by
+    up to 100%. Which is to say it is wrong three quarters of the time, and when it is wrong it can
+    be wrong by everything. Meanwhile the correct formula, checked against the farthest of the eight
+    corners over 100,000 random boxes and directions, disagrees by at most
+    <strong>7.1526e−07 m</strong> — float rounding, and nothing else.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>The control that fails to be exact is the interesting one.</strong> Project a box onto
+      its <em>own</em> axis and the answer must be that half extent exactly: the other two dot
+      products are zero, so the other two terms vanish. Measured on a box with half extents
+      <code>(0.3, 1.7, 0.9)</code>, the middle axis comes back bit-exact and the other two do not —
+      <code>0.3000001</code> against <code>0.3000000</code>. Nothing is wrong. The axes came out of
+      <code>mat3_from_quat</code>, so they are orthonormal only to float precision, and the two
+      "zero" dot products are actually <code>10⁻⁸</code>. It is a useful reminder before §11: in
+      this arithmetic, <em>exactly</em> is a word you have to earn.
+    </p>
+  </div>
+
+  <h3>6.3 The support function, quietly introduced</h3>
+
+  <p>
+    The same argument, with "the largest value" replaced by "the point that achieves it", gives the
+    <strong>support function</strong>: the farthest point of a shape in a given direction. For a box
+    it is three sign tests — go to the <code>+</code> end of each axis when the direction leans that
+    way and the <code>−</code> end when it leans the other.
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] vec3 support(const obb&amp; box, vec3 d);
+[[nodiscard]] vec3 support(const engine::sphere&amp; s, vec3 d);</code></pre>
+
+  <p>
+    Nothing in this lesson needs it; the harness checks it lands on the farthest of the eight
+    corners for 20,000 random directions and otherwise leaves it alone. It is here because
+    <strong>Lesson 8.5's GJK is written entirely in terms of it and needs nothing else</strong> — no
+    corners, no faces, no case analysis, no knowledge of what kind of shape it is holding. Adding it
+    now, next to the derivation it comes from, is cheaper than introducing it cold next lesson.
+  </p>

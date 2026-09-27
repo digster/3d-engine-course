@@ -1,0 +1,573 @@
+  <h2 id="product">4. The product, and the two famous halves inside it</h2>
+
+  <p>
+    We now have the whole table, so we can multiply any two quaternions. Doing it by expanding
+    sixteen products of components is correct and unreadable. There is a much better way to write
+    it, and the better way is also where the lesson's next surprise lives.
+  </p>
+
+  <h3>4.1 Split it into a scalar and a vector</h3>
+
+  <p>
+    Write a quaternion as a real part and a vector part: <code>q = w + v</code>, where
+    <code>w</code> is a number and <code>v = xi + yj + zk</code> is a vector of space wearing a
+    coat. Then multiplying two of them is ordinary distribution:
+  </p>
+
+  <div class="eq">\[ (w_1 + v_1)(w_2 + v_2) \;=\; w_1w_2 \;+\; w_1v_2 \;+\; v_1w_2 \;+\; v_1v_2. \]</div>
+
+  <p>
+    The first three terms need no rules at all — a real times a real, and a real scaling a vector.
+    Everything interesting is in the last one, <code>v₁v₂</code>, the product of two
+    <em>pure</em> quaternions. Expand it against the table from §3, with
+    <code>v₁ = (a₁, b₁, c₁)</code> and <code>v₂ = (a₂, b₂, c₂)</code>:
+  </p>
+
+  <div class="eq">\[
+    \begin{aligned}
+      v_1v_2 = (a_1 i + b_1 j + c_1 k)(a_2 i + b_2 j + c_2 k)
+    \end{aligned}
+  \]</div>
+
+  <p>
+    There are nine terms. Three of them are squares — <code>a₁a₂ i²</code>, <code>b₁b₂ j²</code>,
+    <code>c₁c₂ k²</code> — and each contributes its coefficient with a minus sign, because all
+    three units square to −1. Collect those three and you have
+  </p>
+
+  <div class="eq">\[ -(a_1a_2 + b_1b_2 + c_1c_2) \;=\; -(v_1 \cdot v_2). \]</div>
+
+  <p>
+    The other six are the mixed products, and they pair up. The <code>k</code> terms are
+    <code>a₁b₂\,ij + b₁a₂\,ji = (a₁b₂ − b₁a₂)k</code>, using <code>ji = −ij</code> from §3.2 and
+    nothing else. The <code>i</code> and <code>j</code> terms do the same thing with the indices
+    rotated. So the six mixed terms collect into
+  </p>
+
+  <div class="eq">\[ (b_1c_2 - c_1b_2)\,i + (c_1a_2 - a_1c_2)\,j + (a_1b_2 - b_1a_2)\,k \;=\; v_1 \times v_2. \]</div>
+
+  <p>
+    Putting the two halves together:
+  </p>
+
+  <div class="eq">\[ v_1 v_2 \;=\; -(v_1 \cdot v_2) \;+\; (v_1 \times v_2) \]</div>
+
+  <div class="callout ok">
+    <span class="label">Where the dot and cross products came from</span>
+    <p>
+      That line is not an analogy and it is not a repackaging. <strong>The dot product and the
+      cross product are the two halves of the quaternion product</strong>, and they were extracted
+      from exactly this expression by Josiah Willard Gibbs and Oliver Heaviside in the 1880s, who
+      argued — persuasively, and they won — that most physics needs one half or the other and
+      rarely both at once. Every vector-algebra course since has taught the two pieces without ever
+      mentioning the thing they were cut out of. You have been using half a quaternion product
+      since Lesson 1.7.
+    </p>
+  </div>
+
+  <p>
+    Substituting back, the whole product is:
+  </p>
+
+  <div class="eq">\[ q\,p \;=\; \big(\, w_1w_2 - v_1\!\cdot\! v_2,\;\; w_1v_2 + w_2v_1 + v_1 \times v_2 \,\big) \]</div>
+
+  <p>
+    <strong>That formula is the storage decision.</strong> It is why <code>quat</code> below is
+    <code>{float w; vec3 v;}</code> rather than four loose floats: written that way,
+    <code>operator*</code> is two lines that read as the formula, and written the other way it is
+    sixteen indexed products that nobody can check. The bytes in memory are identical either way;
+    the only thing the choice changes is whether the code can be read.
+  </p>
+
+  <h3>4.2 The one price, located exactly</h3>
+
+  <p>
+    Now swap the operands and go through the formula term by term. <code>w₁w₂</code> is unchanged.
+    <code>v₁·v₂</code> is unchanged, because the dot product is symmetric.
+    <code>w₁v₂ + w₂v₁</code> is unchanged, because addition is. And <code>v₁ × v₂</code> flips
+    sign, because the cross product is antisymmetric. So:
+  </p>
+
+  <div class="eq">\[ q\,p \;-\; p\,q \;=\; \big(\,0,\;\; 2\,(v_1 \times v_2)\,\big) \]</div>
+
+  <p class="eq-plain">
+    In prose: the difference between the two orders is purely a vector, and it is exactly twice the
+    cross product of the two vector parts.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Three sentences, one fact</span>
+    <p>
+      <em>Quaternions do not commute.</em> <em>The cross product is antisymmetric.</em>
+      <em>Rotations of space do not commute.</em> These are not three related observations. They
+      are one observation said three ways, and the equation above is the identification. The price
+      the fourth dimension charges is a single term, and you have known that term's sign convention
+      since Lesson 2.4.
+    </p>
+  </div>
+
+  <h3>4.3 A worked example, by hand</h3>
+
+  <p>
+    Take <code>q = 2 + i − j + 3k</code> and <code>p = −1 + 2i + k</code>. In the split notation,
+    <code>w₁ = 2</code>, <code>v₁ = (1, −1, 3)</code>, <code>w₂ = −1</code>,
+    <code>v₂ = (2, 0, 1)</code>.
+  </p>
+
+  <p>
+    The scalar part is <code>w₁w₂ − v₁·v₂</code>. The dot product is
+    <code>1·2 + (−1)·0 + 3·1 = 5</code>, so the scalar part is <code>2·(−1) − 5 = −7</code>.
+  </p>
+
+  <p>
+    The vector part is <code>w₁v₂ + w₂v₁ + v₁ × v₂</code>, three vectors added:
+  </p>
+
+  <ul>
+    <li><code>w₁v₂ = 2 · (2, 0, 1) = (4, 0, 2)</code></li>
+    <li><code>w₂v₁ = −1 · (1, −1, 3) = (−1, 1, −3)</code></li>
+    <li><code>v₁ × v₂ = ((−1)(1) − (3)(0), (3)(2) − (1)(1), (1)(0) − (−1)(2)) = (−1, 5, 2)</code></li>
+  </ul>
+
+  <p>
+    Adding those three componentwise: <code>(4 − 1 − 1, 0 + 1 + 5, 2 − 3 + 2) = (2, 6, 1)</code>.
+    So
+  </p>
+
+  <div class="eq">\[ q\,p \;=\; -7 + 2i + 6j + k. \]</div>
+
+  <p>
+    Run the same arithmetic the other way round — only the cross product changes, to
+    <code>(1, −5, −2)</code> — and you get <code>p q = −7 + 4i − 4j − 3k</code>. The scalar parts
+    agree, as §4.2 said they must, and the difference is
+    <code>(0, −2, 10, 4) = 2 · (−1, 5, 2)</code>, which is twice the cross product exactly. The
+    harness pushes the same numbers through the real type:
+  </p>
+
+  <pre>B. THE PRODUCT
+   worst |v1 v2 - (-dot + cross)|:    0.000e+00
+  [PASS] B.1  v1 v2 = -(v1.v2) + (v1 x v2)
+   q*p = (-7, 2, 6, 1)
+   p*q = (-7, 4, -4, -3)
+  [PASS] B.2  q*p = (-7, 2, 6, 1) by hand
+   q*p - p*q = (0, -2, 10, 4)
+   2 (v1 x v2) = (-2, 10, 4)
+  [PASS] B.3  qp - pq = (0, 2 v1 x v2)</pre>
+
+  <p>
+    §B.1's <code>0.000e+00</code> is worth a sentence of its own. It is not a tolerance being met;
+    it is exact. The two expressions are the same sequence of floating-point operations in a
+    different order of writing, and there is nothing for rounding to do.
+  </p>
+
+  @@FIG_PRODUCT@@
+
+  <h3>4.4 The control</h3>
+
+  <p>
+    §B.3's identity was measured on one example, and one example is a coincidence waiting to be
+    discovered. §B.5 is the control that turns it into a claim: if the cross term really is the
+    <em>only</em> thing that changes under a swap, then a pair of quaternions whose vector parts
+    are <strong>parallel</strong> must commute exactly, since their cross product is zero. It does:
+  </p>
+
+  <pre>   worst relative |qp|-|q||p|:        2.550e-07
+  [PASS] B.4  the norm is multiplicative
+  [PASS] B.5  CONTROL: parallel vector parts commute</pre>
+
+  <p>
+    <code>B.4</code> is quietly one of the most important lines in the file. <code>|qp| = |q||p|</code>
+    means the unit quaternions are <em>closed under multiplication</em>: compose two rotations and
+    you get a rotation, with no renormalisation step in between and no drift beyond rounding. It is
+    also the same demand as §3.1 in different clothes, which is why they force the same table.
+  </p>
+
+  <h2 id="mirrors">5. Mirrors in space: the sandwich and the half-angle, together</h2>
+
+  <p>
+    §2 promised that a rotation is two reflections. This section does that in algebra, and three
+    things fall out of one calculation that are normally presented as three separate facts you have
+    to accept.
+  </p>
+
+  <h3>5.1 A reflection, as a quaternion product</h3>
+
+  <p>
+    Take a plane through the origin with unit normal <code>n</code>, and a vector <code>v</code>.
+    Treat both as pure quaternions and form the product <code>n v n</code>. Expand it with §4.1's
+    formula, twice.
+  </p>
+
+  <p>
+    First <code>n v</code>. Both are pure, so <code>nv = −(n·v) + (n×v)</code>. Now multiply that on
+    the right by <code>n</code>, which is a general quaternion times a pure one:
+  </p>
+
+  <div class="eq">\[
+    \begin{aligned}
+      (nv)n &amp;= \big(-(n\cdot v) + (n\times v)\big)\,n \\
+            &amp;= -(n\cdot v)\,n \;+\; \big(-\!(n\times v)\cdot n \;+\; (n\times v)\times n\big)
+    \end{aligned}
+  \]</div>
+
+  <p>
+    The term <code>(n×v)·n</code> is zero — a cross product is perpendicular to both its arguments,
+    so it cannot have a component along <code>n</code>. And <code>(n×v)×n</code> is the standard
+    triple product, which expands to <code>v(n·n) − n(n·v) = v − (n·v)n</code> since <code>n</code>
+    is unit. Adding up:
+  </p>
+
+  <div class="eq">\[ n\,v\,n \;=\; v \;-\; 2(n\cdot v)\,n \]</div>
+
+  <div class="callout ok">
+    <span class="label">You have had this function since Lesson 1.8</span>
+    <p>
+      <code>v − 2(n·v)n</code> is <code>engine::reflect(v, n)</code>, in
+      <code>math/vec3.hpp</code>, derived in Module 1 for a ball bouncing off a wall and used ever
+      since for mirror directions in <code>gfx/light.hpp</code>. It is the Householder reflection,
+      and <strong>it is what <code>n v n</code> computes</strong>. Two routes to one answer is a
+      check; one route is a hope, so §C.1 measures the engine's function against the quaternion
+      spelling across 20,000 random normals and vectors:
+    </p>
+    <pre>   worst |n v n - reflect(v, n)|:     1.046e-06
+  [PASS] C.1  n v n is the Householder reflection</pre>
+  </div>
+
+  <p>
+    So a reflection is <strong>one multiplication on each side</strong>. Compare
+    <code>complex.hpp</code>'s <code>reflect_in_line</code>, which is <code>m² v̄</code> — the shapes
+    differ because a mirror in the plane is named by its <em>direction</em> and a mirror in space by
+    its <em>normal</em>, and because conjugating a pure quaternion negates it. The content is the
+    same.
+  </p>
+
+  <h3>5.2 Do it twice, and watch what appears</h3>
+
+  <p>
+    Reflect in the plane with normal <code>n₀</code>, then in the plane with normal
+    <code>n₁</code>. That is <code>n v n</code> applied twice, reading left to right through the
+    sequence:
+  </p>
+
+  <div class="eq">\[ v \;\longmapsto\; n_1\,(n_0\,v\,n_0)\,n_1 \;=\; (n_1n_0)\,v\,(n_0n_1) \]</div>
+
+  <p>
+    using nothing but associativity to move the brackets. Now look at the two outer factors. They
+    are the same two things in opposite orders, and for <em>pure</em> quaternions there is a name
+    for that relationship:
+  </p>
+
+  <div class="eq">\[ \overline{n_1 n_0} \;=\; \overline{n_0}\,\overline{n_1} \;=\; (-n_0)(-n_1) \;=\; n_0 n_1 \]</div>
+
+  <p>
+    Conjugation reverses a product — that is a one-line consequence of the definition, true in any
+    such algebra — and conjugating a pure quaternion just negates it, so the two minus signs cancel.
+    Therefore, writing <code>q = n₁n₀</code>:
+  </p>
+
+  <div class="eq">\[ v \;\longmapsto\; q\,v\,\bar q \]</div>
+
+  <div class="callout warn">
+    <span class="label">The sandwich was not chosen</span>
+    <p>
+      It <strong>fell out of composing two reflections.</strong> Nobody decided that a rotation
+      should be applied from both sides; that is simply what "do two reflections" looks like once
+      you write a reflection as <code>n v n</code>, and the right-hand factor is a conjugate
+      because reversing a product of pure quaternions is exactly what conjugation does.
+    </p>
+  </div>
+
+  <h3>5.3 And <code>q</code> itself is the half-angle object</h3>
+
+  <p>
+    We have a formula for the rotation in terms of <code>q = n₁n₀</code>. Work out what that
+    quaternion actually is, using §4.1 once more, and let <code>φ</code> be the angle between the
+    two normals:
+  </p>
+
+  <div class="eq">\[ q \;=\; n_1 n_0 \;=\; -(n_1 \cdot n_0) \;+\; (n_1 \times n_0)
+                 \;=\; -\cos\varphi \;-\; \sin\varphi\;\hat n \]</div>
+
+  <p>
+    where <code>n̂</code> is the unit vector along <code>n₀ × n₁</code> — the line where the two
+    planes meet, which is the axis, exactly as §2's two hands predicted. (The sign on the second
+    term is because <code>n₁ × n₀ = −(n₀ × n₁)</code>, and <code>|n₀ × n₁| = sin φ</code>.)
+  </p>
+
+  <p>
+    So <code>q = −(cos φ + sin φ · n̂)</code>. There is an overall minus sign sitting in front of the
+    thing we want, and <strong>nothing in the derivation determines it</strong> — reflecting in
+    <code>−n₀</code> instead of <code>n₀</code> gives the same mirror plane and flips it. Negate,
+    which §8 will justify properly and which you can take on trust for two paragraphs, and write
+    <code>θ = 2φ</code> for the rotation angle the two mirrors generate:
+  </p>
+
+  <div class="eq">\[ \boxed{\;q \;=\; \cos(\theta/2) \;+\; \sin(\theta/2)\,\hat n\;} \]</div>
+
+  <p class="eq-plain">
+    In prose: the quaternion for a rotation of <code>θ</code> about the unit axis <code>n̂</code> has
+    real part <code>cos(θ/2)</code> and vector part <code>sin(θ/2)</code> times the axis.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">Prediction 3 discharged — and prediction 4 arrived uninvited</span>
+    <p>
+      The <code>θ/2</code> is not a convention. It is there because the mirrors are <code>φ</code>
+      apart and the rotation is <code>2φ</code>, which is a fact about reflections that Lesson 7.3
+      demonstrated in the plane with a protractor. <strong>And the double cover appeared inside the
+      derivation, as a sign nobody could pin down</strong>, before anybody stated it as a property.
+      That is the honest order of discovery and it is worth noticing: <code>q</code> and
+      <code>−q</code> are not two conventions for one object, they are two genuinely different pairs
+      of mirrors that generate the same turn.
+    </p>
+  </div>
+
+  @@FIG_MIRRORS@@
+
+  <h3>5.4 Checked against Lesson 7.2, which knows nothing about any of this</h3>
+
+  <p>
+    §5 has produced a completely independent construction of a rotation: an axis, an angle, a
+    half-angle object, and a two-sided product. Lesson 7.2 produced another one — Rodrigues'
+    formula, derived by splitting a vector into its component along the axis and its component
+    across it. If both are right they must agree everywhere, and this is the single most
+    load-bearing measurement in the lesson:
+  </p>
+
+  <pre>   mirrors  30.0 deg apart -> turn of  60.00 deg
+   the same rotor read unnegated:    300.00 deg
+   rotor = (-0.866025, 0.000000, 0.000000, -0.500000)
+  [PASS] C.2  30 deg of mirror makes 60 deg of turn
+   |w| = 0.866025, cos(phi) = 0.866025
+  [PASS] C.3  |w| = cos(phi), the mirror separation
+   worst |sandwich - Rodrigues|:      5.960e-07
+  [PASS] C.4  the sandwich is Rodrigues' formula
+   worst |M(qp) - M(q)M(p)|:          7.153e-07
+  [PASS] C.5  M(q p) = M(q) M(p), not reversed</pre>
+
+  <p>
+    Look at the second line of that transcript. <code>rotor_from_mirrors</code> genuinely returns
+    <code>(−0.866, 0, 0, −0.5)</code> — the negated branch — and reading its angle without
+    negating gives <strong>300°</strong>, which is the same rotation as 60° and is not a bug in
+    either. The derivation produces the sign it produces. §C.2 checks all three things at once:
+    that the negated reading is 60°, that the raw reading is 300°, and that the two quaternions
+    give <em>bitwise identical</em> matrices.
+  </p>
+
+  <h3>5.5 The control, and it is the sharpest one in the lesson</h3>
+
+  <p>
+    §C.5 says composing quaternions matches composing matrices in the same order —
+    <code>M(qp) = M(q)M(p)</code>. That is a claim about the sandwich's orientation, and here is
+    why a naive test of it is worthless.
+  </p>
+
+  <p>
+    The <em>other</em> sandwich, <code>q̄ v q</code>, is also a rotation. It sends the basis vectors
+    somewhere perfectly sensible, its matrix is orthonormal, its determinant is 1, and if you
+    checked it on a single rotation you would see nothing wrong. What it gets wrong is the
+    <strong>order</strong>: it is an <em>anti</em>-homomorphism, so every composition comes out
+    backwards. §C.6 builds it deliberately and demands both halves of that statement:
+  </p>
+
+  <pre>   conj(q) v q:  |W(qp) - W(p)W(q)| = 2.980e-07
+                 |W(qp) - W(q)W(p)| = 1.975e+00
+  [PASS] C.6  CONTROL: the other sandwich reverses order</pre>
+
+  <p>
+    The first number must be tiny and the second must be large, and requiring both is what makes
+    this a control rather than a tautology. A test that only checked "the wrong sandwich differs
+    from the right one" would pass on a typo.
+  </p>
+
+  <p>
+    This also settles a question that is easy to get wrong in your own code and painful to debug:
+    <strong><code>q * p</code> means "do <code>p</code>, then do <code>q</code>"</strong>, the same
+    right-to-left reading as <code>A * B * v</code>. That reading is not free — it is a consequence
+    of choosing <code>q v q̄</code> over <code>q̄ v q</code>, and the other choice reverses every
+    composition in the engine.
+  </p>
+
+  <h2 id="implementation">6. Implementation: the type</h2>
+
+  <p>
+    Everything above is now code. <code>math/quat.hpp</code> is written to be read as a
+    <strong>diff against <code>math/complex.hpp</code></strong>, function for function, and that is
+    not a stylistic conceit — Lesson 7.3 chose the names in that file with this mapping in mind, so
+    that the harder header could be read as the easier one with one more imaginary unit and one
+    crucial loss.
+  </p>
+
+  <h3>6.1 The type, and why the storage is the derivation</h3>
+
+  <pre><code class="lang-cpp">struct quat
+{
+    float w{1.0f};   ///&lt; cos(θ/2) for a unit rotation
+    vec3 v{};        ///&lt; sin(θ/2)·n̂ for a unit rotation
+
+    static constexpr quat identity() { return {}; }
+    static constexpr quat i() { return {0.0f, {1, 0, 0}}; }
+    static constexpr quat j() { return {0.0f, {0, 1, 0}}; }
+    static constexpr quat k() { return {0.0f, {0, 0, 1}}; }
+    static constexpr quat pure(vec3 p) { return {0.0f, p}; }
+};</code></pre>
+
+  <p>
+    Four contiguous floats in the order <code>w, x, y, z</code>. A good deal of published code —
+    and most GPU-side packing — uses <code>x, y, z, w</code> instead. Neither is more correct;
+    they are incompatible, and code that memcpys a quaternion across that boundary without saying
+    which it means has a bug that looks like a 180° error about a diagonal axis. It is on the
+    <a href="../conventions.html#quat">Conventions page §8e</a>, which is where this course puts
+    things that cannot be deduced.
+  </p>
+
+  <p>
+    The three imaginary units are worth typing into a test the first time you meet them, because
+    <strong><code>quat::i()</code> is a <em>half</em> turn, not a quarter turn</strong>, and that
+    catches everyone arriving from complex numbers. <code>complex::i()</code> is a quarter turn of
+    the plane; <code>quat::i()</code> has <code>w = cos(θ/2) = 0</code>, so <code>θ = π</code>.
+    Multiply it by itself and you get <code>−1</code>, which is the same rotation as <code>+1</code>
+    — the double cover, in the smallest example there is.
+  </p>
+
+  <h3>6.2 The product</h3>
+
+  <p>
+    Two lines, and they are §4.1's formula read straight across:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr quat operator*(quat a, quat b)
+{
+    return {a.w * b.w - dot(a.v, b.v),
+            b.v * a.w + a.v * b.w + cross(a.v, b.v)};
+}</code></pre>
+
+  <p>
+    Sixteen multiplies and twelve adds. A <code>mat3</code> product is twenty-seven and eighteen.
+    §10 measures whether that operation count survives contact with a real processor, and the
+    answer is a useful lesson in itself.
+  </p>
+
+  <h3>6.3 Conjugate, norm, inverse — the block that did not change</h3>
+
+  <p>
+    Every function in this block is <code>complex.hpp</code>'s function with <code>im</code>
+    widened to a <code>vec3</code>. Not "analogous to" — the same algebra and the same proofs,
+    because <strong>none of those proofs used commutativity</strong>. That is worth noticing while
+    reading: the things that broke on the way up are exactly the things that mentioned the
+    <em>order</em> of a product, and nothing here does.
+  </p>
+
+  <pre><code class="lang-cpp">constexpr quat conjugate(quat q) { return {q.w, -q.v}; }
+
+constexpr float length_squared(quat q)
+{
+    return q.w * q.w + dot(q.v, q.v);
+}
+
+inline quat inverse(quat q)
+{
+    const float len_sq = length_squared(q);
+    if (len_sq &lt;= 0.0f) { return quat::identity(); }
+    return conjugate(q) / len_sq;
+}</code></pre>
+
+  <p>
+    One detail deserves a sentence because it looks as though it ought to be a problem and is not.
+    <code>inverse</code> is a genuine <em>two-sided</em> inverse even though the algebra does not
+    commute: <code>q·q̄</code> and <code>q̄·q</code> are both <code>|q|²</code>, because the cross
+    product of <code>v</code> with itself is zero. The one place non-commutativity would have hurt
+    most is the one place it cannot reach.
+  </p>
+
+  <h3>6.4 Applying: the sandwich, optimised — and a correction</h3>
+
+  <p>
+    Computing <code>q v q̄</code> literally is two quaternion products: 24 multiplies and 17 adds,
+    with a known-zero scalar part being carried through both. Expanding it symbolically for unit
+    <code>q</code> and collecting gives a much better form:
+  </p>
+
+  <div class="eq">\[ v' \;=\; v \;+\; 2w\,(u \times v) \;+\; 2\,\big(u \times (u \times v)\big), \qquad u = q.v \]</div>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr vec3 rotate(quat q, vec3 v)
+{
+    const vec3 t = cross(q.v, v) * 2.0f;
+    return v + t * q.w + cross(q.v, t);
+}</code></pre>
+
+  <p>
+    Two crosses, two scales, two adds: 18 multiplies and 12 adds. It is Rodrigues' formula in
+    disguise, which it must be, since §C.4 measured that they describe the same turn.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A correction, and the harness is what caught it</span>
+    <p>
+      The first draft of this function's documentation said "a non-unit <code>q</code> scales the
+      result by <code>|q|²</code>, exactly as a non-unit <code>z</code> does in the plane".
+      <strong>That is true of the literal <code>q v q̄</code> and false of the form above.</strong>
+      Getting from <code>(w² − |u|²)v + 2w(u×v) + 2(u·v)u</code> to the two crosses substitutes
+      <code>u×(u×v) = (u·v)u − |u|²v</code>, and the two expressions agree
+      <em>only when <code>w² + |u|² = 1</code></em>. Off the unit sphere this is a different linear
+      map — not a rotation, not a scaled rotation, not a similarity at all. §F.6 measures both:
+    </p>
+    <pre>   |q|    literal/|q|^2 err   rotate() err
+   1.000    3.332e-08           0.000e+00
+   1.100    1.032e-07           1.352e-01
+   1.500    7.451e-08           8.046e-01
+  [PASS] F.6  CONTROL: the literal form scales, rotate() does not</pre>
+    <p>
+      This matters far more than a documentation slip usually does, and §10.5 is where it bites.
+    </p>
+  </div>
+
+  <h3>6.5 Axes and angles, in and out</h3>
+
+  <pre><code class="lang-cpp">inline quat quat_from_axis_angle(vec3 unit_axis, float angle)
+{
+    const float half = angle * 0.5f;
+    return {std::cos(half), unit_axis * std::sin(half)};
+}</code></pre>
+
+  <p>
+    <strong>That is the only trigonometry in the file</strong>, together with its inverse and the
+    Euler bridge that calls it — and noticing that is the point of the whole representation. Trig
+    appears exactly at the boundary where a human angle enters or leaves. Composing, inverting,
+    applying and (in Lesson 7.5) interpolating are arithmetic. Lesson 7.2 measured 82% of an
+    axis-angle <code>slerp</code> call going on trigonometry; that number is what this header
+    exists to delete.
+  </p>
+
+  <p>
+    There are also <code>quat_x</code>, <code>quat_y</code> and <code>quat_z</code> — the twins of
+    <code>mat3</code>'s <code>rotation_x/y/z</code>, spelled deliberately in parallel so that a
+    call site can move across by changing four characters:
+  </p>
+
+  <pre><code class="lang-cpp">// before — 27 multiplies
+t.rotation = rotation_y(a) * rotation_x(b);
+
+// after — 16 multiplies
+q = quat_y(a) * quat_x(b);</code></pre>
+
+  <p>
+    and <code>quat_from_euler</code>, which is <code>rotation_from_euler</code> with
+    <code>rotation_*</code> replaced by <code>quat_*</code> and <em>nothing else touched</em> — same
+    intrinsic y-x-z convention, same order, same argument names. That the two agree is the check
+    that this file's product and <code>mat3</code>'s product describe the same composition:
+  </p>
+
+  <pre>G. AGAINST WHAT IS ALREADY HERE
+   worst |M(quat_euler) - R_euler|:   5.960e-07
+  [PASS] G.1  quat_from_euler matches rotation_from_euler
+   worst |M(quat_k) - rotation_k|:    1.788e-07
+  [PASS] G.2  quat_x/y/z match rotation_x/y/z</pre>
+
+  <p>
+    <code>G.5</code> is the control for those two, and it is the kind that is easy to forget:
+    <code>G.1</code> and <code>G.2</code> would both pass if <code>mat3_from_quat</code> and
+    <code>rotation_*</code> were secretly the same function. So nudge one component of the
+    quaternion by 0.001, renormalise, and demand that the agreement break by a predictable amount —
+    0.1076°, which is neither zero nor large.
+  </p>

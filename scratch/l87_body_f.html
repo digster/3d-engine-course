@@ -1,0 +1,322 @@
+  <h2 id="listings">13. Complete code listings</h2>
+
+  <p>
+    Every file this lesson creates or modifies, in full. The manifest first.
+  </p>
+
+  <!-- WRAPPED, because the first column is a full repository path and a path
+       cannot be hyphenated: at 390 px the table is 559 px wide whatever the
+       cells do, and an unwrapped one scrolls the whole PAGE sideways rather
+       than itself. `.tbl-scroll` is `overflow-x: auto` and nothing else. -->
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/phys/manifold.hpp</code></td><td>new</td>
+          <td>The contact id, the point, the manifold, the config, the two queries,
+              <code>carry_impulses</code>, <code>pair_key</code> and the cache.</td></tr>
+      <tr><td><code>engine/src/phys/manifold.cpp</code></td><td>new</td>
+          <td>The clipper, the reduction, the three fallback paths, and the open-addressed table.</td></tr>
+      <tr><td><code>engine/include/engine/phys/shape.hpp</code></td><td>modified</td>
+          <td><code>contact_face</code>, the two capacity constants, the gather tolerance, and
+              <code>support_face</code> for all four primitives.</td></tr>
+      <tr><td><code>engine/src/phys/shape.cpp</code></td><td>modified</td>
+          <td>The four implementations, the face hash, and the angular sort.</td></tr>
+      <tr><td><code>engine/include/engine/phys/convex.hpp</code></td><td>modified</td>
+          <td>A second function pointer, <code>face_of</code>, and the four adapters taught to
+              fill it.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>One include.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>One source file, and the note about the dependency it is the first to take.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>manifold</code> target.</td></tr>
+      <tr><td><code>demos/manifold/main.cpp</code></td><td>new</td>
+          <td>The support polygon on the left, the clip one plane at a time on the right.</td></tr>
+      <tr><td><code>scratch/verify_87.cpp</code></td><td>new</td>
+          <td>Nine measured sections, 92 checks, every section with a control.</td></tr>
+      <tr><td><code>scratch/build_verify_87.sh</code></td><td>new</td>
+          <td>Compiles and runs the harness, refusing an unoptimised library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/phys/manifold.hpp@@
+@@LISTING:engine/src/phys/manifold.cpp@@
+@@LISTING:engine/include/engine/phys/shape.hpp@@
+@@LISTING:engine/src/phys/shape.cpp@@
+@@LISTING:engine/include/engine/phys/convex.hpp@@
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/CMakeLists.txt@@
+@@LISTING:demos/manifold/main.cpp@@
+@@LISTING:scratch/verify_87.cpp@@
+@@LISTING:scratch/build_verify_87.sh@@
+
+  <h2 id="build">14. Build &amp; run</h2>
+
+  <p>
+    The engine and the demo build the same way they have since 5.1.
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --target manifold
+./build/demos/manifold</code></pre>
+
+  <p>
+    On Windows with MSVC, the executable lands in a configuration subdirectory:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug --target manifold
+.\build\demos\Debug\manifold.exe</code></pre>
+
+  <p>
+    The harness wants an <em>optimised</em> library, because §11 quotes the cost of a manifold
+    against the depth query it is built on and both are calls into <code>libengine.a</code>, where a
+    harness's own <code>-O2</code> cannot reach. <code>build_verify_87.sh</code> refuses rather than
+    quietly producing numbers — 7.6 measured the cost of ignoring that at 18.1× on skinning:
+  </p>
+
+  <pre><code class="lang-bash">cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+sh scratch/build_verify_87.sh</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The demo opens on a crate resting on a floor. The left panel shows the crate and the floor in
+    wireframe with <strong>four white dots</strong> at the crate's base corners, joined by a green
+    loop — the support polygon — and a short pink arrow leaving the deepest point along the contact
+    normal. The right panel shows the same contact face on: a blue rectangle (the floor's top face,
+    which is the reference), a red dashed square inside it (the crate's bottom face, which is the
+    incident one), and an amber square exactly on top of the red one, because with the crate wholly
+    inside the floor's face nothing is cut.
+  </p>
+
+  <p>
+    The panel reads <code>status : face</code>, <code>contact points : 4 (clipped 4)</code>,
+    <code>support area : 1.0000 m2</code>, and four rows of ids, each
+    <code>incident vertex</code> with an <code>inc</code> index between 0 and 7.
+  </p>
+
+  <p>
+    Press <kbd>4</kbd>. The crate becomes a ball, the left panel shows <strong>one</strong> dot and
+    no polygon, the right panel shows one dot in the middle of the blue rectangle, and the status
+    reads <code>point</code> with a support area of <code>0.0000 m2</code>.
+  </p>
+
+  <p>
+    The harness prints nine sections and ends:
+  </p>
+
+  <pre><code class="lang-text">==================================================================
+92 checks, 0 failures</code></pre>
+
+  <h2 id="pitfalls">15. Common pitfalls &amp; debugging</h2>
+
+  <p>
+    <strong>Symptom: the manifold is empty on a contact that plainly exists.</strong>
+    <br>Cause: the reference polygon's winding is clockwise about its normal rather than
+    counter-clockwise, so every side plane built as <code>cross(edge, normal)</code> faces inward and
+    classifies everything as outside.
+    <br>Fix: check one face by hand. Take three consecutive vertices <code>a, b, c</code> and
+    confirm <code>dot(cross(b − a, c − b), normal) &gt; 0</code>. §5's control does exactly this and
+    reports 0 of 4 incident vertices accepted when the winding is reversed — which is the quietest
+    way there is to lose a floor, because nothing errors.
+  </p>
+
+  <p>
+    <strong>Symptom: contact points are on the far side of one of the shapes.</strong>
+    <br>Cause: one of the two <code>face_of</code> calls has the wrong sign. <code>a</code> looks
+    along <code>+n</code> and <code>b</code> looks back along <code>−n</code>, because the normal
+    points from <code>a</code> toward <code>b</code>.
+    <br>Fix: assert that <code>dot(fa.normal, n) &gt; 0</code> and <code>dot(fb.normal, −n) &gt;
+    0</code>. The failure looks, on screen, exactly like a body being flung across the level by a
+    solver that is working perfectly, which is why it is worth an assertion rather than a comment.
+  </p>
+
+  <p>
+    <strong>Symptom: a crate rocks on a floor even with four contact points.</strong>
+    <br>Cause: probably not the manifold. Print <code>support_area()</code>: if it is near zero the
+    manifold has four points on a line, which resists nothing about that line. If it is the size of
+    the face, the rocking is the solver's, and 8.9 and 8.10 are where it goes.
+    <br>Fix: if the area really is collapsing, check <code>face_cos</code> — §6's table shows the
+    mean contact count falling as it tightens, and a crate one hundredth of a degree off a face
+    normal dropping to an edge contact is exactly this.
+  </p>
+
+  <p>
+    <strong>Symptom: warm starting does nothing; <code>warm_points</code> is always zero.</strong>
+    <br>Cause: the two manifolds being matched were generated with the shapes the other way round.
+    <code>pair_key</code> is order-independent and the manifold is not.
+    <br>Fix: fix the order at the broadphase — lower body index first — and check by printing
+    <code>reference_on_b</code> on consecutive frames. If it alternates, the arguments are
+    alternating.
+  </p>
+
+  <p>
+    <strong>Symptom: a tessellated cylinder's side contact is two points, not four.</strong>
+    <br>Cause: the gather tolerance is tighter than the angle between the cylinder's consecutive
+    face normals, so the “face” recovered from the supporting plane is the single edge between two
+    of them.
+    <br>Fix: raise <code>gather_sin</code> for that asset, or — properly — give the hull a face list.
+    §5 sweeps both ends and says plainly that there is no value that is right.
+  </p>
+
+  <p>
+    <strong>Symptom: contact depths are slightly wrong on hull contacts.</strong>
+    <br>Cause: the face's normal is being taken as the query direction rather than computed from the
+    gathered polygon. The two can differ by <code>asin(k_face_gather_sin)</code> — nearly three
+    degrees — and the reference plane is what every depth is measured from.
+    <br>Fix: Newell's method over the sorted polygon, oriented to agree with the query. And note that
+    it has to be <em>after</em> the sort: Newell's sum over vertices in exporter order is not the
+    face's normal.
+  </p>
+
+  <p>
+    <strong>Symptom: a contact point's position is nowhere near either surface.</strong>
+    <br>Cause: you are measuring the midpoint. It is defined as halfway between the two surfaces, so
+    on a deep overlap it is legitimately <code>depth/2</code> from each.
+    <br>Fix: recover the surface points — A's is <code>position + normal·depth/2</code>, B's is
+    <code>position − normal·depth/2</code> — and measure those. §7's first instrument made exactly
+    this mistake and reported a 0.63 m “bug” that was a fact about the convention.
+  </p>
+
+  <h2 id="exercises">16. Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>Do the statics by hand, then check it.</strong> A 20 kg crate 0.8 m wide rests on
+      four contact points at its base corners. Write down the largest moment about its centre of mass
+      that the contact set can resist, then set up the same crate in a
+      <code>simulate_rest</code>-style loop and bisect for the value at which it tips. Explain the
+      sign of the discrepancy.</p>
+      <p class="hint"><em>Hint.</em> <code>m·g·(w/2) = 20 × 9.81 × 0.4 = 78.48 N·m</code>. The
+      measurement should come out a couple of per cent <em>low</em>, for the reason §1 gives: the
+      crate's effective lip is inside its geometric one by however much penetration the solver
+      allows.</p>
+    </li>
+
+    <li>
+      <p><strong>Break the winding, and watch where it does not error.</strong> In
+      <code>support_face(const obb&amp;, vec3)</code>, swap <code>f.v[1]</code> and
+      <code>f.v[3]</code>. Rebuild and run the demo. What does preset 1 show? What does the harness
+      say? Then swap them back and instead reverse the sign of <code>side</code> in the clipper, and
+      compare the two failures.</p>
+      <p class="hint"><em>Hint.</em> One of them empties the manifold; the other keeps everything,
+      including points outside the reference face. Both are silent, and only one of them is caught by
+      a test that checks the points are on the surfaces.</p>
+    </li>
+
+    <li>
+      <p><strong>Measure the fifth point yourself.</strong> Extend §8's brute-force comparison to
+      ask what the best <em>five</em> points span, as a fraction of the whole clipped polygon. Then
+      argue — from §2's arithmetic, not from the number — why the answer does not change what a
+      solver can do.</p>
+      <p class="hint"><em>Hint.</em> Five points span more <em>area</em>. The question a solver asks
+      is whether the resultant can act anywhere in the support polygon, and it already could.</p>
+    </li>
+
+    <li>
+      <p><strong>Give <code>hull</code> its faces.</strong> Add an optional
+      <code>std::span&lt;const face_range&gt;</code> to <code>hull</code>, where each entry names a
+      run of indices into a shared index array. Build one by hand for a hexagonal prism, make
+      <code>support_face</code> use it when present and fall back to the gather when it is not, and
+      re-run §5's tolerance sweep. Report what the sweep now looks like.</p>
+      <p class="hint"><em>Hint.</em> With real faces the sweep should be <em>flat</em>: the
+      tolerance has nothing to decide, because the face is named rather than recovered. That flatness
+      is the whole argument for doing it.</p>
+    </li>
+
+    <li>
+      <p><strong>An engine challenge: make the swing survivable.</strong> §1 measured a 90° normal
+      swing between two consecutive frames. Write an experiment that runs a box sliding past a wall's
+      end at a realistic speed, prints the manifold's ids and normal on every frame, and reports how
+      many frames the ids survive on either side of the crossing. Then propose — and measure — a
+      policy for what a solver should do on the frame the normal flips.</p>
+      <p class="hint"><em>Hint.</em> Two candidate policies worth comparing: drop the warm impulses
+      on a flip (safe, and the stack loses a frame of convergence), or rotate them into the new
+      normal's basis (keeps magnitude, and is wrong if the flip is genuine). Measure which one
+      settles a stack faster, and note that you now have a reason to prefer one rather than a
+      preference.</p>
+    </li>
+  </ol>
+
+  <h2 id="recap">17. Recap &amp; next</h2>
+
+  <p>
+    The engine can now say <em>where</em> two shapes touch, not just how far into each other they
+    are. A <code>contact_manifold</code> is up to four points sharing one normal, each with its own
+    depth and its own identity, and the identity is what lets 8.10 begin each contact from the
+    impulse that held it last frame.
+  </p>
+
+  <p>
+    The four things worth carrying forward:
+  </p>
+
+  <ul>
+    <li><strong>A manifold is a support polygon, and a support polygon is a statics problem.</strong>
+        A body rests when its centre of mass projects inside the convex hull of its contact points,
+        and the moment that hull can carry is <code>m·g·(w/2)</code> — predicted at 49.05 N·m and
+        bisected at 47.87. One contact point spans a hull of zero area and holds a crate up only by
+        chattering, at 27.99 °/s of permanent rocking and 21 mm of sink.</li>
+    <li><strong>A support function determines a shape and names no feature.</strong> Four thousand
+        directions from a cone a thousandth of a degree wide return all four corners of the same
+        face, deterministically and arbitrarily. The fix is one more query on the shapes, not a
+        cleverer reading of EPA's output — and <code>epa.hpp</code> was not touched.</li>
+    <li><strong>Clip, filter, reduce.</strong> Sutherland–Hodgman against the reference face's side
+        planes, keep what is actually penetrating, and take the deepest point plus the three that
+        span the most area. That reduction reaches 96.3% of the best four there are and loses
+        <em>no depth at all</em>.</li>
+    <li><strong>Match on identity, never on position.</strong> A crate's landing matches 0.00% of
+        contacts at a ten-micrometre position tolerance and 82% by id, rising to 100% of 1,999
+        consecutive frames once it settles. And a position matcher passes every test you would write
+        for it, because it only fails once things move.</li>
+  </ul>
+
+  <p>
+    Two smaller things that are really the same thing: a control that convicts the code of the
+    test's own mistake looks exactly like a finding, and a knob written for a real hazard can measure
+    zero and should then come out.
+  </p>
+
+  <h3>Next</h3>
+
+  <p>
+    <strong>8.8 — Broadphase: A Uniform Grid.</strong> Everything in Module 8 so far has been a
+    question about <em>one pair</em>, and a scene has n² of them. Four hundred bodies is 79,800
+    pairs, and at §11's 395 ns each that is 31 ms — half a frame, spent almost entirely on pairs
+    that are metres apart. 8.8 is the cheapest possible fix, when it stops being enough, and how to
+    measure that rather than guess it. It also inherits this lesson's argument-order rule, because a
+    broadphase is the thing that decides which shape is <code>a</code>.
+  </p>
+
+  <h2 id="reading">18. Further reading</h2>
+
+  <ul class="reading">
+    <li><strong>Erin Catto, “Contact Manifolds”</strong> — GDC 2007. The clearest statement of the
+        reference/incident split and of why persistence is keyed on ids. Two dimensional, which makes
+        the ideas visible; every one of them generalises.</li>
+    <li><strong>Erin Catto, “Modeling and Solving Constraints”</strong> — GDC 2009. The other half:
+        what the solver does with a manifold, and why warm starting is the difference between a
+        stack and a pile. 8.10's reference.</li>
+    <li><strong>Dirk Gregorius, “Robust Contact Creation for Physics Simulations”</strong> — GDC
+        2015. The industrial version of §5 through §8, including face-list colliders, the
+        Sutherland–Hodgman variants, and the numerical care a shipping engine takes over the
+        reference choice.</li>
+    <li><strong>Christer Ericson, <em>Real-Time Collision Detection</em></strong>, §5.1.9 and §9 —
+        closest points on two segments (the edge-contact path), and polygon clipping.</li>
+    <li><strong>Sutherland &amp; Hodgman, “Reentrant Polygon Clipping”</strong>, CACM 17(1), 1974 —
+        the original, four pages, and worth reading for how little there is to it.</li>
+    <li><strong>Box2D's <code>b2CollidePolygons</code></strong> — the reference implementation of §6
+        and §7, in about two hundred lines. Note its bias on the reference choice, and §9's
+        measurement of why this engine does not need one.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th ed., §22.13</strong> — for the wider context of
+        what a collision system owes a simulation.</li>
+    <li><strong>Lesson 3.3</strong> of this course — the near-plane clipper, which is §7's algorithm
+        with one plane instead of four.</li>
+  </ul>

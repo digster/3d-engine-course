@@ -1,0 +1,249 @@
+  <h2 id="seed">5. What GJK actually hands over</h2>
+
+  <p>
+    Every description of EPA you will read — every paper, every blog post, every implementation's
+    comments — opens the same way: <em>start from the tetrahedron GJK terminated with.</em> It is
+    such a natural sentence that it is easy to read past. GJK's last act on an overlapping pair is
+    to find a tetrahedron enclosing the origin; EPA's first act is to expand a polytope enclosing
+    the origin; the handoff writes itself.
+  </p>
+
+  <p>
+    8.5 §9 measured it, and it does not happen.
+  </p>
+
+  @@FIG_SEED@@
+
+  <p>
+    §D of this lesson's harness takes the measurement again, one lesson later, with the question
+    put more precisely — not “is it a tetrahedron” but “what exactly arrives, by arrangement”:
+  </p>
+
+  <pre><code class="lang-text">  D.1  terminal simplex handed to EPA, by arrangement
+
+       fixture              pairs   1   2    3      4  tetra
+       crates on a floor    50000   0  49 49951      0      0
+         ...one tilted 1 deg  50000   0   1  197  49802  49802
+       free orientations    50000   0  29  755  49216  49216
+       ball in a crate      50000   0  63 1242  48695  48695
+       capsule vs crate     50000   0  65 1032  48903  48903
+       hull vs hull         50000   0   0  204  49796  49796</code></pre>
+
+  <p>
+    Read the first row. Fifty thousand pairs of crates standing on the same floor at arbitrary
+    yaw — which is not an adversarial fixture but the default arrangement of almost everything in
+    almost every level — and the four-point column is <strong>zero</strong>. Not rare. Never.
+  </p>
+
+  <p>
+    The cause is 8.5 §9's and it is exact rather than statistical. Two boxes standing on a floor
+    share an up axis whatever their yaw, so their <code>y</code> half extents multiply the same
+    world direction; <code>support_local</code>'s <code>&gt;= 0</code> tie-break picks the same
+    sign for both; and every vertex of the difference set the search visits comes out with
+    <code>w.y = (+h) − (+h) − 0</code>, exactly zero. The search direction is then also in that
+    plane, and the next vertex, and the next. The set is solid and three-dimensional; it is the
+    <em>search</em> that never leaves its equator. Tilt one crate by a single degree and 49,802
+    tetrahedra appear.
+  </p>
+
+  <h3>5.1 It is a triangle, not a flat tetrahedron</h3>
+
+  <p>
+    And notice what <em>does</em> arrive: 49,951 of the 50,000 are a three-point simplex. This is a
+    detail 8.5 could not have predicted and it changes the repair.
+  </p>
+
+  <p>
+    The literature's degenerate case — the one the folklore warns about — is a <em>flat
+    tetrahedron</em>: four points that happen to be coplanar. That is not what GJK produces, because
+    <code>reduce_simplex</code> discards any vertex the closest point does not use, and three
+    points in a plane already span everything the fourth could reach. A fourth coplanar point is
+    redundant by construction, so it is dropped before the function returns.
+  </p>
+
+  <div class="callout">
+    <p>
+      <strong>So the input is a triangle containing the origin, and that is much better news than
+      a flat tetrahedron would have been.</strong> A triangle GJK reduced to is one whose closest
+      point to the origin uses all three vertices — which is precisely what “the origin's
+      projection lands inside it” means. §E checks it rather than believing it, and it holds
+      <strong>30,000 times out of 30,000</strong>. A flat tetrahedron would have needed a choice of
+      which three of its four points to keep, with no guarantee that any triple covered the origin.
+    </p>
+  </div>
+
+  <p>
+    The last column of §D.1 is the same data read as a verdict. A textbook EPA — one that assumes
+    a tetrahedron with volume — refuses:
+  </p>
+
+  <pre><code class="lang-text">       CONTROL — a textbook EPA refuses everything but 'tetra'
+       crates on a floor   100.00% refused
+         ...one tilted 1 deg   0.40% refused
+       free orientations     1.57% refused
+       ball in a crate       2.61% refused
+       capsule vs crate      2.19% refused
+       hull vs hull          0.41% refused</code></pre>
+
+  <p>
+    Even at free orientations it is 1.57%, which on a scene with a thousand contacts a frame is
+    fifteen contacts a frame with no answer at all. <strong>Building the starting polytope is on
+    the critical path, not the error path</strong>, and that is why it gets its own section rather
+    than a paragraph.
+  </p>
+
+  <h2 id="apex">6. Building the starting polytope</h2>
+
+  <p>
+    So: a triangle, in a plane, with the origin on it. The polytope must be three-dimensional and
+    must contain the origin. The obvious move is to leave the plane, and the obvious way to leave
+    the plane is one support call along the triangle's normal.
+  </p>
+
+  <p>
+    That gives a tetrahedron. It is also useless, and the reason is worth drawing.
+  </p>
+
+  @@FIG_APEX@@
+
+  <p>
+    <strong>The origin is on the base.</strong> It was in the triangle's plane to begin with —
+    that is what “GJK reduced to this triangle” means — and adding one apex above leaves it exactly
+    there, on the tetrahedron's bottom face. So the closest face is the base, at distance zero, and
+    the lower bound starts at zero and has nowhere to go: the expansion has no face to push out
+    against, because the face it would choose is already touching the origin.
+  </p>
+
+  <p>
+    §E builds both seeds by hand from the public <code>cso_support</code> and measures their
+    starting lower bounds over 30,000 flat simplices:
+  </p>
+
+  <pre><code class="lang-text">  E.2  the starting lower bound each seed gives
+
+       seed              mean      p95       max
+       one apex     0.000e+00 0.000e+00 0.000e+00
+       bipyramid    9.044e-02 2.234e-01 4.056e-01
+       true depth   4.908e-01 9.252e-01 1.000e+00
+
+       CONTROL — one apex puts the origin ON the base, so
+       its closest face is at zero: 30000 / 30000 below 1e-6 m.</code></pre>
+
+  <p>
+    Thirty thousand out of thirty thousand, and the maximum is zero, not merely the mean. This is
+    not a tail case; it is what one apex always does.
+  </p>
+
+  <p>
+    The repair is the symmetric one: take a support point on <em>each</em> side of the plane. Two
+    support calls, four extra shape evaluations, and now the origin has a face above it and a face
+    below it. The mean starting lower bound goes from nothing to 9 cm against a true depth of
+    49 cm — not the answer, but a real place to expand from.
+  </p>
+
+  <h3>6.1 And six faces stitched by hand are not a polytope</h3>
+
+  <p>
+    Here is where this lesson's third bug lived, and it is the kind that is invisible in a code
+    review because the code looks obviously correct.
+  </p>
+
+  <p>
+    A triangle with an apex above and an apex below is a <em>bipyramid</em>: five vertices, six
+    triangular faces, three fanning up from the triangle's edges and three fanning down. Writing
+    those six faces out is four lines, and the winding falls out of the order the vertices are in.
+    The first version of <code>seed_polytope</code> did exactly that.
+  </p>
+
+  <p>
+    It is wrong, because <strong>a bipyramid is convex only when each apex projects inside the
+    triangle</strong>, and a support point taken along the plane's normal has no reason whatever to
+    land over the middle of the triangle. When it does not, two of the six faces meet at a
+    <em>reflex</em> edge, the “polytope” is a non-convex surface, and every argument in §4 stops
+    applying — <code>P ⊆ S</code> still holds, but “the minimum over faces is the distance to the
+    boundary” does not.
+  </p>
+
+  <p>
+    §E.3 counts it. Convexity is checkable — every vertex must be on the inner side of every face
+    plane — so it is checked:
+  </p>
+
+  <pre><code class="lang-text">  E.3  and the bipyramid must not be stitched by hand
+
+       six faces from a triangle to two apexes is convex only
+       when each apex projects INSIDE the triangle:
+
+         NOT convex: 15855 / 30000  (52.85%)</code></pre>
+
+  <div class="callout">
+    <p>
+      <strong>Fifty-three per cent — and only 2.3% of queries produced a visibly wrong
+      answer.</strong> That gap is why the bug survived the first full harness run. Half the seeds
+      were not polytopes, and nineteen in twenty of those still came out right, because the very
+      first expansion usually deleted the offending face and repaired the surface by accident. What
+      made it visible was not a failing assertion but a <em>status histogram</em>: 1,172 of 50,000
+      crates-on-a-floor pairs returning <code>stalled</code> instead of <code>proven</code>, with
+      a lower bound that had gone negative. Counting how your code finishes, not just what it
+      returns, is worth the four bytes.
+    </p>
+  </div>
+
+  <p>
+    The repair is to stop hand-building it. There is already a routine in this file that adds a
+    vertex to a convex polytope and produces a convex polytope — it is the expansion step itself,
+    which is beneath-and-beyond and therefore computes the convex hull by construction. So the seed
+    builds a <em>tetrahedron</em> on the first apex, which is always convex because a tetrahedron
+    is, and then adds the second apex through <code>expand</code>:
+  </p>
+
+  <pre><code class="lang-cpp">    gjk_vertex tet[4] = {pts[tri[0]], pts[tri[1]], pts[tri[2]], up};
+    if (!build_tetrahedron(p, tet)) { failure = epa_status::capacity; return false; }
+
+    // The face `down` is beyond is the base — the one whose normal points away
+    // from `up`, which after the winding fix is face 0. Handing it to `expand`
+    // as the certainly-visible seed is exactly what the main loop does with its
+    // closest face.
+    if (!expand(p, down, 0, true)) { failure = epa_status::degenerate; return false; }
+    return true;</code></pre>
+
+  <p>
+    Two lines, and the seed and the loop now share one notion of what adding a vertex means. That
+    is the whole fix, and it is smaller than the code it replaced.
+  </p>
+
+  <h3>6.2 The other four shapes of input</h3>
+
+  <p>
+    For completeness, because <code>gjk_result::terminal</code> can carry one to four points and
+    all four occur in §D.1's table:
+  </p>
+
+  <ul>
+    <li><strong>Four points with volume.</strong> GJK's good case, and the one the literature
+        describes. Used as is, with the winding fixed by the sign of the triple product.</li>
+    <li><strong>Four points without volume.</strong> Does not occur in practice, for §5.1's
+        reason, but the code handles it: of the four triangles those points offer, at least two
+        cover the origin, because either diagonal cuts the quadrilateral into two. The widest one
+        that does is chosen.</li>
+    <li><strong>Three points.</strong> The flat case above: the triangle plus two apexes.</li>
+    <li><strong>Two points.</strong> The origin lies on a segment of the difference set, which
+        happens on 49 of 50,000 floor pairs. Four probe directions perpendicular to the segment,
+        the widest triangle wins, then the flat case. Four rather than one, because the set can be
+        thin in any particular perpendicular direction and a triangle with no area gives a plane
+        normal made of rounding error.</li>
+    <li><strong>One point.</strong> The origin <em>is</em> a vertex of the difference set. Six axis
+        probes, best of six rather than first of six — a first-match loop picks a direction that
+        happens to be barely non-degenerate and hands the next step a segment made of noise.</li>
+  </ul>
+
+  <div class="callout">
+    <p>
+      <strong>And if the support function finds no extent along the plane normal at all, the set
+      really is flat</strong> — two coplanar triangles, a point against a plane — and its
+      penetration depth really is zero, because the minimum of <code>h</code> over directions
+      includes the plane normal, where <code>h</code> is zero. That is reported as
+      <code>epa_status::degenerate</code> with the plane direction in <code>normal</code>, rather
+      than papered over. A caller pushing along it by zero is doing the right thing.
+    </p>
+  </div>

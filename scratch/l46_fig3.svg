@@ -1,0 +1,77 @@
+<svg viewBox="0 0 720 412" role="img" aria-labelledby="f46c-t f46c-d">
+  <title id="f46c-t">Where C++ puts a field and where the shader reads it</title>
+  <desc id="f46c-d">Bytes 64 to 111 of one uniform block, with the 16-byte register boundaries drawn. C++ and the shader agree about the first four fields and diverge on the last: C++ places the trailing float3 at byte 92, and the compiler moved it to 96 because 92 to 103 would straddle the boundary. Measured, the naive struct's float3 arrives as (242, 243, 0) — shifted by one float, with a zero on the end — while every field before it arrives intact.</desc>
+  <defs>
+    <marker id="e-i-f46c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f46c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f46c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">bytes 64 to 111 of one uniform block &#8212; the matrix occupies 0 to 63 and both sides agree about it</text>
+  <text x="24" y="79" class="sm">C++</text>
+  <rect x="96.0" y="54.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="136.0" y="50.0" class="xs muted" text-anchor="middle">register 4</text>
+  <rect x="176.0" y="54.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="216.0" y="50.0" class="xs muted" text-anchor="middle">register 5</text>
+  <rect x="256.0" y="54.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="296.0" y="50.0" class="xs muted" text-anchor="middle">register 6</text>
+  <rect x="96.0" y="62.0" width="20.0" height="26" fill="#5082e6" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="106.0" y="79.0" class="xs mono t-inv" text-anchor="middle">a</text>
+  <text x="96.0" y="100.0" class="xs muted">64</text>
+  <rect x="116.0" y="62.0" width="60.0" height="26" fill="#f0961e" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="146.0" y="79.0" class="xs mono t-inv" text-anchor="middle">b</text>
+  <text x="116.0" y="100.0" class="xs muted">68</text>
+  <rect x="176.0" y="62.0" width="20.0" height="26" fill="#5082e6" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="186.0" y="79.0" class="xs mono t-inv" text-anchor="middle">c</text>
+  <text x="176.0" y="100.0" class="xs muted">80</text>
+  <rect x="196.0" y="62.0" width="40.0" height="26" fill="#5ac878" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="216.0" y="79.0" class="xs mono t-inv" text-anchor="middle">d</text>
+  <text x="196.0" y="100.0" class="xs muted">84</text>
+  <rect x="236.0" y="62.0" width="60.0" height="26" fill="#eb786e" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="266.0" y="79.0" class="xs mono t-inv" text-anchor="middle">e</text>
+  <text x="236.0" y="100.0" class="xs muted">92</text>
+  <text x="24" y="169" class="sm">the shader</text>
+  <rect x="96.0" y="144.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="136.0" y="140.0" class="xs muted" text-anchor="middle">register 4</text>
+  <rect x="176.0" y="144.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="216.0" y="140.0" class="xs muted" text-anchor="middle">register 5</text>
+  <rect x="256.0" y="144.0" width="80.0" height="42" class="grid" fill="none" stroke-dasharray="3 3"/>
+  <text x="296.0" y="140.0" class="xs muted" text-anchor="middle">register 6</text>
+  <rect x="96.0" y="152.0" width="20.0" height="26" fill="#5082e6" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="106.0" y="169.0" class="xs mono t-inv" text-anchor="middle">a</text>
+  <text x="96.0" y="190.0" class="xs muted">64</text>
+  <rect x="116.0" y="152.0" width="60.0" height="26" fill="#f0961e" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="146.0" y="169.0" class="xs mono t-inv" text-anchor="middle">b</text>
+  <text x="116.0" y="190.0" class="xs muted">68</text>
+  <rect x="176.0" y="152.0" width="20.0" height="26" fill="#5082e6" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="186.0" y="169.0" class="xs mono t-inv" text-anchor="middle">c</text>
+  <text x="176.0" y="190.0" class="xs muted">80</text>
+  <rect x="196.0" y="152.0" width="40.0" height="26" fill="#5ac878" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="216.0" y="169.0" class="xs mono t-inv" text-anchor="middle">d</text>
+  <text x="196.0" y="190.0" class="xs muted">84</text>
+  <rect x="256.0" y="152.0" width="60.0" height="26" fill="#f0961e" fill-opacity="0.8" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="286.0" y="169.0" class="xs mono t-inv" text-anchor="middle">e</text>
+  <text x="256.0" y="190.0" class="xs muted">96</text>
+  <line x1="236.0" y1="92.0" x2="256.0" y2="142.0" class="hi" stroke-width="1.4" marker-end="url(#e-h-f46c)"/>
+  <text x="266.0" y="123.0" class="xs t-hi">C++ says 92, the shader reads 96 &#8212; because 92&#8230;103 would STRADDLE the boundary at 96</text>
+  <rect x="24" y="246" width="672" height="150" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="266" class="sm">what arrives, measured &#8212; wrote e = (241, 242, 243)</text>
+  <text x="40" y="292" class="xs">the naive struct</text>
+  <rect x="200" y="277" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="232" y="292" class="xs mono t-bad" text-anchor="middle">242</text>
+  <rect x="272" y="277" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="304" y="292" class="xs mono t-bad" text-anchor="middle">243</text>
+  <rect x="344" y="277" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="376" y="292" class="xs mono t-bad" text-anchor="middle">0</text>
+  <text x="40" y="322" class="xs">padded to 96</text>
+  <rect x="200" y="307" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="232" y="322" class="xs mono t-ok" text-anchor="middle">241</text>
+  <rect x="272" y="307" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="304" y="322" class="xs mono t-ok" text-anchor="middle">242</text>
+  <rect x="344" y="307" width="64" height="21" class="fill-soft ink" stroke-width="0.75" rx="2"/>
+  <text x="376" y="322" class="xs mono t-ok" text-anchor="middle">243</text>
+  <text x="40" y="364" class="xs t-hi">shifted by one float, with a zero on the end &#8212; and every field BEFORE it arrived correctly</text>
+  <text x="40" y="382" class="xs muted">no error, no warning, no validation message: a uniform layout bug corrupts the TAIL of a block</text>
+</svg>

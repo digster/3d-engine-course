@@ -1,0 +1,764 @@
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-image">4.1 A decoder behind our own interface</h3>
+
+  <p>
+    <code>stb_image</code> arrives the way every dependency in this project arrives: pinned, and
+    at arm's length.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake">FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20   # pinned — no tags exist
+    GIT_SHALLOW    FALSE   # a SHA cannot be shallow-fetched by name
+)</code></pre>
+  </figure>
+
+  <p>
+    A commit SHA rather than a tag, because stb has no releases — the same situation Lesson 4.3
+    hit with SDL_shadercross, resolved the same way. A branch name would mean a fresh clone could
+    decode differently from yours.
+  </p>
+
+  <p>
+    The library is header-only, which raises the one thing about stb that catches people:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/image.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">#define STB_IMAGE_IMPLEMENTATION
+#define STBI_NO_STDIO
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_BMP</code></pre>
+  </figure>
+
+  <p>
+    <code>STB_IMAGE_IMPLEMENTATION</code> turns the header from declarations into definitions, and
+    it must be defined in <strong>exactly one</strong> translation unit: two and the linker
+    reports every function twice, none and it reports every function missing. Isolating it in one
+    <code>.cpp</code> means no other file in the engine ever includes <code>stb_image.h</code> —
+    they include <code>image.hpp</code>, which mentions no third-party type at all.
+  </p>
+
+  <p>
+    That isolation is the point of the file existing rather than the decode happening at the call
+    site. <strong>A third-party library reaches exactly as far into a codebase as its types appear
+    in headers</strong>, and stb's reach is one file. If it is ever replaced, one file changes.
+  </p>
+
+  <p>
+    <code>STBI_NO_STDIO</code> is worth a sentence too: it removes stb's <code>FILE*</code> API, so
+    the decode takes bytes we already read with <code>SDL_LoadFile</code>. One notion of where
+    files live (Lesson 3.5's <code>asset_path</code>), one error style, one place that knows how
+    the memory is freed. Two file-opening paths in one program is two answers to "why can it not
+    find my asset".
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — compiling somebody else's code with your warnings</span>
+    <p>
+      <code>image.cpp</code> wraps the include in <code>#pragma GCC diagnostic push</code> and
+      silences three warnings. That is deliberate and it is not laziness: the alternative is
+      <em>editing</em> stb to satisfy <code>-Wall -Wextra</code>, and an edited dependency is one
+      you can no longer update. Suppress at the boundary, never at the source — and suppress
+      narrowly, so that your own code in the same file is still held to the standard.
+    </p>
+  </div>
+
+  <p>
+    Finally, the decode asks for four channels always, whatever the file held:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/image.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    stbi_uc* decoded = stbi_load_from_memory(static_cast&lt;const stbi_uc*&gt;(file),
+                                             static_cast&lt;int&gt;(file_bytes),
+                                             &amp;w, &amp;h, &amp;channels_in_file, 4);</code></pre>
+  </figure>
+
+  <p>
+    The <code>4</code> costs a byte per pixel on images that had no alpha and buys something worth
+    more: nothing downstream ever branches on what shape a file happened to be. Our test image is
+    three-channel PNG and arrives as RGBA; the engine never learns the difference.
+  </p>
+
+  <h3 id="impl-texture">4.2 The texture, and the depth target</h3>
+
+  <p>
+    Both are <code>SDL_GPUTexture</code>. They differ in usage, in format, and in whether anything
+    is ever uploaded to them — so <code>gpu_texture</code> has two creation paths and one
+    destructor.
+  </p>
+
+  <p>
+    The sampled path is Lesson 4.2's transfer chain with a different destination, and one argument
+    that matters more than the rest of the function:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_texture.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    format_ = srgb ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB
+                   : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;</code></pre>
+  </figure>
+
+  <p>
+    One enum, and it decides whether the lighting maths in the fragment shader is correct. §3.5
+    measured what it does; this is where it is chosen. An albedo texture is <code>_SRGB</code>. A
+    normal map, a roughness map, a mask — anything whose values are <em>numbers</em> rather than
+    <em>colours</em> — is <code>_UNORM</code>, because decoding them would corrupt data that was
+    never encoded in the first place. That distinction is one of the commonest mistakes in a
+    material system and Module 6 will lean on it hard.
+  </p>
+
+  <p>
+    The depth path creates and stops:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_texture.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;</code></pre>
+  </figure>
+
+  <p>
+    <code>DEPTH_STENCIL_TARGET</code> and nothing else. Adding <code>SAMPLER</code> would let a
+    later pass <em>read</em> the depth buffer, which is exactly what Module 6's shadow maps need
+    and this lesson does not — and asking for a usage you do not need can force the driver into a
+    layout that is slower for the usage you do. Ask for what you use.
+  </p>
+
+  <p>
+    And the format is asked for rather than chosen:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const SDL_GPUTextureFormat depth_wanted[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    };
+    const SDL_GPUTextureFormat depth_format =
+        engine::supported_depth_format(gpu, depth_wanted, SDL_arraysize(depth_wanted));</code></pre>
+  </figure>
+
+  <p>
+    In preference order, falling back to the one SDL guarantees. On the machine this lesson was
+    written on the middle entry is <em>not supported</em>, which is the entire argument for the
+    function existing.
+  </p>
+
+  <h3 id="impl-sampler">4.3 The sampler, and a cast with a test behind it</h3>
+
+  <p>
+    Here is the whole port of Lesson 3.9's sampler:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_texture.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const SDL_GPUFilter f = static_cast&lt;SDL_GPUFilter&gt;(min_mag);
+    const SDL_GPUSamplerAddressMode a = static_cast&lt;SDL_GPUSamplerAddressMode&gt;(wrap);</code></pre>
+  </figure>
+
+  <p>
+    Two casts. Lesson 3.9 defined <code>engine::filter</code> and
+    <code>engine::address_mode</code> to match SDL's enumerators one for one, wrote down that it
+    was doing so and why, and <code>verify_42</code> §G has asserted the correspondence on every
+    run since Module 4 opened. So this is not a coincidence being relied upon: <strong>it is a
+    rename with a regression test behind it</strong>, and if SDL ever inserts an enumerator the
+    test fails there rather than this cast silently selecting the wrong mode.
+  </p>
+
+  <p>
+    That is what "written so the port is a rename" is worth, two modules later, and it is worth
+    noticing how little it cost at the time — an ordering decision and a comment.
+  </p>
+
+  <p>
+    The interesting part of the create-info is the fields Lesson 3.9's function had no room for:
+    separate minification and magnification filters, three address modes for three axes, the
+    mipmap chain and its LOD clamps, anisotropy, and <code>enable_compare</code>. That last one is
+    worth knowing about now even though we set it false: it makes the sampler perform the depth
+    comparison itself and return a filtered occlusion value, which is how percentage-closer
+    shadow filtering works and why it is nearly free.
+  </p>
+
+  <h3 id="impl-pass">4.4 The attachment, and the resize nobody remembers</h3>
+
+  <p>
+    The depth attachment goes on the render pass, and its fields mirror the colour target's:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                        depth_info.texture = depth_target.handle();
+                        depth_info.clear_depth = 1.0f;
+                        depth_info.load_op = SDL_GPU_LOADOP_CLEAR;
+                        depth_info.store_op = SDL_GPU_STOREOP_DONT_CARE;</code></pre>
+  </figure>
+
+  <p>
+    <code>clear_depth = 1.0f</code> is the far plane, because SDL_GPU's NDC runs 0 at near to 1 at
+    far and the test is <code>LESS</code>. Clear it to 0 and every fragment fails — a black screen
+    with no error, and one of the two or three most common ways to lose an afternoon here.
+  </p>
+
+  <p>
+    <code>STOREOP_DONT_CARE</code> is the interesting one. Nothing reads this buffer after the
+    pass ends, so telling the driver so lets it skip writing the depth buffer back to memory
+    entirely. On a tile-based GPU — every phone, and Apple silicon — that is real bandwidth, and
+    it is the sort of thing that is free to get right and expensive to notice later.
+  </p>
+
+  <p>
+    And then the piece that is not in any tutorial:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                    if (!depth_target.valid() || depth_w != swap_w || depth_h != swap_h)
+                    {
+                        if (depth_target.create_depth(gpu, depth_format, swap_w, swap_h,
+                                                      "scene depth"))
+                        {
+                            depth_w = swap_w;
+                            depth_h = swap_h;</code></pre>
+  </figure>
+
+  <p>
+    <strong>A depth attachment must match its colour target's dimensions, and the window is
+    resizable.</strong> Create it once at startup and the first time somebody drags the window
+    corner the pass fails. This is the one piece of bookkeeping a depth buffer costs, it is
+    trivial, and it is forgotten constantly — because on the machine where the code was written,
+    nobody resized the window.
+  </p>
+
+  <h3 id="impl-probe">4.5 Instruments for a question with no API</h3>
+
+  <p>
+    §3.3 needed to know the smallest gap a depth buffer can resolve, and there is no call that
+    answers it. So, as in Lesson 4.6, the question gets turned into a picture and the picture gets
+    counted.
+  </p>
+
+  <p>
+    <code>depth_probe.vert.hlsl</code> emits a full-target surface at an exact view distance,
+    writing the clip position directly from Lesson 2.10's terms rather than through a camera:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/depth_probe.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    output.position = float4(corner * d, z_clip, d);</code></pre>
+  </figure>
+
+  <p>
+    After the divide that is <code>xy = corner</code> — the whole target — and
+    <code>z_ndc = z_clip / d</code>, which is exactly the expression §3.2 derived. No camera, no
+    matrix, no vertex buffer: the experiment measures the depth <em>buffer</em> and cannot
+    accidentally be measuring anything else.
+  </p>
+
+  <p>
+    Then the test itself, which is binary by construction:
+  </p>
+
+  <blockquote>
+    <p>
+      Draw the <strong>far</strong> surface first, then the <strong>near</strong> one. With
+      <code>LESS</code>, the near one must beat what is already there. If the format can separate
+      them, the near colour survives everywhere; if it cannot, the near draw fails its test and
+      the far colour is left. Count orange pixels.
+    </p>
+  </blockquote>
+
+  <p>
+    Bisect on the gap and you have the number. Except that the first version of this measurement
+    was wrong, in a way worth keeping.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Two measurement bugs, and what they looked like</span>
+    <p>
+      <strong>First:</strong> the answer at a single distance is not a property of the format at
+      all. It depends on where that distance happens to fall between two representable depth
+      codes — land just below a boundary and a nanometre crosses it, land just above and you need
+      very nearly a whole code. Measured that way, D16 reported 1.4 mm at ten metres and 2.6 mm at
+      twenty-five: <em>a curve going the wrong way</em>, which is the signal that the experiment
+      rather than the hardware is being measured. The fix is to sample several nearby distances
+      and take the <strong>maximum</strong>, which is also the honest number — it is what a
+      renderer has to survive.
+    </p>
+    <p>
+      <strong>Second:</strong> those nearby distances were evenly spaced, and at twenty-five
+      metres the step happened to be almost exactly one code wide. So sixteen samples measured one
+      situation sixteen times and reported a quarter of the true spacing. That is
+      <strong>aliasing</strong> — in a course that has already met it in a texture (3.9) and in a
+      vsync measurement (4.2), now in a probe. The fix is the standard one: offsets at fractional
+      multiples of the golden ratio, which never lock to any period.
+    </p>
+  </div>
+
+  <p>
+    With both fixed, the measurement matches §3.2's formula to a few per cent across two orders of
+    magnitude and reproduces exactly between runs. That agreement is the reason to trust either.
+  </p>
+
+  <h3 id="impl-scene">4.6 The scene</h3>
+
+  <p>
+    The payoff is two pipeline flags and one attachment apart:
+  </p>
+
+@@FIG_SCENE@@
+
+  <p>
+    <strong>18.9% of the covered pixels differ</strong>, and every one of them is a surface that
+    should have been hidden. Note that the figure is drawn untextured on purpose — a
+    high-frequency checkerboard on both panels would make the eye work to find the difference, and
+    the difference is the whole point. One variable at a time, in a figure as much as in a
+    measurement.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption class="visually-hidden">Every file this lesson creates or modifies</caption>
+    <thead><tr><th>path</th><th></th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td>src/gfx/image.hpp</td><td><span class="badge new">new</span></td>
+          <td>decoded pixels, and why we do not write the decoder</td></tr>
+      <tr><td>src/gfx/image.cpp</td><td><span class="badge new">new</span></td>
+          <td>the one translation unit that contains stb_image</td></tr>
+      <tr><td>src/gfx/gpu_texture.hpp</td><td><span class="badge new">new</span></td>
+          <td><code>gpu_texture</code>, <code>gpu_sampler</code>, and the format query</td></tr>
+      <tr><td>src/gfx/gpu_texture.cpp</td><td><span class="badge new">new</span></td>
+          <td>the transfer path, the depth path, and two casts</td></tr>
+      <tr><td>shaders/depth_probe.vert.hlsl</td><td><span class="badge new">new</span></td>
+          <td>a full-target surface at an exact distance — the instrument</td></tr>
+      <tr><td>shaders/depth_probe.frag.hlsl</td><td><span class="badge new">new</span></td>
+          <td>a flat colour, so the survivor can be counted</td></tr>
+      <tr><td>shaders/texture_probe.frag.hlsl</td><td><span class="badge new">new</span></td>
+          <td>one texel per pixel, for the orientation and sRGB readback</td></tr>
+      <tr><td>assets/uv_grid.png</td><td><span class="badge new">new</span></td>
+          <td>corners, gridlines and an arrow — orientation readable by machine</td></tr>
+      <tr><td>shaders/mesh.frag.hlsl</td><td><span class="badge mod">modified</span></td>
+          <td>samples the albedo; the grid becomes a uniform-driven toggle</td></tr>
+      <tr><td>src/gfx/gpu_uniform.hpp</td><td><span class="badge mod">modified</span></td>
+          <td>the light block gains <code>uv_scale</code> and <code>grid_mix</code></td></tr>
+      <tr><td>src/gfx/gpu_device.cpp</td><td><span class="badge mod">modified</span></td>
+          <td><code>name_of</code> gains the depth formats</td></tr>
+      <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+          <td>the texture, two samplers, the depth target and its resize, four keys</td></tr>
+      <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td>
+          <td>stb pinned at a commit, and three probe shaders</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:src/gfx/image.hpp@@
+@@LISTING:src/gfx/image.cpp@@
+@@LISTING:src/gfx/gpu_texture.hpp@@
+@@LISTING:src/gfx/gpu_texture.cpp@@
+@@LISTING:shaders/mesh.frag.hlsl@@
+@@LISTING:shaders/depth_probe.vert.hlsl@@
+@@LISTING:shaders/depth_probe.frag.hlsl@@
+@@LISTING:shaders/texture_probe.frag.hlsl@@
+@@LISTING:src/gfx/gpu_uniform.hpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <p>
+    The first configure after this lesson fetches stb, which is one small repository and takes a
+    few seconds. Nothing else changes.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Windows (Visual Studio generator)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j
+.\build\Debug\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Seven tori wearing a checkerboard with coloured corners and an arrow, lit as before — and
+    solid. Orbit with the arrow keys until two of them cross and the nearer one now stays in
+    front, which it did not last lesson.
+  </p>
+
+  <p>
+    The startup log reports the two things worth knowing:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">terminal — <code>./engine --gpu</code></span>
+      <span class="lang" data-lang="text">output</span>
+    </figcaption>
+    <pre><code class="lang-text">  depth format    : D32_FLOAT (32 bits)
+  texture         : uv_grid.png 256x256, 3 channels in the file, uploaded 262144 bytes as R8G8B8A8_UNORM_SRGB
+  depth target    : 1280x720 D32_FLOAT</code></pre>
+  </figure>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Keys added this lesson</caption>
+    <thead><tr><th>key</th><th>what it does</th><th>what to look for</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>C</kbd></td><td>the depth test</td>
+          <td>off is what every lesson before this one looked like</td></tr>
+      <tr><td><kbd>T</kbd></td><td>texture or the 4.5 grid</td>
+          <td>the grid is kept, not deleted — it is still the fastest uv diagnostic</td></tr>
+      <tr><td><kbd>F</kbd></td><td>linear or nearest</td>
+          <td>a different sampler <em>object</em>, not a different argument</td></tr>
+      <tr><td><kbd>R</kbd></td><td>uv scale 1 → 2 → 4</td>
+          <td>where <code>address_mode::repeat</code> starts to mean something</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    To reproduce every measurement:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">from the repository root</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    -I build/_deps/stb-src scratch/verify_47.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp src/gfx/gpu_buffer.cpp \
+    src/gfx/gpu_pipeline.cpp src/gfx/gpu_mesh.cpp src/gfx/gpu_present.cpp \
+    src/gfx/gpu_texture.cpp src/gfx/image.cpp src/gfx/framebuffer.cpp \
+    src/gfx/raster.cpp src/gfx/colour.cpp src/gfx/depth_buffer.cpp \
+    src/gfx/texture.cpp src/gfx/mesh.cpp src/gfx/obj.cpp src/gfx/clip.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/verify_47
+./build/verify_47</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       7 — COMMON PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Nothing draws at all after adding depth</span>
+    <p>
+      <strong>Symptom:</strong> black screen, no error.<br>
+      <strong>Cause:</strong> <code>clear_depth</code> is 0 instead of 1. Every fragment fails a
+      <code>LESS</code> test against a buffer already full of the nearest possible value.<br>
+      <strong>Fix:</strong> 1.0 is far in SDL_GPU's NDC. If you are using reversed-Z, it is 0 —
+      and the compare op is <code>GREATER</code>. The clear value and the compare op always change
+      together.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The pass fails the first time the window is resized</span>
+    <p>
+      <strong>Symptom:</strong> works perfectly until somebody drags a corner.<br>
+      <strong>Cause:</strong> the depth attachment no longer matches the colour target's size.<br>
+      <strong>Fix:</strong> recreate it when the swapchain dimensions change (§4.4). Note that
+      this will never reproduce on a machine where you do not resize the window, which is the
+      machine you are on.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Distant surfaces flicker as the camera moves</span>
+    <p>
+      <strong>Symptom:</strong> z-fighting — two coplanar or near-coplanar surfaces swapping which
+      is visible, per pixel, frame to frame.<br>
+      <strong>Cause:</strong> they are closer together than the depth format can resolve at that
+      distance. §3.2 gives you the number: Δd = (f−n)·d²/(f·n·N).<br>
+      <strong>Fix, in order of how much they buy:</strong> move the <em>near</em> plane out (it is
+      in the numerator of the resolution, so 0.3 → 1.0 is a 3× improvement everywhere); use
+      reversed-Z with a float format; use a wider format; and only then consider moving the far
+      plane in, which helps least.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is washed out, or lighting looks flat and wrong</span>
+    <p>
+      <strong>Symptom:</strong> the scene is too bright, and shading has less contrast than it
+      should.<br>
+      <strong>Cause:</strong> an albedo texture created with <code>_UNORM</code> instead of
+      <code>_SRGB</code>. The sRGB-encoded bytes are being multiplied by light as though they were
+      linear reflectances — Lesson 3.9 measured this as up to 43% of the light in the wrong
+      place.<br>
+      <strong>Fix:</strong> <code>_SRGB</code> for anything that is a <em>colour</em>. And
+      <code>_UNORM</code> for anything that is a <em>number</em> — normal maps, roughness, masks —
+      where decoding would corrupt data that was never encoded.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The texture is upside down</span>
+    <p>
+      <strong>Symptom:</strong> the image is mirrored vertically on the surface.<br>
+      <strong>Cause:</strong> one flip too many or too few between the file (top row first), the
+      OBJ (v upwards), and the sampler (v downwards).<br>
+      <strong>Fix:</strong> §3.5's probe is the way to find out <em>which</em> — read the four
+      corners back and compare with the file. Fixing it by flipping something and seeing whether
+      it looks better is how a codebase ends up with two flips that cancel.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A sheared or garbled texture</span>
+    <p>
+      <strong>Symptom:</strong> the image is recognisable but skewed diagonally.<br>
+      <strong>Cause:</strong> <code>pixels_per_row</code> given a byte pitch instead of a pixel
+      count in <code>SDL_GPUTextureTransferInfo</code>.<br>
+      <strong>Fix:</strong> pixels, not bytes. This is the third time this exact bug has appeared
+      in this course — Lesson 1.5's framebuffer pitch, Lesson 4.5's vertex pitch, and now here —
+      which is worth taking as a general warning about any field named for a row.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">"Texture format is not supported" at startup</span>
+    <p>
+      <strong>Symptom:</strong> <code>SDL_CreateGPUTexture</code> fails for a depth format that
+      works on your other machine.<br>
+      <strong>Cause:</strong> only <code>D16_UNORM</code> is guaranteed. This lesson's development
+      machine does not support <code>D24_UNORM</code> at all.<br>
+      <strong>Fix:</strong> <code>SDL_GPUTextureSupportsFormat</code>, in preference order, with a
+      guaranteed fallback.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>4.7.1 — Move the near plane and watch the table change.</strong> §3.2's formula
+        has <em>n</em> in the denominator, so the near plane costs precision everywhere. Re-run
+        the depth measurement with near at 0.1, 0.3 and 1.0 and confirm the 10× and 3× you
+        predict.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> <code>k_near</code> in <code>verify_47.cpp</code>, and remember
+        <code>k_depth_a</code> depends on it. The lesson to take away is a practical one: pushing
+        the near plane out is the cheapest depth-precision fix there is, and it is usually
+        available — most scenes have nothing within a metre of the camera.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.7.2 — Make z-fighting happen on purpose.</strong> Add a second torus to the
+        scene, offset from the first by a distance you compute from §3.2 to be just under one
+        depth code at its distance. Predict what you will see before you build.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the prediction is not "flicker" — a still camera gives a stable
+        wrong answer. You need motion, and the interesting part is that the pattern of which
+        surface wins is a <em>map</em> of the depth buffer's quantisation.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.7.3 — An albedo in the wrong space.</strong> Change the texture to
+        <code>_UNORM</code> and compare the two renders per pixel, as Lesson 3.9 compared its
+        blends. Report the largest error as a fraction of full range.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> §E of the harness already renders both; the addition is a
+        difference image and a maximum. Expect the largest errors in the <em>midtones</em>, not at
+        the extremes — sRGB and linear agree at 0 and at 1 by construction.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.7.4 — Reversed-Z, properly.</strong> §3.4 measured it with a probe. Do it in the
+        engine: flip the projection's depth remap, the compare op, and the clear value, and
+        confirm the scene is unchanged while the precision is not.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the cleanest flip is in <code>engine::perspective</code> itself —
+        swap the near and far terms — so the shader never learns about it. Check
+        <code>SDL_GPUTextureSupportsFormat</code> for <code>D32_FLOAT</code> first and fall back
+        to the ordinary mapping if it is absent, because reversed-Z on a UNORM format buys
+        nothing (§3.4) and complicates everything.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.7.5 — Mipmaps.</strong> The demo minifies badly — tile the texture with
+        <kbd>R</kbd> and the surface boils. Generate a mip chain, set
+        <code>num_levels</code> and <code>mipmap_mode</code>, and make it stop.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> <code>SDL_GenerateMipmapsForGPUTexture</code> does the generation;
+        the texture must be created with <code>num_levels &gt; 1</code> and the
+        <code>COLOR_TARGET</code> usage bit as well as <code>SAMPLER</code>. Compare against
+        Lesson 3.9's shimmering floor, which is the same phenomenon and the reason that lesson
+        named mipmaps and deferred them.
+      </p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <ul>
+    <li>
+      <strong>Depth is an attachment plus three pipeline fields</strong>, and both are needed.
+      Lesson 3.1 modelled the split two modules early and the port is a rename, exactly as it
+      promised.
+    </li>
+    <li>
+      <strong>Depth precision falls off as the square of distance</strong>, because the
+      perspective divide puts 1/<em>d</em> into the stored value. Seventy per cent of our range is
+      spent in the first metre; D16 cannot separate 41 cm at ninety metres. The formula is
+      Δd = (f−n)·d²/(f·n·N) and the measurement matches it to a few per cent.
+    </li>
+    <li>
+      <strong>Reversed-Z is 180× on a float format and nothing on a UNORM one</strong>, and
+      knowing which is which follows from knowing where a float keeps its precision.
+    </li>
+    <li>
+      <strong>Ask for a depth format; do not assume one.</strong> Only D16 is guaranteed, and this
+      machine has no D24.
+    </li>
+    <li>
+      <strong>A sampler is an object, a texture is an object, and they meet at the binding.</strong>
+      Lesson 3.9's enums were written to make the port two casts, and a test has been guarding
+      that claim since Module 4 opened.
+    </li>
+    <li>
+      <strong><code>_SRGB</code> is one enum and it decides whether your lighting is correct</strong>
+      — decoding per read, for free, before the filter.
+    </li>
+  </ul>
+
+  <p>
+    The engine now has every piece of a renderer: geometry on the device, a camera that moves,
+    materials with an image on them, and hidden-surface removal. What it does not have is the
+    <em>scene</em> — Module 3's demo, with its floor, its models, its lighting controls and its
+    HUD, still runs entirely on the CPU beside all of this.
+  </p>
+
+  <p>
+    <strong>Next: 4.8 — Porting the Module-3 Scene.</strong> The payoff, and it should be
+    undramatic: the same scene, the same maths, a different API. Every convention that made this
+    possible was fixed deliberately in Module 2 and Module 3 — the NDC parity, the depth range,
+    the winding, the column-major matrices, the sampler enums — and the honest test of whether
+    that was worth it is how little of Module 3 has to change now.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>Nathan Reed, "Depth Precision Visualized" (2015).</strong> The definitive treatment
+      of §3.2 and §3.4, with the float-precision argument drawn rather than derived. Read it after
+      this lesson and the pictures will already mean something.
+    </li>
+    <li>
+      <strong>SDL3 — <code>SDL_gpu.h</code>:</strong> <code>SDL_GPUDepthStencilTargetInfo</code>,
+      <code>SDL_GPUSamplerCreateInfo</code>, <code>SDL_GPUTextureSupportsFormat</code>. The
+      sampler create-info in particular is worth reading in full — every field is a decision.
+    </li>
+    <li>
+      <strong>Sean Barrett, <code>stb_image.h</code> — the header comment.</strong> Worth reading
+      as a document about API design: what a single-file library owes its user, and what it
+      deliberately refuses to do.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §23.7 "Depth" and §6.2 "Texture Sampling".</strong>
+      Depth precision in the cost model of a frame, and the filtering taxonomy this lesson only
+      opened.
+    </li>
+    <li>
+      <strong>Emil Persson, "Creating Vast Game Worlds" (SIGGRAPH 2012).</strong> Reversed-Z and
+      logarithmic depth at planetary scale — where §3.2's 1/d² stops being an inconvenience and
+      becomes the design constraint.
+    </li>
+    <li>
+      <a href="../conventions.html">Conventions</a> — §4 (NDC and depth range), §7 (winding),
+      §12 (textures and sampling), and the new §7j entry on depth and texture formats.
+    </li>
+  </ul>

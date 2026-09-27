@@ -1,0 +1,289 @@
+  <h2 id="impl">9. The implementation</h2>
+
+  <p>
+    <code>engine::phys</code> is the fifth new directory since the Module 5 refactor, and the second
+    (after <code>audio/</code>) whose contents never touch a pixel. It starts smaller than any
+    subsystem in this engine has: one header and one source file.
+  </p>
+
+  <h3 id="motion">9.1 <code>motion</code>, and what is deliberately not in it</h3>
+
+  <pre><code class="lang-cpp">struct motion
+{
+    vec3 position{};
+    vec3 velocity{};
+};</code></pre>
+
+  <p>
+    That is the entire state. No mass, no orientation, no handle, no shape, no id. It is worth being
+    explicit about why, because the temptation at the start of a physics module is to write the
+    <code>rigid_body</code> you know is coming and integrate a field of it.
+  </p>
+
+  <p>
+    An integrator does not need any of that. It needs a quantity and its rate of change. Keeping the
+    type down to two vectors is what let §5 be an argument about a 2×2 matrix instead of an argument
+    about an engine — and it is also what makes the type reusable for things that are not bodies at
+    all: a spring-damper camera, a smoothed UI value, a particle. Lesson 8.2 adds mass and turns
+    <code>F = ma</code> into a <code>rigid_body</code> that <em>has</em> a <code>motion</code>; 8.3
+    adds orientation and an inertia tensor beside it.
+  </p>
+
+  <p>
+    The units are the ones fixed on the Conventions page in Module 2: metres and seconds. That has
+    been a statement about rendering for six modules and becomes a statement about physics here — 8.2
+    is where "1 unit = 1 metre" stops being pedantry, because <code>9.81</code> is a number in those
+    units and in no others.
+  </p>
+
+  <h3 id="three-rules">9.2 Three rules, as close together as they will go</h3>
+
+  <p>
+    The stepping function is a template over the acceleration callable, and its three cases are
+    written to sit directly under one another so the difference is impossible to miss:
+  </p>
+
+  <pre><code class="lang-cpp">case integrator::explicit_euler:
+{
+    const vec3 a = accel(m.position);
+    m.position += m.velocity * h;
+    m.velocity += a * h;
+    break;
+}
+
+case integrator::semi_implicit_euler:
+{
+    const vec3 a = accel(m.position);
+    m.velocity += a * h;
+    m.position += m.velocity * h;
+    break;
+}</code></pre>
+
+  <p>
+    Two lines, swapped. The course index calls this "one character's difference", and that is precise
+    if you read it as a formula rather than as code — the update is
+    <code>x<sub>n+1</sub> = x<sub>n</sub> + h·v<sub>n</sub></code> against
+    <code>x<sub>n+1</sub> = x<sub>n</sub> + h·v<sub>n+1</sub></code>, and the difference is the
+    subscript. In C++ it is a line order, which is if anything worse: a line order is the kind of
+    thing an "obvious" refactor rearranges, and there is no compiler diagnostic anywhere that will
+    tell you what you just did.
+  </p>
+
+  <p>
+    Velocity Verlet is the third case, and it does something the others do not — it evaluates the
+    acceleration <em>twice</em>:
+  </p>
+
+  <pre><code class="lang-cpp">case integrator::velocity_verlet:
+{
+    const vec3 a0 = accel(m.position);
+    m.position += m.velocity * h + a0 * (0.5f * h * h);
+    const vec3 a1 = accel(m.position);
+    m.velocity += (a0 + a1) * (0.5f * h);
+    break;
+}</code></pre>
+
+  <p>
+    Move with the acceleration you have, then correct the velocity with the <em>average</em> of the
+    accelerations at the two ends of the step. That average is a trapezium rule, which is why the
+    method is second order, and the <code>½·a·h²</code> in the position line is the Taylor term §3
+    identified as the one everyone else drops.
+  </p>
+
+  <p>
+    A production Verlet caches <code>a1</code> and hands it to the next step as its <code>a0</code>,
+    halving the force work. This one does not, and the reason is stated in the header rather than
+    hidden: caching costs a state field that the other two rules have no use for, which would push a
+    <code>vec3</code> into <code>motion</code> for the benefit of one enumerator. That is the right
+    trade when the force evaluation is a broadphase query, and the wrong one for a type whose whole
+    job in this lesson is to be legible. §10 measures what the honesty costs, and it is 14%.
+  </p>
+
+  <h3 id="template">9.3 Why it is a template</h3>
+
+  <p>
+    <code>Accel&amp;&amp;</code> rather than <code>std::function&lt;vec3(vec3)&gt;</code>, and the
+    justification is a measurement rather than a reflex. A <code>std::function</code> is an indirect
+    call that the optimiser cannot see through, once per body per step:
+  </p>
+
+  <pre>I.1  explicit           0.994 ns/body/step
+     semi-impl          0.963
+     verlet             1.136
+
+I.3  std::function      1.591 ns/body/step</pre>
+
+  <p>
+    0.63 ns per body per step, which is <strong>65% on top of the step itself</strong> — a function
+    call whose body is one multiply, costing more than the arithmetic it wraps. In absolute terms it
+    is small (ten thousand bodies buys it for 6 µs a frame), and the reason to care is that it scales
+    with the same thing everything else in Module 8 scales with. And there is a second, sharper
+    reading of the same table further down:
+  </p>
+
+  <pre>I.4  integrate(m, g, ...)     1.222 ns/body/step
+   SLOWER than the template in I.1, and that is the
+   whole argument for the template: this one is a
+   real call into libengine.a and cannot inline
+   across the archive.</pre>
+
+  <p>
+    The non-template overload — the constant-acceleration one that lives in the <code>.cpp</code> and
+    handles gravity — is the <em>slowest</em> of the lot, because it is a genuine call into
+    <code>libengine.a</code> that cannot be inlined across the static archive. The simpler-looking
+    path is the expensive one. That is worth remembering the next time "just put it in the .cpp"
+    sounds like tidying up.
+  </p>
+
+  <h3 id="diagnostics">9.4 The diagnostics, and a zero that is an answer</h3>
+
+  <p>
+    Four functions in the header do no stepping at all, and they exist so that the analysis in this
+    lesson is something the engine can <em>do</em> rather than something the lesson merely says:
+    <code>spring_energy</code>, <code>shadow_energy</code>, <code>area_factor</code> and
+    <code>max_stable_step</code>. Sections B, C and F of the harness check their own claims against
+    these, which means the header is never allowed to drift away from the prose.
+  </p>
+
+  <p>
+    The one worth singling out is <code>max_stable_step</code>:
+  </p>
+
+  <pre><code class="lang-cpp">case integrator::explicit_euler:      return 0.0f;
+
+case integrator::semi_implicit_euler:
+case integrator::velocity_verlet:     return 2.0f / omega;</code></pre>
+
+  <p>
+    A function called "largest stable step" returning zero looks like a bug and is the most honest
+    line in the file. There <em>is</em> no stable step size for explicit Euler on an oscillator; the
+    answer is not "small", it is "none". Returning some small positive number would be a lie the
+    caller could act on. Returning zero means somebody who writes
+    <code>h = 0.5f * max_stable_step(rule, w)</code> gets a simulation that does not move — which is a
+    far better bug report than a simulation that quietly explodes twenty seconds into a playtest.
+  </p>
+
+  <p>
+    The <code>omega &lt;= 0</code> case returns <code>HUGE_VALF</code> rather than a large number, for
+    the same reason: with no restoring force there is nothing to be unstable about, every rule reduces
+    to straight-line motion, and a caller comparing against the result wants the real answer rather
+    than a sentinel it has to know about.
+  </p>
+
+  <h3 id="demo">9.5 The demo, and an accumulator inside an accumulator</h3>
+
+  <p>
+    <code>demos/integrate</code> draws phase space, because §5 is the argument and a bouncing dot is
+    not. It also does one structural thing worth copying.
+  </p>
+
+  <pre><code class="lang-cpp">void on_fixed_step(float h) override
+{
+    if (paused_) { return; }
+    sim_.begin_frame(h);
+    while (sim_.next_step()) { advance(sim_.h()); }
+}</code></pre>
+
+  <p>
+    That is Lesson 1.4's <code>fixed_step</code> — the same class, unchanged — running
+    <em>inside</em> the application's own fixed step. It looks redundant and it is the point: the
+    application's rate is a platform decision, and the simulation's rate is the variable this demo
+    exists to vary. Pressing <kbd>Up</kbd> changes what physics does without changing how often the
+    screen updates, and the two concerns stay separable because 1.4 made the accumulator a type
+    instead of four lines in a loop.
+  </p>
+
+  <p>
+    Two smaller decisions in that file earned their comments. The first is a ceiling on the view
+    scale: the plot follows the worst track only up to three amplitudes, after which the red curve
+    simply leaves. Without the ceiling a diverging explicit Euler pulls the camera back without limit
+    and every other curve collapses to a dot within about ten seconds — the picture ends up showing
+    nothing but the thing that is broken, at exactly the moment you want to compare it against the
+    things that are not.
+  </p>
+
+  <p>
+    The second is that the curve leaving means the panel needs a real clip, so the file carries a
+    twenty-line Cohen–Sutherland. <code>engine::draw_line</code> deliberately does not clip — Lesson
+    2.1 says so in a comment, walks every pixel and lets <code>put_pixel</code>'s bounds check discard
+    the ones outside — which is correct for the framebuffer and does nothing at all to stop the red
+    spiral being drawn straight across the energy chart next door. That exercise from 2.1 came due
+    here, seventy lessons later, for a reason nobody predicted.
+  </p>
+
+  <h2 id="budget">10. The budget, and the free lunch</h2>
+
+  @@FIG_DEMO@@
+
+  <p>
+    Section I times ten thousand bodies for a hundred steps, with the rule as a <em>compile-time</em>
+    constant so that each of the three loops is a separate monomorphic function. That detail is not
+    incidental — the first version passed the rule as a runtime <code>integrator</code>, and the
+    measurement then depended on whether the optimiser felt like unswitching the loop, which it did on
+    some runs and not others. Explicit came out 15% faster than semi-implicit in one run and 30%
+    slower in the next. <em>A benchmark whose answer changes run to run is measuring the compiler, not
+    the code.</em>
+  </p>
+
+  <pre>I.1  rule            ns/body/step   force evals
+   explicit           0.994          1
+   semi-impl          0.963          1
+   verlet             1.136          2
+
+I.5  CONTROL: a loop that does nothing but walk the
+     same array.
+   touch only         0.608 ns/body/step</pre>
+
+  <p>
+    <strong>0.994 against 0.963.</strong> They differ by 3%, against a run-to-run spread of the same
+    size, which is the measurement's way of saying they cost the same — as they must, because they are
+    the same loads, the same multiplies and the same stores, differing only in which order two of them
+    happen. The control underneath says 0.608 ns of that is walking the array at all, so the
+    arithmetic itself is about a third of a nanosecond.
+  </p>
+
+  <p>
+    Which makes this one of the genuinely rare things in engineering: <strong>a free
+    lunch</strong>. One of these two rules is unconditionally unstable and the other is stable up to a
+    hard, computable limit, and they cost the same. There is no trade-off to weigh, no profile to
+    consult, no "it depends on your workload". There is only a correct choice and an incorrect one.
+  </p>
+
+  <p>
+    And for scale: ten thousand bodies under gravity cost <strong>0.012 ms</strong> of a 16.67 ms
+    frame, which is 0.07% of it. Integration is not where physics time goes. Collision detection is,
+    and Lessons 8.4 through 8.8 are about that — which is worth knowing now, so that nobody spends an
+    afternoon hand-vectorising the cheapest loop in the module.
+  </p>
+
+  <h2 id="limits">11. What this does not do</h2>
+
+  <p>
+    This lesson built the smallest honest thing, and the list of what it is not is longer than the
+    list of what it is.
+  </p>
+
+  <ul>
+    <li><strong>No mass, no forces.</strong> <code>integrate</code> takes an <em>acceleration</em>.
+        Turning a force into one is <code>a = F/m</code>, and it needs a body to have a mass, which is
+        Lesson 8.2.</li>
+    <li><strong>No rotation.</strong> Angular motion has the same structure and a much worse-behaved
+        version of it: the "mass" is a tensor that rotates with the body, and the equations have a
+        term with no linear analogue at all. Lesson 8.3, and it needs the quaternions from 7.4.</li>
+    <li><strong>No collision, no constraints.</strong> Which is why §6.3's stability limit does not
+        immediately doom us. A contact is not going to be a stiff spring; it is going to be an
+        impulse (8.9) inside an iterative solver (8.10), for precisely the reason measured there.</li>
+    <li><strong>No adaptive step.</strong> A general-purpose ODE solver estimates its own error and
+        shrinks the step when it is too large. Games do not do this — a variable step makes replays
+        and lockstep networking impossible, and Lesson 1.4 is the whole argument. We choose
+        <code>h</code> once and make the physics fit inside it.</li>
+    <li><strong>No RK4.</strong> The fourth-order Runge–Kutta everybody meets first is more accurate
+        than anything here per step, and it is <em>not symplectic</em>: it has the same disease as
+        explicit Euler, milder. It costs four force evaluations, which for a physics engine is four
+        broadphase queries. Exercise 5 measures its determinant, and the answer is worth the twenty
+        minutes.</li>
+    <li><strong>No velocity-dependent force in the symplectic path</strong>, for the reason §8 gives.
+        Drag is handled exactly and separately, and anything more exotic — a magnetic force, a
+        gyroscopic term — needs its own analysis rather than an assumption that the reordering
+        helps.</li>
+  </ul>

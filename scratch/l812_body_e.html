@@ -1,0 +1,476 @@
+  <h2 id="implementation">14. Writing it</h2>
+
+  <p>
+    Three files change and one is new. <code>constraint.hpp</code> grows the swing–twist split, a cone
+    on the ball-socket and the position-pass fix; <code>solver.hpp</code> grows one stage; and
+    <code>phys/ragdoll.hpp</code> is the seam between the animation system and the solver. It is the
+    first file in <code>phys/</code> that knows what a skeleton is, and the arrow points that way on
+    purpose: <code>anim/skeleton.hpp</code> includes nothing but maths, a game with no physics must still
+    be able to animate, and a ragdoll is a physics object built <em>from</em> a skeleton — 5.12's rule,
+    that the arrow points at the more general.
+  </p>
+
+  <h3>Step 1: the split</h3>
+
+  <p>
+    §3's projection, four lines and a guard. The guard is the one singularity: a swing of exactly
+    180° leaves nothing to project, every twist is as good as any other, and the identity is the one
+    that does not invent a turn:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — split_swing_twist</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">swing_twist split_swing_twist(quat q, vec3 unit_axis)
+{
+    swing_twist out;
+
+    // Keep the component of q.v along the axis and delete the rest: what is
+    // left is a rotation about the axis, and it is the twist because the part
+    // deleted — q.v&#x27;s perpendicular component — is exactly what the swing is
+    // made of. The swing is then whatever turns the twist into q.
+    const float along = dot(q.v, unit_axis);
+    const float len2 = q.w * q.w + along * along;
+
+    // The one singularity: a swing of 180 degrees leaves nothing to project.
+    // Every twist is equally right there; the identity is the one that does
+    // not invent a turn nobody asked for.
+    if (len2 &lt; 1e-12f)
+    {
+        out.swing = q.w &lt; 0.0f ? -q : q;
+        return out;
+    }
+
+    const float inv = 1.0f / std::sqrt(len2);
+    out.twist = quat{q.w * inv, unit_axis * (along * inv)};
+    if (out.twist.w &lt; 0.0f) { out.twist = -out.twist; }
+    out.swing = q * conjugate(out.twist);
+    if (out.swing.w &lt; 0.0f) { out.swing = -out.swing; }
+    return out;
+}</code></pre>
+  </div>
+
+
+  <h3>Step 2: authoring a cone that is not centred on the bone</h3>
+
+  <p>
+    A cone-twist joint stores the cone's axis in the parent's frame and the twist axis — the bone — in
+    the child's, and they need not agree when the joint is made: a shoulder authored in a T-pose wants
+    its cone between "out" and "down", or an arm hanging at rest sits on the edge of it. The one subtle
+    line is <code>rest</code>. 8.11's hinge stored <code>conj(q_a)·q_b</code>, which makes the relative
+    rotation the identity at the authored pose; here it is pre-multiplied by the conjugate of the swing
+    from the cone's axis to the bone, so that the relative rotation <em>is</em> that swing at the
+    authored pose — twist zero, swing the tilt — and its swing–twist split about the cone's axis is the
+    joint's swing and twist at every pose after. <code>hinge_angle</code> then measures the twist
+    unchanged:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — make_cone_twist</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">joint make_cone_twist(const rigid_body&amp; a, const rigid_body&amp; b, vec3 world_anchor,
+                      vec3 world_twist_axis, vec3 world_cone_axis)
+{
+    joint j = make_ball_socket(a, b, world_anchor);
+
+    const vec3 twist = normalised(world_twist_axis);
+    const vec3 cone = length_squared(world_cone_axis) &gt; 0.0f ? normalised(world_cone_axis) : twist;
+    j.axis_a = local_direction_of(a, cone);
+    j.axis_b = local_direction_of(b, twist);
+
+    // `rest` must make `r = conj(q_a) q_b conj(rest)` carry `axis_a` onto the
+    // bone in `a`&#x27;s frame at every pose, so that r&#x27;s swing–twist split IS the
+    // joint&#x27;s swing and twist. `make_ball_socket` set `rest = r0 =
+    // conj(q_a) q_b`, which carries the bone onto itself; pre-multiplying by
+    // the conjugate of `offset` — the swing from the cone&#x27;s axis to the bone —
+    // makes r equal `offset` now, which is a pure swing, so the twist reads
+    // zero at the authored pose and the swing reads the tilt. With no tilt
+    // `offset` is the identity and `rest` is the hinge&#x27;s.
+    const vec3 bone_in_a = local_direction_of(a, twist);
+    const quat offset = minimal_rotation(j.axis_a, bone_in_a);
+    j.rest = conjugate(offset) * j.rest;
+    return j;
+}</code></pre>
+  </div>
+
+
+  <h3>Step 3: the rows</h3>
+
+  <p>
+    In <code>prepare_joint</code>, at the head of the ball-socket case and guarded on the kind — the
+    hinge falls through into this case for its pin, and a hinge's <code>limit</code> is its own angle.
+    §4's swing row and §5's twist rows, through 8.11's <code>one_sided</code> lambda, which is what makes
+    speculation, warm starting and the position pass apply to them without a line of solver code:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — prepare_joint, the ball-socket's limits (comments removed; the listing has them)</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">if (j.kind == joint_kind::ball_socket &amp;&amp; (j.cone.enabled || j.limit.enabled))
+{
+    vec3 a1;
+    vec3 b1;
+    cone_axes(j, a, b, a1, b1);
+    const vec3 n = cross(a1, b1);
+    const float sin_swing = length(n);
+    const float cos_swing = dot(a1, b1);
+    batch.axis = a1;
+    batch.swing = std::atan2(sin_swing, cos_swing);
+
+    if (j.cone.enabled)
+    {
+        vec3 axis{};
+        if (sin_swing &gt; k_min_swing_sin) { axis = n / sin_swing; }
+        else if (cos_swing &lt; 0.0f)
+        {
+            vec3 q;
+            perpendicular_pair(a1, axis, q);
+        }
+        if (length_squared(axis) &gt; 0.0f)
+        {
+            one_sided(angular_row(-axis), j.cone.swing - batch.swing, row_role::swing,
+                      j.swing_impulse);
+        }
+    }
+
+    if (j.limit.enabled &amp;&amp; 1.0f + cos_swing &gt; k_min_twist_cos)
+    {
+        const vec3 axis = (a1 + b1) / (1.0f + cos_swing);
+        batch.angle = hinge_angle(j, a, b);
+        one_sided(angular_row(axis), batch.angle - j.limit.lower, row_role::limit_lower,
+                  j.limit_impulse[0]);
+        one_sided(angular_row(-axis), j.limit.upper - batch.angle, row_role::limit_upper,
+                  j.limit_impulse[1]);
+    }
+}</code></pre>
+  </div>
+
+
+  <p>
+    <code>k_max_joint_rows</code> did not have to grow: three point rows, one swing row and two twist
+    rows is six, under the hinge's eight.
+  </p>
+
+  <h3>Step 4: the position pass, fixed</h3>
+
+  <p>
+    §7's bug, in the one line that changed. A satisfied one-sided row is given its speculative target
+    rather than its zero bias, through a helper that takes the goal explicitly so that no row's state is
+    borrowed and restored:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/constraint.cpp — solve_joint_positions, the scalar rows</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">const bool one_sided = row.lower == 0.0f;
+worst = std::max(worst, one_sided ? std::max(0.0f, -row.error) : std::abs(row.error));
+
+// *** LESSON 8.12 FIXED THIS, AND IT HAD BEEN WRONG SINCE 8.11. ***
+//
+// A one-sided row that is NOT violated — a limit the joint has not
+// reached — used to be solved here against `row.bias`, which is zero for
+// it, and that made it a hard &quot;no pseudo-velocity toward me&quot; row. A hinge
+// with both stops enabled always has both rows, so the far stop, a
+// hundred and fifty degrees away, cancelled every correction of the
+// near one exactly: a violated limit was NEVER repaired under split
+// impulse. 8.11 measured limits at the velocity level only — bounces,
+// overshoots, stalls — and never met it. 8.12 §7 found it holding a
+// ragdoll&#x27;s knee 9 degrees hyperextended, and an isolated shin on its
+// stop at a violation frozen, to four decimals, for ten seconds.
+//
+// The row&#x27;s own speculative target is the right answer here too: the
+// correction may carry the joint up to the far stop and no further,
+// which is what `target = −C/h` already says. A violated row keeps its
+// bias; a rod&#x27;s bilateral row has no speculative side and keeps its bias.
+const float goal = (one_sided &amp;&amp; row.error &gt; 0.0f) ? row.target : row.bias;
+(void)solve_row_position_to(row, goal, batch.inv_mass_a, batch.inv_mass_b, pa, pb);</code></pre>
+  </div>
+
+
+  <h3>Step 5: a moving kinematic body wakes what it touches</h3>
+
+  <p>
+    §12's bug, as a stage in front of 8.10's <code>wake_islands</code>. "Moving" is the sleep test's own
+    definition turned round, so that a stopped lift wakes nothing:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/solver.cpp — wake_touched_by_kinematic</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">int wake_touched_by_kinematic(std::span&lt;rigid_body&gt; bodies, std::span&lt;const contact_pair&gt; contacts,
+                              std::span&lt;const joint_pair&gt; joints, const sleep_config&amp; cfg)
+{
+    if (!cfg.enabled) { return 0; }
+
+    // &quot;Moving&quot; is the sleep test&#x27;s own definition turned round: a kinematic
+    // body that WOULD fail it, were it allowed to sleep, is one that can
+    // disturb what it touches. A stopped lift passes it and wakes nothing.
+    const auto moving_kinematic = [&amp;cfg](const rigid_body&amp; b) {
+        return b.kind == body_kind::kinematic
+               &amp;&amp; (length_squared(b.state.velocity) &gt; cfg.linear_threshold * cfg.linear_threshold
+                   || length_squared(b.angular_velocity) &gt; cfg.angular_threshold * cfg.angular_threshold);
+    };
+
+    int woken = 0;
+    const auto edge = [&amp;](std::uint32_t ia, std::uint32_t ib) {
+        rigid_body&amp; a = bodies[ia];
+        rigid_body&amp; b = bodies[ib];
+        if (a.sleeping &amp;&amp; moving_kinematic(b)) { wake(a); ++woken; }
+        if (b.sleeping &amp;&amp; moving_kinematic(a)) { wake(b); ++woken; }
+    };
+    for (const contact_pair&amp; p : contacts) { edge(p.body_a, p.body_b); }
+    for (const joint_pair&amp; p : joints) { edge(p.body_a, p.body_b); }
+    return woken;
+}</code></pre>
+  </div>
+
+
+  <h3>Step 6: building the ragdoll</h3>
+
+  <p>
+    <code>build_ragdoll</code> is four passes. The first maps skeleton joints to parts; the second
+    builds each part's capsule, mass, inertia and <code>joint_from_body</code>, places a throwaway body
+    at the bind pose in model space, and finds the parent part by walking up the skeleton. The third
+    authors the joints on those throwaway bodies — which is legitimate because a joint keeps only
+    body-local anchors, axes and a relative rest orientation — and the fourth asks GJK, once per pair,
+    which capsules overlap at rest:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/ragdoll.cpp — build_ragdoll, pass 3: the joints</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">// ---- pass 3: the joints --------------------------------------------------
+for (std::size_t i = 0; i &lt; count; ++i)
+{
+    const ragdoll_part_desc&amp; d = desc.parts[i];
+    ragdoll_part&amp; p = out.parts[i];
+
+    // A part with no parent part, or with a parent that comes after it,
+    // cannot be joined; it is a free body, and counted as a root.
+    if (p.parent &lt; 0 || p.parent &gt;= static_cast&lt;int&gt;(i) || d.link == ragdoll_link::root)
+    {
+        p.kind = ragdoll_link::root;
+        ++report.roots;
+        continue;
+    }
+
+    const rigid_body&amp; a = at_bind[static_cast&lt;std::size_t&gt;(p.parent)];
+    const rigid_body&amp; b = at_bind[i];
+    const vec3 anchor = translation_of(bind[d.bone]);
+
+    if (d.link == ragdoll_link::hinge)
+    {
+        p.link = make_hinge(a, b, anchor, d.axis);
+        ++report.hinges;
+    }
+    else
+    {
+        const vec3 bone = rotate(b.orientation, vec3{0.0f, 1.0f, 0.0f});
+        const vec3 twist = length_squared(d.axis) &gt; 0.0f ? d.axis : bone;
+        p.link = make_cone_twist(a, b, anchor, twist, d.cone_axis);
+        p.link.cone.enabled = d.swing &gt; 0.0f;
+        p.link.cone.swing = d.swing;
+        ++report.cone_twists;
+    }
+    p.link.limit.enabled = d.upper &gt; d.lower;
+    p.link.limit.lower = d.lower;
+    p.link.limit.upper = d.upper;
+}</code></pre>
+  </div>
+
+
+  <h3>Step 7: steering</h3>
+
+  <p>
+    §9's two inverses. The chord for position; for orientation, the Rodrigues vector under the
+    linearised rule and the logarithm under the exponential one:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/ragdoll.cpp — steering_angular_velocity and steer</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">vec3 steering_angular_velocity(quat from, quat to, float h, spin_rule rule)
+{
+    if (!(h &gt; 0.0f)) { return vec3{}; }
+
+    // The rotation still to do, in WORLD terms: `to = delta · from`, because the
+    // integrator applies an angular velocity on the left (`ω q`, 8.3).
+    quat delta = to * conjugate(from);
+    if (delta.w &lt; 0.0f) { delta = -delta; }   // the short way round (7.4&#x27;s double cover)
+
+    if (rule == spin_rule::exponential)
+    {
+        // The logarithm: an axis, and the whole angle, per step.
+        const float s = length(delta.v);
+        if (s &lt; 1e-9f) { return delta.v * (2.0f / h); }
+        return delta.v * (2.0f * std::atan2(s, delta.w) / (s * h));
+    }
+
+    // The inverse of `normalise(q + ½hωq)`: that step&#x27;s delta is proportional
+    // to `(1, ½hω)`, so `½hω = delta.v / delta.w`. A half-turn in one step has
+    // `delta.w = 0` and no finite answer; it is clamped to a very fast one,
+    // which a ragdoll whose animation turns a bone by 180 degrees in a frame
+    // has earned.
+    const float w = std::max(delta.w, 1e-3f);
+    return delta.v * (2.0f / (h * w));
+}
+
+void steer(const ragdoll&amp; rd, std::span&lt;rigid_body&gt; bodies, std::span&lt;const transform&gt; targets,
+           float h, spin_rule rule)
+{
+    if (!(h &gt; 0.0f)) { return; }
+    const float inv_h = 1.0f / h;
+    for (std::size_t i = 0; i &lt; rd.parts.size() &amp;&amp; i &lt; targets.size(); ++i)
+    {
+        rigid_body&amp; b = bodies[rd.first_body + i];
+        if (b.kind != body_kind::kinematic) { continue; }
+
+        // The chord. For the position half of every integrator in this engine
+        // this is exact: the step adds `v·h` and nothing else.
+        b.state.velocity = (targets[i].position - b.state.position) * inv_h;
+        b.angular_velocity = steering_angular_velocity(b.orientation, targets[i].rotation, h, rule);
+    }
+}</code></pre>
+  </div>
+
+
+  <h3>Step 8: the two handoffs</h3>
+
+  <p>
+    Which are, as §2 promised, almost nothing. <code>simulate</code> gives the bodies their mass back
+    and keeps their velocities; <code>animate</code> takes the mass away and clears the joints' cached
+    impulses:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/ragdoll.cpp — simulate</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void simulate(ragdoll&amp; rd, std::span&lt;rigid_body&gt; bodies, std::span&lt;const transform&gt; pose)
+{
+    rd.mode = ragdoll_mode::simulated;
+
+    // The passengers&#x27; locals, as the animation last had them. A pose shorter
+    // than the skeleton keeps what was there for the missing joints.
+    for (std::size_t j = 0; j &lt; rd.frozen_local.size() &amp;&amp; j &lt; pose.size(); ++j)
+    {
+        rd.frozen_local[j] = pose[j];
+    }
+
+    for (std::size_t i = 0; i &lt; rd.parts.size(); ++i)
+    {
+        rigid_body&amp; b = bodies[rd.first_body + i];
+        const ragdoll_part&amp; p = rd.parts[i];
+
+        // THE HANDOFF IS THESE LINES AND NOTHING ELSE. The velocities are left
+        // exactly as `steer` set them — the chord that carried this body onto
+        // this pose — and for semi-implicit Euler that chord IS the velocity.
+        b.kind = body_kind::dynamic;
+        (void)set_mass(b, p.mass);
+        (void)set_inertia(b, p.inertia);
+        b.force = vec3{};
+        b.torque = vec3{};
+        b.sleeping = false;
+        b.sleep_timer = 0.0f;
+    }
+}</code></pre>
+  </div>
+
+
+  <h3>Step 9: reading the pose back</h3>
+
+  <p>
+    A part's joint from its body, a passenger from its parent and its frozen local, and every local
+    transform as the parent's inverse times the joint's own. The loop runs parent before child, which
+    the skeleton guarantees (7.6), so a parent's placement is always ready when its child reads it:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/ragdoll.cpp — read_pose</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void read_pose(const ragdoll&amp; rd, const anim::skeleton&amp; sk, std::span&lt;const rigid_body&gt; bodies,
+               const mat4&amp; world_from_model, std::vector&lt;transform&gt;&amp; local_out)
+{
+    const std::size_t n = sk.joints.size();
+    local_out.resize(n);
+
+    const rigid model = rigid_of(world_from_model);
+    const quat model_inv = conjugate(model.q);
+
+    std::vector&lt;rigid&gt; posed(n);
+    for (std::size_t j = 0; j &lt; n; ++j)
+    {
+        const anim::joint_index parent = sk.joints[j].parent;
+        const bool has_parent = parent != anim::k_no_parent &amp;&amp; parent &lt; j;
+        const transform frozen = j &lt; rd.frozen_local.size() ? rd.frozen_local[j]
+                                                            : sk.joints[j].local_bind;
+        const int part = j &lt; rd.part_of_joint.size() ? rd.part_of_joint[j] : -1;
+
+        if (part &gt;= 0)
+        {
+            // A PART: the body says where its bone is. Into model space, then
+            // back through joint_from_body.
+            const ragdoll_part&amp; p = rd.parts[static_cast&lt;std::size_t&gt;(part)];
+            const rigid_body&amp; b = bodies[rd.first_body + static_cast&lt;std::size_t&gt;(part)];
+            const rigid body{rotate(model_inv, b.state.position - model.p), model_inv * b.orientation};
+            const quat bone_q = body.q * conjugate(p.rotation);
+            posed[j] = rigid{body.p - rotate(bone_q, p.offset), bone_q};
+
+            const rigid local = has_parent ? relative(posed[parent], posed[j]) : posed[j];
+            local_out[j].position = local.p;
+            local_out[j].rotation = normalised(local.q);
+            local_out[j].scale = frozen.scale;
+        }
+        else
+        {
+            // A PASSENGER: it rides on its parent at the animation&#x27;s last word.
+            const rigid local{frozen.position, frozen.rotation};
+            posed[j] = has_parent ? compose(posed[parent], local) : local;
+            local_out[j] = frozen;
+        }
+    }
+}</code></pre>
+  </div>
+
+
+  <h3>Step 10: the caller's frame</h3>
+
+  <p>
+    The ragdoll does not run a narrow phase or own a world — the caller's, as since 8.7 — so the last
+    step is the loop a game writes. While the clip owns the character, aim and let the step carry the
+    bodies; at the trip, <code>simulate</code>; each step while the solver owns it, add the ragdoll's
+    joints between <code>begin</code> and <code>solve</code>; to get up, realign, read the pose back,
+    <code>animate</code>, and steer toward a blend. The demo's <code>advance</code> is exactly this:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">the shape of a frame, from demos/ragdoll/main.cpp</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">// animated: aim at where the clip will be at the END of this step
+part_targets(rd, posed_from_clip(t + h), world_from_model, targets);
+steer(rd, world.bodies(), targets, h);
+
+// the trip: the velocities are already right
+simulate(rd, world.bodies(), clip_local_pose(t));
+
+// every step, while the solver owns it
+solver.begin(world.bodies());
+/* ...contacts... */
+add_joints(rd, solver);
+solver.solve(h, cfg, sleep);
+
+// getting up: put the clip over the pelvis, start from where the bodies lie
+world_from_model = realign_model(rd, world.bodies(), tripped_at, clip_hips_in_model_space);
+read_pose(rd, skeleton, world.bodies(), world_from_model, start);
+animate(rd, world.bodies());
+// ...then each step: blend start -&gt; clip with transform_blend_slerp, part_targets, steer</code></pre>
+  </div>
+
+
+  <p>
+    The narrow phase in the demo and the harness dispatches capsules for the first time — 8.10's and
+    8.11's scenes knew spheres and boxes — through a <code>placed</code> struct that holds whichever
+    primitive a body has by value, so that <code>as_convex</code>, which is a view and refuses a
+    temporary, has an lvalue to look at. That is dispatch, not geometry: <code>collide_manifold</code>
+    has taken any convex pair since 8.7. It has now been written in three demos and a harness, which is
+    the argument for Module 9's scene layer owning it.
+  </p>

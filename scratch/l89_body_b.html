@@ -1,0 +1,169 @@
+  <h2 id="event">2. Building intuition: a collision is an event, not an interval</h2>
+
+  <p>
+    The penalty method's mistake is not the spring. It is a modelling assumption so quiet that
+    nobody states it: that the contact is a <em>thing that lasts</em>, with a force acting
+    throughout. Ask what force acts during a collision and you are already committed to the contact
+    having a duration for the force to act over, and to your simulation resolving that duration.
+  </p>
+
+  <p>
+    Look at what a real collision does. A steel ball bounces off a steel plate in something like a
+    hundred microseconds. At 60 Hz your step is 16,667 microseconds — one hundred and sixty times
+    longer. Whatever happened inside that collision, your simulation was not present for it. You do
+    not know the force, you cannot resolve the force, and you do not need the force. What you can
+    observe is the <em>outcome</em>: the ball arrived going one way and left going another.
+  </p>
+
+  <p>
+    So stop asking about force. Ask instead: <strong>what single, instantaneous change in velocity
+    leaves the two surfaces moving the way a contact requires?</strong> That quantity — a change in
+    momentum with no duration attached — is an <em>impulse</em>, and Lesson 8.2 §6 already argued
+    the general case for it. A force needs a step size to become a velocity change, so the same
+    physical event written as a one-step force produces different results at 30 Hz and 144 Hz; 8.2
+    measured a jump spanning <strong>3.85 m at 30 Hz and 16.7 cm at 144</strong>, a factor of 23.
+    Written as an impulse it has no <code>h</code> in it at all:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \Delta \mathbf{v} = \frac{\mathbf{J}}{m}, \qquad \Delta \boldsymbol{\omega} = \mathbf{I}^{-1}(\mathbf{r} \times \mathbf{J}) \]</span>
+    <span class="eq-plain">delta v = J / m, and delta omega = inverse_inertia * (r cross J)</span>
+  </div>
+
+  <p>
+    Both of those are already in the engine: <code>add_impulse_at</code> has been in
+    <code>rigid_body.hpp</code> since 8.3, and its doc comment has said for two lessons that
+    “everything Lesson 8.9 adds is deciding what <code>J</code> should be”. That is now literally
+    the task.
+  </p>
+
+  <p class="aside">
+    <strong>Where the force went.</strong> If it bothers you that a force has vanished from a
+    Newtonian simulation, it has not: an impulse is the integral of a force over the time it acts,
+    <code>J = ∫F dt</code>. The impulse formulation keeps that integral and throws away the
+    integrand, on the grounds that the integrand was never observable at this time step and the
+    integral is. It is the same move as replacing a rendered motion-blur streak with a single sample
+    — except that here the integral is <em>exactly</em> what the dynamics needs, so nothing is
+    approximated at all.
+  </p>
+
+  <h2 id="demands">3. Three demands on one velocity</h2>
+
+  <p>
+    A contact happens at a <em>point</em> — one of the four that 8.7's manifold produced — and the
+    velocity that matters there is not either body's centre-of-mass velocity. It is the velocity of
+    the <em>material points</em> that are touching, which for a rigid body is
+    <code>v + ω × r</code>: the formula <code>point_velocity</code> has implemented since 8.2, and
+    the one that makes a rigid body rigid.
+  </p>
+
+  <p>
+    Define the relative velocity at the contact, of body <em>b</em>'s point with respect to body
+    <em>a</em>'s:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{u} = \big(\mathbf{v}_b + \boldsymbol{\omega}_b \times \mathbf{r}_b\big) - \big(\mathbf{v}_a + \boldsymbol{\omega}_a \times \mathbf{r}_a\big) \]</span>
+    <span class="eq-plain">u = (v_b + omega_b cross r_b) - (v_a + omega_a cross r_a)</span>
+  </div>
+
+  <p>
+    with <code>r_a</code> and <code>r_b</code> the lever arms from each centre of mass to the
+    contact point. The manifold's normal <strong>n</strong> points from <em>a</em> toward <em>b</em>
+    — <code>collide.hpp</code>'s convention, unchanged since 8.4 — so <code>u·n</code> is
+    <em>negative</em> when the two are approaching, positive when separating, and zero at a resting
+    contact. Get that sign backwards and every contact in the scene sucks instead of pushing, which
+    is a memorable ten minutes.
+  </p>
+
+  @@FIG_CONTACT@@
+
+  <p>
+    Now: everything a contact wants is a statement about <strong>u</strong>, and there are exactly
+    three of them.
+  </p>
+
+  <h3>Non-penetration</h3>
+
+  <p>
+    The surfaces may separate and may slide past each other; they may not approach. So after the
+    impulse, <code>u·n ≥ 0</code>. And a contact can only <em>push</em>: a floor does not reach up
+    and grab a crate that is leaving. That makes the impulse along the normal non-negative,
+    <code>j ≥ 0</code>, and that clamp is the only nonlinearity in the entire normal solve. Nothing
+    else in this lesson has an inequality in it.
+  </p>
+
+  <h3>Restitution</h3>
+
+  <p>
+    A bouncy contact leaves at some fraction of the speed it arrived with. Newton's experimental
+    law, which is a definition dressed as a law: the <strong>coefficient of restitution</strong>
+    <em>e</em> is the ratio of separation speed to approach speed, so we want
+    <code>u·n = −e·(u·n)<sub>before</sub></code>.
+  </p>
+
+  <p>
+    Notice what kind of demand that is. It is the same <em>shape</em> as non-penetration — “make
+    <code>u·n</code> equal to this number” — with a different number on the right. So restitution
+    needs no second equation and no second impulse; it changes the target from zero to
+    <code>−e·(approach)</code> and the same solve delivers it. That is why <em>e</em> will not
+    appear anywhere in the solver code below: it appears once, when the target is computed, and
+    never again.
+  </p>
+
+  <h3>Friction</h3>
+
+  <p>
+    The third demand lives in the plane perpendicular to <strong>n</strong>. “Not sliding” means the
+    tangential part of <strong>u</strong> is zero, so the natural demand is to drive it there — but
+    only as far as the surfaces can manage. Coulomb's condition, which is four centuries old and
+    still the model every engine ships, says the tangential impulse cannot exceed a fixed multiple
+    of the normal one:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \|\mathbf{j}_t\| \;\le\; \mu\, j_n \]</span>
+    <span class="eq-plain">the magnitude of the tangential impulse is at most mu times the normal impulse</span>
+  </div>
+
+  <p>
+    <code>j_t</code> is a two-dimensional vector in the contact plane, so the admissible set is a
+    <strong>disc</strong> of radius <code>μ·j_n</code>. Stack that disc over the normal axis — the
+    radius grows in proportion to the height — and you have swept out a cone, which is where the
+    phrase <em>friction cone</em> comes from. §6 is about what happens when you use a square
+    instead.
+  </p>
+
+  <p>
+    And notice the coupling, because it is the reason the two solves cannot be independent: the
+    cone's radius is <code>μ</code> times <em>the answer to the normal demand</em>. Friction cannot
+    be computed in parallel with the normal impulse, because until the normal impulse exists there
+    is no cone to clip against. §9 measures what happens when you get that order wrong, and the
+    answer is worse than “slightly less friction”.
+  </p>
+
+  <h3>Why each is one equation in one unknown</h3>
+
+  <p>
+    Three demands, and each turns out to need one scalar. The reason is linearity, and it is worth
+    seeing explicitly before we do any algebra.
+  </p>
+
+  <p>
+    Apply an impulse <code>J = j·d</code> along some direction <strong>d</strong> at the contact.
+    Each body's linear velocity changes by <code>±j·d/m</code> and each angular velocity by
+    <code>±j·I⁻¹(r × d)</code> — both <em>proportional to j</em>, because every step from impulse to
+    velocity is a linear map. So the change in <code>u·d</code> is proportional to <em>j</em> too:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \Delta(\mathbf{u}\cdot\mathbf{d}) \;=\; j\,k_{\mathbf{d}} \]</span>
+    <span class="eq-plain">the change in u along d equals j times a constant k that depends only on d</span>
+  </div>
+
+  <p>
+    for some number <code>k_d</code> that depends on the masses, the inertia tensors, the lever arms
+    and the direction — but <em>not</em> on <em>j</em>. Which means “how big an impulse do I need to
+    change this velocity by that much?” is a division, not a solve. The whole of the next section is
+    working out what that number is.
+  </p>

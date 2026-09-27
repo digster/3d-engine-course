@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 420" role="img" aria-labelledby="l67f3-t l67f3-d">
+  <title id="l67f3-t">The tangent frame derived from two edges and two uv deltas</title>
+  <desc id="l67f3-d">The same triangle drawn twice: once in space with its two edges labelled e1 = (2,0,0) and e2 = (0,0,-2), and once in the uv chart with the corresponding deltas (1,0) and (0,1). Below, the two simultaneous equations that define T and B, and the 2x2 inversion that solves them.</desc>
+  <defs>
+    <marker id="e-i-l67f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l67f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l67f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l67f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l67f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="420" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="26" class="lg" text-anchor="middle">T and B are whatever makes the two pictures agree</text>
+<rect x="24" y="46" width="300" height="208" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="174.0" y="68" class="sm" text-anchor="middle">in SPACE (metres)</text>
+<polygon points="94,214 260,214 94,108" fill="#5082e6" fill-opacity="0.12" stroke="#5082e6" stroke-width="1.3"/>
+<line x1="94" y1="214" x2="260" y2="214" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f3)"/>
+<line x1="94" y1="214" x2="94" y2="108" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f3)"/>
+<text x="177.0" y="234" class="xs" text-anchor="middle">e1 = p1 - p0 = (2,0,0)</text>
+<text x="88" y="161.0" class="xs" text-anchor="end">e2 =</text>
+<text x="88" y="177.0" class="xs" text-anchor="end">(0,0,-2)</text>
+<text x="90" y="218" class="xs" text-anchor="end">p0</text>
+<text x="266" y="218" class="xs" text-anchor="start">p1</text>
+<text x="90" y="102" class="xs" text-anchor="end">p2</text>
+<rect x="396" y="46" width="300" height="208" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="546.0" y="68" class="sm" text-anchor="middle">in the uv CHART (texture units)</text>
+<polygon points="466,214 632,214 466,108" fill="#f0961e" fill-opacity="0.12" stroke="#f0961e" stroke-width="1.3"/>
+<line x1="466" y1="214" x2="632" y2="214" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f3)"/>
+<line x1="466" y1="214" x2="466" y2="108" class="hi" stroke-width="1.8" marker-end="url(#e-h-l67f3)"/>
+<text x="549.0" y="234" class="xs" text-anchor="middle">(du1, dv1) = (1, 0)</text>
+<text x="460" y="161.0" class="xs" text-anchor="end">(du2, dv2)</text>
+<text x="460" y="177.0" class="xs" text-anchor="end">= (0, 1)</text>
+<line x1="336" y1="150" x2="384" y2="150" class="ink-soft" stroke-width="1.4" marker-end="url(#e-s-l67f3)"/>
+<text x="360.0" y="140" class="xs" text-anchor="middle">same two</text>
+<text x="360.0" y="172" class="xs" text-anchor="middle">directions</text>
+<rect x="24" y="268" width="672" height="138" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="201.60000000000002" y="292" class="sm" text-anchor="middle">e1 = du1 * T + dv1 * B</text>
+<text x="518.4" y="292" class="sm" text-anchor="middle">e2 = du2 * T + dv2 * B</text>
+<text x="360.0" y="314" class="xs" text-anchor="middle">Two equations, two unknowns — so invert the 2x2 of uv deltas:</text>
+<text x="201.60000000000002" y="340" class="xs" text-anchor="middle">det = du1*dv2 - du2*dv1 = 1</text>
+<text x="518.4" y="340" class="xs" text-anchor="middle">T = (dv2*e1 - dv1*e2)/det = (2,0,0)</text>
+<text x="518.4" y="358" class="xs" text-anchor="middle">B = (du1*e2 - du2*e1)/det = (0,0,-2)</text>
+<line x1="150" y1="374" x2="570" y2="374" class="grid" stroke-width="1.0"/>
+<text x="360.0" y="394" class="sm" text-anchor="middle">T normalises to (1,0,0), B to (0,0,-1) — and verify_67 §B gets exactly that.</text>
+</svg>

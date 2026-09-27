@@ -1,0 +1,49 @@
+<svg viewBox="0 0 720 316" role="img" aria-labelledby="l56f1-t l56f1-d">
+  <title id="l56f1-t">The size of a scene object and the working sets it implies</title>
+  <desc id="l56f1-d">A 96-byte scene_object drawn against two 64-byte cache lines, of which 60 bytes are the transform, and a table of working-set sizes for 4 to 100,000 objects against L1, L2, L3 and DRAM.</desc>
+  <defs>
+    <marker id="e-i-l56f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l56f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l56f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l56f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l56f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="20" class="sm" text-anchor="start">Before any argument about layout: how much data is there, and where does it fit?</text>
+<text x="24" y="48" class="xs t-hi" text-anchor="start">ONE scene_object = 96 bytes = 1.5 cache lines</text>
+<rect x="24" y="60" width="200" height="22" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="124" y="75" class="xs muted" text-anchor="middle">cache line 0  (64 B)</text>
+<rect x="224" y="60" width="200" height="22" rx="3" class="fill-soft grid" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="324" y="75" class="xs muted" text-anchor="middle">cache line 1  (64 B)</text>
+<rect x="24" y="88" width="300" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="118" y="104" class="xs" text-anchor="middle">transform  60 B</text>
+<rect x="211" y="88" width="113" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.22"/>
+<text x="267" y="104" class="xs" text-anchor="middle">the rest 36 B</text>
+<text x="336" y="104" class="xs muted" text-anchor="start">the full-transform loop reads the amber part;</text>
+<text x="336" y="118" class="xs muted" text-anchor="start">the cull loop reads 12 bytes of it.</text>
+<line x1="24" y1="142" x2="696" y2="142" class="grid" stroke-width="1.0"/>
+<text x="24" y="162" class="xs t-hi" text-anchor="start">WORKING SET OF A FLAT ARRAY, against this machine's caches</text>
+<text x="96" y="184" class="xs mono" text-anchor="end">4 objects</text>
+<text x="180" y="184" class="xs mono muted" text-anchor="end">0.4 KB</text>
+<rect x="196" y="173" width="92" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="242" y="184" class="xs" text-anchor="middle">L1</text>
+<text x="300" y="184" class="xs t-hi" text-anchor="start">&lt;- OUR SCENE. k_max_objects = 4.</text>
+<text x="96" y="208" class="xs mono" text-anchor="end">100 objects</text>
+<text x="180" y="208" class="xs mono muted" text-anchor="end">9.4 KB</text>
+<rect x="196" y="197" width="92" height="16" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="242" y="208" class="xs" text-anchor="middle">L1</text>
+<text x="96" y="232" class="xs mono" text-anchor="end">1,000 objects</text>
+<text x="180" y="232" class="xs mono muted" text-anchor="end">93.8 KB</text>
+<rect x="196" y="221" width="92" height="16" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="242" y="232" class="xs" text-anchor="middle">L2</text>
+<text x="96" y="256" class="xs mono" text-anchor="end">10,000 objects</text>
+<text x="180" y="256" class="xs mono muted" text-anchor="end">937.5 KB</text>
+<rect x="196" y="245" width="92" height="16" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="242" y="256" class="xs" text-anchor="middle">L2 / L3</text>
+<text x="300" y="256" class="xs t-hi" text-anchor="start">&lt;- the knee is in here</text>
+<text x="96" y="280" class="xs mono" text-anchor="end">100,000 objects</text>
+<text x="180" y="280" class="xs mono muted" text-anchor="end">9,375 KB</text>
+<rect x="196" y="269" width="92" height="16" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="242" y="280" class="xs" text-anchor="middle">L3 / DRAM</text>
+<line x1="24" y1="292" x2="696" y2="292" class="grid" stroke-width="1.0" stroke-dasharray="2 3"/>
+<text x="24" y="308" class="xs t-hi" text-anchor="start">Every claim in this lesson is a claim about WHICH ROW you are on. A rule with no N in it is not a rule.</text>
+</svg>

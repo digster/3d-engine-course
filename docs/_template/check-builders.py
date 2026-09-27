@@ -28,15 +28,33 @@ NOTHING, so eleven crashes scored as eleven passes.  Exit status, output
 existence and output equality are three independent axes and this script reports
 them separately.  It never infers one from another.
 
-Each builder runs in a throwaway clone of the tree (APFS `clonefile`, so the copy
-is near-free) and writes into that clone.  The working tree is never touched, and
-a builder that scribbles on files other than its own page cannot corrupt anything.
+Each builder runs in a throwaway clone of the tree and writes into that clone.
+The working tree is never touched, and a builder that scribbles on files other
+than its own page cannot corrupt anything.
+
+THE CLONE HOLDS TRACKED FILES ONLY (2026-09-26)
+-----------------------------------------------
+`scratch/` is gitignored, and until this date every builder, prose fragment,
+figure and pin lived there untracked - so a green run proved the pages could be
+rebuilt on THIS machine and nowhere else.  The 8.13 session had already had to
+restore a zero-byte `scratch/l511_fig7.svg` from the page that archived it.
+
+The builders' complete read-set was traced (an audit hook on `open`, all 64
+builders) and force-added: `git add -f`, so `.gitignore` - which is Lesson 3.5's
+listing - did not have to change.  By default the clone is now built from
+`git ls-files`, using each tracked file's working-tree content.  A builder that
+reads a file nobody has added therefore CRASHES here instead of passing, which is
+the whole point: green now means "a fresh clone reproduces every page".
+`--figures` still clones the full working tree, because regenerating an SVG
+reads render captures (`.ppm`) that are build output and deliberately untracked.
 
 USAGE
 -----
     python3 docs/_template/check-builders.py              # all builders
     python3 docs/_template/check-builders.py 51 52 66     # just these
     python3 docs/_template/check-builders.py --diff 51    # show the first diff hunks
+    python3 docs/_template/check-builders.py --worktree    # old behaviour: clone
+                                                          # everything on disk
 
 Exit status is 0 only when every builder reproduces its page byte-identically.
 """
@@ -95,7 +113,38 @@ def clone_tree(dest: str, exclude: set[str] = EXCLUDE) -> None:
             shutil.copy2(src, dst)
 
 
-def run_one(builder: str, show_diff: bool, figures: bool = False) -> tuple[str, str]:
+def tracked_files() -> list[str]:
+    """Every path in git's index, repo-relative.
+
+    Staged-but-uncommitted files count: the question is "would the NEXT commit,
+    cloned fresh, reproduce the pages?", and a file that is `git add`ed will be
+    in that commit.
+    """
+    out = subprocess.run(["git", "ls-files", "-z"], cwd=REPO,
+                         capture_output=True, check=True).stdout
+    return [p for p in out.decode("utf-8").split("\0") if p]
+
+
+def clone_tracked(dest: str, exclude: set[str] = EXCLUDE) -> None:
+    """Copy only the TRACKED files into `dest` - what a fresh clone would hold.
+
+    The working-tree content is copied, not the index's, so a check run
+    mid-edit sees the edit.  A tracked file deleted from disk is skipped: the
+    builder that needs it will then fail, which is the correct report.
+    """
+    for rel in tracked_files():
+        if rel.split("/", 1)[0] in exclude:
+            continue
+        src = os.path.join(REPO, rel)
+        if not os.path.isfile(src):
+            continue
+        dst = os.path.join(dest, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+
+
+def run_one(builder: str, show_diff: bool, figures: bool = False,
+            worktree: bool = False) -> tuple[str, str]:
     """Run one builder in a clone and classify the result.
 
     Returns (status, detail) where status is one of:
@@ -116,7 +165,12 @@ def run_one(builder: str, show_diff: bool, figures: bool = False) -> tuple[str, 
 
     with tempfile.TemporaryDirectory(prefix="builder-check-") as tmp:
         tree = os.path.join(tmp, "tree")
-        clone_tree(tree, EXCLUDE_FIGURES if figures else EXCLUDE)
+        if figures:
+            clone_tree(tree, EXCLUDE_FIGURES)
+        elif worktree:
+            clone_tree(tree, EXCLUDE)
+        else:
+            clone_tracked(tree)
 
         # --figures goes one layer deeper: a builder can reproduce its page
         # perfectly while the GENERATOR behind its diagrams is stale, which is
@@ -145,6 +199,8 @@ def run_one(builder: str, show_diff: bool, figures: bool = False) -> tuple[str, 
 
         if proc.returncode != 0:
             tail = (proc.stderr.strip().splitlines() or ["(no stderr)"])[-1]
+            if "FileNotFoundError" in tail and not (figures or worktree):
+                tail += "  <- untracked? `git add -f` it (the clone holds tracked files only)"
             return "crash", f"exit {proc.returncode}: {tail}"
 
         if not os.path.exists(produced):
@@ -190,6 +246,9 @@ def main() -> int:
                         help="also regenerate each lesson's SVGs from figs_NN.py first "
                              "(slower; catches a stale figure generator behind a page "
                              "that otherwise rebuilds correctly)")
+    parser.add_argument("--worktree", action="store_true",
+                        help="clone everything on disk instead of tracked files only "
+                             "(diagnostic: tells an untracked dependency from a real bug)")
     args = parser.parse_args()
 
     builders = sorted(
@@ -209,7 +268,7 @@ def main() -> int:
 
     tally: dict[str, list[str]] = {}
     for builder in builders:
-        status, detail = run_one(builder, args.diff, args.figures)
+        status, detail = run_one(builder, args.diff, args.figures, args.worktree)
         name = os.path.basename(builder)
         tally.setdefault(status, []).append(name)
         mark = {"ok": "ok   ", "crash": "CRASH", "missing": "EMPTY",

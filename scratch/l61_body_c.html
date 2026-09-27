@@ -1,0 +1,395 @@
+  <!-- =================================================================
+       9 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">9</span>Complete Code Listings</h2>
+
+  <p>
+    Seven files, and not one of them is new — which is unusual for this course and is the shape of
+    the lesson. Nothing here adds a subsystem; it closes a gap in one that existed.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">File manifest for Lesson 6.1</caption>
+    <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/gpu_device.hpp</code></td><td>modified</td>
+          <td>two new report fields, and <code>is_srgb_format</code> promoted to the public API</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_device.cpp</code></td><td>modified</td>
+          <td>asks for <code>SDR_LINEAR</code>; carries the composition through
+              <code>set_present_mode</code>; names the composition for the log</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_present.cpp</code></td><td>modified</td>
+          <td>uses the promoted predicate instead of its own copy</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td><code>pad2</code> becomes <code>encode_output</code> — same 64 bytes, same offsets</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+          <td>the exact sRGB curve, applied only when the target will not do it</td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td>
+          <td>fills the flag from the device report rather than a constant</td></tr>
+      <tr><td><code>scratch/verify_61.cpp</code></td><td>new</td>
+          <td>34 checks in seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The public header count is unchanged at 56, and the engine's source count at 32.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/gpu_device.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_device.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:shaders/scene.frag.hlsl@@
+
+  @@LISTING:engine/include/engine/gfx/colour.hpp@@
+
+  @@LISTING:engine/src/gfx/colour.cpp@@
+
+  @@LISTING:scratch/verify_61.cpp@@
+
+  <p>
+    <code>colour.hpp</code> and <code>colour.cpp</code> are reproduced unchanged, because this is
+    the lesson that owns them. They were written in Lesson 1.6 and extended in 3.10 with the
+    fitted fast encode, and everything §3 derives is in them — including the four constants, the
+    256-entry decode table, and the reason the encode is <em>not</em> tabulated (its input is
+    continuous).
+  </p>
+
+  <!-- =================================================================
+       10 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">10</span>Build &amp; Run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j8
+
+./build/demos/sandbox --log gpu=info      # the GPU scene, and the two lines that matter</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug
+.\build\demos\Debug\sandbox.exe --log gpu=info</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">the checks</span></figcaption>
+    <pre><code class="lang-bash">sh scratch/build_verify_61.sh
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_61.sh</code></pre>
+  </figure>
+
+  <h3>10.1 What you should see</h3>
+
+  <p>
+    Two log lines, and they are the whole deliverable:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">./build/demos/sandbox --log gpu=info</span></figcaption>
+    <pre><code class="lang-bash">  swapchain format: B8G8R8A8_UNORM_SRGB
+  composition     : SDR_LINEAR  (the hardware encodes sRGB)</code></pre>
+  </figure>
+
+  <p>
+    If the second line says <code>SDR&nbsp;&nbsp;(the SHADER encodes sRGB)</code>, your machine
+    refused the linear swapchain and the fallback is running. The picture should be the same; if
+    it is not, §11's first pitfall is where to look.
+  </p>
+
+  <p>
+    <strong>And look at the scene.</strong> Run it beside a screenshot from before this lesson if
+    you have one. The change is not subtle once you know where to look: mid-tones lift
+    substantially, shadows stop being crushed to near-black, and the whole image stops looking
+    like it was shot at dusk. Figure 5's top row is literally what you were looking at before.
+  </p>
+
+  <p>
+    The software path is unchanged — deliberately, and provably:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_61 §G</span></figcaption>
+    <pre><code class="lang-bash">shot ALL  7 frames, 1209600 bytes, hash=905BF27E
+  [PASS] BYTE-IDENTICAL to the golden written in Lesson 5.1 — TWELVE lessons.</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <span class="label">A prediction that was wrong, and why that is the finding</span>
+    <p>The plan for this lesson, written at the end of Module 5, said the golden was
+       <em>“probably over”</em> — a lesson that settles colour would surely change the reference
+       render, and the instruction was to re-baseline deliberately rather than quietly.</p>
+    <p>It did not change, and the reason is precisely the result: <strong>the software renderer
+       was already right.</strong> Lesson 1.6 did the work, and every conversion in the CPU path
+       has been correct for fifty-five lessons. The entire defect was on the GPU path's output
+       stage — a stage the golden does not go through. A prediction that fails for a reason you
+       can state is worth more than one that succeeds.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">11</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is too dark, worst in the shadows</span>
+    <p><strong>Symptom.</strong> The image looks moody and underexposed. Bright surfaces are
+       nearly right; dark ones are crushed. Turning the light up makes the bright parts blow out
+       before the dark parts arrive.</p>
+    <p><strong>Cause.</strong> Linear light is reaching an sRGB-encoded destination without being
+       encoded. This lesson's bug.</p>
+    <p><strong>Fix.</strong> Find the output edge. On SDL_GPU, print the swapchain format: no
+       <code>_SRGB</code> means the shader must encode. Confirm with the arithmetic before
+       changing anything — <em>should</em> mid grey be 128 or 188?</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is washed out and milky</span>
+    <p><strong>Symptom.</strong> Blacks are grey, the image looks foggy, contrast is gone.</p>
+    <p><strong>Cause.</strong> The same mistake with the sign flipped: encoding twice. An
+       <code>_SRGB</code> target <em>and</em> a shader that encodes; or a texture loaded as
+       <code>_SRGB</code> whose contents were already linear.</p>
+    <p><strong>Fix.</strong> Count the conversions along one path and make it exactly one in each
+       direction. <code>verify_61</code> §C reports the double-encode of 0.5 as 0.7354 → 0.8732,
+       so the fingerprint is quantifiable rather than a matter of taste.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">A normal map or roughness texture produces nonsense</span>
+    <p><strong>Symptom.</strong> Lighting is subtly wrong in a way that changes with the texture
+       rather than the light. Normals point oddly; a roughness map behaves as if it had been
+       contrast-boosted.</p>
+    <p><strong>Cause.</strong> The texture was loaded as <code>_SRGB</code>. A normal map is not a
+       colour — it is three numbers — and decoding it applies a curve to data that was never
+       encoded.</p>
+    <p><strong>Fix.</strong> Lesson 4.7's rule, and it is one of the commonest material-system
+       mistakes: <strong><code>_SRGB</code> for colours, <code>_UNORM</code> for numbers.</strong>
+       Albedo and emissive are colours; normal, roughness, metalness, occlusion and masks are
+       not.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Fades and gradients look muddy in the middle</span>
+    <p><strong>Symptom.</strong> A black-to-white fade spends too long dark and then rushes; a
+       red-to-green blend passes through a dark olive rather than a bright yellow.</p>
+    <p><strong>Cause.</strong> Interpolating codes instead of light. This is the per-operation
+       failure, and it is why <code>mix_linear</code> exists.</p>
+    <p><strong>Fix.</strong> Decode, interpolate, encode. And note the honest exception Lesson 1.6
+       recorded: a UI gradient an artist tuned by eye may genuinely mean the encoded blend. Ask
+       what the numbers <em>measure</em>.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Red and blue are swapped and you suspect gamma</span>
+    <p><strong>Symptom.</strong> The image is wrong in colour, and the green channel looks fine.</p>
+    <p><strong>Cause.</strong> Channel order, not gamma. A transfer-function mistake affects all
+       three channels identically, because it is a curve applied per channel.</p>
+    <p><strong>Fix.</strong> Green being right is the tell. Go and look at your pixel format
+       (Lesson 1.6's fingerprint list, and Lesson 4.2's <code>ARGB8888</code> byte order).</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Toggling vsync makes the picture go dark again</span>
+    <p><strong>Symptom.</strong> Correct at start-up, wrong after a settings change.</p>
+    <p><strong>Cause.</strong> <code>SDL_SetGPUSwapchainParameters</code> sets composition
+       <em>and</em> present mode together. A function that changes one of them and passes a
+       literal for the other silently resets it.</p>
+    <p><strong>Fix.</strong> Carry the value through — <code>report_.composition</code>, not
+       <code>SDL_GPU_SWAPCHAINCOMPOSITION_SDR</code>. This engine had exactly this bug latent in
+       <code>set_present_mode()</code> until this lesson.</p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Your test passes and the program is still wrong</span>
+    <p><strong>Symptom.</strong> A harness compares two renderers and reports agreement, while the
+       shipped program looks wrong.</p>
+    <p><strong>Cause.</strong> The harness built its own render target and chose a different
+       format from the one production uses. Lesson 4.8, exactly.</p>
+    <p><strong>Fix.</strong> Have the harness ask the engine for the configuration rather than
+       writing its own literal — and where it cannot, make the production value a readable field
+       so the difference can be asserted on.</p>
+  </div>
+
+  <!-- =================================================================
+       12 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">12</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p><strong>12.1 — Put the bug back, on purpose.</strong> Add a runtime toggle that forces
+         <code>SDR</code> and leaves <code>encode_output</code> at 0, and flip it while looking at
+         the scene. Then write down, before you look, which parts of the image you expect to
+         change most.</p>
+      <details><summary>Hint</summary>
+         <p>You cannot change a swapchain's composition per frame cheaply, but you can leave the
+            composition alone and lie about the flag — set <code>encode_output</code> to 0 on an
+            <code>_SRGB</code> target and you get the same too-dark result, because the shader
+            hands over a value the hardware then encodes a second time. Predict that too.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The prediction that matters is <em>where</em>: shadowed sides of objects and the dark
+            background change enormously, specular highlights barely at all. If your intuition
+            said "everything gets darker by the same amount", Figure 5 is the correction —
+            and it is worth noticing that this is the same reason the bug survived four
+            modules.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>12.2 — Audit something else.</strong> Run §5's grep against a codebase you did
+         not write — an open-source renderer, or your own older project — and build the same
+         table. Every conversion gets a job: input edge, output edge, or per-operation.</p>
+      <details><summary>Hint</summary>
+         <p>Search for the words rather than the functions: <code>srgb</code>, <code>gamma</code>,
+            <code>2.2</code>, <code>2.4</code>, <code>0.0031308</code>, <code>SRGB</code> in
+            format enums, and <code>pow(</code> near a colour. The constant 2.2 in a shader is
+            almost always worth reading twice.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The interesting outcome is not "found a bug" — it is discovering how many codebases
+            have <em>three</em> conversions on one path and stay correct by cancellation. Those
+            are the ones that break when somebody adds a post-processing pass, because the third
+            conversion was load-bearing and nobody knew.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>12.3 — Measure the code budget yourself.</strong> Render a black-to-white gradient
+         across 256 pixels twice: once with the code stepping evenly, once with the <em>light</em>
+         stepping evenly and the codes computed by <code>linear_to_srgb_u8</code>. Look at both on
+         a real display.</p>
+      <details><summary>Hint</summary>
+         <p>Use the software renderer and <code>--shot</code>, so you can look at the file as well
+            as the screen. Count the distinct codes in the darkest tenth of each.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The evenly-stepping-light ramp bands visibly in the darks — 26 codes across a range
+            where the eye wants dozens — while the evenly-stepping-code ramp looks smooth. That is
+            §2.2's argument as a picture, and it is the most direct demonstration that the
+            encoding is a perceptual compression scheme rather than a historical accident.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>12.4 — Break the blend.</strong> Add a transparent surface to the GPU scene and
+         render it twice: once on an <code>_SRGB</code> swapchain, once with the shader encoding
+         into a UNORM target. Compare the blended region.</p>
+      <details><summary>Hint</summary>
+         <p>You need alpha blending enabled in the pipeline — Lesson 4.4's
+            <code>SDL_GPUColorTargetBlendState</code>. Make the transparent surface 50% over a
+            dark background, where the disagreement is largest.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>The shader-encoded version blends codes, so a 50% blend over black gives roughly
+            <code>0.5 × 188 = 94</code>, which decodes to about 0.11 of white rather than the
+            0.25 that half of half the light should be. This is §7.2's warning as a measurement,
+            and it is why "encode in the shader" is the fallback rather than the plan.</p>
+      </details>
+    </li>
+
+    <li>
+      <p><strong>12.5 — The float target, early.</strong> Render the scene into an
+         <code>R16G16B16A16_FLOAT</code> target instead of the swapchain, then copy it to the
+         screen with a trivial pass that just encodes. Nothing should change visually — and that
+         is the point.</p>
+      <details><summary>Hint</summary>
+         <p>Two pipelines and one extra pass. The scene pipeline's colour target format becomes
+            the float one; the copy pass samples it and writes to the swapchain.</p>
+      </details>
+      <details><summary>Solution sketch</summary>
+         <p>You have just built the skeleton of the HDR pipeline, and the interesting part is that
+            values above 1.0 now survive to the copy pass instead of being clamped at the shader's
+            return. Print the maximum: on a scene with a strong highlight it is well above 1. That
+            number is what tonemapping is for, and it is the lesson this one hands off to.</p>
+      </details>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       13 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">13</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine's output stage is now correct on both surfaces, and the reason it was not is a
+    better lesson than the fix.
+  </p>
+
+  <ul>
+    <li><strong>A stored channel is a code, not a quantity of light</strong>, and the curve between
+        them is not the identity: code 128 emits 0.2159 of white, and half the light is code
+        188.</li>
+    <li><strong>The encoding is a budget</strong>, not a historical accident. 90 codes in the
+        darkest tenth against 26 — perceptual compression that would be invented today if it did
+        not exist.</li>
+    <li><strong>The transfer function is piecewise for a reason</strong>: a pure power curve has
+        infinite slope at zero, which amplifies noise without limit and cannot be inverted stably.
+        The toe is 12.92·x, and skipping it costs 8 codes where the eye is sharpest.</li>
+    <li><strong>Convert twice, at the edges.</strong> Not "carefully" — twice. Everything between
+        the two conversions is light, and ordinary arithmetic is valid there because of where the
+        conversions are, not because anybody remembered.</li>
+    <li><strong>The audit found a hole</strong>: the GPU path had an input edge and no output edge.
+        SDL claims windows with a swapchain whose "pixel values are in sRGB encoding", and our
+        shader returned light.</li>
+    <li><strong>The error is a ratio</strong> — 13× in shadow, 1.1× near white — which is why four
+        modules of looking at the picture did not find it, and why a comparison in Lesson 4.8 sat
+        on top of it and reported agreement.</li>
+    <li><strong>The fix is one call, asked and not assumed</strong>, with the answer recorded as a
+        field so a renderer and a harness cannot disagree about it.</li>
+  </ul>
+
+  <p>
+    34 checks green in debug and release; <code>verify_45</code> through <code>verify_511</code>
+    still green; and the reference shot byte-identical for the twelfth lesson — which this
+    lesson's own plan predicted it would not be, for a reason that turned out to be exactly
+    backwards.
+  </p>
+
+  <p>
+    <strong>Next: 6.2 — What a BRDF Is.</strong> Now that the numbers leaving the renderer are
+    quantities of light, it is worth asking what quantity, precisely. Lambert has been standing in
+    since Lesson 3.6 with a comment admitting it is a convenient guess; the next lessons replace
+    the guess with radiometry — what a unit of light actually is, what a surface does to it, and
+    what it means for a material to conserve energy. Cook–Torrance follows, derived rather than
+    quoted, with its three terms visualised separately.
+  </p>
+
+  <p>
+    None of that would have meant anything an hour ago. A BRDF is a ratio of two quantities of
+    light, and until this lesson the quantity leaving this engine was not one.
+  </p>
+
+  <!-- =================================================================
+       14 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">14</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li><strong>John Hable, "Linear-Space Lighting (i.e. Gamma)".</strong> The clearest short
+        treatment there is, and the one that made this a solved problem in games rather than
+        folklore. Read it for the before/after images if nothing else.</li>
+    <li><strong>Naty Hoffman, "Physics and Math of Shading" (SIGGRAPH courses).</strong> Puts the
+        transfer function in its place as one step of a chain, which is the framing §4 is
+        borrowing.</li>
+    <li><strong><em>Real-Time Rendering</em>, 4th edition, §5.6 "Display Encoding".</strong> The
+        reference treatment, including the primaries question §8.3 declines to open.</li>
+    <li><strong>Charles Poynton, <em>Digital Video and HDTV</em>, and his "Gamma FAQ".</strong>
+        Where the perceptual-budget argument comes from, at length and from the video side.
+        Poynton is also the source of the useful insistence that "gamma" names at least three
+        different things.</li>
+    <li><strong>The sRGB specification (IEC 61966-2-1), or the Wikipedia summary of it.</strong>
+        For the four constants and the reason the toe exists, stated by the people who chose
+        them.</li>
+    <li><strong><code>SDL3/SDL_gpu.h</code>, the <code>SDL_GPUSwapchainComposition</code>
+        block.</strong> Twelve lines on your own disk that would have prevented this lesson's bug,
+        and a good argument for reading a header before assuming its defaults.</li>
+    <li><strong>Lesson 1.6</strong>, which introduced all of this and named exactly what it was
+        deferring, and <strong>Lesson 4.7</strong>, whose rule about <code>_SRGB</code> was right
+        and applied to only half the pipeline.</li>
+  </ul>

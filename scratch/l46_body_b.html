@@ -1,0 +1,773 @@
+
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-blocks">4.1 Two blocks, and an assertion that executes the rule</h3>
+
+  <p>
+    The engine needs two uniform blocks: a camera for the vertex stage and a lighting environment
+    for the fragment stage. Both live in a new header, and the interesting part is not the structs
+    — it is what sits underneath them.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_uniform.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">[[nodiscard]] constexpr std::size_t packed_offset(std::size_t cursor, std::size_t components)
+{
+    if (components &gt; 1)
+    {
+        const std::size_t start_register = cursor / 16;
+        const std::size_t end_register = (cursor + components * 4 - 1) / 16;
+        if (start_register != end_register)
+        {
+            return (start_register + 1) * 16;   // it would straddle: move it on
+        }
+    }
+    return cursor;
+}</code></pre>
+  </figure>
+
+  <p>
+    That is §3.2's rule, executable. Eleven lines, and it exists so that the blocks below can
+    assert their offsets against <em>the rule</em> rather than against numbers somebody worked out
+    once:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_uniform.hpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">struct light_uniforms
+{
+    vec3  to_light;   ///&lt; toward the lamp, world space, unit length (3.6's convention)
+    float ambient;    ///&lt; what a surface facing away still receives
+
+    vec3  sky;        ///&lt; the colour that ambient term is tinted with
+    float diffuse;    ///&lt; how much the cosine term contributes
+};
+
+static_assert(sizeof(light_uniforms) == 32, "two registers, exactly filled");
+static_assert(offsetof(light_uniforms, to_light) == packed_offset(0, 3), "");
+static_assert(offsetof(light_uniforms, ambient) == packed_offset(12, 1), "");
+static_assert(offsetof(light_uniforms, sky) == packed_offset(16, 3), "");
+static_assert(offsetof(light_uniforms, diffuse) == packed_offset(28, 1), "");</code></pre>
+  </figure>
+
+  <p>
+    This is the same discipline Lesson 4.5 applied to the vertex layout, aimed at a different
+    boundary. There, the defence was <code>sizeof</code> and <code>offsetof</code> instead of
+    literals. Here it is a <code>constexpr</code> function instead of a comment — and the
+    difference matters, because <strong>a comment describing a layout cannot fail</strong>. Insert
+    a field in the middle of that struct and the build breaks, at the line that is wrong, before
+    anything renders.
+  </p>
+
+  <p>
+    Note the shape of the block itself: <code>float3</code>, <code>float</code>,
+    <code>float3</code>, <code>float</code>. That is §3.2's habit, and the reward is visible in the
+    assertions — every offset is exactly the cursor, because nothing ever needed to move.
+  </p>
+
+  <div class="callout cpp">
+    <span class="label">C++ — why <code>constexpr</code> and not a macro or a comment</span>
+    <p>
+      <code>packed_offset</code> is evaluated at compile time inside a <code>static_assert</code>,
+      which means it costs nothing at runtime and cannot drift from the code it describes. It is
+      also <em>readable as an explanation</em>: somebody who has never met the packing rule can
+      read those eleven lines and know it exactly, which a comment saying "fields are 16-byte
+      aligned" would not have given them. When a rule is simple enough to write as a function,
+      writing it as a function is nearly always better than writing it as prose — the prose then
+      gets to explain <em>why</em> instead of restating <em>what</em>.
+    </p>
+  </div>
+
+  <h3 id="impl-probe">4.2 An instrument for asking the GPU what it got</h3>
+
+  <p>
+    Everything measured in §3 needed a way to read a uniform back, and there is no such API — the
+    data goes one way. So the shader has to be asked, and the only currency it has is the colour
+    of a pixel.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/uniform_probe.frag.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    const int x = int(position.x);
+    const int y = int(position.y);
+
+    float value = 0.0f;
+
+    if (y &lt; 4)
+    {
+        // Rows 0-3: the matrix, in HLSL's indexing. m[row][col].
+        value = m[y][x % 4];
+    }</code></pre>
+  </figure>
+
+  <p>
+    Pixel <em>(x, y)</em> reports one field, encoded so that a value of <em>n</em> comes back as
+    the byte <em>n</em>: divide by 255 in the shader, and the <code>_UNORM</code> target
+    multiplies by 255 on the way in. Push a block whose fields are 201, 211, 212, 213…, download
+    an 8×8 patch, and you have a complete map of which byte you wrote landed at which field the
+    shader can name.
+  </p>
+
+  <p>
+    Two details in the instrument are worth more than they look. First:
+  </p>
+
+  <div class="callout warn">
+    <span class="label">Truncate, do not round</span>
+    <p>
+      <code>SV_Position</code> in a fragment shader is the <strong>pixel centre</strong>, so the
+      first pixel is at (0.5, 0.5). <code>int(0.5)</code> truncates to 0, which is what we want;
+      rounding would give 1 and the entire probe would be shifted by one pixel — producing a table
+      that looks perfectly plausible and is wrong in every entry. An instrument that can be
+      subtly miscalibrated is worse than no instrument, so this is the line to check first if a
+      probe ever disagrees with something you are confident about.
+    </p>
+  </div>
+
+  <p>
+    Second, the probe's vertex stage has <strong>no vertex buffer at all</strong>:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/uniform_probe.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">Output main(uint vertex_id : SV_VertexID)
+{
+    Output output;
+
+    const float2 corner = float2((vertex_id == 1u) ? 3.0f : -1.0f,
+                                 (vertex_id == 2u) ? 3.0f : -1.0f);
+    output.position = float4(corner, 0.0f, 1.0f);
+    return output;
+}</code></pre>
+  </figure>
+
+  <p>
+    <code>SV_VertexID</code> is a system value the hardware fills in, so three vertices can be
+    generated from arithmetic and the pipeline needs no vertex layout. That is partly convenience
+    and mostly hygiene: Lesson 4.5 spent an entire lesson on how quietly a vertex layout goes
+    wrong, and an instrument that has one might be measuring it by accident.
+  </p>
+
+  <p>
+    The corners <code>(-1,-1)</code>, <code>(3,-1)</code>, <code>(-1,3)</code> make a triangle
+    twice the size of the target in each direction, so the target sits entirely inside it and the
+    excess is clipped. One triangle rather than two quads' worth means no shared edge — no seam,
+    and no pixel rasterised twice, which on a probe would mean reading a value that was written
+    twice.
+  </p>
+
+  <h3 id="impl-shaders">4.3 Retiring thirty lines of frozen camera</h3>
+
+  <p>
+    With a way to send data, <code>mesh.vert.hlsl</code> loses its seven constants and eleven
+    lines of hand-written projection, and gains this:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/mesh.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">cbuffer Camera : register(b0, space1)
+{
+    float4x4 clip_from_world;
+};</code></pre>
+  </figure>
+
+  <p>
+    …and the eleven lines of arithmetic collapse to one:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/mesh.vert.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    output.position = mul(clip_from_world, float4(world, 1.0f));</code></pre>
+  </figure>
+
+  <p>
+    <code>mul(M, v)</code> treats <code>v</code> as a column vector — <code>v' = M·v</code>, the
+    convention since Lesson 2.5 — and the <code>1.0f</code> is Lesson 2.7's fourth coordinate
+    doing its job: a <em>position</em>, so the matrix's fourth column is added in full and the
+    camera's translation actually happens. Write <code>0.0f</code> there and the scene ignores
+    where the camera is, rotating correctly around an origin it never leaves. That is a
+    memorable ten minutes if you have not lost them yet.
+  </p>
+
+  <p>
+    The fragment shader gains its own block, and one line of new physics:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">shaders/mesh.frag.hlsl</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="hlsl">HLSL</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    float3 colour = input.tint.rgb * (sky * ambient + diffuse * lambert);</code></pre>
+  </figure>
+
+  <p>
+    The ambient term is <strong>tinted</strong> now rather than grey. A surface facing away from
+    the sun is not unlit; it is lit by the sky, which is blue. That is one multiply, it is visibly
+    better, and it is worth knowing what it is: a one-sample approximation of the entire
+    hemisphere of incoming light, which is the thing Module 6's image-based lighting replaces with
+    something defensible. Naming an approximation as an approximation while you use it is most of
+    what keeps a renderer honest.
+  </p>
+
+  <h3 id="impl-push">4.4 Three lines, once per frame</h3>
+
+  <p>
+    Here is the entire per-frame uniform path:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                    const engine::camera_uniforms camera{view.clip_from_world(aspect)};
+                    SDL_PushGPUVertexUniformData(cb, 0, &amp;camera, sizeof(camera));
+
+                    engine::light_uniforms light{};
+                    light.to_light = view.to_light();
+                    light.ambient = 0.22f;
+                    light.sky = engine::vec3{0.62f, 0.74f, 1.0f};   // a blue sky, not grey
+                    light.diffuse = 0.90f;
+                    SDL_PushGPUFragmentUniformData(cb, 0, &amp;light, sizeof(light));</code></pre>
+  </figure>
+
+  <p>
+    No object, no binding, no release. Compare that with <code>gpu_buffer</code>,
+    <code>gpu_stream_buffer</code>, <code>gpu_mesh</code> and <code>gpu_pipeline</code> — every
+    one of which needed a move-only wrapper class to own a handle. This one needed a struct
+    definition and two calls.
+  </p>
+
+  <p>
+    Two placement decisions in those lines are deliberate. The push happens <strong>before
+    <code>SDL_BeginGPURenderPass</code></strong>, because a push applies to the command buffer and
+    putting it outside the pass makes that visible rather than implied. And the aspect ratio comes
+    from the rectangle about to be drawn into:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                    const float aspect = (fit.h &gt; 0)
+                        ? static_cast&lt;float&gt;(fit.w) / static_cast&lt;float&gt;(fit.h)
+                        : 16.0f / 9.0f;</code></pre>
+  </figure>
+
+  <p>
+    Lesson 4.5 could not do that. Its aspect ratio was a compile-time constant, and the viewport
+    call existed to <em>make that constant true</em>. The viewport is still there — the GPU's
+    picture and the blitted software picture share a window and should share a rectangle — but its
+    job has changed from covering for a limitation to expressing a composition choice. Worth
+    noticing when it happens: <strong>a workaround that becomes a decision is a sign the design
+    moved in the right direction.</strong>
+  </p>
+
+  <h3 id="impl-camera">4.5 A camera you can fly</h3>
+
+  <p>
+    <code>orbit_camera</code> has existed in <code>main.cpp</code> since Lesson 2.9 and the GPU
+    path could not use it. Now it can:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    [[nodiscard]] engine::mat4 clip_from_world(float aspect) const
+    {
+        return engine::perspective(k_fovy, aspect, k_near, k_far) * camera.view();
+    }</code></pre>
+  </figure>
+
+  <p>
+    <strong><code>projection * view</code>, in that order.</strong> Our convention is column
+    vectors, so <code>A*B</code> applies <code>B</code> first, and the view has to happen before
+    the projection. Reverse them and the result is not subtly wrong — it is unrecognisable, which
+    is at least a fast diagnosis.
+  </p>
+
+  <p>
+    The input handling is Lesson 1.3's rule showing up in a new place:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">        if (in.key_down(SDL_SCANCODE_LEFT)  || in.key_down(SDL_SCANCODE_A)) { camera.azimuth -= k_turn * dt; }
+        ...
+        constexpr float k_limit = 1.5f;   // just under pi/2
+        camera.elevation = std::clamp(camera.elevation, -k_limit, k_limit);</code></pre>
+  </figure>
+
+  <p>
+    <code>key_down</code> rather than <code>key_pressed</code>, and multiplied by
+    <code>dt</code>, so the camera turns at a rate rather than per frame. And the elevation clamp
+    is not cosmetic: <code>look_at</code> builds its right vector from
+    <code>cross(up, backward)</code>, which is the zero vector when the camera looks straight up.
+    Lesson 2.9 named that degeneracy; this is the line that keeps the demo out of it, and
+    <strong>1.5 radians is deliberately just under π/2</strong> rather than exactly it, because
+    "exactly at the singularity" and "one float past it" are the same thing to a renderer.
+  </p>
+
+  <h3 id="impl-cost">4.6 How much is too much to push</h3>
+
+  <p>
+    Uniform pushes are for small data. It is worth knowing why, with numbers rather than a feeling.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Cost of a uniform push by size</caption>
+    <thead><tr><th>pushed</th><th>per call</th><th>effective rate</th><th>what dominates</th></tr></thead>
+    <tbody>
+      <tr><td>108 bytes</td><td>0.015 µs</td><td>7.1 GB/s</td><td>the call itself</td></tr>
+      <tr><td>4 KB</td><td>0.058 µs</td><td>70.3 GB/s</td><td>the copy</td></tr>
+      <tr><td>16 KB</td><td>0.259 µs</td><td>63.4 GB/s</td><td>the copy</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Read that as a fixed overhead of roughly 14 nanoseconds plus a <code>memcpy</code> at about
+    65 GB/s — which is exactly what "the bytes are copied into the command buffer" predicts, and
+    a good sign the measurement is measuring the right thing. Our per-frame total is 96 bytes of
+    uniforms, so the cost is two call overheads and nothing else.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">There is a ceiling, and it is not documented</span>
+    <p>
+      Repeating a <em>large</em> push into one command buffer exhausts something and the process
+      dies with <strong>no message at all</strong>: no SDL error, no validation warning, no log
+      line. Measured in an isolated program — this lesson's harness deliberately does not do it,
+      because Lesson 4.4 settled that a test which destabilises the process is not a test — 16,000
+      pushes of 4 KB (62 MB) are fine, while 64 KB pushes die somewhere between 24 and 32 of them,
+      and <em>not at the same count twice</em>. That non-determinism is the signature of a pool
+      being exhausted rather than a limit being enforced. Keep pushes small and this never comes
+      up; the point of knowing it is that the symptom is a silent crash, which you would otherwise
+      spend a long time blaming on something else.
+    </p>
+  </div>
+
+  <p>
+    So: a camera, a material, a handful of parameters — push them. A hundred object transforms or
+    a bone palette is a <strong>storage buffer</strong>:
+    <code>SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ</code>, declared in HLSL as a
+    <code>StructuredBuffer</code> in <code>space0</code> or <code>space2</code>, and
+    <em>bound</em> rather than pushed — so the bytes move once instead of once per draw. Module 6
+    builds one.
+  </p>
+
+@@FIG_SCENE@@
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption class="visually-hidden">Every file this lesson creates or modifies</caption>
+    <thead><tr><th>path</th><th></th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td>src/gfx/gpu_uniform.hpp</td><td><span class="badge new">new</span></td>
+          <td>the two blocks, and <code>packed_offset</code> — the rule, executable</td></tr>
+      <tr><td>shaders/uniform_probe.vert.hlsl</td><td><span class="badge new">new</span></td>
+          <td>a full-target triangle from <code>SV_VertexID</code>, with no vertex layout</td></tr>
+      <tr><td>shaders/uniform_probe.frag.hlsl</td><td><span class="badge new">new</span></td>
+          <td>one pixel, one field — the instrument every measurement here used</td></tr>
+      <tr><td>shaders/mesh.vert.hlsl</td><td><span class="badge mod">modified</span></td>
+          <td>seven constants and eleven lines of projection become one matrix and one <code>mul</code></td></tr>
+      <tr><td>shaders/mesh.frag.hlsl</td><td><span class="badge mod">modified</span></td>
+          <td>a lighting block in space3, and an ambient term with a colour</td></tr>
+      <tr><td>src/main.cpp</td><td><span class="badge mod">modified</span></td>
+          <td><code>probe_view</code>: an orbit camera, a lamp, and two pushes a frame</td></tr>
+      <tr><td>CMakeLists.txt</td><td><span class="badge mod">modified</span></td>
+          <td>the two probe shaders</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:src/gfx/gpu_uniform.hpp@@
+@@LISTING:shaders/uniform_probe.vert.hlsl@@
+@@LISTING:shaders/uniform_probe.frag.hlsl@@
+@@LISTING:shaders/mesh.vert.hlsl@@
+@@LISTING:shaders/mesh.frag.hlsl@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Linux and macOS</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">Windows (Visual Studio generator)</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug -j
+.\build\Debug\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    The same seven tori as Lesson 4.5 — and now the arrow keys move the camera around them. Hold
+    <kbd>←</kbd> and the whole scene swings; <kbd>↑</kbd> and <kbd>↓</kbd> raise and lower the eye;
+    <kbd>Z</kbd> and <kbd>X</kbd> dolly in and out; <kbd>0</kbd> puts it back. The shadowed side of
+    each torus is now faintly <em>blue</em> rather than grey, which is the tinted ambient term.
+  </p>
+
+  <p>
+    <strong>Orbit until two tori overlap and watch what happens.</strong> One is drawn over the
+    other according to which instance came later, not which is nearer. There is no depth buffer
+    yet — Lesson 4.7 — and Lesson 4.5's fixed camera hid this by arranging the scene so nothing
+    overlapped. This is what it looks like when a limitation you designed around stops being
+    designed around.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">Keys added this lesson</caption>
+    <thead><tr><th>key</th><th>what it does</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd>, or <kbd>WASD</kbd></td>
+          <td>orbit the camera</td></tr>
+      <tr><td><kbd>Z</kbd> / <kbd>X</kbd></td><td>dolly in and out</td></tr>
+      <tr><td><kbd>0</kbd></td><td>reset the camera</td></tr>
+      <tr><td><kbd>L</kbd></td><td>set the lamp orbiting — the lighting is data now too</td></tr>
+      <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>everything Lessons 4.2 to 4.5 added</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    To reproduce every measurement in this lesson:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">from the repository root</span>
+      <span class="lang" data-lang="bash">shell</span>
+    </figcaption>
+    <pre><code class="lang-bash">c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_46.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp src/gfx/gpu_buffer.cpp \
+    src/gfx/gpu_pipeline.cpp src/gfx/gpu_mesh.cpp src/gfx/gpu_present.cpp \
+    src/gfx/framebuffer.cpp src/gfx/raster.cpp src/gfx/colour.cpp \
+    src/gfx/depth_buffer.cpp src/gfx/texture.cpp src/gfx/mesh.cpp \
+    src/gfx/obj.cpp src/gfx/clip.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/verify_46
+./build/verify_46</code></pre>
+  </figure>
+
+  <!-- =================================================================
+       7 — COMMON PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="callout pitfall">
+    <span class="label">The last few fields of a block are garbage; the first ones are fine</span>
+    <p>
+      <strong>Symptom:</strong> a uniform block where early fields work and later ones are
+      nonsense, or shifted.<br>
+      <strong>Cause:</strong> a vector that straddles a register boundary in your C++ struct but
+      not in the shader's. Everything before the divergence lands correctly, which is why this is
+      confusing.<br>
+      <strong>Fix:</strong> pair every <code>float3</code> with a <code>float</code>. To find it
+      exactly, <code>spirv-dis your.spv | grep MemberDecorate</code> and compare against
+      <code>offsetof</code> for each field.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Nothing is drawn at all after adding a uniform</span>
+    <p>
+      <strong>Symptom:</strong> the scene vanishes the moment the camera comes from a matrix.<br>
+      <strong>Cause:</strong> the matrix is zero — you pushed before filling it, filled a copy, or
+      declared it and never assigned. Every vertex collapses to the origin, so there is no
+      triangle to draw.<br>
+      <strong>Fix:</strong> push an identity matrix deliberately. If the mesh appears in clip
+      space — huge, centred, unprojected — the plumbing is right and the matrix was the problem.
+      That is a two-minute bisection and it is worth doing before anything cleverer.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The scene rotates but the camera never moves</span>
+    <p>
+      <strong>Symptom:</strong> orbiting spins the world around a fixed point, and dollying does
+      nothing.<br>
+      <strong>Cause:</strong> <code>float4(world, 0.0f)</code> instead of <code>1.0f</code>.
+      Lesson 2.7: a <code>w</code> of 0 makes it a direction, and the matrix's fourth column —
+      the translation, which is where the camera's position lives — is multiplied by zero.<br>
+      <strong>Fix:</strong> the <code>1.0f</code>. Worth recognising by sight, because the symptom
+      is so specific.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">Everything is inside out, or the scene is mirrored</span>
+    <p>
+      <strong>Symptom:</strong> geometry visible but wrong in a way that is hard to name.<br>
+      <strong>Cause:</strong> <code>view * projection</code> instead of
+      <code>projection * view</code>. With column vectors, <code>A*B</code> applies <code>B</code>
+      first.<br>
+      <strong>Fix:</strong> swap them. If unsure which convention a piece of code uses, push an
+      identity and a pure translation and see which one moves the scene.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The shader reads zeros, and the build was fine</span>
+    <p>
+      <strong>Symptom:</strong> a uniform block that is entirely zero at runtime.<br>
+      <strong>Cause:</strong> the push went to the wrong <em>stage</em> —
+      <code>SDL_PushGPUVertexUniformData</code> where the block is declared in the fragment
+      shader, or the reverse. The two are separate slot namespaces and nothing connects them.<br>
+      <strong>Fix:</strong> match the push to the stage that declares the block. Note that this is
+      a different mistake from the wrong <em>space</em>, which the build catches.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">"Descriptor set index for graphics uniform buffer must be 1 or 3!"</span>
+    <p>
+      <strong>Symptom:</strong> the build fails translating SPIR-V to MSL or DXIL.<br>
+      <strong>Cause:</strong> the <code>cbuffer</code> is in the wrong register space. Vertex
+      uniform buffers are <code>space1</code>; fragment ones are <code>space3</code>.<br>
+      <strong>Fix:</strong> as the message says. And be glad of it — the JSON reflection is
+      byte-identical either way, so nothing downstream of the build would have noticed.
+    </p>
+  </div>
+
+  <div class="callout pitfall">
+    <span class="label">The process dies with no message</span>
+    <p>
+      <strong>Symptom:</strong> a silent crash, no SDL error, no validation output.<br>
+      <strong>Cause:</strong> many large uniform pushes into one command buffer. §4.6 measured 64
+      KB pushes dying between 24 and 32 of them, non-deterministically.<br>
+      <strong>Fix:</strong> keep pushes small; put bulk data in a storage buffer. If you are
+      already there, the non-determinism is the tell — a reproducible crash is a bug in your code,
+      an irreproducible one at a resource boundary is exhaustion.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <ol class="exercises">
+    <li>
+      <p>
+        <strong>4.6.1 — Break the block on purpose.</strong> Add a <code>float3</code> to
+        <code>light_uniforms</code> immediately after <code>to_light</code>, without padding.
+        Predict which fields will still arrive correctly before you build, then check with the
+        probe.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> the <code>static_assert</code>s will fail first, which is the
+        feature working. Comment them out to see the runtime behaviour, and note that your
+        prediction should be "everything up to the inserted field". Put them back afterwards.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.6.2 — A layout check for uniforms.</strong> Lesson 4.5's
+        <code>check_layout</code> compares a vertex layout against the reflection JSON. The
+        reflection does <em>not</em> carry cbuffer member offsets — but the SPIR-V does. Write a
+        tool that reads the <code>OpMemberDecorate … Offset</code> instructions out of a
+        <code>.spv</code> and prints them, then compare by hand against your struct.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> §D of <code>verify_46</code> already parses SPIR-V to find
+        descriptor sets — twenty lines, no dependency. Member offsets are the same walk with
+        opcode 72 (<code>OpMemberDecorate</code>) and decoration 35 (<code>Offset</code>). Making
+        it a build step that fails the build is the version worth having.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.6.3 — Per-object transforms.</strong> Right now each instance carries an offset,
+        a scale and a two-float rotation, because Lesson 4.5 had no uniforms. Replace it with a
+        full <code>float4x4</code> per instance and delete the cos/sin pair.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> a matrix in a <em>vertex buffer</em> is four separate
+        <code>FLOAT4</code> attributes at four consecutive locations — the vertex layout has no
+        matrix type. That is 64 bytes per instance against 28, so measure the per-frame upload
+        before and after and decide whether you would take that trade for seven instances, and
+        for a thousand.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.6.4 — Two cameras, one frame.</strong> Draw the scene twice into two halves of
+        the window from two different viewpoints, with one command buffer and one pipeline.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> this is what §2.2's measurement was really about — push, draw,
+        push, draw. You will need <code>SDL_SetGPUViewport</code> between them (Lesson 4.5:
+        viewport is pass state). No second pipeline, no second buffer, nothing rebound.
+      </p>
+    </li>
+    <li>
+      <p>
+        <strong>4.6.5 — Find the push ceiling on your machine.</strong> §4.6 reports 64 KB pushes
+        failing between 24 and 32 repetitions on one Metal device. Write the isolated program that
+        measures it on yours, and find out whether the number is stable, whether it scales with
+        push size, and whether the validation layer says anything.
+      </p>
+      <p class="hint">
+        <strong>Hint:</strong> keep it in a separate binary that is allowed to crash — that is the
+        whole reason it is not in the harness. Bisect on repetition count for a fixed size, then
+        on size for a fixed count, and plot the boundary. If it is a clean product of the two, you
+        have found a pool size.
+      </p>
+    </li>
+  </ol>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <ul>
+    <li>
+      <strong>Three rates of change, three mechanisms.</strong> Per-vertex and per-instance are
+      buffer fetches differing by one enum value; per-frame is not a fetch at all, because there
+      is one value and nothing to index.
+    </li>
+    <li>
+      <strong>SDL_GPU has no uniform buffer object.</strong> You push bytes onto a command buffer
+      and every draw after them reads them. No lifetime, no binding, no cycling hazard — and the
+      bytes are copied, which is why it is for small data.
+    </li>
+    <li>
+      <strong>The packing rule is HLSL's, not std140</strong>, despite what SDL's header says — but
+      std140 is a superset, so following SDL's advice is safe. Pair every <code>float3</code> with
+      a <code>float</code> and the question stops arising.
+    </li>
+    <li>
+      <strong>A uniform layout bug corrupts the tail.</strong> Everything before the first
+      straddling field arrives correctly. Measured: a trailing <code>float3</code> arriving as
+      (242, 243, 0) where (241, 242, 243) was written.
+    </li>
+    <li>
+      <strong>The matrix crosses untouched</strong> — all sixteen elements checked individually,
+      no transpose. Lesson 2.6's column-major choice was right, and the SPIR-V's
+      <code>RowMajor</code> decoration is an artefact rather than a contradiction.
+    </li>
+    <li>
+      <strong>A wrong register space is caught by the build</strong>, not by the reflection and not
+      at runtime — on the paths that translate. On Vulkan there is nothing to translate and
+      nothing to catch it.
+    </li>
+  </ul>
+
+  <p>
+    The engine can now draw a real mesh, many times, from a camera that moves. What it cannot do
+    is decide which of two surfaces is in front — you can see that for yourself by orbiting until
+    two tori cross. It also cannot put an image on anything: the uv coordinate has been travelling
+    through the vertex buffer since Lesson 4.5 and its only job so far has been to draw a grid so
+    we could tell it arrived.
+  </p>
+
+  <p>
+    <strong>Next: 4.7 — Textures, Samplers, and Depth.</strong> Both of those, and both are
+    re-encounters rather than introductions: the bilinear filtering you wrote by hand in Lesson
+    3.9 becomes a sampler object and costs nothing, and the depth test you wrote in Lesson 3.1
+    becomes three fields of a struct you have already been filling in. The interesting parts are
+    the ones that are genuinely new — the depth <em>format</em> is a choice with precision
+    consequences, and a texture has to get onto the device through the transfer path Lesson 4.2
+    built for the framebuffer.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>SDL3 — <code>SDL_gpu.h</code>, "Uniform Data" and <code>SDL_CreateGPUShader</code>.</strong>
+      The push functions and, in the shader-creation docs, the complete per-stage table of register
+      spaces for SPIR-V, DXBC/DXIL and MSL. Read the MSL section even if you never target Metal —
+      it is the clearest statement of what SDL is normalising.
+    </li>
+    <li>
+      <strong>Microsoft, "Packing Rules for Constant Variables".</strong> The authoritative
+      statement of the HLSL rule §3.2 measured, including the array and matrix cases this lesson
+      did not need.
+    </li>
+    <li>
+      <strong>OpenGL 4.6 specification, §7.6.2.2 "Standard Uniform Block Layout".</strong> std140
+      itself, which is what SDL's header points at and what a GLSL front end would give you.
+      Worth reading side by side with the above to see exactly where the two diverge.
+    </li>
+    <li>
+      <strong>Fabian Giesen, "A trip through the Graphics Pipeline 2011", part 3.</strong> Where
+      constant data actually lives on the hardware and why it is loaded in 16-byte units — the
+      "why" behind §3.1.
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §18.4.2.</strong> Constant buffers in the cost model
+      of a frame, and where per-draw data sits against per-frame and per-object.
+    </li>
+    <li>
+      <a href="../conventions.html">Conventions</a> — §6 (matrices: column vectors, column-major),
+      §7g (the SDL_GPU contract), and the new §7i entry on uniform data.
+    </li>
+  </ul>

@@ -1,0 +1,440 @@
+  <!-- =================================================================
+       9 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">9</span>Implementation</h2>
+
+  <p>
+    Four steps, and the order matters because the last one is what makes the whole thing
+    verifiable.
+  </p>
+
+  <h3><span class="num">9.1</span>Step one: the texture gets a pool</h3>
+
+  <p>
+    Before a material can reference a texture by handle, textures need somewhere with stable
+    identity. That is two lines in <code>texture.hpp</code>:
+  </p>
+
+  <pre><code class="lang-cpp">using texture_handle = handle&lt;texture&gt;;
+using texture_pool   = pool&lt;texture&gt;;</code></pre>
+
+  <p>
+    Note where it is <em>not</em>. <code>asset_store</code> already owns pools of meshes and images
+    (5.5), and adding a third would have been the obvious move — but the asset store is about
+    <em>files</em>: a search path, a name, a cache, a load count. Every texture in this engine so far
+    is generated in memory. Lesson 6.6 is where textures start arriving from disk, and that is the
+    lesson that gets to decide whether they become assets. <strong>Inventing that answer now would
+    be guessing</strong>, which is the same call 3.7 made about the material itself.
+  </p>
+
+  <h3><span class="num">9.2</span>Step two: the material, and what it displaces</h3>
+
+  <p>
+    <code>material.hpp</code> is new and small. The interesting part of the diff is what
+    <em>shrinks</em>: <code>scene_object</code> loses two fields and gains one, and
+    <code>ecs_swarm</code>'s invented struct loses its body entirely.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/ecs_swarm/main.cpp</span>
+      <span class="tag modified">the deletion</span></figcaption>
+<pre><code class="lang-cpp">// before — a demo declaring an engine type
+struct material
+{
+    Uint32 tint = 0xFFFFFFFFu;
+    engine::microsurface surface{};
+};
+
+// after
+struct material
+{
+    engine::material_handle mat{};
+};</code></pre>
+  </figure>
+
+  <p>
+    It stays a distinct type rather than becoming <code>engine::material</code> outright, and that
+    is deliberate: <strong>an ECS component is an identity, not just a payload.</strong>
+    <code>view&lt;geometry, material&gt;</code> names <em>this</em> component, and two components
+    that happened to share a layout would be indistinguishable to the registry. Lesson 5.7 made the
+    same call about <code>placement</code>.
+  </p>
+
+  <h3><span class="num">9.3</span>Step three: one packing site</h3>
+
+  <p>
+    <code>uniforms_of</code> (§5) replaces the hand-assembly at three call sites. The sandbox's
+    version went from five statements to one — and, as §5 records, that substitution was wrong
+    until the texture decision was moved onto the material, which is the point the function is
+    making.
+  </p>
+
+  <h3><span class="num">9.4</span>Step four: the resolve, in the golden's own path</h3>
+
+  <p>
+    The reference shot could have kept passing a raw <code>const texture*</code> and nothing would
+    have noticed. Instead it now builds a material and resolves it, so the handle path is on the
+    covered path rather than beside it:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">demos/common/demo_scene.cpp</span>
+      <span class="tag modified">the shot</span></figcaption>
+<pre><code class="lang-cpp">const engine::material draw_material{
+    .albedo_map = bind_texture ? textures.pick(albedo_source::uv_grid)
+                               : engine::texture_handle{},
+    .samp = samp,
+    .surface = lit_pass ? engine::microsurface{.roughness = 0.30f}
+                        : engine::microsurface{}};
+const engine::texture_binding albedo = engine::bind_albedo(draw_material,
+                                                            textures.pool);</code></pre>
+  </figure>
+
+  <p>
+    That is the same discipline Lesson 6.4 arrived at when it added an eighth frame: <strong>a test
+    that does not exercise a path cannot pin it.</strong> A handle system verified only by unit
+    tests is a handle system the reference render has never run.
+  </p>
+
+  <!-- =================================================================
+       10 — THE REFACTOR
+       ================================================================= -->
+  <h2 id="refactor"><span class="num">10</span>The Refactor, in Two Halves</h2>
+
+  <p>
+    Everything above is a refactor, which means it gets exactly one correctness claim: <strong>the
+    picture does not change.</strong> Lesson 5.1 built the machinery for making that claim and
+    stated the rule for using it:
+  </p>
+
+  <div class="callout ok">
+    <span class="label">5.1's rule</span>
+    <p><strong>Move without changing, then change without moving, verifying separately.</strong></p>
+  </div>
+
+  <p>
+    "Separately" is the load-bearing word. If you move code and change behaviour in one step and the
+    output shifts, you have two candidate causes and no way to tell them apart. Worse, if the two
+    changes have <em>compensating</em> errors, the output can come out right and both bugs survive.
+  </p>
+
+  <p>So this lesson ran the golden three times:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>after</th><th>what changed</th><th>hash</th></tr></thead>
+    <tbody>
+      <tr><td>the move</td><td><code>tint</code> and <code>surface</code> into <code>mat</code>, nothing else</td><td><code>E917C06C</code></td></tr>
+      <tr><td>the texture handles</td><td><code>texture_set</code> became a pool; the shot resolves</td><td><code>E917C06C</code></td></tr>
+      <tr><td>the GPU packing</td><td><code>uniforms_of</code>; the swarm's handle component</td><td><code>E917C06C</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The swarm has its own shot, and it got the same treatment — rendered before and after from
+    clean builds on both sides, byte-identical.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">A false alarm worth having, because the symptom was not a crash</span>
+    <p>Capturing that "before" render meant stashing the work, rebuilding, and shooting. The
+       rebuild was <em>incremental</em>, and <code>scene_object</code> had changed size (96 → 112
+       bytes) — so some objects were compiled against the old layout and some against the new.</p>
+    <p>The result was not a crash. It was a shot with the wrong scenes in it: frame 1 rendering
+       <code>solids</code> instead of <code>cycle</code>, triangle counts of 20 where 44 was right,
+       and one frame's name printing as <code>?</code>. <strong>Plausible garbage</strong>, which
+       took a minute to distinguish from a real regression.</p>
+    <p>The fix was <code>cmake --build build --target clean</code>, and the rule is: <strong>after
+       any change to a struct's layout, an incremental build is not evidence.</strong> That is the
+       same failure class as a uniform block disagreeing with its shader, arriving on the CPU
+       side.</p>
+  </div>
+
+  <!-- =================================================================
+       11 — WHAT IT COST
+       ================================================================= -->
+  <h2 id="cost"><span class="num">11</span>What It Cost</h2>
+
+  <p>
+    A material system is not free, and one of the existing harnesses said so immediately.
+    <code>verify_56</code> — Lesson 5.6's cache-behaviour work — asserts the size of
+    <code>scene_object</code>, and it failed:
+  </p>
+
+  <pre><code class="lang-text">[FAIL] scene_object is 112 bytes (1.5 cache lines)</code></pre>
+
+  <p>
+    It was 96. The material added 16 bytes net, and the assertion is worth keeping rather than
+    relaxing, because 5.6 is the lesson that measured <em>why</em> object size matters at all.
+  </p>
+
+  <p>Where the bytes went:</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>field</th><th>bytes</th><th></th></tr></thead>
+    <tbody>
+      <tr><td><code>Uint32 tint</code></td><td>4</td><td>was already there</td></tr>
+      <tr><td><code>texture_handle albedo_map</code></td><td>4</td><td>new — and it replaces an 8-byte pointer elsewhere</td></tr>
+      <tr><td><code>sampler samp</code></td><td><strong>16</strong></td><td><strong>the whole growth</strong></td></tr>
+      <tr><td><code>microsurface surface</code></td><td>12</td><td>was already there</td></tr>
+      <tr><td><code>material</code></td><td>36</td><td></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The sampler is where it went</strong> — four enums, stored per object, identical for
+    every object in every scene this engine has. A real engine interns those into a handle exactly
+    as this lesson interns the texture, which would put <code>scene_object</code> back under a
+    hundred bytes.
+  </p>
+
+  <p>
+    That is named as a debt rather than paid, on the same grounds as everything else here: nothing
+    yet needs two materials to <em>share</em> a sampler, and the rule from §6 is about sharing.
+    Exercise 14.4 does it anyway and measures what comes back.
+  </p>
+
+  <!-- =================================================================
+       12 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">12</span>Complete Code Listings</h2>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>new</td><td>the type, the pool, the resolve, <code>cull_of</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/cull.hpp</code></td><td>new</td><td><code>cull_mode</code>, shared by two components</td></tr>
+      <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td><td><code>texture_handle</code>, <code>texture_pool</code></td></tr>
+      <tr><td><code>engine/include/engine/gfx/scene.hpp</code></td><td>modified</td><td><code>scene_object</code> holds a material; the <code>closed</code> correction</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td><td><code>uniforms_of</code> — one packing site</td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td><td><code>cull_mode</code> moved out</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td><td>the invented struct deleted; handles and a palette</td></tr>
+      <tr><td><code>scratch/verify_65.cpp</code></td><td>new</td><td>27 checks, seven sections</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/material.hpp@@
+  @@LISTING:engine/include/engine/gfx/cull.hpp@@
+  @@LISTING:engine/include/engine/gfx/scene.hpp@@
+  @@LISTING:scratch/verify_65.cpp@@
+
+  <!-- =================================================================
+       13 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">13</span>Build &amp; Run</h2>
+
+  <p>Two new headers, no new sources, no CMake change.</p>
+
+  <figure class="listing">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+sh scratch/build_verify_65.sh</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+<pre><code class="lang-bash">cmake -S . -B build
+cmake --build build --config Debug</code></pre>
+  </figure>
+
+  <p><strong>What you should see.</strong> <code>verify_65</code> ends with:</p>
+
+  <pre><code class="lang-text">27 checks, 0 failures</code></pre>
+
+  <p>
+    And — this is the whole point — <strong>the demos look exactly as they did before.</strong>
+    Run the sandbox, the swarm, <code>hello_cube</code>: not one pixel has moved. If something
+    looks different, the refactor has a bug in it, and §10's table is how you find which half.
+  </p>
+
+  <p>
+    The one visible change is in the swarm's startup log, where nine materials are now built before
+    any entity exists rather than one per entity as they spawn.
+  </p>
+
+  <!-- =================================================================
+       14 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">14</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfall">
+    <h3>The scene renders the wrong objects entirely after a struct change</h3>
+    <p><strong>Symptom:</strong> wrong meshes, wrong counts, garbage names — but no crash.</p>
+    <p><strong>Cause:</strong> an incremental build after a layout change. Some translation units
+       have the old <code>sizeof</code> and some the new, so every field after the change is read at
+       the wrong offset.</p>
+    <p><strong>Fix:</strong> <code>cmake --build build --target clean</code>. And treat it as a
+       rule: <strong>after a struct's layout changes, an incremental build is not evidence.</strong></p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Textures vanish after switching to <code>uniforms_of</code></h3>
+    <p><strong>Symptom:</strong> everything draws flat-coloured; the GPU path lost its images.</p>
+    <p><strong>Cause:</strong> the material's <code>albedo_map</code> was never set, because the
+       texture was still being chosen somewhere else. The derived flag correctly reports "no
+       image" — the material was simply not told.</p>
+    <p><strong>Fix:</strong> move the decision onto the material. If two places both have an opinion
+       about whether a surface is textured, deriving the flag has not helped; it has just picked the
+       uninformed one.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A material renders as debug magenta</h3>
+    <p><strong>Symptom:</strong> one surface is bright magenta.</p>
+    <p><strong>Cause:</strong> a <em>stale</em> handle — well-formed, naming a slot whose occupant
+       is gone — or a texture bound at a slot the shader declares but nothing filled.</p>
+    <p><strong>Fix:</strong> <code>pool::contains()</code> answers the first, and it is a different
+       question from <code>handle::valid()</code> (5.4). Note that <code>bind_albedo</code> already
+       degrades a stale handle to "no image" rather than to magenta — so magenta means the binding
+       was made another way.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Objects sharing a material change together, unexpectedly</h3>
+    <p><strong>Symptom:</strong> tweaking one entity's roughness changes ninety-five others.</p>
+    <p><strong>Cause:</strong> that is the feature. They share a handle.</p>
+    <p><strong>Fix:</strong> if an object needs its own appearance, give it its own material —
+       <code>pool.insert()</code> a copy. The decision "shared or unique" is now explicit at the
+       point of creation, which is exactly the improvement: before, everything was unique and
+       nothing said so.</p>
+  </div>
+
+  <!-- =================================================================
+       15 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">15</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>15.1 — Break the split on purpose</h3>
+    <p>Add <code>cull_mode cull;</code> to <code>material</code> and wire it through. Then count the
+       pipeline objects the GPU renderer needs, and the pipeline binds per frame with and without
+       the draw-list sort.</p>
+    <details><summary>Solution sketch</summary>
+      <p>Nothing stops you compiling it — that is the point. What breaks is the <em>batching</em>:
+         two objects differing only in cull mode can no longer be drawn back to back, and
+         <code>draw_stats::pipeline_binds</code> climbs away from
+         <code>ideal_pipeline_binds</code>. The field is legal C++ and a category error, and the
+         only thing that tells you is the stat Lesson 4.8 added.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.2 — Make a handle go stale, and watch what happens</h3>
+    <p>Give an object a material with a valid <code>albedo_map</code>, then remove that texture from
+       the pool while the scene is still rendering. Predict the result before you run it.</p>
+    <details><summary>Hint</summary>
+      <p><code>bind_albedo</code> returns <code>{nullptr, samp}</code> for a handle the pool no
+         longer contains, and <code>texture_binding::bound()</code> is false.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p>The surface falls back to its tint and keeps rendering. Now do the same thing with the
+         pre-6.5 code, which stored a <code>const texture*</code>: you get freed memory, and
+         whether that crashes depends on the allocator's mood. <strong>The handle turned undefined
+         behaviour into a defined fallback</strong>, and that is worth more than the four bytes it
+         saved.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.3 — Find the next invented type</h3>
+    <p>§2 argued that a demo inventing an engine type is a measurement of a missing API. Read the
+       demos for others. What has <code>sandbox</code> declared that the engine should own?</p>
+    <details><summary>Solution sketch</summary>
+      <p><code>scene_mesh_cache</code> and <code>orbit_camera</code> are both strong candidates —
+         one is an asset-derivation cache the engine plausibly wants, the other is a camera the
+         engine definitely does. Note that the argument is not "move everything": a demo is allowed
+         demo-specific types. The signal is a demo type that <em>other</em> demos also declare.</p></details>
+  </div>
+
+  <div class="exercise">
+    <h3>15.4 — Intern the sampler (engine challenge)</h3>
+    <p>§11 measured the sampler as 16 of the material's 36 bytes, identical for every object.
+       Replace it with a <code>sampler_handle</code> into a small pool and measure
+       <code>sizeof(scene_object)</code> again.</p>
+    <details><summary>Hint</summary>
+      <p>The pool will hold two or three entries for the whole program. That is itself the
+         interesting result: it is what "identical for every object" looks like once it is
+         measured.</p></details>
+    <details><summary>Solution sketch</summary>
+      <p><code>material</code> drops to 24 bytes and <code>scene_object</code> back under 100.
+         Then ask the §6 question honestly: does anything <em>share</em> a sampler in a way that
+         matters, or is this only about bytes? If it is only about bytes, the case is weaker than
+         the texture's — and knowing which argument you are making is the exercise.</p></details>
+  </div>
+
+  <!-- =================================================================
+       16 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">16</span>Recap &amp; Next</h2>
+
+  <p>
+    The engine has a material: one type for what a surface is, referenced by handle where it refers
+    to assets, packed to the GPU in one place, and shared where sharing is real.
+  </p>
+
+  <p>What the engine gained:</p>
+
+  <ul>
+    <li><strong>A rule that decides membership</strong> — <em>can this be a number in a buffer?</em>
+        — which is the hardware's line rather than a matter of taste, and which
+        <code>verify_65</code> asserts with a <code>trivially_copyable</code> check.</li>
+    <li><strong>Handles for stored references, pointers for inner loops</strong>, and
+        <code>bind_albedo</code> as the named step between. A stale handle now degrades to "no
+        image" instead of to freed memory.</li>
+    <li><strong>A derived flag instead of a stored one</strong> — removing a state the program could
+        previously represent and never should have been able to.</li>
+    <li><strong>Sharing, measured:</strong> 3,456 bytes to 600 for the swarm's ring, and, more
+        importantly, one write where there was a loop.</li>
+    <li><strong>Two corrections to comments that had been repeating for three modules</strong> —
+        <code>closed</code> was never material state, and the compile-time argument for
+        <code>cull.hpp</code> did not survive being measured.</li>
+  </ul>
+
+  <p>
+    And one deletion worth more than anything added: <code>ecs_swarm</code>'s hand-written
+    <code>struct material</code>. A demo built it because the engine had a hole; the hole is filled,
+    so the demo stops needing to.
+  </p>
+
+  <p>
+    The reference render is <strong>byte-identical</strong>, hash <code>E917C06C</code>, across all
+    three stages of the refactor. That is the only claim a refactor is entitled to make, and making
+    it in separately-verified halves is what stops two compensating bugs from cancelling into a
+    passing test.
+  </p>
+
+  <p>
+    <strong>Next: 6.6 — glTF 2.0 Loading.</strong> Everything this lesson deferred, 6.6 forces.
+    Textures start arriving from <em>files</em>, which is when the question "should the asset store
+    own the texture pool?" stops being premature. glTF files define <em>materials</em>, which is
+    when a material needs a name, a cache and an identity that survives a reload. And the glTF
+    specification defines its own reference BRDF using the <code>1 − F(v·h)</code> coupling that
+    Lesson 6.4 measured at 1.3395 and declined to ship — so the interoperability question this
+    engine has been able to avoid arrives with an asset attached.
+  </p>
+
+  <!-- =================================================================
+       17 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">17</span>Further Reading</h2>
+
+  <ul>
+    <li><strong>Lakos, J., <em>Large-Scale C++ Software Design</em> (1996), chapters 0–3.</strong>
+        Where "physical design" as a discipline comes from, and the source of the rule
+        <code>cull.hpp</code> follows.</li>
+    <li><strong>Filament's material system documentation (Google).</strong> The clearest public
+        description of a shipping material model, including exactly which parameters are uniforms
+        and which are compile-time variants — the same split §3 draws.</li>
+    <li><strong>The glTF 2.0 specification, §3.9 "Materials".</strong> Worth reading now, before
+        6.6: notice how little it defines, and that everything it defines is per-draw data.</li>
+    <li><strong>Bitsquid / Our Machinery, "Managing Decoupling" and the handle articles.</strong>
+        The handle-versus-pointer argument made at engine scale rather than at struct scale.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §18.4.</strong> Pipeline state, sorting and batching —
+        why the right-hand column of Figure 2 is expensive.</li>
+    <li><strong>Fabien Sanglard's Quake and Doom 3 source reviews.</strong> Both engines' material
+        systems are worth reading precisely because they draw the line differently, and both
+        explain why.</li>
+  </ul>

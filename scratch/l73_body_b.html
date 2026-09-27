@@ -1,0 +1,430 @@
+  <h2 id="product">4. The product, derived — and what it does geometrically</h2>
+
+  <p>
+    We know what <code>a + bi</code> means as a transformation, and we know
+    <code>i² = −1</code>. That is enough to multiply, and the multiplication rule is not invented:
+    it is forced. Take two of these things and multiply them out the way you would multiply any
+    two brackets, treating <code>i</code> as an ordinary symbol, and then use
+    <code>i² = −1</code> exactly once at the end:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ (a + bi)(c + di) = ac + adi + bci + bd\,i^2 = (ac - bd) + (ad + bc)i \]</span>
+    <span class="eq-plain">(a + bi)(c + di) = ac + adi + bci + bd i^2 = (ac - bd) + (ad + bc) i</span>
+  </div>
+
+  <p>
+    Four multiplies and two adds, and exactly one surprising character in the answer: the minus
+    sign in <code>ac − bd</code>. It is <code>i²</code>, and it is nothing else. If you ever
+    forget which term the minus goes on — and you will — do not try to remember it. Multiply the
+    brackets out again; it takes eight seconds and it cannot be got wrong.
+  </p>
+
+  <h3>4.1 A worked example, by hand</h3>
+
+  <p>
+    Take <code>z = 3 + 4i</code> and <code>w = 1 + 2i</code>. Substituting
+    <code>a = 3, b = 4, c = 1, d = 2</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ (3 + 4i)(1 + 2i) = (3 \cdot 1 - 4 \cdot 2) + (3 \cdot 2 + 4 \cdot 1)i = -5 + 10i \]</span>
+    <span class="eq-plain">(3 + 4i)(1 + 2i) = (3*1 - 4*2) + (3*2 + 4*1) i = -5 + 10i</span>
+  </div>
+
+  <p>
+    Now measure the three numbers. The <strong>modulus</strong> of a complex number is its
+    distance from the origin — it is <code>vec2</code>'s <code>length</code>, because a complex
+    number and a point of the plane are the same thing:
+  </p>
+
+  <ul>
+    <li><code>|z| = √(3² + 4²) = √25 = 5</code></li>
+    <li><code>|w| = √(1² + 2²) = √5 ≈ 2.2360680</code></li>
+    <li><code>|zw| = √(25 + 100) = √125 = 5√5 ≈ 11.1803398</code></li>
+  </ul>
+
+  <p>
+    And <code>5 × 2.2360680 = 11.1803398</code>. The moduli <em>multiplied</em>. Now the
+    <strong>arguments</strong> — the angle each makes with the positive real axis, which is
+    <code>atan2(im, re)</code>:
+  </p>
+
+  <ul>
+    <li><code>arg z = atan2(4, 3) = 53.13010°</code></li>
+    <li><code>arg w = atan2(2, 1) = 63.43495°</code></li>
+    <li><code>arg zw = atan2(10, −5) = 116.56505°</code></li>
+  </ul>
+
+  <p>
+    And <code>53.13010 + 63.43495 = 116.56505</code>. The arguments <em>added</em>. Two decimal
+    coincidences in a row would be a coincidence; these are not.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ |zw| = |z|\,|w| \qquad\text{and}\qquad \arg(zw) = \arg z + \arg w \]</span>
+    <span class="eq-plain">|zw| = |z| |w|, and arg(zw) = arg z + arg w</span>
+  </div>
+
+  <p>
+    <strong>That is the whole of complex multiplication, geometrically: scale by the modulus, turn
+    by the argument.</strong> Which means multiplying by a complex number of modulus 1 is a pure
+    rotation, and composing two rotations is a single multiplication — four multiplies, two adds,
+    no trigonometry anywhere. Which is precisely what §1 asked for.
+  </p>
+
+  <h3>4.2 Why it is true, in four steps</h3>
+
+  <p>
+    The numbers above are evidence, not proof. Here is the proof, and it uses nothing but
+    Lesson 2.5's idea that a linear map is determined by where the basis vectors land.
+  </p>
+
+  <p>
+    <strong>Step 1: multiplication by <code>z</code> is a linear map.</strong> Read the formula:
+    each output component is a fixed linear combination of the input components. So
+    <code>z(v + w) = zv + zw</code> and <code>z(sv) = s(zv)</code> for real <code>s</code>. Both
+    are one line of algebra to check and the code makes them obvious.
+  </p>
+
+  <p>
+    <strong>Step 2: find where the basis vectors land.</strong> The basis of the plane is
+    <code>1</code> and <code>i</code>. Multiplying <code>1</code> by <code>z</code> gives
+    <code>z</code>. Multiplying <code>i</code> by <code>z</code> gives <code>zi</code>, which is
+    <code>z</code> turned a quarter circle — because multiplying by <code>i</code> is what a
+    quarter turn <em>is</em>, by §3's definition.
+  </p>
+
+  <p>
+    <strong>Step 3: look at what that pair of images is.</strong> The two images are
+    <code>z</code> and <code>z</code>-turned-90°. They are perpendicular to each other, and they
+    have the same length, namely <code>|z|</code>. A linear map that sends a perpendicular pair of
+    unit vectors to a perpendicular pair of equal-length vectors is a <strong>similarity</strong>:
+    it preserves every angle and multiplies every length by one fixed factor. That factor is
+    <code>|z|</code>.
+  </p>
+
+  <p>
+    <strong>Step 4: find the angle.</strong> A similarity that preserves orientation is a rotation
+    followed by a scale, and the rotation is determined by where any one vector goes. The vector
+    <code>1</code> goes to <code>z</code>, so the rotation is by <code>arg z</code>. Done.
+  </p>
+
+  <p>
+    Figure 2 is steps 3 and 4 drawn. The triangle with vertices <code>0, 1, w</code> and the
+    triangle with vertices <code>0, z, zw</code> are the same triangle — the second is the first
+    scaled by <code>|z| = 5</code> and turned by <code>arg z = 53.130°</code>. They are drawn at
+    different scales <em>on purpose</em>, so that "same shape" is something your eye can check
+    rather than something you take on trust; the factor of five is then stated between them.
+  </p>
+
+  @@FIG_PRODUCT@@
+
+  <h3>4.3 Measured, and with a control</h3>
+
+  <p>
+    Two claims, swept over four thousand random pairs with moduli up to 8 — deliberately not unit
+    numbers, because a claim about general complex multiplication tested only on rotations is a
+    claim about rotations:
+  </p>
+
+  <pre><code>B. WHAT THE PRODUCT DOES GEOMETRICALLY
+   (3+4i)(1+2i) =                -5.0 +10.0i
+     |z| 5.0000000   |w| 2.2360680   |z||w| 11.1803398
+                                     |zw| 11.1803398
+     arg z 53.13010   arg w 63.43495   sum 116.56504 deg
+                                    arg zw 116.56504 deg
+  [PASS] B.1  the worked example is exact
+   4,000 random pairs:  worst |zw| rel. error  2.136e-07
+                        worst arg error        2.732e-05 deg
+  [PASS] B.2  moduli multiply (relative error &lt; 1e-6)
+  [PASS] B.3  arguments add (error &lt; 1e-4 deg)</code></pre>
+
+  <p>
+    The control is the line that makes the other two mean something. A relative error of
+    <code>2.136e−07</code> is impressive-looking, but a bug that made <code>length</code> return a
+    constant would produce an even smaller one. So the harness also runs the sweep asking whether
+    the moduli <em>add</em> — they do not, and the error when you assume they do is
+    <strong>428%</strong>. Now <code>2.136e−07</code> is a measurement rather than a number.
+  </p>
+
+  <p>
+    <code>B.5</code> is the claim that this type deserves its second reading at all: a unit complex
+    number, applied to a pair of arbitrary points, changes neither point's length nor the angle
+    between them. That is the definition of a rotation, checked rather than asserted.
+  </p>
+
+  <h3>4.4 It commutes, and that will matter enormously</h3>
+
+  <p>
+    Look at the multiplication rule once more:
+    <code>(ac − bd) + (ad + bc)i</code>. Swap the two operands and you get
+    <code>(ca − db) + (cb + da)i</code> — the same two products of the same four floats, in a
+    different order. So <code>zw = wz</code>, exactly, bit for bit.
+  </p>
+
+  <p>
+    Geometrically that is the observation from §2: turn the paper 30° then 50°, or 50° then 30°,
+    and it lands in the same place. Plane rotations commute, so the algebra that describes them
+    may. It is worth noticing how easily this passes by unremarked — commutativity is so familiar
+    from ordinary arithmetic that its presence here feels like nothing at all.
+  </p>
+
+  <p>
+    <strong>It is not nothing. It is the one structural fact that does not survive the move to
+    three dimensions</strong>, and §12 will show that giving it up is not optional but forced.
+    When you meet a quaternion library's warning that <code>q₁q₂ ≠ q₂q₁</code>, this is the
+    property it is warning you that you have lost.
+  </p>
+
+  <h2 id="matrices">5. Complex numbers <em>are</em> 2×2 matrices</h2>
+
+  <p>
+    You may have been uneasy for two sections now. We invented a symbol, gave it a geometric
+    meaning, derived a multiplication rule, and got a rotation out — but is any of this
+    <em>real</em>, in the sense that the <code>mat2</code> from Lesson 2.5 is real?
+  </p>
+
+  <p>
+    Yes, and here is the proof, which takes one paragraph. Lesson 2.5's whole idea is that a
+    matrix <em>is</em> the answer to "where do the basis vectors land?", with the columns being
+    those images. We worked that out in §4.2: multiplication by <code>z = a + bi</code> sends
+    <code>1</code> to <code>a + bi</code> and sends <code>i</code> to
+    <code>zi = (a + bi)i = ai + bi² = −b + ai</code>. Those are the two columns. Written on paper:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ M(a + bi) \;=\; \begin{pmatrix} a &amp; -b \\ b &amp; a \end{pmatrix} \]</span>
+    <span class="eq-plain">M(a + bi) = [[a, -b], [b, a]] in written (row) notation</span>
+  </div>
+
+  <p>
+    Every complex number is such a matrix and every such matrix is a complex number. Set
+    <code>a = cos θ</code> and <code>b = sin θ</code> and you have
+    <code>[[cos θ, −sin θ], [sin θ, cos θ]]</code>, which is <code>mat2</code>'s
+    <code>rotation</code> character for character — the same function this engine has had since
+    Lesson 2.5, derived there by exactly the same argument about where <code>(1,0)</code> and
+    <code>(0,1)</code> land.
+  </p>
+
+  <p>
+    So complex numbers are not a parallel invention. They are a two-parameter family of matrices
+    the engine already had, stored without the redundancy.
+  </p>
+
+  <h3>5.1 The correspondence respects multiplication</h3>
+
+  <p>
+    Sharing a shape is not enough; two things are the same <em>algebra</em> only if the operations
+    agree. They do:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ M(z)\,M(w) = M(zw) \]</span>
+    <span class="eq-plain">M(z) M(w) = M(zw)</span>
+  </div>
+
+  <p>
+    You can verify that by hand in about a minute — multiply the two matrices out and compare the
+    four entries against the product rule from §4 — and the harness verifies it over two thousand
+    random pairs. This is what makes the correspondence an <em>isomorphism</em> rather than a
+    coincidence of shape: anything you can say with one, you can say with the other.
+  </p>
+
+  <pre><code>C. COMPLEX NUMBERS AND 2x2 MATRICES ARE THE SAME ALGEBRA
+   mat2_from_complex(e^{i t}) vs rotation(t), 721 angles:
+     worst element diff  0.000e+00
+  [PASS] C.1  the two spellings of a plane rotation agree exactly</code></pre>
+
+  <p>
+    <code>C.1</code> is <em>exactly</em> zero, and that is not luck. Both sides call the same
+    <code>std::cos</code> and <code>std::sin</code> on the same argument and shuffle the results
+    into different slots; there is no arithmetic between them to disagree about.
+    <code>C.2</code> is not exact, because a matrix product performs eight multiplies and four
+    adds where the complex product performs four and two, and every one of those extra operations
+    rounds.
+  </p>
+
+  <h3>5.2 So which two floats are redundant?</h3>
+
+  <p>
+    Look at <code>[[cos θ, −sin θ], [sin θ, cos θ]]</code> as four numbers in memory. In the
+    engine's column-major storage (Conventions §6) they are <code>c0.x = cos θ</code>,
+    <code>c0.y = sin θ</code>, <code>c1.x = −sin θ</code>, <code>c1.y = cos θ</code>. The third
+    and fourth are the second and first again, one of them negated.
+    <strong>A <code>mat2</code> holding a rotation stores <code>cos θ</code> and
+    <code>sin θ</code> twice.</strong> Figure 3 is that, drawn, with what the duplication costs.
+  </p>
+
+  @@FIG_LAYOUT@@
+
+  <p>
+    Every row of that table except one favours the complex number, and §9 measures them. The row
+    that does not is the honest one and it is worth stating before the measurements arrive:
+    <strong>applying a rotation to a point costs exactly the same either way</strong> — four
+    multiplies and two adds — because <code>z · v</code> and <code>M · v</code> are literally the
+    same four multiplies. This representation is cheaper to <em>keep</em> and cheaper to
+    <em>combine</em>. It is not cheaper to <em>use</em>. That trade reappears one dimension up
+    with the same shape and different numbers, and it is why real engines still hand the GPU
+    matrices.
+  </p>
+
+  <h3>5.3 What happens to a matrix that is not of that form</h3>
+
+  <p>
+    <code>complex_from_mat2</code> goes the other way by reading the first column, which by §5's
+    argument is the image of <code>1</code> and therefore is the number itself. But a general
+    <code>mat2</code> also shears and reflects, and neither is a complex multiplication. What does
+    the function do when handed one?
+  </p>
+
+  <pre><code>   a shear k=0.7 read as a complex:  +1.0000 +0.0000i  (0.00 deg)
+   rebuilding it loses  0.7000  in the worst entry
+  [PASS] C.3  a shear does not survive the round trip, and by 0.7
+   CONTROL: a rotation round-trips to 0.000e+00
+  [PASS] C.4  CONTROL: a rotation round-trips exactly
+   sizeof(complex) = 8 bytes,  sizeof(mat2) = 16 bytes
+  [PASS] C.5  a complex is half the size of a mat2</code></pre>
+
+  <p>
+    It reports the identity, confidently and silently, and throws the entire shear away. That is
+    not a bug — it is the documented behaviour of a function that reads one column — but it is
+    exactly the kind of thing that must be <em>on record</em> rather than discovered. The measured
+    <code>0.7000</code> is the shear factor, arriving back as the size of what was lost, and the
+    control beside it rules out the other explanation: a rotation round-trips to zero, so
+    <code>C.3</code> is reporting a matrix outside the family rather than a broken round trip.
+  </p>
+
+  <h2 id="euler">6. Euler's formula, from a picture</h2>
+
+  <p>
+    There is one more piece of standard equipment to derive, and it is the one most often
+    presented as a magic trick:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ e^{i\theta} = \cos\theta + i\sin\theta \]</span>
+    <span class="eq-plain">exp(i theta) = cos(theta) + i sin(theta)</span>
+  </div>
+
+  <p>
+    Most treatments get there by writing down the power series for <code>exp</code>, substituting
+    <code>iθ</code>, and sorting the terms into the series for <code>cos</code> and
+    <code>sin</code>. That derivation is correct and it explains nothing: at the end you believe
+    the identity and have no idea why an exponential would have anything to do with a circle.
+  </p>
+
+  <p>
+    Here is the other route, which is three lines and is a picture.
+  </p>
+
+  <p>
+    <strong>Line one.</strong> Take a point going round the unit circle at unit speed, and let
+    <code>z(θ)</code> be where it is after turning through <code>θ</code>. Its velocity —
+    <code>z′(θ)</code>, the derivative — is tangent to the circle, and the tangent to a circle is
+    perpendicular to the radius. It also has length 1, because the point moves at unit speed.
+  </p>
+
+  <p>
+    <strong>Line two.</strong> "Perpendicular to <code>z</code>, and the same length as
+    <code>z</code>" is exactly what <code>iz</code> is — that is §3's definition of
+    <code>i</code>, applied to <code>z</code>. So:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ z'(\theta) = i\,z(\theta), \qquad z(0) = 1 \]</span>
+    <span class="eq-plain">z'(theta) = i z(theta), with z(0) = 1</span>
+  </div>
+
+  <p>
+    <strong>Line three.</strong> That is the differential equation whose solution everybody
+    already knows: the function whose derivative is itself times a constant <code>k</code> is
+    <code>e^{kθ}</code>, and the initial condition <code>z(0) = 1</code> picks out that one. So
+    <code>z(θ) = e^{iθ}</code>. And we already know what <code>z(θ)</code> is by looking at the
+    picture — it is the point at angle <code>θ</code> on the unit circle, which is
+    <code>cos θ + i sin θ</code>. The two descriptions are of the same function, so they are
+    equal. Figure 4 is the whole argument.
+  </p>
+
+  @@FIG_EULER@@
+
+  <div class="callout note">
+    <span class="label">The ten per cent this skips</span>
+    <p>
+      The step "the only function whose derivative is itself times a constant is the exponential"
+      is doing real work, and doing it for a function that takes complex values needs a definition
+      of <code>e^w</code> for complex <code>w</code> and a uniqueness theorem. The honest summary
+      is that both are available and neither changes the picture: define <code>e^w</code> by its
+      power series (which converges for every complex <code>w</code>), and uniqueness follows from
+      differentiating <code>z(θ)e^{−iθ}</code> and finding it constant.
+    </p>
+    <p>
+      This is the ninety per cent picture. The missing ten per cent is that definition and that
+      one-line uniqueness argument, and Needham's <em>Visual Complex Analysis</em> chapter 1 does
+      both properly and geometrically.
+    </p>
+  </div>
+
+  <h3>6.1 A numeric check, and a free theorem</h3>
+
+  <p>
+    Take <code>θ = 60° = π/3</code>. Then <code>e^{iπ/3} = cos 60° + i sin 60° = 0.5 +
+    0.8660254i</code>. Multiply <code>v = 2 + i</code> by it, using §4's rule with
+    <code>a = 0.5, b = 0.8660254, c = 2, d = 1</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \begin{aligned} (0.5 + 0.8660254i)(2 + i) &amp;= (1.0 - 0.8660254) + (0.5 + 1.7320508)i \\ &amp;= 0.1339746 + 2.2320508i \end{aligned} \]</span>
+    <span class="eq-plain">(0.5 + 0.8660254i)(2 + i) = (1.0 - 0.8660254) + (0.5 + 1.7320508)i = 0.1339746 + 2.2320508i</span>
+  </div>
+
+  <p>
+    And through the matrix, as Lesson 2.5 would do it:
+    <code>[[0.5, −0.8660254], [0.8660254, 0.5]]</code> applied to <code>(2, 1)</code> gives
+    <code>(2·0.5 − 1·0.8660254, 2·0.8660254 + 1·0.5) = (0.1339746, 2.2320508)</code>. The same two
+    numbers, because §5 said they would be.
+  </p>
+
+  <p>
+    And now the free theorem, which is the first sign that this notation is going to pay for
+    itself. Since moduli multiply and arguments add, <code>e^{iα}·e^{iβ} = e^{i(α+β)}</code>.
+    Write both sides out in <code>cos</code> and <code>sin</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ (\cos\alpha + i\sin\alpha)(\cos\beta + i\sin\beta) = \cos(\alpha+\beta) + i\sin(\alpha+\beta) \]</span>
+    <span class="eq-plain">(cos a + i sin a)(cos b + i sin b) = cos(a+b) + i sin(a+b)</span>
+  </div>
+
+  <p>
+    Expand the left with §4's rule and match real parts against real and imaginary against
+    imaginary:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \begin{aligned} \cos(\alpha+\beta) &amp;= \cos\alpha\cos\beta - \sin\alpha\sin\beta \\ \sin(\alpha+\beta) &amp;= \sin\alpha\cos\beta + \cos\alpha\sin\beta \end{aligned} \]</span>
+    <span class="eq-plain">cos(a+b) = cos a cos b - sin a sin b;  sin(a+b) = sin a cos b + cos a sin b</span>
+  </div>
+
+  <p>
+    Those are the angle-addition formulas, the ones that are traditionally memorised. They are not
+    a separate fact to learn. <strong>They are the complex product, written out in components</strong>
+    — the minus sign in the first is the same <code>i²</code> as ever, and the reason the second
+    has a plus is that <code>ad + bc</code> has a plus. If you have ever mixed up which one gets
+    the minus, you now have a way to derive it in eight seconds that cannot go wrong.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">What we have, after six sections</span>
+    <p>
+      A representation of plane rotations in <strong>two floats</strong> that <strong>composes by
+      multiplication</strong> — four multiplies, two adds, no trigonometry — whose
+      <strong>inverse is a sign flip</strong>, and which is provably the same object as the
+      rotation matrix the engine already had, minus the redundancy.
+    </p>
+    <p>
+      Three of 7.2 §10's four requirements, met. The fourth was interpolation, and §10 gets it.
+      But first there is a fact hiding in the reflections that is worth more than all of them,
+      because it is the one that makes Lesson 7.4 comprehensible instead of magical.
+    </p>
+  </div>

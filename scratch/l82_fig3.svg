@@ -1,0 +1,55 @@
+<svg viewBox="0 0 900 400" role="img" aria-labelledby="l82f3-t l82f3-d">
+  <title id="l82f3-t">Two arrangements of the same physics, and the sweep that chose between them</title>
+  <desc id="l82f3-d">The upper path puts weight into the force accumulator and needs a divide to recover the mass; the lower adds gravity as an acceleration after the division. Below, a sweep of a million masses finds sixteen percent of them fail to recover gravity exactly through the first route.</desc>
+  <defs>
+    <marker id="e-i-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-g-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-r-l82f3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<text x="40" y="30" class="sm t-hi" text-anchor="start">THE ONE FORCE WHOSE MASS CANCELS — AND THE TWO ROUTES TO SAYING SO</text>
+<text x="60" y="68" class="xs t-hi" text-anchor="start">THE OBVIOUS ONE: weight is a force</text>
+<rect x="60" y="80" width="150" height="46" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="135.0" y="100" class="xs mono" text-anchor="middle">F += m·g</text>
+<text x="135.0" y="117" class="xs muted" text-anchor="middle">a DIVIDE: m = 1/inv_mass</text>
+<rect x="240" y="80" width="150" height="46" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="315.0" y="100" class="xs mono" text-anchor="middle">a = F · inv_mass</text>
+<text x="315.0" y="117" class="xs muted" text-anchor="middle">the accumulator's payoff</text>
+<line x1="214.00" y1="103.00" x2="236.00" y2="103.00" stroke="#e05c5c" stroke-width="1.5" marker-end="url(#e-r-l82f3)"/>
+<rect x="420" y="80" width="150" height="46" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="495.0" y="100" class="xs mono" text-anchor="middle">integrate(a)</text>
+<text x="495.0" y="117" class="xs muted" text-anchor="middle">8.1, unchanged</text>
+<line x1="394.00" y1="103.00" x2="416.00" y2="103.00" stroke="#e05c5c" stroke-width="1.5" marker-end="url(#e-r-l82f3)"/>
+<text x="588" y="107.0" class="xs" text-anchor="start">15% of the update, and</text>
+<text x="588" y="123.0" class="xs t-bad" text-anchor="start">exact only by luck</text>
+<text x="60" y="164" class="xs t-hi" text-anchor="start">THE ONE THIS ENGINE SHIPS: gravity is an acceleration</text>
+<rect x="60" y="176" width="150" height="46" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="135.0" y="196" class="xs mono" text-anchor="middle">a = F · inv_mass</text>
+<text x="135.0" y="213" class="xs muted" text-anchor="middle">no mass anywhere</text>
+<rect x="240" y="176" width="150" height="46" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="315.0" y="196" class="xs mono" text-anchor="middle">a += g · scale</text>
+<text x="315.0" y="213" class="xs muted" text-anchor="middle">one add</text>
+<line x1="214.00" y1="199.00" x2="236.00" y2="199.00" stroke="#5ac878" stroke-width="1.5" marker-end="url(#e-g-l82f3)"/>
+<rect x="420" y="176" width="150" height="46" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="495.0" y="196" class="xs mono" text-anchor="middle">integrate(a)</text>
+<text x="495.0" y="213" class="xs muted" text-anchor="middle">8.1, unchanged</text>
+<line x1="394.00" y1="199.00" x2="416.00" y2="199.00" stroke="#5ac878" stroke-width="1.5" marker-end="url(#e-g-l82f3)"/>
+<text x="588" y="203.0" class="xs" text-anchor="start">exact by construction,</text>
+<text x="588" y="219.0" class="xs t-ok" text-anchor="start">and 15% cheaper</text>
+<text x="40" y="262" class="xs t-hi" text-anchor="start">THE SWEEP THAT SETTLED IT — a = (g / inv_mass) · inv_mass</text>
+<text x="60" y="286" class="xs mono" text-anchor="start">1,000,001 masses, 1 g to 1000 t</text>
+<text x="360" y="286" class="xs muted" text-anchor="start">checked</text>
+<text x="60" y="304" class="xs mono" text-anchor="start">159,937 of them (15.99%)</text>
+<text x="360" y="304" class="xs muted" text-anchor="start">do not recover g</text>
+<text x="60" y="322" class="xs mono" text-anchor="start">worst error 9.537e-07 m/s²</text>
+<text x="360" y="322" class="xs muted" text-anchor="start">= 1.00 ulp</text>
+<text x="540" y="286" class="xs" text-anchor="start">Seven hand-picked masses all passed.</text>
+<text x="540" y="304" class="xs muted" text-anchor="start">A million did not, and the ones that fail</text>
+<text x="540" y="322" class="xs muted" text-anchor="start">are not at the extremes — the first is</text>
+<text x="540" y="340" class="xs mono t-hi" text-anchor="start">1.000145 kg.</text>
+<text x="540" y="362" class="xs" text-anchor="start">One ulp is invisible in a fall and fatal</text>
+<text x="540" y="380" class="xs muted" text-anchor="start">to a replay. §5.4 has the table.</text>
+</svg>

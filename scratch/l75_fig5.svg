@@ -1,0 +1,58 @@
+<svg viewBox="0 0 760 400" role="img" aria-labelledby="f75d-t f75d-d">
+  <title id="f75d-t">The double cover as a bound</title>
+  <desc id="f75d-d">The hemisphere argument on the left and, on the right, the resulting caps on the sphere arc, the speed ratio and the positional gap, measured over twenty thousand random pairs.</desc>
+  <defs>
+    <marker id="e-i-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-mag-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d676e2"/></marker></defs>
+<defs><marker id="e-blue-f75d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7ebcf8"/></marker></defs>
+<text x="380.0" y="24" class="sm" text-anchor="middle">the thing that looked like a nuisance is what bounds the error</text>
+<circle cx="190.0" cy="216.0" r="122.0" fill="none" class="grid" stroke-width="1.1"/>
+<line x1="54.0" y1="216.0" x2="326.0" y2="216.0" class="grid" stroke-width="1.0" stroke-dasharray="4 4"/>
+<text x="332.0" y="220.0" class="xs mono muted" text-anchor="start">a·q = 0</text>
+<circle cx="190.00" cy="94.00" r="4.5" fill="#7ebcf8"/>
+<text x="190.0" y="82.0" class="sm mono t-hi" text-anchor="middle">a</text>
+<circle cx="291.14" cy="284.22" r="4.5" fill="#d676e2"/>
+<circle cx="88.86" cy="147.78" r="4.5" fill="#7ebcf8"/>
+<text x="305.1425838517151" y="289.22153422343115" class="sm mono" text-anchor="start">b</text>
+<text x="74.85741614828491" y="141.77846577656888" class="sm mono" text-anchor="end">−b</text>
+<line x1="291.1425838517151" y1="284.22153422343115" x2="88.85741614828491" y2="147.77846577656888" class="grid" stroke-width="1.0" stroke-dasharray="2 4"/>
+<path d="M 190.00,111.08 A 104.92,104.92 0 0 1 103.02,157.33" fill="none" stroke="#7ebcf8" stroke-width="2.2"/>
+<path d="M 190.00,128.16 A 87.84,87.84 0 0 1 262.82,265.12" fill="none" stroke="#d676e2" stroke-width="2.2" stroke-dasharray="4 3"/>
+<text x="190.0" y="364.0" class="xs muted" text-anchor="middle">b and −b are the SAME orientation. nearest takes the near one.</text>
+<text x="190.0" y="379.0" class="xs t-hi" text-anchor="middle">so the arc actually walked never leaves one hemisphere: Ω ≤ 90°.</text>
+<rect x="392.0" y="58" width="340.0" height="145.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<text x="404.0" y="80.0" class="xs" text-anchor="start"></text>
+<text x="600.0" y="80.0" class="xs muted" text-anchor="end">the plane (7.3)</text>
+<text x="720.0" y="80.0" class="xs t-hi" text-anchor="end">quaternions (7.5)</text>
+<line x1="400.0" y1="90.0" x2="724.0" y2="90.0" class="grid" stroke-width="1.0"/>
+<text x="404.0" y="107.0" class="xs muted" text-anchor="start">largest Ω</text>
+<text x="600.0" y="107.0" class="xs mono muted" text-anchor="end">180°</text>
+<text x="720.0" y="107.0" class="xs mono t-hi" text-anchor="end">90°</text>
+<line x1="400.0" y1="117.0" x2="724.0" y2="117.0" class="grid" stroke-width="1.0"/>
+<text x="404.0" y="134.0" class="xs muted" text-anchor="start">worst sec²(Ω/2)</text>
+<text x="600.0" y="134.0" class="xs mono muted" text-anchor="end">13131.56</text>
+<text x="720.0" y="134.0" class="xs mono t-hi" text-anchor="end">2.0000</text>
+<line x1="400.0" y1="144.0" x2="724.0" y2="144.0" class="grid" stroke-width="1.0"/>
+<text x="404.0" y="161.0" class="xs muted" text-anchor="start">worst gap at one t</text>
+<text x="600.0" y="161.0" class="xs mono muted" text-anchor="end">26.34°</text>
+<text x="720.0" y="161.0" class="xs mono t-hi" text-anchor="end">8.1491°</text>
+<line x1="400.0" y1="171.0" x2="724.0" y2="171.0" class="grid" stroke-width="1.0"/>
+<text x="404.0" y="188.0" class="xs muted" text-anchor="start">why</text>
+<text x="600.0" y="188.0" class="xs mono muted" text-anchor="end">no double cover</text>
+<text x="720.0" y="188.0" class="xs mono t-hi" text-anchor="end">b and −b agree</text>
+<text x="392.0" y="231.0" class="xs" text-anchor="start">measured over 20,000 uniformly sampled pairs</text>
+<text x="392.0" y="249.0" class="xs muted" text-anchor="start">largest sphere arc seen</text>
+<text x="658.0" y="249.0" class="xs mono t-ok" text-anchor="end">89.9969°</text>
+<text x="732.0" y="249.0" class="xs muted" text-anchor="end">bound 90</text>
+<text x="392.0" y="265.0" class="xs muted" text-anchor="start">largest gap seen</text>
+<text x="658.0" y="265.0" class="xs mono t-ok" text-anchor="end">8.1345°</text>
+<text x="732.0" y="265.0" class="xs muted" text-anchor="end">bound 8.1491</text>
+<text x="392.0" y="281.0" class="xs muted" text-anchor="start">CONTROL: same pairs, no nearest</text>
+<text x="658.0" y="281.0" class="xs mono t-bad" text-anchor="end">176.3020°</text>
+<text x="732.0" y="281.0" class="xs muted" text-anchor="end">unbounded</text>
+</svg>

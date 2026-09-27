@@ -1,0 +1,327 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="08-07-contact-manifolds.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">8.7 — Contact Manifolds and Persistence</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="08-09-impulse-response.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">8.9 — Impulse Response: Restitution and Friction</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 8 — Physics · Lesson 8.8</div>
+    <h1>Broadphase: A Uniform Grid</h1>
+    <p class="deck">
+      Four lessons of narrow phase have built something precise, and this one is about the fact
+      that you cannot afford to run it. 8.7 measured the whole chain — GJK, EPA, the manifold — at
+      395 ns for one pair; §1 re-measures it here at <strong>432 ns</strong> on 8.7's own fixture.
+      A scene of <em>n</em> bodies has <code>n(n−1)/2</code> pairs, so that budget is gone at
+      <strong>n = 278</strong>. Not at ten thousand bodies, not at “some large number” — at
+      <em>two hundred and seventy-eight crates</em>. A broadphase is the stage that asks the cheap
+      question of every pair and hands the narrow phase only the survivors, and it gets to be cheap
+      because it is allowed to be wrong in exactly one direction: it may report pairs that do not
+      touch, and it may not omit one that does. Everything in this lesson falls out of that
+      asymmetry. We build a <strong>hashed uniform grid</strong>, rebuilt from scratch every frame,
+      and the two things that are actually hard turn out not to be the hashing. The first is
+      duplicates: two proxies sharing four cells meet four times, and the usual fixes — a
+      <code>std::set</code> of pair keys, a sort-and-unique — cost <strong>45%</strong> and 5% of
+      what the entire broadphase costs. There is an exact rule that costs three <code>max</code>
+      calls and no memory, and §5 predicts how many duplicates it removes in closed form and gets
+      <strong>3271 against a counted 3271</strong>. The second is the teapot in the stadium: one
+      ground plate at a 1 m cell wants <strong>80,802 cells to itself</strong>, nearly three times
+      what a scene of two thousand crates wants, and it is alone in almost every one of them. Along
+      the way three claims that everyone repeats get measured rather than repeated. The famous
+      <code>floor</code>-versus-cast bug loses <strong>zero pairs</strong> here, because a
+      range-walk grid needs only that its cell map be <em>monotone</em> — the mistake that really
+      loses pairs is the innocent-looking one next to it, and it loses <strong>66.7%</strong> of
+      them. The rule of thumb for cell size is replaced by a two-term cost model whose constants
+      come out the same on scenes of different density, and whose minimum moves as the
+      <em>sixth root</em> of the crowd. And the textbook spatial hash really is
+      <strong>25.7%</strong> worse than chance on a lattice of crates — and stays, because §7 also
+      measures what that is worth. Ships <code>broadphase.hpp</code>, a demo that checks the
+      contract live against <code>n(n−1)/2</code> every frame, <strong>ten measured sections and 51
+      checks</strong>, and an honest crossover: below about a hundred bodies this whole stage is a
+      net loss.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 4 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="03-10-profiling-capstone.html">3.10 — Profiling, and the Module 3 Capstone</a>,
+          <a href="06-16-frustum-culling.html">6.16 — Frustum Culling and Instanced Submission</a>,
+          <a href="08-04-collision-primitives.html">8.4 — Collision Primitives and the SAT</a>,
+          <a href="08-07-contact-manifolds.html">8.7 — Contact Manifolds and Persistence</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/phys/broadphase.hpp</code> <em>(new)</em>,
+            <code>engine/src/phys/broadphase.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/phys/collide.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>demos/broadphase/main.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_88.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_88.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can find <strong>candidate pairs</strong> in a scene of thousands of bodies
+            without testing every pair: <strong>137.7×</strong> faster than brute force at 8,192
+            proxies, with the two pair sets checked <em>equal</em> at every scene size and every
+            cell size. The broadphase costs <strong>18%</strong> of the pair-finding work in a
+            2,000-body frame, against an implied <strong>844 ms</strong> for the alternative, and
+            allocates <strong>nothing</strong> across two thousand rebuilds. Ten measured sections,
+            <strong>51 checks</strong>, every one of them carrying a control — including two that
+            disproved the claim the section was written to make.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…state the broadphase contract in one sentence, and say precisely what each of its two
+          possible errors costs.</li>
+      <li>…compute the scene size at which testing every pair blows a frame budget, from a measured
+          per-pair cost, rather than assuming the quadratic arrives “later”.</li>
+      <li>…explain why a proxy must be inserted into every cell of its <em>range</em>, and why a
+          grid that inserts by centre loses most of the pairs there are.</li>
+      <li>…recognise that a range-walk grid needs only a <em>monotone</em> cell map, and say what
+          truncation actually costs when it costs nothing else.</li>
+      <li>…derive the owner-cell rule, prove it reports each pair exactly once, and say why it
+          beats every deduplication scheme that uses memory.</li>
+      <li>…fit a two-term cost model to a grid's own counters, and use it to choose a cell size
+          without a timer.</li>
+      <li>…argue for a hashed grid over a dense one from memory and from the absence of a boundary,
+          and measure a hash against the balls-in-bins prediction.</li>
+      <li>…say what a broadphase margin buys, what it costs, and why its cost is the cube of a
+          Minkowski sum rather than the ratio of two volumes.</li>
+      <li>…recognise the teapot in the stadium in a profile, and explain why the guard against it
+          is a diagnosis rather than a cure.</li>
+      <li>…measure the crossover below which a broadphase is a net loss, and resist shipping one
+          under it.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: the quadratic is already here</a></li>
+      <li><a href="#contract">Building intuition: two stages, and an asymmetry</a></li>
+      <li><a href="#checking">Checking a thing that is allowed to be wrong</a></li>
+      <li><a href="#cells">Cells, and two ways to get the cell map wrong</a></li>
+      <li><a href="#duplicates">Duplicates, and the cell that owns a pair</a></li>
+      <li><a href="#cellsize">The cell size, and a cost model instead of a rule of thumb</a></li>
+      <li><a href="#hashing">Hashing rather than allocating</a></li>
+      <li><a href="#margin">The margin</a></li>
+      <li><a href="#teapot">The teapot in the stadium</a></li>
+      <li><a href="#budget">The budget, and the crossover</a></li>
+      <li><a href="#implementation">Writing it: four linear passes</a></li>
+      <li><a href="#notyet">What this does not do</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#build">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="problem">1. The problem: the quadratic is already here</h2>
+
+  <p>
+    Four lessons of Module 8 have gone into one question, asked of one pair of shapes. 8.4 gave the
+    Separating Axis Theorem and an exact answer for boxes. 8.5 replaced the enumeration with a
+    search, so that any convex shape could be asked. 8.6 turned “they overlap” into “by this much,
+    in this direction”. 8.7 turned that into a set of contact points a solver can actually push on.
+    At the end of 8.7 §9 the whole chain — GJK, then EPA, then the manifold — cost
+    <strong>395 ns</strong> for one pair of crates.
+  </p>
+
+  <p>
+    That is a good number. It is also, in a sense the rest of this module will keep discovering, the
+    wrong number to be proud of, because nothing in a game asks about one pair.
+  </p>
+
+  <p>
+    Here is the arithmetic, and it takes one line. A scene of <em>n</em> bodies contains
+    <code>n(n−1)/2</code> distinct pairs — every body against every other, each counted once. At
+    sixty frames a second a frame is 16.67 milliseconds. So the largest scene you can afford, if you
+    hand every pair to the narrow phase, is the <em>n</em> that solves
+  </p>
+
+  <div class="eq">
+    \[
+    \frac{n(n-1)}{2}\,\cdot\,t_{\text{pair}} \;\le\; 16.67\ \text{ms}
+    \]
+  </div>
+
+  <p class="eq-plain">
+    — that is: half of <em>n</em> times <em>n</em> minus one, multiplied by the cost of one pair
+    test, must fit in one frame.
+  </p>
+
+  <p>
+    §1 of this lesson's harness re-measures <code>t_pair</code> rather than quoting 8.7's, because a
+    quoted timing is a timing from somebody else's machine. On 8.7's own fixture — crates yawed
+    about the up axis, overlapping by 5 cm, which is what a settling stack looks like — it comes out
+    at <strong>432.4 ns</strong>. (The same measurement on freely tumbling crates driven deep into
+    each other gives 795.9 ns; the lesson uses the smaller number throughout, because it makes every
+    claim below <em>harder</em> to support.) Put 432.4 ns into the inequality and solve the
+    quadratic:
+  </p>
+
+  <pre><code class="lang-text">  16.67 ms budget: all-narrow at n = 278, all-AABB at n = 5293</code></pre>
+
+  <p>
+    <strong>Two hundred and seventy-eight bodies.</strong> That is a small pile of crates. It is
+    fewer bodies than a single collapsing wall in a game you have played. The quadratic is not a
+    problem that shows up when your game gets big; it is a problem that shows up before your game
+    gets interesting, and it shows up as a hard ceiling rather than as a slope, because the cost
+    grows as the <em>square</em>: double the scene and the pair count quadruples.
+  </p>
+
+  @@FIG_WALL@@
+
+  <p>
+    Look at the red curve in Figure 1 and notice what it is not. It is not steep near the origin and
+    then fine. It is a straight line on log-log paper with slope 2, which means it has no flat part
+    anywhere — every doubling costs four times as much, at every scale, for ever. There is no scene
+    size at which you are “past the worst of it”.
+  </p>
+
+  <h3>2. The observation that makes a fix possible</h3>
+
+  <p>
+    Think about what those 499,500 pair tests at <em>n</em> = 1000 are actually doing. Almost every
+    one of them is two crates at opposite ends of the room, and for each of those the narrow phase
+    runs GJK — building a simplex, iterating toward the origin, converging, and reporting a distance
+    of eleven metres. It does the full, careful, correct thing to establish something a child could
+    see at a glance.
+  </p>
+
+  <p>
+    And here is the asymmetry that the whole of this lesson lives inside: <em>establishing that two
+    objects are far apart is a much easier question than establishing exactly how they touch.</em>
+    The narrow phase cannot exploit that, because it does not know in advance which question it is
+    being asked. A separate, earlier stage can.
+  </p>
+
+  <div class="callout">
+    <span class="label">The idea</span>
+    <p>
+      Put a cheap, conservative test in front of the expensive exact one. Run the cheap test on
+      every pair; run the expensive test only on the pairs the cheap test could not rule out. The
+      cheap test is the <strong>broadphase</strong>; the expensive one is the <strong>narrow
+      phase</strong> Module 8 has spent four lessons building.
+    </p>
+  </div>
+
+  <p>
+    The cheapest useful test we already own. 6.16 built axis-aligned bounding boxes for frustum
+    culling and 8.4 moved <code>aabb</code> into <code>engine/math/</code> precisely so that physics
+    could use it without reaching into <code>gfx/</code>. Two AABBs are apart exactly when their
+    intervals are disjoint on one of the three world axes — the Separating Axis Theorem with twelve
+    of its fifteen axes deleted by symmetry, because an AABB's face normals <em>are</em> the world
+    axes. Six comparisons. Measured:
+  </p>
+
+  <pre><code class="lang-text">  narrow phase, resting crates (8.7's)     432.4 ns
+  narrow phase, tumbling and deep          795.9 ns
+  one AABB overlap test                    1.190 ns
+  ratio                                      363x</code></pre>
+
+  <p>
+    <strong>Three hundred and sixty-three times cheaper.</strong> Substituting one for the other
+    moves the wall from 278 bodies to 5,293 — and, crucially, <em>does not remove it</em>, because
+    <code>n(n−1)/2</code> AABB tests is still a quadratic. You can see both walls in Figure 1 as the
+    two circles on the amber line. Eighteen times more room, and the same shape of catastrophe
+    waiting at the end of it.
+  </p>
+
+  <p>
+    So the broadphase cannot merely be a cheaper test applied to every pair. It has to avoid looking
+    at most pairs at all. That is what the grid is for, and it is why the rest of this lesson is
+    about space rather than about arithmetic.
+  </p>
+
+  <h2 id="contract">3. Building intuition: two stages, and an asymmetry</h2>
+
+  <p>
+    Before any data structure, the contract. It is two sentences and it is the most important thing
+    on this page.
+  </p>
+
+  <div class="callout">
+    <span class="label">The broadphase contract</span>
+    <p>
+      <strong>A broadphase may report pairs that do not touch. A broadphase may not omit a pair that
+      does.</strong>
+    </p>
+  </div>
+
+  <p>
+    Read the two errors and price them.
+  </p>
+
+  <p>
+    A <strong>false positive</strong> — a pair reported that turns out not to be touching — costs
+    exactly one narrow-phase call. That is 432 nanoseconds, and the answer that comes back is
+    <em>correct</em>: the narrow phase says “these are apart”, and nothing downstream is misled. The
+    broadphase is allowed as many of these as it likes; they show up in a profile as a number that
+    could be better and never as a bug.
+  </p>
+
+  <p>
+    A <strong>false negative</strong> — a pair that really touches and is never reported — has no
+    stage downstream that could notice. The narrow phase is never called. No manifold is generated.
+    The solver has nothing to solve. The two objects pass through each other, and the symptom
+    reaches the player as “sometimes things fall through the floor”, with no line of code to
+    attach a breakpoint to, at a frequency that depends on velocity and position and which
+    therefore cannot be reproduced.
+  </p>
+
+  @@FIG_CONTRACT@@
+
+  <p>
+    That asymmetry is not a footnote. It is the design rule, and every approximation in this
+    lesson is made in the conservative direction on purpose: cell ranges round <em>outward</em>, a
+    proxy the grid cannot place is kept rather than dropped, and a candidate is rejected only when a
+    cheap <em>exact</em> test says so. When you are writing a broadphase and you catch yourself
+    thinking “this case is so unlikely”, you are about to write a false negative.
+  </p>
+
+  <h3>3.1 What the two stages cost each other</h3>
+
+  <p>
+    The arrangement only pays if the broadphase is enormously cheaper <em>per pair</em> than the
+    narrow phase, because the broadphase runs on everything and the narrow phase runs on a fraction.
+    Figure 2 is the measured version of that sentence, on a scene of two thousand bodies.
+  </p>
+
+  @@FIG_STAGES@@
+
+  <p>
+    Two thousand bodies is 1,999,000 pairs. The grid reports <strong>983</strong> of them — a
+    factor of <strong>2,034</strong> — and costs 0.091 ms doing it, which is
+    <strong>17.7%</strong> of the two stages together. The narrow phase then spends 0.426 ms on the
+    983 survivors. Had we skipped the broadphase, the same narrow phase on all 1,999,000 pairs would
+    have taken an implied <strong>844 ms</strong>: fifty frames' worth of budget, for one frame.
+  </p>
+
+  <p>
+    Note the shape of the trade. The broadphase does not make the narrow phase faster — it is the
+    identical code doing the identical work per pair. It makes there be two thousand times less of
+    it. Almost every optimisation in a real engine has this shape, and it is worth naming, because
+    the instinct when a profile says “the narrow phase is 82% of collision detection” is to go and
+    optimise the narrow phase. The 82% is fine. It is the 18% that bought it.
+  </p>

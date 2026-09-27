@@ -1,0 +1,43 @@
+<svg viewBox="0 0 720 330" role="img" aria-labelledby="f49b-t f49b-d">
+  <title id="f49b-t">Three frame debuggers and what each one captures</title>
+  <desc id="f49b-d">RenderDoc captures Vulkan, D3D11, D3D12, OpenGL and OpenGL ES on Windows, Linux, Android and Switch. Xcode's Metal Debugger captures Metal on macOS and iOS. PIX captures D3D12 on Windows. RenderDoc has no Metal support, so macOS readers use Xcode — which is what SDL_gpu.h's own debugging section says.</desc>
+  <defs>
+    <marker id="e-i-f49b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f49b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f49b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">the tool depends on the backend, and <tspan class="t-bad">the backend depends on your platform</tspan></text>
+  <rect x="24" y="42" width="224" height="180" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="24" y="42" width="224" height="5" fill="#5ac878"/>
+  <text x="38" y="70" class="sm mono">RenderDoc</text>
+  <text x="38" y="96" class="xs muted">captures</text>
+  <text x="38" y="112" class="xs mono">Vulkan, D3D11, D3D12,</text>
+  <text x="38" y="127" class="xs mono">OpenGL, OpenGL ES</text>
+  <text x="38" y="152" class="xs muted">on</text>
+  <text x="38" y="168" class="xs mono">Windows, Linux,</text>
+  <text x="38" y="183" class="xs mono">Android, Switch</text>
+  <text x="38" y="210" class="xs muted">free, open source, the one everybody means</text>
+  <rect x="256" y="42" width="224" height="180" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="256" y="42" width="224" height="5" fill="#f0961e"/>
+  <text x="270" y="70" class="sm mono">Xcode Metal Debugger</text>
+  <text x="270" y="96" class="xs muted">captures</text>
+  <text x="270" y="112" class="xs mono">Metal</text>
+  <text x="270" y="152" class="xs muted">on</text>
+  <text x="270" y="168" class="xs mono">macOS, iOS</text>
+  <text x="270" y="210" class="xs muted">what SDL_gpu.h tells Mac readers to use</text>
+  <rect x="488" y="42" width="224" height="180" class="fill-soft ink" stroke-width="0.75"/>
+  <rect x="488" y="42" width="224" height="5" fill="#5082e6"/>
+  <text x="502" y="70" class="sm mono">PIX</text>
+  <text x="502" y="96" class="xs muted">captures</text>
+  <text x="502" y="112" class="xs mono">D3D12</text>
+  <text x="502" y="152" class="xs muted">on</text>
+  <text x="502" y="168" class="xs mono">Windows</text>
+  <text x="502" y="210" class="xs muted">Microsoft's; strongest on GPU timing</text>
+  <text x="24" y="252" class="xs"><tspan class="t-bad">RenderDoc does not support Metal</tspan>, and it is not an oversight to wait out &#8212; the list above is quoted from its own front page. If you are on a Mac,</text>
+  <text x="24" y="268" class="xs">SDL_GPU gives you Metal and the tool is Xcode. <tspan class="t-hi">Every concept in this lesson is identical</tspan>; the screenshots are not.</text>
+  <text x="24" y="294" class="xs muted">SDL_gpu.h has a "Debugging" section that says exactly this, including the menu path for the Xcode capture. It is the first place to look, and it is</text>
+  <text x="24" y="310" class="xs muted">already on your disk.</text>
+</svg>

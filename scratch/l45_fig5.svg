@@ -1,0 +1,74 @@
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="f45e-t f45e-d">
+  <title id="f45e-t">Vertex rate and instance rate, and what each costs</title>
+  <desc id="f45e-d">Slot 0 advances one element per vertex; slot 1 advances one element per instance, so every vertex of instance 1 reads the same placement record. Nothing else about the two buffers differs — same buffer type, same bind call, same attribute list. Below: 53,024 bytes of torus are uploaded once and never touched again, while 196 bytes of placement are rewritten each frame, which is 0.37% of the data on the device.</desc>
+  <defs>
+    <marker id="e-i-f45e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f45e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f45e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">one draw call, seven instances &#8212; and the only thing that makes slot 1 different is <tspan class="t-hi">input_rate</tspan></text>
+  <text x="24" y="61" class="xs">slot 0</text>
+  <text x="24" y="74" class="xs mono t-hi">VERTEX</text>
+  <text x="24" y="88" class="xs muted">one element per vertex</text>
+  <rect x="132.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="147.0" y="65" class="xs mono t-inv" text-anchor="middle">v0</text>
+  <rect x="162.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="177.0" y="65" class="xs mono t-inv" text-anchor="middle">v1</text>
+  <rect x="192.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="207.0" y="65" class="xs mono t-inv" text-anchor="middle">v2</text>
+  <rect x="222.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="237.0" y="65" class="xs mono t-inv" text-anchor="middle">v3</text>
+  <rect x="252.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="267.0" y="65" class="xs mono t-inv" text-anchor="middle">v4</text>
+  <rect x="282.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="297.0" y="65" class="xs mono t-inv" text-anchor="middle">v5</text>
+  <rect x="312.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="327.0" y="65" class="xs mono t-inv" text-anchor="middle">v6</text>
+  <rect x="342.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="357.0" y="65" class="xs mono t-inv" text-anchor="middle">v7</text>
+  <rect x="372.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="387.0" y="65" class="xs mono t-inv" text-anchor="middle">v8</text>
+  <rect x="402.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="417.0" y="65" class="xs mono t-inv" text-anchor="middle">v9</text>
+  <rect x="432.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="447.0" y="65" class="xs mono t-inv" text-anchor="middle">v10</text>
+  <rect x="462.0" y="48" width="30.0" height="26" fill="#5082e6" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="477.0" y="65" class="xs mono t-inv" text-anchor="middle">v11</text>
+  <text x="24" y="135" class="xs">slot 1</text>
+  <text x="24" y="148" class="xs mono t-hi">INSTANCE</text>
+  <text x="24" y="162" class="xs muted">one element per instance</text>
+  <rect x="132.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="147.0" y="139" class="xs mono t-inv" text-anchor="middle">i0</text>
+  <rect x="162.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="177.0" y="139" class="xs mono t-inv" text-anchor="middle">i1</text>
+  <rect x="192.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="207.0" y="139" class="xs mono t-inv" text-anchor="middle">i2</text>
+  <rect x="222.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="237.0" y="139" class="xs mono t-inv" text-anchor="middle">i3</text>
+  <rect x="252.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="267.0" y="139" class="xs mono t-inv" text-anchor="middle">i4</text>
+  <rect x="282.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="297.0" y="139" class="xs mono t-inv" text-anchor="middle">i5</text>
+  <rect x="312.0" y="122" width="30.0" height="26" fill="#a97ae0" fill-opacity="0.7" stroke="var(--dia-bg)" stroke-width="0.75"/>
+  <text x="327.0" y="139" class="xs mono t-inv" text-anchor="middle">i6</text>
+  <rect x="402.0" y="48" width="30.0" height="26" class="hi" fill="none" stroke-width="1.4"/>
+  <rect x="162.0" y="122" width="30.0" height="26" class="hi" fill="none" stroke-width="1.4"/>
+  <line x1="417.0" y1="74" x2="417.0" y2="196.0" class="hi" stroke-width="1" stroke-dasharray="3 2"/>
+  <line x1="177.0" y1="148" x2="177.0" y2="196.0" class="hi" stroke-width="1" stroke-dasharray="3 2"/>
+  <line x1="177.0" y1="196.0" x2="441.0" y2="196.0" class="hi" stroke-width="1" marker-end="url(#e-h-f45e)"/>
+  <rect x="449.0" y="174.0" width="216" height="44" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="461.0" y="190.0" class="xs">vertex 9 of instance 1 fetches</text>
+  <text x="461.0" y="206.0" class="xs mono t-hi">v9 from slot 0, i1 from slot 1</text>
+  <rect x="24" y="240" width="672" height="112" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="260" class="sm">what actually moves</text>
+  <text x="40" y="293" class="xs">uploaded ONCE, at startup</text>
+  <rect x="228" y="278" width="300.0" height="20" fill="#5082e6" fill-opacity="0.8" stroke="none"/>
+  <text x="536.0" y="293" class="xs mono">53,024 bytes of torus</text>
+  <text x="40" y="325" class="xs">rewritten EVERY frame</text>
+  <rect x="228" y="310" width="2.0" height="20" fill="#a97ae0" fill-opacity="0.8" stroke="none"/>
+  <text x="238.0" y="325" class="xs mono">196 bytes = 7 &#215; 28</text>
+  <text x="40" y="342" class="xs t-hi">0.37% of the data on the device changes per frame &#8212; that is the argument for instancing, as a number</text>
+</svg>

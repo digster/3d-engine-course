@@ -1,0 +1,526 @@
+  <h2 id="atlas">5. The atlas, and measuring a packer honestly</h2>
+
+  <p>
+    Ninety-five glyphs is ninety-five little bitmaps, and ninety-five textures would be ninety-five
+    binds and ninety-five draw calls for one line of text. So they go in one texture, and the
+    question is where.
+  </p>
+
+  <p>
+    We use <strong>shelf packing</strong>: sort the rectangles by descending height, then lay them
+    left to right in rows whose height is set by the first rectangle placed on them. It is a simple
+    algorithm with a known weakness — the waste is the vertical slack under short rectangles sitting
+    on a tall shelf — and it is worth saying why that weakness barely applies here. Shelf packing is
+    bad when heights vary wildly and good when they cluster, and <em>glyph heights at one size
+    cluster hard</em>: every printable ASCII glyph in Karla at 16 px is between 3 and 14 texels
+    tall, and sorting puts the 14s together and the 3s together.
+  </p>
+
+  @@FIG_ATLAS@@
+
+  <p>
+    Figure 4 is the result: six shelves, descending in height from 14 px to 7 px, holding 17, 14,
+    17, 15, 16 and 15 glyphs respectively. Sixty-seven of the atlas's 128 rows are used and the rest
+    are untouched.
+  </p>
+
+  <h3>5.1 The measurement that measures the wrong thing</h3>
+
+  <p>
+    The obvious way to judge a packer is to ask what fraction of the atlas is glyph. Ours reports:
+  </p>
+
+  <p class="eq-plain">
+    7,145 texels of glyph ÷ (128 × 128) = <strong>43.6%</strong>
+  </p>
+
+  <p>
+    That number sounds like a verdict and is not one. Look at the denominator: the atlas is a power
+    of two, so its size was decided <em>before the packer ran</em> — by the observation that 7,145
+    texels will not fit in 64 × 64 = 4,096. The numerator is the total area of the glyphs plus their
+    padding, which is a property of the font at this size. <strong>Neither half of that fraction
+    depends on anything the packer did.</strong> A perfect packer scores 43.6% and a hopeless one
+    that put every glyph on its own shelf would score 43.6% too.
+  </p>
+
+  <p>
+    The honest question is: of the space the packer <em>reached for</em>, how much did it use? That
+    is the glyph area over the rows it actually touched:
+  </p>
+
+  <p class="eq-plain">
+    7,145 ÷ (128 × 67) = <strong>83.3%</strong>
+  </p>
+
+  <p>
+    Now both halves move when the algorithm changes. Put every glyph on its own shelf and the
+    denominator explodes; sort ascending instead of descending and the slack grows. 83.3% says
+    shelf packing wastes about a sixth of the rows it uses, which for an algorithm that is fifteen
+    lines is a good trade, and it says so in a way that could have come out badly.
+  </p>
+
+  <div class="callout note">
+    <p class="label">A check that passed on infinity</p>
+    <p>
+      This section shipped its first draft against a stale library, where <code>used_height</code>
+      was still zero. The denominator was therefore zero, <code>efficiency</code> was
+      <code>inf</code>, and the assertion <code>efficiency &gt; 80.0</code> is <strong>true for
+      infinity</strong>. The harness printed <code>shelf efficiency = inf%</code> and reported a
+      PASS.
+    </p>
+    <p>
+      That is Lesson 6.16's <code>golden_615</code> finding — a comparison that printed
+      <code>identical=YES</code> when both of its file reads failed — arriving in a division instead
+      of a comparison. <strong>A check whose degenerate case is a pass is not a check.</strong> The
+      version in the listings asserts that the footprint is plausible <em>before</em> it divides by
+      it, and asserts <code>std::isfinite</code> on the result.
+    </p>
+  </div>
+
+  <h3>5.2 Padding, and 6.10's argument in a new place</h3>
+
+  <p>
+    Glyphs get one texel of empty space around them. The reason is the same one Lesson 6.10 gave for
+    atlas padding under minification, arriving at the other end of the scale: <strong>a bilinear tap
+    at the edge of a rectangle reads half of the texel outside it.</strong> Pack the next glyph
+    flush against this one and that texel belongs to a neighbour, so a fraction of the wrong letter
+    bleeds into this one's edge.
+  </p>
+
+  <p>
+    The harness bakes a second atlas with <code>padding = 0</code> and counts, for every glyph, how
+    many of the texels immediately right of its rectangle carry somebody else's ink:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>padding</th><th>edge-adjacent texels carrying a neighbour's ink</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>0 of 842</td></tr>
+      <tr><td>0</td><td><strong>398 of 842 — 47.3%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Nearly half the edge texels. And here is the honest qualifier, which matters more than the
+    number: <strong>at a 1:1 blit with nearest filtering, none of this happens.</strong> A nearest
+    fetch at a pixel centre reads exactly one texel, so an unpadded atlas draws perfectly today. The
+    padding is insurance against the first person who scales the overlay, rotates it, or turns on
+    mip generation — and it costs 1,559 texels in an atlas that had 9,239 spare rows' worth.
+  </p>
+
+  <p>
+    Which sets the rule for a mipped atlas, because it is the same argument scaled: a level-<em>N</em>
+    texel spans 2<sup><em>N</em></sup> of level 0's, so a chain <em>L</em> levels deep needs
+    2<sup><em>L</em></sup> texels of padding. One texel buys you level 0 and nothing else, and
+    <code>font_atlas::padding</code> is reported precisely so a consumer can work out how deep a
+    chain it is allowed to build.
+  </p>
+
+  <h3>5.3 One texel that is entirely covered</h3>
+
+  <p>
+    A HUD is not only text. There is a panel behind the readout, a divider under the heading, a bar
+    that fills up. Those are untextured rectangles, and drawing them looks like it needs a second
+    pipeline with no texture bound — a state change between the panel and the words on top of it.
+  </p>
+
+  <p>
+    It does not, because <strong>a solid quad is a textured quad whose coverage happens to be 1
+    everywhere</strong>. The bake reserves a 2 × 2 block of fully-covered texels at the top-left of
+    the first shelf and reports its centre's texture coordinates, and
+    <code>overlay_batch::rect</code> emits a quad with all four corners at that coordinate. The
+    panel and the string are then in one vertex buffer, in one draw call, with nothing between them.
+  </p>
+
+  <p>
+    Two by two rather than one by one, deliberately: a bilinear tap at the exact centre of a 1 × 1
+    block is correct, and one bit of drift in the rasterizer's interpolation reads the transparent
+    padding beside it, which gives the panel a faint dark edge. Two texels leave half a texel of
+    slack in every direction. Placing it at the start of the first shelf — rather than in its own
+    reserved strip — means that on any atlas whose tallest glyph is at least two texels high, it
+    costs no area at all.
+  </p>
+
+  <h2 id="utf8">6. Decoding, and three rules that are security bugs</h2>
+
+  <p>
+    A string arrives as UTF-8 bytes and the atlas is indexed by codepoint, so something has to
+    decode. This is twenty lines and it is worth every one of them, because the failure mode of a
+    sloppy decoder is not a rendering bug.
+  </p>
+
+  <p>
+    The arithmetic is the easy part. A leading byte's high bits say how many continuation bytes
+    follow — <code>0xxxxxxx</code> is one byte, <code>110xxxxx</code> is two, <code>1110xxxx</code>
+    three, <code>11110xxx</code> four — and each continuation contributes six bits. Three rules
+    that most hand-rolled decoders omit are the part that matters:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Over-long forms.</strong> The two-byte sequence <code>0xC0 0xAF</code> decodes, by the
+      arithmetic above, to U+002F — the character <code>/</code>. A naive decoder returns a slash. A
+      path check performed on the <em>raw bytes</em> before decoding therefore sees nothing to
+      reject, and the slash appears after the check. This is the classic directory-traversal vector,
+      it has shipped in web servers and in Java's own decoder, and the rule that stops it is one
+      line: a codepoint must use the shortest sequence that can represent it.
+    </li>
+    <li>
+      <strong>Surrogates.</strong> U+D800 through U+DFFF are UTF-16 machinery — the mechanism by
+      which UTF-16 represents codepoints above the basic plane — and are not characters. Encoded in
+      UTF-8 they are ill-formed; the practice of doing it anyway has a name, CESU-8, and it is a
+      compatibility hack rather than a format.
+    </li>
+    <li>
+      <strong>Beyond U+10FFFF.</strong> The four-byte form can express up to U+1FFFFF. Unicode stops
+      at U+10FFFF, and the extra range is not reserved for later, it is invalid.
+    </li>
+  </ol>
+
+  <p>
+    And a fourth that is not about validity at all: <strong>a malformed byte must still advance the
+    pointer.</strong> A decoder that returns U+FFFD without consuming anything is an infinite loop,
+    which is the other way this function can become a security bug. The harness feeds it five
+    consecutive malformed bytes and asserts that five calls consume all five.
+  </p>
+
+  <h2 id="gamma">7. Stem weight: the colour space of a glyph</h2>
+
+  <p>
+    Now the part this course has been building toward since Lesson 1.6.
+  </p>
+
+  <p>
+    Compositing a glyph over a background is Porter and Duff's <code>over</code> operator:
+  </p>
+
+  <p class="eq-plain">
+    result = source × <em>a</em> + destination × (1 − <em>a</em>)
+  </p>
+
+  <p>
+    where <em>a</em> is the glyph's coverage at that pixel. Lesson 6.11 established the key fact
+    about that expression: <strong>it is a lerp, and a lerp between two light values must happen in
+    linear light.</strong> Lerping sRGB codes does not lerp the light they encode. Lesson 6.11
+    measured the single-pixel case — half-coverage white over black gives 0.5 of the light correctly
+    and 0.2159 incorrectly, 43% — and this lesson is where that number becomes an artefact with a
+    name.
+  </p>
+
+  <h3>7.1 Why text is the worst case</h3>
+
+  <p>
+    A 16 px glyph is <em>mostly edge</em>. Its stems are one to two pixels wide, so a large fraction
+    of its pixels are partially covered — and partially covered pixels are exactly where the two
+    blend spaces disagree. Worse, the disagreement is not uniform: it is largest where the coverage
+    is <em>lowest</em>.
+  </p>
+
+  @@FIG_GAMMA@@
+
+  <p>
+    Figure 5's left half is one pixel of white over black at every tenth of coverage. Read the
+    ratios:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>coverage</th><th>correct light</th><th>light from lerping codes</th><th>ratio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0.10</td><td>0.0999</td><td>0.0103</td><td><strong>10.3%</strong></td></tr>
+      <tr><td>0.20</td><td>0.2016</td><td>0.0331</td><td>16.4%</td></tr>
+      <tr><td>0.50</td><td>0.5029</td><td>0.2159</td><td>42.9%</td></tr>
+      <tr><td>0.80</td><td>0.7991</td><td>0.6038</td><td>75.6%</td></tr>
+      <tr><td>1.00</td><td>1.0000</td><td>1.0000</td><td>100.0%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>A tenth-covered pixel emits a tenth of the light it should.</strong> The faintest parts
+    of a glyph — the tapers, the joins, the antialiased flanks of every stem — very nearly disappear.
+    That is why this bug presents as <em>weight</em> rather than as a colour shift: the interior of
+    a stem is fully covered and comes out right, and everything around it is wrong.
+  </p>
+
+  <h3>7.2 The measurement: ink mass</h3>
+
+  <p>
+    To put a number on a whole string we need a measure of how much ink is on the page. The harness
+    uses <strong>ink mass</strong>: the total light the text adds, summed over every pixel, in
+    linear light.
+  </p>
+
+  <p class="eq-plain">
+    mass = Σ<sub>pixels</sub> ( luminance(pixel) − luminance(background) )
+  </p>
+
+  <p>
+    Linear light rather than code values, deliberately — the question is "does this text emit the
+    right amount of light", and summing sRGB codes would beg exactly the question under test.
+    Rendering <code>"Handgloves 0123"</code> at 16 px, white on black:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>blend space</th><th>ink mass</th><th>share of correct</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>linear (correct)</td><td>253.04</td><td>100.0%</td></tr>
+      <tr><td>sRGB codes</td><td>157.28</td><td><strong>62.2%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Thirty-eight percent of the light, gone. And now the same string, black on white — where ink
+    mass is negative, because the text <em>removes</em> light from the page, so we take the
+    magnitude:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>blend space</th><th>ink mass</th><th>share of correct</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>linear (correct)</td><td>252.73</td><td>100.0%</td></tr>
+      <tr><td>sRGB codes</td><td>348.37</td><td><strong>137.8%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    <strong>The same error, in opposite directions.</strong> Light text on dark gets thinner; dark
+    text on light gets fatter. That asymmetry is the reason this bug is so durable: half the people
+    looking at it see text that is too spindly and half see text that is too heavy, both conclude
+    the font is wrong, and neither suspects the compositor.
+  </p>
+
+  <h3>7.3 Two bugs that are the same function</h3>
+
+  <p>
+    There is a second, entirely independent way to get this wrong, and it lives in a different file.
+    Upload the coverage atlas as an <code>_SRGB</code> texture and the sampler will "decode" every
+    texel on the way out — applying an inverse gamma to an <em>area fraction</em>, which is a
+    category error, since coverage was never encoded through anything. The measured result:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>bug</th><th>ink mass, white on black</th><th>share</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>lerping sRGB codes</td><td>157.2763</td><td>62.2%</td></tr>
+      <tr><td><code>_SRGB</code> coverage atlas</td><td>157.2338</td><td>62.1%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That is not a coincidence, and noticing it is the most useful thing in this section. Work both
+    out for white over black:
+  </p>
+
+  <p class="eq-plain">
+    lerping codes: code = 255<em>a</em>, so light = srgb_to_linear(<em>a</em>)<br>
+    <code>_SRGB</code> atlas: <em>a</em>′ = srgb_to_linear(<em>a</em>), and the linear blend emits
+    <em>a</em>′
+  </p>
+
+  <p>
+    <strong>They are the same function, applied at different points in the pipeline.</strong> One is
+    a colour-space error in the blend equation; the other is a format error on a texture; they are
+    in different files, written by different people, on different days — and on a dark background
+    they are numerically indistinguishable. The remaining 0.04 of difference is the 8-bit
+    quantisation of the modified atlas.
+  </p>
+
+  <p>
+    So measuring light-on-dark text cannot tell you which one you have. Figure 5's right-hand table
+    is the test that can:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>bug</th><th>white on black</th><th>black on white</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>lerping sRGB codes</td><td>62.2%</td><td><strong>137.8%</strong></td></tr>
+      <tr><td><code>_SRGB</code> coverage atlas</td><td>62.1%</td><td><strong>62.1%</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Render your text both ways round. A blend-space bug <em>fattens</em> dark-on-light, because it
+    corrupts the lerp and the lerp is directional. An atlas-format bug <em>thins</em> both, because
+    it corrupts the coverage before the lerp ever sees it and coverage does not know which way the
+    contrast runs. That is a diagnostic you can run in five minutes on any text renderer, including
+    one you did not write.
+  </p>
+
+  <h3>7.4 The part that is usually left out: text is tuned for the wrong arithmetic</h3>
+
+  <p>
+    Everything above says linear compositing is correct, and it is. Here is the complication, and
+    leaving it out is how you end up in an argument with a type designer.
+  </p>
+
+  <p>
+    Outlines are drawn, and hinted, and their coverage tuned, against what the renderer of the day
+    actually did — and for thirty years the renderer of the day blended in sRGB space. So switching
+    to correct blending makes light-on-dark text measurably <em>lighter</em> than its designer
+    intended it to look. The correct answer is not to go back to the wrong arithmetic. It is
+    <strong>stem darkening</strong>: a deliberate adjustment to coverage, applied before
+    compositing, that every serious text stack has. FreeType calls it stem darkening, Skia folds it
+    into gamma and contrast, and macOS's historical "font smoothing" was a version of it.
+  </p>
+
+  <p>
+    Ours is the simplest honest form — a power curve, <code>a′ = a^(1−k)</code>, which pushes
+    partially-covered pixels up and leaves 0 and 1 exactly where they are. At <em>k</em> = 0.2 a
+    half-covered pixel becomes 0.5743, a 15% gain in coverage where it matters and none at the ends.
+    Measured over the whole string:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>case</th><th><em>k</em> = 0</th><th><em>k</em> = 0.2</th><th>change</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>white on black</td><td>253.04</td><td>281.59</td><td>+11.3%</td></tr>
+      <tr><td>black on white</td><td>252.73</td><td>281.34</td><td>+11.3%</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    And there is the reason it is a parameter and not the default. The correction is
+    <em>identical</em> in both directions, because it is a function of coverage and coverage does
+    not know which way the contrast runs. It helps light-on-dark, where correct blending thinned the
+    glyph — and it hurts dark-on-light by exactly the same 11.3%, where correct blending already
+    gives the right weight. <strong>One global constant cannot be right for both.</strong> A real
+    implementation varies <em>k</em> with the contrast direction and the point size; ours exposes
+    the knob, defaults it to zero, and says what it would take to set it properly.
+  </p>
+
+  <h3>7.5 Where the blend actually happens, and why the format decides</h3>
+
+  <p>
+    On the GPU, none of this arithmetic is in our shader. Hardware blending happens <em>after</em>
+    the fragment shader, in the raster operations stage, on whatever is in the target — so what
+    decides the blend space is <strong>the colour target's format</strong>:
+  </p>
+
+  <ul>
+    <li>an <code>_SRGB</code> target: the ROP decodes the destination, lerps in linear light, and
+        re-encodes. Correct, and free.</li>
+    <li>a plain <code>UNORM</code> target with a shader that encodes its own output: the ROP lerps
+        sRGB codes. That is <code>blend_over_encoded</code>, in silicon.</li>
+  </ul>
+
+  <p>
+    Lesson 6.1 predicted this in a comment — <em>"hardware blending happens after the shader, and if
+    we encode there, the blender adds codes"</em> — and Lesson 6.11 put the 43% on it. This lesson
+    can finally <em>measure it on real hardware</em>, because this engine still supports both paths:
+    <code>gpu_device</code> asks for an <code>_SRGB</code> swapchain and falls back to
+    <code>UNORM</code> plus a shader-side encode when <code>SDR_LINEAR</code> composition is
+    unavailable.
+  </p>
+
+  <p>
+    So §11 draws the same batch twice — once at an <code>_SRGB</code> target, once at a
+    <code>UNORM</code> one with <code>encode = 1</code> — and compares each against the two CPU
+    implementations:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>the UNORM target's own blender, compared against…</th><th>pixels differing</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>blend_over_encoded</code> (the wrong one)</td><td><strong>0</strong></td></tr>
+      <tr><td><code>blend_over</code> (the right one)</td><td>933</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    Zero. Not "close to" — the hardware fallback path reproduces our deliberately-wrong CPU function
+    exactly, pixel for pixel, on a Metal backend. A prediction written in a comment seventeen
+    lessons ago, discharged with an equality.
+  </p>
+
+  <h2 id="where">8. Before the curve or after it</h2>
+
+  <p>
+    The engine's frame now ends: scene → HDR float target → bloom → tonemap → swapchain. An overlay
+    could composite at two points in that chain, and this is not a matter of taste.
+  </p>
+
+  @@FIG_WHERE@@
+
+  <p>
+    Composite <em>into the HDR target</em>, before the tonemap, and the text goes through the curve
+    with everything else. Pure white at linear 1.0 comes out of the ACES fit at:
+  </p>
+
+  <p class="eq-plain">
+    ACES(1.0) = <strong>0.803797</strong> → sRGB code <strong>232</strong>
+  </p>
+
+  <p>
+    Your white UI is grey. Not dramatically — 232 rather than 255 — which is worse than
+    dramatically, because it looks like a design choice. And it is grey by an amount that
+    <em>changes with the exposure</em>:
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <thead>
+      <tr><th>exposure</th><th>0.25×</th><th>0.5×</th><th>1×</th><th>2×</th><th>4×</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>white becomes code</td><td>165</td><td>206</td><td>232</td><td>245</td><td>252</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    A HUD that dims when the player walks into a dark room is not a stylistic decision, it is that
+    table. It would also bloom, because the bloom pass runs between the two — which some games want
+    deliberately (a holographic visor, a diegetic UI drawn on glass) and which no debug overlay
+    wants ever.
+  </p>
+
+  <p>
+    Composite <em>into the swapchain</em>, after the tonemap, and white is 255 and stays 255. That
+    is the right answer, and the reason is the line Lesson 6.12 drew through the whole module:
+    <strong>a UI colour is display-referred.</strong> It is a code somebody picked in a colour
+    picker, not a quantity of light arriving from a surface. Scene-referred values belong before the
+    tonemap; display-referred values belong after it. Text is the first thing in this course that is
+    display-referred from birth.
+  </p>
+
+  <div class="callout note">
+    <p class="label">The exception, stated so you know it is a choice</p>
+    <p>
+      Diegetic UI — an interface that exists inside the world, on a screen the character is looking
+      at — <em>should</em> composite before the tonemap, because it is light in the scene. It should
+      bloom, it should be exposed, and it should dim when the room is bright, because a real monitor
+      does. The rule is not "always after"; it is <strong>"decide whether this is light or a
+      code"</strong>, and then put it on the matching side of the curve. Our overlay is a code.
+    </p>
+  </div>

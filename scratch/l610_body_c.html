@@ -1,0 +1,557 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="impl"><span class="num">4</span>Implementation</h2>
+
+  <h3>4.1 &nbsp;The decision that keeps the golden</h3>
+
+  <p>
+    Before any code, one design decision, made deliberately and early because it constrains
+    everything after it.
+  </p>
+
+  <p>
+    The reference render — the fixture that has been byte-identical for eighteen lessons — draws a
+    <em>textured</em> floor. So unlike Lesson 6.9's cascades, mipmapping is not automatically an
+    opt-in path: build a chain for every texture and the reference picture changes, and the
+    regression test that has caught four real bugs stops meaning anything.
+  </p>
+
+  <p>
+    There were two honest options: re-baseline the golden and say so, or make the chain opt-in.
+    <strong>Opt-in wins on its own merits, not just to protect the test.</strong> A chain costs 33%
+    more memory; a 1×1 white fallback has nothing to average; a UI atlas is never minified. Building
+    one unconditionally would be paying everywhere to fix somewhere.
+  </p>
+
+  <p>
+    So <code>texture</code> is untouched, <code>mip_chain</code> is a separate type, and
+    <code>texture_binding</code> grows a nullable pointer — the same bargain <code>lights</code>,
+    <code>albedo</code> and 6.9's <code>cascades</code> already make.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    /// An optional mip chain for `image`. Lesson 6.10.
+    ///
+    /// **Nullable, and null is the whole of "no mipmapping"** — the same bargain
+    /// `lights`, `albedo` and 6.9's `cascades` already make. When it is null the
+    /// fill samples `image` exactly as it did in 3.9, which is why nineteen
+    /// lessons of reference renders are still byte-identical.
+    const mip_chain* mips = nullptr;</code></pre>
+  </figure>
+
+  <h3>4.2 &nbsp;Building the chain</h3>
+
+  <p>
+    The whole correctness story is one boolean, read from the data rather than passed in:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/mipmap.cpp</span> <span class="tag new">new</span></figcaption>
+    <pre><code class="lang-cpp">    // Read the space from the DATA, not from a parameter. A caller who has to
+    // remember which of their textures is colour is a caller who will get the
+    // third one wrong, and the symptom — a normal map quietly gamma-decoded —
+    // is 6.7's bug arriving by a different door.
+    const bool decode = (base.space() == texel_space::srgb);
+
+    while (chain.levels() &lt; k_max_mip_levels)
+    {
+        const texture&amp; src = chain.levels_.back();
+        if (src.width() &lt;= 1 &amp;&amp; src.height() &lt;= 1) { break; }
+
+        // Halve, never below 1. A 64x4 texture ends 8x1, 4x1, 2x1, 1x1 — the
+        // chain stops when BOTH axes reach 1, not when either does, or a wide
+        // thin texture would lose its remaining width.
+        const int w = std::max(1, src.width() / 2);
+        const int h = std::max(1, src.height() / 2);</code></pre>
+  </figure>
+
+  <h3>4.3 &nbsp;The gradient, hoisted</h3>
+
+  <p>
+    §3.3's derivation, in the fill loop. Everything constant over the triangle is computed once,
+    beside the other per-triangle setup:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
+    // walks, divided by the same area it already reciprocated.
+    const float dfx[3] = {static_cast&lt;float&gt;(s.step_x0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x2) * inv_area};
+    const float dfy[3] = {static_cast&lt;float&gt;(s.step_y0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y2) * inv_area};
+
+    const vec2 dnum_dx{dfx[0] * pu0 + dfx[1] * pu1 + dfx[2] * pu2,
+                       dfx[0] * pv0 + dfx[1] * pv1 + dfx[2] * pv2};
+    const vec2 dnum_dy{dfy[0] * pu0 + dfy[1] * pu1 + dfy[2] * pu2,
+                       dfy[0] * pv0 + dfy[1] * pv1 + dfy[2] * pv2};
+    const float dw_dx = dfx[0] * iw0 + dfx[1] * iw1 + dfx[2] * iw2;
+    const float dw_dy = dfy[0] * iw0 + dfy[1] * iw1 + dfy[2] * iw2;
+
+    // Decided once, like every other question constant across a fill.
+    const bool mipped = style.albedo.mipped();</code></pre>
+  </figure>
+
+  <p>
+    And the per-pixel part is the quotient rule and nothing else, guarded by the branch that
+    hoisted:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> — the fill</figcaption>
+    <pre><code class="lang-cpp">                albedo = mipped
+                    ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                    vec2{uu, vv},
+                                    uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                 vec2{uu, vv}, w_recip))
+                    : sample(*style.albedo.image, style.albedo.samp, uu, vv);</code></pre>
+  </figure>
+
+  <p>
+    <strong>The unmipped branch is character-for-character what 3.9 wrote.</strong> That is what
+    keeps the golden, and it is also why touching the hottest loop in the software rasterizer was
+    safe enough to do at all.
+  </p>
+
+  <h3>4.4 &nbsp;The GPU chain, and the assert you will not see</h3>
+
+  <p>
+    4.7's <code>ti.num_levels = 1; // no mipmaps yet — Module 6</code> becomes a level count, and
+    the usage flags grow one bit:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <pre><code class="lang-cpp">    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
+    // BLITTING each level into the next, so every level must be a render target.
+    // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
+    // in debug mode, so on a release device the requirement is unchecked and the
+    // result is undefined rather than diagnosed.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+             | (mips ? SDL_GPU_TEXTUREUSAGE_COLOR_TARGET : 0u);</code></pre>
+  </figure>
+
+  <div class="callout warn">
+    <span class="label">⚠ VERIFY, discharged — and one thing worth reading the source for</span>
+    <p>
+      Checked against the configured SDL3 tree rather than remembered.
+      <code>SDL_GenerateMipmapsForGPUTexture(SDL_GPUCommandBuffer*, SDL_GPUTexture*)</code> returns
+      <code>void</code>, takes exactly those two arguments, and its header says <em>"This function
+      must not be called inside of any pass."</em>
+    </p>
+    <p>
+      <code>SDL_gpu.c</code> validates three things: that no pass is in progress, that
+      <code>num_levels &gt; 1</code>, and that the usage carries both <code>SAMPLER</code> and
+      <code>COLOR_TARGET</code>. <strong>All three checks live inside
+      <code>if (COMMAND_BUFFER_DEVICE-&gt;debug_mode)</code>.</strong> On a release device you get
+      no assert, no log line, and undefined behaviour — so the requirement 4.7's exercise stated is
+      real, and the diagnostic that would tell you about it is conditional.
+    </p>
+    <p>
+      This course has met SDL's assert gating before, from the other side: they key on
+      <code>__OPTIMIZE__</code> rather than <code>NDEBUG</code>, so <code>-O2</code> alone is enough
+      to switch them off.
+    </p>
+  </div>
+
+  <p>
+    Generation goes after the copy pass ends, which the header requires:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> — the chain</figcaption>
+    <pre><code class="lang-cpp">    SDL_EndGPUCopyPass(copy);
+    SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    // AFTER the copy pass ends, and that is a requirement rather than tidiness.
+    // It reads level 0 — which the upload above just wrote — and blits its way
+    // down.
+    //
+    // Note what we do NOT do: average in linear light ourselves. The texture was
+    // created with an _SRGB format when `srgb` is set, so the hardware decodes
+    // on read and encodes on write, and the blit chain averages in linear light
+    // for free.
+    if (mips &amp;&amp; levels_ &gt; 1)
+    {
+        SDL_GenerateMipmapsForGPUTexture(cb, texture_);
+    }</code></pre>
+  </figure>
+
+  <h3>4.5 &nbsp;Two sampler fields that silently disable everything</h3>
+
+  <p>
+    This is the part most likely to cost you an afternoon, and both halves are the same shape: a
+    field whose default is correct for a texture with one level and wrong the moment there are nine.
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> — the sampler</figcaption>
+    <pre><code class="lang-cpp">    // **max_lod = 0 CLAMPS THE WHOLE CHAIN AWAY**, and this line was 0.0f until
+    // Lesson 6.10. It did not matter while every texture had one level; the
+    // moment one has nine it is the difference between mipmapping and an
+    // expensive no-op — you build the chain, set mipmap_mode, see no change, and
+    // go looking in the generator. There is no error and no warning, because
+    // clamping to level 0 is a perfectly legal thing to ask for.
+    si.max_lod = 1000.0f;   // SDL's own "no clamp" idiom
+
+    // BOTH FIELDS, OR NEITHER. SDL ignores `max_anisotropy` unless
+    // `enable_anisotropy` is true, so setting the clamp alone is a silent no-op —
+    // the same shape of trap as max_lod, one struct field along.
+    si.enable_anisotropy = (max_aniso &gt; 1);
+    si.max_anisotropy = static_cast&lt;float&gt;(...);</code></pre>
+  </figure>
+
+  <p>
+    Note that <code>create_comparison</code> — 6.8's shadow sampler — keeps <code>max_lod = 0</code>
+    and anisotropy off, deliberately. A shadow map has one level (6.9 added <em>layers</em>, not
+    levels), so there is nothing between levels to filter and clamping to the only level there is
+    the honest value rather than a leftover.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete code listings</h2>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Files touched by Lesson 6.10</caption>
+      <thead><tr><th>Path</th><th>State</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>engine/include/engine/gfx/mipmap.hpp</code></td><td>new</td>
+            <td>The chain, the footprint, level selection, the mipped sample</td></tr>
+        <tr><td><code>engine/src/gfx/mipmap.cpp</code></td><td>new</td>
+            <td>Linear-light averaging, log2 selection, trilinear, anisotropy</td></tr>
+        <tr><td><code>engine/include/engine/gfx/texture.hpp</code></td><td>modified</td>
+            <td><code>sampler</code> gains the two fields 3.9 named; <code>texture_binding</code>
+                gains a nullable chain</td></tr>
+        <tr><td><code>engine/include/engine/gfx/material.hpp</code></td><td>modified</td>
+            <td><code>bind_albedo_mipped</code></td></tr>
+        <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+            <td>The analytic gradient, hoisted; two sample sites</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+            <td><code>create_sampled(..., mips)</code>, <code>levels()</code>, sampler params</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+            <td>Level count, <code>COLOR_TARGET</code>, generation, <code>max_lod</code></td></tr>
+        <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+            <td><code>src/gfx/mipmap.cpp</code></td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+            <td><code>--floor-tex</code>, <code>--mips</code>, <code>--aniso</code>,
+                <code>--mip-nearest</code></td></tr>
+        <tr><td><code>scratch/verify_610.cpp</code></td><td>new</td>
+            <td>24 checks, eight sections</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  @@LISTING:engine/include/engine/gfx/mipmap.hpp@@
+
+  @@LISTING:engine/src/gfx/mipmap.cpp@@
+
+  @@LISTING:scratch/verify_610.cpp@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">6</span>Build &amp; run</h2>
+
+  <figure class="listing">
+    <figcaption><span class="path">every platform</span></figcaption>
+    <pre><code class="lang-shell">cmake -S . -B build
+cmake --build build --parallel
+sh scratch/build_verify_610.sh</code></pre>
+  </figure>
+
+  <p>
+    On Windows use <code>cmake --build build --config Debug</code> and
+    <code>build\demos\Debug\gltf_view.exe</code>; the harness script is a shell script, so run it
+    under Git Bash or WSL.
+  </p>
+
+  <h3>What you should see</h3>
+
+  <p>
+    <code>24 checks, 0 failures</code>, and §B is the one to read:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">verify_610 §B</span></figcaption>
+    <pre><code class="lang-shell">== B  LINEAR LIGHT ==
+  half the LIGHT of black and white:
+    averaged in linear light : code 188  -> 0.5029 of white
+    averaged as sRGB bytes   : code 127  -> 0.2122 of white
+  [PASS] linear-light averaging gives code 188, and 6.1's second integer says
+         half the light is code 188
+  [PASS] the naive chain delivers 42.2% of the light it should — 57.8% TOO DARK
+         at level 1 alone</code></pre>
+  </figure>
+
+  <h3>The four pictures</h3>
+
+  <p>
+    The demo's ground is untextured by default, so <code>--floor-tex</code> puts a deliberately
+    fine checker on it — which is Lesson 3.9's shimmering floor, rebuilt so the fix has something to
+    fix:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">the comparison</span></figcaption>
+    <pre><code class="lang-shell"># 1. the failure: 3.9's floor, aliasing exactly as it did then
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512
+
+# 2. the fix
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --mips
+
+# 3. the level seam, which trilinear exists to hide
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --mip-nearest
+
+# 4. the grazing case
+./build/demos/gltf_view assets/shapes.glb --floor-tex 512 --aniso 16</code></pre>
+  </figure>
+
+  <p>
+    Run 1 and 2 side by side and the floor stops boiling. The demo reports the chain it built, and
+    the memory line is the geometric series arriving in practice:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">gltf_view --floor-tex 512 --mips</span></figcaption>
+    <pre><code class="lang-shell">  mipmaps       : 1 chain(s), 10 levels, 262144 -> 349525 texels (+33.3%),
+                  aniso 1, between levels trilinear</code></pre>
+  </figure>
+
+  <p>
+    Comparing the two renders pixel by pixel, <strong>13.1% of the frame changes</strong> — which is
+    the floor, and nothing else. Every pixel that was not undersampled is untouched.
+  </p>
+
+  <div class="callout warn">
+    <span class="label">What it costs, stated as a number</span>
+    <p>
+      <strong>33% more memory</strong>, always, whether the texture is ever minified or not. On a
+      surface that was <em>never</em> undersampled, mipmapping buys nothing: §G checks that a fetch
+      at one texel per pixel is byte-identical to the unmipped one, because level 0 is the original
+      image.
+    </p>
+    <p>
+      And over-eager level selection has a cost of its own. A <code>mip_bias</code> of +2 moves the
+      same fetch from 0.4488 to 0.4872 — visible blurring on a surface that asked for none, which
+      is why the bias is exposed rather than hidden, and why "just add a bit of bias" is a poor fix
+      for aliasing you have not measured.
+    </p>
+    <p>
+      The same shape of judgement as 6.9's: cascades cost 29% of their resolution to buy stability
+      and lose outright on a small scene. <strong>Reach for the technique when you have measured
+      the problem.</strong> 3.9 measured this one seven lessons ago.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfall">
+    <h3>The chain is built, the sampler is set, and nothing changes</h3>
+    <p><strong>Symptom.</strong> Mipmapping appears to do nothing on the GPU. The floor aliases
+       exactly as before.</p>
+    <p><strong>Cause.</strong> <code>SDL_GPUSamplerCreateInfo::max_lod</code> is 0, which clamps
+       every lookup to level 0. It is a perfectly legal request, so there is no error and no
+       warning.</p>
+    <p><strong>Fix.</strong> Set it above the chain's top level. And check
+       <code>enable_anisotropy</code> at the same time: <code>max_anisotropy</code> alone is a
+       silent no-op for the same reason.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Textures get darker with distance</h3>
+    <p><strong>Symptom.</strong> A textured surface dims as it recedes. Usually reported as "the
+       lighting falls off too fast" or "the fog is too strong".</p>
+    <p><strong>Cause.</strong> The chain was averaged in sRGB bytes rather than linear light
+       (§3.4). Each level is darker than the one above, and it compounds.</p>
+    <p><strong>Fix.</strong> Decode, average, re-encode. To confirm it before fixing it, build a
+       chain from a pure black-and-white checker and read level 1: it must be <strong>code
+       188</strong>, not 127.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Normal maps look wrong only in the distance</h3>
+    <p><strong>Symptom.</strong> Lighting is correct up close and subtly wrong further away.</p>
+    <p><strong>Cause.</strong> The opposite error — a linear-data texture decoded as sRGB while
+       being averaged. 6.7's bug arriving through a different door.</p>
+    <p><strong>Fix.</strong> Read <code>texel_space</code> from the texture. This is precisely why
+       that field is on the data rather than at the call site.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>A visible line across the floor at a fixed distance</h3>
+    <p><strong>Symptom.</strong> A hard boundary in sharpness, following a contour of constant
+       distance from the camera.</p>
+    <p><strong>Cause.</strong> <code>mip_filter = nearest</code>: the level is being rounded rather
+       than blended. Exactly Lesson 6.9's cascade seam.</p>
+    <p><strong>Fix.</strong> Trilinear. The harness measures the step at 0.3470 rounded against
+       0.0124 blended.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Distant ground looks smeared rather than sharp</h3>
+    <p><strong>Symptom.</strong> No aliasing, but the far floor has lost all its detail.</p>
+    <p><strong>Cause.</strong> Isotropic filtering choosing the level from the long axis of a
+       grazing footprint (§3.6). At 16:1 that blurs the short axis by a factor of 16.</p>
+    <p><strong>Fix.</strong> Anisotropic filtering. This is the single most visible quality setting
+       in most games, and now you know exactly what it is buying.</p>
+  </div>
+
+  <div class="pitfall">
+    <h3>Mipmap generation asserts, or does nothing at all</h3>
+    <p><strong>Symptom.</strong> An assert about usage flags — or, on a release device, silently
+       wrong texture contents.</p>
+    <p><strong>Cause.</strong> The texture lacks <code>COLOR_TARGET</code>, or
+       <code>num_levels</code> is 1, or the call is inside a pass. SDL checks all three
+       <em>only in debug mode</em>.</p>
+    <p><strong>Fix.</strong> All three, and develop against a debug device. A validation layer you
+       have switched off is a validation layer you do not have.</p>
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>8.1 — See the bug you were warned about <span class="tag">guided</span></h3>
+    <p>
+      Change <code>build_mips</code> to average bytes regardless of <code>texel_space</code>, run
+      the demo with <code>--floor-tex 512 --mips</code>, and look at the far floor. Then read level
+      1 of a black-and-white checker and confirm it is code 127. Put it back.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        The visual tell is that the floor's average brightness falls with distance while its
+        <em>contrast</em> also falls — two things changing at once, which is what makes it read as a
+        lighting problem rather than a texturing one.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.2 — Visualise the level <span class="tag">guided</span></h3>
+    <p>
+      Tint each mip level a different colour — level 0 red, 1 green, 2 blue, and so on — and render
+      the floor. You will see the level bands directly, which makes <code>--mip-nearest</code> and
+      trilinear a before/after you can point at, and makes anisotropy's effect on level choice
+      obvious.
+    </p>
+  </div>
+
+  <div class="exercise">
+    <h3>8.3 — Check the gradient against the GPU <span class="tag">engine challenge</span></h3>
+    <p>
+      §D checks the analytic gradient against a finite difference of our own interpolation. Check
+      it against a <em>different implementation</em>: render the same triangle on the GPU with a
+      shader that outputs <code>log2(length(ddx(uv) * textureSize))</code> as a colour, read it
+      back, and compare against the CPU's level for the same fragments.
+    </p>
+    <details><summary>Hint</summary>
+      <p>
+        Expect them to agree closely but not exactly, and the reason is interesting: the GPU's
+        <code>ddx</code> is a <em>finite difference across a 2×2 quad</em>, so it is the
+        approximation and ours is the closed form. Disagreement will be largest where the
+        derivative changes fastest — near a silhouette, or on a steeply foreshortened triangle.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.4 — Measure the cost <span class="tag">open</span></h3>
+    <p>
+      Use Lesson 3.10's timing harness to measure the software rasterizer's fill rate with the
+      chain bound and without, on a floor that fills the frame. Separate the cost of the level
+      arithmetic from the cost of the second bilinear fetch by testing
+      <code>mip_filter = nearest</code> as a middle point.
+    </p>
+    <details><summary>Solution sketch</summary>
+      <p>
+        Three configurations, one variable each: unmipped (one fetch, no arithmetic), nearest (one
+        fetch, plus the log2 and the gradient), trilinear (two fetches, same arithmetic). The gap
+        between the first two is the derivative; between the second and third is the extra tap.
+        Predict which is larger before you measure — most people guess wrong.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>8.5 — Non-power-of-two, honestly <span class="tag">open</span></h3>
+    <p>
+      §3.1 admits that odd sizes round down and lose a row. Build a 100×100 checker, mip it, and
+      find the artefact. Then implement a weighted box filter that accounts for the partial row and
+      measure whether you can see the difference.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; next</h2>
+
+  <p><strong>What the engine gained.</strong></p>
+
+  <ul>
+    <li><strong>Mipmapping in both renderers</strong>, with trilinear filtering and anisotropy, and
+        a level derived from an <em>exact</em> analytic derivative rather than a finite
+        difference — agreeing with a numerical check to 5.79 × 10<sup>−6</sup>.</li>
+    <li><strong>A debt cleared.</strong> Six promises, one of them in a shipped public header,
+        made good.</li>
+    <li><strong>The sampler 3.9 described.</strong> That lesson collapsed SDL's three filter fields
+        into one and said exactly why it could; the other two are now real.</li>
+    <li><strong>A famous bug, quantified rather than merely named</strong>: an sRGB-averaged chain
+        delivers 42.2% of the light it should at level 1, and compounds.</li>
+    <li><strong>The golden held for the nineteenth lesson</strong> — and this time by design rather
+        than by luck, because the reference scene samples textures and the chain had to be made
+        opt-in deliberately.</li>
+  </ul>
+
+  <p>
+    <strong>What it still does not do.</strong> No weighted filtering for non-power-of-two sizes; no
+    mip generation for the CPU's normal maps (only albedo is chained); no negative LOD bias
+    clamping worth the name. And anisotropy is a fixed sample count along one axis rather than the
+    elliptical footprint the literature describes.
+  </p>
+
+  <p>
+    <strong>Next</strong> — <a href="../index.html">6.11, Transparency: Alpha Modes, Blending, and
+    Draw Order</a>. The pipeline has said <code>no blending</code> since 4.4, and 6.6's glTF
+    importer reads <code>alpha</code> and ignores <code>alphaMode</code> entirely — so every
+    downloaded asset with foliage or glass currently renders as opaque cardboard. That is the one
+    gap in that importer which fires no status code, and 6.6 §10 says so in as many words.
+  </p>
+
+  <p>
+    It also matters to this lesson. Alpha-masked foliage and mipmapping interact badly in a way
+    that is famous in its own right: averaging an alpha channel makes cutout edges dissolve with
+    distance, and the fix has a name.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further reading</h2>
+
+  <ul>
+    <li><strong>Lance Williams, "Pyramidal Parametrics" (SIGGRAPH 1983)</strong> — the original mip
+        paper. "MIP" is <em>multum in parvo</em>, "much in a small space", and the paper is short
+        and readable.</li>
+    <li><strong>Paul Heckbert, "Survey of Texture Mapping" (IEEE CG&amp;A, 1986)</strong> — 3.9
+        already sent you here; §3 on resampling and filtering is the part that pays off now.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.2.2 "Mipmapping"</strong> — the standard
+        treatment, including the ripmap and summed-area alternatives this lesson skips.</li>
+    <li><strong>Real-Time Rendering, 4th ed., §6.2.3</strong> — anisotropic filtering, and the
+        elliptical weighted average our fixed-sample version approximates.</li>
+    <li><strong>SDL3, <code>SDL_GenerateMipmapsForGPUTexture</code> and
+        <code>SDL_GPUSamplerCreateInfo</code></strong> — and, worth reading rather than trusting,
+        <code>SDL_gpu.c</code>'s validation of that call, which is conditional on debug mode.</li>
+  </ul>

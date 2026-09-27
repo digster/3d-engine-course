@@ -1,0 +1,814 @@
+  <h2 id="implementation">13. Writing it</h2>
+
+  <p>
+    Two new pairs of files and one small change. <code>phys/cast.hpp</code> is the query. Like
+    <code>gjk.cpp</code> it knows nothing about bodies or shapes, only about <code>convex</code>, because a
+    projectile, a camera boom or a line of sight needs a cast as much as a character does.
+    <code>phys/character.hpp</code> is the policy. It reaches down to <code>rigid_body.hpp</code> for where
+    the obstacles are and how a platform moved, and to <code>collide.hpp</code> once, for 8.6's EPA. It does
+    <em>not</em> include <code>solver.hpp</code>: the controller is outside the simulation on purpose, and
+    the only thing it hands the solver is a proxy's velocity. <code>convex.hpp</code> gains a small
+    struct, and that is a debt being paid, not a feature.
+  </p>
+
+  <h3>Step 1: the cast</h3>
+
+  <p>
+    §3's loop, and every line is one of four questions: how far apart are the two shapes now (GJK), how
+    fast is the motion closing that gap (a dot product), how far can the mover go before the gap is the
+    skin (a division), and has it arrived (a comparison). The mover is moved by changing one vector,
+    <code>origin</code>, because 8.5 made every support function answer <em>relative</em> to it. The line
+    that matters most is the one that takes the gap from <code>certify(...).lower</code> and not from
+    <code>g.distance</code>:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/cast.cpp — cast</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">cast_result cast(const convex&amp; mover, vec3 displacement, const convex&amp; obstacle, const cast_config&amp; cfg)
+{
+    cast_result out;
+
+    const float len = length(displacement);
+
+    // The mover, placed at the current iterate. `convex::support` answers
+    // RELATIVE to `origin` (8.5&#x27;s split), so moving the whole shape is moving
+    // one vector — the adapter&#x27;s pointer still views the untouched shape.
+    convex at = mover;
+    gjk_config gcfg = cfg.gjk;
+
+    float t = 0.0f;
+    for (int i = 0; i &lt; cfg.max_iterations; ++i)
+    {
+        at.origin = mover.origin + displacement * t;
+        const gjk_result g = gjk_distance(at, obstacle, gcfg);
+        out.gjk_iterations += g.iterations;
+        out.iterations = i + 1;
+
+        if (g.status != gjk_status::separated)
+        {
+            // Overlapping (or within GJK&#x27;s own contact margin, which is the
+            // same thing to a cast). At the start that is the caller&#x27;s problem
+            // and EPA&#x27;s question. Later it means the step landed ON the contact
+            // — which, with no skin, is exactly where a flat face sends it —
+            // and GJK cannot tell touching from overlapping there, so report the
+            // last iterate it could still measure. `cast_config::skin` is the
+            // measured case for never getting here.
+            if (i == 0)
+            {
+                out.status = cast_status::started_inside;
+                out.t = 0.0f;
+                return out;
+            }
+            out.status = cast_status::hit;
+            return out;   // `t`, `distance`, normal and point are the previous iterate&#x27;s
+        }
+
+        // `direction` points from the mover toward the obstacle; the closing
+        // rate of the gap is the motion&#x27;s component along it. Per unit of `t`,
+        // so it carries the displacement&#x27;s length.
+        const float approach = dot(displacement, g.direction);
+
+        // THE GAP IS THE LOWER BOUND, NOT GJK&#x27;S `distance`. `distance` is the
+        // length between two witness points — an UPPER bound, short of proof by
+        // up to GJK&#x27;s tolerance — and a step sized from an upper bound can end
+        // inside the skin by exactly that slack (8.13 §3: 377 of 6,049 hits, by
+        // up to 0.17 mm). The
+        // lower bound is the width of the slab between the two supporting planes
+        // normal to `direction`, and under a translation that slab narrows at
+        // exactly `approach` per unit `t`: stepping to where IT reaches `skin`
+        // cannot cross the skin, whatever `direction` is. That is the separating
+        // plane of 8.4, turned into a time.
+        const float gap = certify(at, obstacle, g).lower;
+
+        out.t = t;
+        out.distance = gap;   // the certified lower bound
+        out.surface_normal = -g.direction;
+        out.point = g.point_b;
+
+        // Not closing, or closing so slowly that the whole of what is left of
+        // the motion cannot bring the gap below `skin` by more than
+        // `min_approach · len`. The slab normal to `direction` narrows at
+        // exactly `approach` per unit `t` and not a hair faster, so this is a
+        // proof of &quot;clear&quot; rather than a heuristic.
+        if (approach &lt;= cfg.min_approach * len)
+        {
+            out.status = cast_status::clear;
+            out.t = 1.0f;
+            return out;
+        }
+
+        // Arrived: within tolerance of the skin, and still closing.
+        const float excess = gap - cfg.skin;
+        if (excess &lt;= cfg.tolerance * len)
+        {
+            out.status = cast_status::hit;
+            return out;
+        }
+
+        // The Newton step toward `f = skin`: to where the slab is `skin` wide.
+        // It cannot overshoot — see the header — so the only way out of the
+        // motion is past its end.
+        t += excess / approach;
+        if (t &gt;= 1.0f)
+        {
+            out.status = cast_status::clear;
+            out.t = 1.0f;
+            return out;
+        }
+
+        // Warm start the next GJK from this one&#x27;s answer: the closest features
+        // barely move between Newton steps, which is the case 8.5 §G measured.
+        gcfg.initial_direction = g.direction;
+    }
+
+    // Out of steps. The iterate we stopped at was never evaluated, but it is
+    // still safe — it is where the last separating slab narrowed to `skin` — so
+    // report it; `distance` and the normal describe the iterate before it.
+    out.status = cast_status::iteration_limit;
+    out.t = t;
+    return out;
+}</code></pre>
+  </div>
+
+  <p>
+    Note the two ways out besides a hit. If the motion is not closing the gap (<code>approach</code> at or
+    below <code>min_approach·|d|</code>), the slab will never narrow and the path is clear, which is a proof
+    and not a guess. If GJK finds the shapes intersecting after the first step, the step landed on the
+    contact, and the cast returns the last iterate it could still measure. §3's skin measurement is the
+    case for never getting there.
+  </p>
+
+  <h3>Step 2: a placed shape, by value</h3>
+
+  <p>
+    Every scene since 8.10 has needed to turn "body <code>i</code>'s shape at body <code>i</code>'s pose" into a
+    <code>convex</code>. <code>as_convex</code> needs an <em>lvalue</em> of the placed primitive to point at,
+    so each of them wrote the same small struct: a sphere, a box and a capsule held by value, and a switch
+    to fill the right one. That makes five copies, in three demos and two harnesses, each named as a debt
+    by the lesson that wrote it. The controller is the first code <em>inside</em> the engine that needs it,
+    and a sixth copy there would be the first a student could not see was a copy. So it moves into
+    <code>convex.hpp</code>, with the deleted rvalue overload that makes <code>place(...).view()</code>, a
+    view of a temporary, a compile error:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/include/engine/phys/convex.hpp — placed_shape</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">struct placed_shape
+{
+    shape_kind kind = shape_kind::sphere;
+    engine::sphere s{};
+    obb b{};
+    capsule c{};
+
+    /// A `convex` view of the live member. **It points INTO this object**, so
+    /// the `placed_shape` must outlive it — and the deleted rvalue overload
+    /// below turns the one-liner that would not, `place(...).view()`, into a
+    /// compile error, for the same reason the `as_convex` overloads above are
+    /// deleted.
+    [[nodiscard]] convex view() const&amp;
+    {
+        switch (kind)
+        {
+        case shape_kind::sphere:  return as_convex(s);
+        case shape_kind::box:     return as_convex(b);
+        case shape_kind::capsule: return as_convex(c);
+        }
+        return as_convex(s);
+    }
+
+    convex view() const&amp;&amp; = delete;
+};</code></pre>
+  </div>
+
+  <h3>Step 3: the one query</h3>
+
+  <p>
+    A sweep is §3's rule made into a function. Test the move's swept bounds against every body, cast
+    against each survivor <em>separately</em>, and keep the smallest <code>t</code>. The <code>solid</code>
+    filter leaves out pushable bodies, which is how the sideways pass walks into a crate and lets the proxy
+    move it. An obstacle the capsule already overlaps is skipped, because overlap is <code>recover</code>'s
+    job, and a sweep that refused to move because of it would pin the character inside whatever pushed
+    into it:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — sweep</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">character_hit sweep(vec3 position, vec3 d, const character_world&amp; w, const character_config&amp; cfg,
+                    sweep_filter filter, move_report* report)
+{
+    character_hit best;
+    if (report != nullptr) { ++report-&gt;sweeps; }
+    if (length_squared(d) &lt;= 0.0f) { return best; }
+
+    const capsule here = character_capsule(position, cfg);
+    const capsule there = character_capsule(position + d, cfg);
+    const convex mover = as_convex(here);
+
+    // The swept volume&#x27;s box: both ends, plus the skin. A cast can only hit
+    // what overlaps it, and a box test is a dozen comparisons against a cast&#x27;s
+    // several GJK calls.
+    aabb swept = bounds_of(here);
+    swept.expand(bounds_of(there));
+    swept.grow(cfg.skin);
+
+    cast_config cc = cfg.cast;
+    cc.skin = cfg.skin;
+
+    const std::size_t n = std::min(w.bodies.size(), w.shapes.size());
+    for (std::size_t i = 0; i &lt; n; ++i)
+    {
+        const auto index = static_cast&lt;std::uint32_t&gt;(i);
+        if (index == w.self) { continue; }
+        const rigid_body&amp; b = w.bodies[i];
+        if (filter == sweep_filter::solid &amp;&amp; pushable(b, cfg)) { continue; }
+        const shape&amp; s = w.shapes[i];
+        if (!overlaps(swept, bounds_of(s, b.state.position, b.orientation))) { continue; }
+
+        const placed_shape obstacle = place(s, b.state.position, b.orientation);
+        const cast_result hit = cast(mover, d, obstacle.view(), cc);
+        if (report != nullptr)
+        {
+            ++report-&gt;candidates;
+            ++report-&gt;casts;
+            report-&gt;cast_iterations += hit.iterations;
+            report-&gt;gjk_iterations += hit.gjk_iterations;
+        }
+        if (!hit.hit()) { continue; }
+        if (!best.hit || hit.t &lt; best.t)
+        {
+            best.hit = true;
+            best.t = hit.t;
+            best.normal = hit.surface_normal;
+            best.point = hit.point;
+            best.body = index;
+        }
+    }
+    return best;
+}</code></pre>
+  </div>
+
+  <h3>Step 4: what the rest of a move is clipped from</h3>
+
+  <p>
+    Quake's rule is <code>clip_to_planes</code>: one plane at a time, then each pair's crease, then stop.
+    Its one subtle line is the slack. A vector clipped exactly onto plane <code>i</code> reads a hair either
+    side of it after rounding, and without the slack every corner would be a stop. <code>next_move</code> is
+    §4's finding, with the other two rules kept so that §C can measure them. The default clips the
+    <em>original</em> motion, scaled to the time left:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — next_move</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">[[nodiscard]] vec3 next_move(const character_config&amp; cfg, vec3 intent, float time_left, vec3 left,
+                             const vec3* planes, int count)
+{
+    const auto all = std::span&lt;const vec3&gt;{planes, static_cast&lt;std::size_t&gt;(count)};
+    switch (cfg.clip)
+    {
+    case character_config::clip_rule::original:   return clip_to_planes(intent * time_left, all);
+    case character_config::clip_rule::remainder:  return clip_to_planes(left, all);
+    case character_config::clip_rule::last_plane: return clip_to_planes(left, all.subspan(all.size() - 1));
+    }
+    return vec3{};
+}</code></pre>
+  </div>
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — clip_to_planes</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">vec3 clip_to_planes(vec3 v, std::span&lt;const vec3&gt; planes)
+{
+    // &quot;Goes into a plane&quot; with a relative tolerance: the clipped vector lies IN
+    // the planes it was clipped against, and rounding leaves it a hair either
+    // side. Without the slack a vector clipped exactly onto plane i reads as
+    // entering plane i again, and every corner becomes a stop.
+    if (planes.empty()) { return v; }
+    const float slack = 1e-5f * length(v);
+    auto enters = [&amp;](vec3 u, std::size_t k) { return dot(u, planes[k]) &lt; -slack; };
+
+    // One plane at a time.
+    for (std::size_t i = 0; i &lt; planes.size(); ++i)
+    {
+        const vec3 u = slide_along(v, planes[i]);
+        bool ok = true;
+        for (std::size_t j = 0; j &lt; planes.size() &amp;&amp; ok; ++j)
+        {
+            if (j != i &amp;&amp; enters(u, j)) { ok = false; }
+        }
+        if (ok) { return u; }
+    }
+
+    // Two at a time: along the crease both planes contain.
+    for (std::size_t i = 0; i &lt; planes.size(); ++i)
+    {
+        for (std::size_t j = i + 1; j &lt; planes.size(); ++j)
+        {
+            const vec3 crease = cross(planes[i], planes[j]);
+            const float len2 = length_squared(crease);
+            if (len2 &lt;= 1e-10f) { continue; }   // parallel planes have no crease
+            const vec3 dir = crease * (1.0f / std::sqrt(len2));
+            const vec3 u = dir * dot(dir, v);
+            bool ok = true;
+            for (std::size_t k = 0; k &lt; planes.size() &amp;&amp; ok; ++k)
+            {
+                if (k != i &amp;&amp; k != j &amp;&amp; enters(u, k)) { ok = false; }
+            }
+            if (ok) { return u; }
+        }
+    }
+
+    // Three planes pin it. Stop.
+    return vec3{};
+}</code></pre>
+  </div>
+
+  <h3>Step 5: the sideways pass</h3>
+
+  <p>
+    The pass carries three things through its loop: the <code>intent</code> (the whole step's motion, laid
+    along whatever ground it is on), the <code>time_left</code>, and the list of walls. A walkable hit
+    re-lays the intent along the new ground and carries on. A wall gets one step-up attempt, then a plane
+    in the list with its normal flattened. The clipped result is laid back along the ground, because the
+    clip turned it:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — sideways</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void sideways(character&amp; c, vec3 d, bool grounded, const character_world&amp; w, const character_config&amp; cfg,
+              move_report&amp; r)
+{
+    vec3 planes[k_max_planes];
+    int count = 0;
+    const int limit = std::min(cfg.max_slides, k_max_planes);
+    bool tried_step = false;
+    const bool follow = grounded &amp;&amp; cfg.lay_along_ground;
+
+    vec3 ground_n = c.ground_normal;
+    vec3 intent = d;           // the whole step&#x27;s motion, laid along whatever ground we are on
+    float time_left = 1.0f;
+    vec3 remaining = d;
+    for (int i = 0; i &lt;= limit; ++i)
+    {
+        if (length_squared(remaining) &lt;= k_tiny_move2) { return; }
+        if (i == limit)
+        {
+            r.blocked = true;
+            return;
+        }
+
+        const character_hit hit = sweep(c.position, remaining, w, cfg, sweep_filter::solid, &amp;r);
+        c.position += remaining * hit.t;
+        if (!hit.hit) { return; }
+        time_left *= 1.0f - hit.t;
+        const vec3 left = remaining * (1.0f - hit.t);
+
+        // Walkable ground rising or falling under a grounded character — the
+        // foot of a ramp, the edge of a curb low enough for the round bottom to
+        // roll over. Not a wall: lay the intent along it and carry on.
+        if (follow &amp;&amp; walkable(hit.normal, cfg))
+        {
+            ground_n = hit.normal;
+            intent = along_ground(horizontal(intent), ground_n);
+            remaining = count == 0 ? intent * time_left
+                                   : along_ground(horizontal(next_move(cfg, intent, time_left, left, planes, count)),
+                                                  ground_n);
+            continue;
+        }
+
+        ++r.slides;
+
+        // A wall while standing: try to step up it, once per move.
+        if (grounded &amp;&amp; !tried_step &amp;&amp; cfg.step_height &gt; 0.0f)
+        {
+            tried_step = true;
+            if (try_step_up(c, horizontal(left), w, cfg, r)) { return; }
+        }
+
+        planes[count++] = (cfg.flatten_walls &amp;&amp; !walkable(hit.normal, cfg)) ? wall_normal(hit.normal) : hit.normal;
+        vec3 next = next_move(cfg, intent, time_left, left, planes, count);
+
+        // Clipping turned the motion; turn its climb with it, so that it still
+        // lies on the ground it is crossing rather than lifting off or digging in.
+        // A flattened wall normal is horizontal, so this cannot undo the clip.
+        if (follow &amp;&amp; walkable(ground_n, cfg)) { next = along_ground(horizontal(next), ground_n); }
+        remaining = next;
+    }
+}</code></pre>
+  </div>
+
+  <h3>Step 6: the step-up</h3>
+
+  <p>
+    Three sweeps and four ways to refuse: no headroom, still a wall at the top, no floor to land on, or a
+    landing that is not higher than the start. The across move is the larger of what was left and §8's
+    <code>step_forward_min</code>, called with the radius the casts see:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — try_step_up</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">bool try_step_up(character&amp; c, vec3 across, const character_world&amp; w, const character_config&amp; cfg,
+                 move_report&amp; r)
+{
+    const float len = length(across);
+    if (len &lt;= 0.0f || cfg.step_height &lt;= 0.0f) { return false; }
+
+    const vec3 start = c.position;
+    vec3 p = start;
+
+    // UP, as far as the ceiling allows.
+    const character_hit up = sweep(p, k_up * cfg.step_height, w, cfg, sweep_filter::everything, &amp;r);
+    const float rise = cfg.step_height * up.t;
+    p.y += rise;
+    if (rise &lt;= cfg.skin) { return false; }   // a roof right overhead: nothing to step into
+
+    // ACROSS, by the rest of the move or the least that lands walkable.
+    const float reach = std::max(len, step_forward_min(cfg.radius + cfg.skin, cfg.max_slope));
+    const vec3 dir = across / len;
+    const character_hit ahead = sweep(p, dir * reach, w, cfg, sweep_filter::solid, &amp;r);
+    const float moved = reach * ahead.t;
+    if (moved &lt;= cfg.skin) { return false; }  // still a wall at the top: taller than a step
+    p += dir * moved;
+
+    // DOWN, as far as it rose. Anything lower is a drop, not a step.
+    const character_hit down = sweep(p, k_up * -rise, w, cfg, sweep_filter::everything, &amp;r);
+    if (!down.hit || !walkable(down.normal, cfg)) { return false; }
+    p.y -= rise * down.t;
+
+    const float gained = p.y - start.y;
+    if (gained &lt;= 0.0f || gained &gt; cfg.step_height) { return false; }
+
+    c.position = p;
+    stand_on(c, down);
+    r.stepped = true;
+    r.step_rise = gained;
+    return true;
+}</code></pre>
+  </div>
+
+  <h3>Step 7: the vertical pass, and the snap</h3>
+
+  <p>
+    Rising, one sweep; the first thing overhead is a ceiling, and the game zeroes its upward velocity when
+    <code>hit_ceiling</code> says so. Falling, land on the first walkable surface, or slide along a steep
+    one. <code>stop_on_ground</code> is §5's creep, kept as a knob. The snap is §7: roll off an edge the
+    character is resting on, by exactly what clears it, then cast straight down and keep the result only
+    if it is floor:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — vertical</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void vertical(character&amp; c, float dy, const character_world&amp; w, const character_config&amp; cfg, move_report&amp; r)
+{
+    if (dy &gt; 0.0f)
+    {
+        const character_hit hit = sweep(c.position, k_up * dy, w, cfg, sweep_filter::everything, &amp;r);
+        c.position.y += dy * hit.t;
+        r.hit_ceiling = hit.hit;
+        return;
+    }
+    if (dy == 0.0f) { return; }
+
+    vec3 planes[k_max_planes];
+    int count = 0;
+    const int limit = std::min(cfg.max_slides, k_max_planes);
+
+    const vec3 intent = k_up * dy;
+    float time_left = 1.0f;
+    vec3 remaining = intent;
+    for (int i = 0; i &lt; limit; ++i)
+    {
+        if (length_squared(remaining) &lt;= k_tiny_move2) { return; }
+        const character_hit hit = sweep(c.position, remaining, w, cfg, sweep_filter::everything, &amp;r);
+        c.position += remaining * hit.t;
+        if (!hit.hit) { return; }
+        time_left *= 1.0f - hit.t;
+
+        if (walkable(hit.normal, cfg))
+        {
+            stand_on(c, hit);
+            if (cfg.stop_on_ground) { return; }
+        }
+
+        // Steep: gravity slides the character down it. Not flattened — sliding
+        // DOWN a slope too steep to stand on is exactly what the design wants.
+        const vec3 left = remaining * (1.0f - hit.t);
+        planes[count++] = hit.normal;
+        remaining = next_move(cfg, intent, time_left, left, planes, count);
+    }
+}</code></pre>
+  </div>
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — snap_down</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void snap_down(character&amp; c, const character_world&amp; w, const character_config&amp; cfg, move_report&amp; r)
+{
+    vec3 p = c.position;
+    const vec3 down = k_up * -cfg.snap_distance;
+    character_hit hit = sweep(p, down, w, cfg, sweep_filter::everything, &amp;r);
+
+    if (hit.hit &amp;&amp; !walkable(hit.normal, cfg))
+    {
+        const vec3 foot = p - k_up * cfg.half_height;        // the bottom sphere&#x27;s centre
+        const vec3 away = horizontal(foot - hit.point);
+        const float overhang = length(away);
+        const float clear = cfg.radius + cfg.skin - overhang + 0.1f * cfg.skin;
+        if (overhang &gt; 1e-6f &amp;&amp; clear &gt; 0.0f)
+        {
+            const vec3 roll = away * (clear / overhang);
+            const character_hit side = sweep(p, roll, w, cfg, sweep_filter::solid, &amp;r);
+            p += roll * side.t;
+            hit = sweep(p, down, w, cfg, sweep_filter::everything, &amp;r);
+        }
+    }
+    if (!hit.hit || !walkable(hit.normal, cfg)) { return; }
+
+    p.y -= cfg.snap_distance * hit.t;
+    r.snapped = true;
+    r.snap_drop = c.position.y - p.y;
+    r.snap_shift = length(horizontal(p - c.position));
+    c.position = p;
+    stand_on(c, hit);
+}</code></pre>
+  </div>
+
+  <h3>Step 8: recovering from what moved in</h3>
+
+  <p>
+    Overlap arrives from outside the controller: a door closes on the character, or a platform rises
+    faster than the carry. It is 8.6's question, not a cast's. <code>recover</code> pushes out of anything
+    fixed or kinematic that overlaps, by EPA's minimum translation plus the skin, and back to a full skin
+    from anything nearer than half of one. The <code>dynamic</code> line is §11's refusal, one line long:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — recover</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">int recover(character&amp; c, const character_world&amp; w, const character_config&amp; cfg)
+{
+    int pushes = 0;
+    const std::size_t n = std::min(w.bodies.size(), w.shapes.size());
+
+    // A few passes, because pushing out of one thing can push into another; a
+    // corner is two walls. Four is plenty for anything that is not a vice.
+    for (int pass = 0; pass &lt; 4; ++pass)
+    {
+        bool moved = false;
+        for (std::size_t i = 0; i &lt; n; ++i)
+        {
+            const auto index = static_cast&lt;std::uint32_t&gt;(i);
+            if (index == w.self) { continue; }
+            const rigid_body&amp; b = w.bodies[i];
+            if (b.kind == body_kind::dynamic) { continue; }   // the solver&#x27;s: the proxy meets them
+
+            const capsule here = character_capsule(c.position, cfg);
+            aabb box = bounds_of(here);
+            box.grow(cfg.skin);
+            const shape&amp; s = w.shapes[i];
+            if (!overlaps(box, bounds_of(s, b.state.position, b.orientation))) { continue; }
+
+            const placed_shape obstacle = place(s, b.state.position, b.orientation);
+            const convex me = as_convex(here);
+            const gjk_result g = gjk_distance(me, obstacle.view());
+            vec3 push{};
+            if (g.status == gjk_status::separated)
+            {
+                // Apart, but nearer than half a skin: casts from here would start
+                // inside GJK&#x27;s contact margin. Back off to a full skin.
+                if (g.distance &gt;= 0.5f * cfg.skin) { continue; }
+                push = g.direction * -(cfg.skin - g.distance);
+            }
+            else
+            {
+                // Overlapping: 8.6&#x27;s minimum translation, plus the skin. The axis
+                // points from us toward it, so we move the other way.
+                const separation s2 = collide(me, obstacle.view());
+                push = s2.axis * -(s2.depth + cfg.skin);
+            }
+            c.position += push;
+            ++pushes;
+            moved = true;
+        }
+        if (!moved) { break; }
+    }
+    return pushes;
+}</code></pre>
+  </div>
+
+  <h3>Step 9: what a platform just did</h3>
+
+  <p>
+    <code>advance_orientation(q)</code> is <code>Δ·q</code> for both spin rules. For the linearised one that is
+    because normalising <code>(1&nbsp;+&nbsp;½hω)·q</code> is normalising <code>(1&nbsp;+&nbsp;½hω)</code> when
+    <code>q</code> is unit. So the step's rotation is what the step does to the identity: one line, and
+    exactly the integrator's:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — step_motion</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">body_step step_motion(const rigid_body&amp; b, float h, spin_rule rule)
+{
+    body_step m;
+    if (b.kind == body_kind::fixed)
+    {
+        m.pivot = b.state.position;
+        return m;
+    }
+    m.translation = b.state.velocity * h;
+    m.pivot = b.state.position - m.translation;
+    // `advance_orientation(q)` is `Δ·q` for both rules — the linearised one
+    // because normalising `(1 + ½hω)·q` is normalising `(1 + ½hω)` when `q` is
+    // unit — so the step&#x27;s rotation is what it does to the identity.
+    m.rotation = advance_orientation(quat{}, b.angular_velocity, h, rule);
+    return m;
+}</code></pre>
+  </div>
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — carry_by_transform</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">vec3 carry_by_transform(vec3 p, const body_step&amp; m)
+{
+    return m.pivot + m.translation + rotate(m.rotation, p - m.pivot);
+}</code></pre>
+  </div>
+
+  <h3>Step 10: the move, in order</h3>
+
+  <p>
+    Five stages, each there because a section needed it: carry (§10), recover (§11), sideways (§4, §5,
+    §8), vertical (§5), and then the ground, probed and snapped (§6, §7). Two details are worth reading
+    slowly. The sideways pass is only <em>grounded</em> if the character was grounded and is not rising,
+    so a jump does not follow the floor. And <code>c.velocity</code> is <code>(end&nbsp;−&nbsp;start)/h</code>,
+    what the move <em>achieved</em>, never what was asked for. It is the velocity to show a camera, an
+    animation blend, or the proxy:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">engine/src/phys/character.cpp — move_character</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">move_report move_character(character&amp; c, vec3 displacement, float h, const character_world&amp; w,
+                           const character_config&amp; cfg)
+{
+    move_report r;
+    const vec3 start = c.position;
+    const bool was_grounded = c.grounded;
+
+    // 1. CARRY. The ground moved during the physics step that just ran; move
+    //    with it, swept, so that a platform cannot carry us through a wall.
+    if (was_grounded &amp;&amp; c.ground_body &lt; w.bodies.size() &amp;&amp; cfg.carry != character_config::carry_rule::none)
+    {
+        const rigid_body&amp; g = w.bodies[c.ground_body];
+        if (g.kind != body_kind::fixed)
+        {
+            const body_step m = step_motion(g, h, w.spin);
+            const vec3 target = cfg.carry == character_config::carry_rule::transform
+                                    ? carry_by_transform(c.position, m)
+                                    : carry_by_velocity(c.position, g, h);
+            const vec3 before = c.position;
+            slide_move(c.position, target - c.position, w, cfg, sweep_filter::solid, r);
+            r.carried = c.position - before;
+            r.carried_turn = m.rotation;
+        }
+    }
+
+    // 2. RECOVER from whatever moved into us.
+    r.recovered = recover(c, w, cfg);
+
+    // 3. SIDEWAYS.
+    c.grounded = false;
+    vec3 lateral = horizontal(displacement);
+    if (was_grounded &amp;&amp; cfg.lay_along_ground &amp;&amp; displacement.y &lt;= 0.0f &amp;&amp; walkable(c.ground_normal, cfg))
+    {
+        lateral = along_ground(lateral, c.ground_normal);
+    }
+    sideways(c, lateral, was_grounded &amp;&amp; displacement.y &lt;= 0.0f, w, cfg, r);
+    const bool stepped = r.stepped;
+
+    // 4. VERTICAL.
+    vertical(c, displacement.y, w, cfg, r);
+
+    // 5. GROUND. A rising character is not standing on anything, whatever is
+    //    under it. Otherwise probe a skin&#x27;s width below the skin.
+    if (displacement.y &lt;= 0.0f &amp;&amp; !c.grounded)
+    {
+        const character_hit probe = sweep(c.position, k_up * -(2.0f * cfg.skin), w, cfg,
+                                          sweep_filter::everything, &amp;r);
+        if (probe.hit &amp;&amp; walkable(probe.normal, cfg))
+        {
+            c.position.y -= 2.0f * cfg.skin * probe.t;
+            stand_on(c, probe);
+        }
+    }
+    if (stepped) { c.grounded = true; }
+
+    // ...and SNAP: it stood last step, it is not rising, and the ground has
+    // gone. Kept only if it ends on floor.
+    if (!c.grounded &amp;&amp; was_grounded &amp;&amp; displacement.y &lt;= 0.0f &amp;&amp; cfg.snap_distance &gt; 0.0f)
+    {
+        snap_down(c, w, cfg, r);
+    }
+
+    r.landed = c.grounded &amp;&amp; !was_grounded;
+    if (!c.grounded) { c.ground_body = k_no_body; }
+    c.velocity = (c.position - start) * (1.0f / h);
+    return r;
+}</code></pre>
+  </div>
+
+  <h3>Step 11: the frame, from outside</h3>
+
+  <p>
+    The demo's fixed step is §2's three parts in order: steer the proxies (or teleport them, on
+    <kbd>P</kbd>), run 8.10's physics step unchanged, then move each character against the world the step
+    left. The game's own rules are the few lines around <code>move_character</code>. A grounded character
+    does not fall, a jump is <code>jump_speed(g,&nbsp;H)</code>, and a landing or a ceiling zeroes the
+    vertical velocity:
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">demos/character/main.cpp — advance</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">void advance(float h)
+{
+    // Gameplay moves the kinematic bodies by velocity, never by position.
+    if (lift_ != k_no_body)
+    {
+        // Up and down between 0.1 and 1.5, a 5 s period: v = dy/dt.
+        const float w = 2.0f * k_pi / 5.0f;
+        body(lift_).state.velocity = vec3{0.0f, 0.7f * w * std::cos(w * t_), 0.0f};
+    }
+
+    // 1. The proxies catch up to where each character was left.
+    for (player&amp; p : players_)
+    {
+        rigid_body&amp; proxy = body(p.proxy);
+        if (steer_) { steer_proxy(proxy, p.ch.position, h); }
+        else
+        {
+            proxy.state.position = p.ch.position;
+            proxy.state.velocity = vec3{};
+        }
+    }
+
+    // The rigid character in [2] is driven the way a naive game drives one.
+    if (rigid_ != k_no_body)
+    {
+        const auto [wish, jump] = newton_script();
+        rigid_body&amp; b = body(rigid_);
+        b.state.velocity.x = wish.x;
+        b.state.velocity.z = wish.z;
+        if (jump) { b.state.velocity.y = jump_speed(k_g, 1.2f); }
+    }
+
+    // 2. The physics step.
+    physics_step(h);
+
+    // 3. The controllers, against the world as the step left it.
+    for (std::size_t i = 0; i &lt; players_.size(); ++i)
+    {
+        player&amp; p = players_[i];
+        p.cfg.clip = scene_ == scene::corners ? p.cfg.clip : clip_;
+        p.cfg.snap_distance = snap_ ? 0.35f : 0.0f;
+        p.cfg.step_height = (step_ &amp;&amp; scene_ != scene::corners) ? 0.3f : 0.0f;
+        p.cfg.carry = carry_;
+
+        const vec3 wish = wish_for(i);
+        bool jump = (scene_ == scene::newton) ? newton_script().second : jump_;
+        if (p.ch.grounded)
+        {
+            p.vel.y = 0.0f;
+            if (jump) { p.vel.y = jump_speed(k_g, 1.2f); }
+        }
+        p.vel.x = wish.x;
+        p.vel.z = wish.z;
+        p.vel.y -= k_g * h;
+
+        character_world view;
+        view.bodies = world_.bodies();
+        view.shapes = std::span&lt;const shape&gt;{shapes_};
+        view.self = p.proxy;
+        view.spin = world_.spin();
+
+        const auto t0 = std::chrono::steady_clock::now();
+        p.last = move_character(p.ch, p.vel * h, h, view, p.cfg);
+        p.us = std::chrono::duration&lt;double&gt;(std::chrono::steady_clock::now() - t0).count() * 1e6;
+
+        p.facing = engine::normalised(p.last.carried_turn * p.facing);
+        if (p.ch.grounded &amp;&amp; p.vel.y &lt; 0.0f) { p.vel.y = 0.0f; }
+        if (p.last.hit_ceiling &amp;&amp; p.vel.y &gt; 0.0f) { p.vel.y = 0.0f; }
+    }
+    jump_ = false;
+}</code></pre>
+  </div>
+
+  <p>
+    Nothing in that function knows about casts, slopes or steps, and nothing in <code>character.cpp</code>
+    knows about sticks, jumps or the solver. That is the boundary §2 drew, and it is where Module 9's editor
+    will put a gizmo and its scene format will put a save file.
+  </p>

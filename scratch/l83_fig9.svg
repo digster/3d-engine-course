@@ -1,0 +1,101 @@
+<svg viewBox="0 0 900 430" role="img" aria-labelledby="l83f9-t l83f9-d">
+  <title id="l83f9-t">Angular momentum drift for three formulations, against simulation rate</title>
+  <desc id="l83f9-d">On a logarithmic axis, the explicit treatment of the gyroscopic term drifts by three hundred billion at thirty hertz and still by four percent at nine hundred and sixty; the implicit one is far better behaved and damps rather than growing; and the momentum formulation is three orders of magnitude better than either — but its line slopes the other way, getting worse as the step shrinks, because its error is accumulated rounding rather than truncation.</desc>
+  <defs>
+    <marker id="e-i-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blue-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-green-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amber-l83f9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<rect x="40" y="80" width="420" height="250" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<text x="40" y="38" class="xs muted" text-anchor="start">worst drift in |L| over 60 torque-free seconds, by step rate</text>
+<text x="40" y="56" class="xs muted" text-anchor="start">— a body with NOTHING acting on it must not change its angular momentum at all</text>
+<line x1="74.0" y1="80" x2="74.0" y2="310" class="grid" stroke-width="1.0"/>
+<text x="74.0" y="326" class="xs mono" text-anchor="middle">30</text>
+<line x1="142.8" y1="80" x2="142.8" y2="310" class="grid" stroke-width="1.0"/>
+<text x="142.8" y="326" class="xs mono" text-anchor="middle">60</text>
+<line x1="280.4" y1="80" x2="280.4" y2="310" class="grid" stroke-width="1.0"/>
+<text x="280.4" y="326" class="xs mono" text-anchor="middle">240</text>
+<line x1="418.0" y1="80" x2="418.0" y2="310" class="grid" stroke-width="1.0"/>
+<text x="418.0" y="326" class="xs mono" text-anchor="middle">960</text>
+<line x1="40" y1="310.0" x2="460" y2="310.0" class="grid" stroke-width="1.0"/>
+<text x="34" y="314.0" class="xs muted" text-anchor="end">1e-4</text>
+<line x1="40" y1="284.25" x2="460" y2="284.25" class="grid" stroke-width="1.0"/>
+<text x="34" y="288.25" class="xs muted" text-anchor="end">1e-2</text>
+<line x1="40" y1="258.5" x2="460" y2="258.5" class="grid" stroke-width="1.0"/>
+<text x="34" y="262.5" class="xs muted" text-anchor="end">1e0</text>
+<line x1="40" y1="232.75" x2="460" y2="232.75" class="grid" stroke-width="1.0"/>
+<text x="34" y="236.75" class="xs muted" text-anchor="end">1e2</text>
+<line x1="40" y1="207.0" x2="460" y2="207.0" class="grid" stroke-width="1.0"/>
+<text x="34" y="211.0" class="xs muted" text-anchor="end">1e4</text>
+<line x1="40" y1="181.25" x2="460" y2="181.25" class="grid" stroke-width="1.0"/>
+<text x="34" y="185.25" class="xs muted" text-anchor="end">1e6</text>
+<line x1="40" y1="155.5" x2="460" y2="155.5" class="grid" stroke-width="1.0"/>
+<text x="34" y="159.5" class="xs muted" text-anchor="end">1e8</text>
+<line x1="40" y1="129.75" x2="460" y2="129.75" class="grid" stroke-width="1.0"/>
+<text x="34" y="133.75" class="xs muted" text-anchor="end">1e10</text>
+<line x1="40" y1="104.0" x2="460" y2="104.0" class="grid" stroke-width="1.0"/>
+<text x="34" y="108.0" class="xs muted" text-anchor="end">1e12</text>
+<text x="250.0" y="346" class="xs muted" text-anchor="middle">simulation rate, Hz</text>
+<path d="M 74.00,110.20 L 142.80,255.79 L 280.40,268.07 L 418.00,276.59" fill="none" stroke="#e05c5c" stroke-width="2.6"/>
+<circle cx="74.0" cy="110.2" r="3.4" fill="#e05c5c"/>
+<circle cx="142.8" cy="255.8" r="3.4" fill="#e05c5c"/>
+<circle cx="280.4" cy="268.1" r="3.4" fill="#e05c5c"/>
+<circle cx="418.0" cy="276.6" r="3.4" fill="#e05c5c"/>
+<path d="M 74.00,262.76 L 142.80,264.40 L 280.40,270.02 L 418.00,278.07" fill="none" stroke="#5082e6" stroke-width="2.6"/>
+<circle cx="74.0" cy="262.8" r="3.4" fill="#5082e6"/>
+<circle cx="142.8" cy="264.4" r="3.4" fill="#5082e6"/>
+<circle cx="280.4" cy="270.0" r="3.4" fill="#5082e6"/>
+<circle cx="418.0" cy="278.1" r="3.4" fill="#5082e6"/>
+<path d="M 74.00,302.45 L 142.80,298.34 L 280.40,290.96 L 418.00,283.31" fill="none" stroke="#5ac878" stroke-width="2.6"/>
+<circle cx="74.0" cy="302.4" r="3.4" fill="#5ac878"/>
+<circle cx="142.8" cy="298.3" r="3.4" fill="#5ac878"/>
+<circle cx="280.4" cy="291.0" r="3.4" fill="#5ac878"/>
+<circle cx="418.0" cy="283.3" r="3.4" fill="#5ac878"/>
+<line x1="40.0" y1="310.0" x2="460.0" y2="310.0" stroke="#8f918a" stroke-width="1.2" fill="none" stroke-dasharray="4 3"/>
+<line x1="40.0" y1="366.0" x2="60.0" y2="366.0" stroke="#e05c5c" stroke-width="2.4" fill="none"/>
+<text x="68" y="370" class="xs" text-anchor="start">explicit — 8.1's determinant, growing</text>
+<line x1="40.0" y1="383.0" x2="60.0" y2="383.0" stroke="#5082e6" stroke-width="2.4" fill="none"/>
+<text x="68" y="387" class="xs" text-anchor="start">implicit — its exact reciprocal, damping</text>
+<line x1="40.0" y1="400.0" x2="60.0" y2="400.0" stroke="#5ac878" stroke-width="2.4" fill="none"/>
+<text x="68" y="404" class="xs" text-anchor="start">momentum — and it goes the WRONG WAY</text>
+<text x="520" y="92" class="xs muted" text-anchor="start">rate</text>
+<text x="690" y="92" class="xs muted" text-anchor="end">explicit</text>
+<text x="794" y="92" class="xs muted" text-anchor="end">implicit</text>
+<text x="898" y="92" class="xs muted" text-anchor="end">momentum</text>
+<line x1="520" y1="100.0" x2="904" y2="100.0" class="grid" stroke-width="1.0"/>
+<text x="520" y="117.0" class="xs" text-anchor="start">30 Hz</text>
+<text x="690" y="117.0" class="xs mono" text-anchor="end">3.297e+11</text>
+<text x="794" y="117.0" class="xs mono" text-anchor="end">4.668e-01</text>
+<text x="898" y="117.0" class="xs mono" text-anchor="end">3.859e-04</text>
+<text x="520" y="134.0" class="xs" text-anchor="start">60 Hz</text>
+<text x="690" y="134.0" class="xs mono" text-anchor="end">1.623e+00</text>
+<text x="794" y="134.0" class="xs mono" text-anchor="end">3.481e-01</text>
+<text x="898" y="134.0" class="xs mono" text-anchor="end">8.050e-04</text>
+<text x="520" y="151.0" class="xs" text-anchor="start">240 Hz</text>
+<text x="690" y="151.0" class="xs mono" text-anchor="end">1.807e-01</text>
+<text x="794" y="151.0" class="xs mono" text-anchor="end">1.274e-01</text>
+<text x="898" y="151.0" class="xs mono" text-anchor="end">3.014e-03</text>
+<text x="520" y="168.0" class="xs" text-anchor="start">960 Hz</text>
+<text x="690" y="168.0" class="xs mono" text-anchor="end">3.936e-02</text>
+<text x="794" y="168.0" class="xs mono" text-anchor="end">3.017e-02</text>
+<text x="898" y="168.0" class="xs mono" text-anchor="end">1.184e-02</text>
+<text x="520" y="204.5" class="xs muted" text-anchor="start">The first two columns improve as the step</text>
+<text x="520" y="220.5" class="xs muted" text-anchor="start">shrinks, because their error is truncation.</text>
+<text x="520" y="236.5" class="xs muted" text-anchor="start"></text>
+<text x="520" y="252.5" class="xs t-hi" text-anchor="start">The third gets WORSE, and it is the only</text>
+<text x="520" y="268.5" class="xs t-hi" text-anchor="start">table in this course that does. Its error is</text>
+<text x="520" y="284.5" class="xs muted" text-anchor="start">not truncation at all: nothing in the</text>
+<text x="520" y="300.5" class="xs muted" text-anchor="start">momentum formulation approximates L. The</text>
+<text x="520" y="316.5" class="xs muted" text-anchor="start">engine simply does not STORE it, and rebuilds</text>
+<text x="520" y="332.5" class="xs muted" text-anchor="start">it from ω and the orientation every step.</text>
+<text x="520" y="348.5" class="xs muted" text-anchor="start"></text>
+<text x="520" y="364.5" class="xs muted" text-anchor="start">That round trip loses a little each time, so</text>
+<text x="520" y="380.5" class="xs muted" text-anchor="start">the error grows with the NUMBER of steps</text>
+<text x="520" y="396.5" class="xs muted" text-anchor="start">rather than their size.</text>
+</svg>

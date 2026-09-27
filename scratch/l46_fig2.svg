@@ -1,0 +1,39 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="f46b-t f46b-d">
+  <title id="f46b-t">A push is command-buffer state, not a resource</title>
+  <desc id="f46b-d">Pushes and draws recorded into one command buffer, left to right. A push sets the uniform data that every draw recorded after it will read, so the second draw sees 77 where the first saw 201 — with nothing bound, rebound or released in between. The list of buffer usage flags below has no UNIFORM entry, because SDL_GPU has no uniform buffer object at all.</desc>
+  <defs>
+    <marker id="e-i-f46b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f46b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f46b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">there is no uniform buffer object &#8212; the data lives in the <tspan class="t-hi">command stream</tspan></text>
+  <rect x="40.0" y="58.0" width="128.0" height="34.0" fill="#f0961e" fill-opacity="0.78" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="104.0" y="80.0" class="xs mono t-inv" text-anchor="middle">push A=201</text>
+  <rect x="174.0" y="58.0" width="128.0" height="34.0" fill="#5082e6" fill-opacity="0.3" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="238.0" y="80.0" class="xs mono " text-anchor="middle">draw</text>
+  <rect x="308.0" y="58.0" width="128.0" height="34.0" fill="#f0961e" fill-opacity="0.78" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="372.0" y="80.0" class="xs mono t-inv" text-anchor="middle">push A=77</text>
+  <rect x="442.0" y="58.0" width="128.0" height="34.0" fill="#5082e6" fill-opacity="0.3" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="506.0" y="80.0" class="xs mono " text-anchor="middle">draw</text>
+  <rect x="576.0" y="58.0" width="128.0" height="34.0" fill="#5acdd7" fill-opacity="0.3" stroke="var(--dia-bg)" stroke-width="1"/>
+  <text x="640.0" y="80.0" class="xs mono " text-anchor="middle">submit</text>
+  <text x="40.0" y="48.0" class="xs muted">one SDL_GPUCommandBuffer, recorded left to right</text>
+  <line x1="238.0" y1="92.0" x2="238.0" y2="118.0" class="hi" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="238.0" y="132.0" class="xs mono t-hi" text-anchor="middle">reads 201</text>
+  <line x1="506.0" y1="92.0" x2="506.0" y2="118.0" class="hi" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="506.0" y="132.0" class="xs mono t-hi" text-anchor="middle">reads 77</text>
+  <text x="40.0" y="158.0" class="xs muted">measured: nothing was bound, rebound or released between the two draws</text>
+  <rect x="24" y="198" width="672" height="128" class="fill-soft ink" stroke-width="0.75" rx="3"/>
+  <text x="40" y="218" class="sm">SDL_GPUBufferUsageFlags, in full</text>
+  <text x="40" y="240" class="xs mono muted">VERTEX</text>
+  <text x="258" y="240" class="xs mono muted">INDEX</text>
+  <text x="476" y="240" class="xs mono muted">INDIRECT</text>
+  <text x="40" y="258" class="xs mono muted">GRAPHICS_STORAGE_READ</text>
+  <text x="258" y="258" class="xs mono muted">COMPUTE_STORAGE_READ</text>
+  <text x="476" y="258" class="xs mono muted">COMPUTE_STORAGE_WRITE</text>
+  <text x="40" y="294" class="sm t-hi">no UNIFORM bit, because there is no uniform buffer to create</text>
+  <text x="40" y="312" class="xs muted">for data too large to push, the answer is a STORAGE buffer &#8212; a different resource, bound rather than pushed (Module 6)</text>
+</svg>

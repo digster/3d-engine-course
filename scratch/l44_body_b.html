@@ -1,0 +1,877 @@
+  <!-- =================================================================
+       4 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implementation"><span class="num">4</span>Implementation</h2>
+
+  <h3 id="impl-desc"><span class="num">4.1</span>Describing the pipeline</h3>
+
+  <p>
+    <code>pipeline_desc</code>'s constructor fills in every field with the course's conventions, so
+    that the parts a caller varies are the parts a caller thinks about. Two of those defaults are
+    load-bearing:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_pipeline.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // EXPLICIT, not defaulted, and LEARNINGS.md records why: every enum here has
+    // its first enumerator at zero, so a zero-initialised rasterizer state means
+    // "CCW is front-facing, cull nothing". A forgotten cull_mode therefore shows
+    // up as no culling at all rather than as an error — a silent bug wearing the
+    // costume of a working program.
+    info_.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    info_.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+    info_.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    info_.rasterizer_state.enable_depth_clip = true;</code></pre>
+  </figure>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_pipeline.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // THE FORMAT IS NOT A CHOICE. It must equal the format of the texture this
+    // pipeline will render into, and for the swapchain that is negotiated
+    // between the display, the compositor and the driver. Lesson 4.2 asked and
+    // logged it; this is what the answer was for.
+    colour_targets_[0] = SDL_GPUColorTargetDescription{};
+    colour_targets_[0].format = dev.report().swapchain_format;</code></pre>
+  </figure>
+
+  <p>
+    The arrays are pointed at in the constructor rather than in a later build step, so the
+    create-info is coherent at every moment rather than only after someone remembers to call
+    something. And <code>info()</code> returns a <strong>const reference</strong> — handing out a
+    copy would hand out §2.3's bug in a box.
+  </p>
+
+  <h3 id="impl-buffer"><span class="num">4.2</span>Three vertices on the device</h3>
+
+  <p>
+    <code>gpu_buffer</code> is the smallest thing that can hold geometry, and its upload is the
+    path Lesson 4.2 built for textures with the destination changed: CPU memory → transfer buffer
+    → device buffer, the first hop now and the second recorded. Two details are worth pausing on.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_buffer.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // cycle = false: this buffer is written once, at startup, and nothing is
+    // reading it yet. Cycling here would allocate a second copy of the geometry
+    // to protect against a hazard that does not exist. The per-frame case is the
+    // opposite and `gpu_present_target::upload` passes true for exactly that
+    // reason.
+    SDL_UploadToGPUBuffer(copy, &amp;source, &amp;dest, false);</code></pre>
+  </figure>
+
+  <p>
+    Lesson 4.2 §3.2 introduced cycling as the answer to "am I overwriting something the GPU has
+    not read yet?" — and the answer here is no, because nothing has read it at all. Cycling is not
+    a good-luck charm; it costs memory, and passing <code>true</code> reflexively means every
+    static mesh in your engine quietly exists twice.
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/gfx/gpu_buffer.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">    // Released while the copy that reads it is still only RECORDED — and that is
+    // safe by documentation, not by luck. SDL_gpu.h: "Frees the given transfer
+    // buffer AS SOON AS IT IS SAFE TO DO SO." A deferred free is a strange idea
+    // until you remember that in this API everything is deferred.
+    SDL_ReleaseGPUTransferBuffer(device_, staging);</code></pre>
+  </figure>
+
+  <p>
+    That one looks wrong the first time you read it and is not. The staging buffer is released
+    while a pending command buffer still references it, which in any ordinary API would be a
+    use-after-free — and here it is the documented contract, because "release" in an API where
+    work is deferred means "stop wanting this", not "free this now".
+  </p>
+
+  <h3 id="impl-frame"><span class="num">4.3</span>The draw, in the frame</h3>
+
+  <p>
+    The probe's frame already cleared the swapchain and blitted the software rasterizer's picture
+    onto it. The triangle goes on top, in a <em>second</em> render pass:
+  </p>
+
+  <figure class="listing">
+    <figcaption>
+      <span class="path">src/main.cpp</span>
+      <span class="tag">excerpt</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">                SDL_GPUColorTargetInfo over{};
+                over.texture = swap;
+                over.load_op = SDL_GPU_LOADOP_LOAD;    // keep the blit
+                over.store_op = SDL_GPU_STOREOP_STORE;
+
+                SDL_GPURenderPass* draw_pass = SDL_BeginGPURenderPass(cb, &amp;over, 1, nullptr);
+
+                SDL_BindGPUGraphicsPipeline(draw_pass, triangle_pipeline.handle());
+
+                SDL_GPUBufferBinding binding{};
+                binding.buffer = triangle_vertices.handle();
+                binding.offset = 0;
+                SDL_BindGPUVertexBuffers(draw_pass, 0, &amp;binding, 1);
+
+                SDL_DrawGPUPrimitives(draw_pass, 3, 1, 0, 0);
+
+                SDL_EndGPURenderPass(draw_pass);</code></pre>
+  </figure>
+
+  <p>
+    A second pass rather than the first one, because the blit must happen <em>outside</em> a pass
+    and we want the triangle over it — so the order is clear, blit, then load-and-draw. The
+    <code>LOADOP_LOAD</code> is the whole reason both pictures share a window; Lesson 4.2 §4.5
+    noted that <code>LOAD</code> costs more than <code>CLEAR</code> on tiled hardware, and this is
+    the case where you pay it deliberately.
+  </p>
+
+  <p>
+    Note the binding order too: pipeline first, then vertex buffers, then the draw. The pipeline
+    describes what a vertex <em>is</em>, so binding a buffer before there is a description of how
+    to read it is not a thing the API lets you express.
+  </p>
+
+  <h3 id="impl-compile"><span class="num">4.4</span>Where the compile was hiding</h3>
+
+  <p>
+    Now the debt. Lesson 4.3 measured <code>SDL_CreateGPUShader</code> at eight microseconds, said
+    plainly that this could not include compiling anything, and predicted that the compile happens
+    at pipeline creation because only there does the driver know the target format, the blend state
+    and the vertex layout the machine code must be specialised to.
+  </p>
+
+  <p>
+    <strong>Confirmed</strong>, and Figure 2 is the answer — though getting to a version of that
+    figure worth printing took three attempts, and the two wrong ones are the more useful lesson.
+  </p>
+
+  <p>
+    Creating a shader costs <strong>0.031 ms</strong>, and does so in every run, in every
+    configuration, on every attempt. Creating a pipeline never costs that little. Somewhere
+    between those two calls, milliseconds appear — which is where the compile is, and that is the
+    prediction settled.
+  </p>
+
+  <p>
+    <em>How many</em> milliseconds is a more interesting question than it looks:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>what is being created</th><th>cost</th><th>what you are paying for</th></tr></thead>
+    <tbody>
+      <tr><td>a shader object</td><td>0.031 ms</td>
+          <td>validating a blob and recording four counts</td></tr>
+      <tr><td>the <strong>first</strong> pipeline in a process</td><td><strong>~32 ms</strong></td>
+          <td>one-time driver and compiler start-up</td></tr>
+      <tr><td>each new state permutation after it</td><td><strong>~2.4 ms</strong></td>
+          <td><strong>the compile</strong> — about eighty times a shader</td></tr>
+      <tr><td>a description compiled before</td><td>0.01–0.6 ms</td>
+          <td>a cache lookup</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 4.</span> Measured with the blend state varied by a run-unique seed,
+    so that each "new permutation" really is one. The last row is the important one:
+    <strong>the cache is on disk</strong>, so a pipeline compiled in a previous run of your program
+    is already compiled in this one.
+  </figcaption>
+  </figure>
+
+  @@FIG_COMPILE@@
+
+  <div class="callout warn">
+    <span class="label">Two wrong versions of this section, and what confounded both</span>
+    <p>
+      <strong>The first draft</strong> timed one pipeline, then timed the same description again,
+      and called the difference the compile. <strong>The second</strong> compared a release run
+      against a <code>debug = true</code> run — 0.5 ms against 33.5 — and concluded that the
+      validation layer costs sixty-six times the compile it checks. That claim was written out in
+      full, with a figure, before it was tested.
+    </p>
+    <p>
+      Both were the same confound: <strong>Metal caches compiled pipelines on disk</strong>. The
+      "second" measurement of anything is a cache hit, and the 33.5 ms release-versus-debug gap was
+      not validation at all — it was that the debug run happened to be the first time those shaders
+      had ever been compiled on this machine. Measured properly, with the same permutation freshly
+      generated in both configurations, validation costs almost nothing:
+      <strong>31.8 ms against 34.5</strong> for a first pipeline, and ~2.5 against ~2.4 for each
+      one after.
+    </p>
+    <p>
+      What caught it was running the engine again the next day and seeing <strong>0.077 ms</strong>
+      where the log had said 42. A number that changes by five hundred times between runs of an
+      unchanged binary is not a property of the call; it is a property of what happened before it.
+      This is Lesson 3.10's rule about comparing numbers taken hours apart, and 4.2's about
+      checking that a number can be true, arriving together — and the reason the harness now
+      varies its blend state with a run-unique seed is to make "new" mean new.
+    </p>
+  </div>
+
+  <p>
+    Two consequences survive all that, and they are what an engine actually needs. <strong>Build
+    every pipeline you will need at load time</strong> — 2.4 ms of compilation is fifteen percent of
+    a 60 Hz frame, and the first one in the process is thirty. And <strong>state permutations are
+    compilations</strong>: a material system with five booleans is thirty-two pipelines, which is
+    about eighty milliseconds of startup on this machine and rather more on a phone. That is why
+    shipped engines cache compiled pipelines to disk themselves, and why "shader compilation
+    stutter" is a phrase you will meet in patch notes.
+  </p>
+
+  <h3 id="impl-pixels"><span class="num">4.5</span>Checking it in pixels</h3>
+
+  <p>
+    A triangle on screen is not evidence. A window cannot be asked what it contains, screenshots
+    are unavailable on a machine without screen-recording permission, and "it looks right" has
+    never once caught an interpolation bug. So the harness draws the same triangle into an
+    <em>offscreen</em> texture and downloads it — which Lesson 4.2's readback path already made
+    possible, and which Lesson 4.3's windowless device made convenient.
+  </p>
+
+  @@FIG_TRIANGLE@@
+
+  <p>
+    Figure 3 is what came back. Two numbers in it are worth dwelling on.
+  </p>
+
+  <div class="worked">
+    <span class="label">Worked example — is that the right number of pixels?</span>
+    <p>
+      The triangle spans <code>x ∈ [−0.8, 0.8]</code> and <code>y ∈ [−0.8, 0.8]</code> in clip
+      space, drawn into a 256×256 target. Clip space is two units wide, so one clip unit is 128
+      pixels:
+    </p>
+    <ul>
+      <li>base = <code>1.6 × 128 = 204.8</code> pixels</li>
+      <li>height = <code>1.6 × 128 = 204.8</code> pixels</li>
+      <li>area = <code>½ × 204.8 × 204.8 = 20,972</code> pixels</li>
+    </ul>
+    <p>
+      Measured: <strong>20,808</strong>. The ratio is <strong>0.9922</strong> — short by 164
+      pixels, or 0.8%, which is about what you would expect from a boundary roughly 600 pixels
+      long being resolved one way rather than the other. The hardware filled the triangle the
+      geometry describes, and now you know that rather than believing it.
+    </p>
+  </div>
+
+  <div class="worked">
+    <span class="label">Worked example — the centroid, and Lesson 2.4</span>
+    <p>
+      The centroid of a triangle is the average of its vertices, and its barycentric coordinates
+      are <code>(⅓, ⅓, ⅓)</code> by definition. With corners of pure red, green and blue, the
+      colour there must be one third of each:
+    </p>
+    <ul>
+      <li>predicted: <code>255 × ⅓ = 85</code> in every channel</li>
+      <li>measured: <strong>85, 86, 85</strong></li>
+    </ul>
+    <p>
+      That is Lesson 2.4's interpolation — the one you derived from signed areas and implemented
+      by hand — performed by silicon, agreeing to one code out of 255. The single unit of
+      difference is the pixel centre not landing exactly on the geometric centroid.
+    </p>
+    <p>
+      This is the most satisfying check in the module. You did not learn a new kind of
+      interpolation to use a GPU; you learned the same one, and the hardware happens to do it
+      faster.
+    </p>
+  </div>
+
+  <p>
+    The third check is winding, and it is the one that will save you an evening:
+  </p>
+
+  @@FIG_WINDING@@
+
+  <p>
+    Figure 4 is the answer, and it is blunter than expected. Swapping two vertices does not flip
+    the triangle, or darken it, or turn it inside out. It
+    <strong>deletes it</strong> — 20,808 pixels become 0. And the third panel is what makes that a
+    diagnosis rather than a guess: with <code>cull_mode</code> set to <code>NONE</code>, the same
+    "wrong" vertices produce exactly 20,808 pixels again, identical to the first panel. The
+    geometry was never the problem.
+  </p>
+
+  <p>
+    That gives you a two-minute test for the most common first-triangle failure there is. If your
+    triangle is missing, set the cull mode to <code>NONE</code>. If it appears, your winding
+    disagrees with your <code>front_face</code>; if it does not, look elsewhere — at the pipeline's
+    target format, at whether the buffer was uploaded, at whether the draw is inside the pass.
+  </p>
+
+  <h3 id="impl-compare"><span class="num">4.6</span>Against your own rasterizer</h3>
+
+  <p>
+    And now the comparison this module has been heading towards since Lesson 2.2. The same three
+    vertices, carried through the same viewport transform, filled by <code>fill_triangle</code> —
+    your code, from Module 2 — and by the hardware, and compared pixel for pixel:
+  </p>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th></th><th>pixels</th></tr></thead>
+    <tbody>
+      <tr><td>covered by the GPU</td><td>20,808</td></tr>
+      <tr><td>covered by <code>engine::fill_triangle</code></td><td>20,910</td></tr>
+      <tr><td>covered by both</td><td><strong>20,808</strong></td></tr>
+      <tr><td>the GPU only</td><td><strong>0</strong></td></tr>
+      <tr><td>ours only</td><td>102</td></tr>
+      <tr><td>disagreements strictly inside the triangle</td><td><strong>0</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 5.</span> Two rasterizers, one triangle. They agree about
+    <strong>every interior pixel</strong>, and the hardware covered nothing we missed — our
+    coverage is a strict superset, larger by 102 pixels, 0.49% of the area.
+  </figcaption>
+  </figure>
+
+  @@FIG_EDGE@@
+
+  <p>
+    Figure 5 is drawn from the actual comparison rather than from an idea of what a fill rule looks
+    like, and it shows exactly where those 102 pixels are: single squares along one edge, one per
+    row, never two together, never anywhere but the boundary.
+  </p>
+
+  <p>
+    That pattern is a <strong>fill rule</strong>. Every rasterizer has to decide what happens when
+    a pixel centre lands exactly on an edge — include it, exclude it, or include it only on some
+    edges — because a pixel shared between two triangles must be drawn exactly once or the seam
+    shows. Hardware uses a "top-left" rule; our <code>fill_triangle</code> uses the
+    <code>&gt;= 0</code> test that Lesson 2.2 wrote, which includes every boundary pixel. On a lone
+    triangle that difference is 102 pixels; on two triangles sharing an edge it is a visible seam,
+    and it is why Lesson 2.2's edge function had that comparison written the way it was.
+  </p>
+
+  <div class="callout ok">
+    <span class="label">What this comparison actually establishes</span>
+    <p>
+      Zero interior disagreements over twenty thousand pixels means your rasterizer and a
+      twenty-core GPU are computing <em>the same triangle</em>. Not approximately — identically,
+      everywhere except a boundary convention that both are entitled to choose.
+    </p>
+    <p>
+      That is the strongest possible answer to the question Module 2 opened with. You did not
+      write a toy version of a rasterizer; you wrote a rasterizer, and the difference between it
+      and the hardware is a documented tie-breaking rule and about eight orders of magnitude of
+      throughput.
+    </p>
+  </div>
+
+  <p>
+    Finally, the composition — because the window shows both pictures at once and that claim
+    deserves the same treatment as the others:
+  </p>
+
+  @@FIG_FRAME@@
+
+  <p>
+    Figure 6 is the engine's own frame, rebuilt offscreen and counted: 22,364 pixels of clear,
+    22,364 of the software rasterizer's picture, 20,808 of triangle, and the three sum to 65,536,
+    which is 256² exactly. Every pixel in the window is attributable to exactly one of the three
+    operations that produced it.
+  </p>
+
+  <!-- =================================================================
+       5 — COMPLETE CODE LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">5</span>Complete Code Listings</h2>
+
+  <figure class="tbl">
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>path</th><th>state</th><th>purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>src/gfx/gpu_pipeline.hpp</code></td><td><strong>new</strong></td>
+          <td><code>pipeline_desc</code> — the create-info plus the arrays it points at — and
+              <code>gpu_pipeline</code>, which times its own creation.</td></tr>
+      <tr><td><code>src/gfx/gpu_pipeline.cpp</code></td><td><strong>new</strong></td>
+          <td>The conventions, filled in once: CCW-front, cull-back, the swapchain's format.</td></tr>
+      <tr><td><code>src/gfx/gpu_buffer.hpp</code></td><td><strong>new</strong></td>
+          <td>A device buffer and a one-shot upload.</td></tr>
+      <tr><td><code>src/gfx/gpu_buffer.cpp</code></td><td><strong>new</strong></td>
+          <td>Staging, copy pass, and a release that is deferred by contract.</td></tr>
+      <tr><td><code>src/main.cpp</code></td><td>modified</td>
+          <td><code>gpu_vertex</code>, the three vertices, the pipeline, and the second render
+              pass. <kbd>5</kbd> toggles the triangle.</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>Two new source files.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption>
+    <span class="fignum">Table 6.</span> This lesson's file manifest.
+  </figcaption>
+  </figure>
+
+@@LISTING:src/gfx/gpu_pipeline.hpp@@
+@@LISTING:src/gfx/gpu_pipeline.cpp@@
+@@LISTING:src/gfx/gpu_buffer.hpp@@
+@@LISTING:src/gfx/gpu_buffer.cpp@@
+@@LISTING:src/main.cpp@@
+@@LISTING:CMakeLists.txt@@
+
+  <!-- =================================================================
+       6 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="build"><span class="num">6</span>Build &amp; Run</h2>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Linux / macOS</span></figcaption>
+    <pre><code>cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+./build/engine --gpu</code></pre>
+  </figure>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">Windows (MSVC)</span></figcaption>
+    <pre><code>cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\engine.exe --gpu</code></pre>
+  </figure>
+
+  <h3>What you should see</h3>
+
+  <p>
+    Everything Lesson 4.3 showed — the checkerboard, the spinning software triangle, the four green
+    shader squares, the timing graph — and, on the right-hand side, <strong>a second triangle with
+    red, green and blue corners blending smoothly between them</strong>. It does not move, because
+    <code>triangle.vert</code> applies no matrix and there is nowhere yet to put one; Lesson 4.6
+    gives it a uniform buffer and it starts spinning.
+  </p>
+
+  <p>
+    Press <kbd>5</kbd> to toggle it. And read the startup log, which now includes the line this
+    lesson is about:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">./engine --gpu</span></figcaption>
+    <pre><code>  shader format   : MSL (.msl), entry point "main0"
+    triangle.vert    493 bytes   samplers 0  storage tex 0  storage buf 0  uniform buf 0
+    triangle.frag    342 bytes   samplers 0  storage tex 0  storage buf 0  uniform buf 0
+  pipeline        : created in 2.418 ms  (varies hugely with the driver's pipeline cache — see 4.4 §4.4)
+  geometry        : 84 bytes, 3 vertices</code></pre>
+  </figure>
+
+  <div class="callout ok">
+    <span class="label">Checkpoint</span>
+    <p>
+      Two triangles are on screen. The one on the left was drawn by <code>fill_triangle</code> —
+      code you wrote, running on the CPU, one pixel at a time. The one on the right was drawn by
+      twenty GPU cores running a shader you wrote, and its colours were interpolated by hardware
+      using the barycentric mathematics you derived in Lesson 2.4.
+    </p>
+    <p>
+      They are the same triangle, computed two ways, and §4.6 measured the difference at 102
+      boundary pixels out of twenty thousand. That is what this module has been for.
+    </p>
+  </div>
+
+  <p>
+    To reproduce every measurement, build and run the harness — it needs no window:
+  </p>
+
+  <figure class="listing shell">
+    <figcaption><span class="path">the harness</span></figcaption>
+    <pre><code>c++ -std=c++20 -O2 -Wall -Wextra -I src -I build/_deps/sdl3-src/include \
+    scratch/verify_44.cpp \
+    src/gfx/gpu_device.cpp src/gfx/gpu_shader.cpp src/gfx/gpu_buffer.cpp \
+    src/gfx/gpu_pipeline.cpp src/gfx/gpu_present.cpp \
+    src/gfx/framebuffer.cpp src/gfx/raster.cpp src/gfx/colour.cpp \
+    src/gfx/depth_buffer.cpp src/gfx/texture.cpp \
+    -L build/_deps/sdl3-build -lSDL3 -Wl,-rpath,$PWD/build/_deps/sdl3-build \
+    -o build/verify_44
+./build/verify_44
+./build/verify_44 --debug     # the same thing with the validation layer on</code></pre>
+  </figure>
+
+  <p>
+    Run it both ways and compare the pipeline-creation line. The difference between those two runs
+    is §4.4's whole point.
+  </p>
+
+  <!-- =================================================================
+       7 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">7</span>Common Pitfalls &amp; Debugging</h2>
+
+  <div class="pitfalls">
+
+    <details class="pitfall-item">
+      <summary>The triangle is not there, and nothing errored</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Everything created successfully, the frame completes, and the
+        screen shows no triangle.</p>
+        <p><strong>Cause.</strong> Most often winding: your vertices are clockwise on screen and
+        the pipeline says counter-clockwise is front-facing with back faces culled. §4.5 measured
+        that this is not a subtle effect — it is 20,808 pixels becoming 0.</p>
+        <p><strong>Fix.</strong> Set <code>cull_mode = SDL_GPU_CULLMODE_NONE</code> and run again.
+        If it appears, reverse two vertices (or change <code>front_face</code>) and put the culling
+        back — you want it on, and Lesson 3.4 explains why. If it does <em>not</em> appear, the
+        cause is elsewhere: check that the buffer was uploaded and submitted before the draw, that
+        the draw is inside a render pass, and that the vertices are actually in clip space.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Wildly wrong geometry, or triangles stretching to infinity</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Something is drawn, but it is nothing like the shape you
+        described — often a smear reaching off-screen.</p>
+        <p><strong>Cause.</strong> The vertex layout and the actual struct disagree. A wrong
+        <code>pitch</code> makes the hardware walk the buffer at the wrong rate, so each vertex is
+        read from the middle of two others; a wrong <code>offset</code> feeds colour bytes into a
+        position.</p>
+        <p><strong>Fix.</strong> Use <code>sizeof</code> and <code>offsetof</code>, never
+        literals — §3.2. And remember that <em>nothing</em> checks this contract: the shader
+        declares its inputs in HLSL, the pipeline describes bytes in C++, and the two are only
+        joined by your care. Exercise 4.4.4 automates the check.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>SDL_CreateGPUGraphicsPipeline fails, mentioning the vertex descriptor</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> <em>"Vertex function has input attributes but no vertex
+        descriptor was set."</em></p>
+        <p><strong>Cause.</strong> The pipeline has no <code>vertex_input_state</code>, but the
+        vertex shader declares inputs. This is one of the few mistakes creation actually catches —
+        and the message is exact.</p>
+        <p><strong>Fix.</strong> Describe at least one vertex buffer and the attributes the shader
+        expects. If you genuinely want a shader with no vertex inputs, the technique is to generate
+        positions from <code>SV_VertexID</code> — common for full-screen passes, and Module 6 uses
+        it.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The process crashes inside pipeline creation</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> A segfault with no SDL error, or a Metal message about an
+        interrupted compiler connection followed by a crash on the <em>next</em> creation.</p>
+        <p><strong>Cause.</strong> A shader in the wrong slot. Both are
+        <code>SDL_GPUShader*</code>, so the type system cannot help, and SDL does not check which
+        stage a shader was compiled for.</p>
+        <p><strong>Fix.</strong> Keep the two straight at the point of construction —
+        <code>pipeline_desc</code>'s constructor takes them in the order (vertex, fragment) and
+        nothing else in the codebase touches those fields. If you are already crashing, this is the
+        first thing to check, because it produces no useful diagnostic at all.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>A pipeline that "works" but renders into nothing</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Creation succeeds, the draw is recorded, and the target is
+        unchanged — or the colours are wrong in a way that suggests a different format.</p>
+        <p><strong>Cause.</strong> The pipeline's colour target format does not match the texture
+        the render pass is writing. §3.1 measured that this is <em>not</em> refused at creation on
+        this backend, and the frame even completed.</p>
+        <p><strong>Fix.</strong> Take the format from the thing you will render into, never from
+        memory — <code>pipeline_desc</code> reads it from the device's report, and
+        <code>colour_target_format()</code> exists for offscreen targets. Other backends are
+        stricter than Metal here, so a program that works on one may fail loudly on another;
+        that is a reason to be careful, not a reason to relax.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>Pipeline creation is alarmingly slow</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Creating a pipeline takes tens of milliseconds, and creating
+        several makes startup visibly stutter.</p>
+        <p><strong>Cause.</strong> Compilation, and where you are in the driver's cache. §4.4
+        measured ~32 ms for the first pipeline in a process, ~2.4 ms for each new state
+        permutation, and under a millisecond for anything already compiled — including in a
+        previous run, because the cache is on disk.</p>
+        <p><strong>Fix.</strong> Create every pipeline at load time, never on demand mid-frame.
+        And do not conclude anything from a single measurement of this call: it was the source of
+        two wrong claims in a draft of this lesson, both caused by comparing a cold cache with a
+        warm one.</p>
+      </div>
+    </details>
+
+    <details class="pitfall-item">
+      <summary>The create-info's arrays are garbage by the time SDL reads them</summary>
+      <div class="pitfall-body">
+        <p><strong>Symptom.</strong> Intermittent nonsense: creation fails with an incoherent
+        message, or succeeds and draws something impossible. Behaves differently in debug and
+        release.</p>
+        <p><strong>Cause.</strong> §2.3 — a helper that built an
+        <code>SDL_GPUGraphicsPipelineCreateInfo</code> and returned it by value, leaving its
+        pointers aimed at a dead stack frame.</p>
+        <p><strong>Fix.</strong> Keep the arrays and the struct that points at them in one object
+        with one lifetime, as <code>pipeline_desc</code> does. The general shape — a
+        non-owning view outliving what it views — is worth recognising: it is the same bug as a
+        dangling <code>string_view</code>.</p>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- =================================================================
+       8 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">8</span>Exercises</h2>
+
+  <div class="exercise">
+    <h3>4.4.1 — Break the winding, then diagnose it</h3>
+    <p>
+      Swap two vertices in <code>k_triangle</code> and run. Before changing anything else, use only
+      the pipeline's <code>cull_mode</code> to prove what went wrong, then fix it properly. Write
+      down the two-step test you used; it is the one you will reach for every time a mesh is
+      invisible for the rest of this course.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The measurement in §4.5 is the test: <code>NONE</code> brings it back identically, which
+        rules out geometry, transforms, buffers and formats in one step.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        Setting <code>CULLMODE_NONE</code> makes the triangle reappear unchanged, so nothing about
+        the geometry is wrong and the disagreement is between the winding and
+        <code>front_face</code>. The proper fix is to reorder the vertices rather than to change
+        <code>front_face</code>: the convention is course-wide (conventions §7), and flipping it
+        for one mesh means every other mesh is now wrong.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.4.2 — Find the fill rule</h3>
+    <p>
+      §4.6 found 102 pixels our rasterizer covers and the hardware does not, all on the boundary.
+      Work out the rule. Modify <code>fill_triangle</code>'s edge test to exclude pixels on some
+      edges rather than including all of them, and see how close you can get the disagreement to
+      zero — then draw two triangles sharing an edge and check that neither seams nor
+      double-draws.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Look up the "top-left rule". The question a fill rule answers is not "is this pixel on the
+        edge?" but "which of the two triangles sharing this edge owns it?", and the answer has to
+        be decidable from one triangle at a time.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The standard rule includes a boundary pixel when the edge it lies on is a <em>top</em> edge
+        or a <em>left</em> edge, which is a property of the edge's direction and so can be decided
+        without knowing the neighbour. Implementing it exactly will not reach zero disagreement,
+        because sub-pixel precision differs too (our vertices are integers; hardware rasterizes at
+        roughly 1/256 of a pixel, as conventions §7f notes). Getting from 102 to single digits is
+        a good result, and the two-triangle test is the one that matters.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.4.3 — Draw a second triangle without touching the pipeline</h3>
+    <p>
+      Add three more vertices to the buffer and draw six. Then draw the two triangles as
+      <em>separate draw calls</em> from the same buffer, using <code>first_vertex</code>. Which
+      approach would you use for a scene of a thousand objects, and why?
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Count the state changes. What does the second draw call cost that the extra three vertices
+        did not? Lesson 4.1's note that "binding a pipeline is relatively cheap, but doing it
+        hundreds of times when you don't need to will slow performance significantly" comes from
+        SDL's own performance notes.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        One draw of six vertices is strictly cheaper than two draws of three: same bytes, same
+        pipeline, one command instead of two. That generalises into the single most important
+        renderer optimisation there is — <em>batch</em> — and it is why Module 6 sorts draws by
+        material and Module 9 measures what that saves. The counter-argument is that objects need
+        different transforms, which is what Lesson 4.6's uniforms and instancing exist to solve.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.4.4 — Check the layout against the shader, automatically</h3>
+    <p>
+      §3.2 pointed out that the vertex layout is declared twice, in two languages, with nothing
+      checking that the halves agree. Lesson 4.3's reflection JSON contains the shader's half in
+      its <code>inputs</code> array. Extend <code>parse_shader_reflection</code> to read it, and
+      assert at startup that every attribute in the pipeline description matches the shader's
+      location and type.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        The reflection gives <code>{"name": "input.position", "type": "float3", "location": 0}</code>.
+        Map <code>SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3</code> to <code>"float3"</code> and compare.
+        Decide deliberately what to do on mismatch — Lesson 4.3 refused to load rather than
+        guessing, for reasons that apply here too.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        The check costs a few dozen lines and turns "my mesh renders inside out" into a startup
+        message naming the attribute. It is also the first piece of a <em>material system</em>:
+        once the program can read what a shader needs and verify what it is given, binding
+        resources by name rather than by number becomes possible, which is where Module 6 goes.
+      </p>
+    </details>
+  </div>
+
+  <div class="exercise">
+    <h3>4.4.5 — Make the pipeline expensive</h3>
+    <p>
+      §4.4 measured ~2.4 ms per new state permutation. Find out what that number depends on:
+      time it for a trivial shader and for a deliberately heavy one (unroll a long loop, add a
+      hundred lines of arithmetic), and time creating ten pipelines that differ only in
+      <code>cull_mode</code>. Then run the whole experiment a second time and see which numbers
+      changed.
+    </p>
+    <details>
+      <summary>Hint</summary>
+      <p>
+        Take minimums, warm up first, and control for the caching §4.4 found — ten pipelines that
+        differ in one field are ten different compilations or one cached one, and which it is,
+        is the experiment. Remember the cache is on disk: your second run is not a fresh start.
+      </p>
+    </details>
+    <details>
+      <summary>Solution sketch</summary>
+      <p>
+        You should find creation cost tracking shader complexity, which is the direct evidence that
+        the compile is here. The ten-variants case is the more useful result for an engine:
+        if state permutations each cost a compile, a material system with five booleans has
+        thirty-two pipelines to build at load time, and that is a real startup budget to plan
+        for — the reason shipped engines cache compiled pipelines to disk.
+      </p>
+    </details>
+  </div>
+
+  <!-- =================================================================
+       9 — RECAP & NEXT
+       ================================================================= -->
+  <h2 id="recap"><span class="num">9</span>Recap &amp; Next</h2>
+
+  <div class="recap">
+    <h2>What the engine gained</h2>
+    <ul>
+      <li>
+        <strong>A pipeline object</strong>, with the course's conventions filled in once —
+        CCW-front, cull-back, and a colour format read from the device rather than remembered.
+      </li>
+      <li>
+        <strong>Geometry on the device</strong>, uploaded through a staging buffer that is released
+        while the copy it feeds is still only recorded.
+      </li>
+      <li>
+        <strong>A draw call</strong>, and with it the first pixel in this course whose colour was
+        computed by hardware.
+      </li>
+      <li>
+        <strong>A lifetime holder for a struct full of pointers</strong>, which is a small class
+        preventing a bug that produces no diagnostic at all.
+      </li>
+    </ul>
+  </div>
+
+  <p>
+    Two results are worth carrying. <strong>The compile happens at pipeline creation</strong> —
+    predicted in 4.3, confirmed here at roughly eighty times the cost of creating a shader, with
+    a disk cache behind it that outlives the process. And <strong>the alarming numbers this call
+    can produce are almost never what they look like</strong> — two separate wrong conclusions were
+    drawn from them in drafts of this lesson, both from comparing a cold cache with a warm one, and
+    both caught only by repeating the measurement.
+  </p>
+
+  <p>
+    But the result to keep is the comparison. Your rasterizer and a twenty-core GPU, given the same
+    three vertices, agree about <strong>every single interior pixel</strong> — twenty thousand of
+    them — and differ only on 102 boundary pixels where each is entitled to its own tie-breaking
+    rule. Module 2 was not a simplified rehearsal for this. It was the same computation.
+  </p>
+
+  <p>
+    What we cannot do yet is move anything. <code>triangle.vert</code> applies no matrix, because
+    there is nowhere to put one: a matrix would have to arrive as a uniform, and uniforms need the
+    register spaces Lesson 4.3 set up and the binding calls we have not met. Nor can we draw a mesh
+    — three vertices are a special case that hides every interesting question about how vertices are
+    stored, shared and indexed.
+  </p>
+
+  <p>
+    <strong>Next: 4.5 — Vertex Buffers and Layouts.</strong> Real geometry on the device:
+    interleaved against separate arrays, with the memory layout drawn; what a pitch costs when it
+    is wrong; and the index buffer that lets Lesson 2.12's twelve icosahedron vertices serve twenty
+    triangles instead of sixty.
+  </p>
+
+  <!-- =================================================================
+       10 — FURTHER READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">10</span>Further Reading</h2>
+
+  <ul class="reading">
+    <li>
+      <strong>SDL_gpu.h — <code>SDL_CreateGPUGraphicsPipeline</code> and
+      <code>SDL_GPUGraphicsPipelineCreateInfo</code></strong> — the nine fields, and the nested
+      state structs behind them. Read it beside Figure 1.
+      <a href="https://wiki.libsdl.org/SDL3/SDL_CreateGPUGraphicsPipeline">wiki.libsdl.org</a>
+    </li>
+    <li>
+      <strong>SDL_gpu_examples, <code>BasicTriangle</code> and <code>BasicVertexBuffer</code></strong>
+      — the same lesson in about a hundred lines, without the commentary. Worth reading now that
+      you know what each line is for.
+      <a href="https://github.com/TheSpydog/SDL_gpu_examples">github.com/TheSpydog/SDL_gpu_examples</a>
+    </li>
+    <li>
+      <strong>Fabian Giesen, <em>A trip through the Graphics Pipeline 2011</em>, parts 6–7</strong>
+      — triangle setup and the rasterizer, including the top-left fill rule and why sub-pixel
+      precision is fixed-point. Exercise 4.4.2 is this article made practical.
+      <a href="https://fgiesen.wordpress.com/2011/07/06/a-trip-through-the-graphics-pipeline-2011-part-6/">fgiesen.wordpress.com</a>
+    </li>
+    <li>
+      <strong>Real-Time Rendering, 4th ed., §23.1–23.4</strong> — the hardware pipeline as
+      silicon: triangle setup, rasterization, and where the fixed-function parts sit relative to
+      the programmable ones.
+    </li>
+    <li>
+      <strong>Vulkan Tutorial, <em>Graphics pipeline basics</em></strong> — the same object, spelled
+      out at greater length, with an explicit render-pass object SDL_GPU hides. Useful for seeing
+      which parts of this lesson are SDL's simplifications and which are the hardware's demands.
+      <a href="https://vulkan-tutorial.com/Drawing_a_triangle/Graphics_pipeline_basics">vulkan-tutorial.com</a>
+    </li>
+    <li>
+      <strong>Apple, <em>Metal Best Practices: Pipeline State Objects</em></strong> — the vendor
+      whose driver produced §4.4's numbers, on why to build pipelines at load time and cache them.
+      <a href="https://developer.apple.com/library/archive/documentation/3DDrawing/Conceptual/MTLBestPracticesGuide/">developer.apple.com</a>
+    </li>
+  </ul>

@@ -1,0 +1,377 @@
+  <h2 id="theorem">4. Euler's rotation theorem</h2>
+
+  <p>
+    The claim, stated properly: <strong>every rotation of three-dimensional space about a fixed
+    origin is a rotation about some axis through that origin.</strong> Euler published it in 1775,
+    and the modern proof is short enough to do here in full — which matters, because the short
+    proof is also the one that tells you why it is a fact about odd dimensions.
+  </p>
+
+  <h3 id="theorem-fixed">4.1 "There is an axis" and "something does not move" are the same
+      sentence</h3>
+
+  <p>
+    First, translate the claim into something we can compute with. "There is an axis" means there
+    is a direction <code>n</code> that the rotation leaves alone:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R\,\mathbf{n} = \mathbf{n}, \qquad \mathbf{n} \neq \mathbf{0} \]</span>
+    <span class="eq-plain">R n = n, for some non-zero n</span>
+  </div>
+
+  <p>
+    In the language of Lesson 2.5 — a matrix is where the basis vectors land — this says there is
+    some direction that lands exactly where it started. Rearranging,
+    <code>R n − n = 0</code>, that is <code>(R − I) n = 0</code>: the matrix <code>R − I</code>
+    sends a non-zero vector to zero. A matrix that flattens a non-zero vector to nothing has
+    collapsed space, and the determinant is exactly the number that reports how much space
+    survived (Lesson 2.6). So the whole theorem reduces to one arithmetic claim:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \det(R - I) = 0 \]</span>
+    <span class="eq-plain">det(R - I) = 0</span>
+  </div>
+
+  <p>
+    That is now a statement we can <em>check</em>, and one the engine already has every function
+    for. Section A.1 of the harness checks it on twenty thousand random rotations.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §A.1–A.3</strong> — and note the control, because "det is small" is a
+      claim that needs something to fail:</p>
+<pre><code>20,000 random rotations: worst |det(R - I)| = 1.888e-06
+CONTROL a 1.2x scale: det(M - I) = 0.0080, and it fixes nothing but the origin
+worst |R n - n| = 5.136e-07   CONTROL least motion off-axis = 0.1999</code></pre>
+    <p>
+      Two millionths against eight thousandths is a factor of four thousand, and the axis the
+      extraction hands back really is fixed to five parts in ten million while everything
+      perpendicular to it moves by at least 0.2 units. The control is not decoration: a 1.2×
+      uniform scale is a perfectly respectable linear map with no fixed line at all, and if the
+      check could not tell the two apart it would not be checking anything.
+    </p>
+  </div>
+
+  <h3 id="theorem-proof">4.2 The proof, in four lines</h3>
+
+  <p>
+    We need <code>det(R − I) = 0</code> for every rotation. A rotation is an orthogonal matrix
+    (<code>RᵀR = I</code>, so <code>Rᵀ = R⁻¹</code>) with <code>det R = +1</code> — those two
+    conditions are the definition, and the second is what separates a rotation from a reflection.
+    Three determinant facts do the rest, all of which Lesson 2.6 established:
+    <code>det(AB) = det(A)·det(B)</code>, <code>det(Aᵀ) = det(A)</code>, and
+    <code>det(−A) = (−1)ⁿ·det(A)</code> for an <code>n×n</code> matrix.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \begin{aligned}
+      \det(R - I) &amp;= \det(R^{\mathsf T})\,\det(R - I) &amp;&amp; \text{since } \det(R^{\mathsf T}) = \det(R) = 1 \\
+                  &amp;= \det\!\big(R^{\mathsf T}(R - I)\big) &amp;&amp; \text{product rule} \\
+                  &amp;= \det(I - R^{\mathsf T}) &amp;&amp; \text{since } R^{\mathsf T}R = I \\
+                  &amp;= \det\!\big((I - R)^{\mathsf T}\big) \;=\; \det(I - R) \\
+                  &amp;= (-1)^3 \det(R - I) \;=\; -\det(R - I)
+    \end{aligned} \]</span>
+    <span class="eq-plain">det(R - I) = det(R^T) det(R - I) = det(R^T R - R^T) = det(I - R^T) = det(I - R) = (-1)^3 det(R - I) = -det(R - I)</span>
+  </div>
+
+  <p>
+    The first line multiplies by <code>det(Rᵀ)</code>, which is 1, so nothing has changed. The
+    second folds the product into one determinant. The third uses <code>RᵀR = I</code>. The fourth
+    notices that <code>I − Rᵀ</code> is the transpose of <code>I − R</code>, and transposing does
+    not change a determinant. The fifth pulls a minus sign out of a <strong>3×3</strong> matrix,
+    which costs <code>(−1)³ = −1</code>.
+  </p>
+
+  <p>
+    So <code>x = −x</code>, where <code>x = det(R − I)</code>. The only number equal to its own
+    negative is zero. <strong>Therefore <code>det(R − I) = 0</code>, therefore
+    <code>R − I</code> collapses some non-zero direction to nothing, therefore some direction
+    satisfies <code>R n = n</code>, therefore there is an axis.</strong> □
+  </p>
+
+  <div class="callout note">
+    <span class="label">Two loose ends, named rather than glossed</span>
+    <p>
+      The argument gives a fixed <em>direction</em>; it does not by itself say the rotation is a
+      turn <em>about</em> that direction by some angle. That last step is short: build a basis
+      whose first vector is <code>n</code>, write <code>R</code> in it, and orthogonality plus
+      <code>R n = n</code> force the other two columns to be a 2×2 rotation in the remaining
+      plane — which is a turn by an angle. We use the consequence of that in §8.1 (the trace is
+      <code>1 + 2cos θ</code>) and do not re-derive it here; Lesson 7.1's
+      <code>angle_between_rotations</code> already spells it out in full.
+    </p>
+    <p>
+      And the determinant proof shows a fixed direction exists without telling you <em>which</em>.
+      That is normal for an existence proof and it is why §8 is a separate section: finding the
+      axis is a different job from knowing there is one, and it is the harder of the two.
+    </p>
+  </div>
+
+  <h3 id="theorem-odd">4.3 Why three, and what happens in four</h3>
+
+  <p>
+    Exactly one line of that proof mentions the dimension: <code>(−1)³ = −1</code>. In an even
+    dimension it would be <code>(−1)⁴ = +1</code>, the last line would read <code>x = x</code>,
+    and the argument would prove nothing whatsoever. That is not a technicality to skip past. It
+    is the theorem's entire content, and the cleanest way to see it is to watch the theorem
+    <em>fail</em>.
+  </p>
+
+  @@FIG_ODD@@
+
+  <p>
+    Figure 2 is the eigenvalue picture, which is the same proof from the other side. A rotation
+    preserves lengths, so every eigenvalue has magnitude 1 — they all sit on the unit circle in the
+    complex plane. And a matrix with real entries has eigenvalues that come in
+    <em>conjugate pairs</em>: if <code>λ</code> is one, so is <code>λ̄</code>. A 3×3 matrix has
+    three eigenvalues, and three is odd, so after pairing them up <strong>one is always left
+    over</strong> — and an unpaired eigenvalue must be its own conjugate, hence real, hence
+    (being on the unit circle) either <code>+1</code> or <code>−1</code>. The determinant is the
+    product of the eigenvalues, and for a rotation it is <code>+1</code>; the conjugate pair
+    multiplies to <code>|λ|² = 1</code>, so the leftover one must be <code>+1</code>. An
+    eigenvalue of <code>+1</code> is a fixed direction. That is the axis.
+  </p>
+
+  <p>
+    In four dimensions nothing is left over. A 4-D rotation can turn in two completely independent
+    planes at once — the <code>xy</code> plane by one angle and the <code>zw</code> plane by
+    another — and its four eigenvalues form two conjugate pairs with none spare. Nothing is fixed.
+    There is no axis, because there is nothing for an axis to be.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §A.4</strong> — a 4-D double rotation, 35° in one plane and 50° in the
+      other. Its eigenvalues are <code>e<sup>±35i</sup></code> and <code>e<sup>±50i</sup></code>,
+      so the determinant of <code>R − I</code> is the product of <code>(λ − 1)</code>, which works
+      out to <code>(2 − 2cos 35°)(2 − 2cos 50°)</code>:</p>
+<pre><code>4-D double rotation (35°, 50°): det(R - I) = 0.25840, predicted 0.25840</code></pre>
+    <p>
+      Not zero — and it agrees with the eigenvalue prediction to five decimal places, so the
+      determinant and the eigenvalue story are the same story. In four dimensions the sentence
+      "every rotation is a rotation about an axis" is simply false, and this number is the
+      counterexample. The harness computes it with its own 4×4 determinant, twenty lines of
+      cofactor expansion, because <code>mat3</code> cannot hold a disproof of a claim about
+      <code>mat3</code>.
+    </p>
+  </div>
+
+  <div class="callout note">
+    <span class="label">Ninety percent of the picture</span>
+    <p>
+      The honest general statement is that <strong>rotation happens in a plane, not about an
+      axis</strong>. In <em>n</em> dimensions a rotation decomposes into turns in
+      <code>⌊n/2⌋</code> mutually perpendicular planes. Three dimensions is the special case where
+      <code>⌊3/2⌋ = 1</code> — one plane — <em>and</em> a plane in 3-D has a unique normal
+      direction, so you can name the plane by its normal and call it "the axis". Both coincidences
+      are needed, and both fail in 4-D. The missing ten percent is the general spectral theorem for
+      orthogonal matrices; Artin's <em>Algebra</em> §5.1 finishes it.
+    </p>
+  </div>
+
+  <h2 id="rodrigues">5. Rodrigues' rotation formula, derived</h2>
+
+  <p>
+    We know a single turn exists. Now we need to <em>perform</em> it: given a unit axis
+    <code>n</code>, an angle <code>θ</code>, and a vector <code>v</code>, where does
+    <code>v</code> go?
+  </p>
+
+  <h3 id="rodrigues-split">5.1 Split the vector, and one half does nothing</h3>
+
+  <p>
+    The whole derivation is one idea: <strong>separate the part of <code>v</code> that the rotation
+    cannot touch from the part it acts on.</strong> Decompose <code>v</code> into a component along
+    the axis and a component across it:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{v} = \mathbf{v}_\parallel + \mathbf{v}_\perp, \qquad \mathbf{v}_\parallel = (\mathbf{n}\cdot\mathbf{v})\,\mathbf{n} \]</span>
+    <span class="eq-plain">v = v_parallel + v_perp, with v_parallel = (n . v) n</span>
+  </div>
+
+  <p>
+    The parallel part is the projection of <code>v</code> onto the axis — Lesson 1.7's dot product,
+    doing the job it was introduced for. It lies <em>on</em> the axis, and the axis does not move,
+    so <strong><code>v∥</code> does not move.</strong> Half the problem is already solved and we
+    have not done any trigonometry.
+  </p>
+
+  <p>
+    What remains is <code>v⊥ = v − v∥</code>, which is perpendicular to the axis and therefore
+    lives in the plane the rotation turns. Inside that plane, this is a two-dimensional rotation of
+    a vector by <code>θ</code>, which Lesson 1.7 already solved — but to use that solution we need
+    a pair of axes for the plane, and we need them to be perpendicular and the same length, or
+    "rotate by <code>θ</code>" is not what the sines and cosines will do.
+  </p>
+
+  <p>
+    One of them is <code>v⊥</code> itself. The other is the one place a cross product is the
+    obvious tool: <code>n × v</code> is perpendicular to both <code>n</code> and <code>v</code>, so
+    it lies in the plane and is perpendicular to <code>v⊥</code>. And its length is
+    <code>|n||v| sin α</code> where <code>α</code> is the angle between <code>n</code> and
+    <code>v</code> — which, with <code>n</code> unit, is exactly <code>|v| sin α = |v⊥|</code>.
+    Same length. So <code>{v⊥, n × v}</code> is a perfectly good pair of axes for the disc, and the
+    2-D rotation is the one everybody knows:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{v}_\perp' = \mathbf{v}_\perp\cos\theta + (\mathbf{n}\times\mathbf{v})\sin\theta \]</span>
+    <span class="eq-plain">v_perp' = v_perp cos(theta) + (n x v) sin(theta)</span>
+  </div>
+
+  @@FIG_RODRIGUES@@
+
+  <p>
+    Figure 3 is that sentence, drawn. The dashed disc is the plane <code>v⊥</code> turns in,
+    centred on the tip of <code>v∥</code>; the two in-plane arrows are the pair of axes; the blue
+    arc is the sweep. Everything about the formula is visible in it, including the thing that is
+    easiest to forget — that <code>n × v</code> and <code>n × v⊥</code> are the <em>same
+    vector</em>, because the parallel part of <code>v</code> contributes nothing to a cross product
+    with <code>n</code>. That is why the formula can take the cross product of the axis with the
+    whole of <code>v</code> and never has to compute <code>v⊥</code> at all.
+  </p>
+
+  <p>
+    Add the fixed part back and substitute <code>v⊥ = v − (n·v)n</code>:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{v}' \;=\; \mathbf{v}\cos\theta \;+\; (\mathbf{n}\times\mathbf{v})\sin\theta \;+\; \mathbf{n}\,(\mathbf{n}\cdot\mathbf{v})(1-\cos\theta) \]</span>
+    <span class="eq-plain">v' = v cos(theta) + (n x v) sin(theta) + n (n . v) (1 - cos(theta))</span>
+  </div>
+
+  <p>
+    That is <strong>Rodrigues' rotation formula</strong>, and the three terms have three readings
+    you can keep rather than memorise. The first is <em>most of the vector just leans over</em>.
+    The second is <em>and it swings sideways</em>, along the one direction perpendicular to both.
+    The third is the correction that <em>puts back the along-axis part the cosine took away</em> —
+    which is why it carries <code>(1 − cos θ)</code> and vanishes at <code>θ = 0</code>, where
+    nothing should be corrected.
+  </p>
+
+  <div class="callout note">
+    <span class="label">A sanity check worth doing once</span>
+    <p>
+      Set <code>v = n</code>. Then <code>n × n = 0</code> and <code>n·n = 1</code>, so the formula
+      gives <code>n cos θ + 0 + n(1 − cos θ) = n</code>. The axis does not move. A formula that
+      failed this check would be wrong in the one way that matters most, and it takes ten seconds.
+    </p>
+  </div>
+
+  <h3 id="rodrigues-worked">5.2 A worked example you can check by hand</h3>
+
+  <p>
+    Take the axis through the corner of a cube — the body diagonal <code>(1, 1, 1)</code>,
+    normalised — and turn by 120°. A cube has three-fold symmetry about that diagonal, so we should
+    expect something clean, and what we get is the cleanest possible answer: the coordinate axes
+    cycle. <code>x̂ → ŷ → ẑ → x̂</code>.
+  </p>
+
+  <p>
+    Push <code>x̂ = (1, 0, 0)</code> through by hand. With
+    <code>n = (0.57735, 0.57735, 0.57735)</code>, <code>cos 120° = −0.5</code> and
+    <code>sin 120° = 0.866025</code>:
+  </p>
+
+  <div class="worked">
+    <p><strong>Term by term</strong>, for <code>v = x̂</code>:</p>
+    <ul>
+      <li><code>v cos θ = (1, 0, 0) × (−0.5) = (−0.5, 0, 0)</code></li>
+      <li><code>n × v = (n<sub>y</sub>·0 − n<sub>z</sub>·0, n<sub>z</sub>·1 − n<sub>x</sub>·0,
+          n<sub>x</sub>·0 − n<sub>y</sub>·1) = (0, 0.57735, −0.57735)</code>, so
+          <code>(n × v) sin θ = (0, 0.5, −0.5)</code></li>
+      <li><code>n·v = 0.57735</code>, and <code>1 − cos θ = 1.5</code>, so
+          <code>n (n·v)(1 − cos θ) = n × 0.866025 = (0.5, 0.5, 0.5)</code></li>
+    </ul>
+    <p>Add them:</p>
+<pre><code>  (-0.5,  0.0,  0.0)
++ ( 0.0,  0.5, -0.5)
++ ( 0.5,  0.5,  0.5)
+= ( 0.0,  1.0,  0.0)   =  y-hat</code></pre>
+    <p>
+      <code>x̂</code> lands exactly on <code>ŷ</code>. The three <code>0.5</code>s cancelling in
+      the <em>z</em> column and adding in the <em>y</em> column is the whole of it, and it is worth
+      doing the other two by hand as well — <code>ŷ → ẑ</code> and <code>ẑ → x̂</code> — because a
+      formula you have pushed real numbers through three times stops being something you look up.
+    </p>
+    <p><strong>verify_72 §B.1</strong> agrees, in <code>float</code>:</p>
+<pre><code>n = (0.57735, 0.57735, 0.57735), theta = 120°
+  x -> (-0.000000, +1.000000, +0.000000)
+  y -> (+0.000000, -0.000000, +1.000000)
+  z -> (+1.000000, +0.000000, -0.000000)
+  worst deviation from the exact permutation: 1.075e-07</code></pre>
+  </div>
+
+  <h3 id="rodrigues-matrix">5.3 The matrix form, and why we do not write it</h3>
+
+  <p>
+    A renderer does not rotate one vector, it rotates thousands, and it wants a matrix so the
+    trigonometry is paid for once. Lesson 2.5 gives the construction directly:
+    <strong>a matrix is where the basis vectors land</strong>. Push <code>x̂</code>,
+    <code>ŷ</code> and <code>ẑ</code> through Rodrigues, and the three answers <em>are</em> the
+    three columns. The worked example above already computed the first column of the 120°-about-the-diagonal
+    matrix without anybody calling it that.
+  </p>
+
+  <p>
+    Every reference states the result in closed form instead, and it is worth writing down once so
+    that you recognise it in a paper:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ R \;=\; I\cos\theta \;+\; \sin\theta\,[\mathbf{n}]_\times \;+\; (1-\cos\theta)\,\mathbf{n}\mathbf{n}^{\mathsf T} \]</span>
+    <span class="eq-plain">R = I cos(theta) + sin(theta) [n]_x + (1 - cos(theta)) n n^T</span>
+  </div>
+
+  <p>
+    where <code>[n]ₓ</code> is the <strong>cross-product matrix</strong> — the matrix that does
+    what crossing with <code>n</code> does — and <code>n nᵀ</code> is the outer product, the matrix
+    that projects onto <code>n</code>. Read the three terms and it is the same three sentences as
+    before: scale everything by the cosine, add the sideways swing, restore the along-axis part.
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ [\mathbf{n}]_\times = \begin{bmatrix} 0 &amp; -n_z &amp; n_y \\ n_z &amp; 0 &amp; -n_x \\ -n_y &amp; n_x &amp; 0 \end{bmatrix} \]</span>
+    <span class="eq-plain">[n]_x = [[0, -nz, ny], [nz, 0, -nx], [-ny, nx, 0]] -- antisymmetric, zero diagonal</span>
+  </div>
+
+  <p>
+    <strong>We implement the basis-vector version, not this one</strong>, and the reasons are worth
+    separating because one of them is a matter of taste and the other is not.
+  </p>
+
+  <p>
+    The small reason is that <code>mat3</code> has no <code>operator+</code>, no scalar multiply
+    and no outer product. It has never needed them, and adding three operators to a core type so
+    that one function can be spelled differently is the wrong trade at this point in the course.
+    Module 8's inertia tensor genuinely needs an outer product — that is what an inertia tensor
+    <em>is</em> — and that is the right moment to add them, at the point of need rather than in
+    advance.
+  </p>
+
+  <p>
+    The large reason is that the basis-vector version is <strong>checkable by a reader who has the
+    derivation in their head</strong>, and nine transcribed products of sines are not. You can look
+    at three calls to <code>rotate_about_axis</code> and see the definition of a matrix. You cannot
+    look at <code>m21 = n.z * n.y * k + n.x * s</code> and see anything at all — which is exactly
+    why the harness transcribes the closed form <em>separately</em> and checks the two against each
+    other across fifty thousand turns. A second, independent route is the only thing that makes a
+    transcription trustworthy.
+  </p>
+
+  <div class="worked">
+    <p><strong>verify_72 §B.2–B.4</strong> — two routes, one matrix:</p>
+<pre><code>50,000 turns: worst element difference vs the closed form = 1.788e-07
+worst |RᵀR - I| = 8.345e-07, worst |det R - 1| = 5.364e-07
+vs rotation_x/y/z over 361 angles: worst 5.960e-08   CONTROL (y vs x) 2.0000</code></pre>
+    <p>
+      The last line is the bridge to everything built before this lesson: a Rodrigues turn about
+      <code>x̂</code> <em>is</em> <code>rotation_x</code>, to six parts in a hundred million, over
+      every whole degree from −180 to +180. And the control — comparing a turn about
+      <code>ŷ</code> against <code>rotation_x</code> — differs by 2.0, which is the largest two
+      entries of a rotation matrix can differ by. A check that cannot produce 2.0 cannot be
+      trusted when it produces 6e-08.
+    </p>
+  </div>

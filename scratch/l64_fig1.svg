@@ -1,0 +1,33 @@
+<svg viewBox="0 0 720 340" role="img" aria-labelledby="l64f1-t l64f1-d">
+  <title id="l64f1-t">The energy budget, before and after Fresnel coupling</title>
+  <desc id="l64f1-d">Two stacked bars against a line marking the light that arrived. Before this lesson the diffuse lobe returned the full albedo and the specular lobe was added on top, totalling 1.1386 and overrunning the line. After coupling, the diffuse lobe receives only the light that got past the interface and the two together total 0.9144.</desc>
+  <defs>
+    <marker id="e-i-l64f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l64f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l64f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l64f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l64f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="0" y="0" width="720" height="340" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="360.0" y="28" class="lg" text-anchor="middle">One photon arrives. How many times may it leave?</text>
+<line x1="474.0" y1="62" x2="474.0" y2="258" class="ink" stroke-width="1.6"/>
+<text x="474.0" y="52" class="sm" text-anchor="middle">1.0  =  what arrived</text>
+<text x="194" y="112" class="sm" text-anchor="end">Lessons 3.7 - 6.3</text>
+<text x="194" y="130" class="xs" text-anchor="end">two lobes, added</text>
+<rect x="210" y="92" width="264.0" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="474.0" y="92" width="36.5904" height="34" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.75"/>
+<text x="342.0" y="114" class="xs" text-anchor="middle">diffuse 1.0000</text>
+<text x="552" y="114" class="xs" text-anchor="start">+ specular 0.1386</text>
+<text x="510.5904" y="84" class="sm" text-anchor="middle">1.1386</text>
+<rect x="474.0" y="92" width="36.59040000000002" height="34" rx="3" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.55"/>
+<text x="194" y="196" class="sm" text-anchor="end">Lesson 6.4</text>
+<text x="194" y="214" class="xs" text-anchor="end">one photon, spent once</text>
+<rect x="210" y="176" width="231.71280000000002" height="34" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.45"/>
+<rect x="441.7128" y="176" width="9.6888" height="34" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.75"/>
+<text x="325.8564" y="198" class="xs" text-anchor="middle">diffuse 0.8777</text>
+<text x="552" y="198" class="xs" text-anchor="start">+ specular 0.0367</text>
+<text x="451.40160000000003" y="168" class="sm" text-anchor="middle">0.9144</text>
+<rect x="20" y="262" width="590" height="62" rx="3" class="fill-soft grid" stroke-width="1.2"/>
+<text x="355.0" y="284" class="sm" text-anchor="middle">The fault is the PLUS SIGN, not either term.</text>
+<text x="355.0" y="306" class="xs" text-anchor="middle">F bounces off, so 1 - F goes in — and only what goes in comes back out.</text>
+</svg>

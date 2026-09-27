@@ -1,0 +1,84 @@
+<svg viewBox="0 0 720 356" role="img" aria-labelledby="f49f-t f49f-d">
+  <title id="f49f-t">Our frame log against a real capture</title>
+  <desc id="f49f-d">A twelve-row comparison. The log gives the event tree, resource names, uniform byte counts, a cross-check against a second counter, CI operation and support for every backend. A capture gives resource contents at an event, replay up to a draw, live pipeline state, shader disassembly, per-draw GPU timing and per-fragment shader stepping. The last six need the frame replayed.</desc>
+  <defs>
+    <marker id="e-i-f49f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f49f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f49f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6"
+            orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+  </defs>
+  <text x="24" y="22" class="sm">two instruments, and the questions each one cannot answer</text>
+  <text x="30" y="50" class="xs muted">question</text>
+  <text x="470" y="50" class="xs muted" text-anchor="middle">our frame log</text>
+  <text x="600" y="50" class="xs muted" text-anchor="middle">a real capture</text>
+  <rect x="24" y="48" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="62" class="xs">the event tree: what happened, in order</text>
+  <rect x="454" y="51" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="62" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="51" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="62" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="30" y="83" class="xs">resource NAMES, so the tree is readable</text>
+  <rect x="454" y="72" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="83" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="72" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="83" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="24" y="90" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="104" class="xs">how many bytes each uniform push moved</text>
+  <rect x="454" y="93" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="104" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="93" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="104" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="30" y="125" class="xs">a cross-check against a second counter</text>
+  <rect x="454" y="114" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="125" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="114" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="600" y="125" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="24" y="132" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="146" class="xs">runs in CI, with no GUI and no driver hooks</text>
+  <rect x="454" y="135" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="146" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="135" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="600" y="146" class="xs t-inv" text-anchor="middle">no</text>
+  <text x="30" y="167" class="xs">runs on every backend, including Metal</text>
+  <rect x="454" y="156" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="470" y="167" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="584" y="156" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="600" y="167" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="24" y="174" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="188" class="xs">the CONTENTS of a buffer at a given event</text>
+  <rect x="454" y="177" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="188" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="177" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="188" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="30" y="209" class="xs">the framebuffer replayed up to one draw</text>
+  <rect x="454" y="198" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="209" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="198" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="209" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="24" y="216" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="230" class="xs">which pipeline state was live at a draw</text>
+  <rect x="454" y="219" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="230" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="219" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="230" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="30" y="251" class="xs">the compiled shader, disassembled</text>
+  <rect x="454" y="240" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="251" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="240" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="251" class="xs t-inv" text-anchor="middle">yes</text>
+  <rect x="24" y="258" width="672" height="21" class="fill-soft" stroke="none"/>
+  <text x="30" y="272" class="xs">per-draw GPU timing</text>
+  <rect x="454" y="261" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="272" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="261" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="272" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="30" y="293" class="xs">step a single fragment through the shader</text>
+  <rect x="454" y="282" width="32" height="14" fill="#eb786e" fill-opacity="0.55"/>
+  <text x="470" y="293" class="xs t-inv" text-anchor="middle">no</text>
+  <rect x="584" y="282" width="32" height="14" fill="#5ac878" fill-opacity="0.75"/>
+  <text x="600" y="293" class="xs t-inv" text-anchor="middle">yes</text>
+  <text x="24" y="330" class="xs">The top six are why a hundred and fifty lines of frame log were worth writing. <tspan class="t-hi">The bottom six are why the tools exist</tspan>, and</text>
+  <text x="24" y="346" class="xs">no amount of logging gets you them: they need the frame <tspan class="t-hi">replayed</tspan>, which needs the driver.</text>
+</svg>

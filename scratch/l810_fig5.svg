@@ -1,0 +1,68 @@
+<svg viewBox="0 0 980 396" role="img" aria-labelledby="f5-t f5-d">
+  <title id="f5-t">Baumgarte pushes on the real velocity; split impulse pushes on a shadow</title>
+  <desc id="f5-d">Left: both corrections compute the same target, but Baumgarte adds it to the body's real velocity while split impulse drives a separate pseudo velocity that is discarded at the end of the step. Right: a crate spawned 200 mm inside the floor is thrown 99 mm clear of it by Baumgarte and settles at the slop under split impulse, and the two corrections work at the same rate.</desc>
+  <defs>
+    <marker id="e-i-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-green-f5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="26" y="36" class="sm" text-anchor="start">The same correction, applied to two different velocities</text>
+<text x="30" y="66" class="xs mono" text-anchor="start">Baumgarte</text>
+<rect x="30" y="74" width="400" height="118" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.3"/>
+<text x="46" y="100" class="xs" text-anchor="start">velocity solve</text>
+<rect x="46" y="110" width="150" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.2"/>
+<text x="121" y="130" class="xs mono" text-anchor="middle">state.velocity</text>
+<text x="232" y="100" class="xs" text-anchor="start">correction target</text>
+<rect x="232" y="110" width="174" height="30" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.2"/>
+<text x="319" y="130" class="xs mono" text-anchor="middle">state.velocity</text>
+<text x="46" y="166" class="xs muted" text-anchor="start">one velocity; the push survives the step</text>
+<text x="30" y="218" class="xs mono" text-anchor="start">split impulse</text>
+<rect x="30" y="226" width="400" height="118" rx="3" fill="none" stroke="#5ac878" stroke-width="1.3"/>
+<text x="46" y="252" class="xs" text-anchor="start">velocity solve</text>
+<rect x="46" y="262" width="150" height="30" rx="3" fill="none" stroke="#5082e6" stroke-width="1.2"/>
+<text x="121" y="282" class="xs mono" text-anchor="middle">state.velocity</text>
+<text x="232" y="252" class="xs" text-anchor="start">correction target</text>
+<rect x="232" y="262" width="174" height="30" rx="3" fill="none" stroke="#5ac878" stroke-width="1.2"/>
+<text x="319" y="282" class="xs mono" text-anchor="middle">pseudo_velocity</text>
+<text x="46" y="318" class="xs muted" text-anchor="start">two velocities; the push is thrown away</text>
+<text x="500" y="32" class="xs muted" text-anchor="start">Peak height relative to the surface (negative = never surfaced)</text>
+<text x="500" y="52" class="xs muted" text-anchor="start">spawned inside the floor</text>
+<text x="826" y="52" class="xs muted" text-anchor="end">Baumgarte</text>
+<text x="922" y="52" class="xs muted" text-anchor="end">split</text>
+<line x1="500" y1="60.0" x2="928" y2="60.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="77.0" class="xs" text-anchor="start">10 mm</text>
+<text x="826" y="77.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="922" y="77.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="500" y="94.0" class="xs" text-anchor="start">50 mm</text>
+<text x="826" y="94.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="922" y="94.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="500" y="111.0" class="xs" text-anchor="start">100 mm</text>
+<text x="826" y="111.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="922" y="111.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="500" y="128.0" class="xs" text-anchor="start">200 mm</text>
+<text x="826" y="128.0" class="xs mono" text-anchor="end">+99 mm</text>
+<text x="922" y="128.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="500" y="145.0" class="xs" text-anchor="start">300 mm</text>
+<text x="826" y="145.0" class="xs mono" text-anchor="end">+215 mm</text>
+<text x="922" y="145.0" class="xs mono" text-anchor="end">-5 mm</text>
+<text x="500" y="188" class="xs muted" text-anchor="start">…and what it costs to get there</text>
+<text x="500" y="208" class="xs muted" text-anchor="start">gravity off, 100 mm deep</text>
+<text x="826" y="208" class="xs muted" text-anchor="end">Baumgarte</text>
+<text x="922" y="208" class="xs muted" text-anchor="end">split</text>
+<line x1="500" y1="216.0" x2="928" y2="216.0" class="grid" stroke-width="1.0"/>
+<text x="500" y="233.0" class="xs" text-anchor="start">departure speed, m/s</text>
+<text x="826" y="233.0" class="xs mono" text-anchor="end">1.14010</text>
+<text x="922" y="233.0" class="xs mono" text-anchor="end">0.00000</text>
+<text x="500" y="250.0" class="xs" text-anchor="start">kinetic energy added, J</text>
+<text x="826" y="250.0" class="xs mono" text-anchor="end">6.499</text>
+<text x="922" y="250.0" class="xs mono" text-anchor="end">0.000</text>
+<text x="500" y="267.0" class="xs" text-anchor="start">time to remove 1/e, ms</text>
+<text x="826" y="267.0" class="xs mono" text-anchor="end">83.33</text>
+<text x="922" y="267.0" class="xs mono" text-anchor="end">83.33</text>
+<text x="500" y="314" class="xs muted" text-anchor="start">Not slower: the same arithmetic, the same rate. What differs</text>
+<text x="500" y="330" class="xs muted" text-anchor="start">is only whose velocity it pushes on.</text>
+</svg>
