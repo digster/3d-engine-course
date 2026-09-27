@@ -206,6 +206,10 @@ LISTING_META = {
     "demos/broadphase/main.cpp":                 ("new", "new"),
     "scratch/verify_88.cpp":                     ("new", "new"),
     "scratch/build_verify_88.sh":                ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/phys/rigid_body.hpp": ("modified", "modified"),
+    "engine/include/engine/phys/shape.hpp": ("modified", "modified"),
+    "engine/src/phys/rigid_body.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {

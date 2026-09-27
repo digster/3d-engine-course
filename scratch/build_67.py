@@ -95,10 +95,35 @@ LISTING_META = {
     "engine/include/engine/gfx/material.hpp": ("modified", "modified"),
     "shaders/scene.frag.hlsl":                ("modified", "modified"),
     "scratch/verify_67.cpp":                  ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/asset/asset_store.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/clip.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gltf.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_mesh.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/mesh.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/soft_renderer.hpp": ("modified", "modified"),
+    "engine/src/asset/asset_store.cpp": ("modified", "modified"),
+    "engine/src/gfx/clip.cpp": ("modified", "modified"),
+    "engine/src/gfx/gltf.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_mesh.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
+    "engine/src/gfx/soft_renderer.cpp": ("modified", "modified"),
+    "engine/src/gfx/texture.cpp": ("modified", "modified"),
+    "shaders/mesh.vert.hlsl": ("modified", "modified"),
+    "shaders/scene.vert.hlsl": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/mesh.vert.hlsl": ("hlsl", "HLSL"),
+    "shaders/scene.vert.hlsl": ("hlsl", "HLSL"),
 }
 
 # PINNED at commit b5cbda8 ("Add Lesson 6.7"), by Lesson 6.8, before a line of
@@ -130,6 +155,28 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/material.hpp": "scratch/l67_engine_include_engine_gfx_material.hpp",
     "shaders/scene.frag.hlsl":                "scratch/l67_shaders_scene.frag.hlsl",
     "scratch/verify_67.cpp":                  "scratch/l67_scratch_verify_67.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/asset/asset_store.hpp": "scratch/l67_engine_include_engine_asset_asset_store.hpp",
+    "engine/include/engine/gfx/clip.hpp": "scratch/l67_engine_include_engine_gfx_clip.hpp",
+    "engine/include/engine/gfx/gltf.hpp": "scratch/l67_engine_include_engine_gfx_gltf.hpp",
+    "engine/include/engine/gfx/gpu_mesh.hpp": "scratch/l67_engine_include_engine_gfx_gpu_mesh.hpp",
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l67_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l67_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/mesh.hpp": "scratch/l67_engine_include_engine_gfx_mesh.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l67_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/gfx/soft_renderer.hpp": "scratch/l67_engine_include_engine_gfx_soft_renderer.hpp",
+    "engine/src/asset/asset_store.cpp": "scratch/l67_engine_src_asset_asset_store.cpp",
+    "engine/src/gfx/clip.cpp": "scratch/l67_engine_src_gfx_clip.cpp",
+    "engine/src/gfx/gltf.cpp": "scratch/l67_engine_src_gfx_gltf.cpp",
+    "engine/src/gfx/gpu_mesh.cpp": "scratch/l67_engine_src_gfx_gpu_mesh.cpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l67_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l67_engine_src_gfx_raster.cpp",
+    "engine/src/gfx/soft_renderer.cpp": "scratch/l67_engine_src_gfx_soft_renderer.cpp",
+    "engine/src/gfx/texture.cpp": "scratch/l67_engine_src_gfx_texture.cpp",
+    "shaders/mesh.vert.hlsl": "scratch/l67_shaders_mesh.vert.hlsl",
+    "shaders/scene.vert.hlsl": "scratch/l67_shaders_scene.vert.hlsl",
+    "demos/gltf_view/main.cpp": "scratch/l67_demos_gltf_view_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l67_demos_sandbox_main.cpp",
 }
 #
 # And take `scratch/verify_67.cpp` EARLY — gitignored, so its only provenance is

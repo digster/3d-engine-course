@@ -92,6 +92,16 @@ LISTING_META = {
     "engine/include/engine/gfx/light.hpp":      ("modified", "modified"),
     "shaders/scene.frag.hlsl":                  ("modified", "modified"),
     "scratch/verify_64.cpp":                    ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/soft_renderer.hpp": ("modified", "modified"),
+    "demos/common/demo_scene.cpp": ("modified", "modified"),
+    "demos/common/demo_scene.hpp": ("modified", "modified"),
+    "demos/ecs_swarm/main.cpp": ("modified", "modified"),
+    "demos/hello_cube/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
@@ -151,6 +161,16 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/light.hpp":      "scratch/l64_engine_include_engine_gfx_light.hpp",
     "shaders/scene.frag.hlsl":                  "scratch/l64_shaders_scene.frag.hlsl",
     "scratch/verify_64.cpp":                    "scratch/l64_scratch_verify_64.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l64_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l64_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/gfx/scene.hpp": "scratch/l64_engine_include_engine_gfx_scene.hpp",
+    "engine/include/engine/gfx/soft_renderer.hpp": "scratch/l64_engine_include_engine_gfx_soft_renderer.hpp",
+    "demos/common/demo_scene.cpp": "scratch/l64_demos_common_demo_scene.cpp",
+    "demos/common/demo_scene.hpp": "scratch/l64_demos_common_demo_scene.hpp",
+    "demos/ecs_swarm/main.cpp": "scratch/l64_demos_ecs_swarm_main.cpp",
+    "demos/hello_cube/main.cpp": "scratch/l64_demos_hello_cube_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l64_demos_sandbox_main.cpp",
 }
 
 

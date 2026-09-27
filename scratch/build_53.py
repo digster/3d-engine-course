@@ -74,6 +74,21 @@ LISTING_META = {
     "engine/include/engine/gfx/image.hpp": ("modified", "modified"),
     "engine/src/gfx/image.cpp": ("modified", "modified"),
     "scratch/convert_logs_53.py": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/platform/platform.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_buffer.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_debug.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_device.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_mesh.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_pipeline.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_present.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_shader.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "engine/src/platform/app.cpp": ("modified", "modified"),
+    "engine/src/platform/platform.cpp": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 # LISTING_SOURCE — added 2026-09-12, and without it THIS SCRIPT CANNOT RUN.
@@ -102,6 +117,21 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/image.hpp":   "scratch/l53_engine_include_engine_gfx_image.hpp",
     "engine/src/gfx/image.cpp":              "scratch/l53_engine_src_gfx_image.cpp",
     "scratch/convert_logs_53.py":            "scratch/l53_scratch_convert_logs_53.py",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/platform/platform.hpp": "scratch/l53_engine_include_engine_platform_platform.hpp",
+    "engine/src/gfx/gpu_buffer.cpp": "scratch/l53_engine_src_gfx_gpu_buffer.cpp",
+    "engine/src/gfx/gpu_debug.cpp": "scratch/l53_engine_src_gfx_gpu_debug.cpp",
+    "engine/src/gfx/gpu_device.cpp": "scratch/l53_engine_src_gfx_gpu_device.cpp",
+    "engine/src/gfx/gpu_mesh.cpp": "scratch/l53_engine_src_gfx_gpu_mesh.cpp",
+    "engine/src/gfx/gpu_pipeline.cpp": "scratch/l53_engine_src_gfx_gpu_pipeline.cpp",
+    "engine/src/gfx/gpu_present.cpp": "scratch/l53_engine_src_gfx_gpu_present.cpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l53_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/gpu_shader.cpp": "scratch/l53_engine_src_gfx_gpu_shader.cpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l53_engine_src_gfx_gpu_texture.cpp",
+    "engine/src/platform/app.cpp": "scratch/l53_engine_src_platform_app.cpp",
+    "engine/src/platform/platform.cpp": "scratch/l53_engine_src_platform_platform.cpp",
+    "engine/CMakeLists.txt": "scratch/l53_engine_CMakeLists.txt",
+    "demos/sandbox/main.cpp": "scratch/l53_demos_sandbox_main.cpp",
 }
 
 # LISTING_SOURCE — added 2026-09-12, and without it THIS SCRIPT CANNOT RUN.
@@ -125,6 +155,8 @@ LISTING_SOURCE = {
 # builder from 5.8 onward.
 LISTING_LANG = {
     "scratch/convert_logs_53.py": ("py", "Python"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 

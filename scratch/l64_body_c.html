@@ -431,6 +431,12 @@
       <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td><td>the same equation, in HLSL</td></tr>
       <tr><td><code>demos/common/demo_scene.cpp</code></td><td>modified</td><td>materials re-authored; the eighth golden frame</td></tr>
       <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td><td>[E] cycles roughness; [H] gains Cook-Torrance</td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td><td><code>microsurface surface</code> replaces the Phong exponent; <code>specular_model</code> defaults to Cook–Torrance</td></tr>
+      <tr><td><code>engine/include/engine/gfx/scene.hpp</code></td><td>modified</td><td><code>microsurface surface</code> on every scene object</td></tr>
+      <tr><td><code>engine/include/engine/gfx/soft_renderer.hpp</code></td><td>modified</td><td>the same two fields, for the CPU path</td></tr>
+      <tr><td><code>demos/common/demo_scene.hpp</code></td><td>modified</td><td>the scene builders take a roughness instead of a shininess</td></tr>
+      <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td><td>every material restated as roughness and metallic</td></tr>
+      <tr><td><code>demos/hello_cube/main.cpp</code></td><td>modified</td><td><code>{.roughness = 0.45}</code>: painted wood</td></tr>
       <tr><td><code>scratch/verify_64.cpp</code></td><td>new</td><td>29 checks, eight sections</td></tr>
     </tbody>
   </table>
@@ -439,6 +445,24 @@
   @@LISTING:engine/include/engine/gfx/microfacet.hpp@@
   @@LISTING:engine/include/engine/gfx/light.hpp@@
   @@LISTING:shaders/scene.frag.hlsl@@
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/scene.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/soft_renderer.hpp@@
+
+  @@LISTING:demos/common/demo_scene.cpp@@
+
+  @@LISTING:demos/common/demo_scene.hpp@@
+
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+
+  @@LISTING:demos/hello_cube/main.cpp@@
+
+  @@LISTING:demos/sandbox/main.cpp@@
+
   @@LISTING:scratch/verify_64.cpp@@
 
   <!-- =================================================================

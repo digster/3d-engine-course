@@ -88,6 +88,17 @@ LISTING_META = {
     "engine/include/engine/gfx/cull.hpp":     ("new", "new"),
     "engine/include/engine/gfx/scene.hpp":    ("modified", "modified"),
     "scratch/verify_65.cpp":                  ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/texture.hpp": ("modified", "modified"),
+    "engine/src/gfx/soft_renderer.cpp": ("modified", "modified"),
+    "demos/common/demo_scene.hpp": ("modified", "modified"),
+    "demos/hello_cube/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "demos/common/demo_scene.cpp": ("modified", "modified"),
+    "demos/ecs_swarm/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {}
@@ -122,6 +133,17 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/material.hpp": "scratch/l65_material.hpp",
     "engine/include/engine/gfx/scene.hpp":    "scratch/l65_scene.hpp",
     "scratch/verify_65.cpp":                  "scratch/l65_verify_65.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/raster.hpp": "scratch/l65_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/gfx/texture.hpp": "scratch/l65_engine_include_engine_gfx_texture.hpp",
+    "engine/src/gfx/soft_renderer.cpp": "scratch/l65_engine_src_gfx_soft_renderer.cpp",
+    "demos/common/demo_scene.hpp": "scratch/l65_demos_common_demo_scene.hpp",
+    "demos/hello_cube/main.cpp": "scratch/l65_demos_hello_cube_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l65_demos_sandbox_main.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l65_engine_include_engine_gfx_gpu_uniform.hpp",
+    "demos/common/demo_scene.cpp": "scratch/l65_demos_common_demo_scene.cpp",
+    "demos/ecs_swarm/main.cpp": "scratch/l65_demos_ecs_swarm_main.cpp",
 }
 
 

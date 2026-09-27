@@ -98,10 +98,21 @@ LISTING_META = {
     "engine/src/gfx/instancing.cpp": ("new", "new"),
     "shaders/scene_instanced.vert.hlsl": ("new", "new"),
     "scratch/verify_616.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/bounds.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_pipeline.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_pipeline.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "CMakeLists.txt": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/scene_instanced.vert.hlsl": ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "CMakeLists.txt": ("cmake", "CMake"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -113,6 +124,14 @@ LISTING_SOURCE = {
     "engine/src/gfx/instancing.cpp":            "scratch/l616_engine_src_gfx_instancing.cpp",
     "shaders/scene_instanced.vert.hlsl":        "scratch/l616_shaders_scene_instanced.vert.hlsl",
     "scratch/verify_616.cpp":                   "scratch/l616_scratch_verify_616.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/bounds.hpp": "scratch/l616_engine_include_engine_gfx_bounds.hpp",
+    "engine/include/engine/gfx/gpu_pipeline.hpp": "scratch/l616_engine_include_engine_gfx_gpu_pipeline.hpp",
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l616_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/src/gfx/gpu_pipeline.cpp": "scratch/l616_engine_src_gfx_gpu_pipeline.cpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l616_engine_src_gfx_gpu_scene.cpp",
+    "CMakeLists.txt": "scratch/l616_CMakeLists.txt",
+    "engine/CMakeLists.txt": "scratch/l616_engine_CMakeLists.txt",
 }
 
 # NOTHING PINNED YET, and this page lists SIX files whole.

@@ -2359,6 +2359,12 @@ struct broadphase_pair
           <td>Adds the <code>broadphase</code> target.</td></tr>
       <tr><td><code>demos/broadphase/main.cpp</code></td><td>new</td>
           <td>The grid seen from above, with the contract checked live.</td></tr>
+      <tr><td><code>engine/include/engine/phys/shape.hpp</code></td><td>modified</td>
+          <td>two doc comments: “8.6's broadphase” now reads “8.8's” (see the note)</td></tr>
+      <tr><td><code>engine/include/engine/phys/rigid_body.hpp</code></td><td>modified</td>
+          <td>one doc comment, the same one-digit correction</td></tr>
+      <tr><td><code>engine/src/phys/rigid_body.cpp</code></td><td>modified</td>
+          <td>one doc comment, the same one-digit correction</td></tr>
       <tr><td><code>scratch/verify_88.cpp</code></td><td>new</td>
           <td>Ten measured sections, 51 checks, every one with a control.</td></tr>
       <tr><td><code>scratch/build_verify_88.sh</code></td><td>new</td>
@@ -2368,18 +2374,18 @@ struct broadphase_pair
   </div>
 
   <div class="callout">
-    <span class="label">Three files changed by one word each, and not reprinted</span>
+    <span class="label">Three files changed by one word each, and listed whole anyway</span>
     <p>
       <code>engine/include/engine/phys/shape.hpp</code> (twice),
       <code>engine/include/engine/phys/rigid_body.hpp</code> and
       <code>engine/src/phys/rigid_body.cpp</code> each carried a doc comment saying “8.6's
       broadphase”. They were written when the broadphase was expected to land in 8.6, before GJK and
       EPA took a lesson each; the broadphase is this one. Every occurrence now reads “8.8's
-      broadphase”, and the change is exactly that — no code, no declarations, no behaviour. The
-      three files are 2,458 lines between them and reprinting all of it to change one digit three
-      times would bury this lesson's own code, so this note is the record instead. It is the only
-      place in this course where a changed file is not listed whole, and it is named here rather
-      than passed over.
+      broadphase”, and the change is exactly that — no code, no declarations, no behaviour. All
+      three are reprinted below regardless, 2,458 lines to move one digit three times, because the
+      rule that a changed file appears whole is only worth anything if it holds when it is
+      inconvenient: a student who follows the pages has to end with the engine, and a note is not
+      a file.
     </p>
   </div>
 
@@ -5453,6 +5459,2494 @@ private:
 } // namespace
 
 ENGINE_MAIN(broadphase_app)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/phys/rigid_body.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/phys/rigid_body.hpp — a thing with a mass, and the
+// table of them.
+//
+// Lesson 8.2. Lesson 8.1 gave this engine a `motion` — a position and a velocity
+// — and a set of rules for advancing one through time. What it did not give it is
+// any way to say WHY a body accelerates. You hand `integrate` an acceleration and
+// it believes you. That is enough to drop a cube, and it is enough for nothing
+// else, for two reasons that look small and are not.
+//
+//   1. AN ACCELERATION CANNOT BE ADDED UP. Gravity wants to accelerate a body
+//      downward, a thruster wants to push it forward, drag wants to slow it, and
+//      the wind wants to shove it sideways. Each of those is a separate system
+//      that knows nothing about the others, and every one of them wants to write
+//      the same field. The last writer wins and the rest of the physics silently
+//      does not happen. Forces do not have this problem — they ADD, by Newton&#x27;s
+//      second law being linear in F — which is why every physics engine ever
+//      written has an accumulator and not a setter.
+//
+//   2. AN ACCELERATION DOES NOT KNOW ABOUT MASS, so nothing in 8.1&#x27;s world can
+//      tell a crate from a pebble. Push both with the same thruster and both
+//      accelerate identically, which is wrong in a way a player notices
+//      immediately. And you cannot fix it by passing `F/m` at the call site,
+//      because the whole point of the accumulator above is that the division
+//      happens ONCE, after everything has been added, at the moment the step
+//      runs.
+//
+// So: `F = m*a`, an accumulator, and a table to keep the bodies in.
+//
+// ---- THE TWO THINGS IN THIS FILE THAT ARE NOT OBVIOUS ----------------------
+//
+// INVERSE MASS, NOT MASS, and the reason is not the divide. See `inv_mass`.
+//
+// AND A BODY&#x27;S POSITION IS IN **WORLD SPACE**, unconditionally, which is a
+// restriction rather than a feature and is the second half of this lesson. A
+// rigid body integrated in a parent&#x27;s local space is integrated in a frame that
+// may scale it, shear it, and — if the parent rotates — accelerate it. Under a
+// parent scaled by 2 the body falls at 2 g. Under a NON-UNIFORMLY scaled parent
+// gravity stops pointing down at all: §8 measures a body that falls at 63.4
+// degrees off vertical and 1.58 g, with nothing in the scene doing anything
+// unusual. `body_world` therefore has no concept of a parent, a hierarchy or a
+// transform, and `inspect_frame` below exists so that you can MEASURE what one
+// would have done to you rather than take that on trust.
+//
+// ---- WHAT IS STILL NOT HERE -------------------------------------------------
+//
+// ---- WHAT LESSON 8.3 ADDED --------------------------------------------------
+//
+// Rotation. 8.2 left this file with a body that was a point with a mass — it
+// translated and it did not spin, `add_force` had no application point, and
+// there was no torque and no inertia tensor. All of that is here now:
+// `orientation`, `angular_velocity`, a `torque` accumulator, `inv_inertia_local`
+// and `add_force_at`, which is the first function in this engine that can make
+// something tumble.
+//
+// **The linear half above is untouched by it**, and that is a fact about physics
+// rather than about how carefully the edit was made. Linear momentum and angular
+// momentum do not mix: the centre of mass of a body moves exactly as `F = ma`
+// says however wildly the body is spinning, which is why a thrown hammer&#x27;s
+// centre traces a clean parabola while the hammer tumbles around it. Every
+// number 8.2 measured is still the number it measured.
+//
+// THREE THINGS IN THE ANGULAR HALF ARE NOT MIRRORS OF THE LINEAR ONE, and they
+// are where 8.3&#x27;s difficulty lives:
+//
+//   * **The tensor is in BODY axes and everything else is in world axes.** See
+//     `inv_inertia_local`. It is forced, not chosen.
+//   * **The orientation update is not an addition.** See `advance_orientation`
+//     in integrate.hpp. `q += omega*h` is not merely inaccurate, it is not a
+//     rotation.
+//   * **`omega` is not conserved when `tau` is zero — `L` is.** A torque-free
+//     body&#x27;s angular velocity wanders continuously, changes magnitude, and for
+//     an asymmetric body can flip end over end without anything acting on it.
+//     `angular_momentum` is the quantity to watch in a debugger; `gyroscopic`
+//     is the flag that decides whether any of it happens.
+//
+// No collision (8.4 onward), no constraints (8.10, 8.11), no sleeping (8.10),
+// and no continuous collision detection: `step_report::max_travel` measures how
+// far the fastest body moves in one step, which is the number that decides
+// whether a body will tunnel through a wall, but nothing here does anything
+// about it. Lesson 1.8&#x27;s swept test is the shape of the answer and 8.13 is where
+// it comes due.
+#pragma once
+
+#include &lt;engine/core/handle.hpp&gt;
+#include &lt;engine/core/pool.hpp&gt;
+#include &lt;engine/math/mat3.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/quat.hpp&gt;
+#include &lt;engine/math/transform.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+#include &lt;engine/phys/inertia.hpp&gt;
+#include &lt;engine/phys/integrate.hpp&gt;
+
+#include &lt;cstdint&gt;
+#include &lt;span&gt;
+
+namespace engine::phys
+{
+
+/// Standard gravity at the Earth&#x27;s surface, in metres per second squared.
+///
+/// **9.80665 is a defined constant, not a measurement** — it is fixed by the
+/// General Conference on Weights and Measures, and the actual local value varies
+/// from about 9.764 at the top of a mountain near the equator to 9.834 at the
+/// poles. Games use 9.81, and this engine rounds to it for the same reason
+/// everyone does: the third decimal place of gravity is four orders below the
+/// smallest thing a player can perceive, and a round number is easier to
+/// recognise in a debugger.
+///
+/// THE NUMBER IS IN METRES AND SECONDS, AND THAT IS WHY conventions.html §3
+/// MATTERS. It has said &quot;one unit is one metre&quot; since Module 2, when nothing in
+/// the engine could tell the difference. This constant is the first line of code
+/// in the course for which a unit is not a matter of taste: put it in a world
+/// where a unit is half a metre and everything in it falls at the wrong rate,
+/// with a symptom — &quot;floaty&quot; or &quot;toy-like&quot; — that names the bug if you know how
+/// to read it. §7 derives the relationship (every duration scales as the square
+/// root of the length scale) and measures it.
+inline constexpr float k_gravity = 9.81f;
+
+/// The engine&#x27;s default gravity vector: down is −y, by conventions.html §1.
+inline constexpr vec3 k_gravity_down{0.0f, -k_gravity, 0.0f};
+
+// ---------------------------------------------------------------------------
+// What kind of body this is
+// ---------------------------------------------------------------------------
+
+/// Three answers to two different questions, which is why this is not a bool.
+///
+/// Engines universally offer these three and the difference between the last two
+/// is the one people get wrong, so it is worth stating as two questions rather
+/// than three names:
+///
+///   **&quot;Can a force move it?&quot;** — answered by `inv_mass`, and the answer is no
+///   whenever `inv_mass` is 0. A crate landing on a lift must not push the lift
+///   down, however heavy the crate is.
+///
+///   **&quot;Does it move at all?&quot;** — answered by this enum. A lift moves; a floor
+///   does not. Both are immovable BY FORCES, and only one of them has a velocity
+///   that the crate standing on it will need to be carried by (8.9).
+///
+/// Conflating the two gives you the two classic bugs. Make the lift dynamic and
+/// heavy, and it sags under load and drifts under gravity. Make it static and
+/// teleport it each frame, and anything standing on it is left behind, because a
+/// body with no velocity imparts none.
+///
+/// **`fixed` IS WHAT EVERY OTHER ENGINE CALLS `static`.** `static` is a C++
+/// keyword and cannot be an enumerator, even inside an `enum class`, so the name
+/// has to change; `fixed` is the word this codebase uses and the doc comment
+/// says the other one so that a search for it lands here.
+enum class body_kind : std::uint8_t
+{
+    /// Forces move it and gravity pulls on it. The default, and the only kind
+    /// that `step` integrates a velocity for.
+    dynamic,
+
+    /// Moved by gameplay, never by physics. Its velocity is whatever you set,
+    /// it is integrated (so it travels), gravity does not touch it, and no force
+    /// or impulse can change it. A lift, a moving platform, a swinging door.
+    kinematic,
+
+    /// Does not move, ever. Not integrated at all — `step` skips it entirely,
+    /// which is what lets 8.8&#x27;s broadphase keep every one of these in a
+    /// structure it never has to rebuild. The ground, a wall, a rock.
+    fixed,
+};
+
+/// Human-readable name, for logs and debug UI. Never null.
+[[nodiscard]] const char* name_of(body_kind kind);
+
+// ---------------------------------------------------------------------------
+// The body
+// ---------------------------------------------------------------------------
+
+/// What to do about the term in Euler&#x27;s equations that has no linear
+/// counterpart. Lesson 8.3 §9.
+///
+/// `alpha = I^-1 * tau` is only half of the rotational equation of motion. The
+/// other half is `-I^-1 * (omega x (I omega))`, and it is the term that makes an
+/// asymmetric body **tumble** rather than merely spin: a thrown book wobbles,
+/// a rugby ball precesses, and a box spun about its middle axis flips end over
+/// end. Without it, none of that happens — a box spun about any axis spins
+/// about that axis forever, which looks perfectly stable and is wrong.
+///
+/// It is also the one term in this engine that an explicit rule cannot be
+/// trusted with, and 8.1&#x27;s determinant argument says exactly why: it feeds the
+/// angular velocity back into itself through a cross product, which is a
+/// rotation of `omega` — and an explicitly integrated rotation grows by
+/// `sqrt(1 + (sigma*h)^2)` per step. §9 measures a 1 kg box gaining **164% of
+/// its angular momentum in sixty seconds** at 60 Hz, and diverging outright at
+/// 30 Hz.
+enum class gyroscopic_mode : std::uint8_t
+{
+    /// Drop the term. Fast, unconditionally stable, and visibly wrong for
+    /// anything the player watches tumble. **The default**, and the default
+    /// every engine ships — it is what Bullet and PhysX both do (⚠ VERIFY the
+    /// exact spellings against the headers: Bullet&#x27;s
+    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` flag on `btRigidBody`, and
+    /// PhysX&#x27;s `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES`, both opt-in).
+    off,
+
+    /// The term, evaluated at the start of the step and added explicitly.
+    ///
+    /// **This is the one you would write first and it is the one that
+    /// diverges.** It is here so that §9&#x27;s measurement can be reproduced and so
+    /// that the demo can show it — not because it is ever the right choice.
+    explicit_term,
+
+    /// The term, solved implicitly in the body frame by one Newton step.
+    ///
+    /// Write the step as a root-finding problem in the unknown end-of-step
+    /// angular velocity, differentiate, invert a 3x3 and take one iteration.
+    /// One Newton step is what Bullet does, and the reason one is enough is that
+    /// the residual is already `O(h)`.
+    ///
+    /// **It stops the divergence and does not conserve anything.** §9 measures
+    /// the same box: explicit gains 162% of its angular momentum in a minute at
+    /// 60 Hz and diverges by 3.3e+11 at 30, while implicit *loses* 35%. That is
+    /// 8.1&#x27;s backward-Euler determinant — `1/(1 + h^2 w^2)`, the exact
+    /// reciprocal of the explicit one — arriving in the one place this engine
+    /// still integrates something explicitly. It damps rather than explodes,
+    /// which is why it is shippable and why it is not the last word.
+    implicit_term,
+
+    /// **Make the term unnecessary**, by integrating the angular MOMENTUM and
+    /// deriving the angular velocity from it.
+    ///
+    /// The gyroscopic term is not a force. It is the bookkeeping that appears
+    /// when you differentiate `L = I(t) * omega` and insist on treating `omega`
+    /// as the state: `I` is turning with the body, so a constant `L` *requires*
+    /// a changing `omega`, and the term is the size of that requirement. Store
+    /// `L` instead and it is not a term at all —
+    ///
+    ///     L += tau * h                 exactly, because dL/dt = tau
+    ///     omega = I_world(q)^-1 * L    derived, every step, from the new q
+    ///
+    /// — and the only thing left that can move `L` is arithmetic. §9 measures
+    /// **8.0e-04 against implicit&#x27;s 3.5e-01** at 60 Hz, three orders of
+    /// magnitude, and that residue is not truncation: the engine stores `omega`
+    /// and rebuilds `L` from it every step, so the error grows with the NUMBER
+    /// of steps and is the one column in §9&#x27;s table that gets WORSE as the step
+    /// shrinks. Storing `L` would remove it, at the cost of converting at every
+    /// solver iteration.
+    ///
+    /// **So why is this not the default, and why does every shipping engine
+    /// store `omega`?** Because a contact solver speaks velocities. Lessons
+    /// 8.9–8.11 iterate impulses against relative velocities at contact points,
+    /// dozens of times per body per frame, and each iteration would have to
+    /// convert. The choice here is between a cheap exact tumble and a cheap
+    /// solver, and this module needs the solver — so the engine keeps `omega`
+    /// and offers this for the bodies whose tumbling is the point.
+    ///
+    /// The orientation still integrates approximately, so the body&#x27;s ATTITUDE
+    /// drifts exactly as §7 says — and §9 shows that conserving `L` is not on
+    /// its own enough to make the tumble right, which is why `step` pairs this
+    /// mode with a half-step estimate of the angular velocity.
+    momentum,
+};
+
+[[nodiscard]] const char* name_of(gyroscopic_mode mode);
+
+/// A point with a mass: where it is, how fast it is going, and what is pushing
+/// on it.
+///
+/// **IT HAS A `motion` RATHER THAN BEING ONE**, and 8.1&#x27;s header said it would.
+/// That is composition doing a real job, not an aesthetic preference: every
+/// function in `integrate.hpp` — all three rules, both drag helpers, all four
+/// diagnostics — operates on a `motion&amp;` and none of them has to learn what a
+/// body is. The harness in §3 steps a bare `motion` beside a `rigid_body` and
+/// compares them bit for bit, which would be impossible if mass had been added
+/// by widening the struct.
+///
+/// Sixty bytes, which is under a cache line, and the fields are ordered so the
+/// two that the step touches every time are first. §10 measures the walk.
+struct rigid_body
+{
+    /// Position and velocity, **in world space**. Metres and metres per second.
+    ///
+    /// See the file header: this is not negotiable and `body_world` has no way
+    /// to express anything else. `place_in_parent` is the bridge to a scene
+    /// hierarchy and it converts rather than integrating.
+    motion state{};
+
+    /// Which way the body is facing, as a **unit** quaternion (Lesson 7.4).
+    ///
+    /// Lesson 8.3. `state` says where the body is; this says how it is turned,
+    /// and the two are independent in exactly the way 8.1&#x27;s `motion` was not
+    /// ready for — which is why orientation could not simply be a fourth field
+    /// in `motion`. A position is a point in a vector space and moves by
+    /// addition. An orientation is not, and does not. See `advance_orientation`
+    /// in integrate.hpp, and 8.3 §7.
+    ///
+    /// **`step` renormalises it every step**, and that is not defensive
+    /// programming. The linearised update inflates a unit quaternion by
+    /// `(|omega|*h)^2/8` per step — 0.35% at 10 rad/s and 60 Hz, compounding to
+    /// 23% in one second — so without the renormalisation the body visibly
+    /// shears and then collapses. 8.3 §7 measures it.
+    quat orientation{};
+
+    /// Angular velocity **in world space**, in radians per second.
+    ///
+    /// Direction is the axis (right-hand rule, conventions.html §10), magnitude
+    /// is the rate. World space rather than body space for the same reason
+    /// `state.position` is: a solver in 8.9 has two bodies in front of it and
+    /// needs their velocities in one common frame, and converting at every
+    /// contact is both slower and a place to get the direction backwards.
+    ///
+    /// **It is the tensor that lives in body space**, not this. See
+    /// `inv_inertia_local` and `world_inv_inertia`.
+    vec3 angular_velocity{};
+
+    /// Newtons, accumulated since the last step, and **cleared by `step`**.
+    ///
+    /// A force is an INPUT to a step, not a property of a body — it is the sum
+    /// of what every system had to say this frame, and next frame they will all
+    /// say it again. Leaving it set would mean a thruster fired once keeps
+    /// firing forever, which is the single most common bug in a first physics
+    /// engine and presents as objects that slowly accelerate away.
+    ///
+    /// **THE CLEARING IS AT THE END OF THE STEP AND NOT THE START**, which
+    /// matters the moment anything wants to look at it: a debug overlay drawing
+    /// force arrows, an assertion checking that nothing exceeded a sane
+    /// magnitude, the solver in 8.10 reading what the contact generator asked
+    /// for. Clear it first and every one of those reads zero.
+    vec3 force{};
+
+    /// Newton-metres about the body&#x27;s **centre of mass**, accumulated since the
+    /// last step and cleared alongside `force`.
+    ///
+    /// Lesson 8.3, and everything said above about `force` applies here word for
+    /// word: torques add, for the same reason forces do, and a torque left set
+    /// is a body that spins up forever.
+    ///
+    /// **About the centre of mass, world axes.** A torque is only a number once
+    /// you say what it is about, and choosing the centre of mass is what
+    /// decouples the two halves of `step`: about any other point, a force
+    /// through the centre of mass would produce a torque, and pushing a crate
+    /// squarely in the middle would set it spinning. 8.3 §3.
+    ///
+    /// Most callers never touch this directly — `add_force_at` computes
+    /// `r x F` and feeds both accumulators at once, which is what a thruster, an
+    /// explosion or a contact impulse actually wants.
+    vec3 torque{};
+
+    /// **One over the mass, in 1/kg. Zero means immovable.**
+    ///
+    /// Storing the reciprocal is a decision every physics engine makes and the
+    /// usual justification — &quot;it turns a divide into a multiply&quot; — is the least
+    /// of it. A divide is about four times a multiply on modern hardware and
+    /// this happens once per body per step; you would never restructure a public
+    /// API for that. Three real reasons, in increasing order of weight:
+    ///
+    ///   1. **IMMOVABLE IS REPRESENTABLE, AND IT IS THE COMMON CASE.** The floor
+    ///      is immovable, and so is every wall, every rock and every piece of
+    ///      level geometry — which is most of the bodies in a real scene. Its
+    ///      mass is not large, it is *infinite*, and `inv_mass = 0` says so
+    ///      exactly, in a float, with no sentinel and no branch. Storing mass
+    ///      instead forces either a magic value (and `HUGE_VALF` propagates into
+    ///      NaN the moment two of them are subtracted, which §9.1 shows) or a
+    ///      separate bool that every piece of arithmetic has to remember to
+    ///      consult.
+    ///
+    ///   2. **THE SOLVER WANTS EXACTLY THIS QUANTITY AND NOT MASS.** Every
+    ///      contact and every joint in 8.9–8.11 computes an effective mass that
+    ///      is built from `inv_mass_a + inv_mass_b`, and that sum has a clean
+    ///      meaning when one of the two is zero. In terms of masses it is
+    ///      `(m_a*m_b)/(m_a+m_b)` — the reduced mass — which is what you get
+    ///      when you take the reciprocal of a sum of reciprocals, and which
+    ///      needs a special case at every infinity. The storage is chosen to
+    ///      match the arithmetic that the hot loop actually performs.
+    ///
+    ///   3. **THE DEGENERATE CASE MOVES TO WHERE IT BELONGS.** With mass
+    ///      stored, `mass = 0` is a divide by zero and a massless body is a
+    ///      crash. With the reciprocal stored, a massless body is
+    ///      `inv_mass = infinity`, which is a body that any force accelerates
+    ///      infinitely — still nonsense, but nonsense that does not divide, and
+    ///      which `set_mass` refuses at the one place it can be created.
+    ///
+    /// The default is 1, i.e. one kilogram, because a default of 0 would make
+    /// every default-constructed body immovable and that is the kind of default
+    /// that costs an afternoon.
+    float inv_mass = 1.0f;
+
+    /// The **inverse inertia tensor about the centre of mass, in BODY axes**.
+    /// All zeros means &quot;cannot rotate&quot;.
+    ///
+    /// Lesson 8.3, and it is `inv_mass`&#x27;s argument repeated with nine floats
+    /// instead of one — all three reasons survive intact, and the first one
+    /// survives best. A zero tensor is exactly what an immovable body wants: it
+    /// is representable, it is exact, it needs no sentinel, and it passes
+    /// through the basis change `R * I^-1 * R^T` unchanged, so a wall absorbs
+    /// every torque in the scene with no branch anywhere in the step.
+    ///
+    /// **BODY axes, unlike every other field in this struct**, and the asymmetry
+    /// is forced rather than chosen. In world space a tensor changes the instant
+    /// the body turns, so storing it there would mean rebuilding it from the
+    /// shape every step; in body axes it is constant for the life of the body.
+    /// `world_inv_inertia` is the one line that carries it out, and 8.3 §6 is
+    /// about why that line is a sandwich and not a product.
+    ///
+    /// The default is the identity, i.e. a body that resists being spun about
+    /// any axis by 1 kg·m². It is a *shape-free* default and no real shape has
+    /// it; `set_inertia` is how a body gets a real one, and the demo and harness
+    /// both go through `inertia_solid_box` and friends.
+    mat3 inv_inertia_local{};
+
+    /// The **forward** tensor, same point and same axes. All zeros means
+    /// &quot;cannot rotate&quot;, exactly as above.
+    ///
+    /// Thirty-six bytes of redundancy, and §12 is the reason it is here. The
+    /// first version of this struct stored only the inverse — which is the
+    /// argument `inv_mass` makes, carried over honestly — and every consumer of
+    /// the forward tensor paid a **3x3 inverse per body per step**: the
+    /// gyroscopic term, and `step_report::angular_momentum`, which is computed
+    /// whether or not anybody reads it. Measured at 3.591 ns of a 33.793 ns
+    /// update, on top of the second basis change each of them also needed.
+    ///
+    /// **THE INVARIANT IS THAT THESE TWO AGREE**, and it is maintained by
+    /// `set_inertia` being the only supported way to write either. Assigning
+    /// `inv_inertia_local` directly leaves a body whose angular momentum and
+    /// angular acceleration disagree about what it is made of — which no
+    /// assertion here can catch, and which is exactly the cost of caching
+    /// anything. It is paid because the measurement said so.
+    mat3 inertia_local{};
+
+    /// Velocity-space damping, in 1/s. **This is not air resistance.**
+    ///
+    /// Applied by `step` as `apply_drag` — the exact `v *= exp(-k*h)` from 8.1,
+    /// so it is frame-rate independent and cannot reverse the velocity the way
+    /// `v *= (1 - k*h)` does. `k = 0` is no damping; `k = 1` costs a body 63% of
+    /// its speed per second.
+    ///
+    /// **AND IT IS MASS-INDEPENDENT, WHICH IS EXACTLY WRONG AS PHYSICS AND
+    /// EXACTLY RIGHT AS A KNOB.** Real linear drag is a FORCE, `F = -b*v`, so
+    /// the acceleration it produces is `-(b/m)*v` and a heavy body is harder for
+    /// the air to slow: a cannonball and a feather of the same shape have wildly
+    /// different terminal speeds, which is the entire reason Galileo&#x27;s
+    /// experiment needed a tower rather than a bench. This field skips the mass,
+    /// so every body damped at the same `k` reaches the SAME terminal speed
+    /// regardless of what it weighs, and §5 measures both and puts the numbers
+    /// side by side.
+    ///
+    /// It is here anyway, and named `damping` rather than `drag`, because what
+    /// gameplay wants nine times in ten is &quot;bleed off speed so this feels
+    /// controllable&quot;, which is a stability and feel control with no physical
+    /// content at all. When you want the physics, apply `-b*v` through
+    /// `add_force` and let the mass do its job; `terminal_speed_damped` and
+    /// `terminal_speed_dragged` sit next to each other below so the difference
+    /// is one line of reading.
+    float damping = 0.0f;
+
+    /// The same knob for spin, in 1/s: `omega *= exp(-k*h)` every step.
+    ///
+    /// Lesson 8.3, and it is the same shape of lie as `damping` and for the same
+    /// reason — real rotational drag depends on the body&#x27;s shape, its speed and
+    /// which way round it is, and none of that is what a designer means by
+    /// &quot;stop it spinning forever&quot;. Separate from `damping` because the two are
+    /// tuned independently in practice: a thrown axe should keep tumbling long
+    /// after air resistance has taken the sting out of its flight.
+    float angular_damping = 0.0f;
+
+    /// How this body handles the **gyroscopic term** `omega x (I*omega)`.
+    /// Off by default.
+    ///
+    /// Lesson 8.3 §9. See `gyroscopic_mode` — this is the one field in the
+    /// struct whose default was chosen by a measurement rather than by an
+    /// argument, and the measurement is not the one you would expect.
+    gyroscopic_mode gyroscopic = gyroscopic_mode::off;
+
+    /// Multiplier on the world&#x27;s gravity for this body alone.
+    ///
+    /// The one knob every engine ships, and it is content rather than physics: a
+    /// balloon rises, a boss&#x27;s hammer falls harder than it should because that
+    /// is what makes it feel heavy, and a projectile arcs on a curve an artist
+    /// chose. 1 is normal, 0 is weightless, negative floats.
+    ///
+    /// It multiplies the world gravity and nothing else, so it does not change
+    /// how a thruster or a contact behaves — which is what distinguishes it from
+    /// the mistake of editing the body&#x27;s mass to get the same visual result.
+    float gravity_scale = 1.0f;
+
+    /// Dynamic, kinematic or fixed. See `body_kind` — it answers a different
+    /// question from `inv_mass` and both have to be right.
+    body_kind kind = body_kind::dynamic;
+};
+
+/// A stable reference to a body in a `body_world`. Four bytes, 5.4&#x27;s split.
+using body_id = handle&lt;rigid_body&gt;;
+
+// ---------------------------------------------------------------------------
+// Mass
+// ---------------------------------------------------------------------------
+
+/// The body&#x27;s mass in kilograms — `1/inv_mass`, with infinity for immovable.
+///
+/// Returns `HUGE_VALF` when `inv_mass` is 0, which is the true answer and is
+/// also why you should reach for `inv_mass` in any arithmetic. This function is
+/// for debug UI and for the rare piece of gameplay that genuinely wants
+/// kilograms.
+[[nodiscard]] float mass_of(const rigid_body&amp; b);
+
+/// Set the mass in kilograms, refusing the two inputs that are not masses.
+///
+/// A mass of 0 or less is rejected and the body is left alone — a negative mass
+/// accelerates *towards* a push and would break the solver&#x27;s assumptions from
+/// 8.9 onward in ways that are very hard to trace back here, and a mass of zero
+/// is the infinite-acceleration case the `inv_mass` doc comment describes. Pass
+/// `HUGE_VALF` to make a body immovable, or set `inv_mass = 0` directly, which
+/// is what `make_fixed` does.
+///
+/// @return true if the mass was applied.
+bool set_mass(rigid_body&amp; b, float kilograms);
+
+// ---------------------------------------------------------------------------
+// Applying things
+// ---------------------------------------------------------------------------
+
+/// Add a force, in newtons, for the duration of the next step.
+///
+/// **Accumulates.** Call it from as many systems as you like, in any order; they
+/// sum, because Newton&#x27;s second law is linear in F. §4 measures the one way that
+/// sentence is not quite true in floating point, and what it costs.
+///
+/// No application point, so no torque: this body cannot spin (8.3).
+void add_force(rigid_body&amp; b, vec3 newtons);
+
+/// Add an impulse, in newton-seconds, applied **immediately** to the velocity.
+///
+/// An impulse is a force integrated over a time — `J = F*dt` — and the reason it
+/// is a separate entry point is that the time in question is shorter than a step
+/// and nobody knows what it is. A bat hitting a ball, a bullet landing, a
+/// character jumping: the interesting quantity is the total change in momentum,
+/// `Δv = J/m`, and it does not depend on `h` at all.
+///
+/// **THIS IS THE FRAME-RATE BUG YOU WILL ACTUALLY HIT.** Write a jump as
+/// `add_force(b, up * 500.0f)` for one step and the resulting velocity is
+/// `500*h/m`, so the character jumps twice as high at 30 Hz as at 60 — §6
+/// measures four rates and four jump heights. Write it as
+/// `add_impulse(b, up * 8.0f)` and every rate gives the same jump, because there
+/// is no `h` in the arithmetic.
+///
+/// Every contact response in 8.9 and every constraint in 8.10 is an impulse, for
+/// exactly this reason: a collision does not last a step, and pretending it does
+/// makes the bounce depend on the frame rate.
+void add_impulse(rigid_body&amp; b, vec3 newton_seconds);
+
+/// Add an acceleration directly, in m/s², bypassing the mass.
+///
+/// For fields rather than pushes. Gravity is the canonical one — it is a force
+/// of `m*g`, so the mass cancels and every body accelerates at `g` regardless of
+/// what it weighs — and a magnetic sweep, a vertical wind or a designer&#x27;s
+/// &quot;everything in this volume drifts upward&quot; are the same shape.
+///
+/// Implemented as `add_force(b, a / inv_mass)`, which is `m*a`, so an immovable
+/// body is unaffected and the accumulator still sums. That round trip through
+/// the mass looks pointless and is the thing that makes it correct: a field that
+/// wrote the velocity directly would move the floor.
+void add_acceleration(rigid_body&amp; b, vec3 metres_per_second_squared);
+
+/// Discard any accumulated force without stepping. Mostly for tests and for a
+/// system that changed its mind.
+void clear_force(rigid_body&amp; b);
+
+// ---------------------------------------------------------------------------
+// Torque, and forces that are not aimed at the centre
+// ---------------------------------------------------------------------------
+
+/// Add a pure torque, in newton-metres about the centre of mass, world axes.
+///
+/// &quot;Pure&quot; means it spins the body without pushing it anywhere — which is
+/// physically what you get from a *couple*, a pair of equal and opposite forces
+/// offset from each other. A reaction wheel, a motor mounted on the body, a
+/// character&#x27;s own effort to right themselves: all torque, no force.
+void add_torque(rigid_body&amp; b, vec3 newton_metres);
+
+/// Apply a force at a **world-space point**, which is what almost everything in
+/// a real game actually does.
+///
+///     force  += F
+///     torque += (point - centre of mass) x F
+///
+/// One call, both accumulators, and the cross product is the entire content of
+/// Lesson 8.3 §3. Note what falls out of it for free: a force aimed straight at
+/// the centre of mass produces `r x F` with `F` parallel to `r`, which is
+/// exactly zero — so pushing a crate squarely in the middle does not spin it,
+/// and pushing it at a corner does, without either case being special-cased.
+///
+/// **The point is in world space and the body&#x27;s centre of mass is
+/// `state.position`.** This engine has no concept of a centre of mass offset
+/// from the origin of the body: `inertia_assembly` computes where a compound
+/// body balances so that you can place it there, rather than carrying an offset
+/// through every subsequent calculation. 8.3 §5 explains the trade.
+void add_force_at(rigid_body&amp; b, vec3 newtons, vec3 world_point);
+
+/// The impulse form of `add_force_at`: an instantaneous change in both
+/// velocities, with no `h` anywhere in it.
+///
+///     velocity         += J * inv_mass
+///     angular_velocity += world_inv_inertia * ((point - centre) x J)
+///
+/// 8.2 §6 argued that anything instantaneous must be an impulse rather than a
+/// one-step force, and the argument carries over word for word — with one extra
+/// consequence that is the reason 8.9 exists. **This function is a contact
+/// response.** A ball striking a plank off-centre spins the plank and slows
+/// itself, and both halves of that are this one call applied twice with opposite
+/// signs. Everything Lesson 8.9 adds is deciding what `J` should be.
+///
+/// Costs one basis change (`world_inv_inertia`), which is two matrix products.
+/// A solver applying thousands of these per frame hoists that out — 8.10&#x27;s cached
+/// per-body tensor — and this entry point is the correct, obvious one.
+void add_impulse_at(rigid_body&amp; b, vec3 newton_seconds, vec3 world_point);
+
+/// Change the angular velocity directly by an angular impulse, in
+/// newton-metre-seconds: `omega += world_inv_inertia * L`.
+void add_angular_impulse(rigid_body&amp; b, vec3 newton_metre_seconds);
+
+/// Zero the torque accumulator. `clear_force` does not — they are separate so
+/// that a debug overlay can consume one and leave the other.
+void clear_torque(rigid_body&amp; b);
+
+// ---------------------------------------------------------------------------
+// Inertia
+// ---------------------------------------------------------------------------
+
+/// Give a body an inertia tensor, expressed **about its centre of mass, in body
+/// axes** — normally straight from one of inertia.hpp&#x27;s shape functions.
+///
+/// Stores the inverse, validates first, and returns false without changing
+/// anything if the tensor is not one a real mass distribution could have:
+/// asymmetric, non-positive, or violating the triangle inequality. The
+/// refusal is the same shape as `set_mass`&#x27;s and for the same reason — a body
+/// that reaches the step with a nonsense tensor gains energy from nowhere, and
+/// the symptom appears several seconds and several systems away from the cause.
+///
+/// **A thin rod is refused**, because `inertia_thin_rod` has an exact zero
+/// principal moment and its inverse does not exist. Give it a real radius; every
+/// physical object has one.
+bool set_inertia(rigid_body&amp; b, const mat3&amp; body_inertia);
+
+/// The body&#x27;s inertia tensor about its centre of mass in body axes.
+///
+/// Free — it reads `inertia_local`, which is stored. It was not free before
+/// §12; see that field&#x27;s note.
+[[nodiscard]] mat3 inertia_of(const rigid_body&amp; b);
+
+/// The body&#x27;s **world-space** inverse inertia tensor: `R * inv_inertia_local *
+/// R^T`, rebuilt from the current orientation.
+///
+/// The one quantity every rotational calculation in the rest of this module
+/// starts from, and the reason `world_inverse_inertia` in inertia.hpp is worth
+/// its own function: this is called once per body per step by `step`, and once
+/// per contact per iteration by 8.10 unless it is hoisted.
+[[nodiscard]] mat3 world_inv_inertia(const rigid_body&amp; b);
+
+/// The body&#x27;s angular velocity after one step&#x27;s worth of the gyroscopic term
+/// alone — no applied torque, no damping.
+///
+/// Exposed as a function rather than buried in `step` because §9 compares the
+/// two modes against each other and against doing nothing, and a measurement of
+/// a branch inside a loop is a measurement of the loop.
+///
+/// `mode::off` returns `b.angular_velocity` unchanged, bit for bit.
+[[nodiscard]] vec3 gyroscopic_step(const rigid_body&amp; b, float h, gyroscopic_mode mode);
+
+/// Angular momentum in world space: `I_world * omega`.
+///
+/// **The quantity to watch.** With no torque applied this is conserved exactly,
+/// forever, while `angular_velocity` is not — it changes direction and magnitude
+/// on its own, which is not a bug and is the subject of 8.3 §9. A debug overlay
+/// that plots `|L|` is the single most useful rotational diagnostic there is,
+/// because a rising `|L|` on a torque-free body means the integrator is inventing
+/// energy and nothing else does.
+[[nodiscard]] vec3 angular_momentum(const rigid_body&amp; b);
+
+/// Total kinetic energy, in joules: `(1/2) m v^2 + (1/2) omega . (I omega)`.
+///
+/// The second term is the rotational half, and its shape is worth noticing: it
+/// is a quadratic form in `omega` rather than a product of scalars, which is the
+/// price of the resistance-to-turning being a tensor. Like `|L|`, it should be
+/// flat on a torque-free body.
+[[nodiscard]] float kinetic_energy(const rigid_body&amp; b);
+
+/// The world-space velocity of a point rigidly attached to the body:
+/// `v + omega x r`, with `r` measured from the centre of mass.
+///
+/// The formula that makes a rigid body rigid, and the one every contact in 8.9
+/// is written against — a collision does not happen at a body&#x27;s centre, it
+/// happens at a point on its surface which may be moving very differently. A
+/// wheel&#x27;s contact patch is the standard demonstration: its centre moves forward
+/// at `v`, and the patch touching the road is instantaneously **stationary**,
+/// because `omega x r` exactly cancels `v` there.
+[[nodiscard]] vec3 point_velocity(const rigid_body&amp; b, vec3 world_point);
+
+/// Where a point authored in body coordinates is right now, in world space.
+///
+/// `position + rotate(orientation, local)`. The other half of the pair above,
+/// and what a debug renderer needs to draw a box around a tumbling body.
+[[nodiscard]] vec3 world_point_of(const rigid_body&amp; b, vec3 local_point);
+
+// ---------------------------------------------------------------------------
+// Terminal speeds — the two that look the same and are not
+// ---------------------------------------------------------------------------
+
+/// Terminal speed under `rigid_body::damping`: `g/k`. **Independent of mass.**
+///
+/// Falling under gravity and velocity-space damping, the speed settles where
+/// `g = k*v`. There is no mass in that equation because `damping` was defined
+/// without one, so a paper cup and a piano damped identically fall at identical
+/// terminal speeds. Read this function and the next one together.
+[[nodiscard]] float terminal_speed_damped(float g, float k);
+
+/// Terminal speed under a linear drag FORCE `F = -b*v`: `m*g/b`. **Proportional
+/// to mass.**
+///
+/// Falling under gravity and a drag force, the speed settles where `m*g = b*v`.
+/// This is the physical one, it is the reason a cannonball beats a feather, and
+/// getting it costs one line at the call site:
+///
+///     add_force(b, body.state.velocity * -drag_coefficient);
+///
+/// @param b_coefficient Drag coefficient in N·s/m. Must be positive.
+[[nodiscard]] float terminal_speed_dragged(float g, float mass, float b_coefficient);
+
+// ---------------------------------------------------------------------------
+// Units, and the scaling law
+// ---------------------------------------------------------------------------
+
+/// Time to fall `distance` metres from rest under acceleration `g`:
+/// `sqrt(2d/g)`.
+///
+/// A function rather than a comment because §7 measures against it, and because
+/// it is the cleanest possible statement of the thing the next function is
+/// about: the time depends on the square root of a LENGTH.
+[[nodiscard]] float free_fall_time(float distance, float g);
+
+/// The factor every duration in a world is multiplied by when every length in it
+/// is multiplied by `length_scale` and gravity is left alone: `sqrt(s)`.
+///
+/// **THIS IS WHY MINIATURES LOOK LIKE MINIATURES**, and it is the whole of §7.
+/// A model ship at 1/8 scale sits in water that falls at the same 9.81 m/s² the
+/// real one does, so every splash, every roll and every collapse happens
+/// `sqrt(8) = 2.83` times too fast, and an audience reads that instantly without
+/// being able to say why. Film crews fix it by overcranking the camera by
+/// exactly this factor.
+///
+/// A game has the same problem in reverse and the symptom has a name. Model your
+/// world twice as large as it depicts — a &quot;1.8 m&quot; character built 3.6 units tall
+/// — and everything in it takes `sqrt(2) = 1.41` times too long to fall. That is
+/// the complaint &quot;the jumping feels floaty&quot;, and the fix is not a bigger `g`;
+/// see §7.4 for what a bigger `g` does and does not repair.
+[[nodiscard]] float time_scale_for_length_scale(float length_scale);
+
+// ---------------------------------------------------------------------------
+// Frames: what a parent would have done to you
+// ---------------------------------------------------------------------------
+
+/// What integrating a body in some other space would actually produce.
+///
+/// Nothing in `body_world` calls this. It exists so that the rule in the file
+/// header — **bodies are world space, full stop** — is a measurable claim rather
+/// than an assertion, and so that a tool can point at a scene node and say why
+/// physics must not happen there.
+struct frame_report
+{
+    /// Where a local-space `gravity` actually points once the frame has had its
+    /// way with it, in world space.
+    vec3 gravity_in_world{};
+
+    /// `|gravity_in_world| / |gravity|`. 1 for any rigid frame — a rotation and
+    /// a translation cannot change a length — and equal to the scale factor for
+    /// a uniformly scaled one. **2.0 means the body falls at twice gravity.**
+    float gain = 1.0f;
+
+    /// The angle between where gravity was supposed to point and where it does,
+    /// in degrees. Nonzero whenever the frame rotates, which is expected and
+    /// fine for a rotation alone; the interesting case is the one where a
+    /// NON-UNIFORM scale changes an angle that a rotation had already set.
+    float tilt_degrees = 0.0f;
+
+    /// The three column lengths of the frame&#x27;s linear part — its scale.
+    vec3 scale{1.0f, 1.0f, 1.0f};
+
+    /// `transform_extraction::out_of_square` for this frame: the worst |cosine|
+    /// between two of its axes, so 0 for anything square and positive for shear.
+    ///
+    /// **Lesson 7.5 built this number for a completely different reason** — to
+    /// report what a `quat` could not hold when a `mat3` field was narrowed —
+    /// and it is the exact diagnostic a physics frame needs, because a sheared
+    /// frame is one that does not preserve angles, and a frame that does not
+    /// preserve angles turns a sphere into an ellipsoid and a straight fall into
+    /// a slanted one.
+    float out_of_square = 0.0f;
+
+    /// Is the scale the same on all three axes (within a tolerance)? A uniform
+    /// scale is survivable — it changes `gain` and nothing else. A non-uniform
+    /// one changes DIRECTIONS, and no amount of tuning recovers from that.
+    bool uniform = true;
+
+    /// Is this frame safe to integrate a body in? True only for a frame that is
+    /// a rotation and a translation: `gain` 1, square, uniform.
+    bool inertial = true;
+};
+
+/// Measure what `world_from_parent` would do to a body integrated in its space.
+///
+/// @param gravity The acceleration as the body&#x27;s own space would express it.
+[[nodiscard]] frame_report inspect_frame(const mat4&amp; world_from_parent, vec3 gravity);
+
+/// Convert a body&#x27;s world position into a local `transform`, for a scene node
+/// whose parent&#x27;s world matrix is `world_from_parent`.
+///
+/// The bridge, and the only one: the body owns world space, the scene owns local
+/// space, and this converts at the boundary once per frame rather than letting
+/// either one leak into the other. `authored` supplies the rotation and scale,
+/// which physics does not own yet (8.3 takes the rotation).
+[[nodiscard]] transform place_in_parent(const rigid_body&amp; b, const mat4&amp; world_from_parent,
+                                        const transform&amp; authored);
+
+// ---------------------------------------------------------------------------
+// The world
+// ---------------------------------------------------------------------------
+
+/// What one call to `body_world::step` did.
+///
+/// Every field here is something a later lesson in this module needs, and they
+/// are cheap because the step is already walking every body.
+struct step_report
+{
+    /// How many bodies of each kind the walk saw.
+    int bodies = 0;
+    int dynamic = 0;
+    int kinematic = 0;
+    int fixed = 0;
+
+    /// The fastest body&#x27;s speed at the END of the step, in m/s.
+    float max_speed = 0.0f;
+
+    /// **How far the fastest body moved during this step, in metres.**
+    ///
+    /// The tunnelling number. A body that travels further in one step than the
+    /// thickness of the wall it is heading for passes through it without any
+    /// test ever seeing an overlap, because the tests in 8.4 onward are all
+    /// asked about a body&#x27;s position and never about the segment between two of
+    /// them. At 60 Hz a bullet at 400 m/s covers 6.67 m per step.
+    ///
+    /// Nothing here fixes it; reporting it is how you find out that you need to.
+    /// Lesson 1.8&#x27;s swept test is the shape of the answer, and 8.13&#x27;s character
+    /// controller is where it stops being optional.
+    float max_travel = 0.0f;
+
+    /// Total linear momentum of every dynamic body, `sum(m*v)`, in kg·m/s.
+    ///
+    /// **The conservation law this module is eventually judged by.** Gravity and
+    /// thrusters change it — they are external forces, and that is what an
+    /// external force IS — but a collision between two bodies must not, to the
+    /// last bit the arithmetic allows. 8.9 checks its impulse response against
+    /// this field; measuring it now costs one multiply-add per body and means
+    /// the instrument predates the thing it measures.
+    ///
+    /// Immovable bodies are excluded, because their momentum is either zero or
+    /// infinite and neither is a useful contribution to a sum.
+    vec3 momentum{};
+
+    /// Total **angular** momentum of every dynamic body about the world origin,
+    /// in kg·m²/s. Lesson 8.3.
+    ///
+    /// Two terms per body, and the second one surprises people: `I_world*omega`
+    /// is the body&#x27;s spin about its own centre, and `r x (m*v)` is the angular
+    /// momentum its linear motion has *about the origin*. A body sailing past in
+    /// a straight line without rotating at all has angular momentum about any
+    /// point not on its path, which is why a planet&#x27;s orbit conserves one.
+    ///
+    /// Like `momentum`, it is the law a collision response is judged against —
+    /// and it is the stricter of the two, because getting the contact point
+    /// wrong changes this without changing that.
+    vec3 angular_momentum{};
+
+    /// The fastest-spinning body&#x27;s angular speed at the end of the step, rad/s.
+    ///
+    /// The rotational twin of `max_speed`, and it has its own tunnelling
+    /// analogue: a body turning more than a radian or so per step cannot have
+    /// its contacts tracked frame to frame, because the features that were
+    /// touching are on the other side by the time the next test runs. 8.8&#x27;s
+    /// manifold persistence is where that bites.
+    float max_spin = 0.0f;
+
+    /// The largest `| |q| - 1 |` over all bodies, measured as the step **found**
+    /// them — before it touched anything.
+    ///
+    /// A pure instrument, and it is deliberately *not* a measurement of the
+    /// integrator&#x27;s drift. `step` renormalises on the way out, so by the time
+    /// the next step looks, the integrator&#x27;s own inflation is already gone and
+    /// what is left is a couple of ulps. §7 measures the inflation in the
+    /// harness, where the un-normalised intermediate is still visible.
+    ///
+    /// What this catches is the other thing: **code outside the step writing
+    /// `orientation` without normalising it.** A gameplay system that lerps two
+    /// rotations, an animation blend, a network packet, a hand-authored
+    /// `quat{0.7f, {0.7f, 0, 0}}` — all of them leave a body slightly off the
+    /// unit sphere, all of them render as a subtle shear that is very hard to
+    /// see and impossible to search for, and all of them show up here as a
+    /// number that is not 1e-7.
+    float max_unit_error = 0.0f;
+};
+
+/// The table of bodies, and the thing that steps them.
+///
+/// **A `pool&lt;rigid_body&gt;` and eight lines of policy**, which is deliberate:
+/// Lesson 5.4 built generational handles precisely so that subsystems would not
+/// each invent their own storage, and a body table is the textbook case for it —
+/// bodies are created and destroyed constantly, everything else in the engine
+/// wants to refer to them, and the solver in 8.10 wants them in a flat array it
+/// can walk without chasing a pointer.
+///
+/// What the pool gives for free and is worth naming: bodies live in a **dense**
+/// array with no holes, so `bodies()` is a contiguous span and `step` is a linear
+/// walk; a removal swaps the last body into the hole, so a stale `body_id` fails
+/// its generation check instead of silently naming whichever body moved in; and
+/// the whole table serialises as integers, which Module 9&#x27;s scene format needs.
+class body_world
+{
+public:
+    /// Add a body. The `body_id` is stable across every later insertion and
+    /// removal.
+    body_id add(const rigid_body&amp; body);
+
+    /// Remove a body. Returns false if the handle was already stale.
+    bool remove(body_id id);
+
+    /// Resolve a handle, or null if it is stale. See `handle::valid` for why
+    /// this is a different question from &quot;is the handle non-null&quot;.
+    [[nodiscard]] rigid_body* get(body_id id);
+    [[nodiscard]] const rigid_body* get(body_id id) const;
+
+    /// Every body, densely packed, in no particular order.
+    ///
+    /// **THE ORDER IS NOT STABLE** — a removal swaps the last element into the
+    /// gap — and code that iterates this span must not depend on it. That is not
+    /// a defect to work around; it is what keeps the walk contiguous, and 5.4
+    /// §6 measured what the alternative costs.
+    [[nodiscard]] std::span&lt;rigid_body&gt; bodies();
+    [[nodiscard]] std::span&lt;const rigid_body&gt; bodies() const;
+
+    [[nodiscard]] std::size_t size() const;
+    void clear();
+
+    /// The world&#x27;s gravity, applied to every dynamic body scaled by its
+    /// `gravity_scale`. Defaults to `k_gravity_down`.
+    void set_gravity(vec3 g);
+    [[nodiscard]] vec3 gravity() const;
+
+    /// The integration rule, for every body. Defaults to semi-implicit Euler,
+    /// which Lesson 8.1 settled and this lesson does not relitigate.
+    void set_integrator(integrator rule);
+    [[nodiscard]] integrator integrator_rule() const;
+
+    /// How orientations are advanced. Lesson 8.3 §7, and the default is
+    /// `linearised` — the cheap one — because §12 measures the difference and
+    /// the honest answer is that it depends on what you are simulating.
+    void set_spin_rule(spin_rule rule);
+    [[nodiscard]] spin_rule spin() const;
+
+    /// Advance every body by `h` seconds.
+    ///
+    /// **THE ORDER OF OPERATIONS IS THE LESSON**, and it is four steps:
+    ///
+    ///   1. `a = F * inv_mass` — one multiply, once, after every system has
+    ///      added what it had to say, which is the entire reason the accumulator
+    ///      exists;
+    ///   2. `a += gravity * gravity_scale`, AFTER the division rather than
+    ///      before it as a weight of `m*g`. Both are correct physics and only
+    ///      one of them needs the mass: §10.1 measures the divide that the other
+    ///      arrangement costs at 15% of the whole update. **The consequence is
+    ///      that `force` does not contain the body&#x27;s weight** — see §9, and use
+    ///      `mass_of(b) * world.gravity()` if a tool needs to draw it;
+    ///   3. the body is integrated by the chosen rule, then damped by 8.1&#x27;s
+    ///      exact `exp(-k*h)`;
+    ///   4. the force is cleared, LAST, so that anything wanting to look at what
+    ///      was applied this step still can.
+    ///
+    /// Kinematic bodies skip 1, 2 and the velocity half of 3: they travel at
+    /// whatever velocity you set and nothing else touches them. Fixed bodies are
+    /// skipped entirely.
+    const step_report&amp; step(float h);
+
+    /// What the last `step` saw.
+    [[nodiscard]] const step_report&amp; report() const;
+
+private:
+    pool&lt;rigid_body&gt; bodies_;
+    vec3 gravity_ = k_gravity_down;
+    integrator rule_ = integrator::semi_implicit_euler;
+    spin_rule spin_ = spin_rule::linearised;
+    step_report report_{};
+};
+
+// ---------------------------------------------------------------------------
+// Small conveniences
+// ---------------------------------------------------------------------------
+
+/// A dynamic body of `mass` kilograms at `position`, at rest.
+///
+/// **Its inertia tensor is the default identity**, which is no shape at all. A
+/// body made this way will spin, and will spin wrong. Use `make_box` or
+/// `set_inertia` for anything whose rotation is going to be looked at; this one
+/// remains because most of what a physics engine simulates never rotates
+/// visibly, and because 8.2&#x27;s demos and harness call it.
+[[nodiscard]] rigid_body make_dynamic(vec3 position, float mass);
+
+/// A dynamic body shaped like a box: mass, half-extents, and the matching
+/// inertia tensor, all set consistently. Lesson 8.3.
+///
+/// The convenience that makes the common case right by default. Note that this
+/// is the FIRST factory in the file that could not have existed in 8.2 — a mass
+/// and a position are enough to describe a point, and a shape is the extra thing
+/// rotation needs.
+[[nodiscard]] rigid_body make_box(vec3 position, float mass, vec3 half_extents);
+
+/// A dynamic body shaped like a solid sphere. Lesson 8.3.
+///
+/// The only shape whose tensor is a multiple of the identity — so it is the only
+/// shape for which &quot;resistance to turning&quot; really is one number, and the only
+/// one that behaves the way the single-`float` version of this engine&#x27;s angular
+/// dynamics would have.
+[[nodiscard]] rigid_body make_sphere(vec3 position, float mass, float radius);
+
+/// An immovable body at `position`: `inv_mass` 0, kind `fixed`.
+///
+/// **Its inverse inertia tensor is all zeros too**, from 8.3 onward, which is
+/// the same statement as `inv_mass = 0` made nine floats wide: no torque can
+/// spin it, exactly, with no branch and no sentinel.
+[[nodiscard]] rigid_body make_fixed(vec3 position);
+
+/// A kinematic body at `position` moving at `velocity`: immovable by forces,
+/// moved by the step, unaffected by gravity.
+[[nodiscard]] rigid_body make_kinematic(vec3 position, vec3 velocity);
+
+} // namespace engine::phys
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/phys/shape.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/phys/shape.hpp — what a body is SHAPED like.
+//
+// Lesson 8.4. Eighty-six lessons in, no object in this engine has a size that
+// the simulation knows about. A `rigid_body` has a mass, an inertia tensor, a
+// position and an orientation, and every one of those describes how it MOVES.
+// Nothing describes how much room it takes up — which is why, if you drop two
+// of 8.2&#x27;s crates on the same spot, they arrive at the same spot and stay
+// there, occupying the same cubic metre of the world, forever.
+//
+// The gap is visible in the constructor. `make_box(position, mass, half)` takes
+// half extents, uses them to build an inertia tensor, and **throws them away**.
+// The body then knows exactly how hard it is to spin a 0.5 x 1.0 x 1.5 metre box
+// and has no idea that it is 0.5 x 1.0 x 1.5 metres. This file is the missing
+// half, and the split is deliberate:
+//
+//     a SHAPE is geometry            — where the surface is
+//     a BODY is dynamics             — how the thing responds to a push
+//     a COLLIDER is the pair of them — which Lesson 8.6 introduces, because a
+//                                      pair is only useful once something walks
+//                                      a list of them looking for candidates
+//
+// So there is no `shape` member on `rigid_body` yet, and that is not an
+// oversight to be tidied later. Collision detection is a query over *geometry*:
+// every function in `collide.hpp` takes shapes and placements and returns an
+// answer, and none of them has any business knowing what the geometry weighs or
+// which way it is moving. Keeping the dependency pointed that way is what lets
+// 8.5&#x27;s GJK, 8.7&#x27;s manifold cache and 8.8&#x27;s broadphase each take the piece they
+// need without dragging the dynamics along.
+//
+// ---- WHY THESE THREE PRIMITIVES -------------------------------------------
+//
+// A sphere, an axis-aligned box and an oriented box. They are not an arbitrary
+// starter set; they are the three points on a single curve, and the curve is
+// &quot;how much does this shape know about which way round it is?&quot;.
+//
+//   SPHERE  knows nothing, and does not need to. A rotation does not change it,
+//           so its test is four floats and one comparison and stays correct
+//           however wildly the body tumbles. It is the cheapest true answer in
+//           collision detection and the reason every broadphase starts with one.
+//
+//   AABB    knows the world&#x27;s axes and nothing else. Its test is three interval
+//           comparisons, its storage is two corners, and it is what a spatial
+//           grid, a BVH and a frustum culler all actually index. Its weakness is
+//           the same as its strength: **it cannot turn**. Rotate the object
+//           inside it and the box has to be rebuilt, larger.
+//
+//   OBB     an AABB that brought its own axes. Six floats plus an orientation,
+//           exactly as tight as the object under any rotation, and the price is
+//           that its overlap test is no longer three comparisons — it is the
+//           Separating Axis Theorem, which is the subject of `collide.hpp` and
+//           the mathematical heart of this lesson.
+//
+// Everything past this file is a generalisation of the OBB case: 8.5&#x27;s GJK
+// answers the same question for any convex shape, and 8.6 puts the spheres and
+// the AABBs back in front of it as a filter.
+//
+// ---- WHAT A SHAPE IS NOT ---------------------------------------------------
+//
+// It is not a mesh. The visual model and the collision shape are separate
+// assets in every engine that ships, and the reason is not laziness: a barrel
+// drawn with 4,000 triangles collides as a cylinder because a cylinder is 6
+// floats and a convex primitive, and 4,000 triangles are neither. A player
+// cannot see the difference and the solver can.
+//
+// It is also not a transform. A shape is defined in its own BODY AXES, centred
+// on the centre of mass, and it is placed in the world by a position and an
+// orientation supplied at the call site. `world_obb` below is that placement,
+// and it is a function rather than stored state because a shape outlives any
+// particular place it happens to be.
+
+#pragma once
+
+#include &lt;engine/math/bounds.hpp&gt;
+#include &lt;engine/math/mat3.hpp&gt;
+#include &lt;engine/math/quat.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+#include &lt;engine/phys/inertia.hpp&gt;
+
+#include &lt;cstdint&gt;
+#include &lt;span&gt;
+
+namespace engine::phys
+{
+
+// ---------------------------------------------------------------------------
+// The shape itself
+// ---------------------------------------------------------------------------
+
+/// Which of the primitives a `shape` is.
+///
+/// A plain tag rather than a class hierarchy, and that is the engine-core rule
+/// from 5.2 rather than a stylistic preference: no RTTI and no virtual dispatch
+/// in the simulation, because a collision test is called tens of thousands of
+/// times a frame and a vtable lookup per call buys nothing here. There are two
+/// shapes; there will be three or four; a `switch` is the right tool for that
+/// and stays the right tool at the scale this engine works at.
+enum class shape_kind : std::uint8_t
+{
+    sphere,    ///&lt; A ball. Rotation-invariant, four floats.
+    box,       ///&lt; A rectangular box, centred, in body axes. Six floats.
+    capsule,   ///&lt; A segment along body +y, inflated by a radius. Two floats.
+};
+
+/// `&quot;sphere&quot;`, `&quot;box&quot;`, `&quot;capsule&quot;`. For logs and debug UI.
+[[nodiscard]] const char* name_of(shape_kind kind);
+
+/// A collision primitive **in body axes, centred on the centre of mass**.
+///
+/// Twenty-four bytes, laid out as a tag plus the union of what the primitives
+/// need — written as plain members rather than as a `union`, because a `union`
+/// here would save twelve bytes and cost every reader a moment of doubt about
+/// which member is live. If a primitive with a large payload ever arrives, that
+/// trade changes; today it does not. Lesson 8.5&#x27;s `hull` is exactly such a
+/// primitive, and note where it went: it is NOT a `shape_kind`, because it is a
+/// span of somebody else&#x27;s vertices and a `shape` is a value you can copy into a
+/// save file. See `hull` below.
+///
+/// **Centred is a requirement, not a convention.** Every tensor in `inertia.hpp`
+/// is taken about the centre of mass, `rigid_body::state.position` *is* the
+/// centre of mass, and a torque is `r × F` with `r` measured from it. A shape
+/// whose geometric centre is somewhere else would put all three of those
+/// quietly out of step. When a real asset needs an off-centre collider — and
+/// they do — the offset belongs in the collider that pairs shape with body
+/// (Lesson 8.6), where it can be applied once, in one place, visibly.
+struct shape
+{
+    shape_kind kind = shape_kind::sphere;
+
+    /// Metres. Meaningful when `kind == sphere`.
+    float radius = 0.5f;
+
+    /// Metres, half the full width on each body axis. Meaningful when
+    /// `kind == box` — so a unit cube is `{0.5f, 0.5f, 0.5f}`, not `{1, 1, 1}`.
+    ///
+    /// Half extents rather than a full size for the same reason a box is stored
+    /// as centre-and-extent rather than as two corners in the physics code: the
+    /// projection formula in `collide.hpp` is a sum of half extents times
+    /// absolute dot products, and every line of the SAT wants the half. Storing
+    /// the full width would put a `* 0.5f` on fifteen consecutive lines of the
+    /// hottest loop in the module.
+    vec3 half_extents{0.5f, 0.5f, 0.5f};
+
+    /// Metres, half the length of the **segment** — not of the whole capsule.
+    /// Meaningful when `kind == capsule`, where the total height along body `y`
+    /// is `2*half_height + 2*radius`.
+    ///
+    /// Lesson 8.5. The half again, and for the same reason as `half_extents`:
+    /// a capsule&#x27;s support function is `sign(d.y) * half_height * y + radius *
+    /// normalise(d)`, and the half is what appears in it. A capsule with
+    /// `half_height == 0` is a sphere, exactly — `volume_of`, `inertia_of` and
+    /// `support` all reduce to the sphere case with no special-casing, which is
+    /// the first hint that these two primitives are the same family.
+    float half_height = 0.5f;
+};
+
+/// A ball of radius `r`.
+[[nodiscard]] shape sphere_shape(float radius);
+
+/// A box with the given half extents — half, not full. See `shape::half_extents`.
+[[nodiscard]] shape box_shape(vec3 half_extents);
+
+/// A cube of side `side`. A convenience, because `box_shape({s/2, s/2, s/2})` is
+/// where the factor of two gets dropped.
+[[nodiscard]] shape cube_shape(float side);
+
+/// A capsule along body **+y**: a segment of half-length `half_height`, inflated
+/// by `radius`. Total height `2*(half_height + radius)`.
+///
+/// Lesson 8.5. **+y and not an arbitrary axis**, because conventions.html §2
+/// makes `y` up and a capsule&#x27;s overwhelming job in this engine is to stand
+/// upright under a character controller (8.13). An arbitrary axis is a rotation,
+/// and a shape already has one at placement time.
+[[nodiscard]] shape capsule_shape(float radius, float half_height);
+
+/// Cubic metres.
+[[nodiscard]] float volume_of(const shape&amp; s);
+
+/// The radius of the smallest sphere centred on the shape&#x27;s centre that contains
+/// it — `radius` for a sphere, the half-diagonal for a box.
+///
+/// **This is the one measurement of a shape that a rotation cannot change**,
+/// which is what makes it the right thing to hand a broadphase. A body that is
+/// tumbling has a different AABB every frame and the same bounding radius
+/// forever.
+[[nodiscard]] float bounding_radius(const shape&amp; s);
+
+/// The inertia tensor of this shape, at uniform density, about its centre, in
+/// body axes.
+///
+/// **This is the dependency the file header promised: a shape knows what it
+/// weighs.** It runs one way and must keep running one way — `inertia.hpp` was
+/// written in 8.3 knowing nothing about collision geometry and must go on
+/// knowing nothing about it, because half the bodies in a real scene get their
+/// tensor from an artist&#x27;s number or from a compound assembly rather than from a
+/// collision primitive.
+///
+/// What this function buys is that `make_box`&#x27;s two arguments stop being two
+/// independent facts that a caller has to keep in agreement. Before it, a box
+/// body&#x27;s tensor and a box shape&#x27;s extents were set separately, and setting one
+/// without the other gave you a crate that collides like a crate and spins like
+/// something else — a bug with no symptom until something lands on a corner.
+[[nodiscard]] mat3 inertia_of(const shape&amp; s, float mass);
+
+// ---------------------------------------------------------------------------
+// Placement: a shape, somewhere, facing some way
+// ---------------------------------------------------------------------------
+
+/// An **oriented** bounding box: a centre, three unit axes, three half extents.
+///
+/// THE AXES ARE STORED AS A `mat3` AND NOT AS A `quat`, and the reason is a
+/// measurement rather than a preference. Every line of the SAT is a dot product
+/// between one box&#x27;s axis and the other&#x27;s; a quaternion cannot supply those
+/// without building the matrix first, and 8.3 §12 found the engine building the
+/// same `mat3_from_quat` twice in one step because two reasonable functions each
+/// needed it. An `obb` is a box that has already paid that cost, once, at the
+/// point where it was placed into the world — which is exactly where a
+/// broadphase wants it paid, since a box is placed once per frame and tested
+/// against every candidate neighbour.
+///
+/// The columns are the axes, matching `mat3`&#x27;s storage and Lesson 2.5&#x27;s reading
+/// of a matrix as &quot;where the basis vectors land&quot;: column `i` is the world
+/// direction of the box&#x27;s own `i`-th axis. `axis(i)` says so out loud.
+struct obb
+{
+    vec3 centre{};                      ///&lt; World space, metres.
+    mat3 axes = mat3::identity();       ///&lt; Columns are the unit body axes in world space.
+    vec3 half_extents{0.5f, 0.5f, 0.5f};///&lt; Metres, along the corresponding axis.
+
+    /// The world-space direction of body axis `i`, for `i` in 0..2.
+    [[nodiscard]] vec3 axis(int i) const
+    {
+        return (i == 0) ? axes.c0 : (i == 1) ? axes.c1 : axes.c2;
+    }
+
+    /// Half extent along body axis `i`, for `i` in 0..2.
+    [[nodiscard]] float half(int i) const
+    {
+        return (i == 0) ? half_extents.x : (i == 1) ? half_extents.y : half_extents.z;
+    }
+
+    /// The eight corners, written into `out`.
+    ///
+    /// **Same index order as `aabb::corners`** — x varies fastest, then y, then
+    /// z, with bit `i` set meaning the `+` side — so a test can name a corner by
+    /// index and mean the same one whichever box type it is holding. That
+    /// agreement is worth more than it looks: 8.7&#x27;s manifolds identify contact
+    /// features by index, and two conventions for &quot;corner 3&quot; would be a bug that
+    /// only appears when a box changes type.
+    void corners(vec3 out[8]) const;
+};
+
+/// Place a box shape in the world. Asserts in debug that `s` is a box.
+[[nodiscard]] obb world_obb(const shape&amp; s, vec3 centre, quat orientation);
+
+/// Place a sphere shape in the world. Asserts in debug that `s` is a sphere.
+[[nodiscard]] engine::sphere world_sphere(const shape&amp; s, vec3 centre);
+
+/// The axis-aligned box that contains this oriented one.
+///
+/// **This is the projection formula from `collide.hpp` §6, run three times**,
+/// and seeing that is worth more than the function is. The half extent of the
+/// enclosing AABB along world axis `i` is the OBB&#x27;s projected radius onto that
+/// axis, which is `Σⱼ hⱼ |dot(uⱼ, eᵢ)|` — and `dot(uⱼ, eᵢ)` is just the `i`-th
+/// component of the `j`-th column, so the whole thing is the element-wise
+/// absolute value of the axis matrix applied to the half extents. Three lines,
+/// no corners enumerated, no branches.
+///
+/// It is loose, necessarily: a box rotated 45° about one axis has an enclosing
+/// AABB up to √2 wider, and up to √3 under a general rotation. That looseness is
+/// the price of axis alignment and is why 8.8&#x27;s broadphase uses this for
+/// candidate pairs and then asks `collide` for the real answer.
+[[nodiscard]] aabb bounds_of(const obb&amp; box);
+
+/// The axis-aligned box that contains this shape, placed here, facing this way.
+///
+/// The sphere case ignores the orientation, exactly, and that is the whole
+/// argument for spheres in one line of code.
+[[nodiscard]] aabb bounds_of(const shape&amp; s, vec3 centre, quat orientation);
+
+/// The AABB read as an OBB with identity axes.
+///
+/// A conversion rather than a separate code path, and it is how §5&#x27;s claim that
+/// &quot;an AABB test is the SAT with three axes&quot; is checked rather than asserted:
+/// the harness runs the specialised `collide(aabb, aabb)` and the general
+/// `collide(obb, obb)` on the same pairs and requires them to agree.
+[[nodiscard]] obb as_obb(const aabb&amp; box);
+
+/// The farthest point of the box in direction `d`. `d` need not be unit length.
+///
+/// **The support function** — the one interface every convex shape in this
+/// engine will eventually be asked for, because Lesson 8.5&#x27;s GJK is written
+/// entirely in terms of it and needs nothing else. For a box it is three sign
+/// tests: go to the `+` end of each axis when the direction leans that way and
+/// the `−` end when it leans the other, which is the same &quot;choose `sᵢ` to
+/// maximise&quot; argument that produces the projected-radius formula.
+///
+/// A degenerate `d` of exactly zero returns the `+++` corner rather than
+/// asserting. There is no meaningful &quot;farthest point in no direction&quot;, and every
+/// caller that could produce a zero direction is already guarding it for its own
+/// reasons; returning a real corner keeps the function total.
+[[nodiscard]] vec3 support(const obb&amp; box, vec3 d);
+
+/// The farthest point of the sphere in direction `d`. Zero `d` returns the centre.
+[[nodiscard]] vec3 support(const engine::sphere&amp; s, vec3 d);
+
+// ---------------------------------------------------------------------------
+// Lesson 8.5: two more convex shapes, and support taken RELATIVE to a centre
+// ---------------------------------------------------------------------------
+
+/// A capsule placed in the world: a segment, inflated by a radius.
+///
+/// **A capsule is a Minkowski sum, and its support function says so out loud.**
+/// The set is `segment ⊕ ball`, and the support function of a Minkowski sum is
+/// the *sum of the support functions* — `support_{X⊕Y}(d) = support_X(d) +
+/// support_Y(d)` — because maximising `dot(x + y, d)` over independent `x` and
+/// `y` maximises each term separately. So:
+///
+///     support(capsule, d) = ±half_height·axis   +   radius·normalise(d)
+///                           \_____ segment ____/     \______ ball ______/
+///
+/// Two terms, one per operand, and neither of them knows the other exists. That
+/// identity is the reason 8.5 can hand GJK a capsule without GJK learning what a
+/// capsule is, and it is the same identity that makes the Minkowski *difference*
+/// in `gjk.hpp` computable at all.
+struct capsule
+{
+    vec3 centre{};                  ///&lt; World space, the midpoint of the segment.
+    vec3 axis{0.0f, 1.0f, 0.0f};    ///&lt; Unit, world space. Body `+y`, rotated.
+    float half_height = 0.5f;       ///&lt; Half the SEGMENT, not half the capsule.
+    float radius = 0.5f;            ///&lt; Metres.
+
+    /// The two segment endpoints — the capsule&#x27;s &quot;spine&quot;.
+    [[nodiscard]] vec3 end(int sign) const
+    {
+        return centre + axis * (sign &gt;= 0 ? half_height : -half_height);
+    }
+};
+
+/// A convex point set placed in the world — **the shape that has no formula**.
+///
+/// The other primitives in this file are described by numbers: a radius, three
+/// half extents. This one is described by its vertices, which is what an artist&#x27;s
+/// convex collider actually is, and it is the reason GJK exists. There is no SAT
+/// axis list for an arbitrary hull — 8.4&#x27;s fifteen candidates came from *knowing*
+/// the shape was a box — and there is no closed form for the distance between
+/// two of them. There is only a support function, and that turns out to be
+/// enough.
+///
+/// **`points` is a non-owning span, and the vertices are in BODY axes relative
+/// to `centre`.** A hull&#x27;s geometry is an asset: it is loaded once, shared by
+/// every instance, and outlives any particular placement, exactly like a mesh.
+/// That is also why a hull is not a `shape_kind` — a `shape` is a 24-byte value
+/// that Module 9 will write to a save file, and a pointer is not a value.
+///
+/// **It need not actually be a hull.** `support` takes the maximum over the
+/// points, so passing a point cloud gives you the support function of its convex
+/// hull for free, and passing interior points costs time and changes nothing.
+/// The engine does not compute hulls — 8.5 §13 says plainly that a hull builder
+/// is out of scope and names the algorithm.
+struct hull
+{
+    vec3 centre{};                       ///&lt; World space.
+    mat3 axes = mat3::identity();        ///&lt; Columns are the unit body axes in world space.
+    std::span&lt;const vec3&gt; points{};      ///&lt; Body axes, relative to `centre`.
+};
+
+/// Place a capsule shape in the world. Asserts in debug that `s` is a capsule.
+[[nodiscard]] capsule world_capsule(const shape&amp; s, vec3 centre, quat orientation);
+
+/// Place a point set in the world. `points` must outlive the returned `hull`.
+[[nodiscard]] hull world_hull(std::span&lt;const vec3&gt; points, vec3 centre, quat orientation);
+
+/// The farthest point of the capsule in direction `d`.
+[[nodiscard]] vec3 support(const capsule&amp; c, vec3 d);
+
+/// The farthest point of the hull in direction `d`. Linear in the vertex count.
+///
+/// **Brute force, and that is a decision rather than a placeholder.** The
+/// alternative is hill climbing over an adjacency list, which turns O(n) into
+/// roughly O(√n) and needs a data structure this engine does not have. 8.5 §12
+/// measures the crossover: at the vertex counts a hand-authored collider
+/// actually has, the linear scan wins, because it is a contiguous sweep with no
+/// pointer chasing and the branch predictor sees one loop.
+[[nodiscard]] vec3 support(const hull&amp; h, vec3 d);
+
+// ---- support, relative to the shape&#x27;s own centre ---------------------------
+//
+// THE SAME FUNCTIONS, MINUS THE CENTRE, AND THE DIFFERENCE IS NUMERICAL RATHER
+// THAN STYLISTIC. 8.4 §11 measured a 1 mm gap between two boxes decaying to
+// EXACTLY ZERO at 100 km from the origin, and found the cause upstream of the
+// algorithm: `b.centre - a.centre` subtracts two world-sized floats to produce a
+// crate-sized one, and the information is gone before the test begins.
+//
+// GJK would inherit that intact, and worse: it forms `support_A(d) -
+// support_B(-d)` on EVERY iteration, so the cancellation is not paid once but
+// once per step. These overloads are the fix. Each returns the support point as
+// an OFFSET FROM ITS OWN CENTRE — for a box that is `axes * s` with the centre
+// never entering the arithmetic at all — and `gjk.hpp` forms the one large
+// subtraction `b_origin - a_origin` exactly once, outside the loop.
+//
+// 8.5 §11 measures what that buys, and the honest answer has two halves: the
+// algorithm stops adding error of its own, and the error already present in the
+// input positions stays. A relative formulation cannot recover information that
+// `float` positions never held.
+
+/// The farthest point of the box in direction `d`, **relative to `box.centre`**.
+[[nodiscard]] vec3 support_local(const obb&amp; box, vec3 d);
+
+/// The farthest point of the sphere in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const engine::sphere&amp; s, vec3 d);
+
+/// The farthest point of the capsule in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const capsule&amp; c, vec3 d);
+
+/// The farthest point of the hull in direction `d`, relative to its centre.
+[[nodiscard]] vec3 support_local(const hull&amp; h, vec3 d);
+
+/// The axis-aligned box that contains this capsule.
+///
+/// A capsule is a Minkowski sum, so its bounds are one too: the AABB of the
+/// segment, grown by `radius` on every side. No case analysis, no corners.
+[[nodiscard]] aabb bounds_of(const capsule&amp; c);
+
+/// The axis-aligned box that contains this hull. Linear in the vertex count.
+[[nodiscard]] aabb bounds_of(const hull&amp; h);
+
+// ---------------------------------------------------------------------------
+// Lesson 8.7: the support FACE
+// ---------------------------------------------------------------------------
+//
+// *** A SUPPORT FUNCTION DETERMINES A SHAPE AND DOES NOT HAND YOU A FEATURE. ***
+//
+// 8.5&#x27;s header made a strong claim and it is true: a convex set is completely
+// determined by its support function, because the set is the intersection of all
+// the half-spaces containing it and `support` names the boundary of every one.
+// Two shapes with the same support function are the same shape.
+//
+// But `support(d)` returns **one point**, and when `d` is a face normal the
+// argmax is the whole face. Which of the face&#x27;s four corners comes back is
+// decided by the tie-break — `support_local(obb)` uses `&gt;= 0` on each of three
+// dot products, so it is deterministic, and it is also arbitrary: rotate the box
+// by a millionth of a degree and a different corner wins. 8.7 §4 measures that
+// directly, and it is the reason a resting box cannot be held up by the witness
+// points GJK and EPA return. A box on a floor needs four contact points; a
+// support call can only ever produce one.
+//
+// So the interface widens by exactly one query. `support_face(shape, d)` returns
+// the whole feature the shape presents in direction `d`:
+//
+//     a sphere                    -&gt;  1 point   (a ball has no flat feature)
+//     a capsule, end on           -&gt;  1 point   (the pole of a cap)
+//     a capsule, side on          -&gt;  2 points  (the segment along its spine)
+//     a box                       -&gt;  4 points  (the dominant face)
+//     a hull                      -&gt;  n points  (the vertices on the supporting plane)
+//
+// and 8.7 clips one against the other to produce a manifold. The counts are not
+// a limitation of the implementation: they are the actual dimensions of the
+// contact features these shapes have, which is why a sphere resting on a plane
+// really does get one contact point and really does not need more.
+//
+// ---- WHAT MAKES THIS ONE HARDER THAN `support_local` -----------------------
+//
+// `support` has no tolerance in it. `support_face` has one, unavoidably, and it
+// is the same shape of problem 8.6 §7 hit at the horizon: deciding whether a
+// vertex is ON the supporting plane is a comparison whose two sides are equal in
+// exact arithmetic. The box and the capsule dodge it with closed forms — a box&#x27;s
+// dominant axis is an argmax over three numbers, and a capsule is a segment plus
+// a ball — but a `hull` is a point cloud with no face list, so its face has to
+// be GATHERED from the plane, and `k_face_gather_sin` below is the width of that
+// gather. 8.7 §5 measures what it costs to get it wrong in both directions.
+//
+// ---- THE POLYGON IS WOUND, AND THE WINDING IS LOAD-BEARING -----------------
+//
+// Every polygon returned here is wound **counter-clockwise about its own
+// outward normal** — conventions.html §7, the same winding the rasteriser has
+// used since 3.5 and the GPU since 4.4. It is not decoration. 8.7&#x27;s clipper
+// builds each side plane as `cross(edge, normal)`, which points OUT of the
+// polygon only if the winding is CCW; reverse it and every side plane faces
+// inward, every incident point is classified outside, and the manifold comes
+// back empty on exactly the contacts that matter most.
+
+/// The most vertices `support_face` will return.
+///
+/// Four covers every box, two covers a capsule, one covers a sphere; the number
+/// exists for `hull`, where a face can have as many vertices as the artist drew.
+/// Eight is not a limit on what you may model — it is the resolution at which
+/// this engine represents a contact face, and 8.7 §5 measures the error on a
+/// 24-sided prism, where the inscribed octagon&#x27;s contact points sit up to
+/// `r(1 - cos(pi/8))` inside the true rim — predicted 0.03806 m at a radius of
+/// 0.5, and measured at 0.03806.
+inline constexpr int k_max_face_vertices = 8;
+
+/// The most vertices `support_face(hull)` will gather before it gives up and
+/// decimates. Larger than `k_max_face_vertices` on purpose: the decimation must
+/// happen AFTER the angular sort, or the polygon it keeps is not a polygon.
+inline constexpr int k_max_gathered_vertices = 32;
+
+/// How far off a face normal a query direction may be and still be answered with
+/// that face, as a **sine** — so `0.05` is about 2.87 degrees.
+///
+/// This is one number wearing two hats, and they are the same hat. For a capsule
+/// it decides when a direction is perpendicular enough to the spine to be
+/// answered with the side segment rather than a single point on the cap. For a
+/// hull it becomes the width of the plane gather: a vertex `w` metres across a
+/// face is `w * sin(theta)` below the supporting plane when the query direction
+/// is `theta` off the face normal, so the gather tolerance that admits a whole
+/// face is exactly this constant times the shape&#x27;s own extent.
+///
+/// **It is a sine and not a distance**, for 8.5 §11&#x27;s reason repeated: a
+/// tolerance in metres is a tolerance that is too tight on a car and too loose
+/// on a doorknob.
+inline constexpr float k_face_gather_sin = 0.05f;
+
+/// The feature a convex shape presents in a direction: a point, a segment, or a
+/// polygon.
+///
+/// **RELATIVE TO THE SHAPE&#x27;S OWN CENTRE**, exactly like `support_local`, and for
+/// the same reason — 8.4 §11&#x27;s precision wall. The one world-sized subtraction
+/// is formed once, by the caller, outside every loop.
+///
+/// 8.6 §12 DELETED FOUR DEFAULT MEMBER INITIALISERS AND BOUGHT 20.5%, AND THE
+/// SAME QUESTION HAS A DIFFERENT ANSWER HERE. What made it pay there was not the
+/// struct but the ARRAY: `polytope` held 128 faces, so one initialiser on one
+/// member made `polytope p;` write four kilobytes that the next line overwrote,
+/// and `expand` rebuilt a three-kilobyte horizon array once per pass. This type
+/// is 124 bytes, a manifold query builds exactly two of them once, and there is
+/// no array of them anywhere. `vec3`&#x27;s own initialisers are therefore left alone
+/// and `v` is simply documented as written-before-read. 8.7 §11 measures the
+/// whole face query at 5.2 ns.
+struct contact_face
+{
+    /// The feature&#x27;s vertices, **counter-clockwise about `normal`**, relative to
+    /// the shape&#x27;s centre. Only the first `count` are meaningful.
+    vec3 v[k_max_face_vertices];
+
+    /// Each vertex&#x27;s own identity **on its shape**, independent of which face it
+    /// was reached through: a box corner index 0-7 in `obb::corners`&#x27; order, a
+    /// capsule end 0 or 1, a hull point index modulo 256, and 0 for a sphere.
+    ///
+    /// 8.4&#x27;s `obb::corners` doc comment promised this field by name a lesson
+    /// before it existed — &quot;8.7&#x27;s manifolds identify contact features by index,
+    /// and two conventions for corner 3 would be a bug that only appears when a
+    /// box changes type&quot;. It is honoured here literally: corner 3 of a box&#x27;s
+    /// face is corner 3 of the box.
+    ///
+    /// **A hull with more than 256 vertices aliases**, and the consequence is
+    /// bounded: two contacts that should be distinct share an id, so one frame&#x27;s
+    /// warm-start impulse lands on the wrong point of the same face, and the
+    /// solver corrects it on the next one. 8.7 §9 measures a settled contact
+    /// matching 100% of its points over 1,999 consecutive frames.
+    std::uint8_t id[k_max_face_vertices];
+
+    /// Unit, outward. For a polygon this is the face&#x27;s own plane normal, which
+    /// is generally NOT the query direction — that difference is the whole
+    /// reason 8.7 chooses a reference face instead of trusting EPA&#x27;s normal.
+    vec3 normal{};
+
+    /// 1 (a vertex), 2 (an edge), or 3 and up (a face). Zero only for an empty
+    /// hull.
+    int count = 0;
+
+    /// **Which feature this is, stably across frames.** A box face is `2*axis +
+    /// (negative ? 1 : 0)`, so 0-5; a capsule is 0 and 1 for its caps and 2 for
+    /// its side; a sphere is always 0; a hull face is a 16-bit hash of the
+    /// sorted indices of the vertices on its supporting plane.
+    ///
+    /// THIS IS THE FIELD PERSISTENCE IS BUILT ON. 8.7 §9 makes the argument in
+    /// full: a contact cannot be matched to last frame&#x27;s contact by POSITION,
+    /// because both shapes moved and the position is a float computed two
+    /// different ways. It can be matched by identity, and this is the identity.
+    std::uint16_t feature = 0;
+
+    /// A hull face had more vertices than would fit and was decimated. Never set
+    /// for a box, a sphere or a capsule.
+    bool truncated = false;
+};
+
+/// The whole face of the box in direction `d`. Always four vertices.
+///
+/// An argmax over three numbers, with no tolerance anywhere: the face is the one
+/// whose axis `d` leans into hardest, which is a strictly better-behaved
+/// question than &quot;is this vertex on the plane&quot;. A direction exactly between two
+/// faces picks the lower axis index, deterministically — the tie is a tie in the
+/// value, so either answer is right and only reproducibility is at stake, which
+/// is `support_local`&#x27;s `&gt;= 0` argument one dimension up.
+[[nodiscard]] contact_face support_face(const obb&amp; box, vec3 d);
+
+/// The single point of the sphere in direction `d`. Always one vertex.
+///
+/// **A ball has no flat feature and this function does not pretend otherwise.**
+/// Returning a fabricated polygon here — a disc of some radius around the
+/// support point — is a tempting way to make a sphere stack, and it is a lie
+/// that shows up as a ball refusing to roll. One point is the truth.
+[[nodiscard]] contact_face support_face(const engine::sphere&amp; s, vec3 d);
+
+/// The feature of the capsule in direction `d`: the side segment when `d` is
+/// within `k_face_gather_sin` of perpendicular to the spine, one point otherwise.
+[[nodiscard]] contact_face support_face(const capsule&amp; c, vec3 d);
+
+/// The vertices of the hull on its supporting plane in direction `d`, wound CCW.
+///
+/// Linear in the vertex count for the gather, then an insertion sort over what
+/// was gathered — which is the face, so typically three to six. `truncated` is
+/// set if the face had more vertices than `k_max_face_vertices` and had to be
+/// decimated, or more than `k_max_gathered_vertices` and had to be cut short.
+///
+/// **`gather_sin` IS EXPOSED BECAUSE THERE IS NO VALUE THAT IS RIGHT**, and that
+/// is a fact about `hull` rather than about this function. A box, a sphere and a
+/// capsule answer with closed forms because they KNOW their own faces; a hull is
+/// a point cloud with no face list, so its face has to be recovered from the
+/// supporting plane, and how wide to make that plane is a guess about the
+/// geometry. On a hand-authored collider — genuinely flat faces, normals well
+/// apart — any value in a wide range gives the same answer. On a tessellated
+/// cylinder, where consecutive face normals are degrees apart, the default
+/// merges three flat faces into one slightly bulged polygon, and tightening it
+/// until that stops drops the side contact to a bare edge — 8 vertices and
+/// 33.8 mm of bulge at the default, 4 vertices and none at 0.01. 8.7 §5 measures
+/// both ends, and names the only real fix: give `hull` its faces.
+[[nodiscard]] contact_face support_face(const hull&amp; h, vec3 d,
+                                        float gather_sin = k_face_gather_sin);
+
+} // namespace engine::phys
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/phys/rigid_body.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/phys/rigid_body.cpp — mass, forces, and the walk over the table.
+//
+// Lesson 8.2. Nothing in this file is a template, because nothing in it needs to
+// be: 8.1&#x27;s general stepper is a template so that a one-line acceleration
+// function can inline into the step, and a body&#x27;s acceleration is not a function
+// at all — it is a field divided by a mass. The whole per-body update is eleven
+// multiplies and two adds, and `step` below is the only loop-resident code here.
+//
+// The FORCE ACCUMULATOR is the design, and it shows up as an absence: there is
+// no list of force generators, no visitor, no registry, no interface to
+// implement. Anything in the program that wants to push a body calls `add_force`
+// and the vector adds. That works because F = m*a is linear in F, and it is why
+// gravity is handled below by the same two lines a thruster would use rather
+// than by a special case in the integrator.
+
+#include &lt;engine/phys/rigid_body.hpp&gt;
+
+#include &lt;engine/core/log.hpp&gt;
+
+#include &lt;cmath&gt;
+
+namespace engine::phys
+{
+
+const char* name_of(gyroscopic_mode mode)
+{
+    switch (mode)
+    {
+    case gyroscopic_mode::off:           return &quot;off&quot;;
+    case gyroscopic_mode::explicit_term: return &quot;explicit&quot;;
+    case gyroscopic_mode::implicit_term: return &quot;implicit&quot;;
+    case gyroscopic_mode::momentum:      return &quot;momentum&quot;;
+    }
+    return &quot;?&quot;;
+}
+
+const char* name_of(body_kind kind)
+{
+    switch (kind)
+    {
+    case body_kind::dynamic:   return &quot;dynamic&quot;;
+    case body_kind::kinematic: return &quot;kinematic&quot;;
+    case body_kind::fixed:     return &quot;fixed&quot;;
+    }
+    // Not an assert, for 5.3&#x27;s reason: a naming function feeds logs and debug
+    // UI, and a log line is the last thing that should be able to stop a
+    // program.
+    return &quot;?&quot;;
+}
+
+// ---------------------------------------------------------------------------
+// Mass
+// ---------------------------------------------------------------------------
+
+float mass_of(const rigid_body&amp; b)
+{
+    // HUGE_VALF rather than a large float, because the answer really is
+    // infinity and a caller comparing against it deserves the comparison to
+    // work. Note what this means for arithmetic: `mass_of(floor) -
+    // mass_of(wall)` is `inf - inf`, which is NaN, and that is precisely the
+    // trap the header&#x27;s `inv_mass` note is about. Subtracting two inverse
+    // masses gives 0, which is the right answer.
+    return (b.inv_mass &gt; 0.0f) ? (1.0f / b.inv_mass) : HUGE_VALF;
+}
+
+bool set_mass(rigid_body&amp; b, float kilograms)
+{
+    if (!(kilograms &gt; 0.0f))
+    {
+        // Catches 0, negatives AND NaN — `!(x &gt; 0)` is true for NaN where
+        // `x &lt;= 0` is false, which is the one place in this file where the
+        // negated comparison is load-bearing rather than a style choice.
+        // `log_core`, and that is a decision rather than a default. 5.3&#x27;s test
+        // for a new category is &quot;would somebody want to turn exactly this off&quot;,
+        // and 7.8 — which added the last one — predicted in log.hpp that the
+        // subsystems arriving in Modules 8 and 9 would not qualify. This is the
+        // first test of that prediction and it holds: the only thing physics has
+        // to say here is that a caller passed something that is not a mass,
+        // which is a programmer error, and a programmer error is the last line
+        // anybody wants a switch for.
+        ENGINE_LOG_WARN(log_core, &quot;set_mass: %f kg is not a mass; body unchanged&quot;,
+                        static_cast&lt;double&gt;(kilograms));
+        return false;
+    }
+
+    // An infinite mass is a legal way to ask for immovable, and `1/inf` is
+    // exactly 0, so no branch is needed for it.
+    b.inv_mass = 1.0f / kilograms;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Applying things
+// ---------------------------------------------------------------------------
+
+void add_force(rigid_body&amp; b, vec3 newtons)
+{
+    b.force += newtons;
+}
+
+void add_impulse(rigid_body&amp; b, vec3 newton_seconds)
+{
+    // dv = J/m, and no `h` anywhere. That absence is the whole point — see the
+    // header&#x27;s note on the jump that is twice as high at 30 Hz.
+    //
+    // An immovable body has inv_mass 0, so this is a multiply by zero and the
+    // impulse is absorbed. That is the physically correct answer (the floor
+    // really does not move when you hit it) and it needs no test.
+    b.state.velocity += newton_seconds * b.inv_mass;
+}
+
+void add_acceleration(rigid_body&amp; b, vec3 metres_per_second_squared)
+{
+    if (b.inv_mass &lt;= 0.0f)
+    {
+        // An immovable body cannot be accelerated by anything, and `m*a` with
+        // an infinite mass is an infinite force — which would poison the
+        // accumulator with an infinity that survives the later multiply by zero
+        // as a NaN. Handled here rather than trusted to the arithmetic.
+        return;
+    }
+
+    // m*a, so that a field enters the SAME accumulator a push does and the two
+    // sum correctly. The round trip through the mass is what makes this line
+    // right rather than pointless: writing the velocity directly would move
+    // kinematic bodies and would not compose with anything.
+    b.force += metres_per_second_squared * (1.0f / b.inv_mass);
+}
+
+void clear_force(rigid_body&amp; b)
+{
+    b.force = vec3{};
+}
+
+// ---- Torque (Lesson 8.3) ---------------------------------------------------
+
+void add_torque(rigid_body&amp; b, vec3 newton_metres)
+{
+    b.torque += newton_metres;
+}
+
+void add_force_at(rigid_body&amp; b, vec3 newtons, vec3 world_point)
+{
+    // Both accumulators, one call. The lever arm is measured from the centre of
+    // mass, which for this engine is the body&#x27;s position — see the header note
+    // on `add_force_at` for why there is no separate centre-of-mass offset.
+    b.force += newtons;
+    b.torque += cross(world_point - b.state.position, newtons);
+}
+
+void add_impulse_at(rigid_body&amp; b, vec3 newton_seconds, vec3 world_point)
+{
+    b.state.velocity += newton_seconds * b.inv_mass;
+
+    const vec3 arm = world_point - b.state.position;
+    b.angular_velocity += world_inv_inertia(b) * cross(arm, newton_seconds);
+}
+
+void add_angular_impulse(rigid_body&amp; b, vec3 newton_metre_seconds)
+{
+    b.angular_velocity += world_inv_inertia(b) * newton_metre_seconds;
+}
+
+void clear_torque(rigid_body&amp; b)
+{
+    b.torque = vec3{};
+}
+
+// ---- Inertia (Lesson 8.3) --------------------------------------------------
+
+bool set_inertia(rigid_body&amp; b, const mat3&amp; body_inertia)
+{
+    const inertia_report r = inspect_inertia(body_inertia);
+    if (!r.usable)
+    {
+        // The same shape of refusal as `set_mass`, and it goes to `log_core` for
+        // the same reason: this is a programmer error, not a condition anybody
+        // would want a per-subsystem switch for. 7.8&#x27;s rule for a log category
+        // is &quot;would somebody want to turn exactly this off&quot;, and nobody wants to
+        // turn off the line that tells them their crate cannot exist.
+        ENGINE_LOG_WARN(log_core,
+                        &quot;set_inertia: rejected tensor (diag %f %f %f, asym %f, &quot;
+                        &quot;positive %d, triangle %d); body unchanged&quot;,
+                        static_cast&lt;double&gt;(r.diagonal.x),
+                        static_cast&lt;double&gt;(r.diagonal.y),
+                        static_cast&lt;double&gt;(r.diagonal.z),
+                        static_cast&lt;double&gt;(r.asymmetry),
+                        r.positive ? 1 : 0, r.triangle ? 1 : 0);
+        return false;
+    }
+
+    // BOTH, always, and this is the only function that writes either. See the
+    // note on `rigid_body::inertia_local`.
+    b.inv_inertia_local = inverse_inertia(body_inertia);
+    b.inertia_local = body_inertia;
+    return true;
+}
+
+mat3 inertia_of(const rigid_body&amp; b)
+{
+    return b.inertia_local;
+}
+
+mat3 world_inv_inertia(const rigid_body&amp; b)
+{
+    return world_inverse_inertia(b.orientation, b.inv_inertia_local);
+}
+
+vec3 gyroscopic_step(const rigid_body&amp; b, float h, gyroscopic_mode mode)
+{
+    // `momentum` is not a correction applied to an angular velocity — it is a
+    // different choice of state variable, and it needs the END-OF-STEP
+    // orientation, which this function does not have. `step` implements it
+    // directly; here it is a no-op so that a caller cycling through the modes
+    // does not get a wrong answer instead of an unavailable one.
+    if (mode == gyroscopic_mode::off || mode == gyroscopic_mode::momentum)
+    {
+        return b.angular_velocity;
+    }
+
+    const mat3 body_to_world = mat3_from_quat(b.orientation);
+    const mat3&amp; i_body = b.inertia_local;
+
+    if (mode == gyroscopic_mode::explicit_term)
+    {
+        // The obvious one: evaluate the term at the state you already have and
+        // add it. Done in world space, where `omega` already lives.
+        const mat3 i_world = body_to_world * i_body * transpose(body_to_world);
+        const mat3 inv_i_world =
+            body_to_world * b.inv_inertia_local * transpose(body_to_world);
+
+        const vec3 term = cross(b.angular_velocity, i_world * b.angular_velocity);
+        return b.angular_velocity - (inv_i_world * term) * h;
+    }
+
+    // ---- the implicit one, in the BODY frame ------------------------------
+    //
+    // Work in body axes, because that is the one frame in which `I` is a
+    // constant and can be differentiated through without a product rule.
+    const vec3 w0 = transpose(body_to_world) * b.angular_velocity;
+    const vec3 l0 = i_body * w0;
+
+    // Write the step as a root-finding problem in the UNKNOWN end-of-step
+    // angular velocity `w`:
+    //
+    //     f(w) = I*(w - w0) + h * (w x (I w)) = 0
+    //
+    // At `w = w0` the first term vanishes and the residual is just the term
+    // itself, scaled by the step. That residual is already O(h), which is why
+    // ONE Newton iteration is enough — a second would correct an O(h^2) error
+    // in a scheme that is O(h) anyway.
+    const vec3 residual = cross(w0, l0) * h;
+
+    // The derivative of `w x (I w)` with respect to `w`, applied to a
+    // perturbation `d`, is `d x (I w) + w x (I d)` — which as matrices is
+    // `[w]x I - [I w]x`. Both cross-product matrices, and the reason `skew`
+    // exists in mat3.hpp.
+    const mat3 jacobian = i_body + (skew(w0) * i_body - skew(l0)) * h;
+
+    const vec3 correction = inverse(jacobian) * residual;
+    return body_to_world * (w0 - correction);
+}
+
+vec3 angular_momentum(const rigid_body&amp; b)
+{
+    // `R * (I_body * (R^T * omega))` rather than `(R I_body R^T) * omega`.
+    //
+    // The two are the same number and not the same amount of work: the sandwich
+    // builds a whole matrix — two 3x3 products, 90 flops — and then throws it
+    // away after one use, where this route is three matrix-VECTOR products at 15
+    // flops each. Build the operator when you will apply it many times; apply it
+    // directly when you will not.
+    const mat3 body_to_world = mat3_from_quat(b.orientation);
+    const vec3 omega_body = transpose(body_to_world) * b.angular_velocity;
+    return body_to_world * (b.inertia_local * omega_body);
+}
+
+float kinetic_energy(const rigid_body&amp; b)
+{
+    const float linear = (b.inv_mass &gt; 0.0f)
+                       ? (0.5f * length_squared(b.state.velocity) / b.inv_mass)
+                       : 0.0f;
+
+    // The rotational half is a quadratic FORM — omega . (I omega) — not a
+    // product of two scalars, which is the whole difference between a mass and
+    // a tensor written out in one line of arithmetic.
+    const vec3 l = angular_momentum(b);
+    return linear + 0.5f * dot(b.angular_velocity, l);
+}
+
+vec3 point_velocity(const rigid_body&amp; b, vec3 world_point)
+{
+    return b.state.velocity + cross(b.angular_velocity, world_point - b.state.position);
+}
+
+vec3 world_point_of(const rigid_body&amp; b, vec3 local_point)
+{
+    return b.state.position + rotate(b.orientation, local_point);
+}
+
+// ---------------------------------------------------------------------------
+// Terminal speeds
+// ---------------------------------------------------------------------------
+
+float terminal_speed_damped(float g, float k)
+{
+    if (!(k &gt; 0.0f)) { return HUGE_VALF; }   // no damping, no terminal speed
+    return g / k;
+}
+
+float terminal_speed_dragged(float g, float mass, float b_coefficient)
+{
+    if (!(b_coefficient &gt; 0.0f)) { return HUGE_VALF; }
+    return (mass * g) / b_coefficient;
+}
+
+// ---------------------------------------------------------------------------
+// Units
+// ---------------------------------------------------------------------------
+
+float free_fall_time(float distance, float g)
+{
+    if (!(g &gt; 0.0f) || distance &lt;= 0.0f) { return 0.0f; }
+    return std::sqrt(2.0f * distance / g);
+}
+
+float time_scale_for_length_scale(float length_scale)
+{
+    if (!(length_scale &gt; 0.0f)) { return 0.0f; }
+    return std::sqrt(length_scale);
+}
+
+// ---------------------------------------------------------------------------
+// Frames
+// ---------------------------------------------------------------------------
+
+frame_report inspect_frame(const mat4&amp; world_from_parent, vec3 gravity)
+{
+    frame_report out;
+
+    const mat3 linear = linear_of(world_from_parent);
+
+    // A gravity vector is a DIRECTION, not a position — Lesson 2.7&#x27;s `w`, and
+    // the reason this uses the 3x3 linear part rather than the full 4x4. A
+    // translation must not change an acceleration; if it did, moving a platform
+    // sideways would make everything on it fall harder.
+    out.gravity_in_world = linear * gravity;
+
+    const float g_len = length(gravity);
+    const float w_len = length(out.gravity_in_world);
+    out.gain = (g_len &gt; 0.0f) ? (w_len / g_len) : 1.0f;
+
+    if (g_len &gt; 0.0f &amp;&amp; w_len &gt; 0.0f)
+    {
+        // The angle between where gravity was aimed and where it landed. Clamped
+        // before the acos because a dot of two normalised floats can land a few
+        // ulps outside [-1, 1] and `std::acos(1.0000001f)` is NaN — the same
+        // guard `quat_slerp` needs for the same reason (7.5 §4).
+        float c = dot(gravity, out.gravity_in_world) / (g_len * w_len);
+        c = (c &gt; 1.0f) ? 1.0f : ((c &lt; -1.0f) ? -1.0f : c);
+        out.tilt_degrees = std::acos(c) * (180.0f / 3.14159265358979323846f);
+    }
+
+    // The scale and the shear come from 7.5&#x27;s decomposition, unchanged and
+    // uncalled-for until now: `out_of_square` is the worst |cosine| between two
+    // recovered axes, which is exactly &quot;does this frame preserve angles&quot;.
+    const transform_extraction ex = transform_from_affine(world_from_parent);
+    out.scale = ex.value.scale;
+    out.out_of_square = ex.out_of_square;
+
+    const float sx = std::fabs(out.scale.x);
+    const float sy = std::fabs(out.scale.y);
+    const float sz = std::fabs(out.scale.z);
+    const float biggest = (sx &gt; sy) ? ((sx &gt; sz) ? sx : sz) : ((sy &gt; sz) ? sy : sz);
+    const float smallest = (sx &lt; sy) ? ((sx &lt; sz) ? sx : sz) : ((sy &lt; sz) ? sy : sz);
+
+    // A relative test, not an absolute one: a frame scaled uniformly by 1000 is
+    // still uniform, and `biggest - smallest` would call it wildly non-uniform.
+    out.uniform = (biggest &lt;= 0.0f) || ((biggest - smallest) / biggest &lt;= 1e-4f);
+
+    // &quot;Inertial&quot; here means the narrow thing physics needs: a frame that is a
+    // rotation and a translation, so that it preserves lengths and angles and a
+    // body integrated in it feels exactly what a body integrated in world space
+    // feels. `gain` within a tenth of a percent of 1 covers the uniform-scale
+    // case; `out_of_square` covers shear; `uniform` covers the rest.
+    //
+    // A ROTATING frame passes all three tests and is still not inertial, and
+    // this function cannot see that, because a matrix has no time derivative.
+    // §8.5 measures what that case costs and the header says what it is: the
+    // fictitious forces are real and nothing here supplies them.
+    out.inertial = out.uniform
+                &amp;&amp; std::fabs(out.gain - 1.0f) &lt;= 1e-3f
+                &amp;&amp; out.out_of_square &lt;= k_transform_square_tolerance;
+
+    return out;
+}
+
+transform place_in_parent(const rigid_body&amp; b, const mat4&amp; world_from_parent,
+                          const transform&amp; authored)
+{
+    // The inverse of a general affine matrix, which this genuinely needs: the
+    // parent may be scaled, and `rigid_inverse` (2.8) assumes it is not.
+    //
+    // Route: decompose to a `transform`, then use `local_from_parent`, which
+    // 7.6 wrote and which inverts by construction rather than by cofactors —
+    // transpose the rotation, reciprocate the scale, negate the translation.
+    // Forty operations saved is not the reason; the reason is that a
+    // decomposition REPORTS what it could not represent, and a determinant does
+    // not.
+    const transform_extraction ex = transform_from_affine(world_from_parent);
+    const mat4 parent_from_world = local_from_parent(ex.value);
+
+    transform out = authored;
+    // A position, so the full affine matrix and the translation with it — the
+    // opposite of `inspect_frame` above, and the same `w` deciding both.
+    // `point()` and not `to_vec4(p, 1)` — 2.7&#x27;s rule, and it is exactly the
+    // distinction this function is about: `inspect_frame` above uses the linear
+    // part because an acceleration is a DIRECTION, and this line uses the full
+    // matrix because a position is a POINT. Same matrix, one `w`, two meanings.
+    out.position = xyz(parent_from_world * point(b.state.position));
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// The world
+// ---------------------------------------------------------------------------
+
+body_id body_world::add(const rigid_body&amp; body)
+{
+    return bodies_.insert(body);
+}
+
+bool body_world::remove(body_id id)
+{
+    return bodies_.remove(id);
+}
+
+rigid_body* body_world::get(body_id id) { return bodies_.get(id); }
+const rigid_body* body_world::get(body_id id) const { return bodies_.get(id); }
+
+std::span&lt;rigid_body&gt; body_world::bodies() { return bodies_.items(); }
+std::span&lt;const rigid_body&gt; body_world::bodies() const { return bodies_.items(); }
+
+std::size_t body_world::size() const { return bodies_.size(); }
+void body_world::clear() { bodies_.clear(); }
+
+void body_world::set_gravity(vec3 g) { gravity_ = g; }
+vec3 body_world::gravity() const { return gravity_; }
+
+void body_world::set_integrator(integrator rule) { rule_ = rule; }
+integrator body_world::integrator_rule() const { return rule_; }
+
+void body_world::set_spin_rule(spin_rule rule) { spin_ = rule; }
+spin_rule body_world::spin() const { return spin_; }
+
+const step_report&amp; body_world::report() const { return report_; }
+
+const step_report&amp; body_world::step(float h)
+{
+    report_ = step_report{};
+
+    for (rigid_body&amp; b : bodies_.items())
+    {
+        ++report_.bodies;
+
+        // Lesson 8.3&#x27;s instrument, read BEFORE the step touches anything: how
+        // far from the unit sphere did this body&#x27;s quaternion ARRIVE? The step
+        // renormalises on the way out, so anything found here was written by
+        // somebody else — an animation blend, a lerp, a network packet, a
+        // hand-authored quaternion. See `step_report::max_unit_error`.
+        const float unit_error = std::fabs(length(b.orientation) - 1.0f);
+        if (unit_error &gt; report_.max_unit_error) { report_.max_unit_error = unit_error; }
+
+        switch (b.kind)
+        {
+        case body_kind::fixed:
+            // Skipped entirely. Not &quot;integrated with zero acceleration&quot; — a
+            // fixed body does not even pay the loads, and 8.8&#x27;s broadphase
+            // relies on these never moving to keep a structure it never
+            // rebuilds. Its force accumulator is still cleared, so that a
+            // system pushing on the floor does not leak a growing vector.
+            ++report_.fixed;
+            b.force = vec3{};
+            b.torque = vec3{};
+            continue;
+
+        case body_kind::kinematic:
+        {
+            // Travels at whatever velocity gameplay set, and nothing else
+            // touches it: no gravity, no forces, no damping. The position
+            // update is the one line of the integrator that applies, written
+            // out rather than routed through `integrate` so that it is obvious
+            // that the velocity is NOT being changed.
+            ++report_.kinematic;
+            b.state.position += b.state.velocity * h;
+
+            // Lesson 8.3: it TURNS as well as travels. A rotating platform, a
+            // swinging door and a fan blade are all this line, and the same
+            // sentence above applies to it — the angular velocity is whatever
+            // gameplay set, and nothing here changes it.
+            b.orientation = advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+
+            b.force = vec3{};
+            b.torque = vec3{};
+            break;
+        }
+
+        case body_kind::dynamic:
+        {
+            ++report_.dynamic;
+
+            // (1) and (2) TOGETHER, and the order of the two terms is a
+            // decision this lesson makes twice and gets wrong the first time.
+            //
+            // The obvious arrangement puts gravity into the accumulator as a
+            // force of `m*g`, alongside everything else, and divides the sum by
+            // the mass at the end — which is the honest statement of the
+            // physics (weight IS a force) and reads beautifully. It costs a
+            // FLOAT DIVIDE PER BODY PER STEP, because the weight needs `m` and
+            // the body stores `1/m`, and §10 measures that at 15% of the whole
+            // update — more than 8.1&#x27;s entire integrator step.
+            //
+            // So gravity is added AFTER the division, as the acceleration it
+            // already is. The mass was always going to cancel; this line simply
+            // declines to compute it and then undo it. Two things survive
+            // unchanged: `gravity_scale` still works, because it multiplies an
+            // acceleration exactly as happily as it multiplied a force, and the
+            // result is now exact by construction rather than by luck — §3
+            // found that 16% of masses do not survive the round trip
+            // `(g/inv_mass)*inv_mass` bit for bit.
+            //
+            // The one thing given up is real and is named in §9: `force` no
+            // longer contains the body&#x27;s weight, so a debug overlay drawing
+            // force arrows draws every push EXCEPT the one that is always
+            // there. That is a tooling problem with a one-line answer
+            // (`mass_of(b) * world.gravity()`), and it is the right side of the
+            // trade. Box2D makes the same one, in the same place.
+            const vec3 acceleration = (b.inv_mass &gt; 0.0f)
+                                    ? (b.force * b.inv_mass
+                                       + gravity_ * b.gravity_scale)
+                                    : vec3{};
+
+            // (3) Advance, by 8.1&#x27;s rule and 8.1&#x27;s code. The constant-
+            // acceleration overload, because the force was collected before the
+            // step and is held fixed across it — which is what &quot;the force
+            // applied during this step&quot; means.
+            integrate(b.state, acceleration, h, rule_);
+
+            // ...then damping, exactly, as `v *= exp(-k*h)`. AFTER the step and
+            // not folded into the acceleration, because `a = -k*v` is not a
+            // force derived from a potential and feeding it through a symplectic
+            // rule gets you plain explicit Euler&#x27;s stability limit on it
+            // (8.1 §8). A body with `damping` 0 pays a branch and no exp.
+            if (b.damping &gt; 0.0f) { apply_drag(b.state, b.damping, h); }
+
+            // ---- (5) THE ANGULAR HALF, Lesson 8.3 -------------------------
+            //
+            // Structurally the mirror of the three lines above — a resistance,
+            // an accumulator, a step — with three differences that are the
+            // whole of 8.3.
+            //
+            // FIRST: the resistance is a TENSOR and it lives in body axes, so
+            // it has to be carried into world space before it can act on a
+            // world-space torque. That is the sandwich `R * I^-1 * R^T`, and
+            // §6 is about why it is a sandwich rather than a product.
+            //
+            // ONE `mat3_from_quat` PER BODY PER STEP, and §12 is the reason
+            // it is spelled out here rather than left inside
+            // `world_inverse_inertia`. The first version of this loop called
+            // that function and then `angular_momentum` twenty lines later, and
+            // each of them built the same rotation matrix from the same
+            // quaternion — 7.843 ns apiece, measured, on a 33.793 ns update.
+            // Hoisting it is the single largest saving in the angular half.
+            const mat3 body_to_world = mat3_from_quat(b.orientation);
+            const mat3 inv_i_world =
+                body_to_world * b.inv_inertia_local * transpose(body_to_world);
+
+            // SECOND: there is a term with no linear counterpart at all.
+            // `alpha = I^-1 * tau` is only half of Euler&#x27;s equation; the other
+            // half is the body&#x27;s own angular momentum being carried around by
+            // its own rotation, and it is what makes an asymmetric body tumble
+            // instead of spin. Without it, §10&#x27;s demo never flips. See
+            // `gyroscopic_mode` — four answers, and §9 measures all of them.
+            //
+            // THIRD: the orientation update is not an addition. `q += omega*h`
+            // is not a rotation — it is not even a unit quaternion — and §7 is
+            // the derivation of what goes there instead.
+            //
+            // SEMI-IMPLICIT ALWAYS, whatever `rule_` says, and the
+            // inconsistency is deliberate. `rule_` chooses how a position
+            // update is paired with a velocity update; velocity Verlet&#x27;s second
+            // half would need the tensor rebuilt at the new orientation and a
+            // second renormalisation, to correct by less than the
+            // renormalisation&#x27;s own error. §7 measures both sides of that.
+            if (b.gyroscopic == gyroscopic_mode::momentum)
+            {
+                // ---- the momentum formulation -------------------------------
+                //
+                // Integrate `L`, derive `omega`. Nothing below ever writes `L`
+                // except the torque line, so a torque-free body&#x27;s angular
+                // momentum is conserved BIT FOR BIT rather than to a tolerance.
+                //
+                // Note what has disappeared: there is no gyroscopic term here,
+                // no Jacobian and no Newton iteration. The term was never
+                // physics — it was the price of differentiating `I(t)*omega`
+                // while insisting that `omega` be the state.
+                vec3 l_world = body_to_world
+                             * (b.inertia_local
+                                * (transpose(body_to_world) * b.angular_velocity));
+
+                l_world += b.torque * h;
+
+                if (b.angular_damping &gt; 0.0f)
+                {
+                    l_world *= std::exp(-b.angular_damping * h);
+                }
+
+                // ---- and now the MIDPOINT, which is the whole accuracy
+                // ---- of this mode.
+                //
+                // Advancing the orientation by the angular velocity at the
+                // START of the step is first order, and §9 measured what that
+                // costs on a tumbling box. `L` is conserved by construction
+                // whatever this line does, so `L` cannot tell you the body is
+                // wrong — the SECOND conserved quantity can. At 60 Hz the
+                // kinetic energy, which a torque-free body also holds exactly,
+                // drifted by **97.1%**, and `|omega|` ranged over 4.0559 to
+                // 8.0350 where §8 derives a bound of 4.0524 to 4.4880. The
+                // momentum was beautifully conserved and the body was doing the
+                // wrong thing with it.
+                //
+                // The fix is to take a half step first, read the angular
+                // velocity THERE, and use that for the whole step. One extra
+                // rotation matrix and one extra orientation advance took the
+                // energy drift from 9.714e-01 to **1.198e-04** at the same
+                // 60 Hz — a factor of 8,100 — and put `|omega|` on
+                // 4.0525..4.4879, inside the bound.
+                //
+                // This works here and would not work on `angular_velocity`,
+                // because `L` is FIXED across the whole step: the only thing
+                // the half step is estimating is where the body will be
+                // pointing, and that is a question a half step answers well.
+                const vec3 omega_start = body_to_world
+                                       * (b.inv_inertia_local
+                                          * (transpose(body_to_world) * l_world));
+
+                const quat half = advance_orientation(b.orientation, omega_start,
+                                                      0.5f * h, spin_);
+                const mat3 half_to_world = mat3_from_quat(half);
+                const vec3 omega_mid = half_to_world
+                                     * (b.inv_inertia_local
+                                        * (transpose(half_to_world) * l_world));
+
+                b.orientation = advance_orientation(b.orientation, omega_mid, h, spin_);
+
+                // ...and re-derive the angular velocity at the orientation the
+                // body actually ended up in. THIS is where the tumble comes
+                // from: `L` did not move, `I_world` did, so `omega` must.
+                const mat3 new_to_world = mat3_from_quat(b.orientation);
+                b.angular_velocity = new_to_world
+                                   * (b.inv_inertia_local
+                                      * (transpose(new_to_world) * l_world));
+            }
+            else
+            {
+                // The gyroscopic term first, on its own, and the applied torque
+                // after it. The order is Bullet&#x27;s and it is the order the
+                // derivation wants: the implicit solve asks &quot;where does this
+                // body&#x27;s OWN momentum carry its angular velocity in `h`
+                // seconds&quot;, which is a question about the body as it is now,
+                // before anything external has been added to it.
+                if (b.gyroscopic != gyroscopic_mode::off)
+                {
+                    b.angular_velocity = gyroscopic_step(b, h, b.gyroscopic);
+                }
+
+                b.angular_velocity += (inv_i_world * b.torque) * h;
+
+                if (b.angular_damping &gt; 0.0f)
+                {
+                    b.angular_velocity *= std::exp(-b.angular_damping * h);
+                }
+
+                b.orientation =
+                    advance_orientation(b.orientation, b.angular_velocity, h, spin_);
+            }
+
+            // (6) ...and only now are the accumulators cleared, so that a debug
+            // overlay, an assertion or 8.10&#x27;s solver can still read what was
+            // applied during the step that just ran.
+            b.force = vec3{};
+            b.torque = vec3{};
+
+            // A `sqrt` PER BODY, and it was measured before being kept. The
+            // obvious saving is to compare squared speeds and take one root at
+            // the end; §10.2 timed both and found 1.036, 0.968 and 0.969 over
+            // three runs — a tie, and once a loss. `sqrtss` is a pipelined
+            // single instruction on every target this engine builds for, and
+            // the version that reads as what it means wins by default when the
+            // measurement is a wash.
+            const float speed = length(b.state.velocity);
+            if (speed &gt; report_.max_speed) { report_.max_speed = speed; }
+
+            const float spin = length(b.angular_velocity);
+            if (spin &gt; report_.max_spin) { report_.max_spin = spin; }
+
+            // Momentum excludes immovable bodies: theirs is either zero or
+            // infinite and neither belongs in a sum that 8.9 will compare
+            // across a collision.
+            const float mass = 1.0f / b.inv_mass;
+            report_.momentum += b.state.velocity * mass;
+
+            // Angular momentum about the WORLD ORIGIN, which is two terms and
+            // the second one is the one people forget: `I*omega` is the body&#x27;s
+            // spin about its own centre, and `r x (m*v)` is the angular
+            // momentum its linear motion carries about the origin. A body
+            // sailing past in a straight line without rotating at all has the
+            // second and not the first, which is how a planet&#x27;s orbit conserves
+            // one.
+            // Reusing `body_to_world` from twenty lines above, and applying
+            // the tensor rather than building the world one — see
+            // `angular_momentum`, which does the same thing for a caller who
+            // does not already have the rotation in hand.
+            report_.angular_momentum +=
+                body_to_world * (b.inertia_local
+                                 * (transpose(body_to_world) * b.angular_velocity))
+                + cross(b.state.position, b.state.velocity * mass);
+            break;
+        }
+        }
+    }
+
+    // Computed from the final speed rather than accumulated per body, because
+    // the two agree for the semi-implicit rule — its position line moves at
+    // exactly the end-of-step velocity — and this way it is one multiply rather
+    // than a length per body.
+    report_.max_travel = report_.max_speed * h;
+    return report_;
+}
+
+// ---------------------------------------------------------------------------
+// Conveniences
+// ---------------------------------------------------------------------------
+
+rigid_body make_dynamic(vec3 position, float mass)
+{
+    rigid_body b;
+    b.state.position = position;
+    b.kind = body_kind::dynamic;
+    set_mass(b, mass);
+    return b;
+}
+
+rigid_body make_box(vec3 position, float mass, vec3 half_extents)
+{
+    rigid_body b = make_dynamic(position, mass);
+    set_inertia(b, inertia_solid_box(mass, half_extents));
+    return b;
+}
+
+rigid_body make_sphere(vec3 position, float mass, float radius)
+{
+    rigid_body b = make_dynamic(position, mass);
+    set_inertia(b, inertia_solid_sphere(mass, radius));
+    return b;
+}
+
+rigid_body make_fixed(vec3 position)
+{
+    rigid_body b;
+    b.state.position = position;
+    b.inv_mass = 0.0f;
+
+    // Nine zeros, for exactly the reason the one zero above is there: no torque
+    // can spin this, exactly, with no branch and no sentinel. 8.2&#x27;s argument
+    // for `inv_mass = 0`, made nine floats wide. The forward tensor is zero too,
+    // which makes the body&#x27;s angular momentum exactly zero rather than infinite.
+    b.inv_inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.kind = body_kind::fixed;
+    return b;
+}
+
+rigid_body make_kinematic(vec3 position, vec3 velocity)
+{
+    rigid_body b;
+    b.state.position = position;
+    b.state.velocity = velocity;
+    b.inv_mass = 0.0f;
+
+    // Immovable by torques as well as by forces. Set `angular_velocity`
+    // directly to make it turn — that is what kinematic means.
+    b.inv_inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.inertia_local = mat3{vec3{}, vec3{}, vec3{}};
+    b.kind = body_kind::kinematic;
+    return b;
+}
+
+} // namespace engine::phys
 </code></pre>
   </figure>
 

@@ -100,9 +100,25 @@ LISTING_META = {
     "engine/include/engine/gfx/gpu_post.hpp": ("modified", "modified"),
     "engine/src/gfx/gpu_post.cpp": ("modified", "modified"),
     "scratch/verify_614.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_pipeline.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_texture.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/microfacet.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_pipeline.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "shaders/scene.frag.hlsl": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
 }
 
-LISTING_LANG = {}
+LISTING_LANG = {
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
+}
 
 LISTING_SOURCE = {
     # PINNED 2026-09-12, at the start of 6.15's session, exactly as the note below
@@ -121,6 +137,18 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/gpu_post.hpp": "scratch/l614_gpu_post.hpp",
     "engine/src/gfx/gpu_post.cpp": "scratch/l614_gpu_post.cpp",
     "scratch/verify_614.cpp": "scratch/l614_verify_614.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_pipeline.hpp": "scratch/l614_engine_include_engine_gfx_gpu_pipeline.hpp",
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l614_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_texture.hpp": "scratch/l614_engine_include_engine_gfx_gpu_texture.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l614_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/microfacet.hpp": "scratch/l614_engine_include_engine_gfx_microfacet.hpp",
+    "engine/src/gfx/gpu_pipeline.cpp": "scratch/l614_engine_src_gfx_gpu_pipeline.cpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l614_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l614_engine_src_gfx_gpu_texture.cpp",
+    "shaders/scene.frag.hlsl": "scratch/l614_shaders_scene.frag.hlsl",
+    "engine/CMakeLists.txt": "scratch/l614_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l614_demos_gltf_view_main.cpp",
 }
 
 # NOTHING PINNED YET, and this page lists FIVE files whole.

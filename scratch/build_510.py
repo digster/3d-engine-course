@@ -73,9 +73,16 @@ LISTING_META = {
     "engine/src/core/actions.cpp": ("new", "new"),
     "demos/ecs_swarm/main.cpp": ("modified", "modified"),
     "scratch/verify_510.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/platform/app.hpp": ("modified", "modified"),
+    "engine/src/platform/app.cpp": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
 }
 
-LISTING_LANG = {}
+LISTING_LANG = {
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
+}
 
 # PINNED, as this file's own warning said it would have to be.
 #
@@ -117,6 +124,10 @@ LISTING_SOURCE = {
     "engine/src/core/actions.cpp":            "scratch/l510_engine_src_core_actions.cpp",
     "demos/ecs_swarm/main.cpp":               "scratch/l510_demos_ecs_swarm_main.cpp",
     "scratch/verify_510.cpp":                 "scratch/l510_scratch_verify_510.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/platform/app.hpp": "scratch/l510_engine_include_engine_platform_app.hpp",
+    "engine/src/platform/app.cpp": "scratch/l510_engine_src_platform_app.cpp",
+    "engine/CMakeLists.txt": "scratch/l510_engine_CMakeLists.txt",
 }
 
 

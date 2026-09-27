@@ -890,7 +890,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    /// An optional mip chain for `image`. Lesson 6.10.
     ///
     /// **Nullable, and null is the whole of "no mipmapping"** — the same bargain
@@ -907,7 +907,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/mipmap.cpp</span> <span class="tag new">new</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/mipmap.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // Read the space from the DATA, not from a parameter. A caller who has to
     // remember which of their textures is colour is a caller who will get the
     // third one wrong, and the symptom — a normal map quietly gamma-decoded —
@@ -934,7 +934,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/raster.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
     // walks, divided by the same area it already reciprocated.
     const float dfx[3] = {static_cast&lt;float&gt;(s.step_x0) * inv_area,
@@ -984,7 +984,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
     // BLITTING each level into the next, so every level must be a render target.
     // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
@@ -1580,6 +1580,3749 @@ linear_rgb sample_mipped(const mip_chain&amp; chain, const sampler&amp; samp,
     }
     const float inv = 1.0f / static_cast&lt;float&gt;(taps);
     return linear_rgb{sum.r * inv, sum.g * inv, sum.b * inv};
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_texture.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/gpu_texture.hpp — an image on the device, and the object that reads it.
+//
+// Lesson 4.7. Two types, and the interesting one is the second.
+//
+// `gpu_texture` is the storage. It arrives by the transfer path Lesson 4.2 built
+// for the framebuffer, unchanged in shape: CPU memory -&gt; transfer buffer -&gt;
+// texture, because texture memory is TILED and possibly swizzled in a layout only
+// the driver knows, so there is no pointer to it and there cannot be.
+//
+// `gpu_sampler` is the part that is genuinely new, and it is worth being precise
+// about why. In Lesson 3.9 the filter and the address mode were ARGUMENTS:
+//
+//     sample(image, uv, filter::linear, address_mode::repeat)
+//
+// On the GPU they are an OBJECT, created once and bound alongside the texture.
+// That is Lesson 4.1&#x27;s argument arriving in a third place — after the pipeline
+// (4.4) and the vertex layout (4.5) — and for the same reason: a decision the
+// hardware must specialise for cannot be a parameter of the innermost loop.
+//
+// A texture and a sampler are SEPARATE objects bound as a PAIR
+// (`SDL_GPUTextureSamplerBinding`), which is not how either OpenGL or the CPU
+// path modelled it, and is better: one image can be read three ways in one frame
+// by binding it with three samplers, and one sampler serves every texture in a
+// material system without being duplicated per image.
+//
+// A DEPTH TARGET IS ALSO A TEXTURE — same SDL type, different usage and format,
+// never uploaded and (usually) never sampled. `create_depth` below is that path,
+// and it lives here rather than in its own file because SDL models it as one
+// type and pretending otherwise would be inventing a distinction to explain.
+
+#pragma once
+
+#include &lt;engine/gfx/gpu_device.hpp&gt;
+#include &lt;engine/gfx/image.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;   // engine::filter, engine::address_mode — Lesson 3.9
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// Owns an `SDL_GPUTexture`. Move-only, like every device resource here.
+class gpu_texture
+{
+public:
+    gpu_texture() = default;
+    ~gpu_texture();
+
+    gpu_texture(const gpu_texture&amp;) = delete;
+    gpu_texture&amp; operator=(const gpu_texture&amp;) = delete;
+
+    gpu_texture(gpu_texture&amp;&amp; other) noexcept;
+    gpu_texture&amp; operator=(gpu_texture&amp;&amp; other) noexcept;
+
+    /// Create a sampled 2-D texture and record the upload of `src` into `cb`.
+    ///
+    /// @param srgb ask for an `_SRGB` format, so the SAMPLER decodes to linear on
+    ///             every read, for free. This is the single most important
+    ///             argument in the file and Lesson 3.9 is why: an albedo is a
+    ///             reflectance, a reflectance multiplies a quantity of light, and
+    ///             both sides of that multiply must be linear. Lesson 3.9 paid
+    ///             for the decode per texel in software and measured what
+    ///             skipping it costs — blending two texels in encoded space gives
+    ///             0.2139 where 0.5 is correct, 43% of the light. Here it is a
+    ///             flag, and it happens BEFORE the filter, which is the order
+    ///             software cannot easily achieve.
+    /// @param mips build a full mip chain. Lesson 6.10, and the flag 4.7&#x27;s
+    ///             `num_levels = 1` comment promised.
+    ///
+    ///             **It also adds `COLOR_TARGET` to the usage flags**, which is
+    ///             not decoration: SDL generates a chain by blitting each level
+    ///             into the next, so every level has to be a render target.
+    ///             `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET and on
+    ///             `num_levels &gt; 1` — but **only when the device is in debug
+    ///             mode**, so on a release device the requirement is unchecked
+    ///             and the result is undefined rather than diagnosed.
+    [[nodiscard]] bool create_sampled(const gpu_device&amp; dev, SDL_GPUCommandBuffer* cb,
+                                      const image_data&amp; src, bool srgb,
+                                      const char* name = nullptr,
+                                      bool mips = false);
+
+    /// How many mip levels this texture has. 1 unless `mips` was asked for.
+    [[nodiscard]] int levels() const { return levels_; }
+
+    /// Create a depth attachment: no upload, cleared by the render pass that
+    /// uses it.
+    ///
+    /// `format` must be one the device supports for this usage — ask with
+    /// `supported_depth_format` below rather than assuming, because only
+    /// `D16_UNORM` is guaranteed.
+    ///
+    /// @param sampled also ask for `SDL_GPU_TEXTUREUSAGE_SAMPLER`, so a LATER
+    ///        pass can read this buffer back — Lesson 6.8, and the whole of what
+    ///        separates a shadow map from an ordinary depth target. It is a
+    ///        parameter rather than always-on because the comment this replaces
+    ///        was right: **asking for a usage you do not need can force the
+    ///        driver into a slower layout**, and the scene&#x27;s own depth buffer is
+    ///        read by nothing. There is a second cost, and it is the one that
+    ///        bites on phones: a sampled depth target cannot stay in tile memory,
+    ///        so `store_op` has to become `STORE` and the buffer is written out
+    ///        to main memory in full.
+    [[nodiscard]] bool create_depth(const gpu_device&amp; dev, SDL_GPUTextureFormat format,
+                                    Uint32 width, Uint32 height, const char* name = nullptr,
+                                    bool sampled = false);
+
+    /// A stack of depth slices addressed as one texture. Lesson 6.9.
+    ///
+    /// `layers` maps to `layer_count_or_depth`, and the type becomes
+    /// `SDL_GPU_TEXTURETYPE_2D_ARRAY` — which the shader must match with
+    /// `Texture2DArray`, because a `Texture2D` bound to an array texture is a
+    /// binding error the validation layer catches and a silent black map on
+    /// drivers that do not.
+    ///
+    /// **A render pass targets ONE layer at a time.**
+    /// `SDL_GPUDepthStencilTargetInfo` has a `layer` field (a `Uint8`, beside
+    /// `mip_level`) and no way to say &quot;all of them&quot;, so N cascades are N passes.
+    /// That is not a limitation to route around: each cascade has its own camera
+    /// and its own culling, so they were always going to be separate passes.
+    [[nodiscard]] bool create_depth_array(const gpu_device&amp; dev,
+                                          SDL_GPUTextureFormat format,
+                                          Uint32 width, Uint32 height,
+                                          Uint32 layers, const char* name = nullptr,
+                                          bool sampled = false);
+
+    void destroy();
+
+    [[nodiscard]] bool valid() const { return texture_ != nullptr; }
+    [[nodiscard]] SDL_GPUTexture* handle() const { return texture_; }
+    [[nodiscard]] Uint32 width() const { return width_; }
+    [[nodiscard]] Uint32 height() const { return height_; }
+    [[nodiscard]] SDL_GPUTextureFormat format() const { return format_; }
+
+    /// Bytes the upload moved. Zero for a depth target, which is never written
+    /// from the CPU at all.
+    [[nodiscard]] Uint32 uploaded_bytes() const { return uploaded_bytes_; }
+
+private:
+    SDL_GPUDevice* device_ = nullptr;    ///&lt; NOT owned
+    SDL_GPUTexture* texture_ = nullptr;  ///&lt; owning by contract
+    Uint32 width_ = 0;
+    Uint32 height_ = 0;
+    Uint32 uploaded_bytes_ = 0;
+    int levels_ = 1;
+    SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+};
+
+/// Owns an `SDL_GPUSampler` — the *how* of a texture read, frozen into an object.
+class gpu_sampler
+{
+public:
+    gpu_sampler() = default;
+    ~gpu_sampler();
+
+    gpu_sampler(const gpu_sampler&amp;) = delete;
+    gpu_sampler&amp; operator=(const gpu_sampler&amp;) = delete;
+
+    gpu_sampler(gpu_sampler&amp;&amp; other) noexcept;
+    gpu_sampler&amp; operator=(gpu_sampler&amp;&amp; other) noexcept;
+
+    /// Create one from Lesson 3.9&#x27;s own enums.
+    ///
+    /// The parameters are `engine::filter` and `engine::address_mode`, not SDL&#x27;s,
+    /// and the conversion inside is a `static_cast`. Lesson 3.9 wrote those enums
+    /// to match `SDL_GPUFilter` and `SDL_GPUSamplerAddressMode` enumerator for
+    /// enumerator specifically so that this moment would be a rename, and
+    /// `verify_42` §G has asserted the correspondence on every run since — so if
+    /// SDL ever inserts an enumerator, that test fails rather than this cast
+    /// silently selecting the wrong mode.
+    /// @param mip  how to filter BETWEEN levels — Lesson 6.10. `linear` is
+    ///             trilinear. Ignored by a texture with one level, which is why
+    ///             passing it costs nothing on the paths that predate 6.10.
+    /// @param max_aniso  above 1 enables anisotropic filtering and sets
+    ///             `max_anisotropy`. **Both fields**: SDL ignores the clamp
+    ///             unless `enable_anisotropy` is true, so setting one without
+    ///             the other is a silent no-op.
+    [[nodiscard]] bool create(const gpu_device&amp; dev,
+                              filter min_mag = filter::linear,
+                              address_mode wrap = address_mode::repeat,
+                              const char* name = nullptr,
+                              filter mip = filter::linear,
+                              int max_aniso = 1);
+
+    /// A **comparison sampler** — Lesson 6.8, and the two fields that make it one
+    /// are `enable_compare` and `compare_op`, verified against `SDL3/SDL_gpu.h`
+    /// rather than guessed (6.7 left that as a `VERIFY` and this discharges it).
+    ///
+    /// **WHAT IT DOES, AND WHY IT CANNOT BE DONE WITH AN ORDINARY SAMPLER.** A
+    /// shadow lookup does not want a depth, it wants a yes-or-no. Ask a linear
+    /// sampler for four texels around a point and it hands back their AVERAGE
+    /// DEPTH, and averaging depths is not a blurrier answer, it is a wrong one:
+    /// an occluder at 0.3 and one at 0.9 average to 0.6, which a receiver at 0.5
+    /// passes — &quot;fully lit&quot;, with half its taps occluded. A comparison sampler
+    /// performs the test on each texel FIRST and filters the four booleans, which
+    /// gives 0.5. §6 derives it with those numbers.
+    ///
+    /// Every field here is dictated by the job, which is why this is a named
+    /// function rather than four more defaulted parameters: `LINEAR` because
+    /// filtering the comparison results is the entire point,
+    /// `CLAMP_TO_EDGE` because a lookup outside the map must not wrap round to
+    /// the far side of the scene, and `LESS_OR_EQUAL` because our depth runs 0 at
+    /// the near plane (conventions §4) and &quot;nearer than or equal to what is
+    /// stored&quot; is what &quot;lit&quot; means.
+    [[nodiscard]] bool create_comparison(const gpu_device&amp; dev, const char* name = nullptr);
+
+    void destroy();
+
+    [[nodiscard]] bool valid() const { return sampler_ != nullptr; }
+    [[nodiscard]] SDL_GPUSampler* handle() const { return sampler_; }
+
+private:
+    SDL_GPUDevice* device_ = nullptr;      ///&lt; NOT owned
+    SDL_GPUSampler* sampler_ = nullptr;    ///&lt; owning by contract
+};
+
+/// The first of `candidates` this device accepts as a depth target, or
+/// `INVALID` if it accepts none.
+///
+/// **Ask, never assume.** SDL guarantees exactly one depth format —
+/// `D16_UNORM` — and everything else is a query. Lesson 4.2 established the habit
+/// with the swapchain format and the present modes; this is the same discipline
+/// applied to the one piece of texture state that has a precision consequence.
+[[nodiscard]] SDL_GPUTextureFormat supported_depth_format(const gpu_device&amp; dev,
+                                                          const SDL_GPUTextureFormat* candidates,
+                                                          int count);
+
+/// The first of `candidates` this device accepts as a depth target **that can
+/// also be sampled** — Lesson 6.8.
+///
+/// A separate function rather than a flag on the one above, because it asks a
+/// genuinely different question and can get a different answer. SDL guarantees
+/// `D16_UNORM` for `DEPTH_STENCIL_TARGET`; it guarantees NOTHING about any depth
+/// format for `SAMPLER`, and a device that refuses every combination cannot have
+/// shadow maps at all. Asking is the only honest way to find out — the same
+/// discipline 4.2 applied to the swapchain format and 4.7 to depth.
+///
+/// @return `INVALID` if none of them work, which the caller must treat as &quot;this
+///         machine gets no shadows&quot; rather than as an error.
+[[nodiscard]] SDL_GPUTextureFormat supported_shadow_format(const gpu_device&amp; dev,
+                                                           const SDL_GPUTextureFormat* candidates,
+                                                           int count);
+
+// `name_of(SDL_GPUTextureFormat)` lives in gpu_device.hpp, where Lesson 4.2 put
+// it to log the swapchain format; Lesson 4.7 added the depth rows to the same
+// table rather than starting a second one.
+
+/// Bits of depth precision `format` stores, or 0 if it is not a depth format.
+///
+/// For the `_UNORM` formats this is exact — evenly spaced codes across [0, 1].
+/// For `D32_FLOAT` it is a convenient lie: a float has 24 bits of mantissa but
+/// its precision is not uniform across the range, which turns out to matter in
+/// exactly the direction that helps. Lesson 4.7 §3.2 measures what each format
+/// can actually separate.
+[[nodiscard]] int depth_bits(SDL_GPUTextureFormat format);
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/material.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/material.hpp — what a surface IS.
+//
+// Lesson 6.5, and this file is the answer to a question the codebase has been
+// asking since Lesson 3.4. It is worth reading the evidence before the type,
+// because the type is unremarkable and the evidence is the lesson.
+//
+// THREE PLACES GREW THE SAME STRUCT-SHAPED HOLE, INDEPENDENTLY.
+//
+//   1. `scene_object` (3.4, 3.7) collected `tint`, `closed` and `surface`
+//      alongside `xform` and `geometry`, and its own doc comment says so: &quot;that
+//      is two different kinds of data wearing one struct, and the second kind has
+//      a name: a material. Module 6 gives it one.&quot;
+//   2. `fill_style` (3.8) collected `lights`, `surface`, `eye` and `albedo`
+//      beside the four rasterizer knobs, and its own comment says &quot;`fill_style`
+//      is now two structs wearing one name.&quot;
+//   3. `ecs_swarm` — a DEMO, restricted to the public API — declared
+//      `struct material { Uint32 tint; microsurface surface; }` because the
+//      engine did not offer one. A demo that has to invent an engine type is the
+//      strongest evidence available that the type is missing.
+//
+// AND LESSON 6.4 PRICED IT. Changing the surface description meant editing
+// forty-four call sites across the engine, four demos and six harnesses. That
+// number is not a complaint about 6.4; it is the measurement that says the
+// description had no single home.
+//
+// THE SPLIT THAT MATTERS IS NOT struct-VERSUS-struct. It is:
+//
+//     WHICH HALF CAN BE A NUMBER IN A BUFFER?
+//
+// Everything in `material` below can. It is per-draw data: the fragment stage
+// reads it, a GPU pushes it as a uniform block, and two objects that differ only
+// in these fields can be drawn back to back with no state change between them.
+// Cull mode, fill mode and the choice of BRDF cannot — they are baked into a
+// PIPELINE OBJECT, and two objects that differ in them need two pipelines and a
+// sort between them. Lesson 4.8 measured that: three pipelines, and the sort
+// that keeps the bind count at three instead of one per draw.
+//
+// So this file draws the line where the hardware draws it, and the things on the
+// other side of it stay where they are — in `fill_style`, `surface_style` and
+// `render_options`. A material that swallowed them would be a material that
+// cannot be a uniform, which is not a material at all.
+//
+// AND ONE THING TURNED OUT TO BE ON NEITHER SIDE. `scene_object::closed` says
+// &quot;this mesh is a closed solid&quot;, which reads like material state and is not: it
+// is a fact about the GEOMETRY, true of a cube whatever colour you paint it.
+// `validate()` already reports it, as `mesh_report::closed()`. See `cull_of`.
+
+#pragma once
+
+#include &lt;engine/core/handle.hpp&gt;
+#include &lt;engine/core/pool.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/cull.hpp&gt;
+#include &lt;engine/gfx/microfacet.hpp&gt;
+#include &lt;engine/gfx/texture.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// **Everything about a surface that can be a number in a buffer.**
+///
+/// Five fields, and every one of them is read by the fragment stage and by
+/// nothing else. That is the test this struct is built to pass, and it is worth
+/// applying to anything you are tempted to add: *could this be pushed as a
+/// uniform, or does it change which pipeline runs?*
+///
+/// **It is a VALUE, and small.** 36 bytes as measured — a `Uint32`, a 4-byte
+/// handle, a 16-byte `sampler` and three floats — so it is copied rather than
+/// referenced wherever there is one of them. `material_handle` exists for where
+/// there are many; see the note on `material_pool`.
+///
+/// (The sampler is the largest field, and it is worth knowing that is where the
+/// bytes went: it is four enums that a real engine would intern into a handle of
+/// its own, exactly as this lesson does for the texture. Named rather than done,
+/// because nothing has yet needed two materials to share a sampler.)
+struct material
+{
+    /// The surface&#x27;s own colour, **sRGB-encoded**, as an artist types it.
+    ///
+    /// It stays a `Uint32` rather than becoming a `linear_rgb`, and the reason is
+    /// Lesson 6.1&#x27;s rule rather than laziness: *decode once at the input edge*.
+    /// A hex colour is authored data, it arrives sRGB-encoded, and the decode
+    /// belongs at the point where it meets arithmetic — which is `shade_encoded`
+    /// on the CPU side and the uniform push on the GPU side. Storing it decoded
+    /// would move the conversion earlier without removing it, and would quietly
+    /// widen an 8-bit authored value into a float that looks more precise than
+    /// the thing it came from.
+    Uint32 tint = 0xFFFFFFFFu;
+
+    /// The albedo image, or an invalid handle for &quot;this surface has none&quot;.
+    ///
+    /// **A HANDLE, not a `const texture*`, and that is Lesson 5.4 collecting.** A
+    /// material outlives the frame it was used in; a pointer into a container
+    /// that can reallocate does not. A handle is checkable — `pool::contains()`
+    /// answers &quot;does this still resolve?&quot; and a raw pointer cannot be asked.
+    ///
+    /// **When it is valid it REPLACES `tint`; it does not multiply it** — Lesson
+    /// 3.9&#x27;s rule, and the reason is that both of them *are* the albedo and a
+    /// surface has one albedo. That is why there is no separate &quot;textured&quot; flag
+    /// here: see `textured()`.
+    texture_handle albedo_map{};
+
+    /// The **normal map**, or an invalid handle for &quot;this surface is as flat as
+    /// its triangles&quot;. Lesson 6.7.
+    ///
+    /// A second texture handle, and it passes 6.5&#x27;s membership test for exactly
+    /// the same reason the first one does: it is a number in a buffer — an index
+    /// the fragment stage reads, not a decision about which pipeline runs.
+    ///
+    /// **The image behind it must have `texel_space::linear`**, and that is not
+    /// a convention this field can enforce. A normal map is a direction packed
+    /// into bytes, not a colour, so reading it through the sRGB curve is
+    /// arithmetic on numbers that were never a colour — see `texel_space`.
+    /// `asset_store::load_texture` takes the space as a parameter and the glTF
+    /// importer supplies it from which slot the texture was bound to, so the
+    /// engine&#x27;s own paths cannot get it wrong; a caller building a material by
+    /// hand can, which is why `verify_67` §C asserts it on every shipped path.
+    texture_handle normal_map{};
+
+    /// How to read those images. Independent of *which* image, which is why it is
+    /// a separate field and why `SDL_GPUTextureSamplerBinding` is a pair (3.9).
+    ///
+    /// **ONE sampler for both maps**, and that is a compromise named rather than
+    /// hidden. glTF gives every texture its own sampler, and a material whose
+    /// albedo tiles while its normal map clamps is legal and unrepresentable
+    /// here. In practice an exporter emits the same sampler for both, because
+    /// they are baked against the same uv chart; and the right fix is the one
+    /// 6.5 already named as a debt — intern the sampler into a handle of its own,
+    /// at which point a second one costs four bytes instead of sixteen.
+    sampler samp{};
+
+    /// Roughness, metallic, F0 — Lesson 6.4&#x27;s `microsurface`.
+    microsurface surface{};
+
+    /// Does the albedo come from the image rather than from `tint`?
+    ///
+    /// **DERIVED, never stored**, and that is the point of writing it as a
+    /// function. Lesson 4.8&#x27;s `material_uniforms` carries a `textured` float
+    /// beside the texture pointer, which is two fields that can disagree — and a
+    /// material with `textured = 1` and no image bound draws the sampler&#x27;s debug
+    /// magenta, while one with `textured = 0` and an image bound silently ignores
+    /// it. Neither is diagnosable at the point of the mistake.
+    ///
+    /// One field cannot contradict itself. The GPU still needs the flag as a
+    /// number, and `material_uniforms` still has it — but it is now *computed* at
+    /// the push, from the only field that knows.
+    [[nodiscard]] bool textured() const { return albedo_map.valid(); }
+
+    /// Does this surface perturb its normal per pixel? **Derived**, for the same
+    /// reason `textured()` is: one field cannot contradict itself, and a
+    /// `normal_mapped` bool beside a separately-chosen handle is two opinions
+    /// that can disagree (6.5 §5).
+    [[nodiscard]] bool normal_mapped() const { return normal_map.valid(); }
+};
+
+/// A reference to a material held in a `material_pool`.
+using material_handle = handle&lt;material&gt;;
+
+/// Storage for materials, for when many objects share one.
+///
+/// **A pool is not automatically the right answer, and it is worth saying when it
+/// is.** With one material per object, a `material` value on the object is
+/// simpler, cheaper and cannot dangle — which is why `scene_object` holds one by
+/// value. The pool earns its place the moment objects SHARE: `ecs_swarm` gives
+/// two hundred drones the same appearance, and a handle makes that one material
+/// instead of two hundred copies of it (§6.5 measures what that saves).
+///
+/// It is the same judgement Lesson 5.4 made about meshes and 5.5 about images,
+/// arriving a third time — and the third time it is worth noticing that the rule
+/// is about *sharing*, not about size.
+using material_pool = pool&lt;material&gt;;
+
+/// Resolve a material&#x27;s texture reference into something the fill loop can read.
+///
+/// **This function is the whole handle/pointer story in four lines, and the
+/// separation it makes is the architectural point of this lesson:**
+///
+///   - a **handle** is how you STORE a reference — durable, checkable, safe
+///     across a reallocation, and cheap to copy into a component or a file;
+///   - a **pointer** is how you USE one in an inner loop — a dereference, no
+///     lookup, no branch;
+///   - and the **resolve** is a named step that happens ONCE PER DRAW, between
+///     the two.
+///
+/// Getting that boundary wrong in either direction is a real cost. Store
+/// pointers and the scene dangles the first time a pool grows. Resolve inside the
+/// fill loop and you have added a bounds check and a generation compare to every
+/// pixel — Lesson 5.4 measured what a handle lookup costs, and per-pixel is
+/// exactly where you cannot afford it.
+///
+/// Returns an unbound binding for an invalid or stale handle, which is not an
+/// error: it is a surface with no image, and the fill falls back to `tint`
+/// exactly as it did before this lesson existed.
+[[nodiscard]] inline texture_binding bind_albedo(const material&amp; m,
+                                                 const texture_pool&amp; textures)
+{
+    return {textures.get(m.albedo_map), m.samp};
+}
+
+/// The same binding, with a mip chain attached. Lesson 6.10.
+///
+/// A separate function rather than a defaulted argument, because the chain does
+/// not live in the `texture_pool` — it is built by whoever wanted mipmapping and
+/// owned by them. Making `bind_albedo` take it would force every existing caller
+/// to pass a null, which is the sort of change that makes nineteen lessons of
+/// listings stop compiling to add one feature none of them use.
+[[nodiscard]] inline texture_binding bind_albedo_mipped(const material&amp; m,
+                                                        const texture_pool&amp; textures,
+                                                        const mip_chain* chain)
+{
+    texture_binding b{textures.get(m.albedo_map), m.samp};
+    b.mips = chain;
+    return b;
+}
+
+/// The same resolve, for the normal map — Lesson 6.7.
+///
+/// A second function rather than a second field on one binding, because the two
+/// images are independent: a surface may have an albedo and no normal map, a
+/// normal map and no albedo, both, or neither, and all four are ordinary. The
+/// fill loop reads whichever bindings are bound and falls back where they are
+/// not.
+///
+/// Note that it resolves against the same pool and with the same sampler, so the
+/// per-draw cost is one extra pointer lookup and nothing else.
+[[nodiscard]] inline texture_binding bind_normal_map(const material&amp; m,
+                                                     const texture_pool&amp; textures)
+{
+    return {textures.get(m.normal_map), m.samp};
+}
+
+/// The cull mode a mesh&#x27;s own geometry justifies.
+///
+/// **`closed` was never material state, and this is where that gets fixed.**
+/// `scene_object::closed` has carried a hand-typed bool since Lesson 3.4, and its
+/// doc comment predicted it would move onto the material in Module 6. It should
+/// not: it is a fact about the *mesh* — a cube is closed whatever colour you
+/// paint it — and `validate()` already reports it, as `mesh_report::closed()`, from the geometry
+/// rather than taking anyone&#x27;s word.
+///
+/// What belongs to the material is the DECISION, not the fact. Back-face culling
+/// is only valid on a closed surface, so a sheet must not be culled; but a closed
+/// mesh may still be drawn two-sided deliberately (to see inside it, to debug a
+/// winding). Hence: the mesh supplies the fact, the caller supplies the intent,
+/// and this function is the one place the rule lives.
+///
+/// Note what that means for the demo&#x27;s `closed` flags. They stop being a promise
+/// somebody typed and become a cached answer — which is exactly the transition
+/// `demos/common/demo_scene.cpp` already made for the loaded model in Lesson 5.4,
+/// and now makes everywhere.
+[[nodiscard]] constexpr cull_mode cull_of(bool mesh_is_closed, bool want_two_sided = false)
+{
+    return (mesh_is_closed &amp;&amp; !want_two_sided) ? cull_mode::back : cull_mode::none;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># engine/CMakeLists.txt — the engine, as a library.
+#
+# Lesson 5.1. Everything above this line in the course built ONE executable, and
+# a single executable can be arranged however you like because nothing outside it
+# can tell. A library is different in kind: it has an outside, and the outside is
+# the part you can never take back once somebody depends on it.
+#
+# Three properties below do the entire job of drawing that boundary, and it is
+# worth reading them as a group before reading them one at a time.
+
+# STATIC, not SHARED, and not a choice made by shrugging.
+#
+# A static library is copied into each executable at link time. A shared one is a
+# separate file the program finds at startup, which buys you the ability to swap
+# the engine without relinking the game — and costs you an ABI you must not break,
+# per-call indirection, and a deployment story (&quot;which .dll did it load?&quot;).
+#
+# We are one repository building both sides from the same source, so we get none
+# of the benefit and all of the cost. Engines that DO ship shared libraries do it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
+# reloads shaders and assets, not code. If that ever changes, this word is the
+# only thing that has to.
+add_library(engine STATIC
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader&#x27;s
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action&#x27;s level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
+    src/core/profile.cpp
+    src/gfx/clip.cpp
+    src/gfx/colour.cpp
+    src/gfx/debug_draw.cpp
+    # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
+    # than one because their include lists must differ: this one is reachable
+    # from a physics system, debug_draw.cpp is reachable only from a renderer.
+    src/gfx/debug_lines.cpp
+    src/gfx/depth_buffer.cpp
+    src/gfx/framebuffer.cpp
+    src/gfx/gpu_buffer.cpp
+    src/gfx/gpu_debug.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_pipeline.cpp
+    src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
+    src/gfx/gpu_shader.cpp
+    # Lesson 6.8. The GPU half of the shadow map: a second render pass, a
+    # pipeline with no colour target, and a depth texture that can be sampled.
+    src/gfx/gpu_shadow.cpp
+    src/gfx/gpu_texture.cpp
+    # Lesson 6.6. The second asset format, and it gets its own translation
+    # unit for the same reason obj.cpp has one: it is the ONLY file allowed
+    # to see cgltf, so the dependency has exactly one place to leak from.
+    src/gfx/gltf.cpp
+    src/gfx/image.cpp
+    src/gfx/mipmap.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
+    src/gfx/raster.cpp
+    # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
+    # header because it owns buffers and reaches into the whole software
+    # pipeline — `collect_triangles` and `draw_triangles` both — which is more
+    # than a header should drag into every file that mentions a light.
+    src/gfx/cascade.cpp
+    src/gfx/shadow.cpp
+    src/gfx/soft_renderer.cpp
+    src/gfx/texture.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library&#x27;s to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
+    # Lesson 5.11. A new directory again, and the same argument asset/ made in
+    # 5.5: tooling UI is not a graphics subsystem. Module 9&#x27;s editor lands here
+    # beside it, and the top-level tools/ directory is a different thing — the
+    # executables that USE the engine, not part of it.
+    src/ui/debug_ui.cpp
+)
+
+# `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
+# double colon in it CANNOT be mistaken for a file. If a demo asks to link
+# `engine::engine` and no such target exists, CMake stops at configure time with
+# &quot;target not found&quot;. If it asks to link plain `engine` and no such target
+# exists, CMake happily passes `-lengine` to the linker and you find out much
+# later, in a different language, from a different tool. Every library worth
+# using exports a namespaced alias — SDL3::SDL3 is one — and now so do we.
+add_library(engine::engine ALIAS engine)
+
+# ---- The boundary ----------------------------------------------------------
+#
+# THIS IS THE MOST IMPORTANT PROPERTY IN THE PROJECT, so read it slowly.
+#
+#   PUBLIC  include/ : everything that links this library gets this directory on
+#                      its include path. It contains ONE thing — a directory
+#                      called `engine` — so from outside, the only spellings that
+#                      resolve are &lt;engine/gfx/raster.hpp&gt; and its siblings.
+#   PRIVATE src/     : the engine&#x27;s own sources get this, and nobody else does.
+#
+# The consequence is the whole point of Lesson 5.1: a demo that writes
+# `#include &quot;gfx/raster.hpp&quot;` — the spelling every file in this repository used
+# until today — does not compile. Not &quot;is discouraged&quot;, not &quot;fails review&quot;. Does
+# not compile, with a message naming the file it could not find.
+#
+# A boundary maintained by discipline is a boundary that lasts until the week
+# somebody is in a hurry. This one is maintained by the include path, which is
+# never in a hurry.
+target_include_directories(engine
+    PUBLIC  include
+    PRIVATE src)
+
+# PUBLIC because SDL is in our public headers: `framebuffer.hpp` says `Uint32`,
+# `gpu_device.hpp` takes an `SDL_Window*`, and `input.hpp` reads `SDL_Event`.
+# Anybody who includes those needs SDL&#x27;s headers too, and PUBLIC is CMake&#x27;s word
+# for &quot;this dependency is contagious, and it has to be&quot;.
+#
+# It is also an admission. A renderer whose public API names another library&#x27;s
+# types has adopted that library&#x27;s vocabulary permanently — port to a different
+# platform layer and every one of those signatures changes. §6 of the lesson
+# weighs that honestly; we keep it, and we keep knowing about it.
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+
+# stb_image, by contrast, is PRIVATE: exactly one translation unit
+# (src/gfx/image.cpp) includes it, and `image.hpp` deliberately exposes our own
+# `engine::image` instead. So the dependency stops at the boundary — a demo can
+# neither see stb nor accidentally start depending on it. That is what a good
+# wrapper buys, and this line is the proof it worked.
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes &lt;cgltf.h&gt;, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead. A demo can neither see cgltf nor
+# start depending on it — which is what makes &quot;swap the glTF library&quot; a
+# one-file change rather than a project-wide one.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
+
+# Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
+# engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a
+# CONCEPT (decode bytes into pixels), which is one function and one type. ImGui&#x27;s
+# value IS its vocabulary — four hundred widget calls — and a wrapper around that
+# is a re-spelling with no content that has to be re-spelled again forever.
+#
+# So demos include &lt;imgui.h&gt; and call ImGui:: directly, and this line is what
+# makes that legal. Note precisely what it costs: two more directories on the
+# include path of everything that links the engine, and a second third-party
+# vocabulary inside our public API. What makes it acceptable is that the only
+# code allowed to speak it is TOOLING code.
+target_link_libraries(engine PUBLIC imgui::imgui)
+
+engine_set_warnings(engine)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">demos/gltf_view/main.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// demos/gltf_view/main.cpp — a glTF file on screen, through the public API only.
+//
+// Lesson 6.6, and it is `hello_cube`&#x27;s successor in one specific sense: that
+// program was the acceptance test for the LIBRARY BOUNDARY (Lesson 5.1), and
+// this one is the acceptance test for the ASSET SYSTEM. If a program outside the
+// engine cannot say &quot;load that file and draw it&quot; in a handful of lines, then the
+// asset system is not an asset system — it is a collection of functions that
+// happen to live near each other.
+//
+//     cmake --build build --target gltf_view
+//     ./build/demos/gltf_view                          shapes.glb, spinning
+//     ./build/demos/gltf_view --model cube.gltf        the textured cube
+//     ./build/demos/gltf_view --shot out.ppm           one frame, no window
+//
+// WHAT TO LOOK FOR. Three shapes with three materials, and the materials came
+// out of the FILE: the octahedron is gold because `baseColorFactor` said
+// (1.00, 0.71, 0.29) and `metallicFactor` said 1, so `f0_of` put that colour in
+// the reflectance and `diffuse_albedo_of` gave it no diffuse lobe at all
+// (Lesson 6.4). Nothing in this program types a colour.
+//
+// AND ONE THING THE STRUCTURE MAKES VISIBLE. The draw loop below is one
+// `collect_triangles` + `draw_triangles` PER OBJECT, not one for the scene, and
+// that is not laziness — `fill_style` carries exactly one material, so two
+// objects with different materials cannot share a call. It is the CPU-side twin
+// of Lesson 4.8&#x27;s three pipelines and a sort, and it is what a draw-list sorted
+// by material is FOR.
+
+#include &lt;engine/asset/asset_store.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;
+#include &lt;engine/gfx/depth_buffer.hpp&gt;
+#include &lt;engine/gfx/gltf.hpp&gt;
+#include &lt;engine/gfx/light.hpp&gt;
+#include &lt;engine/gfx/material.hpp&gt;
+#include &lt;engine/gfx/mesh.hpp&gt;
+#include &lt;engine/gfx/projector.hpp&gt;
+#include &lt;engine/gfx/raster.hpp&gt;
+#include &lt;engine/gfx/bounds.hpp&gt;
+#include &lt;engine/gfx/scene.hpp&gt;
+#include &lt;engine/gfx/cascade.hpp&gt;
+#include &lt;engine/gfx/mipmap.hpp&gt;
+#include &lt;engine/gfx/shadow.hpp&gt;
+#include &lt;engine/gfx/soft_renderer.hpp&gt;
+#include &lt;engine/gfx/viewport.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/transform.hpp&gt;
+#include &lt;engine/platform/app.hpp&gt;
+
+#include &lt;engine/platform/main.hpp&gt;
+
+#include &lt;vector&gt;
+
+namespace {
+
+constexpr int k_width = 480;
+constexpr int k_height = 270;
+constexpr Uint32 k_background = 0xFF0C0E14u;
+
+/// Pull a `transform` out of a glTF node&#x27;s world matrix.
+///
+/// **AND SAY WHAT IT CANNOT DO, because this is a real seam and not a helper.**
+/// `engine::transform` is T * R * S with a `mat3` rotation; a glTF node may
+/// carry an arbitrary 4x4 `matrix`, and not every 4x4 is a TRS — a sheared or
+/// non-uniformly-scaled-then-rotated node is perfectly legal glTF and cannot be
+/// expressed here at all. What comes back is the translation, the scale
+/// recovered as the length of each basis column, and the rotation recovered by
+/// dividing those lengths out.
+///
+/// That is exact for every node built from `translation`/`rotation`/`scale`
+/// properties, which is what an exporter writes and what both of this course&#x27;s
+/// assets use. It silently drops shear. The honest fix is for `scene_object` to
+/// hold a `mat4` — which is what an engine eventually does, and which Lesson
+/// 5.9&#x27;s hierarchy already computes — and it is not this lesson&#x27;s to make.
+[[nodiscard]] engine::transform transform_of(const engine::mat4&amp; m)
+{
+    engine::transform t;
+    t.position = {m.c3.x, m.c3.y, m.c3.z};
+
+    const engine::vec3 cx{m.c0.x, m.c0.y, m.c0.z};
+    const engine::vec3 cy{m.c1.x, m.c1.y, m.c1.z};
+    const engine::vec3 cz{m.c2.x, m.c2.y, m.c2.z};
+
+    t.scale = {engine::length(cx), engine::length(cy), engine::length(cz)};
+
+    // A zero-length column means a degenerate node (scale 0 on an axis). Leaving
+    // the rotation column as the basis vector keeps the matrix finite instead of
+    // producing NaNs that spread through every subsequent frame.
+    const engine::vec3 rx = (t.scale.x &gt; 0.0f) ? cx * (1.0f / t.scale.x)
+                                               : engine::vec3{1.0f, 0.0f, 0.0f};
+    const engine::vec3 ry = (t.scale.y &gt; 0.0f) ? cy * (1.0f / t.scale.y)
+                                               : engine::vec3{0.0f, 1.0f, 0.0f};
+    const engine::vec3 rz = (t.scale.z &gt; 0.0f) ? cz * (1.0f / t.scale.z)
+                                               : engine::vec3{0.0f, 0.0f, 1.0f};
+    t.rotation = engine::mat3{rx, ry, rz};
+    return t;
+}
+
+class gltf_app final : public engine::app
+{
+public:
+    [[nodiscard]] engine::app_config configure(int argc, char* argv[]) override
+    {
+        for (int i = 1; i &lt; argc; ++i)
+        {
+            if (SDL_strcmp(argv[i], &quot;--shot&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                shot_path_ = argv[++i];
+            }
+            else if (SDL_strcmp(argv[i], &quot;--model&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                model_name_ = argv[++i];
+            }
+            else if (SDL_strcmp(argv[i], &quot;--bumps&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                // Cells across the map; 0 turns normal mapping off entirely, so
+                // the two pictures can be put side by side. Lesson 6.7 — and the
+                // map is GENERATED rather than shipped, which is the same door
+                // `insert_mesh` has used for generated geometry since 5.5.
+                bump_cells_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--shadow&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                // The map&#x27;s side, in texels; 0 turns the whole pass off so the
+                // before picture and the after picture come out of the same
+                // binary. Lesson 6.8 — and the number is on the command line
+                // rather than fixed because RESOLUTION IS THE SUBJECT: every
+                // formula in §4 is a multiple of `world_per_texel`, and halving
+                // this doubles the bias the same geometry needs.
+                shadow_res_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--bias&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                const char* w = argv[++i];
+                bias_ = (SDL_strcmp(w, &quot;none&quot;) == 0)     ? engine::shadow_bias::none
+                      : (SDL_strcmp(w, &quot;constant&quot;) == 0) ? engine::shadow_bias::constant
+                      : (SDL_strcmp(w, &quot;normal&quot;) == 0)   ? engine::shadow_bias::normal_offset
+                                                         : engine::shadow_bias::slope_scaled;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--constant-bias&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                constant_bias_ = static_cast&lt;float&gt;(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], &quot;--pcf&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                pcf_ = SDL_atoi(argv[++i]);
+            }
+            // LESSON 6.9. `--cascades 4` splits the CAMERA&#x27;s frustum instead of
+            // boxing the whole scene. `--cascades 1` is 6.8&#x27;s single map fitted
+            // to the frustum rather than the scene, which is worth having
+            // separately: it isolates &quot;cascades&quot; from &quot;camera-fitted&quot;.
+            // LESSON 6.10. `--mips` builds a chain per albedo texture and binds
+            // it; `--aniso N` turns on anisotropic filtering. Both off by
+            // default, because a chain costs 33% more memory and a surface that
+            // was never undersampled gains nothing from one.
+            // A fine checker on the ground, which is the surface that minifies.
+            // This is Lesson 3.9&#x27;s shimmering floor, made reachable again so the
+            // fix has something to fix.
+            else if (SDL_strcmp(argv[i], &quot;--floor-tex&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                floor_tex_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--mips&quot;) == 0)
+            {
+                mips_ = true;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--aniso&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                mips_ = true;
+                aniso_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--mip-nearest&quot;) == 0)
+            {
+                // 3.5&#x27;s rule: the failure has to be reachable. This is the
+                // visible line across the floor that trilinear exists to hide.
+                mips_ = true;
+                mip_filter_ = engine::filter::nearest;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--cascades&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                cascades_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--csm-lambda&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                csm_lambda_ = static_cast&lt;float&gt;(SDL_atof(argv[++i]));
+            }
+            else if (SDL_strcmp(argv[i], &quot;--csm-blend&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                csm_blend_ = static_cast&lt;float&gt;(SDL_atof(argv[++i]));
+            }
+            // 3.5&#x27;s rule: the failure has to be reachable, or the fix is folklore.
+            else if (SDL_strcmp(argv[i], &quot;--no-snap&quot;) == 0)
+            {
+                csm_snap_ = false;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--shadow-cull&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                const char* w = argv[++i];
+                shadow_cull_ = (SDL_strcmp(w, &quot;front&quot;) == 0) ? engine::cull_mode::front
+                             : (SDL_strcmp(w, &quot;back&quot;) == 0)  ? engine::cull_mode::back
+                                                             : engine::cull_mode::none;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--no-ground&quot;) == 0)
+            {
+                ground_ = false;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--no-ground-cast&quot;) == 0)
+            {
+                // Keep the ground, drop it from the shadow pass. See `casters()`
+                // for the two separate things this changes.
+                ground_casts_ = false;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--pose&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                // Where on the orbit a `--shot` is taken, in radians. It exists
+                // because a METAL has essentially one interesting camera angle —
+                // the one that puts a facet in the mirror direction — and being
+                // able to sweep past it is how you see that for yourself rather
+                // than being told.
+                pose_ = static_cast&lt;float&gt;(SDL_atof(argv[++i]));
+            }
+        }
+
+        return {.title = &quot;gltf_view — a file, drawn&quot;,
+                .draw_to = (shot_path_ != nullptr) ? engine::surface::headless
+                                                   : engine::surface::renderer,
+                .fb_width = k_width,
+                .fb_height = k_height};
+    }
+
+    [[nodiscard]] bool on_start() override
+    {
+        // ---- THE WHOLE LOAD. One call. -------------------------------------
+        //
+        // Behind it: a search path resolves the name, cgltf parses the container
+        // (text or binary — this program never finds out which), the node tree is
+        // flattened, every primitive&#x27;s accessors are read into a `mesh_data` and
+        // inserted under a derived name, every material&#x27;s base colour image is
+        // resolved, decoded, channel-shuffled and cached, and every material is
+        // built and named. That list is the argument for an asset system: not one
+        // step of it is about THIS program.
+        // ---- An OBJ is a mesh, not a model — Lesson 6.7 --------------------
+        //
+        // One branch, and it earns its place by making a point no glTF asset in
+        // this repository can: **OBJ has no tangent attribute at all**, so a
+        // model loaded this way gets its frame from `with_tangents` and nowhere
+        // else. `assets/torus.obj` also has a real uv chart on every triangle,
+        // which `assets/cube.gltf` does not — Lesson 6.6 gave that cube one uv
+        // per box corner so its round trip could be index-for-index, and the
+        // consequence is that four of its six faces have ZERO uv area and
+        // therefore no tangent frame at all. Normal mapping is what makes that
+        // visible; see §7 of the lesson.
+        const std::string requested(model_name_);
+        if (requested.size() &gt; 4
+            &amp;&amp; requested.compare(requested.size() - 4, 4, &quot;.obj&quot;) == 0)
+        {
+            if (!load_obj_model(requested)) { return false; }
+            return finish_setup();
+        }
+
+        const engine::model_load model = assets_.load_model(model_name_);
+
+        if (!model.ok())
+        {
+            SDL_Log(&quot;gltf_view: could not load &#x27;%s&#x27; (%s)&quot;,
+                    model_name_, engine::name_of(model.report.status));
+            return false;
+        }
+
+        SDL_Log(&quot;gltf_view: %s -&gt; %d primitive(s), %d vertices, %d triangles, &quot;
+                &quot;%zu material(s)%s&quot;,
+                model_name_, model.report.primitives, model.report.vertices,
+                model.report.triangles, model.materials.size(),
+                model.report.binary ? &quot;  [.glb]&quot; : &quot;  [.gltf]&quot;);
+        if (model.textures_missing &gt; 0)
+        {
+            SDL_Log(&quot;  %d texture(s) could not be resolved — those surfaces fall &quot;
+                    &quot;back to their base colour&quot;, model.textures_missing);
+        }
+
+        // ---- File data -&gt; scene objects ------------------------------------
+        //
+        // The only loop this program owns, and it is a translation between two
+        // representations rather than any kind of work: a handle, a placement and
+        // a material become a `scene_object`.
+        objects_.reserve(model.meshes.size());
+        for (std::size_t i = 0; i &lt; model.meshes.size(); ++i)
+        {
+            engine::scene_object obj;
+            obj.geometry = model.meshes[i];
+            obj.name = &quot;gltf primitive&quot;;
+            obj.xform = transform_of(model.placements[i]);
+
+            // A material by VALUE on the object, resolved from the handle here —
+            // Lesson 6.5&#x27;s rule, and this is a case where it applies cleanly:
+            // each primitive has exactly one material, so a handle on the object
+            // would add a lookup and buy nothing. The pool still exists, and
+            // still shares: two primitives naming one file material resolve to
+            // one entry in it.
+            if (const engine::material* m = assets_.material_at(model.mesh_material[i]))
+            {
+                obj.mat = *m;
+            }
+
+            // THE FACT, MEASURED, NOT PROMISED — 6.5&#x27;s `cull_of` pair. A file&#x27;s
+            // geometry is untrusted input, so `validate()` answers whether it is
+            // closed and the file&#x27;s `doubleSided` supplies the intent. A glTF
+            // primitive is very often an open shell, and culling one makes it
+            // vanish from behind.
+            if (const engine::mesh_data* g = assets_.mesh_at(obj.geometry))
+            {
+                obj.closed = engine::validate(g-&gt;view()).closed();
+            }
+
+            // FRAME THE MODEL FROM ITS OWN GEOMETRY. A viewer with a
+            // hard-coded camera distance works for exactly one asset, which is
+            // the asset it was written against — and every glTF file has a
+            // different scale, because the spec&#x27;s unit is the metre and a chair
+            // and a building are both legal.
+            //
+            // The bounds are accumulated in WORLD space, so the node transforms
+            // are what make the plinth (a cube flattened by its own node) count
+            // as flat rather than as a cube. Note that the accessors already
+            // carry `min`/`max` — the spec requires them on POSITION precisely
+            // so a viewer can do this WITHOUT decoding the vertices — and
+            // reading them instead is Exercise 3.
+            if (const engine::mesh_data* g = assets_.mesh_at(obj.geometry))
+            {
+                const engine::mat4 m = model.placements[i];
+                for (const engine::vec3 v : g-&gt;vertices)
+                {
+                    const engine::vec4 w = m * engine::vec4{v.x, v.y, v.z, 1.0f};
+                    bounds_.expand(engine::vec3{w.x, w.y, w.z});
+                }
+            }
+
+            objects_.push_back(obj);
+        }
+
+        return finish_setup();
+    }
+
+    /// Load an OBJ as one object and DERIVE its tangent frame.
+    [[nodiscard]] bool load_obj_model(const std::string&amp; name)
+    {
+        const engine::mesh_load loaded = assets_.load_mesh(name);
+        if (!loaded.ok())
+        {
+            SDL_Log(&quot;gltf_view: could not load &#x27;%s&#x27; (%s)&quot;,
+                    name.c_str(), engine::name_of(loaded.report.status));
+            return false;
+        }
+
+        const engine::mesh_data* src = assets_.mesh_at(loaded.handle);
+        if (src == nullptr) { return false; }
+
+        // A DERIVED ASSET, through the door Lesson 5.5 built for exactly this
+        // shape: the tangent pass produces a mesh FROM a mesh, with no name of
+        // its own and no reason to exist beyond its source — so unloading the
+        // source takes it. `with_normals` was the first thing to have this
+        // shape and 5.5&#x27;s header named the pattern then.
+        const engine::mesh_handle framed =
+            assets_.derive_mesh(loaded.handle, engine::with_tangents(src-&gt;view()));
+        if (!framed.valid()) { return false; }
+
+        const engine::mesh_data* g = assets_.mesh_at(framed);
+        if (g == nullptr) { return false; }
+
+        SDL_Log(&quot;gltf_view: %s -&gt; %zu vertices, %zu triangles, %zu tangents &quot;
+                &quot;(OBJ carries none, so every one was DERIVED from the uv chart)&quot;,
+                name.c_str(), g-&gt;vertices.size(), g-&gt;triangle_count(),
+                g-&gt;tangents.size());
+
+        engine::scene_object obj;
+        obj.geometry = framed;
+        obj.name = &quot;obj model&quot;;
+        obj.mat.tint = 0xFFE0A83Cu;
+        obj.mat.surface = {.roughness = 0.40f};
+        obj.closed = engine::validate(g-&gt;view()).closed();
+        objects_.push_back(obj);
+
+        for (const engine::vec3 v : g-&gt;vertices)
+        {
+            bounds_.expand(v);
+        }
+        return true;
+    }
+
+    /// Framing, the generated normal map and the light — shared by both paths.
+    [[nodiscard]] bool finish_setup()
+    {
+        centre_ = bounds_.centre();
+        const engine::vec3 extent = bounds_.extent();
+        const float radius = bounds_.radius();
+
+        // Enough distance that a sphere of that radius fits the vertical field
+        // of view, plus a margin. tan(fov/2) is the half-height at unit depth,
+        // so `radius / tan(fov/2)` is the depth at which it exactly fills.
+        distance_ = 1.45f * radius / SDL_tanf(0.5f * k_fov_y);
+
+        SDL_Log(&quot;  bounds (%.2f %.2f %.2f) .. (%.2f %.2f %.2f), camera at %.2f&quot;,
+                static_cast&lt;double&gt;(bounds_.min.x), static_cast&lt;double&gt;(bounds_.min.y),
+                static_cast&lt;double&gt;(bounds_.min.z), static_cast&lt;double&gt;(bounds_.max.x),
+                static_cast&lt;double&gt;(bounds_.max.y), static_cast&lt;double&gt;(bounds_.max.z),
+                static_cast&lt;double&gt;(distance_));
+
+        // ---- LESSON 6.7: a normal map, generated and inserted -------------
+        //
+        // Through `insert_texture`, which is the same door a loaded one comes
+        // through — 5.5&#x27;s rule that an asset system which can only LOAD is
+        // missing half its job, applied to the newest asset type. The texture
+        // arrives carrying `texel_space::linear` because `make_normal_bumps`
+        // set it: an image whose meaning is fixed by the function that made it
+        // should not leave the caller to declare what it is.
+        //
+        // ONLY MATERIALS ON GEOMETRY THAT HAS TANGENTS GET ONE. A normal map is
+        // a direction in the surface&#x27;s own frame, and a mesh with no uvs has no
+        // frame — `shapes.glb` carries POSITION only, so it is correctly left
+        // flat and the log says so rather than the picture leaving you guessing.
+        if (bump_cells_ &gt; 0)
+        {
+            const engine::texture_handle bumps = assets_.insert_texture(
+                &quot;generated:bumps&quot;, engine::make_normal_bumps(256, bump_cells_, 1.0f));
+
+            int mapped = 0;
+            for (engine::scene_object&amp; obj : objects_)
+            {
+                const engine::mesh_data* g = assets_.mesh_at(obj.geometry);
+                if (g == nullptr || g-&gt;tangents.empty()) { continue; }
+                obj.mat.normal_map = bumps;
+                ++mapped;
+            }
+            SDL_Log(&quot;  normal map    : %d cells, applied to %d of %zu object(s) &quot;
+                    &quot;(the rest carry no tangents, so they have no frame to map into)&quot;,
+                    bump_cells_, mapped, objects_.size());
+        }
+
+        lights_.key.direction = engine::normalised(engine::vec3{-0.45f, -0.65f, -0.62f});
+        lights_.key.colour = {1.0f, 0.97f, 0.90f};
+        lights_.key.irradiance = engine::k_reference_irradiance;
+        lights_.ambient = {0.05f, 0.06f, 0.08f};
+
+        // ---- LESSON 6.8: SOMETHING FOR THE SHADOW TO LAND ON ---------------
+        //
+        // Every picture in this course so far has had its subject floating in
+        // the dark, and that was fine while nothing could occlude anything. A
+        // shadow needs a receiver, and the receiver is where the whole lesson
+        // becomes visible: acne is a pattern ACROSS A LIT SURFACE, and a scene
+        // with no large lit surface cannot show one.
+        //
+        // The quad is authored in the z = 0 plane (`quad_mesh`), so the rotation
+        // below is the one that takes local +z to world +y. Written as three
+        // columns rather than a rotation helper because Lesson 2.5&#x27;s sentence is
+        // the fastest way to check it: a matrix IS where the basis vectors land,
+        // so read column 2 and confirm it says (0, 1, 0).
+        caster_count_ = static_cast&lt;int&gt;(objects_.size());
+        if (ground_)
+        {
+            const engine::mesh_handle quad = assets_.insert_mesh(
+                &quot;generated:ground&quot;,
+                engine::with_normals(engine::quad_mesh(), engine::normal_style::flat));
+            if (!quad.valid()) { return false; }
+
+            const float side = 3.0f * SDL_max(SDL_max(extent.x, extent.z), 1e-3f);
+
+            engine::scene_object g;
+            g.geometry = quad;
+            g.name = &quot;ground&quot;;
+            g.xform.position = {centre_.x, bounds_.min.y, centre_.z};
+            g.xform.rotation = engine::mat3{{1.0f, 0.0f, 0.0f},
+                                            {0.0f, 0.0f, -1.0f},
+                                            {0.0f, 1.0f, 0.0f}};
+            g.xform.scale = {side, side, 1.0f};
+            g.mat.tint = 0xFF9A9AA2u;
+            g.mat.surface = {.roughness = 0.85f};
+
+            // LESSON 6.10. A checker DELIBERATELY finer than the screen can
+            // resolve at distance, which is 3.9&#x27;s shimmering floor rebuilt: the
+            // sparkle is the missing minification filter, and it is the picture
+            // this lesson exists to fix.
+            if (floor_tex_ &gt; 0)
+            {
+                const int side_px = floor_tex_;
+                const int cell = SDL_max(1, side_px / 64);
+                engine::texture checker(side_px, side_px, 0xFF000000u,
+                                        engine::texel_space::srgb);
+                for (int y = 0; y &lt; side_px; ++y)
+                {
+                    for (int x = 0; x &lt; side_px; ++x)
+                    {
+                        const bool on = ((x / cell) + (y / cell)) % 2 == 0;
+                        checker.set_texel(x, y, on ? 0xFFF2F2F2u : 0xFF1A1A1Au);
+                    }
+                }
+                g.mat.albedo_map = assets_.insert_texture(&quot;floor checker&quot;,
+                                                          std::move(checker));
+                g.mat.tint = 0xFFFFFFFFu;   // the texture IS the albedo (3.9)
+            }
+
+            // A sheet has no inside, so back-face culling would delete it when
+            // seen from below — Lesson 3.4&#x27;s rule, and `cull_of` is where it
+            // lives.
+            g.closed = false;
+            objects_.push_back(g);
+        }
+
+        // ---- The map ------------------------------------------------------
+        //
+        // `shadow_res_` is a side, so the storage is its square: 1024 costs 4 MB
+        // of float depth here and 2 MB as a 16-bit target on the GPU.
+        // ---- LESSON 6.10: one chain per DISTINCT albedo texture -------------
+        //
+        // Keyed by pointer rather than one per object, because two objects
+        // sharing a texture must share its chain — building it twice would
+        // double the memory and make the 33% claim a lie.
+        if (mips_)
+        {
+            for (const engine::scene_object&amp; o : objects_)
+            {
+                const engine::texture* img = assets_.textures().get(o.mat.albedo_map);
+                if (img == nullptr || img-&gt;empty()) { continue; }
+                bool seen = false;
+                for (const auto&amp; e : chain_of_) { if (e.first == img) { seen = true; break; } }
+                if (seen) { continue; }
+                chains_.push_back(engine::build_mips(*img));
+                chain_of_.emplace_back(img, chains_.size() - 1);
+            }
+            std::size_t base = 0, total = 0;
+            for (std::size_t i = 0; i &lt; chains_.size(); ++i)
+            {
+                base += static_cast&lt;std::size_t&gt;(chains_[i].width())
+                      * static_cast&lt;std::size_t&gt;(chains_[i].height());
+                total += chains_[i].texels();
+            }
+            SDL_Log(&quot;  mipmaps       : %zu chain(s), %d levels, %zu -&gt; %zu texels (+%.1f%%), &quot;
+                    &quot;aniso %d, between levels %s&quot;,
+                    chains_.size(), chains_.empty() ? 0 : chains_[0].levels(), base, total,
+                    base == 0 ? 0.0 : 100.0 * (static_cast&lt;double&gt;(total) / static_cast&lt;double&gt;(base) - 1.0),
+                    aniso_,
+                    mip_filter_ == engine::filter::linear ? &quot;trilinear&quot; : &quot;NEAREST (the seam)&quot;);
+        }
+
+        if (shadow_res_ &gt; 0)
+        {
+            engine::shadow_settings ss;
+            ss.bias = bias_;
+            ss.constant_bias = constant_bias_;
+            ss.pcf_radius = pcf_;
+            ss.cull = shadow_cull_;
+
+            if (cascades_ &gt; 0)
+            {
+                if (!cascade_.create(cascades_, shadow_res_)) { return false; }
+                cascade_.settings().count = cascade_.count();
+                cascade_.settings().lambda = csm_lambda_;
+                cascade_.settings().snap = csm_snap_;
+                cascade_.settings().blend_fraction = csm_blend_;
+                cascade_.settings().near_d = 0.1f;
+                // Stop the cascades WELL SHORT of the camera&#x27;s own 100 m far
+                // plane. Shadows out there are worth nothing and every metre
+                // spent on them makes cascade 0 coarser.
+                cascade_.settings().far_d = 4.0f * distance_;
+                cascade_.apply_shadow_settings(ss);
+                SDL_Log(&quot;  cascades      : %d x %dx%d, lambda %.2f, snap %s, blend %.2f&quot;,
+                        cascade_.count(), shadow_res_, shadow_res_,
+                        static_cast&lt;double&gt;(csm_lambda_), csm_snap_ ? &quot;on&quot; : &quot;OFF&quot;,
+                        static_cast&lt;double&gt;(csm_blend_));
+            }
+            if (!shadows_.create(shadow_res_)) { return false; }
+            shadows_.settings() = ss;
+
+            SDL_Log(&quot;  shadow map    : %dx%d, bias %s, PCF %dx%d, caster cull %s&quot;,
+                    shadow_res_, shadow_res_, engine::name_of(bias_),
+                    2 * pcf_ + 1, 2 * pcf_ + 1,
+                    (shadow_cull_ == engine::cull_mode::front) ? &quot;FRONT&quot;
+                    : (shadow_cull_ == engine::cull_mode::back) ? &quot;BACK&quot; : &quot;none&quot;);
+        }
+
+        if (shot_path_ != nullptr) { t_ = pose_; }
+        return true;
+    }
+
+    /// The objects the shadow pass rasterises. Everything, by default.
+    ///
+    /// **`--no-ground-cast` DROPS THE GROUND FROM THE MAP, AND TWO THINGS
+    /// CHANGE AT ONCE.** The first is the fit: the box is sized to its contents,
+    /// and a ground plane three times the model&#x27;s width triples the box&#x27;s side
+    /// and cuts the texel density to a ninth — a 1024 map made to resolve like a
+    /// 341. That is the commonest reason a shadow map looks blocky, and it costs
+    /// one `subspan` to avoid.
+    ///
+    /// The second is more interesting and is §4.2&#x27;s whole point: **the ground
+    /// stops having acne.** Acne is a surface failing its own depth test, so a
+    /// surface that is not IN the map cannot have it. That is a real trick and a
+    /// bad general rule — it works here because this ground is one flat sheet,
+    /// and it fails the moment a receiver is folded, stacked or curved enough to
+    /// occlude itself.
+    [[nodiscard]] std::span&lt;const engine::scene_object&gt; casters() const
+    {
+        const std::size_t n = ground_casts_ ? objects_.size()
+                                            : static_cast&lt;std::size_t&gt;(caster_count_);
+        return std::span&lt;const engine::scene_object&gt;(objects_.data(), n);
+    }
+
+    void on_fixed_step(float h) override
+    {
+        if (shot_path_ == nullptr) { t_ += h * 0.6f; }
+        if (in().key_down(SDL_SCANCODE_ESCAPE)) { request_quit(); }
+    }
+
+    void on_frame(float alpha) override
+    {
+        (void)alpha;
+
+        fb().clear(k_background);
+        depth_.clear();
+
+        // The whole model spins about the world origin, so the objects keep
+        // their relative placement — which is the point of not baking the node
+        // transforms into the geometry.
+        const engine::vec3 eye = orbit_eye();
+        const engine::mat4 view = engine::look_at(eye, centre_, {0.0f, 1.0f, 0.0f});
+
+        // ---- LESSON 6.8: THE DEPTH PASS ------------------------------------
+        //
+        // Before the camera draws anything, the light does. Every frame, because
+        // the fit depends on the scene&#x27;s bounds and an animated scene moves —
+        // this one does not, and re-fitting anyway is the honest default: a map
+        // cached against a scene that has changed is a shadow of where things
+        // used to be.
+        if (cascade_.valid())
+        {
+            // The camera&#x27;s frustum, as the fit needs it: the view matrix
+            // inverted (rigid, so `rigid_inverse` is the whole inverse) plus the
+            // two numbers `perspective` was built from.
+            engine::camera_frustum cf;
+            cf.world_from_view = engine::rigid_inverse(view);
+            cf.fovy_radians = k_fov_y;
+            cf.aspect = static_cast&lt;float&gt;(k_width) / static_cast&lt;float&gt;(k_height);
+            cascade_.render(casters(), assets_.meshes(), lights_.key, cf,
+                            &amp;shadow_stats_);
+        }
+        else if (shadows_.valid())
+        {
+            shadows_.render(casters(), assets_.meshes(), lights_.key, &amp;shadow_stats_);
+        }
+
+        int drawn = 0;
+        for (const engine::scene_object&amp; obj : objects_)
+        {
+            engine::collect_triangles(triangles_, scratch_, {&amp;obj, 1}, assets_.meshes(),
+                                      {view, eye}, projector_, lights_,
+                                      engine::render_options{
+                                          .cull = engine::cull_choice::back});
+
+            // ONE RESOLVE PER DRAW, which is exactly where 6.5 said it belongs:
+            // a handle is how you store a texture reference, a pointer is how
+            // you read one per pixel, and `bind_albedo` is the named step
+            // between them. Inside the fill loop it would be a bounds check and
+            // a generation compare per fragment.
+            engine::texture_binding albedo =
+                engine::bind_albedo(obj.mat, assets_.textures());
+            if (mips_)
+            {
+                // 6.10. The chain is nullable and null is the whole of &quot;off&quot;,
+                // so the unmipped path is the one every earlier lesson drew.
+                for (const auto&amp; e : chain_of_)
+                {
+                    if (e.first == albedo.image) { albedo.mips = &amp;chains_[e.second]; break; }
+                }
+                albedo.samp.mip_filter = mip_filter_;
+                albedo.samp.max_anisotropy = aniso_;
+            }
+            const engine::texture_binding normals =
+                engine::bind_normal_map(obj.mat, assets_.textures());
+
+            const engine::fill_style style{
+                .interp = engine::interpolation::perspective,
+                .shade = engine::shading::lit,
+                .space = engine::blend_space::linear,
+                .cull = engine::cull_of(obj.closed),
+                .lights = &amp;lights_,
+                .surface = obj.mat.surface,
+                .model = engine::specular_model::cook_torrance,
+                .eye = eye,
+                .albedo = albedo,
+                .normal_map = normals,   // 6.7
+                .encode = engine::encode_mode::fast,
+                .traverse = engine::traversal::scanline,
+
+                // 6.8. Null when `--shadow 0`, which is the whole of &quot;turn the
+                // feature off&quot; — the same nullable-pointer bargain `lights` and
+                // `albedo` already make, so a picture without shadows is the
+                // picture this demo drew yesterday, bit for bit.
+                .shadows = (!cascade_.valid() &amp;&amp; shadows_.valid()) ? &amp;shadows_ : nullptr,
+
+                // 6.9. Takes priority when both are set; the view axis is what
+                // selects a cascade, and it must be the AXIAL depth.
+                .cascades = cascade_.valid() ? &amp;cascade_ : nullptr,
+                .view_eye = eye,
+                .view_forward = engine::normalised(centre_ - eye)};
+
+            engine::draw_triangles(fb(), &amp;depth_, triangles_, false, style);
+            drawn += static_cast&lt;int&gt;(triangles_.size());
+        }
+
+        if (shot_path_ != nullptr)
+        {
+            SDL_Log(&quot;gltf_view: %zu object(s), %d triangles&quot;, objects_.size(), drawn);
+            if (shadows_.valid() || cascade_.valid())
+            {
+                SDL_Log(&quot;  shadow pass  : %d caster triangles into %d texels, %.2f ms&quot;,
+                        shadow_stats_.triangles, shadow_stats_.texels,
+                        shadow_stats_.render_ms);
+
+                if (cascade_.valid())
+                {
+                    // ONE LINE PER CASCADE, because the whole point of the
+                    // lesson is that they differ — a single averaged number
+                    // would hide exactly the thing worth seeing.
+                    float near_d = cascade_.settings().near_d;
+                    for (int i = 0; i &lt; cascade_.count(); ++i)
+                    {
+                        const engine::light_camera&amp; c = cascade_.map(i).camera();
+                        const float far_d = cascade_.splits()[static_cast&lt;std::size_t&gt;(i)];
+                        SDL_Log(&quot;  cascade %d    : [%6.2f, %6.2f] m  %.5f m/texel  &quot;
+                                &quot;depth range %.3f&quot;,
+                                i, static_cast&lt;double&gt;(near_d),
+                                static_cast&lt;double&gt;(far_d),
+                                static_cast&lt;double&gt;(c.world_per_texel),
+                                static_cast&lt;double&gt;(c.depth_range));
+                        near_d = far_d;
+                    }
+                }
+                else
+                {
+                    const engine::light_camera&amp; lc = shadows_.camera();
+                    SDL_Log(&quot;  fit          : %.4f world units per texel, depth range %.3f&quot;,
+                            static_cast&lt;double&gt;(lc.world_per_texel),
+                            static_cast&lt;double&gt;(lc.depth_range));
+                }
+            }
+            request_quit(engine::save_ppm(fb(), shot_path_));
+        }
+    }
+
+private:
+    /// A slow orbit at the fitted distance, looking at the model&#x27;s own centre.
+    /// A still frame is therefore reproducible and a live one shows every side.
+    [[nodiscard]] engine::vec3 orbit_eye() const
+    {
+        return {centre_.x + distance_ * 0.86f * SDL_cosf(t_),
+                centre_.y + distance_ * 0.42f,
+                centre_.z + distance_ * 0.86f * SDL_sinf(t_)};
+    }
+
+    const char* shot_path_ = nullptr;
+    const char* model_name_ = &quot;shapes.glb&quot;;
+    float t_ = 0.0f;
+    float pose_ = 3.0f;   ///&lt; the orbit angle a --shot freezes at
+    int bump_cells_ = 6;  ///&lt; 6.7: cells across the generated normal map; 0 = off
+
+    // ---- Lesson 6.8 --------------------------------------------------------
+    int shadow_res_ = 1024;        ///&lt; the map&#x27;s side in texels; 0 = no shadows
+    int cascades_ = 0;          // 6.9: 0 = 6.8&#x27;s single map
+    bool mips_ = false;         // 6.10
+    int floor_tex_ = 0;         // checker side, 0 = untextured ground
+    int aniso_ = 1;
+    engine::filter mip_filter_ = engine::filter::linear;
+    std::vector&lt;engine::mip_chain&gt; chains_;
+    std::vector&lt;std::pair&lt;const engine::texture*, std::size_t&gt;&gt; chain_of_;
+    float csm_lambda_ = 0.5f;   // uniform &lt;-&gt; logarithmic blend
+    float csm_blend_ = 0.0f;    // 0 shows the seam, which is the point
+    bool csm_snap_ = true;
+    int pcf_ = 1;                  ///&lt; kernel radius: 0 = one tap, 1 = 3x3
+    int caster_count_ = 0;         ///&lt; objects_ before the ground was appended
+    bool ground_ = true;
+    bool ground_casts_ = true;    ///&lt; is the ground in the map? See casters().
+    float constant_bias_ = 0.0f;
+    engine::shadow_bias bias_ = engine::shadow_bias::slope_scaled;
+    engine::cull_mode shadow_cull_ = engine::cull_mode::none;
+    engine::shadow_map shadows_;
+    engine::cascaded_shadow_map cascade_;   // 6.9
+    engine::shadow_stats shadow_stats_;
+
+    static constexpr float k_fov_y = 50.0f * 3.14159265f / 180.0f;
+
+    engine::asset_store assets_;
+    std::vector&lt;engine::scene_object&gt; objects_;
+    engine::lighting lights_;
+
+    /// World-space bounds of everything loaded, and what the camera derives from
+    /// them.
+    ///
+    /// **LESSON 6.8 REPLACED TWO LOOSE `vec3` WITH ONE `aabb`**, and the reason
+    /// is not tidiness: the shadow map needs exactly this quantity to fit its
+    /// orthographic box, so the pattern acquired its third caller and moved into
+    /// the engine (`gfx/bounds.hpp`). The inside-out default that used to be
+    /// spelled `1e30f` here by hand is now the type&#x27;s own, which is what removes
+    /// the first-vertex special case.
+    engine::aabb bounds_;
+    engine::vec3 centre_{};
+    float distance_ = 4.0f;
+
+    const engine::projector projector_{
+        engine::perspective(k_fov_y,
+                            static_cast&lt;float&gt;(k_width) / static_cast&lt;float&gt;(k_height),
+                            0.1f, 100.0f),
+        engine::viewport{0.0f, 0.0f, static_cast&lt;float&gt;(k_width),
+                         static_cast&lt;float&gt;(k_height), 0.0f, 1.0f},
+        engine::near_mode::clip};
+
+    engine::depth_buffer depth_{k_width, k_height};
+
+    std::vector&lt;engine::raster_triangle&gt; triangles_;
+    engine::projection_scratch scratch_;
+};
+
+}   // namespace
+
+ENGINE_MAIN(gltf_app)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/texture.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/texture.hpp — images, and how to ask one what colour is at (u, v).
+//
+// Lesson 3.9. Everything before this lesson computed a fragment&#x27;s colour from a
+// RULE: a blend of three corner colours (2.4), a checkerboard evaluated from a
+// formula (3.2), a lighting equation (3.6-3.8). A texture is the other answer —
+// look it up in an array somebody painted — and the whole subject of this file is
+// that the lookup is not as simple as an array index.
+//
+// Three questions have to be settled before `image[y][x]` is a defensible answer,
+// and each one has a visible failure if you get it wrong:
+//
+//   WHERE IS (0, 0)?          Top-left, v downwards. Not a taste question: it is
+//                             what SDL_GPU does, quoted below, and Module 4 is a
+//                             port rather than a redesign.
+//   WHAT IS OUTSIDE [0, 1]?   Three answers, all useful, all different — and the
+//                             wrong one shows as a smeared edge or a visible seam.
+//   WHAT IS BETWEEN TEXELS?   A texel is a SAMPLE, not a square. Its value belongs
+//                             at its CENTRE, and forgetting the half-texel that
+//                             follows from that is the single most common texture
+//                             bug there is.
+//
+// The types here mirror `SDL_GPUSampler` deliberately — same names, same
+// enumerator order — so that when Module 4 replaces this file with a GPU sampler
+// object, the change is a rename and not a re-education.
+
+#pragma once
+
+#include &lt;engine/core/handle.hpp&gt;   // 6.5: a texture is referenced, not pointed at
+#include &lt;engine/core/pool.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;   // linear_rgb: what a sample IS, once decoded
+#include &lt;engine/gfx/image.hpp&gt;    // 6.6: image_data, the thing a file decodes to
+#include &lt;engine/math/vec2.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cstddef&gt;
+#include &lt;span&gt;
+#include &lt;vector&gt;
+
+namespace engine {
+
+// ---- The sampler&#x27;s two enums -----------------------------------------------
+
+/// How to combine texels when the sample point falls between them.
+///
+/// Enumerator order matches `SDL_GPUFilter` exactly — verified in
+/// `SDL3/SDL_gpu.h`, where it is `SDL_GPU_FILTER_NEAREST`, `SDL_GPU_FILTER_LINEAR`
+/// in that order — so Module 4&#x27;s port is a rename.
+enum class filter
+{
+    /// Take the one texel the sample point lands in. Sharp, cheap, exact — and
+    /// the reason a magnified texture looks like a mosaic of hard squares.
+    nearest,
+
+    /// Blend the four texels whose centres surround the sample point, weighted by
+    /// how close each one is. **Bilinear filtering**, and the default, because a
+    /// magnified texture is the common case and blocky is worse than soft.
+    ///
+    /// Note the exact claim: *four texels whose CENTRES surround the point*. Not
+    /// &quot;the four texels nearest the point&quot;, which is the same thing said loosely
+    /// and the sentence that produces the half-texel bug.
+    linear
+};
+
+/// What a texture coordinate outside `[0, 1]` means.
+///
+/// Enumerator order matches `SDL_GPUSamplerAddressMode` exactly — `REPEAT`,
+/// `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` — verified in `SDL3/SDL_gpu.h`.
+///
+/// **This is a real choice with three right answers**, not a default plus two
+/// curiosities. A tiled floor wants `repeat`; a decal or a skybox face wants
+/// `clamp_to_edge`, because repeating it would wrap the far edge into view; a
+/// pattern that must not show a seam and was not authored to tile wants
+/// `mirrored_repeat`, which makes every boundary a reflection and therefore
+/// continuous by construction.
+enum class address_mode
+{
+    /// Wrap around: texel `n` is texel `0`, texel `-1` is texel `n-1`. The tiling
+    /// mode. Shows a **seam** if the image&#x27;s last column and first column are not
+    /// continuous with each other — which is a property of the image, not a bug in
+    /// the sampler.
+    repeat,
+
+    /// Wrap around, reflecting every other copy. Period `2n`, and the edge texel
+    /// appears twice at each fold. Never seams, at the price of a pattern that
+    /// reads as mirrored rather than repeated.
+    mirrored_repeat,
+
+    /// Clamp to the outermost texel. Outside the image, the edge row or column
+    /// **smears outward forever** — which is exactly right for a decal and exactly
+    /// wrong for a floor, where it turns everything past the first tile into a
+    /// stretched streak.
+    clamp_to_edge
+};
+
+/// Where in a texel its value is deemed to live. **There is only one right
+/// answer**; the other is kept so it can be switched on and seen failing.
+///
+/// The ninth keep-the-wrong-thing bargain in this engine, after `draw_line_naive`
+/// (2.1), Pong&#x27;s naive collision test (1.8), `blend_space::encoded` (2.4), the `w`
+/// toggles (2.7), `trs_order` (2.8), `interpolation::affine` (3.2), `near_mode`
+/// (3.3), `cull_choice::back_by_forward` (3.4) and Phong (3.7).
+enum class texel_origin
+{
+    /// **Correct.** Texel `i` holds the value of the image at `(i + 0.5) / n`. A
+    /// texel is a *sample of a continuous image*, and a sample has a position, not
+    /// an extent — the little square you draw when you visualise a texture is a
+    /// rendering convenience, not what the number means.
+    centre,
+
+    /// **Wrong**, and wrong in the most plausible possible way: treat texel `i` as
+    /// occupying the square starting at `i / n`. Nearest-neighbour sampling cannot
+    /// tell the difference — §5.3 measures exactly zero pixels changed — and
+    /// bilinear sampling shifts the whole image by half a texel *and* blurs it,
+    /// because the sample point that should have landed on a texel centre now
+    /// lands exactly between two.
+    corner
+};
+
+// ---- Lesson 6.7: what the numbers in a texture MEAN --------------------------
+
+/// Is this image **colour**, or is it **data**?
+///
+/// Lesson 6.7, and this is the field whose absence Lesson 6.6 had to name and
+/// walk away from. Every texture in this engine until now was an albedo — an
+/// authored colour, sRGB-encoded like every stored colour since Lesson 1.6 — so
+/// `sample` could decode unconditionally and be right every time. A normal map
+/// is not a colour. Its three channels are a **direction**, packed into bytes,
+/// and running them through the sRGB curve is arithmetic on numbers that were
+/// never a colour in the first place.
+///
+/// **THE GPU HAS HAD THIS SINCE LESSON 4.7 AND THE CPU HAS NEVER HAD IT.**
+/// `gpu_texture::create_sampled` takes an `srgb` flag and asks for an
+/// `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB` format when it is set. That is
+/// the same gap 6.6 found between `load_image` and `sample` — two halves of a
+/// thing, one of them complete, and no code path crossing between them until a
+/// format arrived that needed both.
+///
+/// **It belongs on the TEXTURE, not on the sampler, and the hardware settles
+/// it.** In SDL_GPU the decode is declared by the texture&#x27;s FORMAT and performed
+/// by the sampler; the same image bound twice cannot be sRGB in one binding and
+/// linear in the other, because the format is a property of the memory. Lesson
+/// 3.9 built these types to mirror SDL_GPU&#x27;s &quot;so that when Module 4 replaces
+/// this file with a GPU sampler object, the change is a rename and not a
+/// re-education&quot;, and mirroring includes mirroring where a decision lives.
+enum class texel_space
+{
+    /// **Colour.** Authored, sRGB-encoded, decoded through the transfer function
+    /// on every read — which is what `sample` has always done and what makes an
+    /// albedo a reflectance that can multiply a quantity of light (1.6, 3.9).
+    ///
+    /// The default, because it is the only kind of texture that existed before
+    /// this lesson and because getting it wrong on a colour is the *visible*
+    /// mistake — a washed-out albedo announces itself.
+    srgb,
+
+    /// **Data.** A normal, a roughness, a metalness, a mask, an occlusion factor.
+    /// The byte is a number, `value / 255`, and no curve is applied.
+    ///
+    /// Getting THIS one wrong is the invisible mistake, which is why the two are
+    /// worth separating rather than documenting. A normal map read through an
+    /// sRGB decode is wrong by the gamma curve everywhere except 0 and 1 — the
+    /// flat value 0.5 comes back as **0.2140** — so every surface tilts toward
+    /// its own steepest reading and the result looks like a normal map that was
+    /// authored too strong. Lesson 6.7 §3 measures it.
+    linear
+};
+
+/// Everything about *how* to read a texture, gathered into one object.
+///
+/// The shape is `SDL_GPUSamplerCreateInfo` with the fields we can honestly
+/// implement. That struct has thirteen members; three of them are ours today, and
+/// naming the gap is more useful than pretending there is none:
+///
+///   - `min_filter` / `mag_filter` / `mipmap_mode` are **one** field here, because
+///     without mipmaps there is nothing different for a minification filter to do.
+///     That is not a simplification being hidden — it is §7&#x27;s entire subject. The
+///     sparkle on a floor running to the horizon *is* the missing minification
+///     filter, and Module 6&#x27;s mipmaps are what fills the gap.
+///   - `address_mode_w` is absent because we have no 3-D textures.
+///   - anisotropy, LOD clamping and comparison sampling are all Module 6.
+struct sampler
+{
+    /// How to combine texels WITHIN a level. One of SDL&#x27;s three; the other two
+    /// arrived in Lesson 6.10, below.
+    filter texel_filter = filter::linear;
+
+    /// **How to filter BETWEEN mip levels.** Lesson 6.10.
+    ///
+    /// The second of the three fields 3.9 collapsed into one, and 3.9&#x27;s comment
+    /// said exactly why it could: &quot;without mipmaps there is nothing different
+    /// for a minification filter to do&quot;. There is now. `nearest` snaps to the
+    /// closer level and draws a visible line across a floor where the level
+    /// changes; `linear` blends the two straddling levels — trilinear — for the
+    /// cost of a second bilinear fetch.
+    ///
+    /// Ignored when sampling a bare `texture`, which is every call site written
+    /// before 6.10.
+    filter mip_filter = filter::linear;
+
+    /// Nudge the chosen level. Negative sharpens (and re-introduces the
+    /// aliasing), positive blurs. It is the one knob artists actually reach for,
+    /// and `SDL_GPUSamplerCreateInfo::mip_lod_bias` has it — a sampler that
+    /// could not express it would not survive the port.
+    float mip_bias = 0.0f;
+
+    /// **Refuse to choose between blurring and aliasing.** 1 is isotropic.
+    ///
+    /// A grazing floor has a footprint long in one direction and short in the
+    /// other, and one square average cannot represent that: choose the level by
+    /// the long axis and the short one is blurred away; choose it by the short
+    /// axis and the long one aliases. Above 1 this takes several samples ALONG
+    /// the long axis at the level the SHORT axis asked for, which buys the
+    /// detail back at a linear cost. Clamped to 16, as hardware is.
+    int max_anisotropy = 1;
+
+    /// Addressing per axis, and **per axis for a reason**: a strip of road wants to
+    /// repeat along its length and clamp across its width, and one mode for both
+    /// cannot say that.
+    address_mode address_u = address_mode::repeat;
+    address_mode address_v = address_mode::repeat;
+
+    /// Always `centre` in anything that is not a demonstration.
+    texel_origin origin = texel_origin::centre;
+};
+
+// ---- The image itself -------------------------------------------------------
+
+/// A 2-D array of texels, owned.
+///
+/// **Row 0 is the TOP row**, and that is the load-bearing sentence of this whole
+/// file. SDL3&#x27;s `SDL_gpu.h` states the convention in its &quot;Coordinate System&quot;
+/// section, verbatim:
+///
+///   &gt; **Texture Coordinates:** The top-left corner has an x,y coordinate of
+///   &gt; `(0, 0)` and extends to the bottom-right corner at `(1.0, 1.0)`. +Y is down.
+///
+/// So `v = 0` is the top of the image and `v` increases downwards, which lines up
+/// with the framebuffer&#x27;s own +y-down convention (Lesson 1.5) and with the
+/// viewport transform&#x27;s y-flip (2.11). Every space this engine touches on the
+/// screen side of the projection now agrees.
+///
+/// **It does not agree with an OBJ file.** Wavefront writes `vt` with the origin
+/// at the *bottom* left, which is the older, mathematician&#x27;s convention, and the
+/// disagreement is a straight vertical flip — see `flip_uv_v` in `mesh.hpp`.
+///
+/// Texels are `Uint32` ARGB8888, byte-identical to a framebuffer pixel. That is
+/// not laziness: it means a texture drawn at 1:1 is a copy rather than a
+/// conversion, and §5.1 uses exactly that to check the sampler against the image
+/// it is sampling.
+///
+/// **Texels are sRGB-ENCODED**, like every other stored colour in this engine and
+/// like every PNG an artist will ever hand you. Decoding is the *sampler&#x27;s* job
+/// (`sample` returns `linear_rgb`), which is also what hardware does: an
+/// `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB` texture is decoded in the sampler,
+/// before filtering, for free. Lesson 1.6&#x27;s argument, arriving for the third time.
+class texture
+{
+public:
+    texture() = default;
+
+    /// An image of `w` x `h` texels, every one set to `fill`.
+    ///
+    /// A non-positive dimension gives an **empty** texture rather than a thrown
+    /// exception or an undefined one — the engine core has no exceptions (§4 of the
+    /// course conventions) and `sample` has a defined answer for an empty image.
+    ///
+    /// **`space` defaults to `srgb`** (Lesson 6.7), which keeps every texture
+    /// written before that lesson meaning exactly what it meant. A default that
+    /// changed the answer would have made the whole lesson a re-baseline.
+    texture(int w, int h, Uint32 fill = 0xFF000000u, texel_space space = texel_space::srgb);
+
+    /// Colour or data? See `texel_space`. Set at construction and never after:
+    /// an image does not stop being a normal map halfway through a frame, and
+    /// making it settable would put the decision back at the call site, which is
+    /// exactly where this lesson took it from.
+    [[nodiscard]] texel_space space() const { return space_; }
+
+    [[nodiscard]] int width() const { return width_; }
+    [[nodiscard]] int height() const { return height_; }
+    [[nodiscard]] bool empty() const { return texels_.empty(); }
+
+    /// The texel at integer coordinates, **clamped** into range.
+    ///
+    /// The clamp is not the addressing mode — addressing happens in the sampler,
+    /// which decides what `x = -1` *means* before it ever gets here. This clamp is
+    /// the last line of defence: it guarantees this function cannot read memory the
+    /// texture does not own, whatever a caller does. An empty texture returns
+    /// opaque black, because there is no texel to return and a debug magenta here
+    /// would fire on every pixel of a legitimately-unbound sampler.
+    [[nodiscard]] Uint32 texel(int x, int y) const;
+
+    void set_texel(int x, int y, Uint32 colour);
+
+    /// The raw texels, row-major, top row first. For blits and for tests that
+    /// compare an image against what was drawn from it.
+    [[nodiscard]] std::span&lt;const Uint32&gt; texels() const { return texels_; }
+
+private:
+    std::vector&lt;Uint32&gt; texels_;
+    int width_ = 0;
+    int height_ = 0;
+    texel_space space_ = texel_space::srgb;   ///&lt; 6.7
+};
+
+// ---- Addressing --------------------------------------------------------------
+
+/// Fold an out-of-range texel index into `[0, n)` according to `mode`.
+///
+/// Exposed rather than hidden inside the sampler because it is the piece with the
+/// most arithmetic per line and the least visible failure, so it deserves to be
+/// testable on its own — the same argument `is_top_left` (2.4) and
+/// `is_front_facing` (3.4) made. §5.2 tabulates its output.
+///
+/// `n &lt;= 0` returns 0, so an empty texture cannot produce an index.
+[[nodiscard]] int wrap_texel(int i, int n, address_mode mode);
+
+// ---- Sampling ----------------------------------------------------------------
+
+/// **The one to call.** What colour is the image at texture coordinate `(u, v)`?
+///
+/// Returns **linear light**, not a stored pixel, because a texture is a material
+/// input and material inputs get multiplied by quantities of light. Decoding here
+/// rather than at the call site also puts the decode *before* the filter, which is
+/// the correct order and not the obvious one: blending four encoded bytes and
+/// decoding the result is a different (and wrong) answer, for exactly the reason
+/// Lesson 2.4 gave about blending vertex colours. §4.4 measures the difference.
+///
+/// An empty texture samples as opaque **magenta** — the debug convention this
+/// engine already uses for &quot;this value is invalid&quot; (`checker_at`, 3.2) — because a
+/// fill configured to sample a texture that is not there is a mistake worth seeing
+/// rather than a black surface worth misreading as unlit.
+[[nodiscard]] linear_rgb sample(const texture&amp; image, const sampler&amp; samp, float u, float v);
+
+/// `sample` with the `vec2` a mesh actually stores.
+[[nodiscard]] inline linear_rgb sample(const texture&amp; image, const sampler&amp; samp, vec2 uv)
+{
+    return sample(image, samp, uv.x, uv.y);
+}
+
+/// The two halves of `sample`, separated so each can be measured against the other.
+///
+/// Both take the sampler for its addressing and origin fields and ignore
+/// `texel_filter`, which is what selects between them.
+[[nodiscard]] linear_rgb sample_nearest(const texture&amp; image, const sampler&amp; samp,
+                                        float u, float v);
+[[nodiscard]] linear_rgb sample_bilinear(const texture&amp; image, const sampler&amp; samp,
+                                         float u, float v);
+
+// ---- Binding -----------------------------------------------------------------
+
+/// An image and the rules for reading it, travelling together.
+///
+/// `SDL_GPUTextureSamplerBinding` is exactly this pair — `{ SDL_GPUTexture*,
+/// SDL_GPUSampler* }` — and it is a pair for a good reason: the same image is
+/// legitimately read two ways in one frame (clamped for a decal, repeated for a
+/// floor), and the same rules are legitimately applied to a hundred images. They
+/// are independent objects joined at the point of use.
+///
+/// **Non-owning.** The texture outlives the binding, exactly as `fill_style`&#x27;s
+/// `lighting*` does (3.8).
+/// Lesson 6.10. Defined in `mipmap.hpp`, which includes this file.
+class mip_chain;
+
+struct texture_binding
+{
+    const texture* image = nullptr;
+    sampler samp{};
+
+    /// An optional mip chain for `image`. Lesson 6.10.
+    ///
+    /// **Nullable, and null is the whole of &quot;no mipmapping&quot;** — the same bargain
+    /// `lights`, `albedo` and 6.9&#x27;s `cascades` already make. When it is null the
+    /// fill samples `image` exactly as it did in 3.9, which is why nineteen
+    /// lessons of reference renders are still byte-identical.
+    ///
+    /// A forward declaration rather than an include: `mipmap.hpp` includes THIS
+    /// header, so the dependency has to point one way.
+    const mip_chain* mips = nullptr;
+
+    /// Is a chain bound AND wanted? A chain plus `max_anisotropy` and the mip
+    /// filters live in `samp`, so this asks only about the data.
+    [[nodiscard]] bool mipped() const { return mips != nullptr; }
+
+    /// Is there anything to sample? A binding with no image is not an error — it
+    /// is a pipeline that was never given one, and the fill falls back to vertex
+    /// colours.
+    [[nodiscard]] bool bound() const { return image != nullptr &amp;&amp; !image-&gt;empty(); }
+};
+
+// ---- Lesson 6.5: storing textures, as opposed to pointing at them -----------
+
+/// A reference to a texture held in a `texture_pool`.
+///
+/// **The same argument `image_handle` made in Lesson 5.5, arriving one layer
+/// further down.** `image_data` is what was *loaded*; `texture` is what was
+/// *derived* from it and is ready to sample. Both want stable, checkable
+/// references, and for the same reason: a raw `const texture*` stored in a
+/// material outlives nothing in particular, and the day the pool reallocates is
+/// the day every material in the scene points at freed memory.
+using texture_handle = handle&lt;texture&gt;;
+
+/// Storage for the textures a scene samples.
+///
+/// **Lesson 6.5 kept this out of `asset_store` and Lesson 6.6 put it in.** The
+/// reasoning 6.5 gave was that the store is about *files* — a search path, a
+/// name, a cache, a load count (5.5) — and every texture in the engine at that
+/// point was generated in memory. glTF is what expired that: a material now
+/// arrives naming an image on disk, two materials routinely name the same one,
+/// and &quot;load it once and hand out the same reference&quot; is precisely the store&#x27;s
+/// job description.
+///
+/// The pool itself did not move or change. What the store adds around it is the
+/// three things 5.5 named: a name -&gt; handle map, an unload, and — because a
+/// texture is MADE FROM an image rather than loaded directly — a derivation
+/// edge, so that unloading the image unloads the textures built from it. See
+/// `asset_store::load_texture`.
+using texture_pool = pool&lt;texture&gt;;
+
+// ---- Lesson 6.6: the bridge that had never been built -----------------------
+
+/// Turn decoded file pixels into something `sample` can read.
+///
+/// **This function should have existed since Lesson 5.3 and did not**, and the
+/// reason it did not is worth more than the twelve lines it takes. The engine
+/// has been able to decode a PNG since 5.3 (`load_image` -&gt; `image_data`) and to
+/// sample a texture since 3.9 (`texture` -&gt; `sample`), and nothing ever joined
+/// them — because every CPU texture was *generated* (`make_checker`,
+/// `make_uv_grid`) and every *loaded* image went straight to the GPU as bytes
+/// (`gpu_texture::create_sampled`). Two complete halves with no middle, and no
+/// test could see the gap because no code path crossed it.
+///
+/// glTF is what forces the join: a material names an image file, and the
+/// software renderer has to be able to sample it. Lesson 6.6 §5.
+///
+/// **It is a channel shuffle, not a memcpy**, and that is the part to get right.
+/// `image_data::pixels` is R, G, B, A in that byte order, as stb hands it over.
+/// `texture` stores `Uint32` in ARGB8888 — the framebuffer&#x27;s own format (1.5) —
+/// which on a little-endian machine is the bytes B, G, R, A. Copying the buffer
+/// wholesale therefore swaps red and blue, which is the single most recognisable
+/// wrong-looking texture there is and the reason `pack_argb` exists rather than
+/// a cast.
+///
+/// An invalid image gives an empty texture, which `sample` already answers with
+/// debug magenta — a visible failure rather than a silent black one.
+///
+/// **`space` is not optional in spirit even though it has a default** (Lesson
+/// 6.7). An importer that does not say what an image holds is guessing, and the
+/// guess is right for albedos and silently wrong for everything else — which is
+/// why `asset_store::load_texture` takes the space as a parameter and glTF
+/// supplies it from which slot the texture was bound to.
+[[nodiscard]] texture to_texture(const image_data&amp; src,
+                                 texel_space space = texel_space::srgb);
+
+// ---- Generated test images ---------------------------------------------------
+//
+// No image DECODER this lesson, and that is a deliberate boundary rather than an
+// omission. Decoding PNG or JPEG is a compression problem, not a graphics one:
+// stb_image is the approved answer (course conventions §4) and it arrives with the
+// asset pipeline. Everything in this file takes an array of texels and does not
+// care where the array came from — which is precisely why generating it in memory
+// costs the lesson nothing.
+
+/// A checkerboard of `cells` x `cells` squares over a `size` x `size` image.
+///
+/// The classic texture-debugging image, now as actual texels rather than 3.2&#x27;s
+/// procedural rule. `size` should be a multiple of `cells` or the squares come out
+/// uneven — which is itself worth seeing once, so it is not forbidden.
+[[nodiscard]] texture make_checker(int size, int cells, Uint32 a, Uint32 b);
+
+/// An orientation chart: four differently-coloured quadrants, a grid, and a mark
+/// in the top-left corner.
+///
+/// Its whole job is to make **which way up** unmistakable. A checkerboard is
+/// symmetric under every flip and rotation, so it cannot show you that your `v` is
+/// upside down; this can, at a glance, and §3.2 uses it to settle the OBJ-versus-
+/// SDL_GPU disagreement by looking at it rather than by arguing about it.
+///
+/// Quadrant colours, which §5.4 asserts by sampling:
+///   top-left RED, top-right GREEN, bottom-left BLUE, bottom-right AMBER.
+[[nodiscard]] texture make_uv_grid(int size);
+
+/// An **egg-carton normal map**: a grid of `cells` x `cells` smooth bumps.
+///
+/// Lesson 6.7&#x27;s test image, and it is generated rather than painted for the
+/// reason Lesson 3.9 generated its checkerboard and 6.6 generated its glTF —
+/// the course ships no third-party assets, and every number a lesson quotes has
+/// to be reproducible from the repository alone.
+///
+/// **The height field is analytic**, which is what makes it a test rather than a
+/// picture:
+///
+///     k = 2*pi*cells,   h(u, v) = (strength/k) * cos(k*u) * cos(k*v)
+///
+/// so the surface normal at any point is the normalised
+/// `(-dh/du, -dh/dv, 1)`, and `verify_67` computes that by hand and compares.
+/// A painted map can only be checked by looking at it.
+///
+/// **`strength` is the maximum SLOPE, not the amplitude**, which is why the
+/// `1/k` is in there. `A cos(ku)cos(kv)` has a peak gradient of `A k`, so a
+/// fixed amplitude means the steepness changes when the cell count does — at six
+/// cells an amplitude of 1 is a surface tilted 88 degrees everywhere, and the
+/// picture is a dark mess that reads as a shading bug. Dividing it out makes
+/// **1.0 a maximum tilt of 45 degrees** at any cell count, which is a number
+/// somebody can author against.
+///
+/// **`strength = 0` gives the flat map** — every texel `(0.5, 0.5, 1.0)`, the
+/// lavender that means &quot;no change&quot; — which is the identity input for the round
+/// trip in §D: perturb by a flat map and the geometric normal must come back
+/// unchanged to float precision.
+///
+/// The result carries `texel_space::linear`, because it is a direction and not a
+/// colour. That is not a detail this function could sensibly leave to the
+/// caller: an image whose meaning is fixed by the function that made it should
+/// arrive knowing what it is.
+///
+/// **Green points along +v, which is DOWN the image** (Lesson 3.9&#x27;s origin, and
+/// glTF&#x27;s). A map baked for the opposite convention has its green channel
+/// inverted, and the symptom is that every bump reads as a dent — see §7.
+[[nodiscard]] texture make_normal_bumps(int size, int cells, float strength = 1.0f);
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gpu_texture.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/gpu_texture.cpp — the upload path Lesson 4.2 built, aimed at an asset.
+
+#include &lt;engine/gfx/gpu_texture.hpp&gt;
+
+#include &lt;engine/core/log.hpp&gt;
+#include &lt;engine/gfx/gpu_debug.hpp&gt;   // Lesson 4.9: named at CREATION, as SDL asks
+
+#include &lt;cstring&gt;
+#include &lt;utility&gt;
+
+namespace engine {
+
+int depth_bits(SDL_GPUTextureFormat format)
+{
+    switch (format)
+    {
+    case SDL_GPU_TEXTUREFORMAT_D16_UNORM:         return 16;
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM:
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT: return 24;
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT: return 32;
+    default:                                      return 0;
+    }
+}
+
+SDL_GPUTextureFormat supported_depth_format(const gpu_device&amp; dev,
+                                            const SDL_GPUTextureFormat* candidates, int count)
+{
+    if (!dev.valid() || candidates == nullptr) { return SDL_GPU_TEXTUREFORMAT_INVALID; }
+
+    for (int i = 0; i &lt; count; ++i)
+    {
+        if (SDL_GPUTextureSupportsFormat(dev.handle(), candidates[i],
+                                         SDL_GPU_TEXTURETYPE_2D,
+                                         SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
+        {
+            return candidates[i];
+        }
+    }
+    return SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
+SDL_GPUTextureFormat supported_shadow_format(const gpu_device&amp; dev,
+                                             const SDL_GPUTextureFormat* candidates, int count)
+{
+    if (!dev.valid() || candidates == nullptr) { return SDL_GPU_TEXTUREFORMAT_INVALID; }
+
+    for (int i = 0; i &lt; count; ++i)
+    {
+        // BOTH USAGES IN ONE QUERY, because that is the texture we are actually
+        // going to ask for. Querying them separately and taking the intersection
+        // would be asking two questions neither of which is ours: a device may
+        // support a format as an attachment and as a texture and still refuse
+        // the combination, and the combination is the whole point of a shadow
+        // map.
+        if (SDL_GPUTextureSupportsFormat(dev.handle(), candidates[i],
+                                         SDL_GPU_TEXTURETYPE_2D,
+                                         SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                                         | SDL_GPU_TEXTUREUSAGE_SAMPLER))
+        {
+            return candidates[i];
+        }
+    }
+    return SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
+// ===========================================================================
+// gpu_texture
+// ===========================================================================
+
+gpu_texture::~gpu_texture()
+{
+    destroy();
+}
+
+gpu_texture::gpu_texture(gpu_texture&amp;&amp; other) noexcept
+    : device_(other.device_), texture_(other.texture_), width_(other.width_),
+      height_(other.height_), uploaded_bytes_(other.uploaded_bytes_), format_(other.format_)
+{
+    other.device_ = nullptr;
+    other.texture_ = nullptr;
+    other.width_ = 0;
+    other.height_ = 0;
+    other.uploaded_bytes_ = 0;
+    other.format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
+gpu_texture&amp; gpu_texture::operator=(gpu_texture&amp;&amp; other) noexcept
+{
+    if (this != &amp;other)
+    {
+        destroy();
+        device_ = other.device_;
+        texture_ = other.texture_;
+        width_ = other.width_;
+        height_ = other.height_;
+        uploaded_bytes_ = other.uploaded_bytes_;
+        format_ = other.format_;
+        other.device_ = nullptr;
+        other.texture_ = nullptr;
+        other.width_ = 0;
+        other.height_ = 0;
+        other.uploaded_bytes_ = 0;
+        other.format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    }
+    return *this;
+}
+
+bool gpu_texture::create_sampled(const gpu_device&amp; dev, SDL_GPUCommandBuffer* cb,
+                                 const image_data&amp; src, bool srgb, const char* name,
+                                 bool mips)
+{
+    destroy();
+
+    if (!dev.valid() || cb == nullptr || !src.valid()) { return false; }
+
+    device_ = dev.handle();
+    width_ = static_cast&lt;Uint32&gt;(src.width);
+    height_ = static_cast&lt;Uint32&gt;(src.height);
+
+    // THE FORMAT IS WHERE THE COLOUR SPACE DECISION LIVES, and it is one enum
+    // apart. `_SRGB` means the sampler decodes each texel to linear on the way
+    // out — before the filter, which is the ordering Lesson 3.9 had to construct
+    // by hand and measured the cost of getting wrong.
+    format_ = srgb ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB
+                   : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+    SDL_GPUTextureCreateInfo ti{};
+    ti.type = SDL_GPU_TEXTURETYPE_2D;
+    ti.format = format_;
+    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
+    // BLITTING each level into the next, so every level must be a render target.
+    // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
+    // in debug mode, so on a release device the requirement is unchecked and the
+    // result is undefined rather than diagnosed.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+             | (mips ? SDL_GPU_TEXTUREUSAGE_COLOR_TARGET : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    ti.layer_count_or_depth = 1;
+    // 1 + floor(log2(max side)): the number of halvings before a side reaches 1.
+    // 4.7 wrote `= 1` here with a comment saying Module 6 would change it.
+    levels_ = 1;
+    if (mips)
+    {
+        Uint32 side = (width_ &gt; height_) ? width_ : height_;
+        while (side &gt; 1u) { side &gt;&gt;= 1; ++levels_; }
+    }
+    ti.num_levels = static_cast&lt;Uint32&gt;(levels_);
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUTexture(%ux%u %s) failed: %s&quot;,
+                width_, height_, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    // ---- The transfer path, unchanged from Lesson 4.2 -----------------------
+    const Uint32 bytes = width_ * height_ * 4u;
+
+    SDL_GPUTransferBufferCreateInfo tb{};
+    tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    tb.size = bytes;
+
+    SDL_GPUTransferBuffer* staging =
+        create_named_transfer_buffer(device_, tb, &quot;staging (texture upload)&quot;);
+    if (staging == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUTransferBuffer(%u) failed: %s&quot;, bytes, SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(device_, staging, false);
+    if (mapped == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_MapGPUTransferBuffer failed: %s&quot;, SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device_, staging);
+        destroy();
+        return false;
+    }
+    std::memcpy(mapped, src.pixels.data(), bytes);
+    SDL_UnmapGPUTransferBuffer(device_, staging);
+
+    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cb);
+
+    SDL_GPUTextureTransferInfo source{};
+    source.transfer_buffer = staging;
+    source.offset = 0;
+    // PIXELS AND ROWS, not bytes. Lesson 4.2 recorded this one after being bitten
+    // by it: handing `width * 4` to pixels_per_row shears the image, exactly as a
+    // wrong pitch did in Lesson 1.5 and again in Lesson 4.5.
+    source.pixels_per_row = width_;
+    source.rows_per_layer = height_;
+
+    SDL_GPUTextureRegion dest{};
+    dest.texture = texture_;
+    dest.w = width_;
+    dest.h = height_;
+    dest.d = 1;
+
+    // cycle = false: this texture is written once, at load, and nothing is
+    // reading it yet — the same argument `gpu_buffer::upload` makes for geometry.
+    SDL_UploadToGPUTexture(copy, &amp;source, &amp;dest, false);
+
+    SDL_EndGPUCopyPass(copy);
+    SDL_ReleaseGPUTransferBuffer(device_, staging);
+
+    // ---- LESSON 6.10: the chain ---------------------------------------------
+    //
+    // AFTER the copy pass ends, and that is a requirement rather than tidiness:
+    // &quot;This function must not be called inside of any pass&quot;, says the header,
+    // and `SDL_gpu.c` asserts it in debug mode. It reads level 0 — which the
+    // upload above just wrote — and blits its way down.
+    //
+    // Note what we do NOT do: average in linear light ourselves. The texture was
+    // created with an _SRGB format when `srgb` is set, so the hardware decodes
+    // on read and encodes on write, and the blit chain averages in linear light
+    // for free. That is the same correctness the CPU path has to arrange by hand
+    // in `build_mips`, and it is the clearest case in the course of a format
+    // flag doing real work.
+    if (mips &amp;&amp; levels_ &gt; 1)
+    {
+        SDL_GenerateMipmapsForGPUTexture(cb, texture_);
+    }
+
+    uploaded_bytes_ = bytes;
+    return true;
+}
+
+bool gpu_texture::create_depth(const gpu_device&amp; dev, SDL_GPUTextureFormat format,
+                               Uint32 width, Uint32 height, const char* name,
+                               bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || width == 0 || height == 0
+        || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = width;
+    height_ = height;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    ti.type = SDL_GPU_TEXTURETYPE_2D;
+    ti.format = format_;
+    // DEPTH_STENCIL_TARGET, and SAMPLER as well when the caller asks — Lesson
+    // 6.8. That second flag is the difference between a depth buffer and a
+    // SHADOW MAP: one is consumed by the pass that writes it, the other is read
+    // back by a pass that comes after. The flag is not free (gpu_texture.hpp
+    // says why), which is exactly why it is a parameter and not a default.
+    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    ti.layer_count_or_depth = 1;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUTexture(depth %ux%u %s) failed: %s&quot;,
+                width_, height_, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    // Nothing is uploaded. A depth buffer is written by the render pass that
+    // clears it and by every fragment that passes the test — never by us.
+    uploaded_bytes_ = 0;
+    return true;
+}
+
+bool gpu_texture::create_depth_array(const gpu_device&amp; dev, SDL_GPUTextureFormat format,
+                                     Uint32 width, Uint32 height, Uint32 layers,
+                                     const char* name, bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || width == 0 || height == 0 || layers == 0
+        || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = width;
+    height_ = height;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD THAT MAKES IT AN ARRAY, and the one the shader has to agree
+    // with. `Texture2D` bound to a 2D_ARRAY is a binding error — caught by the
+    // validation layer, and a silently black shadow map without it.
+    ti.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    ti.format = format_;
+    ti.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+             | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+    ti.width = width_;
+    ti.height = height_;
+    // `layer_count_or_depth` is one field carrying two meanings: the LAYER COUNT
+    // for a 2D array, the DEPTH for a 3D texture. The name is SDL being honest
+    // about a union it did not make one.
+    ti.layer_count_or_depth = layers;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                &quot;SDL_CreateGPUTexture(depth array %ux%ux%u %s) failed: %s&quot;,
+                width_, height_, layers, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    uploaded_bytes_ = 0;
+    return true;
+}
+
+void gpu_texture::destroy()
+{
+    if (device_ != nullptr &amp;&amp; texture_ != nullptr)
+    {
+        SDL_ReleaseGPUTexture(device_, texture_);
+    }
+    device_ = nullptr;
+    texture_ = nullptr;
+    width_ = 0;
+    height_ = 0;
+    uploaded_bytes_ = 0;
+    format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
+// ===========================================================================
+// gpu_sampler
+// ===========================================================================
+
+gpu_sampler::~gpu_sampler()
+{
+    destroy();
+}
+
+gpu_sampler::gpu_sampler(gpu_sampler&amp;&amp; other) noexcept
+    : device_(other.device_), sampler_(other.sampler_)
+{
+    other.device_ = nullptr;
+    other.sampler_ = nullptr;
+}
+
+gpu_sampler&amp; gpu_sampler::operator=(gpu_sampler&amp;&amp; other) noexcept
+{
+    if (this != &amp;other)
+    {
+        destroy();
+        device_ = other.device_;
+        sampler_ = other.sampler_;
+        other.device_ = nullptr;
+        other.sampler_ = nullptr;
+    }
+    return *this;
+}
+
+bool gpu_sampler::create(const gpu_device&amp; dev, filter min_mag, address_mode wrap,
+                         const char* name, filter mip, int max_aniso)
+{
+    destroy();
+
+    if (!dev.valid()) { return false; }
+    device_ = dev.handle();
+
+    SDL_GPUSamplerCreateInfo si{};
+
+    // THE CAST IS THE PORT. Lesson 3.9 defined these enums to match SDL&#x27;s
+    // enumerator for enumerator, and verify_42 §G has checked it on every run
+    // since — so this is a rename with a regression test behind it rather than a
+    // coincidence being relied on.
+    const SDL_GPUFilter f = static_cast&lt;SDL_GPUFilter&gt;(min_mag);
+    const SDL_GPUSamplerAddressMode a = static_cast&lt;SDL_GPUSamplerAddressMode&gt;(wrap);
+
+    // MINIFICATION AND MAGNIFICATION ARE SEPARATE FIELDS, which the CPU sampler
+    // had no equivalent of because it never minified — Lesson 3.9&#x27;s floor demo
+    // showed the shimmer that results and named mipmaps as the answer. We set
+    // both the same; Module 6 sets them differently and adds the mipmap chain
+    // that makes minification mean anything.
+    si.min_filter = f;
+    si.mag_filter = f;
+    // LESSON 6.10. `linear` here is the &quot;tri&quot; in trilinear: it blends the two
+    // straddling levels instead of snapping to the nearer one.
+    si.mipmap_mode = (mip == filter::linear) ? SDL_GPU_SAMPLERMIPMAPMODE_LINEAR
+                                             : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+
+    // THREE ADDRESS MODES FOR THREE AXES. Lesson 3.9&#x27;s sampler had one, because a
+    // 2-D image has two axes and we wrapped both the same way. Real uses differ:
+    // a terrain splat clamps v and repeats u. `w` is for 3-D textures and is set
+    // for completeness.
+    si.address_mode_u = a;
+    si.address_mode_v = a;
+    si.address_mode_w = a;
+
+    si.mip_lod_bias = 0.0f;
+    si.min_lod = 0.0f;
+
+    // **max_lod = 0 CLAMPS THE WHOLE CHAIN AWAY**, and this line was 0.0f until
+    // Lesson 6.10. It did not matter while every texture had one level; the
+    // moment one has nine it is the difference between mipmapping and an
+    // expensive no-op — you build the chain, set mipmap_mode, see no change, and
+    // go looking in the generator. There is no error and no warning, because
+    // clamping to level 0 is a perfectly legal thing to ask for.
+    si.max_lod = 1000.0f;   // SDL&#x27;s own &quot;no clamp&quot; idiom; any level the texture has
+
+    // BOTH FIELDS, OR NEITHER. SDL ignores `max_anisotropy` unless
+    // `enable_anisotropy` is true, so setting the clamp alone is a silent no-op —
+    // the same shape of trap as max_lod, one struct field along.
+
+    si.enable_anisotropy = (max_aniso &gt; 1);
+    si.max_anisotropy = static_cast&lt;float&gt;((max_aniso &lt; 1) ? 1 : (max_aniso &gt; 16 ? 16 : max_aniso));
+
+    // enable_compare is for SHADOW sampling — the sampler performs the depth
+    // comparison itself and returns a filtered 0..1 occlusion instead of a depth.
+    // That is Lesson 6.8&#x27;s percentage-closer filtering, and `create_comparison`
+    // below is where it is switched on. An ordinary sampler must leave it off:
+    // a comparison sampler bound to a colour texture is a validation error on
+    // every backend.
+    si.enable_compare = false;
+    si.compare_op = SDL_GPU_COMPAREOP_NEVER;
+
+    sampler_ = SDL_CreateGPUSampler(device_, &amp;si);
+    if (sampler_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUSampler failed: %s&quot;, SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    (void)name;   // SDL exposes no sampler-naming call; RenderDoc infers it
+    return true;
+}
+
+bool gpu_sampler::create_comparison(const gpu_device&amp; dev, const char* name)
+{
+    destroy();
+
+    if (!dev.valid()) { return false; }
+    device_ = dev.handle();
+
+    SDL_GPUSamplerCreateInfo si{};
+
+    // LINEAR, and it is the entire reason this object exists. The filter runs
+    // on the COMPARISON RESULTS, not on the depths — four booleans blended into
+    // a 0..1 coverage — which is hardware 2x2 PCF for the price of one fetch.
+    si.min_filter = SDL_GPU_FILTER_LINEAR;
+    si.mag_filter = SDL_GPU_FILTER_LINEAR;
+    // A shadow map has ONE level (6.8 fits a box; 6.9 adds layers, not levels),
+    // so there is nothing between levels to filter. Lesson 6.10 left this alone
+    // deliberately rather than making it a parameter nobody could use.
+    si.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+
+    // CLAMP, never repeat. A lookup that falls outside the light&#x27;s box must read
+    // the edge and not wrap round to the opposite side of the scene, which would
+    // paint a shadow of one corner onto the other. Clamping gives the edge texel;
+    // §5.4 explains why the shader ALSO range-checks rather than relying on it.
+    si.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+    si.mip_lod_bias = 0.0f;
+    si.min_lod = 0.0f;
+
+    si.max_lod = 0.0f;   // one level, so clamping to it is the honest value
+    si.enable_anisotropy = false;
+    si.max_anisotropy = 1.0f;
+
+    // THE TWO FIELDS. `LESS_OR_EQUAL` because our device depth runs 0 at the near
+    // plane and 1 at the far one (conventions §4), so &quot;the fragment is at or in
+    // front of what the light recorded&quot; means lit. Flip the depth convention and
+    // this must flip with it — which is why it is written here beside the reason
+    // rather than chosen once and forgotten.
+    si.enable_compare = true;
+    si.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+
+    sampler_ = SDL_CreateGPUSampler(device_, &amp;si);
+    if (sampler_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUSampler(comparison) failed: %s&quot;,
+                         SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    (void)name;
+    return true;
+}
+
+void gpu_sampler::destroy()
+{
+    if (device_ != nullptr &amp;&amp; sampler_ != nullptr)
+    {
+        SDL_ReleaseGPUSampler(device_, sampler_);
+    }
+    device_ = nullptr;
+    sampler_ = nullptr;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/raster.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/raster.cpp — the software rasterizer&#x27;s implementation.
+//
+// Three line algorithms (Lesson 2.1), then triangles by edge function (2.2),
+// barycentric coordinates (2.3), attribute interpolation (2.4), the depth test
+// (3.1), per-pixel shading (3.8) and texturing (3.9).
+//
+// Read the line routines in the order they appear. Each one fixes something the
+// one above it got wrong, and the last one is the only one that should ever be
+// called.
+
+#include &lt;engine/gfx/raster.hpp&gt;
+
+#include &lt;engine/gfx/cascade.hpp&gt;
+#include &lt;engine/gfx/mipmap.hpp&gt;
+#include &lt;engine/gfx/shadow.hpp&gt;   // 6.8: fill_style holds a pointer; the fill needs the type
+
+#include &lt;engine/gfx/depth_buffer.hpp&gt;
+#include &lt;engine/gfx/framebuffer.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;cstdlib&gt;
+#include &lt;utility&gt;
+
+namespace engine {
+
+// ---- 1. The obvious one, which does not work -------------------------------
+
+void draw_line_naive(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    // &quot;A line is y = mx + b&quot; — so walk x and evaluate y. The trouble starts
+    // before the loop does.
+    //
+    // A vertical line has dx = 0, and its slope is not merely large, it does not
+    // exist: there is no m for which y = mx + b describes x = 5. That is not a
+    // rounding problem or a special case to patch, it is the equation being the
+    // wrong tool. Any formulation that needs an if-statement to survive one of
+    // its inputs is telling you something.
+    if (x0 == x1)
+    {
+        const int step = (y1 &gt;= y0) ? 1 : -1;
+        for (int y = y0; y != y1 + step; y += step) { fb.put_pixel(x0, y, colour); }
+        return;
+    }
+
+    // Walking x from left to right means the caller&#x27;s endpoint order is lost;
+    // the pixels are the same set either way here, which is not true of the
+    // algorithms below.
+    if (x0 &gt; x1)
+    {
+        std::swap(x0, x1);
+        std::swap(y0, y1);
+    }
+
+    const float slope = static_cast&lt;float&gt;(y1 - y0) / static_cast&lt;float&gt;(x1 - x0);
+
+    for (int x = x0; x &lt;= x1; ++x)
+    {
+        // One pixel per COLUMN. That is the whole bug: if the line rises by more
+        // than one pixel per column — any line steeper than 45° — the pixels it
+        // lights are vertically separated, and the result is a dotted line with
+        // gaps that widen as the slope does. Lesson 2.1 §1.
+        const float y = static_cast&lt;float&gt;(y0) + slope * static_cast&lt;float&gt;(x - x0);
+        fb.put_pixel(x, static_cast&lt;int&gt;(std::lround(y)), colour);
+    }
+}
+
+// ---- 2. DDA: step the major axis ------------------------------------------
+
+void draw_line_dda(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    const int dx = x1 - x0;
+    const int dy = y1 - y0;
+
+    // The fix for the gaps, and it is one line. Step whichever axis changes
+    // MORE, so that axis advances by exactly one pixel per iteration and the
+    // other advances by at most one. No step can skip a row or a column, so the
+    // line cannot come apart.
+    const int steps = std::max(std::abs(dx), std::abs(dy));
+
+    if (steps == 0)
+    {
+        fb.put_pixel(x0, y0, colour);   // a line from a point to itself
+        return;
+    }
+
+    const float x_inc = static_cast&lt;float&gt;(dx) / static_cast&lt;float&gt;(steps);
+    const float y_inc = static_cast&lt;float&gt;(dy) / static_cast&lt;float&gt;(steps);
+
+    float x = static_cast&lt;float&gt;(x0);
+    float y = static_cast&lt;float&gt;(y0);
+
+    for (int i = 0; i &lt;= steps; ++i)
+    {
+        fb.put_pixel(static_cast&lt;int&gt;(std::lround(x)),
+                     static_cast&lt;int&gt;(std::lround(y)),
+                     colour);
+        // The defect worth naming, and it is NOT speed. This is a running sum:
+        // the value at step i is the result of i additions, each of which
+        // rounded. Two mathematically identical lines computed by different
+        // routes can therefore light different pixels, and the error grows with
+        // the length of the line. Bresenham&#x27;s error term, below, is exact at
+        // every step because it never leaves the integers.
+        x += x_inc;
+        y += y_inc;
+    }
+}
+
+// ---- 3. Bresenham: the same decision, in integers --------------------------
+
+void draw_line(framebuffer&amp; fb, int x0, int y0, int x1, int y1, Uint32 colour)
+{
+    // Lesson 2.1 §3.3 derives this for the first octant, where it reads as:
+    // step x, add dy to an error term, and when the error passes half a pixel,
+    // step y and take a whole pixel back out. The form below is that algorithm
+    // with the octant bookkeeping folded in, and §3.5 checks the two produce
+    // identical pixels rather than asserting it.
+    //
+    // Two conventions make the folding work:
+    //   - dx is kept POSITIVE and dy NEGATIVE, so a single error term can be
+    //     compared against both without a second sign to track;
+    //   - sx and sy carry the direction, so the loop never needs to know which
+    //     octant it is in.
+    const int dx = std::abs(x1 - x0);
+    const int sx = (x0 &lt; x1) ? 1 : -1;
+    const int dy = -std::abs(y1 - y0);
+    const int sy = (y0 &lt; y1) ? 1 : -1;
+
+    // err is twice the signed distance from the ideal line to the pixel centre,
+    // scaled so it stays an integer — the doubling is what turns the &quot;half a
+    // pixel&quot; test of the derivation into a comparison with no fraction in it.
+    int err = dx + dy;
+
+    for (;;)
+    {
+        fb.put_pixel(x0, y0, colour);
+
+        // Tested after plotting, so both endpoints are lit and a zero-length
+        // line lights exactly one pixel.
+        if (x0 == x1 &amp;&amp; y0 == y1) { break; }
+
+        const int e2 = 2 * err;
+
+        // The two tests are INDEPENDENT, and that is the whole trick. A shallow
+        // line trips only the first most steps; a steep line trips only the
+        // second; a 45° line trips both every step and moves diagonally. One
+        // loop, eight octants, no cases.
+        if (e2 &gt;= dy) { err += dy; x0 += sx; }
+        if (e2 &lt;= dx) { err += dx; y0 += sy; }
+    }
+
+    // A note on what this does NOT do: a line whose endpoints are far outside
+    // the framebuffer is still walked pixel by pixel, and every one of those
+    // pixels is discarded by put_pixel&#x27;s bounds check. The output is correct and
+    // the work is wasted — a line from (-100000, 0) to (100000, 0) costs 200001
+    // iterations to draw at most 320 pixels. Clipping the line to the viewport
+    // BEFORE walking it is the fix (Cohen–Sutherland; Exercise 2.1.4), and it
+    // becomes non-optional in Module 3, where geometry behind the camera must be
+    // clipped for reasons of correctness rather than speed.
+}
+
+// ---- 4. Triangles: three half-planes ---------------------------------------
+
+namespace {
+
+/// Everything a triangle fill works out before it touches a pixel.
+///
+/// This was inline in `fill_triangle` until Lesson 2.4 gave the file a second
+/// fill, and Module 3 will give it more. The bookkeeping here — the clipped
+/// bounding box, the three fill-rule biases, the six per-pixel steps, the three
+/// starting values — is short, and every line of it is subtle. Duplicating it
+/// would not be a style problem; it would be three places for one bias to be
+/// wrong, producing a crack visible only where two particular triangles meet.
+///
+/// The rule this follows is not &quot;never repeat yourself&quot;. It is *never repeat
+/// something subtle* — a duplicated `x + 1` costs nothing, a duplicated
+/// top-left rule costs an afternoon.
+struct fill_setup
+{
+    int min_x = 0, min_y = 0, max_x = -1, max_y = -1;
+
+    /// 0 for a top-or-left edge, -1 otherwise. Folded into the starting values
+    /// below, so the coverage test stays a single comparison against zero — and
+    /// therefore **subtracted back out** by anything that interpolates.
+    int bias0 = 0, bias1 = 0, bias2 = 0;
+
+    int step_x0 = 0, step_y0 = 0;
+    int step_x1 = 0, step_y1 = 0;
+    int step_x2 = 0, step_y2 = 0;
+
+    int row_w0 = 0, row_w1 = 0, row_w2 = 0;
+
+    [[nodiscard]] bool empty() const { return min_x &gt; max_x || min_y &gt; max_y; }
+};
+
+/// Prepare a fill for a triangle that is **already oriented to positive area**.
+///
+/// Orientation is deliberately not done here. Reorienting means swapping two
+/// vertices, and from Lesson 2.4 a vertex carries attributes that must swap with
+/// it — so the caller, which is the only code that knows what a vertex holds,
+/// owns that step. Everything after it is mechanical and identical for every
+/// fill, which is exactly what belongs in a shared helper.
+[[nodiscard]] fill_setup prepare_fill(const framebuffer&amp; fb,
+                                      int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    fill_setup s;
+
+    // The bounding box, clipped to the framebuffer. Two jobs: it bounds the
+    // search (a triangle covering 1% of the screen should not cost a full-screen
+    // scan), and clipping it here means the inner loop never needs a bounds
+    // check — which is why a fill can write through row() instead of put_pixel.
+    s.min_x = std::max(0, std::min({x0, x1, x2}));
+    s.min_y = std::max(0, std::min({y0, y1, y2}));
+    s.max_x = std::min(fb.width() - 1, std::max({x0, x1, x2}));
+    s.max_y = std::min(fb.height() - 1, std::max({y0, y1, y2}));
+
+    if (s.empty()) { return s; }   // entirely off-screen
+
+    // The top-left rule as an integer bias. An edge function is zero exactly on
+    // the edge, so testing `w &gt;= 0` includes boundary pixels and `w - 1 &gt;= 0`
+    // excludes them. Folding the -1 into the starting value costs nothing per
+    // pixel — the test stays a single comparison against zero.
+    s.bias0 = is_top_left(x1, y1, x2, y2) ? 0 : -1;   // edge opposite v0
+    s.bias1 = is_top_left(x2, y2, x0, y0) ? 0 : -1;   // edge opposite v1
+    s.bias2 = is_top_left(x0, y0, x1, y1) ? 0 : -1;   // edge opposite v2
+
+    // An edge function is *affine* in the pixel position, so its value at the
+    // next pixel differs from this one by a constant. Evaluating it once at the
+    // corner and then adding is the same trick as Lesson 2.1&#x27;s error term, and
+    // it turns two multiplies per edge per pixel into one add.
+    //
+    //   E(x+1, y) - E(x, y) = -(By - Ay) = Ay - By
+    //   E(x, y+1) - E(x, y) =  (Bx - Ax)
+    s.step_x0 = y1 - y2; s.step_y0 = x2 - x1;
+    s.step_x1 = y2 - y0; s.step_y1 = x0 - x2;
+    s.step_x2 = y0 - y1; s.step_y2 = x1 - x0;
+
+    s.row_w0 = edge_function(x1, y1, x2, y2, s.min_x, s.min_y) + s.bias0;
+    s.row_w1 = edge_function(x2, y2, x0, y0, s.min_x, s.min_y) + s.bias1;
+    s.row_w2 = edge_function(x0, y0, x1, y1, s.min_x, s.min_y) + s.bias2;
+
+    return s;
+}
+
+/// Three floats at a triangle corner, waiting to be averaged.
+///
+/// Deliberately *not* `linear_rgb`. What these numbers mean depends on the blend
+/// space in force — light in [0,1] under `blend_space::linear`, stored channel
+/// values in [0,255] under `blend_space::encoded` — and a type called
+/// `linear_rgb` holding encoded values would be a lie that compiles. Naming a
+/// type after what it contains rather than what it is used for is how units get
+/// mixed up, and mixing up these particular units is the entire subject of
+/// Lesson 1.6.
+struct rgb3
+{
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+};
+
+/// A corner colour, converted into whatever space we are about to average in.
+[[nodiscard]] rgb3 corner_in(Uint32 colour, blend_space space)
+{
+    if (space == blend_space::linear)
+    {
+        const linear_rgb light = to_linear(colour);
+        return {light.r, light.g, light.b};
+    }
+    return {static_cast&lt;float&gt;(red_of(colour)),
+            static_cast&lt;float&gt;(green_of(colour)),
+            static_cast&lt;float&gt;(blue_of(colour))};
+}
+
+/// The weighted average, back to a storable pixel.
+[[nodiscard]] Uint32 pixel_from(rgb3 mixed, blend_space space, encode_mode mode)
+{
+    if (space == blend_space::linear)
+    {
+        return to_encoded({mixed.r, mixed.g, mixed.b}, mode);
+    }
+
+    // Already in stored units, so there is nothing to encode — which is exactly
+    // what makes this path cheap, and exactly what makes it wrong. The +0.5
+    // rounds to nearest; the weights sum to 1 to within 2.4e-7, so the result
+    // cannot exceed 255.5 and the cast cannot wrap.
+    return pack_argb(static_cast&lt;Uint8&gt;(mixed.r + 0.5f),
+                     static_cast&lt;Uint8&gt;(mixed.g + 0.5f),
+                     static_cast&lt;Uint8&gt;(mixed.b + 0.5f));
+}
+
+/// A procedural checkerboard: one cell per unit of texture space.
+///
+/// `std::floor`, not a cast to int, and the difference is a real bug rather than
+/// a style point: a cast truncates TOWARD ZERO, so -0.5 and +0.5 both land in
+/// cell 0 and the pattern grows a doubled cell straddling the origin. Floor is
+/// the function that means &quot;which cell is this in&quot; for negative coordinates too,
+/// and uvs go negative the moment a mesh is tiled or a uv is offset.
+///
+/// Fixed colours, deliberately. This is a debug pattern with one job — showing
+/// you where texture space lands on a surface — and a configurable palette would
+/// be a knob nobody turns.
+///
+/// **Lesson 3.9 did not delete this**, which was the plan when 3.2 wrote it. A
+/// procedural rule is not a worse texture; it is a different thing with different
+/// costs — no memory, no sampler, no filtering, and *exact at every
+/// magnification*, because there is no finite grid of texels to run out of. That
+/// last property is why it stays: `shading::textured` right next to it is the
+/// cleanest possible demonstration of what a texture buys and what it costs.
+[[nodiscard]] Uint32 checker_at(float u, float v)
+{
+    const float cu = std::floor(u);
+    const float cv = std::floor(v);
+
+    // A uv that is infinite or NaN is not a hypothetical, and Lesson 3.3 is where
+    // it arrives: let a triangle straddle the near plane with the projective divide
+    // still switched on and the interpolated `1/w` passes through zero, so its
+    // reciprocal — the factor every attribute is multiplied by — is an infinity.
+    //
+    // This guard is about UNDEFINED BEHAVIOUR, not tidiness. Converting a float to
+    // an int is undefined when the value is not representable, so `static_cast&lt;int&gt;`
+    // below on an infinity is not &quot;a big number&quot;, it is a program with no defined
+    // meaning; the compiler is free to produce anything at all. Magenta is the
+    // long-standing debug convention for &quot;this value is invalid&quot;, and it is
+    // genuinely informative here: it marks exactly the pixels where the divide
+    // broke. The fix is upstream — clip the triangle (Lesson 3.3 §3) — and this is
+    // only what keeps the broken mode showable.
+    //
+    // `!(x &lt; limit)` rather than `x &gt;= limit` because every comparison against a
+    // NaN is false, so the negated form catches NaN and the direct form does not.
+    constexpr float k_cell_limit = 1.0e7f;
+    if (!(std::fabs(cu) &lt; k_cell_limit) || !(std::fabs(cv) &lt; k_cell_limit))
+    {
+        return pack_argb(255, 0, 200);
+    }
+
+    const bool light = (static_cast&lt;int&gt;(cu) + static_cast&lt;int&gt;(cv)) % 2 == 0;
+    return light ? pack_argb(232, 226, 214) : pack_argb(58, 64, 88);
+}
+
+} // namespace
+
+barycentric barycentric_at(int x0, int y0, int x1, int y1, int x2, int y2,
+                           int px, int py)
+{
+    const int area = edge_function(x0, y0, x1, y1, x2, y2);
+    if (area == 0) { return {}; }   // collinear: no interior, so no answer
+
+    // Each weight comes from the sub-triangle OPPOSITE its vertex — the one
+    // that does not touch it. w0 therefore uses the edge v1-&gt;v2.
+    //
+    // These are the same three numbers fill_triangle already computes for its
+    // inside test. Nothing new is being calculated here; the only new thing is
+    // the division, which turns &quot;twice an area&quot; into &quot;a fraction of the whole&quot;.
+    const int e0 = edge_function(x1, y1, x2, y2, px, py);
+    const int e1 = edge_function(x2, y2, x0, y0, px, py);
+    const int e2 = edge_function(x0, y0, x1, y1, px, py);
+
+    // e0 + e1 + e2 == area EXACTLY, in integers, for every point in the plane —
+    // inside or outside. The float sum below is therefore 1 up to one rounding,
+    // not up to accumulated drift.
+    const float inv = 1.0f / static_cast&lt;float&gt;(area);
+    return {static_cast&lt;float&gt;(e0) * inv,
+            static_cast&lt;float&gt;(e1) * inv,
+            static_cast&lt;float&gt;(e2) * inv};
+}
+
+void fill_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    // Twice the signed area. One number that answers two questions: is this
+    // triangle degenerate, and which way round is it?
+    int area = edge_function(x0, y0, x1, y1, x2, y2);
+
+    // Three collinear points enclose nothing. Returning here is not just an
+    // optimisation — every test below would be simultaneously satisfiable only
+    // on the line itself, and the top-left rule&#x27;s orientation assumption would
+    // have no meaning. A &quot;sliver&quot; triangle of zero area is a real thing to hit
+    // once meshes arrive, so it is handled rather than assumed away.
+    if (area == 0) { return; }
+
+    // Orient to positive area by swapping two vertices, which flips the sign of
+    // every edge function at once. Doing this once, here, is what lets the
+    // inside test below be a plain `&gt;= 0` rather than &quot;same sign as the area&quot;
+    // evaluated per pixel.
+    if (area &lt; 0)
+    {
+        std::swap(x1, x2);
+        std::swap(y1, y2);
+        area = -area;
+    }
+
+    const fill_setup s = prepare_fill(fb, x0, y0, x1, y1, x2, y2);
+    if (s.empty()) { return; }
+
+    int row_w0 = s.row_w0;
+    int row_w1 = s.row_w1;
+    int row_w2 = s.row_w2;
+
+    for (int y = s.min_y; y &lt;= s.max_y; ++y)
+    {
+        int w0 = row_w0;
+        int w1 = row_w1;
+        int w2 = row_w2;
+
+        // The whole row is in bounds by construction, so this takes the
+        // documented fast path from Lesson 1.5 and skips put_pixel&#x27;s per-pixel
+        // bounds check and index multiply.
+        Uint32* const row = fb.row(y);
+
+        for (int x = s.min_x; x &lt;= s.max_x; ++x)
+        {
+            // Inside all three half-planes at once. That is the entire test,
+            // and it is the same three numbers for every pixel — only their
+            // values change.
+            //
+            // Worth knowing: `(w0 | w1 | w2) &gt;= 0` is exactly equivalent and
+            // costs one comparison instead of three. A negative int has its top
+            // bit set, OR keeps any bit that any operand has, so the result is
+            // negative precisely when some input was. C++20 guarantees signed
+            // integers are two&#x27;s complement, which is what makes that a
+            // portable claim rather than a lucky one. Written the long way here
+            // because you should be able to read this line without knowing that.
+            if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0)
+            {
+                row[x] = colour;
+            }
+
+            w0 += s.step_x0;
+            w1 += s.step_x1;
+            w2 += s.step_x2;
+        }
+
+        row_w0 += s.step_y0;
+        row_w1 += s.step_y1;
+        row_w2 += s.step_y2;
+    }
+}
+
+void fill_triangle(framebuffer&amp; fb, depth_buffer* depth,
+                   const vertex&amp; a, const vertex&amp; b, const vertex&amp; c,
+                   fill_style style, quad_stats* stats)
+{
+    // Local copies, because reorienting reorders the vertices — and this is the
+    // whole reason a vertex is a struct. `std::swap` on the struct moves the
+    // colour with the position it belongs to. Swapping loose coordinates and
+    // forgetting the loose colours is a bug with no geometric symptom at all:
+    // the triangle is the right shape, in the right place, shaded one corner
+    // out of step. Lesson 2.4 §4.2.
+    vertex v0 = a;
+    vertex v1 = b;
+    vertex v2 = c;
+
+    int area = edge_function(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+    if (area == 0) { return; }
+
+    // ---- Back-face culling (Lesson 3.4) ------------------------------------
+    //
+    // Note where this sits: AFTER the area is known and BEFORE the reorientation
+    // below. That ordering is the whole implementation. The sign of `area` is the
+    // facing, and the very next thing this function does is destroy it by
+    // swapping two vertices to make the area positive — so the test has exactly
+    // one place it can live, and this is it.
+    //
+    // `is_front_facing` rather than an inline `area &lt; 0`, even though that is
+    // literally what it is: the rule now has two readers (this, and the demo&#x27;s
+    // kept/culled counter), and Lesson 2.4 made the same move with `is_top_left`
+    // for the same reason — a rule you cannot inspect is a rule you cannot check.
+    if (style.cull != cull_mode::none)
+    {
+        const bool front = is_front_facing(v0, v1, v2);
+        if ((style.cull == cull_mode::back &amp;&amp; !front)
+         || (style.cull == cull_mode::front &amp;&amp; front))
+        {
+            return;
+        }
+    }
+
+    if (area &lt; 0)
+    {
+        std::swap(v1, v2);
+        area = -area;
+    }
+
+    const fill_setup s = prepare_fill(fb, v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+    if (s.empty()) { return; }
+
+    // One reciprocal for the whole triangle. The weights are edge values over
+    // the total area, and the total area does not vary across a triangle — so
+    // the division that turns &quot;twice an area&quot; into &quot;a fraction&quot; is hoisted, and
+    // the inner loop pays a multiply instead. Lesson 2.3 §4.
+    const float inv_area = 1.0f / static_cast&lt;float&gt;(area);
+
+    // LESSON 6.8. Is there a map to consult? Decided once per triangle, like
+    // every other question whose answer is constant across a fill. `lit` is part
+    // of the test because the visibility term multiplies `E`, and `E` only exists
+    // on that path.
+    const bool shadowed = (style.shadows != nullptr || style.cascades != nullptr)
+                          &amp;&amp; (style.shade == shading::lit)
+                          &amp;&amp; (style.lights != nullptr);
+
+    // LESSON 6.8. A depth-only fill, which is what a shadow pass is. Requires a
+    // depth attachment: with neither target there would be nothing left for the
+    // fill to do, and silently doing nothing is worse than drawing the wrong
+    // thing because it looks like the call never happened.
+    const bool depth_only = style.depth_only &amp;&amp; (depth != nullptr);
+
+    // `lit` needs somewhere to read the light from. A null `lights` is not an
+    // error — it is a pipeline that was never given one — so fall back to the
+    // unlit path rather than dereferencing nothing. Decided once per triangle.
+    const bool lit = (style.shade == shading::lit) &amp;&amp; (style.lights != nullptr);
+
+    // Is there an image to read? Decided ONCE PER TRIANGLE, like every other
+    // question whose answer is constant across a fill. `bound()` folds together
+    // &quot;nobody bound one&quot; and &quot;somebody bound an empty one&quot;, because from the
+    // fragment&#x27;s point of view those are the same situation.
+    const bool textured = style.albedo.bound();
+
+    // LESSON 6.7. Three conditions, all constant for the whole triangle, so the
+    // branch below costs nothing per pixel — only the work behind it does.
+    //
+    // The third one is the interesting one: geometry with no tangents cannot be
+    // normal mapped, because tangent space IS the uv parameterisation and a mesh
+    // without one has no frame to map into. The zero `xyz` that `tangent_at`
+    // returns for a mesh with no tangents is what makes this checkable here
+    // rather than needing a flag alongside — the same trick `normal_at` has used
+    // since 3.6.
+    const bool normal_mapped = style.normal_map.bound()
+                               &amp;&amp; (v0.tangent.x != 0.0f || v0.tangent.y != 0.0f
+                                   || v0.tangent.z != 0.0f);
+
+    // Under `lit` the corner colours are an ALBEDO that is about to be multiplied
+    // by a quantity of light, so they must be decoded whatever `blend_space` says.
+    // `blend_space::encoded` is a statement about how to *blend two colours*, and
+    // there is no coherent reading of it here: multiplying a stored sRGB byte by a
+    // cosine is not dim light, it is nothing at all (Lesson 1.6). So `lit` ignores
+    // the field rather than honouring it into nonsense.
+    const blend_space space = lit ? blend_space::linear : style.space;
+
+    // Convert the corners **once per triangle**, not once per pixel. Three
+    // conversions for a triangle covering eight thousand pixels; the interior is
+    // then pure arithmetic. This hoist is the reason the correct path is
+    // affordable at all — see §3.7 for what it costs when you forget it.
+    const rgb3 c0 = corner_in(v0.colour, space);
+    const rgb3 c1 = corner_in(v1.colour, space);
+    const rgb3 c2 = corner_in(v2.colour, space);
+
+    // ---- Perspective correction (Lesson 3.2) -------------------------------
+    //
+    // THE AFFINE MODE IS NOT A SEPARATE CODE PATH. It is this same arithmetic
+    // with every `1/w` forced to 1 — which is precisely what affine
+    // interpolation *is*: a renderer behaving as though `w = 1` everywhere, i.e.
+    // as though the projection were orthographic. Writing it that way rather than
+    // as a second loop is not only shorter, it says the thing.
+    //
+    // Note the consequence for 2-D: `vertex::inv_w` defaults to 1, so a flat fill
+    // takes the &quot;correct&quot; path and gets exactly the answer it always got.
+    const bool correct = (style.interp == interpolation::perspective);
+    const float iw0 = correct ? v0.inv_w : 1.0f;
+    const float iw1 = correct ? v1.inv_w : 1.0f;
+    const float iw2 = correct ? v2.inv_w : 1.0f;
+
+    // Pre-divide every attribute by w, ONCE PER TRIANGLE. What interpolates
+    // affinely across the screen is `a/w`, not `a` — so these are the values the
+    // inner loop actually blends, and the division back out happens per pixel
+    // using the interpolated `1/w`. Lesson 3.2 §3.3.
+    const rgb3 p0{c0.r * iw0, c0.g * iw0, c0.b * iw0};
+    const rgb3 p1{c1.r * iw1, c1.g * iw1, c1.b * iw1};
+    const rgb3 p2{c2.r * iw2, c2.g * iw2, c2.b * iw2};
+
+    const float pu0 = v0.u * iw0, pv0 = v0.v * iw0;
+    const float pu1 = v1.u * iw1, pv1 = v1.v * iw1;
+    const float pu2 = v2.u * iw2, pv2 = v2.v * iw2;
+
+    // ---- Lesson 3.8: the two varyings per-pixel shading needs ---------------
+    //
+    // Pre-divided by w exactly like the colour and the uvs, and for exactly the
+    // same reason: what is affine in screen space is `a/w`, not `a`. Lesson 3.2&#x27;s
+    // derivation never mentioned what `a` was, which is why it covers a normal and
+    // a position without a word of new argument.
+    //
+    // Hoisted out of the pixel loop and computed even when the fill is not lit,
+    // because six multiplies per triangle is not worth a branch. The PER-PIXEL
+    // work below is what is guarded.
+    const vec3 pn0 = v0.normal * iw0, pn1 = v1.normal * iw1, pn2 = v2.normal * iw2;
+    const vec3 pw0 = v0.world * iw0, pw1 = v1.world * iw1, pw2 = v2.world * iw2;
+
+    // ---- LESSON 6.10: the screen-space uv gradients, once per triangle -------
+    //
+    // THE CPU&#x27;S REPLACEMENT FOR ddx/ddy. A GPU shades in 2x2 quads precisely so
+    // a neighbouring fragment is always available to subtract; a scanline
+    // rasterizer has no neighbour, so the derivative has to come from the
+    // triangle itself.
+    //
+    // It is CONSTANT over the triangle and therefore hoisted: `U = sum(f_i*u_i/w_i)`
+    // and `W = sum(f_i/w_i)` are both AFFINE in screen space, because the
+    // normalised barycentrics are, so their gradients do not vary. Only the
+    // quotient rule&#x27;s per-pixel part (`(dU - u*dW) * w_recip`) is paid inside
+    // the loop, and only when a chain is bound.
+    //
+    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
+    // walks, divided by the same area it already reciprocated.
+    const float dfx[3] = {static_cast&lt;float&gt;(s.step_x0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_x2) * inv_area};
+    const float dfy[3] = {static_cast&lt;float&gt;(s.step_y0) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y1) * inv_area,
+                          static_cast&lt;float&gt;(s.step_y2) * inv_area};
+
+    const vec2 dnum_dx{dfx[0] * pu0 + dfx[1] * pu1 + dfx[2] * pu2,
+                       dfx[0] * pv0 + dfx[1] * pv1 + dfx[2] * pv2};
+    const vec2 dnum_dy{dfy[0] * pu0 + dfy[1] * pu1 + dfy[2] * pu2,
+                       dfy[0] * pv0 + dfy[1] * pv1 + dfy[2] * pv2};
+    const float dw_dx = dfx[0] * iw0 + dfx[1] * iw1 + dfx[2] * iw2;
+    const float dw_dy = dfy[0] * iw0 + dfy[1] * iw1 + dfy[2] * iw2;
+
+    // Decided once, like every other question constant across a fill.
+    const bool mipped = style.albedo.mipped();
+
+    // Lesson 6.7&#x27;s third varying, pre-divided by exactly the same rule — the
+    // derivation in §3.2 never said what `a` was, and it does not start caring
+    // now. Only the `xyz` goes through the correction: `w` is a SIGN, constant
+    // across a uv chart, and dividing a sign by `w` and multiplying it back is a
+    // pair of operations whose only possible effect is float error.
+    const vec3 pt0{v0.tangent.x * iw0, v0.tangent.y * iw0, v0.tangent.z * iw0};
+    const vec3 pt1{v1.tangent.x * iw1, v1.tangent.y * iw1, v1.tangent.z * iw1};
+    const vec3 pt2{v2.tangent.x * iw2, v2.tangent.y * iw2, v2.tangent.z * iw2};
+
+
+    // ---- The fragment, as a function (Lesson 4.1) --------------------------
+    //
+    // Everything below was written inline in the pixel loop until Lesson 4.1
+    // needed two different loops to share it. Look at what extracting it
+    // revealed: a function from three barycentric weights to a colour, with every
+    // piece of pipeline state captured. **That is a fragment shader.** The only
+    // thing separating it from one is that the caller cannot supply it — which is
+    // Module 4&#x27;s opening argument, and the reason this refactor belongs to a
+    // lesson rather than to a tidying commit.
+    //
+    // It is called for lanes the triangle does NOT cover (see the quad traversal
+    // below), so it has to be total. Barycentric weights go negative outside the
+    // triangle — Lesson 2.3 said so and called it useful — `w_recip` can come back
+    // enormous or negative, and a uv can land anywhere at all. Nothing here reads
+    // out of bounds on such a lane (`wrap_texel` folds any index into range,
+    // `linear_to_srgb_u8` refuses a NaN), and whatever it computes is discarded.
+    const auto fragment = [&amp;](float f0, float f1, float f2) -&gt; Uint32 {
+        // ---- Perspective correction, per pixel (Lesson 3.2) ----
+        //
+        // Interpolate 1/w with the same weights as everything else —
+        // it is affine in screen space (Lesson 3.1 §3.4) — and its
+        // reciprocal is the factor that turns every interpolated
+        // `a/w` back into an `a`.
+        //
+        // ONE DIVIDE PER PIXEL, and it is the honest cost of this
+        // lesson. It is paid once, not once per attribute, so it
+        // amortises the moment a fragment carries more than one
+        // thing — which from Lesson 3.6 onwards it always will.
+        // In affine mode every iw is 1, so this sum is 1 and the
+        // reciprocal is a no-op that we pay for anyway; keeping one
+        // loop is worth more than saving a divide on a mode that
+        // exists only to be shown failing.
+        const float w_recip = 1.0f / (f0 * iw0 + f1 * iw1 + f2 * iw2);
+
+        if (style.shade == shading::uv_checker)
+        {
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+            return checker_at(uu, vv);
+        }
+        else if (style.shade == shading::textured)
+        {
+            // ---- The lookup (Lesson 3.9) ------------------------
+            //
+            // Compare these four lines against the four above them.
+            // The uvs are obtained by IDENTICAL arithmetic — the same
+            // three multiply-adds, the same perspective divide-back —
+            // and the only difference is what the pair of numbers is
+            // handed to: a formula, or an array somebody painted.
+            //
+            // That is the entire structural content of this lesson.
+            // Nothing about interpolation changed, because nothing
+            // needed to: 2.4 built a machine for carrying attributes
+            // without knowing what they are, and this is the last
+            // attribute Module 3 asks it to carry.
+            const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+            const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+            // `to_encoded` is the largest single item in THIS branch —
+            // three `pow` calls against one bilinear fetch — which is
+            // Lesson 3.10&#x27;s measured headline and the reason
+            // `style.encode` exists.
+            return to_encoded(
+                mipped ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                       vec2{uu, vv},
+                                       uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                    vec2{uu, vv}, w_recip))
+                       : sample(*style.albedo.image, style.albedo.samp, uu, vv),
+                style.encode);
+        }
+        else if (lit)
+        {
+            // ---- Per-pixel shading (Lesson 3.8) ----------------
+            //
+            // The whole lesson, in six lines. Interpolate the NORMAL
+            // and the POSITION rather than the answer, then evaluate
+            // the shading equation here — where the pixel is — instead
+            // of at three corners and blending.
+            //
+            // The equation is byte-for-byte the one Lessons 3.6 and
+            // 3.7 built. Nothing about the lighting changed; only
+            // where it is called from. That is the distinction this
+            // lesson exists to draw, and it is worth seeing that the
+            // code says it too.
+            const vec3 n{(f0 * pn0.x + f1 * pn1.x + f2 * pn2.x) * w_recip,
+                         (f0 * pn0.y + f1 * pn1.y + f2 * pn2.y) * w_recip,
+                         (f0 * pn0.z + f1 * pn1.z + f2 * pn2.z) * w_recip};
+            const vec3 p{(f0 * pw0.x + f1 * pw1.x + f2 * pw2.x) * w_recip,
+                         (f0 * pw0.y + f1 * pw1.y + f2 * pw2.y) * w_recip,
+                         (f0 * pw0.z + f1 * pw1.z + f2 * pw2.z) * w_recip};
+
+            // The albedo, from one of two places — Lesson 3.9.
+            //
+            // WITH A TEXTURE BOUND it is a sample, and `sample` already
+            // returns linear light, so it drops straight into the same
+            // slot with no conversion at all. That is not a coincidence
+            // and it is worth pausing on: `sample` returns linear
+            // *because* this is what a texture is for. An albedo is a
+            // reflectance — the fraction of arriving light a surface
+            // sends back — and a fraction has to multiply a quantity of
+            // light, which means both have to be linear. Texture and
+            // light multiply, and that one multiply is Module 3&#x27;s last
+            // structural gap closing.
+            //
+            // WITHOUT ONE it is the interpolated corner colour, by the
+            // same three multiply-adds as any other attribute, exactly
+            // as 3.8 left it. Note that it is taken in LINEAR light and
+            // handed straight to `shade`, with no encode in between:
+            // `blend_space` is ignored under `lit`, because lighting
+            // arithmetic is linear by definition (conventions §7c) and
+            // there is no meaning to give the encoded variant here. One
+            // encode at the very end, which is where an encode belongs.
+            // Written as one branch rather than &quot;interpolate, then
+            // overwrite if textured&quot;, because the interpolation is nine
+            // multiply-adds and a discarded result is still a paid one.
+            // `textured` is constant for the whole triangle, so the
+            // predictor eats the branch itself for free — it is only
+            // the WORK behind it that is worth not doing.
+            linear_rgb albedo{};
+            if (textured)
+            {
+                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+                albedo = mipped
+                    ? sample_mipped(*style.albedo.mips, style.albedo.samp,
+                                    vec2{uu, vv},
+                                    uv_gradients(dnum_dx, dnum_dy, dw_dx, dw_dy,
+                                                 vec2{uu, vv}, w_recip))
+                    : sample(*style.albedo.image, style.albedo.samp, uu, vv);
+            }
+            else
+            {
+                albedo = {(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                          (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                          (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+            }
+
+            // ---- LESSON 6.7: THE NORMAL, PERTURBED --------------
+            //
+            // Everything above computed the normal the GEOMETRY has.
+            // This replaces it with the normal the SURFACE has, read
+            // out of an image — and the whole of the work is building
+            // the frame that makes the image&#x27;s numbers mean something.
+            vec3 shading_normal = n;
+            if (normal_mapped)
+            {
+                const float uu = (f0 * pu0 + f1 * pu1 + f2 * pu2) * w_recip;
+                const float vv = (f0 * pv0 + f1 * pv1 + f2 * pv2) * w_recip;
+
+                // THE MAP IS DATA, NOT COLOUR. `sample` returns
+                // `texel/255` here rather than decoding through the
+                // sRGB curve, because the texture was built with
+                // `texel_space::linear` (6.7 §3). Through the wrong
+                // space the flat value 0.5 comes back as 0.2140 and
+                // every surface tilts toward its own steepest reading.
+                const linear_rgb t = sample(*style.normal_map.image,
+                                            style.normal_map.samp, uu, vv);
+
+                // [0,1] -&gt; [-1,1]. A direction has negative components
+                // and a byte does not, so the encoding is an offset —
+                // which is exactly why an unperturbed normal map is
+                // LAVENDER: (0, 0, 1) stores as (0.5, 0.5, 1.0), and a
+                // pale blue-violet is what &quot;no change&quot; looks like.
+                const vec3 tn{t.r * 2.0f - 1.0f,
+                              t.g * 2.0f - 1.0f,
+                              t.b * 2.0f - 1.0f};
+
+                // THE FRAME, REBUILT PER FRAGMENT. Both the normal and
+                // the tangent were interpolated, so neither is unit
+                // length and they are no longer perpendicular to each
+                // other — interpolation does not preserve either
+                // property. Gram-Schmidt fixes the second and
+                // normalising fixes the first, in that order, and the
+                // NORMAL is what we refuse to move: it is what the
+                // shading is about, and the tangent only has to span
+                // the plane.
+                const vec3 nn = normalised_or(n, vec3{0.0f, 0.0f, 1.0f});
+                const vec3 ti{(f0 * pt0.x + f1 * pt1.x + f2 * pt2.x) * w_recip,
+                              (f0 * pt0.y + f1 * pt1.y + f2 * pt2.y) * w_recip,
+                              (f0 * pt0.z + f1 * pt1.z + f2 * pt2.z) * w_recip};
+                const vec3 tt = normalised_or(ti - nn * dot(nn, ti),
+                                              vec3{1.0f, 0.0f, 0.0f});
+
+                // The bitangent is COMPUTED, not stored — and the sign
+                // is why the tangent is a vec4. A mirrored uv chart
+                // needs the other one, and every symmetric model has a
+                // mirrored chart.
+                const float handed = (f0 * v0.tangent.w + f1 * v1.tangent.w
+                                      + f2 * v2.tangent.w) &gt;= 0.0f ? 1.0f : -1.0f;
+                const vec3 bb = cross(nn, tt) * handed;
+
+                // TANGENT SPACE -&gt; WORLD, which is a matrix multiply
+                // written as its own definition: a matrix IS where the
+                // basis vectors land (Lesson 2.5), and these three ARE
+                // the basis vectors. `tn.z` weights the normal, which
+                // is why a flat map — z = 1, x = y = 0 — returns `nn`
+                // exactly and changes nothing. verify_67 §D asserts
+                // that round trip.
+                shading_normal = tt * tn.x + bb * tn.y + nn * tn.z;
+            }
+
+            // ---- LESSON 6.8: CAN THIS POINT SEE THE LIGHT? -------
+            //
+            // Two things are worth reading twice here. The first
+            // is that the normal handed to the shadow lookup is
+            // `n`, the GEOMETRIC one, and not `shading_normal`:
+            // shadow acne is a disagreement about where the
+            // TRIANGLES are, and a normal map does not move a
+            // triangle. 6.7 is what made those two different, and
+            // this is the first line in the engine that has to
+            // choose between them.
+            //
+            // The second is that this cosine is computed here
+            // rather than taken from `shade`, and it is genuinely
+            // a DIFFERENT cosine from the one that scales the
+            // light: that one uses the shading normal, because it
+            // asks how much light the surface receives; this one
+            // uses the geometric normal, because it asks how
+            // steeply the surface is tilted relative to the map&#x27;s
+            // texel grid. Sharing one value between them would be
+            // shorter and would put a normal map&#x27;s tilt into the
+            // bias, which is a bias that varies per texel of an
+            // image and has nothing to do with the geometry.
+            float visibility = 1.0f;
+            if (shadowed)
+            {
+                const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
+                const float geo_cos = dot(gn, style.lights-&gt;key.to_light());
+                if (style.cascades != nullptr)
+                {
+                    // AXIAL, not radial — raster.hpp says why, and the
+                    // difference is 22% at the corner of the frame.
+                    const float vd = dot(p - style.view_eye, style.view_forward);
+                    visibility = style.cascades-&gt;visibility(p, gn, geo_cos, vd);
+                }
+                else
+                {
+                    visibility = style.shadows-&gt;visibility(p, gn, geo_cos);
+                }
+            }
+
+            // `shade` normalises `n` itself — a decision made in 3.6
+            // (&quot;a caller who forgets gets a brightness scaled by the
+            // normal&#x27;s length, which looks like a lighting bug and is
+            // not one&quot;), and this is the call site that cashes it in.
+            // The interpolated normal is genuinely short here, worst in
+            // the middle of the triangle; §3.5 measures by how much.
+            return to_encoded(shade(albedo, shading_normal, style.eye - p,
+                                      *style.lights, style.surface,
+                                      style.model, ndf_model::ggx,
+                                      visibility),
+                                style.encode);
+        }
+        else
+        {
+            // Three multiply-adds per channel, then the divide-back.
+            // This is the interpolation, and it is the same three
+            // lines whatever the attribute turns out to be — texture
+            // coordinates just above, normals in 3.6. The rasterizer
+            // never learns what it carries.
+            const rgb3 mixed{(f0 * p0.r + f1 * p1.r + f2 * p2.r) * w_recip,
+                             (f0 * p0.g + f1 * p1.g + f2 * p2.g) * w_recip,
+                             (f0 * p0.b + f1 * p1.b + f2 * p2.b) * w_recip};
+
+            // One branch per pixel on a value that is constant for
+            // the whole triangle. A branch predictor eats this for
+            // free; hoisting it would mean two copies of the loop,
+            // which is a worse trade at this size.
+            return pixel_from(mixed, space, style.encode);
+        }
+    };
+
+    // ---- The depth test, also as a function --------------------------------
+    //
+    // Shared by both traversals, because two copies of a rule are two rules.
+    // Returns whether the fragment survives and writes the new depth if it does,
+    // so it must only be called for lanes that are genuinely covered.
+    const auto depth_test = [&amp;](float* zrow, int x, float f0, float f1, float f2) -&gt; bool {
+        // With no attachment bound not one instruction of depth work happens —
+        // the 2-D fills of Lessons 2.2-2.4 pay nothing for a feature they do not
+        // use.
+        if (zrow == nullptr) { return true; }
+
+        // NOTE the asymmetry with the fragment above: `z` is interpolated
+        // DIRECTLY, with no perspective correction, because the projection has
+        // already made device depth an affine function of the pixel position, so
+        // barycentric interpolation of it is the exact answer. Correcting it here
+        // would be actively wrong — and it is the single easiest mistake to make
+        // once you have learnt Lesson 3.2&#x27;s trick and start applying it
+        // everywhere. Depth is the one attribute that arrives pre-corrected.
+        // (Lesson 3.1 §3.4 derives it; Lesson 3.2 §3.5 has the asymmetry.)
+        //
+        // Quantise BEFORE comparing, because that is the order the hardware uses:
+        // the fragment&#x27;s depth is converted to the attachment&#x27;s format, then
+        // tested against a value already in it. For a full-precision buffer this
+        // is the identity.
+        const float z = depth-&gt;quantise(f0 * v0.z + f1 * v1.z + f2 * v2.z);
+
+        // Smaller is nearer. `&lt;` and not `&lt;=`: on a tie the pixel already there
+        // keeps it, so a surface drawn twice does not flicker between two
+        // identical answers, and coplanar geometry has one stable winner — the
+        // first one drawn.
+        if (!(z &lt; zrow[x])) { return false; }
+        zrow[x] = z;
+        return true;
+    };
+
+    // **Unbias, then divide** — needed by both traversals and spelt once. The
+    // accumulators carry the top-left rule&#x27;s -1 on any edge that is not
+    // top-or-left; that -1 is a statement about who owns a boundary pixel, and it
+    // is not a statement about where the pixel is. Left in, it displaces the whole
+    // attribute field by 1/edge_length of a pixel and stops the three weights
+    // summing to 1. Taking it back out is one integer subtraction against a value
+    // that is *exact* — these are the stepped integers, so there is no accumulated
+    // drift to undo, only a known constant. Lesson 2.4 §3.5.
+    const auto weights = [&amp;](int w0, int w1, int w2, float&amp; f0, float&amp; f1, float&amp; f2) {
+        f0 = static_cast&lt;float&gt;(w0 - s.bias0) * inv_area;
+        f1 = static_cast&lt;float&gt;(w1 - s.bias1) * inv_area;
+        f2 = static_cast&lt;float&gt;(w2 - s.bias2) * inv_area;
+    };
+
+    if (style.traverse == traversal::scanline)
+    {
+        // ---- One pixel at a time (Lessons 2.2 - 3.10) ----------------------
+        //
+        // Shades exactly the pixels the triangle covers, which is the right thing
+        // for a CPU to do and is what every measurement before Lesson 4.1 was
+        // taken against.
+        int row_w0 = s.row_w0;
+        int row_w1 = s.row_w1;
+        int row_w2 = s.row_w2;
+
+        for (int y = s.min_y; y &lt;= s.max_y; ++y)
+        {
+            int w0 = row_w0;
+            int w1 = row_w1;
+            int w2 = row_w2;
+
+            // The whole row is in bounds by construction, so this takes the
+            // documented fast path from Lesson 1.5 and skips put_pixel&#x27;s
+            // per-pixel bounds check and index multiply.
+            Uint32* const row = fb.row(y);
+
+            // The matching row of the depth attachment, or nullptr when there is
+            // no attachment. Hoisted for the same reason the colour row is: the
+            // row index does not change across a scanline, so resolving it per
+            // pixel would be paying for an answer we already have.
+            float* const zrow = (depth != nullptr) ? depth-&gt;row(y) : nullptr;
+
+            for (int x = s.min_x; x &lt;= s.max_x; ++x)
+            {
+                // Inside all three half-planes at once. That is the entire test,
+                // and it is the same three numbers for every pixel — only their
+                // values change.
+                if (w0 &gt;= 0 &amp;&amp; w1 &gt;= 0 &amp;&amp; w2 &gt;= 0)
+                {
+                    float f0, f1, f2;
+                    weights(w0, w1, w2, f0, f1, f2);
+
+                    if (depth_test(zrow, x, f0, f1, f2))
+                    {
+                        // LESSON 6.8. `depth_only` skips the fragment, not the
+                        // store — the store is one word and the fragment is the
+                        // whole shading equation. A shadow pass takes this
+                        // branch on every pixel it covers.
+                        if (!depth_only) { row[x] = fragment(f0, f1, f2); }
+                    }
+                }
+
+                w0 += s.step_x0;
+                w1 += s.step_x1;
+                w2 += s.step_x2;
+            }
+
+            row_w0 += s.step_y0;
+            row_w1 += s.step_y1;
+            row_w2 += s.step_y2;
+        }
+        return;
+    }
+
+    // ---- 2x2 quads, the way hardware does it (Lesson 4.1) ------------------
+    //
+    // Three things change, and only the first is visible in the output:
+    //
+    //   1. NOTHING. The image is bit-identical to the loop above. Helper lanes
+    //      are shaded and thrown away; they never write colour and never write
+    //      depth. `verify_41` §B checks this over a 2,304-triangle scene.
+    //   2. The fragment function runs for lanes the triangle does not cover.
+    //   3. Those lanes are counted, and the count is the lesson.
+    //
+    // QUADS ARE ALIGNED TO EVEN COORDINATES IN THE RENDER TARGET, not to the
+    // triangle. That is not a detail: it is why a triangle cannot arrange to be
+    // cheap by being positioned well, and why the waste depends on a triangle&#x27;s
+    // size and perimeter rather than on where it happens to land.
+    const int qx0 = s.min_x &amp; ~1;
+    const int qy0 = s.min_y &amp; ~1;
+
+    // Edge values at the aligned corner. Stepping back from `s.min_x/min_y` to
+    // the even boundary is exact, because an edge function is affine and the step
+    // is a constant — the same fact the row stepping rests on.
+    int quad_w0 = s.row_w0 + (qx0 - s.min_x) * s.step_x0 + (qy0 - s.min_y) * s.step_y0;
+    int quad_w1 = s.row_w1 + (qx0 - s.min_x) * s.step_x1 + (qy0 - s.min_y) * s.step_y1;
+    int quad_w2 = s.row_w2 + (qx0 - s.min_x) * s.step_x2 + (qy0 - s.min_y) * s.step_y2;
+
+    const bool show_helpers = (style.traverse == traversal::quad_debug);
+    quad_stats local{};
+
+    for (int qy = qy0; qy &lt;= s.max_y; qy += 2)
+    {
+        int lane_w0 = quad_w0;
+        int lane_w1 = quad_w1;
+        int lane_w2 = quad_w2;
+
+        for (int qx = qx0; qx &lt;= s.max_x; qx += 2)
+        {
+            // The four lanes&#x27; edge values, derived by adding one step in x, one
+            // in y, and both. Lane order is the usual one: top-left, top-right,
+            // bottom-left, bottom-right — which is also why `ddx` is lane 1 minus
+            // lane 0 and `ddy` is lane 2 minus lane 0.
+            const int lw0[4] = {lane_w0, lane_w0 + s.step_x0,
+                                lane_w0 + s.step_y0, lane_w0 + s.step_x0 + s.step_y0};
+            const int lw1[4] = {lane_w1, lane_w1 + s.step_x1,
+                                lane_w1 + s.step_y1, lane_w1 + s.step_x1 + s.step_y1};
+            const int lw2[4] = {lane_w2, lane_w2 + s.step_x2,
+                                lane_w2 + s.step_y2, lane_w2 + s.step_x2 + s.step_y2};
+
+            bool covered[4];
+            bool any = false;
+            for (int i = 0; i &lt; 4; ++i)
+            {
+                covered[i] = (lw0[i] &gt;= 0 &amp;&amp; lw1[i] &gt;= 0 &amp;&amp; lw2[i] &gt;= 0);
+                any = any || covered[i];
+            }
+
+            // THE ONE EARLY-OUT HARDWARE HAS. A quad with no covered lane is
+            // never issued, which is what keeps the cost proportional to the
+            // triangle rather than to its bounding box. Everything past this
+            // point is paid for.
+            if (any)
+            {
+                ++local.quads;
+
+                for (int i = 0; i &lt; 4; ++i)
+                {
+                    const int lx = qx + (i &amp; 1);
+                    const int ly = qy + (i &gt;&gt; 1);
+
+                    // Outside the render target. Real hardware clips
+                    // rasterization to the target as well, so these lanes do not
+                    // run; counted separately because they are not waste, they
+                    // are simply absent.
+                    if (lx &gt;= fb.width() || ly &gt;= fb.height())
+                    {
+                        ++local.off_target;
+                        continue;
+                    }
+
+                    float f0, f1, f2;
+                    weights(lw0[i], lw1[i], lw2[i], f0, f1, f2);
+
+                    // THE DEPTH TEST IS FOR COVERED LANES ONLY. A helper lane is
+                    // not on the surface, so it must not write depth — and this
+                    // is the line that keeps the output bit-identical.
+                    float* const zrow = (depth != nullptr) ? depth-&gt;row(ly) : nullptr;
+                    const bool visible = covered[i] &amp;&amp; depth_test(zrow, lx, f0, f1, f2);
+
+                    // AND HERE IS THE WHOLE LESSON. The fragment runs whether or
+                    // not this lane is covered, because its neighbours may need to
+                    // difference against it. Moving this call inside the
+                    // `if (visible)` below would make the quad traversal cheap and
+                    // would stop it modelling anything at all.
+                    const Uint32 colour = depth_only ? 0u : fragment(f0, f1, f2);
+                    if (!depth_only) { ++local.shaded; }
+
+                    if (covered[i]) { ++local.covered; } else { ++local.helpers; }
+
+                    if (visible &amp;&amp; !depth_only)
+                    {
+                        fb.row(ly)[lx] = colour;
+                    }
+                    else if (show_helpers &amp;&amp; !covered[i])
+                    {
+                        // Not a rendering mode — a picture of the waste. Magenta
+                        // is this engine&#x27;s &quot;this value is not real&quot; convention
+                        // (`checker_at` in 3.2, an unbound sampler in 3.9), used
+                        // for a third time and for the same reason: no real
+                        // surface is ever this colour by accident.
+                        fb.row(ly)[lx] = pack_argb(255, 0, 255);
+                    }
+                }
+            }
+
+            lane_w0 += 2 * s.step_x0;
+            lane_w1 += 2 * s.step_x1;
+            lane_w2 += 2 * s.step_x2;
+        }
+
+        quad_w0 += 2 * s.step_y0;
+        quad_w1 += 2 * s.step_y1;
+        quad_w2 += 2 * s.step_y2;
+    }
+
+    // ACCUMULATE, never assign: one `quad_stats` totals a whole draw, and a
+    // per-triangle lane efficiency is not a number anybody wants.
+    if (stats != nullptr) { *stats += local; }
+}
+
+void draw_triangle(framebuffer&amp; fb,
+                   int x0, int y0, int x1, int y1, int x2, int y2,
+                   Uint32 colour)
+{
+    draw_line(fb, x0, y0, x1, y1, colour);
+    draw_line(fb, x1, y1, x2, y2, colour);
+    draw_line(fb, x2, y2, x0, y0, colour);
 }
 
 } // namespace engine

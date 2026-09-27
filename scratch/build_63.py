@@ -87,6 +87,8 @@ FIGURES = {
 LISTING_META = {
     "engine/include/engine/gfx/microfacet.hpp": ("new", "new"),
     "scratch/verify_63.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/light.hpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {}
@@ -134,6 +136,8 @@ LISTING_SOURCE = {
     "scratch/verify_62.cpp":                     "scratch/l62_verify_62.cpp",
     "engine/include/engine/gfx/microfacet.hpp":  "scratch/l63_microfacet.hpp",
     "scratch/verify_63.cpp":                     "scratch/l63_verify_63.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/light.hpp": "scratch/l63_engine_include_engine_gfx_light.hpp",
 }
 
 

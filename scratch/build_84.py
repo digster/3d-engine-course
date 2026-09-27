@@ -189,6 +189,11 @@ LISTING_META = {
     "demos/collide/main.cpp":                     ("new", "new"),
     "scratch/verify_84.cpp":                      ("new", "new"),
     "scratch/build_verify_84.sh":                 ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/cascade.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/frustum.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/shadow.hpp": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {

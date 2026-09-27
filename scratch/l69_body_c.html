@@ -17,7 +17,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/shadow.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/shadow.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">void shadow_map::render(std::span&lt;const scene_object&gt; objects, const mesh_pool&amp; meshes,
                         const directional_light&amp; key, shadow_stats* stats_out)
 {
@@ -40,7 +40,7 @@
   <h3>4.2 &nbsp;The split scheme, guarded</h3>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/cascade.cpp</span> <span class="tag new">new</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/cascade.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">float practical_split(int index, int count, float near_d, float far_d,
                       float lambda)
 {
@@ -144,7 +144,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    SDL_GPUTextureCreateInfo ti{};
     // THE ONE FIELD THAT MAKES IT AN ARRAY, and the one the shader has to agree
     // with. `Texture2D` bound to a 2D_ARRAY is a binding error — caught by the
@@ -208,7 +208,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/include/engine/gfx/gpu_uniform.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/include/engine/gfx/gpu_uniform.hpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    /// The camera's forward axis, world space, unit length.
     ///
     /// **Because the splits are in AXIAL depth and the fragment only knows a
@@ -233,7 +233,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/gpu_scene.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/gpu_scene.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    cascade_uniforms fallback{};
     if (cascades == nullptr)
     {
@@ -265,7 +265,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">shaders/scene.frag.hlsl</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">shaders/scene.frag.hlsl — excerpt</span></figcaption>
     <pre><code class="lang-hlsl">    // THE PER-CASCADE NUMBERS, and the whole of what a cascade changes. Both of
     // these are what 6.8's bias derivation was written in terms of, which is why
     // that derivation needed no edit: read a different texel size and a different
@@ -370,6 +370,34 @@
   @@LISTING:engine/include/engine/gfx/cascade.hpp@@
 
   @@LISTING:engine/src/gfx/cascade.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_shadow.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/shadow.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_shadow.cpp@@
+
+  @@LISTING:engine/src/gfx/raster.cpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_texture.cpp@@
+
+  @@LISTING:engine/src/gfx/shadow.cpp@@
+
+  @@LISTING:shaders/scene.frag.hlsl@@
 
   @@LISTING:scratch/verify_69.cpp@@
 

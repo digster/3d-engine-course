@@ -79,6 +79,10 @@ LISTING_META = {
     "demos/common/demo_scene.cpp": ("modified", "modified"),
     "demos/hello_cube/main.cpp": ("modified", "modified"),
     "scratch/verify_54.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/mesh.hpp": ("modified", "modified"),
+    "engine/src/gfx/mesh.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 # LISTING_SOURCE — added 2026-09-12, and without it THIS SCRIPT CANNOT RUN.
@@ -119,6 +123,10 @@ LISTING_SOURCE = {
     "demos/common/demo_scene.cpp":                 "scratch/l54_demos_common_demo_scene.cpp",
     "demos/hello_cube/main.cpp":                   "scratch/l54_demos_hello_cube_main.cpp",
     "scratch/verify_54.cpp":                       "scratch/l54_scratch_verify_54.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/mesh.hpp": "scratch/l54_engine_include_engine_gfx_mesh.hpp",
+    "engine/src/gfx/mesh.cpp": "scratch/l54_engine_src_gfx_mesh.cpp",
+    "demos/sandbox/main.cpp": "scratch/l54_demos_sandbox_main.cpp",
 }
 
 LISTING_LANG = {}

@@ -92,10 +92,32 @@ LISTING_META = {
     "engine/include/engine/gfx/draw_order.hpp": ("new", "new"),
     "engine/src/gfx/draw_order.cpp": ("new", "new"),
     "scratch/verify_611.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gltf.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_pipeline.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/material.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/mipmap.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/texture.hpp": ("modified", "modified"),
+    "engine/src/asset/asset_store.cpp": ("modified", "modified"),
+    "engine/src/gfx/gltf.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_pipeline.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/mipmap.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
+    "engine/src/gfx/texture.cpp": ("modified", "modified"),
+    "shaders/scene.frag.hlsl": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -109,6 +131,25 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/draw_order.hpp": "scratch/l611_draw_order.hpp",
     "engine/src/gfx/draw_order.cpp":            "scratch/l611_draw_order.cpp",
     "scratch/verify_611.cpp":                   "scratch/l611_verify_611.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gltf.hpp": "scratch/l611_engine_include_engine_gfx_gltf.hpp",
+    "engine/include/engine/gfx/gpu_pipeline.hpp": "scratch/l611_engine_include_engine_gfx_gpu_pipeline.hpp",
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l611_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l611_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/material.hpp": "scratch/l611_engine_include_engine_gfx_material.hpp",
+    "engine/include/engine/gfx/mipmap.hpp": "scratch/l611_engine_include_engine_gfx_mipmap.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l611_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/gfx/texture.hpp": "scratch/l611_engine_include_engine_gfx_texture.hpp",
+    "engine/src/asset/asset_store.cpp": "scratch/l611_engine_src_asset_asset_store.cpp",
+    "engine/src/gfx/gltf.cpp": "scratch/l611_engine_src_gfx_gltf.cpp",
+    "engine/src/gfx/gpu_pipeline.cpp": "scratch/l611_engine_src_gfx_gpu_pipeline.cpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l611_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/mipmap.cpp": "scratch/l611_engine_src_gfx_mipmap.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l611_engine_src_gfx_raster.cpp",
+    "engine/src/gfx/texture.cpp": "scratch/l611_engine_src_gfx_texture.cpp",
+    "shaders/scene.frag.hlsl": "scratch/l611_shaders_scene.frag.hlsl",
+    "engine/CMakeLists.txt": "scratch/l611_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l611_demos_gltf_view_main.cpp",
 }
 
 # NOTHING PINNED YET, and this page lists FIVE files whole.

@@ -84,6 +84,8 @@ LISTING_META = {
     "scratch/hier_probe.hpp": ("new", "new"),
     "scratch/bench_59.cpp": ("new", "new"),
     "scratch/verify_59.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/math/mat4.hpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {}
@@ -119,6 +121,8 @@ LISTING_SOURCE = {
     "scratch/hier_probe.hpp":                  "scratch/l59_scratch_hier_probe.hpp",
     "scratch/bench_59.cpp":                    "scratch/l59_scratch_bench_59.cpp",
     "scratch/verify_59.cpp":                   "scratch/l59_scratch_verify_59.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/math/mat4.hpp": "scratch/l59_engine_include_engine_math_mat4.hpp",
 }
 
 

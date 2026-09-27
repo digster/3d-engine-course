@@ -436,6 +436,8 @@ one pixel in 65,536 — 0.00153% of the frame — contributes 62.8% of the bloom
           <td><code>bloom.cpp</code> and the three new shaders</td></tr>
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--bloom</code> and its four knobs</td></tr>
+      <tr><td><code>engine/include/engine/gfx/draw_order.hpp</code></td><td>modified</td>
+          <td>a forward reference renumbered: frustum culling is 6.16</td></tr>
       <tr><td><code>scratch/verify_613.cpp</code></td><td>new</td>
           <td>39 checks across ten sections</td></tr>
     </tbody>
@@ -450,6 +452,28 @@ one pixel in 65,536 — 0.00153% of the frame — contributes 62.8% of the bloom
   @@LISTING:engine/include/engine/gfx/gpu_post.hpp@@
   @@LISTING:engine/src/gfx/gpu_post.cpp@@
   @@LISTING:shaders/tonemap.frag.hlsl@@
+  @@LISTING:engine/include/engine/gfx/draw_order.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_pipeline.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/hdr.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_pipeline.cpp@@
+
+  @@LISTING:engine/src/gfx/hdr.cpp@@
+
+  @@LISTING:CMakeLists.txt@@
+
+  @@LISTING:cmake/EngineHelpers.cmake@@
+
+  @@LISTING:cmake/Shaders.cmake@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
   @@LISTING:scratch/verify_613.cpp@@
 
   <!-- =================================================================

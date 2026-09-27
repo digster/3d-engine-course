@@ -2697,6 +2697,581 @@ ENGINE_MAIN(swarm_app)
 
     <figure class="listing">
     <figcaption>
+      <span class="path">engine/include/engine/platform/app.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/platform/app.hpp — when the engine calls you.
+//
+// Lesson 5.2&#x27;s fork, and the half that is genuinely a different shape of program.
+//
+// Everything this course has written so far is a LIBRARY user: you wrote main(),
+// you wrote `while (running)`, and inside it you called the engine. This file is
+// the other arrangement — a FRAMEWORK. You implement a handful of functions and
+// something else decides when they run. Your program has no loop in it at all.
+//
+// ---------------------------------------------------------------------------
+// WHY BOTH, AND WHY THIS ONE IS BUILT ON THE OTHER
+// ---------------------------------------------------------------------------
+//
+// The framework arrangement is not merely a convenience. On a desktop it is one;
+// on the web and on mobile it is the ONLY arrangement that works, because there
+// the operating system owns the loop and `while (true)` inside your code starves
+// the browser or the OS event pump. That is why SDL3 ships the callback entry
+// points at all, and it is why an engine that intends to reach those platforms
+// should have a callback-shaped spine even while it runs on desktops.
+//
+// So we offer both. The rule that keeps that from becoming two engines is one
+// line of physical design: **`app` is implemented ON `platform`, never beside
+// it.** Every service `app` gives you is reachable through `sys()`, and nothing
+// in this file does anything a hand-written main() could not. If that ever stops
+// being true, the framework has begun to grow a private engine inside it, and
+// the library path has quietly become second-class.
+//
+// ---------------------------------------------------------------------------
+// THE HOOKS, AND WHERE THEY SIT IN LESSON 1.4&#x27;s LOOP
+// ---------------------------------------------------------------------------
+//
+//     configure()      once, BEFORE SDL exists. Read argv, return an app_config.
+//     on_start()       once, after the window and framebuffer exist.
+//     ─────────────── per frame ───────────────
+//     on_event()       once per event, before the frame it belongs to
+//     on_fixed_step()  0..N times, N decided by the accumulator (Lesson 1.4)
+//     on_frame(alpha)  once, draws into fb() using the interpolation factor
+//     on_overlay()     once, after the framebuffer is on screen, before it is shown
+//     ─────────────────────────────────────────
+//     on_stop()        once, before the window is destroyed
+//
+// The only hook you must write is on_frame(). Everything else has a default that
+// does the right nothing.
+
+#pragma once
+
+#include &lt;engine/platform/platform.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;memory&gt;
+
+namespace engine {
+
+/// The base class a program derives from to be driven by the engine.
+///
+/// Derive, override what you need, and hand the type to ENGINE_MAIN (see
+/// &lt;engine/platform/main.hpp&gt;):
+///
+///     class my_app final : public engine::app
+///     {
+///     public:
+///         engine::app_config configure(int, char*[]) override
+///         {
+///             return {.title = &quot;my app&quot;, .fb_width = 320, .fb_height = 180};
+///         }
+///
+///         void on_frame(float alpha) override
+///         {
+///             fb().clear(engine::pack_argb(12, 14, 20));
+///             draw_everything(fb(), alpha);
+///         }
+///     };
+///
+///     ENGINE_MAIN(my_app)
+///
+/// That program has no `main`, no `SDL_Init`, no window handling, no event drain,
+/// no accumulator and no teardown — and it is a correct, fixed-timestep,
+/// interpolating, cross-platform SDL3 application.
+class app
+{
+public:
+    app() = default;
+
+    /// Virtual, because `app_runner` destroys derived instances through this
+    /// type. A base with virtual functions and a non-virtual destructor is the
+    /// classic silent leak: the derived destructor simply never runs.
+    virtual ~app() = default;
+
+    app(const app&amp;) = delete;
+    app&amp; operator=(const app&amp;) = delete;
+    app(app&amp;&amp;) = delete;
+    app&amp; operator=(app&amp;&amp;) = delete;
+
+    // ---- The hooks ---------------------------------------------------------
+
+    /// Decide how this program starts. Called before SDL is initialised, so it
+    /// may look at argv and nothing else — no window exists, no timer is running,
+    /// and SDL_GetError() has nothing to say yet.
+    ///
+    /// Parsing arguments HERE rather than in on_start() is what lets a flag
+    /// change the surface: `--shot` picks `surface::headless`, and by the time
+    /// on_start() runs that decision is already irreversible (Lesson 4.2).
+    [[nodiscard]] virtual app_config configure(int argc, char* argv[]);
+
+    /// Build whatever the program needs. Return false to abort start-up; the
+    /// process exits with a failure code and on_stop() still runs.
+    [[nodiscard]] virtual bool on_start();
+
+    /// One event, already fed to `in()` and already checked for quit.
+    ///
+    /// Use this for things that are genuinely events: text input, file drops,
+    /// window resizes, and discrete key presses you would rather not poll for.
+    /// Anything that asks &quot;is this key down&quot; belongs in on_fixed_step() instead,
+    /// reading `in()`.
+    virtual void on_event(const SDL_Event&amp; event);
+
+    /// Once per frame, after input is published and BEFORE any simulation step.
+    ///
+    /// **Lesson 5.10 added this hook, and the reason is a gap the other five could
+    /// not cover.** `on_event` runs per event, `on_fixed_step` runs zero or more
+    /// times, and `on_frame` runs after the steps. Nothing ran exactly once, at the
+    /// moment `in()` had just been refreshed and no step had yet consumed it — and
+    /// that is precisely the moment an `action_map` has to be updated, because a
+    /// map updated in `on_frame` would leave every step in the frame reading last
+    /// frame&#x27;s actions.
+    ///
+    /// Also the right place for anything else that is once-per-frame and must
+    /// precede the simulation: reading a network snapshot, sampling a debug
+    /// scrubber, latching a replay&#x27;s recorded intentions.
+    ///
+    /// **Frame-scoped edges are valid in here** — `in().key_pressed()`,
+    /// `action_map::pressed()` — because this runs exactly once. They are NOT
+    /// valid in `on_fixed_step`; see Lesson 1.4 and `action_map::consume_pressed`.
+    virtual void on_input();
+
+    /// Advance the simulation by exactly `h` seconds. Called zero or more times
+    /// per frame — never assume once.
+    ///
+    /// Reading `in()` in here is safe and correct: input is published once per
+    /// frame (Lesson 1.2), so every step in one frame sees the same keyboard.
+    /// That is not sloppiness, it is the frame-coherence guarantee being used.
+    virtual void on_fixed_step(float h);
+
+    /// Draw one frame. `alpha` is how far this frame sits between the previous
+    /// simulation step and the current one, in [0, 1] — Lesson 1.4&#x27;s
+    /// interpolation factor. The only hook without a default.
+    virtual void on_frame(float alpha) = 0;
+
+    /// Draw on top of the presented framebuffer, with SDL_RenderDebugText and
+    /// friends. Runs after blit_framebuffer() and before present(), which is the
+    /// only moment at which &quot;over the render, under the vsync wait&quot; is true.
+    virtual void on_overlay();
+
+    /// Release anything on_start() built. Runs whenever on_start() RAN, whatever
+    /// it returned — so a half-built program still gets to clean up — and always
+    /// before the window is destroyed.
+    virtual void on_stop();
+
+    // ---- What you are given ------------------------------------------------
+
+    /// The platform underneath. Never hidden: if a hook is not enough, reach
+    /// through here and do it by hand.
+    [[nodiscard]] platform&amp; sys() { return sys_; }
+    [[nodiscard]] const platform&amp; sys() const { return sys_; }
+
+    // Forwarders for the four things every frame touches. They exist so that a
+    // demo reads `fb()` rather than `sys().fb()` forty times, and for no deeper
+    // reason — each is one line and adds no behaviour.
+    [[nodiscard]] framebuffer&amp; fb() { return sys_.fb(); }
+    [[nodiscard]] input&amp; in() { return sys_.in(); }
+    [[nodiscard]] const clock&amp; time() const { return sys_.time(); }
+    [[nodiscard]] const fixed_step&amp; steps() const { return sys_.steps(); }
+
+    [[nodiscard]] SDL_Window* window() const { return sys_.window(); }
+    [[nodiscard]] SDL_Renderer* renderer() const { return sys_.renderer(); }
+
+    /// Ask to stop at the end of this frame. `success = false` makes the process
+    /// exit with a failure code.
+    void request_quit(bool success = true) { sys_.request_quit(success); }
+
+private:
+    platform sys_;
+};
+
+/// The four SDL callbacks, implemented once for every program in the project.
+///
+/// This is a struct of static functions rather than four free functions because
+/// they are one mechanism, and grouping them says so. ENGINE_MAIN&#x27;s whole body is
+/// four one-line forwards into here — which means the macro contains no logic,
+/// and a macro with no logic is a macro that cannot hide a bug.
+struct app_runner
+{
+    /// SDL_AppInit. Takes ownership of `instance`, publishes it as SDL&#x27;s
+    /// `appstate`, configures and starts the platform, then calls on_start().
+    [[nodiscard]] static SDL_AppResult init(void** appstate,
+                                            std::unique_ptr&lt;app&gt; instance,
+                                            int argc, char* argv[]);
+
+    /// SDL_AppIterate. One whole frame: begin, steps, draw, blit, overlay, present.
+    [[nodiscard]] static SDL_AppResult iterate(void* appstate);
+
+    /// SDL_AppEvent. One event, into the platform and then into the app.
+    [[nodiscard]] static SDL_AppResult event(void* appstate, SDL_Event* event);
+
+    /// SDL_AppQuit. Runs on_stop(), tears the platform down, and destroys the
+    /// instance. Called by SDL in every exit path, including a failed init.
+    static void quit(void* appstate, SDL_AppResult result);
+};
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/platform/app.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/platform/app.cpp — the frame, and the ownership handoff.
+//
+// Two things happen in this file and they are worth separating in your head.
+//
+// The first is `iterate`, which is Lesson 1.4&#x27;s loop with the `while` taken off
+// the front. That is all the inversion physically is: the body of a loop, called
+// by somebody else.
+//
+// The second is ownership crossing into C. SDL&#x27;s callbacks pass an app&#x27;s state
+// as a `void*`, because SDL is a C library and `void*` is C&#x27;s word for &quot;yours,
+// not mine&quot;. Getting a C++ object safely across that boundary and back is the
+// interesting part, and it is where the one raw `new`-shaped operation in this
+// engine lives.
+
+#include &lt;engine/platform/app.hpp&gt;
+
+#include &lt;engine/core/log.hpp&gt;
+
+namespace engine {
+
+// ---- The defaults ---------------------------------------------------------
+//
+// Out of line rather than `{}` in the header, so that adding behaviour to one of
+// them later does not recompile every file that includes app.hpp (Lesson 5.1
+// §3.3). They are also the documentation of what &quot;do nothing&quot; means for each
+// hook, which is easier to read here than as six empty braces in a class body.
+
+app_config app::configure(int argc, char* argv[])
+{
+    (void)argc;
+    (void)argv;
+    return {};
+}
+
+bool app::on_start() { return true; }
+
+void app::on_event(const SDL_Event&amp; event) { (void)event; }
+
+void app::on_fixed_step(float h) { (void)h; }
+
+void app::on_input() {}
+void app::on_overlay() {}
+
+void app::on_stop() {}
+
+// ---- The callbacks --------------------------------------------------------
+
+SDL_AppResult app_runner::init(void** appstate, std::unique_ptr&lt;app&gt; instance,
+                               int argc, char* argv[])
+{
+    if (appstate == nullptr) { return SDL_APP_FAILURE; }
+    *appstate = nullptr;
+    if (!instance) { return SDL_APP_FAILURE; }
+
+    // OWNERSHIP CROSSES HERE, and it crosses BEFORE anything can fail.
+    //
+    // release() hands the raw pointer to SDL, which will hand it back to
+    // app_runner::quit(), which wraps it in a unique_ptr again and lets it die.
+    // The pointer is unowned for exactly the length of the program, which sounds
+    // alarming until you notice the alternative: publishing it only on success
+    // means an early failure below has to destroy the instance HERE, and SDL
+    // then calls quit() with a null appstate and no way to know whether that
+    // means &quot;never built&quot; or &quot;already cleaned up&quot;.
+    //
+    // One owner, one teardown path, one place that deletes. The window in which
+    // the raw pointer is exposed contains no branches at all.
+    app* const self = instance.release();
+    *appstate = self;
+
+    // configure() runs before SDL exists, which is precisely why it takes argv:
+    // a flag that chooses the surface must be read before the surface is made.
+    app_config cfg = self-&gt;configure(argc, argv);
+
+    // Lesson 5.3. Filled in for the app rather than by it: `--log` should work
+    // on every program built on the engine, including the ones whose author
+    // never heard of it. An app that genuinely wants to own the flag sets
+    // `argv` itself and gets whatever it set.
+    if (cfg.argv == nullptr)
+    {
+        cfg.argc = argc;
+        cfg.argv = argv;
+    }
+
+    if (!self-&gt;sys().start(cfg))
+    {
+        // No log here — platform::start already said exactly which call failed
+        // and what SDL_GetError() had to say about it. A second, vaguer line
+        // above it would only make the real message harder to find.
+        return SDL_APP_FAILURE;
+    }
+
+    if (!self-&gt;on_start())
+    {
+        ENGINE_LOG_ERROR(engine::log_platform, &quot;app: on_start() failed&quot;);
+        return SDL_APP_FAILURE;
+    }
+
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult app_runner::iterate(void* appstate)
+{
+    app* const self = static_cast&lt;app*&gt;(appstate);
+    if (self == nullptr) { return SDL_APP_FAILURE; }
+
+    platform&amp; sys = self-&gt;sys();
+
+    // Nothing to do if a quit is already pending. SDL&#x27;s own loop checks this too
+    // — SDL_IterateMainCallbacks reads its result atom before calling us, so in
+    // production this branch is never the one that catches it — but a callback
+    // should be TOTAL: safe to call at any moment, including a moment SDL would
+    // not have chosen. That is what makes the four functions testable without an
+    // entry point, which is how verify_52 §D drives them at all.
+    if (!sys.running())
+    {
+        return sys.failed() ? SDL_APP_FAILURE : SDL_APP_SUCCESS;
+    }
+
+    // ---- Lesson 1.4&#x27;s loop, minus the `while` ------------------------------
+    //
+    // Compare it, line for line, against the loop the demos have been writing
+    // since Lesson 1.4:
+    //
+    //     drain events  -&gt;  SDL did that, and called on_event for each one
+    //     tick clock    -&gt;  begin_frame()
+    //     update input  -&gt;  begin_frame()
+    //     map actions   -&gt;  on_input()                                    (5.10)
+    //     N fixed steps -&gt;  the while below
+    //     render        -&gt;  on_frame(alpha)
+    //     present       -&gt;  blit_framebuffer() + on_overlay() + present()
+    //
+    // Nothing about the loop changed. What changed is who says `while`.
+    sys.begin_frame();
+
+    // Lesson 5.10. Exactly here, and nowhere else: input has just been published
+    // by begin_frame() and no step has run yet, so an action map updated in this
+    // hook is the one every step of this frame will read. Updating it after the
+    // steps — in on_frame, which is the only other once-per-frame hook — would
+    // give every step last frame&#x27;s actions.
+    self-&gt;on_input();
+
+    while (sys.next_step())
+    {
+        self-&gt;on_fixed_step(sys.steps().h());
+    }
+
+    self-&gt;on_frame(sys.steps().alpha());
+
+    sys.blit_framebuffer();
+    self-&gt;on_overlay();
+    sys.present();
+
+    // And checked again at the BOTTOM, which is the check that matters: a quit
+    // requested DURING this frame still lets the frame finish. `--shot` depends
+    // on it — the frame is drawn, written to disk, and only then is the program
+    // allowed to end. The two checks are not redundant. The one above declines
+    // to START a frame; this one refuses to ABANDON one.
+    if (!sys.running())
+    {
+        return sys.failed() ? SDL_APP_FAILURE : SDL_APP_SUCCESS;
+    }
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult app_runner::event(void* appstate, SDL_Event* event)
+{
+    app* const self = static_cast&lt;app*&gt;(appstate);
+    if (self == nullptr || event == nullptr) { return SDL_APP_FAILURE; }
+
+    // Platform first, app second, and the order is a guarantee we are making: by
+    // the time on_event() sees an event, `in()` has already been fed it and a
+    // close request has already been noticed. So an override never has to
+    // remember to call a base implementation — the classic framework trap, where
+    // forgetting `Base::onEvent(e)` breaks input in a way that looks like an
+    // input bug rather than an override bug.
+    self-&gt;sys().handle(*event);
+    self-&gt;on_event(*event);
+
+    if (!self-&gt;sys().running())
+    {
+        return self-&gt;sys().failed() ? SDL_APP_FAILURE : SDL_APP_SUCCESS;
+    }
+    return SDL_APP_CONTINUE;
+}
+
+void app_runner::quit(void* appstate, SDL_AppResult result)
+{
+    // The other end of the handoff. Wrapping the raw pointer back into a
+    // unique_ptr means the instance is destroyed when this function returns, by
+    // the ordinary rules, even if on_stop() throws — which it will not, since the
+    // engine core has no exceptions, but the shape is right and costs nothing.
+    const std::unique_ptr&lt;app&gt; owned(static_cast&lt;app*&gt;(appstate));
+    if (!owned) { return; }
+
+    if (result == SDL_APP_FAILURE)
+    {
+        ENGINE_LOG_ERROR(engine::log_platform, &quot;app: shutting down after a failure&quot;);
+    }
+
+    // on_stop() only if the platform actually came up. If start() failed there is
+    // no window, no framebuffer and no clock, and a destructor that assumed
+    // otherwise would fault while cleaning up after an error — the worst possible
+    // moment, because it replaces a clear message with a crash.
+    if (owned-&gt;sys().started())
+    {
+        owned-&gt;on_stop();
+    }
+
+    // Explicit rather than left to the platform&#x27;s destructor, because the ORDER
+    // matters and only being explicit makes it visible: on_stop() may still touch
+    // the window (a GPU demo releases its device here), so the window must
+    // outlive it.
+    owned-&gt;sys().stop();
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># engine/CMakeLists.txt — the engine, as a library.
+#
+# Lesson 5.1. Everything above this line in the course built ONE executable, and
+# a single executable can be arranged however you like because nothing outside it
+# can tell. A library is different in kind: it has an outside, and the outside is
+# the part you can never take back once somebody depends on it.
+#
+# Three properties below do the entire job of drawing that boundary, and it is
+# worth reading them as a group before reading them one at a time.
+
+# STATIC, not SHARED, and not a choice made by shrugging.
+#
+# A static library is copied into each executable at link time. A shared one is a
+# separate file the program finds at startup, which buys you the ability to swap
+# the engine without relinking the game — and costs you an ABI you must not break,
+# per-call indirection, and a deployment story (&quot;which .dll did it load?&quot;).
+#
+# We are one repository building both sides from the same source, so we get none
+# of the benefit and all of the cost. Engines that DO ship shared libraries do it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
+# reloads shaders and assets, not code. If that ever changes, this word is the
+# only thing that has to.
+add_library(engine STATIC
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader&#x27;s
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action&#x27;s level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
+    src/core/profile.cpp
+    src/gfx/clip.cpp
+    src/gfx/colour.cpp
+    src/gfx/debug_draw.cpp
+    src/gfx/depth_buffer.cpp
+    src/gfx/framebuffer.cpp
+    src/gfx/gpu_buffer.cpp
+    src/gfx/gpu_debug.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_pipeline.cpp
+    src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
+    src/gfx/gpu_shader.cpp
+    src/gfx/gpu_texture.cpp
+    src/gfx/image.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
+    src/gfx/raster.cpp
+    src/gfx/soft_renderer.cpp
+    src/gfx/texture.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library&#x27;s to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
+)
+
+# `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
+# double colon in it CANNOT be mistaken for a file. If a demo asks to link
+# `engine::engine` and no such target exists, CMake stops at configure time with
+# &quot;target not found&quot;. If it asks to link plain `engine` and no such target
+# exists, CMake happily passes `-lengine` to the linker and you find out much
+# later, in a different language, from a different tool. Every library worth
+# using exports a namespaced alias — SDL3::SDL3 is one — and now so do we.
+add_library(engine::engine ALIAS engine)
+
+# ---- The boundary ----------------------------------------------------------
+#
+# THIS IS THE MOST IMPORTANT PROPERTY IN THE PROJECT, so read it slowly.
+#
+#   PUBLIC  include/ : everything that links this library gets this directory on
+#                      its include path. It contains ONE thing — a directory
+#                      called `engine` — so from outside, the only spellings that
+#                      resolve are &lt;engine/gfx/raster.hpp&gt; and its siblings.
+#   PRIVATE src/     : the engine&#x27;s own sources get this, and nobody else does.
+#
+# The consequence is the whole point of Lesson 5.1: a demo that writes
+# `#include &quot;gfx/raster.hpp&quot;` — the spelling every file in this repository used
+# until today — does not compile. Not &quot;is discouraged&quot;, not &quot;fails review&quot;. Does
+# not compile, with a message naming the file it could not find.
+#
+# A boundary maintained by discipline is a boundary that lasts until the week
+# somebody is in a hurry. This one is maintained by the include path, which is
+# never in a hurry.
+target_include_directories(engine
+    PUBLIC  include
+    PRIVATE src)
+
+# PUBLIC because SDL is in our public headers: `framebuffer.hpp` says `Uint32`,
+# `gpu_device.hpp` takes an `SDL_Window*`, and `input.hpp` reads `SDL_Event`.
+# Anybody who includes those needs SDL&#x27;s headers too, and PUBLIC is CMake&#x27;s word
+# for &quot;this dependency is contagious, and it has to be&quot;.
+#
+# It is also an admission. A renderer whose public API names another library&#x27;s
+# types has adopted that library&#x27;s vocabulary permanently — port to a different
+# platform layer and every one of those signatures changes. §6 of the lesson
+# weighs that honestly; we keep it, and we keep knowing about it.
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+
+# stb_image, by contrast, is PRIVATE: exactly one translation unit
+# (src/gfx/image.cpp) includes it, and `image.hpp` deliberately exposes our own
+# `engine::image` instead. So the dependency stops at the boundary — a demo can
+# neither see stb nor accidentally start depending on it. That is what a good
+# wrapper buys, and this line is the proof it worked.
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+engine_set_warnings(engine)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
       <span class="path">scratch/verify_510.cpp</span>
       <span class="tag new">new</span>
       <span class="lang" data-lang="cpp">C++</span>

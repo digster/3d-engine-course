@@ -298,11 +298,13 @@ SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);</code></pre>
   <h2 id="listings"><span class="num">8</span>Complete code listings</h2>
 
   <p>
-    Five files in full. The remaining changes — <code>microfacet.hpp</code>'s two new functions,
+    Every file this lesson changed, in full. The four new ones come first — the cube map and the
+    skybox shaders. Then every file it modified: <code>microfacet.hpp</code>'s two new functions,
     <code>hdr.{hpp,cpp}</code>'s half-float pair, <code>gpu_texture</code>'s
     <code>create_cube</code>, <code>gpu_scene</code>'s bindings, the shader's IBL term,
-    <code>raster.cpp</code>'s subtraction and the demo's flags — are quoted in full at the point
-    where they are argued for, above.
+    <code>raster.cpp</code>'s subtraction and the demo's flags, each already quoted above at the
+    point where it is argued for, and each here whole so that your copy can be checked rather than
+    assembled. The harness is last.
   </p>
 
 @@LISTING:engine/include/engine/gfx/cubemap.hpp@@
@@ -312,6 +314,40 @@ SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);</code></pre>
 @@LISTING:shaders/skybox.vert.hlsl@@
 
 @@LISTING:shaders/skybox.frag.hlsl@@
+
+@@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+
+@@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+
+@@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+@@LISTING:engine/include/engine/gfx/hdr.hpp@@
+
+@@LISTING:engine/include/engine/gfx/light.hpp@@
+
+@@LISTING:engine/include/engine/gfx/microfacet.hpp@@
+
+@@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+@@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+@@LISTING:engine/src/gfx/gpu_shadow.cpp@@
+
+@@LISTING:engine/src/gfx/gpu_texture.cpp@@
+
+@@LISTING:engine/src/gfx/hdr.cpp@@
+
+@@LISTING:engine/src/gfx/raster.cpp@@
+
+@@LISTING:shaders/scene.frag.hlsl@@
+
+@@LISTING:CMakeLists.txt@@
+
+@@LISTING:cmake/EngineHelpers.cmake@@
+
+@@LISTING:engine/CMakeLists.txt@@
+
+@@LISTING:demos/gltf_view/main.cpp@@
 
 @@LISTING:scratch/verify_615.cpp@@
 

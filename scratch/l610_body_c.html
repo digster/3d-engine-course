@@ -31,7 +31,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/include/engine/gfx/texture.hpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    /// An optional mip chain for `image`. Lesson 6.10.
     ///
     /// **Nullable, and null is the whole of "no mipmapping"** — the same bargain
@@ -48,7 +48,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/mipmap.cpp</span> <span class="tag new">new</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/mipmap.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // Read the space from the DATA, not from a parameter. A caller who has to
     // remember which of their textures is colour is a caller who will get the
     // third one wrong, and the symptom — a normal map quietly gamma-decoded —
@@ -75,7 +75,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/raster.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/raster.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // df_i/dx is step_x_i * inv_area — the same edge steps the fill already
     // walks, divided by the same area it already reciprocated.
     const float dfx[3] = {static_cast&lt;float&gt;(s.step_x0) * inv_area,
@@ -125,7 +125,7 @@
   </p>
 
   <figure class="listing">
-    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp</span> <span class="tag modified">modified</span></figcaption>
+    <figcaption><span class="path">engine/src/gfx/gpu_texture.cpp — excerpt</span></figcaption>
     <pre><code class="lang-cpp">    // LESSON 6.10. COLOR_TARGET is not decoration: SDL generates a chain by
     // BLITTING each level into the next, so every level must be a render target.
     // `SDL_gpu.c` asserts on SAMPLER|COLOR_TARGET — but only when the device is
@@ -251,6 +251,20 @@
   @@LISTING:engine/include/engine/gfx/mipmap.hpp@@
 
   @@LISTING:engine/src/gfx/mipmap.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/material.hpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/texture.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_texture.cpp@@
+
+  @@LISTING:engine/src/gfx/raster.cpp@@
 
   @@LISTING:scratch/verify_610.cpp@@
 

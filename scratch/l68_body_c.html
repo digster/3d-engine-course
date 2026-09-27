@@ -421,6 +421,12 @@ SamplerComparisonState shadow_sampler : register(s2, space2);</code></pre>
             <td>a ground plane and the CPU controls</td></tr>
         <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td>
             <td>the GPU pass and keys [1] [2] [3]</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+            <td>chooses a depth format the device can sample, and creates the shadow map</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+            <td><code>supported_shadow_format</code>: the first candidate the device supports</td></tr>
+        <tr><td><code>shaders/shadow.frag.hlsl</code></td><td>modified</td>
+            <td>an empty fragment stage: the depth-only pass writes no colour</td></tr>
         <tr><td><code>scratch/verify_68.cpp</code></td><td><strong>new</strong></td>
             <td>53 checks in eight sections</td></tr>
       </tbody>
@@ -440,6 +446,34 @@ SamplerComparisonState shadow_sampler : register(s2, space2);</code></pre>
 @@LISTING:shaders/shadow.vert.hlsl@@
 
 @@LISTING:shaders/scene.frag.hlsl@@
+
+@@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+
+@@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+
+@@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+@@LISTING:engine/include/engine/gfx/light.hpp@@
+
+@@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+@@LISTING:engine/include/engine/math/mat4.hpp@@
+
+@@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+@@LISTING:engine/src/gfx/gpu_texture.cpp@@
+
+@@LISTING:engine/src/gfx/raster.cpp@@
+
+@@LISTING:shaders/shadow.frag.hlsl@@
+
+@@LISTING:CMakeLists.txt@@
+
+@@LISTING:engine/CMakeLists.txt@@
+
+@@LISTING:demos/gltf_view/main.cpp@@
+
+@@LISTING:demos/sandbox/main.cpp@@
 
 @@LISTING:scratch/verify_68.cpp@@
 

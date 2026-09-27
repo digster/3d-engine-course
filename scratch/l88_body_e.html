@@ -25,6 +25,12 @@
           <td>Adds the <code>broadphase</code> target.</td></tr>
       <tr><td><code>demos/broadphase/main.cpp</code></td><td>new</td>
           <td>The grid seen from above, with the contract checked live.</td></tr>
+      <tr><td><code>engine/include/engine/phys/shape.hpp</code></td><td>modified</td>
+          <td>two doc comments: “8.6's broadphase” now reads “8.8's” (see the note)</td></tr>
+      <tr><td><code>engine/include/engine/phys/rigid_body.hpp</code></td><td>modified</td>
+          <td>one doc comment, the same one-digit correction</td></tr>
+      <tr><td><code>engine/src/phys/rigid_body.cpp</code></td><td>modified</td>
+          <td>one doc comment, the same one-digit correction</td></tr>
       <tr><td><code>scratch/verify_88.cpp</code></td><td>new</td>
           <td>Ten measured sections, 51 checks, every one with a control.</td></tr>
       <tr><td><code>scratch/build_verify_88.sh</code></td><td>new</td>
@@ -34,18 +40,18 @@
   </div>
 
   <div class="callout">
-    <span class="label">Three files changed by one word each, and not reprinted</span>
+    <span class="label">Three files changed by one word each, and listed whole anyway</span>
     <p>
       <code>engine/include/engine/phys/shape.hpp</code> (twice),
       <code>engine/include/engine/phys/rigid_body.hpp</code> and
       <code>engine/src/phys/rigid_body.cpp</code> each carried a doc comment saying “8.6's
       broadphase”. They were written when the broadphase was expected to land in 8.6, before GJK and
       EPA took a lesson each; the broadphase is this one. Every occurrence now reads “8.8's
-      broadphase”, and the change is exactly that — no code, no declarations, no behaviour. The
-      three files are 2,458 lines between them and reprinting all of it to change one digit three
-      times would bury this lesson's own code, so this note is the record instead. It is the only
-      place in this course where a changed file is not listed whole, and it is named here rather
-      than passed over.
+      broadphase”, and the change is exactly that — no code, no declarations, no behaviour. All
+      three are reprinted below regardless, 2,458 lines to move one digit three times, because the
+      rule that a changed file appears whole is only worth anything if it holds when it is
+      inconvenient: a student who follows the pages has to end with the engine, and a note is not
+      a file.
     </p>
   </div>
 
@@ -62,6 +68,12 @@
   @@LISTING:demos/CMakeLists.txt@@
 
   @@LISTING:demos/broadphase/main.cpp@@
+
+  @@LISTING:engine/include/engine/phys/rigid_body.hpp@@
+
+  @@LISTING:engine/include/engine/phys/shape.hpp@@
+
+  @@LISTING:engine/src/phys/rigid_body.cpp@@
 
   @@LISTING:scratch/verify_88.cpp@@
 

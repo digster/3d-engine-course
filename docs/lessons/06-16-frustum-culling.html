@@ -1819,11 +1819,13 @@ SDL_BindGPUVertexBuffers(pass, 1, &amp;instance_binding, 1);</code></pre>
   <h2 id="listings"><span class="num">12</span>Complete code listings</h2>
 
   <p>
-    Six files in full. The remaining changes — <code>bounds.hpp</code>'s sphere,
-    <code>gpu_pipeline</code>'s cap and assertion, <code>gpu_scene</code>'s tenth pipeline,
+    Every file this lesson changed, in full. The new ones come first — the frustum, the instancing
+    batcher and the instanced vertex shader. Then every file it modified: <code>bounds.hpp</code>'s
+    sphere, <code>gpu_pipeline</code>'s cap and assertion, <code>gpu_scene</code>'s tenth pipeline,
     <code>begin_frame</code>, <code>render_batched</code> and the <code>destroy()</code> fix, and the
-    two <code>CMakeLists.txt</code> entries — are quoted in full at the point where they are argued
-    for, above and below.
+    two <code>CMakeLists.txt</code> entries, each already quoted at the point where it is argued for,
+    and each here whole so that your copy can be checked rather than assembled. The harness is
+    last.
   </p>
 
     <figure class="listing">
@@ -3112,6 +3114,3041 @@ Output main(Input input)
 # which is the clearest statement of what instancing is.
 add_hlsl_shader(scene_instanced.vert vertex)</code></pre>
   </figure>
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/bounds.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/bounds.hpp — an axis-aligned box, and what it is for.
+//
+// Lesson 6.8. This struct has existed three times already, written out by hand
+// each time: `demos/gltf_view` accumulates a `bounds_min_`/`bounds_max_` pair to
+// frame its camera, `mesh_report` measures an extent to report it, and Lesson
+// 6.6&#x27;s importer walks every position of every primitive for the same reason.
+// Three call sites is the rule this course uses for promoting a pattern into a
+// type (Lesson 3.3&#x27;s `projector`, 3.8&#x27;s `fill_style`), and a fourth arrives in
+// this lesson: **a directional light has no position, so its shadow frustum has
+// to be fitted to something, and the thing it is fitted to is this.**
+//
+// WHY A BOX AND NOT A SPHERE. A sphere is smaller to store, cheaper to
+// transform, and rotation-invariant — genuinely better for a lot of culling. It
+// is the wrong shape *here* for one reason: the quantity a shadow map needs is
+// the extent of the scene **along the light&#x27;s three axes**, and a box already
+// answers that question directly in whatever frame you put it in, while a sphere
+// would have to be re-tightened. Lesson 6.16&#x27;s frustum culling will want both
+// and will say so then.
+//
+// **LESSON 6.16 SAYS SO NOW**, and it wanted both for exactly the reason above,
+// read in the other direction. A frustum test against a sphere is four
+// multiplies and an add against ONE plane and it needs no corner selection; a
+// box needs three comparisons to choose a corner before it can do the same
+// arithmetic. So the sphere is the cheap first question and the box is the
+// precise second one — and 6.16 §7 measures whether asking the cheap one first
+// is worth it, which turned out to depend on the answer&#x27;s distribution rather
+// than on the arithmetic. `bounding_sphere` below is the conversion, and it is
+// deliberately the LOOSE one: see its own comment.
+//
+// WHAT AN AABB IS NOT. It is not the object. `transformed()` below returns the
+// box that contains the transformed *box*, which is generally larger than the
+// box that contains the transformed *object* — rotate a long thin rod by 45° and
+// the enclosing box grows by up to sqrt(3). That looseness is the price of
+// axis-alignment and it is why the function is named for what it does rather
+// than for what a caller might wish it did.
+
+#ifndef ENGINE_GFX_BOUNDS_HPP
+#define ENGINE_GFX_BOUNDS_HPP
+
+#include &lt;engine/math/mat4.hpp&gt;
+#include &lt;engine/math/vec3.hpp&gt;
+
+#include &lt;algorithm&gt;   // std::min, std::max
+#include &lt;span&gt;       // bounds_of (6.16)
+
+namespace engine {
+
+/// An axis-aligned bounding box, stored as its two extreme corners.
+///
+/// **A default-constructed box is EMPTY, and it is empty by being inside out** —
+/// `min` holds +infinity and `max` holds -infinity. That is not a trick, it is
+/// the identity element for `expand`: growing an empty box by a point gives
+/// exactly that point, with no &quot;is this the first one?&quot; branch at the call site.
+/// A first-point special case is the single most common bug in bounds code, and
+/// this representation removes the opportunity rather than documenting it.
+struct aabb
+{
+    vec3 min{ 1e30f,  1e30f,  1e30f};
+    vec3 max{-1e30f, -1e30f, -1e30f};
+
+    /// Has anything been added? False for the inside-out default.
+    ///
+    /// Checked on one axis, because `expand` only ever writes all three
+    /// together — there is no way to reach a box that is empty in x and not
+    /// in y.
+    [[nodiscard]] bool empty() const { return min.x &gt; max.x; }
+
+    /// Grow to include `p`. The one mutator, and every other builder calls it.
+    void expand(vec3 p)
+    {
+        min = {std::min(min.x, p.x), std::min(min.y, p.y), std::min(min.z, p.z)};
+        max = {std::max(max.x, p.x), std::max(max.y, p.y), std::max(max.z, p.z)};
+    }
+
+    /// Grow to include all of `other`. A no-op if `other` is empty, which falls
+    /// out of the inside-out representation without a test.
+    void expand(const aabb&amp; other)
+    {
+        min = {std::min(min.x, other.min.x), std::min(min.y, other.min.y),
+               std::min(min.z, other.min.z)};
+        max = {std::max(max.x, other.max.x), std::max(max.y, other.max.y),
+               std::max(max.z, other.max.z)};
+    }
+
+    /// Push every face out by `m`. Negative shrinks, and is not guarded: a box
+    /// shrunk past itself is inside out, which `empty()` already reports.
+    void grow(float m)
+    {
+        min = {min.x - m, min.y - m, min.z - m};
+        max = {max.x + m, max.y + m, max.z + m};
+    }
+
+    [[nodiscard]] vec3 centre() const
+    {
+        return {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f};
+    }
+
+    /// The full width on each axis — `max - min`. Zero on an axis where the box
+    /// is a plane, which a ground quad genuinely is.
+    [[nodiscard]] vec3 extent() const
+    {
+        return {max.x - min.x, max.y - min.y, max.z - min.z};
+    }
+
+    /// Half the length of the box&#x27;s diagonal — the radius of the smallest sphere
+    /// centred on `centre()` that contains it.
+    ///
+    /// Used to frame a camera, and used in Lesson 6.8 to decide how far behind
+    /// the scene a directional light&#x27;s near plane has to start.
+    [[nodiscard]] float radius() const
+    {
+        if (empty()) { return 0.0f; }
+        const vec3 e = extent();
+        return length(e) * 0.5f;
+    }
+
+    /// The eight corners, written into `out`.
+    ///
+    /// **The order is (x, then y, then z) with x varying fastest**, so corner `i`
+    /// takes `max.x` when bit 0 is set, `max.y` when bit 1 is set and `max.z` when
+    /// bit 2 is set. Fixed here so that a test can name a corner by index and mean
+    /// the same one every time.
+    void corners(vec3 out[8]) const
+    {
+        for (int i = 0; i &lt; 8; ++i)
+        {
+            out[i] = {(i &amp; 1) ? max.x : min.x,
+                      (i &amp; 2) ? max.y : min.y,
+                      (i &amp; 4) ? max.z : min.z};
+        }
+    }
+};
+
+/// The axis-aligned box containing this box&#x27;s eight corners after `m`.
+///
+/// **Read the name literally.** This is the box around the transformed BOX, not
+/// the box around the transformed contents — and under a rotation the two are
+/// different, because an axis-aligned box has to grow to stay axis-aligned.
+/// Applying it twice compounds that growth, which is the reason a scene keeps
+/// object-space bounds and transforms them once rather than caching world-space
+/// ones and re-transforming.
+///
+/// Lesson 6.8 uses it in the direction that is exactly right: world -&gt; light
+/// space, once, to find the extent of the scene along the light&#x27;s axes.
+[[nodiscard]] inline aabb transformed(const aabb&amp; box, const mat4&amp; m)
+{
+    if (box.empty()) { return {}; }
+
+    vec3 c[8];
+    box.corners(c);
+
+    aabb out;
+    for (const vec3&amp; p : c)
+    {
+        // `point()` is Lesson 2.7&#x27;s w = 1: this is a POSITION, so the matrix&#x27;s
+        // translation column applies in full. A direction would use `w = 0` and
+        // would be the wrong question for a corner.
+        const vec4 q = m * point(p);
+        out.expand(vec3{q.x, q.y, q.z});
+    }
+    return out;
+}
+
+/// A ball: a centre and a radius. **The other bounding volume**, Lesson 6.16.
+///
+/// Four floats against a box&#x27;s six, and the saving is not the point — the point
+/// is that a sphere is **rotation-invariant**, so a rotating object&#x27;s bounding
+/// sphere is a translation of the same sphere while its bounding box has to be
+/// rebuilt. That is the whole reason engines keep both: a box is tighter, a
+/// sphere is cheaper to keep true.
+struct sphere
+{
+    vec3 centre{};
+    float radius = -1.0f;   ///&lt; NEGATIVE means empty, matching `aabb`&#x27;s inside-out
+
+    [[nodiscard]] bool empty() const { return radius &lt; 0.0f; }
+};
+
+/// The axis-aligned box containing every point in `points`.
+///
+/// A free function over a span rather than a member of anything, because the
+/// callers do not agree on what owns the points: Lesson 6.16 hands it a mesh&#x27;s
+/// `vertices`, and 6.8&#x27;s `shadow_map::bounds_of` walks objects instead because it
+/// wants the tight WORLD box and not the box of a box. Both spellings are correct
+/// for what they ask; §5 of Lesson 6.16 is about which question to ask.
+[[nodiscard]] inline aabb bounds_of(std::span&lt;const vec3&gt; points)
+{
+    aabb box;
+    for (const vec3&amp; p : points) { box.expand(p); }
+    return box;
+}
+
+/// The sphere centred on the box&#x27;s centre that contains the box.
+///
+/// **This is the LOOSE conversion and it is loose by a factor of sqrt(3) in
+/// radius**, because a cube&#x27;s half-diagonal is sqrt(3) times its half-side. In
+/// volume that is 3*sqrt(3)*pi/6 ≈ **2.72x** the box for a cube — so a sphere
+/// derived this way rejects strictly less than the box it came from, and using
+/// it as a *replacement* for the box test would be a worse culler wearing a
+/// cheaper coat.
+///
+/// It is here because Lesson 6.16 uses it as a **pre-test**, where being loose is
+/// exactly the required property: a volume that contains the box can only ever
+/// produce false keeps, never a false reject, so a box test behind it is still
+/// the final word. Being loose costs accepted work; being tight would cost
+/// correctness.
+///
+/// The tighter answer — the minimal enclosing sphere of the original POINTS
+/// rather than of their box — is Welzl&#x27;s algorithm, is O(n) expected, and is
+/// genuinely worth it for a mesh you bake once. It is Exercise 6 rather than
+/// engine code, because the pre-test&#x27;s whole value is that it is nearly free and
+/// a better sphere does not change what the box behind it decides.
+[[nodiscard]] inline sphere bounding_sphere(const aabb&amp; box)
+{
+    if (box.empty()) { return {}; }
+    return {box.centre(), box.radius()};
+}
+
+} // namespace engine
+
+#endif // ENGINE_GFX_BOUNDS_HPP
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_pipeline.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/gpu_pipeline.hpp — every piece of render state, gathered into one object.
+//
+// Lesson 4.4. Lesson 4.1 argued that a GPU bakes state into an immutable object
+// and measured the usual justification for it (sparing the inner loop a branch)
+// and found it FALSE — the real reason being that the driver must validate the
+// combination and compile machine code specialised to it. Lesson 4.3 then found
+// that `SDL_CreateGPUShader` takes eight microseconds, far too little to be
+// compiling anything, and wrote down a prediction: the compile happens HERE.
+// `scratch/verify_44.cpp` §C is where that prediction gets its answer.
+//
+// The type below exists for one reason that is not obvious until it bites:
+//
+//   **`SDL_GPUGraphicsPipelineCreateInfo` HOLDS POINTERS.** Its vertex input
+//   state points at an array of buffer descriptions and an array of attributes;
+//   its target info points at an array of colour target descriptions. So a
+//   function that fills in a create-info and RETURNS IT returns a struct pointing
+//   at its own dead stack frame. The compiler will not say a word.
+//
+// `pipeline_desc` owns those arrays and hands out the create-info that points
+// into them, so the pointers stay valid exactly as long as the object does.
+//
+// LESSON 4.5 adds the two things a real mesh needs and one thing every project
+// eventually wishes it had written on day one:
+//
+//   * `instance_buffer` — a binding whose attributes advance once per INSTANCE
+//     instead of once per vertex. One field of one struct; that is all instancing
+//     costs at this level.
+//   * `check_layout` — the cross-check Lesson 4.4 said nothing performs, run
+//     against the reflection JSON the build has been emitting since Lesson 4.3.
+//     SDL validates almost nothing here (4.4 §B measured it), so this is the only
+//     thing standing between a mistyped offset and an evening of confusion.
+
+#pragma once
+
+#include &lt;engine/gfx/gpu_device.hpp&gt;
+#include &lt;engine/gfx/gpu_shader.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;array&gt;
+
+namespace engine {
+
+/// Bytes one attribute of this format occupies **in the buffer**.
+///
+/// Lesson 4.5. Needed for exactly one thing: deciding whether the attributes you
+/// declared actually fit inside the pitch you declared. Every silent layout bug
+/// is an arithmetic disagreement, and this is the arithmetic.
+[[nodiscard]] Uint32 size_of(SDL_GPUVertexElementFormat format);
+
+/// The HLSL type the **shader** receives when an attribute of this format arrives.
+///
+/// NOT the same question as `size_of`, and the gap between them is the single
+/// most useful thing on this page. `UBYTE4_NORM` occupies four bytes in the
+/// buffer and arrives in the shader as a `float4` — four bytes of storage, sixteen
+/// bytes of register, and a divide by 255 performed by fixed-function hardware on
+/// the way. That conversion is free, which is why a vertex colour has no business
+/// being four floats, and why Lesson 4.5 shrinks ours.
+///
+/// @return a static string like &quot;float3&quot;; &quot;&quot; for `INVALID`.
+[[nodiscard]] const char* shader_type_of(SDL_GPUVertexElementFormat format);
+
+/// What `check_layout` found. Zero problems is the only good answer.
+struct layout_report
+{
+    int checked = 0;        ///&lt; attributes compared against a shader input
+    int missing = 0;        ///&lt; the shader declares a location nothing supplies
+    int extra = 0;          ///&lt; we supply a location the shader never declares
+    int type_mismatch = 0;  ///&lt; float bits arriving where the shader reads an int, or vice versa
+    int overrun = 0;        ///&lt; the attribute does not fit inside its buffer&#x27;s pitch
+    int duplicate = 0;      ///&lt; two attributes at the same location — SDL requires unique
+
+    /// Same base type, **fewer components** than the shader declares — `FLOAT3`
+    /// supplied to a `float4`. Reported and deliberately NOT counted as a
+    /// problem: it is a legal and widely-used layout, and the components you did
+    /// not supply are filled in by fixed-function hardware. What they are filled
+    /// with is measured in `verify_45` §F rather than assumed, because SDL&#x27;s
+    /// header does not say and the three backends could in principle differ.
+    int widening = 0;
+
+    [[nodiscard]] int problems() const
+    {
+        return missing + extra + type_mismatch + overrun + duplicate;
+    }
+    [[nodiscard]] bool ok() const { return problems() == 0; }
+};
+
+/// Builds an `SDL_GPUGraphicsPipelineCreateInfo` and owns the arrays it points at.
+///
+/// Not a fluent &quot;builder&quot; hiding the API — every field of the create-info is
+/// still reachable and still spelled SDL&#x27;s way. This is a lifetime holder with
+/// the course&#x27;s conventions pre-filled, which is the same bargain `gpu_device`
+/// made about its raw handle in Lesson 4.2.
+class pipeline_desc
+{
+public:
+    /// Start from the course&#x27;s defaults: triangle list, fill mode, **CCW-front
+    /// and cull-back** (conventions §7), no depth test yet, no blending, and one
+    /// colour target whose format is *taken from the device&#x27;s swapchain* rather
+    /// than chosen.
+    ///
+    /// That last one is load-bearing. A pipeline whose colour target format does
+    /// not match the texture it renders to fails to create, and the swapchain&#x27;s
+    /// format is not ours to pick — Lesson 4.2 logged it for this moment.
+    pipeline_desc(const gpu_device&amp; dev, SDL_GPUShader* vertex, SDL_GPUShader* fragment);
+
+    /// Describe one vertex buffer binding: which slot, and the stride between
+    /// consecutive vertices.
+    ///
+    /// `pitch` is the whole vertex&#x27;s size, not one attribute&#x27;s. Getting it wrong
+    /// does not fail to create — it walks the buffer at the wrong rate and draws
+    /// a smear, which Lesson 4.5 will make a much bigger point of.
+    pipeline_desc&amp; vertex_buffer(Uint32 slot, Uint32 pitch);
+
+    /// Describe one attribute: which shader input location, from which buffer
+    /// slot, in what format, at what byte offset into the vertex.
+    ///
+    /// `location` matches the HLSL semantic index — `TEXCOORD0` is location 0 —
+    /// which is why Lesson 4.3 insisted the semantics be numbered from zero with
+    /// no gaps.
+    pipeline_desc&amp; attribute(Uint32 location, Uint32 buffer_slot,
+                             SDL_GPUVertexElementFormat format, Uint32 offset);
+
+    /// Describe one **per-instance** buffer binding: same slot-and-pitch shape as
+    /// `vertex_buffer`, and one field different.
+    ///
+    /// That field is `input_rate`. A `VERTEX`-rate buffer advances by `pitch`
+    /// once per vertex; an `INSTANCE`-rate buffer advances once per *instance*,
+    /// so every vertex of instance 7 reads element 7. Nothing else changes — same
+    /// buffer type, same attributes, same `SDL_BindGPUVertexBuffers` — which is
+    /// why instancing costs so much less machinery than it sounds like it should.
+    ///
+    /// `instance_step_rate` is **not** exposed, because SDL&#x27;s header says it is
+    /// reserved and must be zero. A setter for a field with one legal value is an
+    /// invitation to a bug.
+    pipeline_desc&amp; instance_buffer(Uint32 slot, Uint32 pitch);
+
+    /// Compare the layout declared here against the inputs the shader declares.
+    ///
+    /// **This is the check Lesson 4.4 said nothing performs.** SDL does not
+    /// perform it — Lesson 4.4 measured an attribute at a location the shader
+    /// never declared being accepted without complaint — and the compiler cannot,
+    /// because the two halves are written in different languages. So we do it,
+    /// from the reflection JSON that Lesson 4.3&#x27;s build already produces.
+    ///
+    /// Diagnostic, not a gate: it logs what it finds and returns the tally, and
+    /// the caller decides. Every disagreement it can find is a bug, but some of
+    /// them draw a picture anyway, and a lesson about layout wants those pictures.
+    ///
+    /// @param label prefix for the log lines — the shader&#x27;s name reads best.
+    [[nodiscard]] layout_report check_layout(const shader_inputs&amp; inputs,
+                                             const char* label) const;
+
+    /// Turn on alpha blending for colour target 0 — Lesson 6.11.
+    ///
+    /// **This is the method whose absence `pipeline_desc`&#x27;s constructor has been
+    /// documenting since Lesson 4.4** (&quot;no depth test yet, no blending&quot;). Six
+    /// lessons later the depth test arrived; here is the other half.
+    ///
+    /// The state it sets is the standard `over` operator, and it is worth reading
+    /// the four factors against the arithmetic in `blend.hpp` rather than taking
+    /// them as an incantation:
+    ///
+    ///     SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ADD   =&gt;   src*a + dst*(1-a)
+    ///     ONE,       ONE_MINUS_SRC_ALPHA, ADD   =&gt;   src   + dst*(1-a)
+    ///
+    /// The second is the premultiplied form, and the difference is one enum. That
+    /// really is the whole of the API-level difference between the two, which is
+    /// worth knowing because the difference in what they *do* is large enough to
+    /// be worth a section of the lesson.
+    ///
+    /// **The alpha channel gets its own pair of factors and its own op**, which
+    /// SDL exposes and many tutorials leave at whatever the defaults are. Ours
+    /// composites coverage the way coverage composes — `a_out = a_src + a_dst *
+    /// (1 - a_src)`, which is `over` applied to the coverage itself — so that a
+    /// render target used as a layer later (Module 9&#x27;s editor, a post-process
+    /// input) carries a meaningful alpha rather than the last fragment&#x27;s.
+    ///
+    /// **THE COLOUR TARGET&#x27;S FORMAT DECIDES WHETHER THIS IS CORRECT**, and this
+    /// is the trap the lesson&#x27;s §7 measures. Hardware blending happens AFTER the
+    /// fragment shader, on whatever is in the target — so on an `_SRGB` target
+    /// the ROP decodes, blends in linear light and re-encodes, for free, and on a
+    /// plain `UNORM` target with a shader that encodes its own output the
+    /// hardware lerps sRGB CODES. That is `blend_over_encoded`, in silicon, and
+    /// it costs 43% of the light at half coverage. `scene.frag.hlsl`&#x27;s
+    /// `encode_output` comment predicted exactly this in Lesson 6.1.
+    ///
+    /// @param premultiplied  source colours already scaled by their own alpha
+    pipeline_desc&amp; blend(bool premultiplied = false);
+
+    /// `src + dst` — additive blending, Lesson 6.13.
+    ///
+    /// **The other classic operator**, and the one `over` is not. `blend()` above
+    /// composites a surface that OCCLUDES what is behind it in proportion to its
+    /// coverage; this one composites light that ARRIVES ALONGSIDE what is behind
+    /// it. Fire, a muzzle flash, a hologram — and the bloom&#x27;s upsample chain,
+    /// which is what motivates it here.
+    ///
+    /// Three things are worth noticing about how much simpler it is:
+    ///
+    ///   * **Alpha is not in the expression.** `ONE, ONE` on both colour and
+    ///     alpha, so nothing has to agree about whether the source is
+    ///     premultiplied — `blend.hpp`&#x27;s whole distinction evaporates, because a
+    ///     source that adds light does not also subtract any.
+    ///   * **It is order-independent.** Addition is commutative and associative,
+    ///     so additive geometry needs no back-to-front sort — which is why 6.11&#x27;s
+    ///     `order_draws` exists for `over` and not for this. That is a real
+    ///     property to have, and it is the reason particle systems reach for
+    ///     additive so often.
+    ///   * **On a float target it does not clip.** The same add into an 8-bit
+    ///     UNORM target saturates at 1 and the operator stops being associative
+    ///     in practice; on `k_hdr_format` it simply accumulates. The bloom&#x27;s
+    ///     upsample chain depends on that, and it is a dependency worth stating,
+    ///     because the same pipeline pointed at the swapchain would be wrong.
+    pipeline_desc&amp; blend_add();
+
+    /// Test depth but do not write it — Lesson 6.11.
+    ///
+    /// **One bool, and the absence of a depth write is the entire reason blended
+    /// geometry composites at all.** A transparent surface does not occlude what
+    /// is behind it, because what is behind it is visible through it; write its
+    /// depth and every transparent surface further away fails the test and
+    /// vanishes. The symptom reads as &quot;the far window disappears when I look
+    /// through the near one&quot;, which sounds like a culling bug.
+    ///
+    /// Has no effect when the pipeline has no depth-stencil target.
+    pipeline_desc&amp; depth_write(bool enabled);
+
+    /// Rasterize at `n` samples per pixel — Lesson 6.14.
+    ///
+    /// **This is the whole of MSAA at the pipeline level**, and its brevity is the
+    /// point: one field, and the hardware evaluates coverage and depth at N
+    /// positions inside each pixel while the fragment shader still runs ONCE per
+    /// pixel per primitive. That asymmetry is the optimisation — 4x MSAA costs
+    /// about 1.3x rather than 4x — and it is also, exactly, why MSAA does nothing
+    /// for shading aliasing. You cannot buy shading samples with a coverage
+    /// feature.
+    ///
+    /// **It must match every attachment&#x27;s sample count.** SDL will not reconcile a
+    /// 4x pipeline with a 1x target; the pass simply fails to begin.
+    ///
+    /// The other two fields of `SDL_GPUMultisampleState` are left alone
+    /// deliberately: the header says `sample_mask` is *&quot;Reserved for future use.
+    /// Must be set to 0&quot;* and `enable_mask` must be false, so writing anything
+    /// there would be inventing behaviour SDL has not defined yet.
+    pipeline_desc&amp; samples(SDL_GPUSampleCount n);
+
+    /// Render to something other than the swapchain.
+    ///
+    /// The constructor takes the format from the device&#x27;s swapchain, which is
+    /// right for the ninety percent of pipelines that draw to the window. It is
+    /// wrong for a shadow map, a post-processing chain, or a headless test — all
+    /// of which render into a texture whose format they chose. Module 6 lives on
+    /// this method; Lesson 4.4&#x27;s harness needs it because a device with no window
+    /// has no swapchain format to inherit.
+    pipeline_desc&amp; colour_target_format(SDL_GPUTextureFormat format);
+
+    /// The finished create-info, valid while this object is.
+    ///
+    /// Returned by const reference on purpose: a copy would be a struct whose
+    /// pointers outlive nothing in particular, and handing one out by value is
+    /// precisely the bug this class exists to prevent.
+    [[nodiscard]] const SDL_GPUGraphicsPipelineCreateInfo&amp; info();
+
+    /// Direct access, for the fields this class has no opinion about. The
+    /// create-info has nine top-level fields and fifty-three once its nested
+    /// state structs are expanded; pre-empting all of them behind setters would
+    /// be inventing an API to avoid learning one.
+    [[nodiscard]] SDL_GPUGraphicsPipelineCreateInfo&amp; raw() { return info_; }
+
+private:
+    static constexpr std::size_t k_max_buffers = 4;
+
+    /// **Raised from 8 to 16 in Lesson 6.16**, and the raise is worth recording
+    /// because of how the old value behaved rather than because of the new one.
+    ///
+    /// Eight was enough for every pipeline in Modules 4 and 5 and for eight
+    /// lessons of Module 6, so nothing ever reached it. 6.16&#x27;s instanced scene
+    /// pipeline wants **eleven** — four from `gpu_mesh::describe` (position,
+    /// normal, uv, tangent) plus seven from `describe_instances` (a `float4x4`
+    /// is four attributes, and the normal matrix&#x27;s three columns are three more)
+    /// — and the ninth, tenth and eleventh were **dropped silently**, because
+    /// `attribute()` returned early rather than complaining.
+    ///
+    /// The net that caught it is Lesson 4.5&#x27;s `check_layout`, which compares the
+    /// declared attributes against the shader&#x27;s reflected inputs and reports
+    /// `missing`. That is the whole argument for that function existing: A LIMIT
+    /// THAT HAS NEVER BEEN REACHED CANNOT TELL YOU IT IS WRONG, so the only
+    /// defence is an independent reading of what the pipeline actually declares.
+    /// `attribute()` now also asserts, so the next program to overflow it finds
+    /// out at the call site instead of three steps downstream.
+    static constexpr std::size_t k_max_attributes = 16;
+
+    SDL_GPUGraphicsPipelineCreateInfo info_{};
+
+    // The arrays the create-info points at. Fixed-size and owned by value: a
+    // std::vector would work too, right up until somebody copies the desc and
+    // the vector reallocates.
+    std::array&lt;SDL_GPUVertexBufferDescription, k_max_buffers&gt; buffers_{};
+    std::array&lt;SDL_GPUVertexAttribute, k_max_attributes&gt; attributes_{};
+    std::array&lt;SDL_GPUColorTargetDescription, 4&gt; colour_targets_{};
+
+    Uint32 buffer_count_ = 0;
+    Uint32 attribute_count_ = 0;
+};
+
+/// Owns an `SDL_GPUGraphicsPipeline`.
+///
+/// A pipeline holds its own reference to the shaders it was built from, so the
+/// `gpu_shader` objects may be released as soon as every pipeline using them
+/// exists. We keep ours alive anyway, because a lesson that releases them would
+/// have to explain why the picture still works, which is a distraction.
+class gpu_pipeline
+{
+public:
+    gpu_pipeline() = default;
+    ~gpu_pipeline();
+
+    gpu_pipeline(const gpu_pipeline&amp;) = delete;
+    gpu_pipeline&amp; operator=(const gpu_pipeline&amp;) = delete;
+
+    gpu_pipeline(gpu_pipeline&amp;&amp; other) noexcept;
+    gpu_pipeline&amp; operator=(gpu_pipeline&amp;&amp; other) noexcept;
+
+    /// Create it. Failure is logged with SDL&#x27;s message, which is unusually good
+    /// for this call — a format mismatch says so by name.
+    [[nodiscard]] bool create(const gpu_device&amp; dev, const SDL_GPUGraphicsPipelineCreateInfo&amp; info);
+
+    void destroy();
+
+    [[nodiscard]] bool valid() const { return pipeline_ != nullptr; }
+    [[nodiscard]] SDL_GPUGraphicsPipeline* handle() const { return pipeline_; }
+
+    /// Milliseconds the creation call took. Lesson 4.4&#x27;s whole §5 is this number.
+    [[nodiscard]] double create_ms() const { return create_ms_; }
+
+private:
+    SDL_GPUDevice* device_ = nullptr;            ///&lt; NOT owned
+    SDL_GPUGraphicsPipeline* pipeline_ = nullptr; ///&lt; owning by contract
+    double create_ms_ = 0.0;
+};
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/gpu_scene.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/gpu_scene.hpp — drawing a SCENE, rather than a thing.
+//
+// Lesson 4.8. Everything Module 4 has built so far draws one piece of geometry:
+// a triangle (4.4), a torus (4.5), the same torus seven times (4.5&#x27;s instancing),
+// the same torus again with a camera (4.6) and a texture (4.7). Module 3&#x27;s scene
+// is not that. It is up to four objects with DIFFERENT MESHES, DIFFERENT
+// TRANSFORMS and DIFFERENT MATERIALS, and one of them is a ground plane that must
+// not be back-face culled while the others must be.
+//
+// ---------------------------------------------------------------------------
+// THE THING THE SOFTWARE RASTERIZER LET US GET AWAY WITH
+// ---------------------------------------------------------------------------
+//
+// `collect_triangles` walks every object, transforms every vertex, and appends
+// the results to ONE array. `draw_triangles` then fills that array in a single
+// loop, re-binding the material per triangle from `raster_triangle::surface` —
+// and Lesson 3.8 flagged that field, in writing, as a cheat a GPU cannot make:
+//
+//     &quot;material parameters are pipeline state, so a real renderer BATCHES BY
+//      MATERIAL and a scene with three materials is three draws.&quot;
+//
+// This file is where that bill arrives. There is no way to change a uniform in
+// the middle of a draw call, and no way at all to change the cull mode or the
+// fill mode — those are baked into a pipeline object, which was Lesson 4.1&#x27;s
+// entire argument for pipelines existing. So the scene becomes:
+//
+//     for each object:  push its matrices, push its material, bind its texture,
+//                       bind the pipeline its SURFACE STYLE needs, draw.
+//
+// Four objects is four draws. That is not a regression and it is not overhead to
+// be optimised away later — it is the shape a GPU renderer has, and the reason
+// every engine you will read has a &quot;sort the draw list&quot; step. `draw_stats`
+// counts what the sort saves, in this scene, on this frame.
+//
+// ---------------------------------------------------------------------------
+// WHAT THIS FILE IS NOT
+// ---------------------------------------------------------------------------
+//
+// It is not a render graph, a material system, or a scene graph. It owns three
+// pipelines, a depth target and a 1x1 white texture, and it turns an array of
+// `gpu_draw_item` into command-buffer calls. Every larger idea it gestures at —
+// materials that own their pipeline state (Module 6), a sorted and bucketed draw
+// list, a frame graph — is named where the pressure for it shows up and built
+// where the course reaches it. The point of writing the small version first is
+// that the big one then arrives as an answer rather than as a framework.
+
+#pragma once
+
+#include &lt;engine/gfx/gpu_debug.hpp&gt;
+#include &lt;engine/gfx/gpu_device.hpp&gt;
+#include &lt;engine/gfx/gpu_mesh.hpp&gt;
+#include &lt;engine/gfx/gpu_pipeline.hpp&gt;
+#include &lt;engine/gfx/gpu_shader.hpp&gt;
+#include &lt;engine/gfx/gpu_texture.hpp&gt;
+#include &lt;engine/gfx/gpu_uniform.hpp&gt;
+#include &lt;engine/math/mat3.hpp&gt;
+#include &lt;engine/math/mat4.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+namespace engine {
+
+/// **Forward-declared, and that is a physical-design decision** — Lesson 6.16.
+///
+/// `instancing.hpp` includes THIS header, because a batch key is made of
+/// `gpu_draw_item`&#x27;s fields. So this header cannot include that one: the two
+/// would form a cycle, and `#pragma once` would resolve it by silently giving
+/// whichever file was reached second a half-defined view of the other.
+///
+/// A forward declaration breaks it exactly, and costs nothing because
+/// `render_batched` below takes a POINTER AND A COUNT rather than a
+/// `std::span` — `std::span&lt;const T&gt;` needs `T` complete, and `render` has taken
+/// a pointer and a count since Lesson 4.8 anyway, so the constraint lands on a
+/// spelling the class had already chosen for other reasons.
+struct instance_batch;
+
+/// Which pipeline an object needs — the part of a material that **cannot be a
+/// number in a buffer**.
+///
+/// Lesson 3.4 discovered that back-face culling is only valid on a closed
+/// surface, put a `closed` flag on the demo&#x27;s object struct, and noted that in a
+/// real engine the flag belongs on the material because cull mode is pipeline
+/// state. That sentence is now enforced by the hardware: these three values are
+/// three separate `SDL_GPUGraphicsPipeline` objects, created at startup, and
+/// switching between them mid-frame costs a bind.
+///
+/// Three, and not more, on purpose. Every additional axis of pipeline state
+/// multiplies the number of objects to create — two cull modes times two fill
+/// modes times two depth settings is eight — which is why real engines either
+/// enumerate a small fixed set like this one or build them lazily and cache. The
+/// combinatorial growth is the honest reason &quot;just make it a parameter&quot; is not
+/// available.
+enum class surface_style
+{
+    /// A closed solid: cull back faces. Lesson 3.4&#x27;s optimisation, now free.
+    solid,
+
+    /// A sheet with two visible sides — the ground plane, a quad, a plank. Cull
+    /// nothing, because &quot;the back&quot; of a sheet is a face somebody can see.
+    two_sided,
+
+    /// `SDL_GPU_FILLMODE_LINE`, cull nothing. Module 2&#x27;s wireframe milestone,
+    /// which cost Lessons 2.1 and 2.12 to build, as one enum value. Kept because
+    /// it is still the fastest way to see geometry that is drawing wrongly, and
+    /// because the contrast is worth feeling.
+    wireframe
+};
+
+[[nodiscard]] const char* name_of(surface_style s);
+
+/// The **second** state axis, and the first one this course has had to add —
+/// Lesson 6.11.
+///
+/// `surface_style` is one axis with three values, so the renderer has held three
+/// pipelines since Lesson 4.8. Transparency is not a fourth value of that axis:
+/// a blended surface is still solid, two-sided or wireframe, and every
+/// combination is legitimate. So it is a second axis, and the pipeline count
+/// becomes a **product** rather than a sum — 3 x 3 = 9.
+///
+/// **That multiplication is the real cost of transparency at the API level**, and
+/// it is worth feeling now, at nine, because it is how every real engine ends up
+/// with a pipeline cache keyed on a hash of the whole state. Add MSAA (6.14) and
+/// it is 18. Add a depth-only variant and 27. Nobody enumerates that; they build
+/// the state, hash it, and create on miss. We enumerate, because nine is
+/// countable and because `create_ms()` then measures what the ninth costs.
+///
+/// **Note what is NOT on this axis: `alpha_mode::mask`.** Masking is a uniform
+/// (`material_uniforms::alpha_cutoff`) and a `clip` in the shader, so a masked
+/// draw uses the `opaque` blend style and adds no pipeline at all. `blend.hpp`
+/// argues the general case; this enum is where the argument becomes a number.
+enum class blend_style
+{
+    /// No blending, depth written. Every draw before this lesson.
+    opaque,
+
+    /// `src*a + dst*(1-a)`, depth tested and NOT written.
+    alpha,
+
+    /// `src + dst*(1-a)`, depth tested and NOT written. For sources whose colour
+    /// is already scaled by their coverage — see `alpha_storage`.
+    premultiplied
+};
+
+[[nodiscard]] const char* name_of(blend_style b);
+
+/// One object, ready to draw.
+///
+/// **Note what is a pointer and what is a value.** The mesh is borrowed — it
+/// lives on the device and is owned by whoever uploaded it — while the matrices
+/// and the material are copied, because they are small and they change every
+/// frame. That split is the seed of Module 5&#x27;s handle system: the day this struct
+/// holds a `mesh_handle` instead of a `const gpu_mesh*` is the day the renderer
+/// stops being able to be handed a dangling pointer.
+struct gpu_draw_item
+{
+    const gpu_mesh* mesh = nullptr;         ///&lt; borrowed; must outlive the draw
+
+    /// T*R*S, from `engine::parent_from_local` — Lesson 2.8.
+    mat4 world_from_model = mat4::identity();
+
+    /// The INVERSE TRANSPOSE of the above, from `engine::normal_matrix` — Lesson
+    /// 3.6. Stored as a `mat3` here and unpacked into three padded `vec4` at push
+    /// time, for the reason `object_uniforms` documents.
+    mat3 normal_from_model = mat3::identity();
+
+    /// The albedo, the highlight and the exponent. `material_uniforms::albedo` is
+    /// LINEAR — decode the demo&#x27;s `Uint32` tint before it gets here.
+    material_uniforms material{};
+
+    /// The albedo image, or `nullptr` for &quot;this surface has no texture&quot;, in which
+    /// case the renderer binds its own 1x1 white texture and the material&#x27;s
+    /// `textured` flag decides what the shader does with it.
+    ///
+    /// Bound even when unused, because a draw with nothing at a sampler slot the
+    /// shader declares draws NOTHING — silently. That failure has now cost this
+    /// project two debugging sessions (Lessons 4.6 and 4.7 each hit it once), and
+    /// the fix both times was the same: hand the shader the identity element of
+    /// the feature it is missing.
+    SDL_GPUTexture* texture = nullptr;
+
+    /// The normal map, or `nullptr` for &quot;this surface is as flat as its
+    /// triangles&quot; — Lesson 6.7, and the renderer then binds its own 1x1 FLAT
+    /// NORMAL for the same reason it binds a white texel for the albedo: a
+    /// declared sampler slot with nothing bound draws nothing at all.
+    ///
+    /// Note that the two fallbacks are different constants and both are the
+    /// identity element of their own operation. White is the identity for a
+    /// multiply; (128, 128, 255) — the lavender — is the identity for a basis
+    /// change, because it decodes to (0, 0, 1) and `T*0 + B*0 + N*1` is `N`.
+    SDL_GPUTexture* normal_map = nullptr;
+
+    surface_style style = surface_style::solid;
+
+    /// Which blend state this draw needs — Lesson 6.11.
+    ///
+    /// A **second** enum beside `style` rather than more values of it, because
+    /// they are independent: see `blend_style`. Defaults to `opaque`, so every
+    /// draw item built before this lesson selects pipeline `[style][0]`, which is
+    /// the same pipeline object it selected before.
+    ///
+    /// **The renderer does not derive this from the material**, and that is
+    /// deliberate. It could — `material::needs_sorting()` is right there — but the
+    /// caller is the one who knows whether this draw is in the sorted pass, and a
+    /// renderer that silently switched a draw to a depth-write-disabled pipeline
+    /// because of a uniform would be making an ordering decision on the caller&#x27;s
+    /// behalf without being able to do the sort that has to go with it.
+    blend_style blend = blend_style::opaque;
+};
+
+/// What one `render()` call actually did. The HUD&#x27;s numbers, and §4&#x27;s evidence.
+struct draw_stats
+{
+    int items = 0;              ///&lt; how many were submitted
+    int draws = 0;              ///&lt; how many `SDL_DrawGPUIndexedPrimitives` were issued
+    int pipeline_binds = 0;     ///&lt; how many of those needed a different pipeline
+    int texture_binds = 0;      ///&lt; …and a different texture
+    Uint32 triangles = 0;       ///&lt; the total, before any culling the GPU does
+    Uint32 uniform_bytes = 0;   ///&lt; pushed per frame: the per-draw blocks add up
+
+    /// Pipeline binds that a perfectly sorted list would have needed: one per
+    /// distinct style present. The gap between this and `pipeline_binds` is what
+    /// sorting the draw list is worth, in this frame, measured rather than
+    /// asserted.
+    int ideal_pipeline_binds = 0;
+};
+
+/// Owns the pipelines, the depth target and the fallback texture that turn a list
+/// of `gpu_draw_item` into a picture.
+///
+/// **Movable, not copyable**, like every resource type in this engine.
+class gpu_scene_renderer
+{
+public:
+    gpu_scene_renderer() = default;
+    ~gpu_scene_renderer();
+
+    gpu_scene_renderer(const gpu_scene_renderer&amp;) = delete;
+    gpu_scene_renderer&amp; operator=(const gpu_scene_renderer&amp;) = delete;
+
+    /// Build the **nine** pipelines (Lesson 6.11; three until 6.10) and the 1x1
+    /// white texture.
+    ///
+    /// @param depth_format what `supported_depth_format` returned, or
+    ///        `SDL_GPU_TEXTUREFORMAT_INVALID` for a device with no usable depth
+    ///        format — in which case the pipelines are built without a depth
+    ///        attachment and the scene draws with Lesson 3.1&#x27;s problem back.
+    /// @param colour_format `SDL_GPU_TEXTUREFORMAT_INVALID` means &quot;the device&#x27;s
+    ///        swapchain format&quot;, which is right for anything drawing into the
+    ///        window. `verify_48` renders offscreen and passes its own.
+    ///
+    /// The upload command buffer is acquired and submitted internally, because
+    /// the only thing to upload is four bytes and making a caller thread a
+    /// command buffer through for that would be ceremony.
+    /// @param instanced_vertex **Lesson 6.16.** `scene_instanced.vert`, or
+    ///        `nullptr` for &quot;this renderer does no instanced draws&quot;. When given,
+    ///        ONE more pipeline is created — solid, opaque — bringing the count
+    ///        to ten.
+    ///
+    ///        **One and not nine**, and the asymmetry is the honest part. The
+    ///        nine exist because `surface_style` and `blend_style` are
+    ///        independent axes that every draw must choose from; instancing is
+    ///        neither, it is a THIRD axis, and crossing it in would make
+    ///        eighteen. We build the one combination that is worth instancing —
+    ///        many copies of a closed opaque mesh, which is what foliage, crates
+    ///        and crowds are — and say plainly that a wireframe instanced draw
+    ///        or a blended instanced draw is unavailable. `batch_instances`
+    ///        refuses to batch blended geometry anyway, for ordering reasons
+    ///        that are correctness rather than convenience, so that half of the
+    ///        gap is a rule and not a shortcut.
+    ///
+    ///        The general answer — build the state, hash it, create on miss — is
+    ///        named in `blend_style`&#x27;s comment and is Module 9&#x27;s pipeline cache.
+    [[nodiscard]] bool create(const gpu_device&amp; dev,
+                              SDL_GPUShader* vertex, SDL_GPUShader* fragment,
+                              SDL_GPUTextureFormat depth_format,
+                              SDL_GPUTextureFormat colour_format
+                                  = SDL_GPU_TEXTUREFORMAT_INVALID,
+                              SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1,
+                              SDL_GPUShader* instanced_vertex = nullptr);
+
+    void destroy();
+
+    [[nodiscard]] bool valid() const { return pipelines_[0][0].valid(); }
+
+    /// Create or re-create the depth attachment at `w` x `h`.
+    ///
+    /// A depth target must match its colour target&#x27;s dimensions exactly, and the
+    /// window is resizable, so this is called every frame with the swapchain&#x27;s
+    /// size and does nothing on the frames where the size has not changed.
+    /// Forgetting it is a crash on the first resize, not a wrong picture.
+    ///
+    /// @return false when there is no usable depth format, which is not an error
+    ///         — the caller then begins its pass without a depth attachment.
+    /// @param samples **Lesson 6.14.** Must match the colour target&#x27;s count —
+    ///        every attachment in a pass shares its sample positions, so a 4x
+    ///        colour target beside a 1x depth target is a pass that cannot begin.
+    [[nodiscard]] bool ensure_depth(const gpu_device&amp; dev, Uint32 w, Uint32 h,
+                                    SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1);
+
+    /// Fill in the depth attachment description for a pass. Only valid after a
+    /// successful `ensure_depth`.
+    ///
+    /// **Cleared to 1, the far plane**, because SDL_GPU&#x27;s NDC runs 0 at near to 1
+    /// at far (conventions §4) and the comparison is LESS. Clear it to 0 and
+    /// every fragment in the scene fails its test.
+    [[nodiscard]] SDL_GPUDepthStencilTargetInfo depth_target_info() const;
+
+    [[nodiscard]] bool has_depth() const { return depth_.valid(); }
+    [[nodiscard]] SDL_GPUTextureFormat depth_format() const { return depth_format_; }
+
+    /// Record the whole scene into `pass`.
+    ///
+    /// The per-frame blocks are pushed onto `cb` first and then never again; the
+    /// per-draw blocks are pushed between draws. Both go on the COMMAND BUFFER
+    /// rather than the pass, which is why `cb` is a separate parameter and not
+    /// something the pass could hand us.
+    ///
+    /// Items are drawn **in the order given**. This function does not sort them,
+    /// and the reason is that sorting is a policy decision with more than one
+    /// right answer (by pipeline? by material? front-to-back for early-z? by
+    /// distance for transparency?) and it belongs to the caller who knows what
+    /// the frame is for. What this function does is COUNT what the caller&#x27;s order
+    /// cost, so the policy can be evaluated rather than argued about.
+    ///
+    /// A null or invalid mesh is skipped rather than being an error: a scene
+    /// whose model failed to load should draw the rest of itself.
+    /// @param log  Lesson 4.9&#x27;s frame log, or `nullptr`. When present, every
+    ///        bind, push and draw below is recorded as it is issued — from the
+    ///        SAME statement that issues it, never from a parallel description
+    ///        of what the function is believed to do. Instrumentation that can
+    ///        drift from the code it describes is worse than none, because it
+    ///        is believed. `verify_49` §D checks the log against `draw_stats`,
+    ///        which is a second reading of the same events.
+    /// The environment&#x27;s three resources, **gathered into a struct because the
+    /// alternative had stopped being readable**. Lesson 6.15.
+    ///
+    /// `render` already takes nine parameters, four of them optional pointers,
+    /// and `hdr.hpp`&#x27;s `resolve` said the same thing one lesson earlier: &quot;two
+    /// inputs is the point at which this signature stops scaling... a third
+    /// would need a struct&quot;. Three more would have made twelve. They also
+    /// genuinely belong together — an irradiance map baked from one sky and a
+    /// prefiltered chain baked from another produce a diffuse and a specular
+    /// term that disagree about where the sun is, which is a failure the type
+    /// system can help with by making them arrive as one thing.
+    ///
+    /// **All three are required together.** A null `scene_environment` (or a
+    /// null pointer to one) binds the renderer&#x27;s own identity fallbacks — a 1x1
+    /// BLACK cube and a 1x1 black table — which is the fourth instance of this
+    /// class&#x27;s stated pattern: hand the shader the identity element of the
+    /// feature it is missing. Black is the identity for the ADDITION the
+    /// ambient term performs, where white was the identity for the albedo&#x27;s
+    /// multiply and lavender for a basis change. Note that the fallback is
+    /// bound whether or not `ibl_intensity` is zero: HLSL does not elide a
+    /// resource because a branch did not reach it, and an unbound sampler slot
+    /// is undefined rather than empty.
+    struct scene_environment
+    {
+        SDL_GPUTexture* irradiance = nullptr;   ///&lt; TextureCube, slot 3
+        SDL_GPUTexture* prefiltered = nullptr;  ///&lt; TextureCube, slot 4
+        SDL_GPUTexture* brdf_lut = nullptr;     ///&lt; Texture2D, slot 5
+
+        /// The sampler for both cube maps. **CLAMP_TO_EDGE and trilinear**, and
+        /// the mip filter is not optional: the prefiltered chain is indexed by a
+        /// continuous roughness, so `nearest` between levels would make a
+        /// smoothly-varying roughness step visibly between blur radii.
+        SDL_GPUSampler* cube_sampler = nullptr;
+
+        /// The sampler for the table. **CLAMP_TO_EDGE, linear, one level.**
+        /// Repeat here would wrap a grazing `n.v` round to the head-on entry.
+        SDL_GPUSampler* lut_sampler = nullptr;
+
+        [[nodiscard]] bool complete() const
+        {
+            return irradiance != nullptr &amp;&amp; prefiltered != nullptr
+                &amp;&amp; brdf_lut != nullptr &amp;&amp; cube_sampler != nullptr
+                &amp;&amp; lut_sampler != nullptr;
+        }
+    };
+
+    /// @param shadow the shadow map to bind at fragment slot 2, or `nullptr` for
+    ///        &quot;this scene has none&quot; — in which case the renderer binds its own
+    ///        **1x1 depth texture cleared to the far plane**, Lesson 6.8.
+    ///
+    ///        That fallback is the third of its kind in this class and the
+    ///        pattern is now explicit: hand the shader the IDENTITY ELEMENT of
+    ///        the feature it is missing. White is the identity for a multiply,
+    ///        lavender for a basis change (6.7), and **`1.0` is the identity for
+    ///        a depth comparison** — a map that says the nearest surface along
+    ///        every ray is the far plane says nothing occludes anything. A
+    ///        declared sampler slot with nothing bound draws nothing at all, and
+    ///        silently, which has now cost this project three debugging sessions.
+    /// @param shadow_sampler the COMPARISON sampler that goes with it, or
+    ///        `nullptr` to use the renderer&#x27;s own. It is a separate parameter
+    ///        from `sampler` because it is a different kind of object —
+    ///        `enable_compare` is on — and binding an ordinary sampler here is a
+    ///        validation error rather than a wrong picture.
+    draw_stats render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                      const gpu_draw_item* items, int count,
+                      const camera_uniforms&amp; camera,
+                      const scene_light_uniforms&amp; light,
+                      SDL_GPUSampler* sampler,
+                      frame_log* log = nullptr,
+                      SDL_GPUTexture* shadow = nullptr,
+                      SDL_GPUSampler* shadow_sampler = nullptr,
+                      const cascade_uniforms* cascades = nullptr,
+                      const scene_environment* environment = nullptr) const;
+
+    /// Draw a frame that has already been culled and batched — Lesson 6.16.
+    ///
+    /// Records the same per-frame state `render` does (camera, light, cascades,
+    /// shadow map, environment — one shared helper, so the two cannot drift) and
+    /// then issues **one draw per batch** instead of one per object.
+    ///
+    /// `instances` is a vertex buffer holding `batches`&#x27; instance data end to
+    /// end, in the order `batch_instances` produced — typically a
+    /// `gpu_stream_buffer` written earlier in the same command buffer. It is
+    /// bound at **slot 1**, with a per-batch OFFSET, which is the mechanism that
+    /// lets one buffer serve every batch: `SDL_BindGPUVertexBuffers` takes an
+    /// offset in bytes, so batch `k` binds at `first * sizeof(gpu_instance)` and
+    /// the hardware&#x27;s instance index then counts from zero within it.
+    ///
+    /// @return the same `draw_stats` shape as `render`, so the two are directly
+    ///         comparable — which is the entire point of §10&#x27;s measurement. Note
+    ///         that `items` counts INSTANCES and `draws` counts BATCHES, so the
+    ///         ratio between them is what instancing bought.
+    ///
+    /// A batch whose mesh is null or whose style is not solid+opaque is SKIPPED
+    /// and counted in `draw_stats::items` but not `draws` — the renderer has one
+    /// instanced pipeline (see `create`), and silently drawing such a batch with
+    /// the wrong state would be worse than not drawing it.
+    draw_stats render_batched(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                              const instance_batch* batches, int count,
+                              SDL_GPUBuffer* instances,
+                              const camera_uniforms&amp; camera,
+                              const scene_light_uniforms&amp; light,
+                              SDL_GPUSampler* sampler,
+                              frame_log* log = nullptr,
+                              SDL_GPUTexture* shadow = nullptr,
+                              SDL_GPUSampler* shadow_sampler = nullptr,
+                              const cascade_uniforms* cascades = nullptr,
+                              const scene_environment* environment = nullptr) const;
+
+    /// Was an instanced pipeline created? False when `create` was given no
+    /// `instanced_vertex`, in which case `render_batched` draws nothing.
+    [[nodiscard]] bool has_instanced() const { return instanced_.valid(); }
+
+    /// The white 1x1 texture, for callers that want to bind it themselves.
+    [[nodiscard]] SDL_GPUTexture* white() const { return white_.handle(); }
+
+    /// The flat 1x1 normal map, for callers that want to bind it themselves.
+    [[nodiscard]] SDL_GPUTexture* flat_normal() const { return flat_normal_.handle(); }
+
+    /// How long `create` spent inside `SDL_CreateGPUGraphicsPipeline`, summed
+    /// over the three. Lesson 4.4 measured that this number is dominated by the
+    /// driver&#x27;s on-disk pipeline cache and varies by two orders of magnitude
+    /// between a cold and a warm run; it is reported for that reason, not as a
+    /// benchmark.
+    [[nodiscard]] double create_ms() const { return create_ms_; }
+
+private:
+    /// What is resolved once per frame and read by every draw — Lesson 6.16.
+    ///
+    /// **Split out of `render` when `render_batched` arrived.** Until this lesson
+    /// there was one draw loop, and the ninety lines that resolve the fallbacks
+    /// and push the per-frame blocks were simply its prologue. Instanced
+    /// submission adds a second loop that needs every one of those lines and none
+    /// of the first loop&#x27;s. Copying them would have produced two copies of one
+    /// rule — the failure this engine has already paid for twice (Lesson 5.1&#x27;s
+    /// four hand-transcribed harnesses; 6.15&#x27;s two spellings of an ARGB packing).
+    ///
+    /// The split is exactly at &quot;does this change within a frame?&quot;, which is the
+    /// same line Lesson 4.6 drew for uniform blocks: **data grouped by RATE of
+    /// change**, not by what it describes.
+    struct frame_setup
+    {
+        SDL_GPUTexture* shadow = nullptr;
+        SDL_GPUSampler* shadow_sampler = nullptr;
+        SDL_GPUTexture* irradiance = nullptr;
+        SDL_GPUTexture* prefiltered = nullptr;
+        SDL_GPUTexture* brdf_lut = nullptr;
+        SDL_GPUSampler* cube_sampler = nullptr;
+        SDL_GPUSampler* lut_sampler = nullptr;
+    };
+
+    /// Push the per-frame uniform blocks and resolve every fallback.
+    ///
+    /// `stats.uniform_bytes` is accumulated through the reference parameter,
+    /// because the bytes are pushed here and the caller is the one reporting.
+    [[nodiscard]] frame_setup begin_frame(SDL_GPUCommandBuffer* cb,
+                                          const camera_uniforms&amp; camera,
+                                          const scene_light_uniforms&amp; light,
+                                          const cascade_uniforms* cascades,
+                                          SDL_GPUTexture* shadow,
+                                          SDL_GPUSampler* shadow_sampler,
+                                          const scene_environment* environment,
+                                          frame_log* log,
+                                          draw_stats&amp; stats) const;
+
+    static constexpr int k_styles = 3;
+
+    /// 6.11. The second axis — see `blend_style`. Three, not two, because
+    /// premultiplied is a different pipeline and not a different shader.
+    static constexpr int k_blends = 3;
+
+    /// **Nine pipelines, indexed `[style][blend]`.** Lesson 4.8 had three; the
+    /// count is a product now, and `create_ms()` reports what the extra six cost
+    /// at startup rather than leaving it to be guessed at.
+    gpu_pipeline pipelines_[k_styles][k_blends];
+
+    /// 6.16. The TENTH pipeline: solid, opaque, and an instance-rate buffer at
+    /// slot 1. Invalid when `create` was given no instanced vertex shader, which
+    /// is the supported way to say &quot;this renderer does no instanced draws&quot; —
+    /// every program built before this lesson keeps working unchanged, because
+    /// the parameter defaults to null.
+    gpu_pipeline instanced_;
+
+    gpu_texture depth_;
+    gpu_texture white_;
+    gpu_texture flat_normal_;   ///&lt; 6.7
+
+    /// 6.8. A 1x1 sampled depth texture holding 1.0 — &quot;nothing occludes&quot;. Its
+    /// contents come from a render pass that clears it and draws nothing, which
+    /// is the only way to write a depth texture at all: `SDL_UploadToGPUTexture`
+    /// cannot target one.
+    gpu_texture far_depth_;
+
+    /// 6.15&#x27;s identity fallbacks — a black cube and a black table. Both are
+    /// 1x1, both are bound whenever the caller has no environment, and both
+    /// exist because a declared-but-unbound sampler slot is undefined behaviour
+    /// rather than a no-op.
+    gpu_texture black_cube_;
+    gpu_texture black_lut_;
+    gpu_sampler cube_sampler_;
+
+    /// 6.8. The comparison sampler for the fallback, and for callers that have a
+    /// map but no sampler of their own.
+    gpu_sampler shadow_sampler_;
+    SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUSampleCount samples_ = SDL_GPU_SAMPLECOUNT_1;   ///&lt; 6.14
+    Uint32 depth_w_ = 0;
+    Uint32 depth_h_ = 0;
+    double create_ms_ = 0.0;
+};
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gpu_pipeline.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/gpu_pipeline.cpp — filling in fifty-three fields, timing the call that
+// consumes them, and (Lesson 4.5) checking the half of them nobody else checks.
+
+#include &lt;engine/gfx/gpu_pipeline.hpp&gt;
+
+#include &lt;engine/core/assert.hpp&gt;
+
+#include &lt;engine/core/log.hpp&gt;
+
+#include &lt;cstddef&gt;
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+#include &lt;utility&gt;
+
+namespace engine {
+
+// ---------------------------------------------------------------------------
+// Lesson 4.5 — the two questions you can ask about a vertex element format
+// ---------------------------------------------------------------------------
+//
+// They have different answers, and confusing them is a whole class of bug.
+// `size_of` is about the BUFFER: how many bytes this attribute eats, which is
+// what decides whether the layout fits inside the pitch. `shader_type_of` is
+// about the REGISTER: what the shader ends up holding, which is what decides
+// whether the declaration on the HLSL side agrees.
+//
+// For FLOAT3 the two agree in spirit — twelve bytes, a `float3`. For UBYTE4_NORM
+// they do not: four bytes in the buffer, a `float4` in the shader, with the
+// divide by 255 done by fixed-function hardware for free.
+
+Uint32 size_of(SDL_GPUVertexElementFormat format)
+{
+    switch (format)
+    {
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT:
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT:          return 4;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2:         return 8;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT3:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT3:
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3:         return 12;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4:         return 16;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2_NORM:    return 2;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM:    return 4;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_HALF2:          return 4;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_HALF4:          return 8;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INVALID:
+    default:                                         return 0;
+    }
+}
+
+const char* shader_type_of(SDL_GPUVertexElementFormat format)
+{
+    switch (format)
+    {
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT:          return &quot;float&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2:         return &quot;float2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3:         return &quot;float3&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4:         return &quot;float4&quot;;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT:            return &quot;int&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT2:           return &quot;int2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT3:           return &quot;int3&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_INT4:           return &quot;int4&quot;;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT:           return &quot;uint&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT2:          return &quot;uint2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT3:          return &quot;uint3&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_UINT4:          return &quot;uint4&quot;;
+
+    // The integer formats arrive as integers...
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT2:         return &quot;int2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT4:         return &quot;int4&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT2:        return &quot;uint2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT4:        return &quot;uint4&quot;;
+
+    // ...and the _NORM ones do NOT. This is the interesting row of the table:
+    // the bytes are integers and the shader sees floats, because the hardware
+    // divides by 255 (or 32767, or 65535) on the way in. Half floats likewise
+    // expand to full floats for free.
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT2_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_HALF2:          return &quot;float2&quot;;
+    case SDL_GPU_VERTEXELEMENTFORMAT_BYTE4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_USHORT4_NORM:
+    case SDL_GPU_VERTEXELEMENTFORMAT_HALF4:          return &quot;float4&quot;;
+
+    case SDL_GPU_VERTEXELEMENTFORMAT_INVALID:
+    default:                                         return &quot;&quot;;
+    }
+}
+
+namespace {
+
+/// Split &quot;float3&quot; into (&quot;float&quot;, 3). A trailing digit is the component count;
+/// its absence means one component.
+void split_type(const char* type, std::string_view&amp; base, int&amp; components)
+{
+    std::string_view t(type);
+    components = 1;
+    if (!t.empty() &amp;&amp; t.back() &gt;= &#x27;2&#x27; &amp;&amp; t.back() &lt;= &#x27;4&#x27;)
+    {
+        components = t.back() - &#x27;0&#x27;;
+        t.remove_suffix(1);
+    }
+    base = t;
+}
+
+void split_type(const std::string&amp; type, std::string_view&amp; base, int&amp; components)
+{
+    split_type(type.c_str(), base, components);
+}
+
+} // namespace
+
+pipeline_desc::pipeline_desc(const gpu_device&amp; dev, SDL_GPUShader* vertex,
+                             SDL_GPUShader* fragment)
+{
+    info_.vertex_shader = vertex;
+    info_.fragment_shader = fragment;
+
+    // Three separate triangles per three vertices. TRIANGLESTRIP shares two
+    // vertices between neighbours and is cheaper for a fan or a ribbon; a list
+    // is what indexed geometry wants, and Lesson 2.12&#x27;s meshes are indexed.
+    info_.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+
+    // ---- Rasterizer state ---------------------------------------------------
+    //
+    // EXPLICIT, not defaulted, and LEARNINGS.md records why: every enum here has
+    // its first enumerator at zero, so a zero-initialised rasterizer state means
+    // &quot;CCW is front-facing, cull nothing&quot;. A forgotten cull_mode therefore shows
+    // up as no culling at all rather than as an error — a silent bug wearing the
+    // costume of a working program.
+    info_.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    info_.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+    info_.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    info_.rasterizer_state.enable_depth_clip = true;
+
+    // ---- Multisample state --------------------------------------------------
+    // One sample. SDL requires sample_mask = 0 and enable_mask = false; the
+    // header says both are reserved, and the zero-initialisation above already
+    // set them, but naming the sample count is worth the line.
+    info_.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    // ---- Depth-stencil state ------------------------------------------------
+    // Off. There is one triangle and nothing to be hidden behind. Lesson 4.7
+    // turns this on and it becomes Lesson 3.1&#x27;s depth test, as a struct field —
+    // note that `enable_depth_write` is documented as ignored while
+    // `enable_depth_test` is false, so leaving both off is one decision.
+    info_.depth_stencil_state.enable_depth_test = false;
+    info_.depth_stencil_state.enable_depth_write = false;
+
+    // ---- The target -----------------------------------------------------
+    //
+    // THE FORMAT IS NOT A CHOICE. It must equal the format of the texture this
+    // pipeline will render into, and for the swapchain that is negotiated
+    // between the display, the compositor and the driver. Lesson 4.2 asked and
+    // logged it; this is what the answer was for.
+    colour_targets_[0] = SDL_GPUColorTargetDescription{};
+    colour_targets_[0].format = dev.report().swapchain_format;
+
+    info_.target_info.color_target_descriptions = colour_targets_.data();
+    info_.target_info.num_color_targets = 1;
+    info_.target_info.has_depth_stencil_target = false;
+
+    // The vertex input arrays start empty and are filled in by the two methods
+    // below. Pointing at them here rather than in `info()` means the create-info
+    // is coherent at every moment, not only after a build step nobody called.
+    info_.vertex_input_state.vertex_buffer_descriptions = buffers_.data();
+    info_.vertex_input_state.num_vertex_buffers = 0;
+    info_.vertex_input_state.vertex_attributes = attributes_.data();
+    info_.vertex_input_state.num_vertex_attributes = 0;
+}
+
+pipeline_desc&amp; pipeline_desc::vertex_buffer(Uint32 slot, Uint32 pitch)
+{
+    if (buffer_count_ &gt;= k_max_buffers) { return *this; }
+
+    SDL_GPUVertexBufferDescription&amp; d = buffers_[buffer_count_];
+    d = SDL_GPUVertexBufferDescription{};
+    d.slot = slot;
+    d.pitch = pitch;
+    d.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    d.instance_step_rate = 0;   // reserved; the header says it must be 0
+
+    ++buffer_count_;
+    info_.vertex_input_state.num_vertex_buffers = buffer_count_;
+    return *this;
+}
+
+pipeline_desc&amp; pipeline_desc::instance_buffer(Uint32 slot, Uint32 pitch)
+{
+    if (buffer_count_ &gt;= k_max_buffers) { return *this; }
+
+    SDL_GPUVertexBufferDescription&amp; d = buffers_[buffer_count_];
+    d = SDL_GPUVertexBufferDescription{};
+    d.slot = slot;
+    d.pitch = pitch;
+
+    // THE ONE DIFFERENT FIELD. Everything else about this binding — the buffer
+    // type, the attributes that read it, the call that binds it — is identical to
+    // a per-vertex one. `INSTANCE` says: advance by `pitch` once per instance, so
+    // every vertex of instance 7 reads element 7 of this buffer.
+    d.input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+    d.instance_step_rate = 0;   // reserved; the header says it must be 0
+
+    ++buffer_count_;
+    info_.vertex_input_state.num_vertex_buffers = buffer_count_;
+    return *this;
+}
+
+pipeline_desc&amp; pipeline_desc::attribute(Uint32 location, Uint32 buffer_slot,
+                                        SDL_GPUVertexElementFormat format, Uint32 offset)
+{
+    // 6.16: ASSERT, THEN REFUSE. Refusing alone is what let three dropped
+    // attributes reach `check_layout` as a puzzle rather than reaching the call
+    // site as an error. The refusal stays for release builds — a pipeline with a
+    // missing attribute is a wrong picture, a buffer overrun is worse.
+    ENGINE_ASSERT_MSG(attribute_count_ &lt; k_max_attributes, log_gfx,
+                      &quot;pipeline_desc: attribute %u exceeds the cap of %zu; it is &quot;
+                      &quot;being DROPPED and check_layout will report it missing&quot;,
+                      location, k_max_attributes);
+    if (attribute_count_ &gt;= k_max_attributes) { return *this; }
+
+    SDL_GPUVertexAttribute&amp; a = attributes_[attribute_count_];
+    a = SDL_GPUVertexAttribute{};
+    a.location = location;
+    a.buffer_slot = buffer_slot;
+    a.format = format;
+    a.offset = offset;
+
+    ++attribute_count_;
+    info_.vertex_input_state.num_vertex_attributes = attribute_count_;
+    return *this;
+}
+
+layout_report pipeline_desc::check_layout(const shader_inputs&amp; inputs, const char* label) const
+{
+    layout_report r;
+    const char* who = (label != nullptr) ? label : &quot;pipeline&quot;;
+
+    // ---- Every attribute we declared, against the shader --------------------
+    for (Uint32 i = 0; i &lt; attribute_count_; ++i)
+    {
+        const SDL_GPUVertexAttribute&amp; a = attributes_[i];
+
+        // SDL&#x27;s header states the rule plainly: &quot;All vertex attribute locations
+        // provided to an SDL_GPUVertexInputState must be unique.&quot; It does not say
+        // what happens otherwise, and a rule with no stated consequence is a rule
+        // you want to be checking yourself.
+        for (Uint32 j = 0; j &lt; i; ++j)
+        {
+            if (attributes_[j].location == a.location)
+            {
+                ++r.duplicate;
+                ENGINE_LOG_ERROR(engine::log_gpu, &quot;  layout %s: TWO attributes at location %u — SDL requires them unique&quot;,
+                        who, a.location);
+                break;
+            }
+        }
+
+        // Does the attribute fit inside the vertex it claims to live in? An
+        // offset past the pitch is not caught anywhere else, and it reads the
+        // NEXT vertex&#x27;s bytes rather than failing.
+        for (Uint32 b = 0; b &lt; buffer_count_; ++b)
+        {
+            if (buffers_[b].slot != a.buffer_slot) { continue; }
+
+            const Uint32 end = a.offset + size_of(a.format);
+            if (end &gt; buffers_[b].pitch)
+            {
+                ++r.overrun;
+                ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: location %u ends at byte %u of a %u-byte vertex&quot;
+                        &quot; — it reads into the NEXT one&quot;,
+                        who, a.location, end, buffers_[b].pitch);
+            }
+            break;
+        }
+
+        // The cross-language half: does the shader declare this location at all,
+        // and if so does it expect what we are sending?
+        const shader_input* match = nullptr;
+        for (const shader_input&amp; in : inputs)
+        {
+            if (in.location == a.location) { match = &amp;in; break; }
+        }
+
+        if (match == nullptr)
+        {
+            // Lesson 4.4 §B measured this being accepted by pipeline creation
+            // without a word. It is harmless to the picture and it is almost
+            // always a typo, so it is worth a line.
+            ++r.extra;
+            ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: location %u is supplied but the shader never declares it&quot;,
+                    who, a.location);
+            continue;
+        }
+
+        ++r.checked;
+
+        std::string_view ours_base;
+        std::string_view theirs_base;
+        int ours_n = 0;
+        int theirs_n = 0;
+        split_type(shader_type_of(a.format), ours_base, ours_n);
+        split_type(match-&gt;type, theirs_base, theirs_n);
+
+        if (ours_base != theirs_base)
+        {
+            // The bad kind. Float bits read as an integer are not a small error;
+            // 1.0f read as an int is 1065353216.
+            ++r.type_mismatch;
+            ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: location %u (%s) supplies %s, the shader reads %s&quot;
+                    &quot; — the BITS are reinterpreted, not converted&quot;,
+                    who, a.location, match-&gt;name.c_str(),
+                    shader_type_of(a.format), match-&gt;type.c_str());
+        }
+        else if (ours_n &lt; theirs_n)
+        {
+            // The legal kind — see `layout_report::widening`.
+            ++r.widening;
+            ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: location %u (%s) supplies %s into a %s&quot;
+                    &quot; — hardware fills the rest; verify_45 §F says with what&quot;,
+                    who, a.location, match-&gt;name.c_str(),
+                    shader_type_of(a.format), match-&gt;type.c_str());
+        }
+        else if (ours_n &gt; theirs_n)
+        {
+            // Also legal, also worth saying: the extra components are read out of
+            // the buffer and then discarded, which is bandwidth spent on nothing.
+            ++r.widening;
+            ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: location %u (%s) supplies %s into a %s&quot;
+                    &quot; — the extra components are fetched and thrown away&quot;,
+                    who, a.location, match-&gt;name.c_str(),
+                    shader_type_of(a.format), match-&gt;type.c_str());
+        }
+    }
+
+    // ---- Every input the shader declared, against us ------------------------
+    //
+    // THE ONE THAT ACTUALLY BITES. A shader input nothing supplies does not stop
+    // pipeline creation and does not stop the draw; it reads undefined data, and
+    // undefined data in a POSITION is geometry stretching off to infinity.
+    for (const shader_input&amp; in : inputs)
+    {
+        bool supplied = false;
+        for (Uint32 i = 0; i &lt; attribute_count_; ++i)
+        {
+            if (attributes_[i].location == in.location) { supplied = true; break; }
+        }
+        if (!supplied)
+        {
+            ++r.missing;
+            ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: the shader declares %s (%s) at location %u&quot;
+                    &quot; and NOTHING supplies it&quot;,
+                    who, in.name.c_str(), in.type.c_str(), in.location);
+        }
+    }
+
+    if (r.ok())
+    {
+        ENGINE_LOG_INFO(engine::log_gpu, &quot;  layout %s: %d attribute%s checked against the reflection, no problems%s&quot;,
+                who, r.checked, r.checked == 1 ? &quot;&quot; : &quot;s&quot;,
+                r.widening &gt; 0 ? &quot; (see the note above)&quot; : &quot;&quot;);
+    }
+    return r;
+}
+
+pipeline_desc&amp; pipeline_desc::colour_target_format(SDL_GPUTextureFormat format)
+{
+    colour_targets_[0].format = format;
+    return *this;
+}
+
+// ---- Lesson 6.11 ------------------------------------------------------------
+
+pipeline_desc&amp; pipeline_desc::blend(bool premultiplied)
+{
+    // `SDL_GPUColorTargetBlendState`, verified field by field against
+    // SDL3/SDL_gpu.h: six enums, a write mask and two bools, in that order.
+    SDL_GPUColorTargetBlendState&amp; b = colour_targets_[0].blend_state;
+
+    // The switch. Without it every other field here is ignored, which is the
+    // usual way this is got wrong — the state is filled in perfectly and the
+    // picture is unchanged, and there is no error anywhere to explain it.
+    // (Lesson 6.10 met exactly this shape twice: `max_lod = 0` clamping a chain
+    // away, and `max_anisotropy` ignored without `enable_anisotropy`. When a
+    // feature &quot;does nothing&quot;, suspect the enable.)
+    b.enable_blend = true;
+
+    // src*a + dst*(1-a), or src + dst*(1-a). ONE ENUM APART — see the header,
+    // and `blend.hpp` for what the two expressions actually do to a filtered
+    // edge.
+    b.src_color_blendfactor = premultiplied ? SDL_GPU_BLENDFACTOR_ONE
+                                            : SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    b.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    b.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    // COVERAGE COMPOSES LIKE COVERAGE: a_out = a_src + a_dst*(1 - a_src), which
+    // is `over` applied to the alpha channel itself and is the same expression
+    // in both storage conventions — alpha is never premultiplied by itself.
+    // Leaving these at their zero-initialised values would set both factors to
+    // `INVALID` and the op to `INVALID`, which is not a synonym for &quot;the colour
+    // ones&quot;.
+    b.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    b.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    // `enable_color_write_mask` stays false, which SDL documents as &quot;writes to
+    // all channels&quot; — so the mask field is deliberately left alone rather than
+    // set to an all-ones value that would mean the same thing less clearly.
+    return *this;
+}
+
+pipeline_desc&amp; pipeline_desc::blend_add()
+{
+    SDL_GPUColorTargetBlendState&amp; b = colour_targets_[0].blend_state;
+
+    // The enable, first, for the reason `blend()` gives at length: without it
+    // every field below is ignored and the picture is silently unchanged.
+    b.enable_blend = true;
+
+    // src*1 + dst*1. Six fields to say &quot;add&quot;, and every one of them has to be
+    // filled: a zero-initialised `SDL_GPUColorTargetBlendState` has `INVALID` in
+    // the factors and the ops, and `INVALID` is not a synonym for &quot;the sensible
+    // default&quot;.
+    b.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    b.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    b.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    return *this;
+}
+
+pipeline_desc&amp; pipeline_desc::samples(SDL_GPUSampleCount n)
+{
+    // ONE FIELD. `sample_mask` and `enable_mask` stay at their zero-initialised
+    // values because SDL3&#x27;s header reserves both for future use and requires
+    // exactly those values — see the note in the header.
+    info_.multisample_state.sample_count = n;
+    return *this;
+}
+
+pipeline_desc&amp; pipeline_desc::depth_write(bool enabled)
+{
+    info_.depth_stencil_state.enable_depth_write = enabled;
+    return *this;
+}
+
+const SDL_GPUGraphicsPipelineCreateInfo&amp; pipeline_desc::info()
+{
+    return info_;
+}
+
+gpu_pipeline::~gpu_pipeline()
+{
+    destroy();
+}
+
+gpu_pipeline::gpu_pipeline(gpu_pipeline&amp;&amp; other) noexcept
+    : device_(other.device_), pipeline_(other.pipeline_), create_ms_(other.create_ms_)
+{
+    other.device_ = nullptr;
+    other.pipeline_ = nullptr;
+    other.create_ms_ = 0.0;
+}
+
+gpu_pipeline&amp; gpu_pipeline::operator=(gpu_pipeline&amp;&amp; other) noexcept
+{
+    if (this != &amp;other)
+    {
+        destroy();
+        device_ = other.device_;
+        pipeline_ = other.pipeline_;
+        create_ms_ = other.create_ms_;
+        other.device_ = nullptr;
+        other.pipeline_ = nullptr;
+        other.create_ms_ = 0.0;
+    }
+    return *this;
+}
+
+bool gpu_pipeline::create(const gpu_device&amp; dev, const SDL_GPUGraphicsPipelineCreateInfo&amp; info)
+{
+    destroy();
+
+    if (!dev.valid()) { return false; }
+    device_ = dev.handle();
+
+    // Timed, because Lesson 4.3 published a prediction about this call and a
+    // prediction that is never checked is a decoration.
+    const Uint64 t0 = SDL_GetPerformanceCounter();
+    pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &amp;info);
+    const Uint64 t1 = SDL_GetPerformanceCounter();
+
+    create_ms_ = 1000.0 * static_cast&lt;double&gt;(t1 - t0)
+               / static_cast&lt;double&gt;(SDL_GetPerformanceFrequency());
+
+    if (pipeline_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;SDL_CreateGPUGraphicsPipeline failed: %s&quot;, SDL_GetError());
+        destroy();
+        return false;
+    }
+    return true;
+}
+
+void gpu_pipeline::destroy()
+{
+    if (device_ != nullptr &amp;&amp; pipeline_ != nullptr)
+    {
+        SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);
+    }
+    device_ = nullptr;
+    pipeline_ = nullptr;
+    create_ms_ = 0.0;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/gpu_scene.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/gpu_scene.cpp — see gpu_scene.hpp for why this file exists.
+
+#include &lt;engine/gfx/gpu_scene.hpp&gt;
+
+#include &lt;engine/gfx/instancing.hpp&gt;  // 6.16: instance_batch, gpu_instance
+
+#include &lt;engine/gfx/cubemap.hpp&gt;   // Lesson 6.15: the 1x1 black fallback cube
+#include &lt;engine/gfx/gpu_post.hpp&gt;  // k_hdr_format
+
+#include &lt;engine/core/log.hpp&gt;
+#include &lt;engine/gfx/image.hpp&gt;
+
+#include &lt;cstring&gt;
+
+namespace engine {
+
+const char* name_of(blend_style b)
+{
+    switch (b)
+    {
+    case blend_style::opaque:        return &quot;opaque&quot;;
+    case blend_style::alpha:         return &quot;alpha&quot;;
+    case blend_style::premultiplied: return &quot;premultiplied&quot;;
+    }
+    return &quot;?&quot;;
+}
+
+const char* name_of(surface_style s)
+{
+    switch (s)
+    {
+    case surface_style::solid:     return &quot;solid (cull back)&quot;;
+    case surface_style::two_sided: return &quot;two-sided (cull none)&quot;;
+    case surface_style::wireframe: return &quot;wireframe (fill LINE)&quot;;
+    }
+    return &quot;?&quot;;
+}
+
+gpu_scene_renderer::~gpu_scene_renderer()
+{
+    destroy();
+}
+
+bool gpu_scene_renderer::create(const gpu_device&amp; dev,
+                                SDL_GPUShader* vertex, SDL_GPUShader* fragment,
+                                SDL_GPUTextureFormat depth_format,
+                                SDL_GPUTextureFormat colour_format,
+                                SDL_GPUSampleCount samples,
+                                SDL_GPUShader* instanced_vertex)
+{
+    if (vertex == nullptr || fragment == nullptr) { return false; }
+
+    depth_format_ = depth_format;
+    samples_ = samples;
+
+    // ---- The three pipelines ------------------------------------------------
+    //
+    // Written as a loop over the enum rather than three near-identical blocks,
+    // because the whole point being made is how LITTLE separates them: two enum
+    // values out of the fifty-three fields in a create-info. Spelling that out
+    // three times would bury it.
+    static constexpr surface_style k_order[k_styles] = {
+        surface_style::solid, surface_style::two_sided, surface_style::wireframe
+    };
+
+    // LESSON 6.11. A SECOND AXIS, and therefore a NESTED loop and a PRODUCT.
+    // Three became nine, and the shape of the change is the lesson: transparency
+    // is not a fourth surface style, it is an independent choice that every
+    // surface style has to be crossed with. See `blend_style` in the header for
+    // why that multiplication is where real engines stop enumerating and start
+    // hashing.
+    static constexpr blend_style k_blend_order[k_blends] = {
+        blend_style::opaque, blend_style::alpha, blend_style::premultiplied
+    };
+
+    for (int i = 0; i &lt; k_styles; ++i)
+    {
+    for (int j = 0; j &lt; k_blends; ++j)
+    {
+        pipeline_desc desc(dev, vertex, fragment);
+
+            // LESSON 6.14. EVERY pipeline gets the sample count, because a
+            // pipeline&#x27;s multisample state is baked in at creation exactly as its
+            // colour format is (4.4) — so MSAA is not a different argument to the
+            // same nine pipelines, it is a different nine pipelines.
+            desc.samples(samples_);
+
+        // Slot 0, `gpu_vertex_pnu`, three attributes — the layout Lesson 4.5
+        // built and 4.7 last touched. Not re-derived here: `describe` is the one
+        // place that knows the pitch and the offsets, which is what stops the
+        // C++ half and the HLSL half drifting apart.
+        gpu_mesh::describe(desc, 0);
+
+        // No instance buffer. Lesson 4.5&#x27;s ring of seven tori was one mesh drawn
+        // seven times; a scene is different meshes drawn once each, and there is
+        // nothing for a per-instance rate to do. Instancing comes back the moment
+        // the scene has repeated geometry — foliage, crates, particles — and the
+        // machinery for it is still exactly where 4.5 left it.
+
+        if (colour_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            desc.colour_target_format(colour_format);
+        }
+
+        SDL_GPUGraphicsPipelineCreateInfo&amp; raw = desc.raw();
+
+        // ---- The two fields that differ ------------------------------------
+        //
+        // `front_face` is NOT one of them. It is COUNTER_CLOCKWISE in all three,
+        // set by `pipeline_desc`&#x27;s constructor, and it is conventions §7 — the
+        // same winding Lesson 3.4&#x27;s `is_front_facing` tests by the sign of a
+        // signed area. Nothing in the port had to negotiate it.
+        switch (k_order[i])
+        {
+        case surface_style::solid:
+            raw.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+            raw.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+            break;
+        case surface_style::two_sided:
+            raw.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+            raw.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+            break;
+        case surface_style::wireframe:
+            raw.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_LINE;
+            raw.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+            break;
+        }
+
+        // ---- Depth ----------------------------------------------------------
+        //
+        // LESS, because SDL_GPU&#x27;s NDC puts 0 at the near plane (conventions §4):
+        // smaller is nearer. Lesson 3.1&#x27;s `depth_buffer::test_and_write` makes
+        // the identical comparison in software, which is not a coincidence —
+        // Lesson 3.1 chose it to match, three modules before it mattered.
+        if (depth_format_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            raw.target_info.has_depth_stencil_target = true;
+            raw.target_info.depth_stencil_format = depth_format_;
+            raw.depth_stencil_state.enable_depth_test = true;
+            raw.depth_stencil_state.enable_depth_write = true;
+            raw.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+        }
+
+        // ---- The blend axis (Lesson 6.11) -----------------------------------
+        //
+        // TWO CALLS, and the second one is the one people forget. Blending
+        // without disabling the depth write gives a transparent surface that
+        // occludes every transparent surface behind it — so a scene of glass
+        // panes shows exactly one of them, whichever happened to be drawn first,
+        // and the others are simply absent. It reads as a culling bug.
+        if (k_blend_order[j] != blend_style::opaque)
+        {
+            desc.blend(k_blend_order[j] == blend_style::premultiplied);
+            desc.depth_write(false);
+        }
+
+        if (!pipelines_[i][j].create(dev, desc.info()))
+        {
+            ENGINE_LOG_ERROR(engine::log_gpu,
+                             &quot;gpu_scene: pipeline &#x27;%s&#x27; / &#x27;%s&#x27; was not created&quot;,
+                             name_of(k_order[i]), name_of(k_blend_order[j]));
+            destroy();
+            return false;
+        }
+        create_ms_ += pipelines_[i][j].create_ms();
+    }
+    }
+
+    // ---- The tenth pipeline: instanced, solid, opaque — Lesson 6.16 ---------
+    //
+    // Built from the SAME fragment shader as the nine above. That is not a
+    // saving, it is the statement: instancing changes where the vertex stage
+    // gets its transform and the fragment stage never asked, so every Module 6
+    // feature comes along unported. The pipeline is separate anyway because a
+    // pipeline IS the (vertex, fragment, state) triple — Lesson 4.1 — and one
+    // third of it changed.
+    if (instanced_vertex != nullptr)
+    {
+        pipeline_desc desc(dev, instanced_vertex, fragment);
+        desc.samples(samples_);
+
+        // BOTH LAYOUTS, AND THE ORDER MATTERS FOR THE LOCATIONS, NOT THE SLOTS.
+        // `gpu_mesh::describe` takes locations 0-3 from buffer slot 0;
+        // `describe_instances` takes 4-10 from slot 1. Eleven attributes in one
+        // pipeline, which is what raised `pipeline_desc::k_max_attributes` from
+        // eight to sixteen this lesson — see that constant&#x27;s comment for how the
+        // three dropped attributes announced themselves.
+        gpu_mesh::describe(desc, 0);
+        describe_instances(desc, 1);
+
+        if (colour_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            desc.colour_target_format(colour_format);
+        }
+
+        SDL_GPUGraphicsPipelineCreateInfo&amp; raw = desc.raw();
+        raw.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        raw.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+        if (depth_format_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            raw.target_info.has_depth_stencil_target = true;
+            raw.target_info.depth_stencil_format = depth_format_;
+            raw.depth_stencil_state.enable_depth_test = true;
+            raw.depth_stencil_state.enable_depth_write = true;
+            raw.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+        }
+
+        if (!instanced_.create(dev, desc.info()))
+        {
+            // NOT FATAL, and that is deliberate. A device that cannot build this
+            // pipeline can still draw the whole scene through `render`; losing
+            // instancing costs draw calls, not pixels. Returning false here
+            // would turn an optimisation into a hard requirement.
+            ENGINE_LOG_ERROR(engine::log_gpu,
+                             &quot;gpu_scene: the instanced pipeline was not created; &quot;
+                             &quot;render_batched will draw nothing&quot;);
+        }
+        else
+        {
+            create_ms_ += instanced_.create_ms();
+        }
+    }
+
+    // ---- One white texel ----------------------------------------------------
+    //
+    // The identity element of sampling, and the third time this trick has been
+    // needed: Lesson 4.6 gave an older harness the camera matrix its `static
+    // const` floats encoded, Lesson 4.7 gave one a 1x1 white texture, and here it
+    // is again for objects that carry no image. A draw with nothing bound at a
+    // sampler slot the shader declares produces no pixels and no message.
+    //
+    // sRGB, so that a caller who does set `textured` gets exactly 1.0 in linear
+    // light rather than something that depends on which decode ran.
+    image_data one_texel;
+    one_texel.width = 1;
+    one_texel.height = 1;
+    one_texel.source_channels = 4;
+    one_texel.pixels = {255, 255, 255, 255};
+
+    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(dev.handle());
+    if (cb == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;gpu_scene: could not acquire a command buffer: %s&quot;, SDL_GetError());
+        destroy();
+        return false;
+    }
+    // ---- And one flat normal texel — Lesson 6.7 -----------------------------
+    //
+    // (128, 128, 255): the lavender. It decodes to (0.5, 0.5, 1.0), maps to the
+    // direction (0, 0, 1), and `T*0 + B*0 + N*1` is `N` — so binding it changes
+    // nothing, which is exactly what an identity element is for.
+    //
+    // **NOT sRGB**, and that one boolean is this lesson&#x27;s entire subject on the
+    // GPU side. A normal map is data, so it wants an `_UNORM` format and a
+    // sampler that hands back `byte/255`. Pass `true` here and 128 decodes to
+    // 0.2140 rather than 0.5020, the flat direction becomes (-0.57, -0.57, 1)
+    // normalised, and every unmapped surface in the scene tilts.
+    image_data flat_texel;
+    flat_texel.width = 1;
+    flat_texel.height = 1;
+    flat_texel.source_channels = 4;
+    flat_texel.pixels = {128, 128, 255, 255};
+
+    // ---- And one texel of &quot;nothing occludes&quot; — Lesson 6.8 ------------------
+    //
+    // THE THIRD IDENTITY ELEMENT, and the first one that cannot be uploaded.
+    // `SDL_UploadToGPUTexture` cannot target a depth texture at all, so the only
+    // way to put a value in one is to have a render pass clear it — a pass that
+    // begins, clears to 1.0, and ends without drawing anything. That is a legal
+    // and completely ordinary thing to do, and it is the shape every &quot;clear a
+    // render target&quot; helper in every engine eventually takes.
+    //
+    // 1.0 is the far plane, so this map reports that the nearest surface along
+    // every one of the light&#x27;s rays is as far away as the box goes: nothing is
+    // in front of anything, everything is lit. Bind it and the shadow term is
+    // exactly 1.
+    static constexpr SDL_GPUTextureFormat k_shadow_candidates[] = {
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    };
+    const SDL_GPUTextureFormat shadow_fmt =
+        supported_shadow_format(dev, k_shadow_candidates, 3);
+
+    // ---- Lesson 6.15: the environment&#x27;s identity elements -------------------
+    //
+    // A 1x1 BLACK cube map and a 1x1 black table, built through the same
+    // `create_cube` path a real environment uses so that the fallback exercises
+    // the code rather than bypassing it. Black is the identity for addition,
+    // which is what the ambient term does with them — see the header.
+    //
+    // `k_hdr_format` and not an 8-bit format, because the shader&#x27;s
+    // `TextureCube&lt;float4&gt;` binding does not care but a format mismatch between
+    // the fallback and the real thing is the sort of difference that makes a
+    // bug appear only when the feature is switched off.
+    cube_map black_env(1, 1);
+    const bool cube_ok =
+        black_cube_.create_cube(dev, cb, black_env, k_hdr_format, &quot;black cube 1x1 (no env)&quot;)
+        &amp;&amp; cube_sampler_.create(dev, filter::linear, address_mode::clamp_to_edge,
+                                &quot;environment (trilinear, clamped)&quot;, filter::linear);
+
+    image_data black_texel;
+    black_texel.width = 1;
+    black_texel.height = 1;
+    black_texel.source_channels = 4;
+    black_texel.pixels = {0, 0, 0, 255};
+
+    if (!white_.create_sampled(dev, cb, one_texel, true, &quot;white 1x1&quot;)
+        || !flat_normal_.create_sampled(dev, cb, flat_texel, false, &quot;flat normal 1x1&quot;)
+        || !black_lut_.create_sampled(dev, cb, black_texel, false, &quot;black brdf lut 1x1&quot;)
+        || !cube_ok)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;gpu_scene: the fallback textures were not created&quot;);
+        SDL_SubmitGPUCommandBuffer(cb);
+        destroy();
+        return false;
+    }
+
+    // A device that supports no sampled depth format at all gets no shadows,
+    // which is a capability report rather than an error — the same shape
+    // `ensure_depth` already has for a device with no depth format.
+    if (shadow_fmt != SDL_GPU_TEXTUREFORMAT_INVALID
+        &amp;&amp; far_depth_.create_depth(dev, shadow_fmt, 1, 1, &quot;far 1x1 (no shadow)&quot;, true)
+        &amp;&amp; shadow_sampler_.create_comparison(dev, &quot;shadow comparison (fallback)&quot;))
+    {
+        SDL_GPUDepthStencilTargetInfo dsi{};
+        dsi.texture = far_depth_.handle();
+        dsi.clear_depth = 1.0f;
+        dsi.load_op = SDL_GPU_LOADOP_CLEAR;
+        dsi.store_op = SDL_GPU_STOREOP_STORE;
+        dsi.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+        dsi.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+        SDL_GPURenderPass* clear_pass = SDL_BeginGPURenderPass(cb, nullptr, 0, &amp;dsi);
+        if (clear_pass != nullptr) { SDL_EndGPURenderPass(clear_pass); }
+    }
+    else
+    {
+        ENGINE_LOG_INFO(engine::log_gpu,
+                        &quot;gpu_scene: no sampled depth format — this device gets no shadows&quot;);
+        far_depth_.destroy();
+        shadow_sampler_.destroy();
+    }
+
+    if (!SDL_SubmitGPUCommandBuffer(cb))
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu, &quot;gpu_scene: the fallback upload was not submitted&quot;);
+        destroy();
+        return false;
+    }
+
+    return true;
+}
+
+void gpu_scene_renderer::destroy()
+{
+    depth_.destroy();
+    white_.destroy();
+    flat_normal_.destroy();
+    far_depth_.destroy();
+    shadow_sampler_.destroy();
+
+    // 6.16 ADDED `instanced_` HERE AND FOUND THREE THAT WERE MISSING.
+    //
+    // `black_cube_`, `black_lut_` and `cube_sampler_` arrived in Lesson 6.15 and
+    // were never added to this function. It is NOT a leak — every one of them is
+    // an RAII member whose destructor runs when the renderer dies, and each
+    // `create_*` calls its own `destroy()` first, so re-creating is clean too.
+    // What it is, is a function that does not do what its name says: after
+    // `destroy()` the object reported `valid() == false` while still holding
+    // three live GPU objects, so &quot;destroyed&quot; and &quot;empty&quot; had quietly stopped
+    // meaning the same thing.
+    //
+    // The transferable part is how it was found: not by a leak report, but by
+    // ADDING A MEMBER AND READING THE LIST. A teardown function is a list that
+    // must be kept in step with a declaration list by hand, and nothing checks
+    // it — which is an argument for having as few members as possible, and, in
+    // Module 9, for the arena that makes teardown one operation instead of eight.
+    black_cube_.destroy();
+    black_lut_.destroy();
+    cube_sampler_.destroy();
+
+    instanced_.destroy();
+    for (auto&amp; row : pipelines_) { for (gpu_pipeline&amp; p : row) { p.destroy(); } }
+    depth_w_ = 0;
+    depth_h_ = 0;
+    create_ms_ = 0.0;
+}
+
+bool gpu_scene_renderer::ensure_depth(const gpu_device&amp; dev, Uint32 w, Uint32 h,
+                                      SDL_GPUSampleCount samples)
+{
+    if (depth_format_ == SDL_GPU_TEXTUREFORMAT_INVALID) { return false; }
+    if (w == 0 || h == 0) { return false; }
+    // THE SAMPLE COUNT IS PART OF THE IDENTITY (6.14). Without it in this test, a
+    // program that toggles MSAA keeps the depth buffer it already had and the
+    // next pass fails to begin — with an error about the attachment, several
+    // frames after the setting changed.
+    if (depth_.valid() &amp;&amp; depth_w_ == w &amp;&amp; depth_h_ == h &amp;&amp; depth_.samples() == samples)
+    {
+        return true;
+    }
+
+    depth_.destroy();
+    if (!depth_.create_depth(dev, depth_format_, w, h, &quot;scene depth&quot;, false, samples))
+    {
+        return false;
+    }
+    depth_w_ = w;
+    depth_h_ = h;
+    ENGINE_LOG_INFO(engine::log_gpu, &quot;gpu_scene: depth target %ux%u %s&quot;, w, h, name_of(depth_format_));
+    return true;
+}
+
+SDL_GPUDepthStencilTargetInfo gpu_scene_renderer::depth_target_info() const
+{
+    SDL_GPUDepthStencilTargetInfo info{};
+    info.texture = depth_.handle();
+
+    // 1 is the far plane. Conventions §4, and the reason the compare op above is
+    // LESS rather than GREATER.
+    info.clear_depth = 1.0f;
+    info.load_op = SDL_GPU_LOADOP_CLEAR;
+
+    // DONT_CARE, not STORE: nothing reads this buffer after the pass ends. On
+    // tiled hardware — every phone, and Apple silicon — that difference is real
+    // bandwidth, because a DONT_CARE depth buffer never leaves tile memory at
+    // all. Module 6&#x27;s shadow maps and depth-based post-processing are where this
+    // has to become STORE, and where the cost shows up.
+    info.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    info.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    info.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+    return info;
+}
+
+gpu_scene_renderer::frame_setup
+gpu_scene_renderer::begin_frame(SDL_GPUCommandBuffer* cb,
+                                const camera_uniforms&amp; camera,
+                                const scene_light_uniforms&amp; light,
+                                const cascade_uniforms* cascades,
+                                SDL_GPUTexture* shadow,
+                                SDL_GPUSampler* shadow_sampler,
+                                const scene_environment* environment,
+                                frame_log* log,
+                                draw_stats&amp; stats) const
+{
+
+    // ---- Per FRAME, pushed once ---------------------------------------------
+    //
+    // Both blocks go onto the COMMAND BUFFER. They are not bound to this pass and
+    // they survive every pipeline change below, which is exactly why the loop
+    // does not have to re-push them and why &quot;bind&quot; is the wrong verb for a push.
+    SDL_PushGPUVertexUniformData(cb, 0, &amp;camera, sizeof(camera));
+    SDL_PushGPUFragmentUniformData(cb, 0, &amp;light, sizeof(light));
+    stats.uniform_bytes += static_cast&lt;Uint32&gt;(sizeof(camera) + sizeof(light));
+
+    // ---- The cascades — Lesson 6.9 ------------------------------------------
+    //
+    // ALWAYS PUSHED, EVEN WHEN THERE ARE NO SHADOWS. A cbuffer the shader
+    // declares and nobody fills does not read as zero — it reads as whatever was
+    // last in that slot, which is a garbage matrix and a `cascade_count` that
+    // may be anything. The fallback below is a deliberate identity: one cascade,
+    // a split past any reachable depth, and `shadow_strength` in the light block
+    // is what actually disables the lookup.
+    cascade_uniforms fallback{};
+    if (cascades == nullptr)
+    {
+        fallback.cascade_count = 1.0f;
+        fallback.splits = vec4{1e30f, 1e30f, 1e30f, 1e30f};
+        fallback.world_per_texel = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.depth_range = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.view_forward = vec4{0.0f, 0.0f, -1.0f, 0.0f};
+        for (mat4&amp; m : fallback.light_clip_from_world) { m = light.light_clip_from_world; }
+    }
+    const cascade_uniforms&amp; casc = (cascades != nullptr) ? *cascades : fallback;
+    SDL_PushGPUFragmentUniformData(cb, 2, &amp;casc, sizeof(casc));
+    stats.uniform_bytes += static_cast&lt;Uint32&gt;(sizeof(casc));
+
+    if (log != nullptr)
+    {
+        log-&gt;record(gpu_event_kind::push_uniform, &quot;camera (vertex)&quot;, 0,
+                    static_cast&lt;Uint32&gt;(sizeof(camera)));
+        log-&gt;record(gpu_event_kind::push_uniform, &quot;lighting (fragment)&quot;, 0,
+                    static_cast&lt;Uint32&gt;(sizeof(light)));
+    }
+
+    // ---- The shadow map, resolved once for the whole frame — Lesson 6.8 -----
+    //
+    // It does not change between draws, so it is not part of the per-item
+    // change detection below; it rides along in the same three-binding call
+    // because `SDL_BindGPUFragmentSamplers` takes an array and re-binding two
+    // slots costs the same as re-binding three.
+    SDL_GPUTexture* const shadow_tex = (shadow != nullptr) ? shadow : far_depth_.handle();
+    SDL_GPUSampler* const shadow_samp =
+        (shadow_sampler != nullptr) ? shadow_sampler : shadow_sampler_.handle();
+
+    // ---- The environment, resolved once for the whole frame — Lesson 6.15 ---
+    //
+    // Same shape as the shadow map above and for the same reason: three
+    // resources that do not change between draws, folded into the one
+    // `SDL_BindGPUFragmentSamplers` call the albedo already forces. The array
+    // goes from three entries to six and the call count does not move.
+    //
+    // AN INCOMPLETE ENVIRONMENT IS TREATED AS NO ENVIRONMENT, not as a partial
+    // one. Binding two of the three would leave the shader reading an undefined
+    // slot, and `complete()` says so in one place rather than three.
+    const bool have_env = (environment != nullptr) &amp;&amp; environment-&gt;complete();
+    SDL_GPUTexture* const irr_tex = have_env ? environment-&gt;irradiance : black_cube_.handle();
+    SDL_GPUTexture* const pre_tex = have_env ? environment-&gt;prefiltered : black_cube_.handle();
+    SDL_GPUTexture* const lut_tex = have_env ? environment-&gt;brdf_lut : black_lut_.handle();
+    SDL_GPUSampler* const cube_samp = have_env ? environment-&gt;cube_sampler : cube_sampler_.handle();
+    SDL_GPUSampler* const lut_samp = have_env ? environment-&gt;lut_sampler : cube_sampler_.handle();
+
+    frame_setup out;
+    out.shadow = shadow_tex;
+    out.shadow_sampler = shadow_samp;
+    out.irradiance = irr_tex;
+    out.prefiltered = pre_tex;
+    out.brdf_lut = lut_tex;
+    out.cube_sampler = cube_samp;
+    out.lut_sampler = lut_samp;
+    return out;
+}
+
+draw_stats gpu_scene_renderer::render(SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* pass,
+                                      const gpu_draw_item* items, int count,
+                                      const camera_uniforms&amp; camera,
+                                      const scene_light_uniforms&amp; light,
+                                      SDL_GPUSampler* sampler, frame_log* log,
+                                      SDL_GPUTexture* shadow,
+                                      SDL_GPUSampler* shadow_sampler,
+                                      const cascade_uniforms* cascades,
+                                      const scene_environment* environment) const
+{
+    draw_stats stats;
+    if (cb == nullptr || pass == nullptr || items == nullptr || count &lt;= 0) { return stats; }
+
+    const frame_setup frame = begin_frame(cb, camera, light, cascades, shadow,
+                                          shadow_sampler, environment, log, stats);
+
+    // Track what is currently bound so a redundant bind can be skipped AND
+    // counted. The skipping is a small real saving; the counting is the lesson.
+    const gpu_pipeline* bound_pipeline = nullptr;
+    SDL_GPUTexture* bound_texture = nullptr;
+    SDL_GPUTexture* bound_normal = nullptr;   // 6.7
+
+    // 6.11: a matrix now, because the ideal bind count is one per distinct
+    // (surface style, blend style) PAIR present — a solid opaque draw and a solid
+    // blended draw are two pipelines however well the list is sorted.
+    bool style_present[k_styles][k_blends] = {};
+
+    for (int i = 0; i &lt; count; ++i)
+    {
+        const gpu_draw_item&amp; item = items[i];
+        ++stats.items;
+
+        // A scene whose model failed to load should draw the rest of itself.
+        if (item.mesh == nullptr || !item.mesh-&gt;valid()) { continue; }
+
+        style_present[static_cast&lt;int&gt;(item.style)][static_cast&lt;int&gt;(item.blend)] = true;
+
+        const gpu_pipeline&amp; want =
+            pipelines_[static_cast&lt;int&gt;(item.style)][static_cast&lt;int&gt;(item.blend)];
+        if (!want.valid()) { continue; }
+
+        if (&amp;want != bound_pipeline)
+        {
+            SDL_BindGPUGraphicsPipeline(pass, want.handle());
+            bound_pipeline = &amp;want;
+            ++stats.pipeline_binds;
+            if (log != nullptr)
+            {
+                log-&gt;record(gpu_event_kind::bind_pipeline, name_of(item.style));
+            }
+        }
+
+        SDL_GPUTexture* tex = (item.texture != nullptr) ? item.texture : white_.handle();
+        SDL_GPUTexture* nrm = (item.normal_map != nullptr) ? item.normal_map
+                                                           : flat_normal_.handle();
+        if (tex != bound_texture || nrm != bound_normal)
+        {
+            // BOTH SLOTS IN ONE CALL — Lesson 6.7. `SDL_BindGPUFragmentSamplers`
+            // takes an array and a count, so two bindings starting at slot 0 is
+            // one call rather than two, and the pair travels together for the
+            // same reason `SDL_GPUTextureSamplerBinding` is a pair at all.
+            //
+            // The change-detection is now on the PAIR, which is the honest
+            // version: rebinding because the albedo changed while the normal map
+            // did not still costs a bind, and counting it as one is what keeps
+            // `texture_binds` comparable with the number 4.8 measured.
+            // THREE SLOTS NOW, and the third is a different KIND of binding: a
+            // depth texture read through a COMPARISON sampler (6.8). It never
+            // changes within a frame, so binding it here rather than once at the
+            // top is redundant work — but a partial `SDL_BindGPUFragmentSamplers`
+            // does not merge with an earlier one, it REPLACES the range it names,
+            // so slot 2 would be unbound the moment slot 0 changed. One call for
+            // the whole set is the only spelling that is correct.
+            // SIX SLOTS NOW, and the comment above about a partial bind
+            // REPLACING the range it names is the reason all six travel
+            // together: slots 3 to 5 do not change within a frame, but rebinding
+            // slot 0 alone would leave them unbound. The rule that made three
+            // correct makes six correct and costs the same call.
+            SDL_GPUTextureSamplerBinding binds[6]{};
+            binds[0].texture = tex;
+            binds[0].sampler = sampler;
+            binds[1].texture = nrm;
+            binds[1].sampler = sampler;
+            binds[2].texture = frame.shadow;
+            binds[2].sampler = frame.shadow_sampler;
+            binds[3].texture = frame.irradiance;
+            binds[3].sampler = frame.cube_sampler;
+            binds[4].texture = frame.prefiltered;
+            binds[4].sampler = frame.cube_sampler;
+            binds[5].texture = frame.brdf_lut;
+            binds[5].sampler = frame.lut_sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);
+            bound_texture = tex;
+            bound_normal = nrm;
+            ++stats.texture_binds;
+            if (log != nullptr)
+            {
+                log-&gt;record(gpu_event_kind::bind_sampler,
+                            (item.texture != nullptr) ? &quot;albedo&quot; : &quot;white 1x1&quot;, 0);
+            }
+        }
+
+        // ---- Per DRAW ------------------------------------------------------
+        //
+        // 112 bytes to the vertex stage and 32 to the fragment stage, per object,
+        // per frame. Four objects is 576 bytes of uniform traffic a frame — which
+        // is nothing, and is nothing precisely because a `mat4` per object is
+        // small. Module 7&#x27;s skinned characters push a bone palette instead, at
+        // which point this mechanism runs out and a STORAGE buffer takes over.
+        object_uniforms obj{};
+        obj.world_from_model = item.world_from_model;
+        obj.normal_from_model[0] = vec4{item.normal_from_model.c0.x,
+                                        item.normal_from_model.c0.y,
+                                        item.normal_from_model.c0.z, 0.0f};
+        obj.normal_from_model[1] = vec4{item.normal_from_model.c1.x,
+                                        item.normal_from_model.c1.y,
+                                        item.normal_from_model.c1.z, 0.0f};
+        obj.normal_from_model[2] = vec4{item.normal_from_model.c2.x,
+                                        item.normal_from_model.c2.y,
+                                        item.normal_from_model.c2.z, 0.0f};
+
+        SDL_PushGPUVertexUniformData(cb, 1, &amp;obj, sizeof(obj));
+        SDL_PushGPUFragmentUniformData(cb, 1, &amp;item.material, sizeof(item.material));
+        stats.uniform_bytes += static_cast&lt;Uint32&gt;(sizeof(obj) + sizeof(item.material));
+
+        item.mesh-&gt;bind(pass, 0);
+
+        const Uint32 tris = (item.mesh-&gt;index_count() &gt; 0u)
+            ? item.mesh-&gt;index_count() / 3u
+            : item.mesh-&gt;vertex_count() / 3u;
+
+        if (log != nullptr)
+        {
+            log-&gt;record(gpu_event_kind::push_uniform, &quot;object matrices&quot;, 1,
+                        static_cast&lt;Uint32&gt;(sizeof(obj)));
+            log-&gt;record(gpu_event_kind::push_uniform, &quot;material&quot;, 1,
+                        static_cast&lt;Uint32&gt;(sizeof(item.material)));
+            log-&gt;record(gpu_event_kind::bind_vertex, &quot;mesh vertices&quot;, 0);
+            if (item.mesh-&gt;index_count() &gt; 0u)
+            {
+                log-&gt;record(gpu_event_kind::bind_index, &quot;mesh indices&quot;, 0);
+            }
+        }
+
+        item.mesh-&gt;draw(pass, 1);
+        ++stats.draws;
+
+        if (log != nullptr)
+        {
+            log-&gt;record(gpu_event_kind::draw, &quot;scene object&quot;,
+                        item.mesh-&gt;index_count(), 1u, tris);
+        }
+
+        // An expanded mesh (Lesson 4.5&#x27;s control) keeps no index buffer, so the
+        // triangle count came from whichever of the two the draw actually used.
+        stats.triangles += tris;
+    }
+
+    for (const auto&amp; row : style_present)
+    {
+        for (bool present : row)
+        {
+            if (present) { ++stats.ideal_pipeline_binds; }
+        }
+    }
+
+    return stats;
+}
+
+// ---------------------------------------------------------------------------
+// Lesson 6.16 — the same frame, submitted as batches
+// ---------------------------------------------------------------------------
+
+draw_stats gpu_scene_renderer::render_batched(SDL_GPUCommandBuffer* cb,
+                                              SDL_GPURenderPass* pass,
+                                              const instance_batch* batches, int count,
+                                              SDL_GPUBuffer* instances,
+                                              const camera_uniforms&amp; camera,
+                                              const scene_light_uniforms&amp; light,
+                                              SDL_GPUSampler* sampler, frame_log* log,
+                                              SDL_GPUTexture* shadow,
+                                              SDL_GPUSampler* shadow_sampler,
+                                              const cascade_uniforms* cascades,
+                                              const scene_environment* environment) const
+{
+    draw_stats stats;
+    if (cb == nullptr || pass == nullptr || batches == nullptr || count &lt;= 0) { return stats; }
+    if (instances == nullptr || !instanced_.valid()) { return stats; }
+
+    // THE IDENTICAL PROLOGUE, BY CONSTRUCTION AND NOT BY DISCIPLINE. One call,
+    // one implementation; `render` above makes the same one. See `frame_setup`.
+    const frame_setup frame = begin_frame(cb, camera, light, cascades, shadow,
+                                          shadow_sampler, environment, log, stats);
+
+    // ONE PIPELINE FOR THE WHOLE LOOP. `render`&#x27;s change-detection over nine
+    // pipelines has nothing to detect here: `create` builds exactly one instanced
+    // pipeline (solid, opaque) and `batch_instances` only ever produces opaque
+    // multi-instance batches, so the bind happens once, outside the loop.
+    //
+    // That is a real and slightly surprising saving. A perfectly sorted
+    // non-instanced frame still pays one pipeline bind per distinct style present
+    // — `ideal_pipeline_binds` has measured exactly that since Lesson 4.8 — and
+    // here the ideal and the actual are both 1 by construction.
+    SDL_BindGPUGraphicsPipeline(pass, instanced_.handle());
+    stats.pipeline_binds = 1;
+    stats.ideal_pipeline_binds = 1;
+    if (log != nullptr) { log-&gt;record(gpu_event_kind::bind_pipeline, &quot;instanced solid&quot;); }
+
+    SDL_GPUTexture* bound_texture = nullptr;
+    SDL_GPUTexture* bound_normal = nullptr;
+
+    for (int b = 0; b &lt; count; ++b)
+    {
+        const instance_batch&amp; batch = batches[b];
+        stats.items += batch.count;
+
+        if (batch.key.mesh == nullptr || !batch.key.mesh-&gt;valid()) { continue; }
+
+        // A batch this pipeline cannot express is SKIPPED, not drawn wrongly.
+        // `batch_instances` never produces a blended batch with more than one
+        // instance, but it does hand back single-instance blended and two-sided
+        // batches so the caller has one list; those belong in `render`.
+        if (batch.key.style != surface_style::solid
+            || batch.key.blend != blend_style::opaque)
+        {
+            continue;
+        }
+
+        SDL_GPUTexture* tex = (batch.key.texture != nullptr) ? batch.key.texture
+                                                             : white_.handle();
+        SDL_GPUTexture* nrm = (batch.key.normal_map != nullptr) ? batch.key.normal_map
+                                                                : flat_normal_.handle();
+        if (tex != bound_texture || nrm != bound_normal)
+        {
+            // The same six-slot bind `render` performs, for the same reason: a
+            // partial `SDL_BindGPUFragmentSamplers` REPLACES the range it names
+            // rather than merging, so slots 2-5 must ride along with 0 and 1.
+            SDL_GPUTextureSamplerBinding binds[6]{};
+            binds[0].texture = tex;
+            binds[0].sampler = sampler;
+            binds[1].texture = nrm;
+            binds[1].sampler = sampler;
+            binds[2].texture = frame.shadow;
+            binds[2].sampler = frame.shadow_sampler;
+            binds[3].texture = frame.irradiance;
+            binds[3].sampler = frame.cube_sampler;
+            binds[4].texture = frame.prefiltered;
+            binds[4].sampler = frame.cube_sampler;
+            binds[5].texture = frame.brdf_lut;
+            binds[5].sampler = frame.lut_sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);
+            bound_texture = tex;
+            bound_normal = nrm;
+            ++stats.texture_binds;
+        }
+
+        // ---- The material, still a push ------------------------------------
+        //
+        // PER BATCH, not per instance, and that is the batch key earning its
+        // keep: every instance in this run was required to have byte-identical
+        // material bytes, so one push serves all of them. A hundred objects that
+        // differ only in placement push 32 bytes once here against 3,200 bytes
+        // through `render`.
+        SDL_PushGPUFragmentUniformData(cb, 1, &amp;batch.key.material,
+                                       sizeof(batch.key.material));
+        stats.uniform_bytes += static_cast&lt;Uint32&gt;(sizeof(batch.key.material));
+
+        // ---- The mesh at slot 0, the instances at slot 1 --------------------
+        batch.key.mesh-&gt;bind(pass, 0);
+
+        // ONE BUFFER, MANY BATCHES, ADDRESSED BY OFFSET. `first` is an index into
+        // the instance array, so the byte offset is `first * sizeof(gpu_instance)`
+        // and the hardware&#x27;s instance index counts from zero inside the binding.
+        // Binding a separate buffer per batch would work and would cost an
+        // allocation per batch per frame; this costs a different `offset` field.
+        SDL_GPUBufferBinding instance_binding{};
+        instance_binding.buffer = instances;
+        instance_binding.offset =
+            static_cast&lt;Uint32&gt;(batch.first) * static_cast&lt;Uint32&gt;(sizeof(gpu_instance));
+        SDL_BindGPUVertexBuffers(pass, 1, &amp;instance_binding, 1);
+
+        const Uint32 tris = (batch.key.mesh-&gt;index_count() &gt; 0u)
+            ? batch.key.mesh-&gt;index_count() / 3u
+            : batch.key.mesh-&gt;vertex_count() / 3u;
+
+        if (log != nullptr)
+        {
+            log-&gt;record(gpu_event_kind::push_uniform, &quot;material (per batch)&quot;, 1,
+                        static_cast&lt;Uint32&gt;(sizeof(batch.key.material)));
+            log-&gt;record(gpu_event_kind::bind_vertex, &quot;instance placements&quot;, 1);
+        }
+
+        batch.key.mesh-&gt;draw(pass, static_cast&lt;Uint32&gt;(batch.count));
+        ++stats.draws;
+        stats.triangles += tris * static_cast&lt;Uint32&gt;(batch.count);
+
+        if (log != nullptr)
+        {
+            log-&gt;record(gpu_event_kind::draw, &quot;instanced batch&quot;,
+                        batch.key.mesh-&gt;index_count(),
+                        static_cast&lt;Uint32&gt;(batch.count), tris);
+        }
+    }
+
+    return stats;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the top of the build.
+#
+# Lesson 5.1 turned this file inside out. Through Module 4 it described one
+# executable and everything that went into it, which is exactly right for a
+# program. This project is no longer a program: it is a LIBRARY and the programs
+# built on it, and this file&#x27;s job is now to acquire the dependencies, declare the
+# rules everybody shares, and then get out of the way.
+#
+#     engine/   the library. Public headers under engine/include/engine/.
+#     demos/    executables that link it and may include only those headers.
+#     tools/    (Module 9) the editor and the asset pipeline.
+#
+# Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
+# they are about a hundred lines of actual instruction, and the boundary the whole
+# lesson is about is drawn by three of them.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how &quot;works on my machine&quot; is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL&#x27;s own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag&#x27;s snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# stb_image — Lesson 4.7. A PNG/JPEG/BMP decoder in one header, and the first
+# third-party code in this project that is not SDL.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Every other &quot;we could write that&quot; in this course
+# has been written: the maths, the rasterizer, the OBJ parser, the ECS to come.
+# An image decoder is different in kind, and the difference is not difficulty —
+# a baseline PNG decoder is an afternoon — it is that PNG is DEFLATE plus five
+# filter modes plus interlacing plus sixteen-bit channels plus palettes plus
+# transparency chunks, and a decoder that handles only the files you happened to
+# test is worse than no decoder at all. There is nothing about the ENGINE to be
+# learned from the fifth filter mode.
+#
+# stb has no releases and no tags, so we pin a COMMIT — the same rule Lesson 4.3
+# had to apply to SDL_shadercross for the same reason. A branch name would mean a
+# fresh clone could decode differently from yours.
+#
+# Header-only, so there is nothing to build. Note where it is USED: only
+# engine/src/gfx/image.cpp, and only PRIVATELY (engine/CMakeLists.txt), so the
+# dependency stops at the library boundary and no demo can see it.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20   # pinned — no tags exist
+    GIT_SHALLOW    FALSE   # a SHA cannot be shallow-fetched by name
+)
+FetchContent_MakeAvailable(stb)
+
+# Dear ImGui — Lesson 5.11. The course&#x27;s first third-party USER INTERFACE, and
+# the first third-party library whose types reach our PUBLIC headers.
+#
+# WHY WE DO NOT HAND-ROLL THIS. The test this course applies to every library is
+# not &quot;is it hard?&quot; — the rasterizer was hard and we wrote it — it is **whether
+# the hard part is the subject**. A debug UI is four subjects at once: a font
+# rasterizer and text shaper, a layout engine, an input router with focus and
+# capture rules, and a widget state machine that has to remember what you were
+# dragging across frames. Not one of those is graphics or engine architecture,
+# and a half-built version of all four is precisely the tool you stop trusting
+# the first time it misreports a number.
+#
+# What we get in exchange is worth naming too, because it is not just &quot;saved
+# time&quot;: ImGui is IMMEDIATE MODE, so a debug panel is a function that runs every
+# frame and owns no state. There is no widget tree to keep in sync with the
+# world, which is the failure every retained-mode debug UI eventually has.
+#
+# TOOLING ONLY, NEVER GAMEPLAY UI. That is a binding rule of this course and it
+# is a real engineering line, not a stylistic one: ImGui rebuilds its geometry
+# from scratch every frame and knows nothing about controllers, localisation,
+# safe areas or artists. It is the right tool for the people building the game
+# and the wrong one for the people playing it.
+#
+# IMGUI SHIPS SOURCES, NOT A BUILD. There is no CMakeLists.txt in that
+# repository, which is deliberate on its author&#x27;s part — the library is nine
+# .cpp files and a backend pair, and every project wants to compile them its own
+# way. FetchContent_MakeAvailable notices the absence and only POPULATES; the
+# target below is ours to declare, and being forced to declare it is how you
+# find out exactly which files you are compiling.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.9b   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+# The core, plus exactly ONE backend pair. ImGui separates &quot;what a window looks
+# like&quot; (the core) from &quot;how events get in and triangles get out&quot; (a platform
+# backend and a renderer backend), and you pick one of each.
+#
+#   imgui_impl_sdl3         the PLATFORM backend: SDL_Event in, mouse/keyboard/
+#                           text/focus out. Independent of how we draw.
+#   imgui_impl_sdlrenderer3 the RENDERER backend: ImGui&#x27;s vertex+index draw
+#                           lists out through an SDL_Renderer.
+#
+# Lesson 5.11 §5 explains why the SDL_Renderer pair goes first and what the
+# SDL_GPU one (imgui_impl_sdlgpu3) would need instead. The platform half is
+# shared between them; only the renderer half would change.
+#
+# imgui_demo.cpp is 8,000 lines of showcase and it is included ON PURPOSE:
+# ImGui::ShowDemoWindow() is the fastest widget reference there is, and its
+# source is the documentation. Drop it from this list when a real game ships.
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+)
+add_library(imgui::imgui ALIAS imgui)
+
+# PUBLIC, because anything that includes &lt;imgui.h&gt; needs these two directories
+# and ImGui&#x27;s headers are reached BY NAME rather than through a prefix — the
+# spelling is &lt;imgui.h&gt;, not &lt;imgui/imgui.h&gt;. That is a real cost of using it and
+# it is worth seeing: two directories go onto the include path of everything that
+# links this target.
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends)
+
+# Both backends include SDL3 headers, and imgui_impl_sdlrenderer3 calls into it.
+target_link_libraries(imgui PUBLIC SDL3::SDL3)
+
+# NOT engine_set_warnings(imgui). Third-party code is compiled with its own
+# flags, for the reason cmake/EngineHelpers.cmake gives: warnings we cannot act
+# on train us to ignore the ones we can.
+
+# cgltf — Lesson 6.6. The third approved third-party library, and the one whose
+# &quot;why we don&#x27;t hand-roll this&quot; argument is the least obvious of the three,
+# because on the face of it glTF is JSON and we have already written a parser.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Lesson 3.5 wrote an OBJ loader in three hundred
+# lines, and it was the right call: OBJ is a line-oriented text format with six
+# keywords that matter, and writing it taught the index problem, fan
+# triangulation and vertex unification — all of which are ENGINE subjects.
+#
+# glTF is a different kind of thing, and the difference is not &quot;harder&quot;. It is
+# that glTF is a CONTAINER: JSON describing accessors, which describe strides
+# into buffer views, which describe windows into buffers, which may be external
+# files, base64 data URIs, or a binary chunk glued to the JSON in a .glb. An
+# accessor may be any of five component types, normalized or not, interleaved
+# with its neighbours or not, sparse (a base array plus a patch list) or not.
+# That is a combinatorial matrix with roughly a hundred cells, every one of them
+# legal, and none of them about graphics. `cgltf_accessor_read_float` is the
+# function that collapses the matrix — and writing our own would teach byte
+# offsets, not rendering.
+#
+# The test this course applies is never &quot;is it hard?&quot; but WHETHER THE HARD PART
+# IS THE SUBJECT. For stb_image the hard part was DEFLATE; for ImGui it was text
+# layout and input routing; here it is a strided, typed, optionally-sparse view
+# of somebody else&#x27;s bytes. In all three cases the answer is no.
+#
+# WHY cgltf RATHER THAN tinygltf. Both are approved (CLAUDE.md §4). cgltf is one
+# C header with no dependencies; tinygltf is C++ and pulls in a JSON library and
+# stb (which we already have, at a different pin — two copies of stb_image in one
+# binary is a diagnosable problem we would rather not have). cgltf also matches
+# the shape we already use: header-only, PRIVATE to one translation unit, wrapped
+# behind our own types so the dependency stops at the library boundary.
+#
+# Pinned to a TAG, because cgltf has releases — unlike stb, which forced a commit.
+FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG        v1.15   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(cgltf)
+
+# ---- Shared build rules ----------------------------------------------------
+# Two modules, both of ours. EngineHelpers defines the three functions every
+# target calls; Shaders defines the HLSL toolchain and probes it once, here, at
+# configure time.
+list(APPEND CMAKE_MODULE_PATH &quot;${CMAKE_CURRENT_SOURCE_DIR}/cmake&quot;)
+include(EngineHelpers)
+include(Shaders)
+
+# ---- Shaders ---------------------------------------------------------------
+# Lesson 4.3. One HLSL source per stage, compiled to every format this machine&#x27;s
+# toolchain can produce, plus a JSON reflection file per shader.
+#
+# Declared HERE rather than in engine/ or demos/, and the reason is worth a
+# sentence. A compiled shader is not the property of a library (the engine never
+# loads one by name) nor of any single program (three of them want the same
+# scene.frag). It is a build artifact of the repository. Each executable then
+# asks for a copy beside itself with engine_use_shaders().
+add_hlsl_shader(triangle.vert vertex)
+add_hlsl_shader(triangle.frag fragment)
+add_hlsl_shader(textured.vert vertex)
+add_hlsl_shader(textured.frag fragment)
+add_hlsl_shader(mesh.vert vertex)             # Lesson 4.5
+add_hlsl_shader(mesh.frag fragment)           # Lesson 4.5
+add_hlsl_shader(uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
+add_hlsl_shader(uniform_probe.frag fragment)
+add_hlsl_shader(depth_probe.vert vertex)      # Lesson 4.7 — the instrument
+add_hlsl_shader(depth_probe.frag fragment)
+add_hlsl_shader(texture_probe.frag fragment)
+add_hlsl_shader(scene.vert vertex)            # Lesson 4.8 — the ported scene
+add_hlsl_shader(scene.frag fragment)
+add_hlsl_shader(matrix_probe.frag fragment)   # Lesson 4.8 — the instrument
+add_hlsl_shader(shadow.vert vertex)          # Lesson 6.8 — the depth pass
+add_hlsl_shader(shadow.frag fragment)
+add_hlsl_shader(fullscreen.vert vertex)      # Lesson 6.12 — no vertex buffer at all
+add_hlsl_shader(tonemap.frag fragment)       # Lesson 6.12 — the resolve
+# Lesson 6.13 — the bloom&#x27;s three stages. Three fragment shaders and no new vertex
+# shader, which is the clearest evidence that `fullscreen.vert` was the right
+# abstraction: every post pass wants the same three corners, and only the question
+# asked of each pixel differs.
+add_hlsl_shader(bloom_bright.frag fragment)
+add_hlsl_shader(bloom_down.frag fragment)
+add_hlsl_shader(bloom_up.frag fragment)
+
+# Lesson 6.15 — the sky. A vertex shader of its own after all, where 6.13 needed
+# none: `fullscreen.vert` emits a uv, and a skybox needs a world-space RAY. The
+# two differ by the camera basis, which a post pass does not have and must not
+# acquire — so this is one of the rare cases where copying nine lines is the
+# right answer and generalising the older shader is not.
+add_hlsl_shader(skybox.vert vertex)
+add_hlsl_shader(skybox.frag fragment)
+
+# Lesson 6.16 — the instanced scene. A VERTEX shader and no fragment shader,
+# which is the clearest statement of what instancing is: the per-object transform
+# arrives as seven vertex attributes instead of a pushed constant buffer, and
+# every fragment-stage thing Module 6 built (PBR, normal maps, cascades, alpha
+# modes, IBL) is reused byte-for-byte by binding `scene.frag` beside it.
+add_hlsl_shader(scene_instanced.vert vertex)
+
+# ---- The project -----------------------------------------------------------
+# ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
+# nothing of demos/ and is added first; demos/ links the engine and is added
+# second. Swap these two lines and the configure fails, because `engine::engine`
+# would not exist yet — which is a build system enforcing an architecture rule,
+# and is the cheapest such enforcement you will ever get.
+add_subdirectory(engine)
+add_subdirectory(demos)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># engine/CMakeLists.txt — the engine, as a library.
+#
+# Lesson 5.1. Everything above this line in the course built ONE executable, and
+# a single executable can be arranged however you like because nothing outside it
+# can tell. A library is different in kind: it has an outside, and the outside is
+# the part you can never take back once somebody depends on it.
+#
+# Three properties below do the entire job of drawing that boundary, and it is
+# worth reading them as a group before reading them one at a time.
+
+# STATIC, not SHARED, and not a choice made by shrugging.
+#
+# A static library is copied into each executable at link time. A shared one is a
+# separate file the program finds at startup, which buys you the ability to swap
+# the engine without relinking the game — and costs you an ABI you must not break,
+# per-call indirection, and a deployment story (&quot;which .dll did it load?&quot;).
+#
+# We are one repository building both sides from the same source, so we get none
+# of the benefit and all of the cost. Engines that DO ship shared libraries do it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
+# reloads shaders and assets, not code. If that ever changes, this word is the
+# only thing that has to.
+add_library(engine STATIC
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader&#x27;s
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action&#x27;s level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
+    src/core/profile.cpp
+    # Lesson 6.11. Compositing, and the two enums that say what a surface&#x27;s
+    # alpha MEANS. Below `colour.cpp` in the list and above it in the dependency
+    # graph: `blend.hpp` includes `colour.hpp` and nothing includes `blend.cpp`.
+    # Lesson 6.14. Two prefilters that look unrelated and are the same
+    # operation: a linear-light box down for coverage, and a widened NDF for
+    # shading. A translation unit because the first is a loop over pixels and the
+    # second pulls in &lt;cmath&gt;, and neither belongs in every TU that shades.
+    src/gfx/antialias.cpp
+    src/gfx/blend.cpp
+    # Lesson 6.13. The bloom&#x27;s four filters and the chain that orders them. A
+    # translation unit and not a header: every function in it is a loop over
+    # pixels, and inlining a loop over 129,600 texels into six call sites buys
+    # nothing and costs a rebuild of all six whenever a kernel weight changes.
+    src/gfx/bloom.cpp
+    src/gfx/clip.cpp
+    src/gfx/colour.cpp
+    # Lesson 6.15. The environment map and the two integrals it feeds:
+    # irradiance (exact for Lambert) and the split sum (approximate, and
+    # measured). It sits in gfx/ rather than under a new `env/` because it
+    # is a texture type, not a subsystem — the same argument gpu_texture.hpp
+    # makes for keeping depth targets beside sampled ones.
+    src/gfx/cubemap.cpp
+    src/gfx/debug_draw.cpp
+    # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
+    # than one because their include lists must differ: this one is reachable
+    # from a physics system, debug_draw.cpp is reachable only from a renderer.
+    src/gfx/debug_lines.cpp
+    src/gfx/depth_buffer.cpp
+    # Lesson 6.11. Bucketing and back-to-front sorting. A translation unit rather
+    # than a header because `order_draws` is a real algorithm over a span, and
+    # 6.16&#x27;s frustum culling walks the same list — one place, not two.
+    src/gfx/draw_order.cpp
+    src/gfx/framebuffer.cpp
+    # Lesson 6.16. The six planes, extracted from the view-projection matrix, and
+    # the walk that rejects what they exclude. A translation unit for the reason
+    # draw_order.cpp gives one line above: `cull_visible` is a real algorithm over
+    # a span, and the extraction has six sign conventions in it that must have
+    # exactly one home.
+    src/gfx/frustum.cpp
+    src/gfx/gpu_buffer.cpp
+    src/gfx/gpu_debug.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
+    # Lesson 6.16. Grouping a culled set into instanced draws. Beside gpu_mesh
+    # rather than inside it, because a mesh that knew how many copies of itself
+    # exist would be deciding something that belongs to the scene — which is the
+    # rule `gpu_mesh::bind` has stated since 4.5 and is why it refuses to bind
+    # slot 1.
+    src/gfx/instancing.cpp
+    src/gfx/gpu_pipeline.cpp
+    # Lesson 6.12. The first pass that draws no geometry: one full-screen
+    # triangle, one texture in, one texture out. 6.13 turns it into a stack.
+    src/gfx/gpu_post.cpp
+    src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
+    src/gfx/gpu_shader.cpp
+    # Lesson 6.8. The GPU half of the shadow map: a second render pass, a
+    # pipeline with no colour target, and a depth texture that can be sampled.
+    src/gfx/gpu_shadow.cpp
+    src/gfx/gpu_texture.cpp
+    # Lesson 6.12. Exposure, the tonemap curves and the CPU resolve. A translation
+    # unit rather than a header because `resolve` is a full-screen loop and
+    # `measure` walks every pixel — neither belongs in every file that mentions a
+    # colour.
+    src/gfx/hdr.cpp
+    # Lesson 6.6. The second asset format, and it gets its own translation
+    # unit for the same reason obj.cpp has one: it is the ONLY file allowed
+    # to see cgltf, so the dependency has exactly one place to leak from.
+    src/gfx/gltf.cpp
+    src/gfx/image.cpp
+    src/gfx/mipmap.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
+    src/gfx/raster.cpp
+    # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
+    # header because it owns buffers and reaches into the whole software
+    # pipeline — `collect_triangles` and `draw_triangles` both — which is more
+    # than a header should drag into every file that mentions a light.
+    src/gfx/cascade.cpp
+    src/gfx/shadow.cpp
+    src/gfx/soft_renderer.cpp
+    src/gfx/texture.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library&#x27;s to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
+    # Lesson 5.11. A new directory again, and the same argument asset/ made in
+    # 5.5: tooling UI is not a graphics subsystem. Module 9&#x27;s editor lands here
+    # beside it, and the top-level tools/ directory is a different thing — the
+    # executables that USE the engine, not part of it.
+    src/ui/debug_ui.cpp
+)
+
+# `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
+# double colon in it CANNOT be mistaken for a file. If a demo asks to link
+# `engine::engine` and no such target exists, CMake stops at configure time with
+# &quot;target not found&quot;. If it asks to link plain `engine` and no such target
+# exists, CMake happily passes `-lengine` to the linker and you find out much
+# later, in a different language, from a different tool. Every library worth
+# using exports a namespaced alias — SDL3::SDL3 is one — and now so do we.
+add_library(engine::engine ALIAS engine)
+
+# ---- The boundary ----------------------------------------------------------
+#
+# THIS IS THE MOST IMPORTANT PROPERTY IN THE PROJECT, so read it slowly.
+#
+#   PUBLIC  include/ : everything that links this library gets this directory on
+#                      its include path. It contains ONE thing — a directory
+#                      called `engine` — so from outside, the only spellings that
+#                      resolve are &lt;engine/gfx/raster.hpp&gt; and its siblings.
+#   PRIVATE src/     : the engine&#x27;s own sources get this, and nobody else does.
+#
+# The consequence is the whole point of Lesson 5.1: a demo that writes
+# `#include &quot;gfx/raster.hpp&quot;` — the spelling every file in this repository used
+# until today — does not compile. Not &quot;is discouraged&quot;, not &quot;fails review&quot;. Does
+# not compile, with a message naming the file it could not find.
+#
+# A boundary maintained by discipline is a boundary that lasts until the week
+# somebody is in a hurry. This one is maintained by the include path, which is
+# never in a hurry.
+target_include_directories(engine
+    PUBLIC  include
+    PRIVATE src)
+
+# PUBLIC because SDL is in our public headers: `framebuffer.hpp` says `Uint32`,
+# `gpu_device.hpp` takes an `SDL_Window*`, and `input.hpp` reads `SDL_Event`.
+# Anybody who includes those needs SDL&#x27;s headers too, and PUBLIC is CMake&#x27;s word
+# for &quot;this dependency is contagious, and it has to be&quot;.
+#
+# It is also an admission. A renderer whose public API names another library&#x27;s
+# types has adopted that library&#x27;s vocabulary permanently — port to a different
+# platform layer and every one of those signatures changes. §6 of the lesson
+# weighs that honestly; we keep it, and we keep knowing about it.
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+
+# stb_image, by contrast, is PRIVATE: exactly one translation unit
+# (src/gfx/image.cpp) includes it, and `image.hpp` deliberately exposes our own
+# `engine::image` instead. So the dependency stops at the boundary — a demo can
+# neither see stb nor accidentally start depending on it. That is what a good
+# wrapper buys, and this line is the proof it worked.
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes &lt;cgltf.h&gt;, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead. A demo can neither see cgltf nor
+# start depending on it — which is what makes &quot;swap the glTF library&quot; a
+# one-file change rather than a project-wide one.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
+
+# Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
+# engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a
+# CONCEPT (decode bytes into pixels), which is one function and one type. ImGui&#x27;s
+# value IS its vocabulary — four hundred widget calls — and a wrapper around that
+# is a re-spelling with no content that has to be re-spelled again forever.
+#
+# So demos include &lt;imgui.h&gt; and call ImGui:: directly, and this line is what
+# makes that legal. Note precisely what it costs: two more directories on the
+# include path of everything that links the engine, and a second third-party
+# vocabulary inside our public API. What makes it acceptable is that the only
+# code allowed to speak it is TOOLING code.
+target_link_libraries(engine PUBLIC imgui::imgui)
+
+engine_set_warnings(engine)
+</code></pre>
+  </figure>
+
 
     <figure class="listing">
     <figcaption>

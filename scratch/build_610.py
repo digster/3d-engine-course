@@ -83,11 +83,22 @@ LISTING_META = {
     "engine/include/engine/gfx/mipmap.hpp": ("new", "new"),
     "engine/src/gfx/mipmap.cpp": ("new", "new"),
     "scratch/verify_610.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_texture.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/material.hpp": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/texture.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/shadow.vert.hlsl": ("hlsl", "HLSL"),
     "shaders/scene.frag.hlsl":  ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -98,6 +109,15 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/mipmap.hpp": "scratch/l610_mipmap.hpp",
     "engine/src/gfx/mipmap.cpp":            "scratch/l610_mipmap.cpp",
     "scratch/verify_610.cpp":               "scratch/l610_verify_610.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_texture.hpp": "scratch/l610_engine_include_engine_gfx_gpu_texture.hpp",
+    "engine/include/engine/gfx/material.hpp": "scratch/l610_engine_include_engine_gfx_material.hpp",
+    "engine/CMakeLists.txt": "scratch/l610_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l610_demos_gltf_view_main.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/texture.hpp": "scratch/l610_engine_include_engine_gfx_texture.hpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l610_engine_src_gfx_gpu_texture.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l610_engine_src_gfx_raster.cpp",
 }
 
 # NOTHING PINNED YET, and this page lists EIGHT files whole.

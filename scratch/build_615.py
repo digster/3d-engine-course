@@ -91,11 +91,34 @@ LISTING_META = {
     "shaders/skybox.vert.hlsl": ("new", "new"),
     "shaders/skybox.frag.hlsl": ("new", "new"),
     "scratch/verify_615.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_texture.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/hdr.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/light.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/microfacet.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_shadow.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "engine/src/gfx/hdr.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
+    "shaders/scene.frag.hlsl": ("modified", "modified"),
+    "CMakeLists.txt": ("modified", "modified"),
+    "cmake/EngineHelpers.cmake": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/skybox.vert.hlsl": ("hlsl", "HLSL"),
     "shaders/skybox.frag.hlsl": ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
+    "CMakeLists.txt": ("cmake", "CMake"),
+    "cmake/EngineHelpers.cmake": ("cmake", "CMake"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -107,6 +130,24 @@ LISTING_SOURCE = {
     "shaders/skybox.vert.hlsl":              "scratch/l615_shaders_skybox.vert.hlsl",
     "shaders/skybox.frag.hlsl":              "scratch/l615_shaders_skybox.frag.hlsl",
     "scratch/verify_615.cpp":                "scratch/l615_scratch_verify_615.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l615_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_texture.hpp": "scratch/l615_engine_include_engine_gfx_gpu_texture.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l615_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/hdr.hpp": "scratch/l615_engine_include_engine_gfx_hdr.hpp",
+    "engine/include/engine/gfx/light.hpp": "scratch/l615_engine_include_engine_gfx_light.hpp",
+    "engine/include/engine/gfx/microfacet.hpp": "scratch/l615_engine_include_engine_gfx_microfacet.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l615_engine_include_engine_gfx_raster.hpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l615_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/gpu_shadow.cpp": "scratch/l615_engine_src_gfx_gpu_shadow.cpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l615_engine_src_gfx_gpu_texture.cpp",
+    "engine/src/gfx/hdr.cpp": "scratch/l615_engine_src_gfx_hdr.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l615_engine_src_gfx_raster.cpp",
+    "shaders/scene.frag.hlsl": "scratch/l615_shaders_scene.frag.hlsl",
+    "CMakeLists.txt": "scratch/l615_CMakeLists.txt",
+    "cmake/EngineHelpers.cmake": "scratch/l615_cmake_EngineHelpers.cmake",
+    "engine/CMakeLists.txt": "scratch/l615_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l615_demos_gltf_view_main.cpp",
 }
 
 # PINNED — done 2026-09-12, at the start of 6.16's session, before a line of the

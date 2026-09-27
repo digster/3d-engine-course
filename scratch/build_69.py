@@ -88,11 +88,31 @@ LISTING_META = {
     "engine/include/engine/gfx/cascade.hpp": ("new", "new"),
     "engine/src/gfx/cascade.cpp": ("new", "new"),
     "scratch/verify_69.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_shadow.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_texture.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/shadow.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_shadow.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "engine/src/gfx/shadow.cpp": ("modified", "modified"),
+    "shaders/scene.frag.hlsl": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/shadow.vert.hlsl": ("hlsl", "HLSL"),
     "shaders/scene.frag.hlsl":  ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/scene.frag.hlsl": ("hlsl", "HLSL"),
 }
 
 LISTING_SOURCE = {
@@ -103,6 +123,22 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/cascade.hpp": "scratch/l69_cascade.hpp",
     "engine/src/gfx/cascade.cpp":            "scratch/l69_cascade.cpp",
     "scratch/verify_69.cpp":                 "scratch/l69_verify_69.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l69_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_shadow.hpp": "scratch/l69_engine_include_engine_gfx_gpu_shadow.hpp",
+    "engine/include/engine/gfx/gpu_texture.hpp": "scratch/l69_engine_include_engine_gfx_gpu_texture.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l69_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/gfx/shadow.hpp": "scratch/l69_engine_include_engine_gfx_shadow.hpp",
+    "engine/src/gfx/gpu_shadow.cpp": "scratch/l69_engine_src_gfx_gpu_shadow.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l69_engine_src_gfx_raster.cpp",
+    "engine/CMakeLists.txt": "scratch/l69_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l69_demos_gltf_view_main.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l69_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l69_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l69_engine_src_gfx_gpu_texture.cpp",
+    "engine/src/gfx/shadow.cpp": "scratch/l69_engine_src_gfx_shadow.cpp",
+    "shaders/scene.frag.hlsl": "scratch/l69_shaders_scene.frag.hlsl",
 }
 
 # NOTHING PINNED YET, and this page lists EIGHT files whole.

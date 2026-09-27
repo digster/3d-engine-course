@@ -100,8 +100,33 @@ _MOVES = (
     (re.compile(r"src/game/(pong\.(?:hpp|cpp))"), r"demos/common/\1"),
     (re.compile(r"src/main\.cpp"), r"demos/sandbox/main.cpp"),
 )
-_INCLUDE_REWRITE = (re.compile(r'#include "(core|gfx|math)/([a-z0-9_]+\.hpp)"'),
-                    r"#include <engine/\1/\2>")
+# The script's `sed -E` expressions, in its order: two include rewrites on every
+# line, three path-comment rewrites on line 1 only.  Until 2026-09-26 the
+# published script had only the first include rule, so a student's moved files
+# kept `// src/...` path comments and `pong.cpp` kept `#include "game/pong.hpp"`
+# - a header the same script had just moved away, i.e. a broken build at 5.1.
+_EVERY_LINE = (
+    (re.compile(r'#include "(core|gfx|math)/([a-z0-9_]+\.hpp)"'), r"#include <engine/\1/\2>"),
+    (re.compile(r'#include "game/pong\.hpp"'), r'#include "pong.hpp"'),
+)
+_LINE_ONE = (
+    (re.compile(r"^// src/(core|gfx|math)/([a-z0-9_]+\.hpp)"), r"// engine/include/engine/\1/\2"),
+    (re.compile(r"^// src/(core|gfx)/([a-z0-9_]+\.cpp)"), r"// engine/src/\1/\2"),
+    (re.compile(r"^// src/game/(pong\.[hc]pp)"), r"// demos/common/\1"),
+)
+
+
+def _rewrite(text: str) -> str:
+    """One file through the script's sed: per line, in expression order."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        for pattern, replacement in _EVERY_LINE:
+            line = pattern.sub(replacement, line)
+        if i == 0:
+            for pattern, replacement in _LINE_ONE:
+                line = pattern.sub(replacement, line)
+        lines[i] = line
+    return "\n".join(lines)
 
 
 def course_owned(path: str) -> bool:
@@ -161,11 +186,29 @@ def page_listings(page_html: str) -> list[Listing]:
     return out
 
 
+_SECTION_RE = re.compile(r"(?=<h2\b)")
+_LISTINGS_H2 = re.compile(r"<h2\b[^>]*>(?:(?!</h2>).)*complete code listings", re.S | re.I)
+
+
+def listings_section(page_html: str) -> str:
+    """The page's Complete Code Listings section - master prompt §6.7, "every
+    file created or modified this lesson, in full".  Only listings in it count
+    as whole: 6.9 captioned a nine-line excerpt of `shadow.cpp` with the
+    `modified` tag in its Implementation section, and a tag-only rule took that
+    excerpt for the file and hid the omission of the real one.  A page without
+    the section (none today) falls back to the whole page."""
+    for part in _SECTION_RE.split(page_html):
+        if _LISTINGS_H2.match(part):
+            return part
+    return page_html
+
+
 def whole_listings(page_html: str) -> dict[str, str]:
-    """Path -> text of the LAST whole listing of each path.  Early pages list a
-    file several times as it grows; the last one is the state the lesson ends in."""
+    """Path -> text of the LAST whole listing of each path in the Code Listings
+    section.  Early pages list a file several times as it grows; the last one
+    is the state the lesson ends in."""
     result: dict[str, str] = {}
-    for listing in page_listings(page_html):
+    for listing in page_listings(listings_section(page_html)):
         if listing.whole:
             result[listing.path] = listing.text
     return result
@@ -191,23 +234,28 @@ def apply_refactor_script(tree: dict[str, str]) -> tuple[dict[str, str], set[str
             produced.add(target)
         elif not path.startswith("src/"):
             result[path] = text
-    pattern, replacement = _INCLUDE_REWRITE
+    # `find engine demos -name '*.[hc]pp'`: every .hpp/.cpp under the two roots.
     for path in result:
-        if path.startswith(("engine/", "demos/")):
-            result[path] = pattern.sub(replacement, result[path])
+        if path.startswith(("engine/", "demos/")) and path.endswith((".hpp", ".cpp")):
+            result[path] = _rewrite(result[path])
     return result, produced
 
 
-_COMMENT_LINE = re.compile(r"^\s*(//|#|$)")
+# What a comment looks like depends on the language: `#` opens a comment in
+# CMake but a preprocessor DIRECTIVE in C++ and HLSL.  Treating `#include` as a
+# comment once filed a build-breaking include as cosmetic.
+_C_COMMENT = re.compile(r"^\s*(//|$)")
+_CMAKE_COMMENT = re.compile(r"^\s*(#|$)")
 
 
-def describe_difference(ours: str, theirs: str) -> str:
+def describe_difference(ours: str, theirs: str, path: str = "") -> str:
     """How two versions of a file differ, in the terms a repair needs: how many
     lines, and whether any of them is code (vs. only comments or blank lines)."""
+    comment = _CMAKE_COMMENT if path.endswith(("CMakeLists.txt", ".cmake")) else _C_COMMENT
     a, b = normalise(ours).split("\n"), normalise(theirs).split("\n")
     changed = [line[1:] for line in difflib.unified_diff(a, b, lineterm="", n=0)
                if line[:1] in "+-" and not line.startswith(("+++", "---"))]
-    kind = "comments only" if all(_COMMENT_LINE.match(line) for line in changed) else "code"
+    kind = "comments only" if all(comment.match(line) for line in changed) else "code"
     return f"{len(changed)} line(s), {kind}"
 
 
@@ -324,7 +372,7 @@ def run(replay: bool) -> Findings:
         elif normalise(tree[path]) != normalise(head):
             found.r1.add(f"R1 {path}")
             found.notes.append(f"R1 {path}: last listed whole in {last_listed.get(path, '?')}; "
-                               f"HEAD differs by {describe_difference(tree[path], head)}")
+                               f"HEAD differs by {describe_difference(tree[path], head, path)}")
     return found
 
 

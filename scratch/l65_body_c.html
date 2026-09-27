@@ -213,6 +213,11 @@ const engine::texture_binding albedo = engine::bind_albedo(draw_material,
       <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td><td><code>uniforms_of</code> — one packing site</td></tr>
       <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td><td><code>cull_mode</code> moved out</td></tr>
       <tr><td><code>demos/ecs_swarm/main.cpp</code></td><td>modified</td><td>the invented struct deleted; handles and a palette</td></tr>
+      <tr><td><code>engine/src/gfx/soft_renderer.cpp</code></td><td>modified</td><td>shades through <code>objects[i].mat</code>: tint and surface from the material</td></tr>
+      <tr><td><code>demos/common/demo_scene.hpp</code></td><td>modified</td><td>a <code>texture_pool</code> and the three texture handles the scenes share</td></tr>
+      <tr><td><code>demos/common/demo_scene.cpp</code></td><td>modified</td><td>every scene object built as a material: tint, surface, maps</td></tr>
+      <tr><td><code>demos/hello_cube/main.cpp</code></td><td>modified</td><td>the cube's tint and surface, as one <code>mat</code></td></tr>
+      <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td><td>GPU uniforms from <code>uniforms_of(obj.mat)</code>; the floor's textures through the pool</td></tr>
       <tr><td><code>scratch/verify_65.cpp</code></td><td>new</td><td>27 checks, seven sections</td></tr>
     </tbody>
   </table>
@@ -221,6 +226,24 @@ const engine::texture_binding albedo = engine::bind_albedo(draw_material,
   @@LISTING:engine/include/engine/gfx/material.hpp@@
   @@LISTING:engine/include/engine/gfx/cull.hpp@@
   @@LISTING:engine/include/engine/gfx/scene.hpp@@
+  @@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/texture.hpp@@
+
+  @@LISTING:engine/src/gfx/soft_renderer.cpp@@
+
+  @@LISTING:demos/common/demo_scene.hpp@@
+
+  @@LISTING:demos/hello_cube/main.cpp@@
+
+  @@LISTING:demos/sandbox/main.cpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:demos/common/demo_scene.cpp@@
+
+  @@LISTING:demos/ecs_swarm/main.cpp@@
+
   @@LISTING:scratch/verify_65.cpp@@
 
   <!-- =================================================================

@@ -81,6 +81,13 @@ LISTING_META = {
     "demos/common/demo_scene.hpp": ("modified", "modified"),
     "demos/common/demo_scene.cpp": ("modified", "modified"),
     "scratch/verify_55.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/image.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_shader.cpp": ("modified", "modified"),
+    "engine/src/gfx/obj.cpp": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/hello_cube/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 # LISTING_SOURCE — added 2026-09-12, and without it THIS SCRIPT CANNOT RUN.
@@ -110,9 +117,19 @@ LISTING_SOURCE = {
     "demos/common/demo_scene.hpp":                 "scratch/l55_demos_common_demo_scene.hpp",
     "demos/common/demo_scene.cpp":                 "scratch/l55_demos_common_demo_scene.cpp",
     "scratch/verify_55.cpp":                       "scratch/l55_scratch_verify_55.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/image.hpp": "scratch/l55_engine_include_engine_gfx_image.hpp",
+    "engine/src/gfx/gpu_shader.cpp": "scratch/l55_engine_src_gfx_gpu_shader.cpp",
+    "engine/src/gfx/obj.cpp": "scratch/l55_engine_src_gfx_obj.cpp",
+    "engine/CMakeLists.txt": "scratch/l55_engine_CMakeLists.txt",
+    "demos/hello_cube/main.cpp": "scratch/l55_demos_hello_cube_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l55_demos_sandbox_main.cpp",
 }
 
-LISTING_LANG = {}
+LISTING_LANG = {
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
+}
 
 
 def esc(text):

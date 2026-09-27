@@ -9180,3 +9180,38 @@ the published page stayed correct, so nothing looked wrong until `check-builders
 as DIFF. The fix came from the page itself, which archives its figures; the lesson is to run the
 builder check at the START of a session too, and to treat a "known failure" note as a claim to
 re-verify, because the note had attributed this to `--figures` only.
+
+## A page can look complete and still not add up to the engine
+
+`check-builders.py` proves a page is what its builder says, not that it says enough. On 2026-09-26
+a replay of the pages — every whole listing in course order, 5.1's move script replayed — found
+23 lessons whose commits changed files their pages never listed whole (6.15 added 156 lines of
+IBL to `scene.frag.hlsl` and listed only the skybox shaders), so a student following Modules 5–6
+could not reach the engine as shipped. `check-continuity.py` now asks the question on every run.
+When a lesson changes a file for a small reason, it still lists it whole — the exceptions are
+exactly where this went wrong.
+
+## A tagged excerpt is read as the whole file
+
+6.9 captioned a ten-line excerpt of `shadow.cpp` with the `modified` tag outside Code Listings. A
+checker keyed on the tag took it for the file, and so would a student pasting it over 372 lines.
+Whole files live only in Complete Code Listings; excerpts elsewhere are captioned
+`path — what it is` and never carry a bare `new`/`modified` tag.
+
+## A move script is code: it can break a build, and it can be non-portable
+
+5.1's script promised "your files match the repository's byte for byte" and did not: it never
+rewrote the line-1 path comments the page said change, left `pong.cpp` including
+`"game/pong.hpp"` (a header it had just moved — a broken build at 5.1), and used `sed -i ''`,
+which only BSD sed reads as intended. A published script gets a test that RUNS it
+(`test_checkers.py`), on the machine's own sed.
+
+## `GIT_INDEX_FILE` leaks into every child `git`, and `git reset` empties a staged index
+
+Staging one change set in a temporary index (`GIT_INDEX_FILE=… git add`) is a clean way to verify
+it without disturbing the real one — but EXPORTED, the variable reached the unit tests' throwaway
+repositories, and their `git add` overwrote the temporary index. Set it per command, and have
+tests that create repositories strip `GIT_*` from their environment. Separately, `git reset -q`
+"to unstage one thing" unstaged 1,394 uncommitted files; it was recoverable only because a
+`git write-tree` taken earlier had saved the index as a tree (`git read-tree <tree>` restores it).
+Snapshot the index with `git write-tree` before any bulk index operation.

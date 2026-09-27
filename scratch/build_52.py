@@ -79,6 +79,8 @@ LISTING_META = {
     "demos/CMakeLists.txt": ("modified", "modified"),
     "demos/hello_cube/main.cpp": ("modified", "modified"),
     "demos/pong/main.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 # LISTING_SOURCE — added 2026-09-12, and without it THIS SCRIPT CANNOT RUN.
@@ -126,6 +128,8 @@ LISTING_SOURCE = {
     "demos/CMakeLists.txt":                        "scratch/l52_demos_CMakeLists.txt",
     "demos/hello_cube/main.cpp":                   "scratch/l52_demos_hello_cube_main.cpp",
     "demos/pong/main.cpp":                         "scratch/l52_demos_pong_main.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "demos/sandbox/main.cpp": "scratch/l52_demos_sandbox_main.cpp",
 }
 
 LISTING_LANG = {

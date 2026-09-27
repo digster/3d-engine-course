@@ -88,6 +88,11 @@ LISTING_META = {
     "shaders/scene.frag.hlsl": ("modified", "modified"),
     "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
     "scratch/verify_62.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "demos/common/demo_scene.cpp": ("modified", "modified"),
+    "demos/ecs_swarm/main.cpp": ("modified", "modified"),
+    "demos/hello_cube/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
@@ -140,6 +145,11 @@ LISTING_SOURCE = {
     "shaders/scene.frag.hlsl":                   "scratch/l62_shaders_scene.frag.hlsl",
     "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l62_engine_include_engine_gfx_gpu_uniform.hpp",
     "scratch/verify_62.cpp":                     "scratch/l62_scratch_verify_62.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "demos/common/demo_scene.cpp": "scratch/l62_demos_common_demo_scene.cpp",
+    "demos/ecs_swarm/main.cpp": "scratch/l62_demos_ecs_swarm_main.cpp",
+    "demos/hello_cube/main.cpp": "scratch/l62_demos_hello_cube_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l62_demos_sandbox_main.cpp",
 }
 
 

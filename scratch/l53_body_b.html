@@ -593,6 +593,15 @@ DEFAULT_LEVEL = "ENGINE_LOG_INFO"</code></pre>
       <tr><td><code>engine/src/platform/app.cpp</code></td><td><span class="badge mod">modified</span></td><td>Fills in <code>argv</code> so every app gets the flag</td></tr>
       <tr><td><code>engine/CMakeLists.txt</code></td><td><span class="badge mod">modified</span></td><td><code>src/core/log.cpp</code></td></tr>
       <tr><td><code>demos/sandbox/main.cpp</code></td><td><span class="badge mod">modified</span></td><td><code>--trace</code> raises <code>gpu=info</code>; the report call site</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_buffer.cpp</code></td><td><span class="badge mod">modified</span></td><td>8 <code>SDL_Log</code> calls levelled by §4.6's rule: 8 <code>ERROR</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_debug.cpp</code></td><td><span class="badge mod">modified</span></td><td>7 <code>SDL_Log</code> calls levelled: 7 <code>INFO</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_device.cpp</code></td><td><span class="badge mod">modified</span></td><td>12 <code>SDL_Log</code> calls levelled: 4 <code>ERROR</code>, 8 <code>INFO</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_mesh.cpp</code></td><td><span class="badge mod">modified</span></td><td>1 <code>SDL_Log</code> call levelled: <code>ERROR</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_pipeline.cpp</code></td><td><span class="badge mod">modified</span></td><td>9 <code>SDL_Log</code> calls levelled: 2 <code>ERROR</code>, 7 <code>INFO</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_present.cpp</code></td><td><span class="badge mod">modified</span></td><td>3 <code>SDL_Log</code> calls levelled: 3 <code>ERROR</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td><span class="badge mod">modified</span></td><td>4 <code>SDL_Log</code> calls levelled: 3 <code>ERROR</code>, 1 <code>INFO</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_shader.cpp</code></td><td><span class="badge mod">modified</span></td><td>7 <code>SDL_Log</code> calls levelled: 7 <code>ERROR</code></td></tr>
+      <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td><span class="badge mod">modified</span></td><td>5 <code>SDL_Log</code> calls levelled: 5 <code>ERROR</code></td></tr>
       <tr><td><code>scratch/convert_logs_53.py</code></td><td><span class="badge new">new</span></td><td>The 76-site conversion, by written rule</td></tr>
       <tr><td><code>scratch/verify_53.cpp</code></td><td><span class="badge new">new</span></td><td>60 checks, in three build configurations</td></tr>
       <tr><td><code>scratch/measure_53.py</code></td><td><span class="badge new">new</span></td><td>Every number in §5</td></tr>
@@ -613,11 +622,13 @@ DEFAULT_LEVEL = "ENGINE_LOG_INFO"</code></pre>
 
   <h3>6.3 &nbsp; The tools</h3>
 
+  @@LISTING:engine/include/engine/platform/platform.hpp@@
+
   @@LISTING:scratch/convert_logs_53.py@@
 
   <p>
     <code>engine/src/platform/platform.cpp</code>, <code>app.cpp</code> and
-    <code>demos/sandbox/main.cpp</code> are listed whole in Lesson 5.2; this lesson's changes to
+    <code>demos/sandbox/main.cpp</code> are listed whole in §6.4 below; this lesson's changes to
     them are the levelled messages (mechanical — see <code>convert_logs_53.py</code> above), the
     two <code>argc</code>/<code>argv</code> fields, and these two blocks:
   </p>
@@ -649,6 +660,42 @@ DEFAULT_LEVEL = "ENGINE_LOG_INFO"</code></pre>
         cfg.argv = argv;
     }</code></pre>
   </figure>
+
+  <h3>6.4 &nbsp; Every other file this lesson changed, whole</h3>
+
+  <p>
+    The conversion rule and the two blocks above say <em>how</em> each of these files changed;
+    what follows is what each one <em>is</em> afterwards: the nine GPU sources whose
+    <code>SDL_Log</code> calls became levelled <code>ENGINE_LOG_*</code> calls, the platform and
+    application layers, the build, and the sandbox. Run the script and then compare, rather than
+    trusting a conversion applied by hand.
+  </p>
+
+  @@LISTING:engine/src/gfx/gpu_buffer.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_debug.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_device.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_mesh.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_pipeline.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_present.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_shader.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_texture.cpp@@
+
+  @@LISTING:engine/src/platform/app.cpp@@
+
+  @@LISTING:engine/src/platform/platform.cpp@@
+
+  @@LISTING:engine/CMakeLists.txt@@
+
+  @@LISTING:demos/sandbox/main.cpp@@
 
   <!-- =================================================================
        7 — BUILD & RUN

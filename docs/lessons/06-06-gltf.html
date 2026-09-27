@@ -4436,6 +4436,1929 @@ ENGINE_MAIN(gltf_app)
 
     <figure class="listing">
     <figcaption>
+      <span class="path">engine/include/engine/gfx/microfacet.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/microfacet.hpp — what a surface actually is.
+//
+// Lesson 6.3. Everything in `light.hpp` describes a surface as a smooth plane with
+// a `shininess` exponent, and Lesson 6.2 measured what that costs: the same surface
+// reflects 0.1386 of the arriving light toward an eye 37 degrees off the normal and
+// 0.0259 toward one at 75, a swing of 5.36x that nobody asked for and no parameter
+// controls — and a white surface with a white highlight reflects 1.1386 of what
+// hits it, because the diffuse and specular lobes are added with no coupling.
+//
+// Those are symptoms of one cause: THE MODEL HAS NO STORY ABOUT WHAT A SURFACE IS.
+// `shininess` is a number that makes the highlight the right size. It is not a
+// measurement of anything, it is not comparable between Phong and Blinn (3.7 fitted
+// the ratio at 4.38x falling to 4.01x), and there is no experiment you could do on
+// a real material to find out what its shininess is.
+//
+// MICROFACET THEORY REPLACES THE EXPONENT WITH A STATISTICAL CLAIM. A surface is a
+// landscape of microscopic mirrors, far smaller than a pixel and far larger than a
+// wavelength. Each is a perfect mirror, so each reflects light toward the eye only
+// if it happens to face the halfway vector `h` (Lesson 3.7 already derived that
+// `h` is &quot;the normal this surface would need&quot;; that sentence is now literal). What
+// a rough surface looks like is therefore decided by ONE question:
+//
+//     what fraction of the microfacets face this way?
+//
+// That is a probability distribution over normals, and it is the NDF below. It is
+// a distribution rather than a fudge, which means it must integrate to one, which
+// means it can be CHECKED — verify_63 §A does exactly that for all three models.
+//
+// WHAT THIS HEADER WAS NOT, AND NOW IS. Lesson 6.3 built D and G and wired
+// neither in, because a microfacet BRDF is D, G and F over a denominator and
+// Fresnel is the piece that couples the diffuse and specular lobes back together.
+// Shipping two thirds of it live would have left the renderer running a model
+// that was neither the old one nor the new one for a lesson.
+//
+// LESSON 6.4 ADDED F AND ASSEMBLED, and the second half of this file is that
+// work: Schlick&#x27;s Fresnel and the constant it needs, the 4(n.l)(n.v) denominator
+// DERIVED from a change of variables rather than quoted, `microsurface` (the
+// parameters that replace `shininess` and `specular::colour`), and the two lobes
+// composed into one BRDF that cannot emit more light than arrives. `shade()` and
+// `scene.frag.hlsl` both call into it, and the reference render moved for the
+// first time in fifteen lessons.
+
+#pragma once
+
+#include &lt;engine/gfx/colour.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+#include &lt;numbers&gt;
+
+namespace engine {
+
+/// The smallest roughness the model is allowed to see.
+///
+/// **A perfectly smooth surface is a delta function**, not a small number: every
+/// microfacet faces exactly `n`, so `D` is infinite at `h == n` and zero
+/// everywhere else. That is the correct physics and it is unrepresentable in
+/// floating point — `ndf()` divides by a quantity that goes to zero, and the
+/// answer arrives as `inf` and then as `NaN` the moment it meets a zero.
+///
+/// Clamping is the standard answer, and it is worth being clear that it is a
+/// *lie with a physical reading*: no real surface is smooth at the scale of a
+/// light wavelength, so a floor on roughness is closer to the truth than zero is.
+/// The value is chosen so that `alpha*alpha` stays well clear of `float`&#x27;s
+/// denormals: at 1e-3 the peak of GGX is 1/(pi*alpha^2) = 318,310, which is large
+/// and finite.
+inline constexpr float k_min_alpha = 1.0e-3f;
+
+/// Which distribution of microfacet normals to use.
+///
+/// **This is pipeline state, not a material parameter** — the same call 3.7 made
+/// for `specular_model`, and for the same reason. A real engine bakes one choice
+/// into a shader; it is a runtime knob here so the three can be rendered side by
+/// side and the differences measured (Lesson 6.3 §5) rather than asserted.
+enum class ndf_model
+{
+    /// Blinn-Phong&#x27;s `cos^s` lobe — **which is a microfacet distribution**, and
+    /// always was. Lesson 3.7 introduced it as a shape that looked right and said
+    /// so; all it has ever been missing is its normalising constant. Kept because
+    /// that continuity is worth being able to see, and because it is the cheapest
+    /// of the three.
+    blinn,
+
+    /// Beckmann&#x27;s: a Gaussian on the microfacet *slopes*. The distribution that
+    /// physical-optics derivations arrive at, and the one against which &quot;does this
+    /// look like a real surface?&quot; was argued for thirty years.
+    beckmann,
+
+    /// GGX / Trowbridge-Reitz. Same peak as Beckmann for the same roughness, and a
+    /// **far heavier tail** — measured at 456x Beckmann&#x27;s value 45 degrees off the
+    /// peak (verify_63 §C). That tail is the whole reason it won: real surfaces
+    /// have a glow around the highlight that Beckmann cuts off abruptly.
+    ggx
+};
+
+/// Perceptual roughness in [0,1] to the `alpha` the distributions actually use.
+///
+/// **`alpha = roughness^2`, and this is a CHOICE, not a derivation.** The
+/// distributions are written in terms of `alpha`, which is the RMS slope of the
+/// microfacet field — a physical quantity. But `alpha` is a terrible thing to hand
+/// an artist: almost all the visible change happens in its bottom fifth, so a
+/// slider in `alpha` spends four fifths of its travel doing nothing. Squaring a
+/// [0,1] parameter pushes resolution toward the smooth end where the eye is, which
+/// is the same argument Lesson 6.1 made about sRGB spending codes where the eye is.
+///
+/// It is Disney&#x27;s remap, it is what UE4 and Filament ship, and it is worth knowing
+/// that it is a convention rather than physics: a roughness value copied from one
+/// renderer into another that squares it differently will not match.
+[[nodiscard]] inline float alpha_from_roughness(float roughness)
+{
+    const float r = std::clamp(roughness, 0.0f, 1.0f);
+    return std::max(k_min_alpha, r * r);
+}
+
+/// The inverse, for reading a stored `alpha` back into artist units.
+[[nodiscard]] inline float roughness_from_alpha(float alpha)
+{
+    return std::sqrt(std::max(0.0f, alpha));
+}
+
+/// The Blinn exponent whose distribution PEAKS at the same height as GGX&#x27;s.
+///
+/// **The word &quot;peaks&quot; is doing all the work here, and the folklore leaves it
+/// out.** Both distributions are largest at `h == n`; setting those two values
+/// equal gives `(s + 2) / 2pi = 1 / (pi * alpha^2)`, hence `s = 2/alpha^2 - 2`.
+/// That is the mapping everyone quotes.
+///
+/// It matches the peak and nothing else. Lesson 6.3 §6 instead *fits* the exponent
+/// by minimising the difference over the whole hemisphere, and gets consistently
+/// **about 0.80x** this value (0.806 at alpha 0.1, 0.758 at 0.5) — because a lobe
+/// fit trades peak height for the tail, and GGX has a tail Blinn cannot reproduce
+/// at any exponent. Both numbers are right; they are answers to different
+/// questions, and quoting one without saying which is how the folklore travels.
+[[nodiscard]] inline float blinn_exponent_from_alpha(float alpha)
+{
+    const float a = std::max(k_min_alpha, alpha);
+    return 2.0f / (a * a) - 2.0f;
+}
+
+/// The reverse: what roughness a Lesson 3.7 `shininess` was asking for.
+///
+/// Useful for exactly one thing, and it is the thing this lesson needs: reading
+/// the engine&#x27;s existing materials into the new vocabulary. The demo&#x27;s default
+/// shininess of 32 turns out to mean `alpha = 0.2425`, a perceptual roughness of
+/// **0.49** — almost exactly half way, which is a reasonable thing for a default
+/// to be and was never chosen on purpose.
+[[nodiscard]] inline float alpha_from_blinn_exponent(float shininess)
+{
+    return std::max(k_min_alpha, std::sqrt(2.0f / (std::max(0.0f, shininess) + 2.0f)));
+}
+
+/// **The normal distribution function**: the fraction of microfacets facing `h`.
+///
+/// Derived in Lesson 6.3 §4. `n_dot_h` is the cosine between the surface&#x27;s
+/// macroscopic normal and the halfway vector — so this asks &quot;how much of the
+/// surface is tilted to send this light at my eye?&quot;, which is the question Lesson
+/// 3.7&#x27;s halfway vector was already a way of asking.
+///
+/// **THE DEFINING PROPERTY IS THAT IT IS A DISTRIBUTION**, and the test is not
+/// that it integrates to 1 over the hemisphere but that it does so *weighted by
+/// `cos(theta_h)`*:
+///
+///     integral over hemisphere of D(h) * cos(theta_h) dw = 1
+///
+/// The cosine is there because a microfacet tilted away presents less of its own
+/// area to the macroscopic surface — the same projected-area factor as everywhere
+/// else in this module (Lesson 6.2 §3). Read the identity the other way and it
+/// says something nicer: **the microfacets&#x27; projected areas add up to exactly the
+/// area of the flat surface they stand on.** Nothing else would make sense.
+///
+/// All three models satisfy it exactly (verify_63 §A, to 1e-6 at 200k samples),
+/// and `blinn` satisfies it only *because* of the `(s + 2) / 2pi` this function
+/// applies. The engine&#x27;s own highlight, which has shipped since 3.7 with `1/pi`
+/// instead, is therefore off by a factor of `(s + 2) / 2` — **exactly 17x at the
+/// default shininess of 32**. See Lesson 6.3 §5; it is the finding.
+///
+/// Returns 0 for a halfway vector below the surface, which is not a degenerate
+/// case to guard against but a true statement: no microfacet faces that way.
+[[nodiscard]] inline float ndf(ndf_model model, float n_dot_h, float alpha)
+{
+    if (n_dot_h &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float c2 = n_dot_h * n_dot_h;
+
+    switch (model)
+    {
+    case ndf_model::blinn:
+    {
+        const float s = blinn_exponent_from_alpha(a);
+        return ((s + 2.0f) / (2.0f * std::numbers::pi_v&lt;float&gt;)) * std::pow(n_dot_h, s);
+    }
+    case ndf_model::beckmann:
+    {
+        // exp(-tan^2(theta_h) / alpha^2) / (pi * alpha^2 * cos^4(theta_h)).
+        // tan^2 is written from the cosine rather than via std::tan, because the
+        // cosine is what we have and a round trip through an angle would cost an
+        // acos and lose bits for nothing. `sin2` is computed the stable way — see
+        // the note on GGX below, which is where it actually bites.
+        const float sin2 = (1.0f - n_dot_h) * (1.0f + n_dot_h);
+        return std::exp(-(sin2 / c2) / (a * a))
+             / (std::numbers::pi_v&lt;float&gt; * a * a * c2 * c2);
+    }
+    case ndf_model::ggx:
+        break;
+    }
+
+    // GGX. The denominator is squared, which is the entire difference from
+    // Beckmann: a rational function has a power-law tail where an exponential has
+    // none. That is why the highlight has a glow around it.
+    //
+    // THE ALGEBRA HERE IS NOT THE TEXTBOOK&#x27;S, AND THE DIFFERENCE IS MEASURABLE.
+    // Every reference writes the denominator as
+    //
+    //     d = cos^2(theta_h) * (alpha^2 - 1) + 1
+    //
+    // which is correct, and in `float` it is a catastrophic cancellation: near the
+    // peak `cos^2` is close to 1 and `alpha^2 - 1` is close to -1, so the result is
+    // the difference of two numbers of size 1 that very nearly agree. A `float`
+    // resolves that to about 1e-7 ABSOLUTE — and at alpha = 0.01 the true value of
+    // `d` at the peak is 1e-4, so a thousandth of it is noise. Then it is squared.
+    //
+    // The identical expression, rearranged, does not cancel:
+    //
+    //     d = (1 - cos^2) + alpha^2 * cos^2 = (1 - c)(1 + c) + alpha^2 * c^2
+    //
+    // `(1 - c)` is where the win is, and the reason is **Sterbenz&#x27;s lemma**: for
+    // c in [0.5, 1], `1.0f - c` is computed with NO ROUNDING AT ALL, exactly, in
+    // any IEEE format. The whole peak region is inside that range.
+    //
+    // MEASURED, by the §A normalisation test, which is what found this:
+    //
+    //     alpha    textbook form   this form     (double, for truth)
+    //     0.001    0.9891063       1.0023035     1.0000013
+    //     0.010    0.9998169       1.0000004     1.0000000
+    //     0.050    1.0000006       1.0000000     1.0000000
+    //
+    // At mirror-like roughness the textbook form loses **1.1% of the model&#x27;s
+    // energy** to rounding, and it does not improve with a finer integration grid,
+    // because it is not a quadrature error. This is exactly the sort of thing a
+    // test whose expected answer is a round number finds and a test that compares
+    // against &quot;what it printed last time&quot; cannot.
+    const float a2 = a * a;
+    const float d = (1.0f - n_dot_h) * (1.0f + n_dot_h) + a2 * c2;
+    return a2 / (std::numbers::pi_v&lt;float&gt; * d * d);
+}
+
+/// Smith&#x27;s masking function for **one** direction: the fraction of microfacets
+/// visible from `n_dot_x` rather than hidden behind their neighbours.
+///
+/// Derived in Lesson 6.3 §7. The exact GGX form (Walter 2007), not the Schlick
+/// approximation — the approximation belongs with the rest of 6.4&#x27;s arithmetic
+/// budget, and this lesson is about knowing what is being approximated.
+///
+/// It is 1 looking straight down and falls toward 0 at grazing incidence, and how
+/// fast it falls depends entirely on roughness: at `alpha = 0.05` it is still
+/// 0.9914 at 75 degrees, and at `alpha = 1.0` it is 0.4112 there. **That is the
+/// term Lesson 6.2 was missing when it measured a 5.36x view-angle swing it could
+/// not explain** — a rough surface really does hide part of itself from you, and
+/// a model with no G has no way to say so.
+[[nodiscard]] inline float smith_g1(float n_dot_x, float alpha)
+{
+    if (n_dot_x &lt;= 0.0f) { return 0.0f; }
+    const float a2 = std::max(k_min_alpha, alpha) * std::max(k_min_alpha, alpha);
+    return 2.0f * n_dot_x
+         / (n_dot_x + std::sqrt(a2 + (1.0f - a2) * n_dot_x * n_dot_x));
+}
+
+/// The separable Smith geometry term: mask the light, then mask the eye.
+///
+/// **The assumption is stated in the name.** Multiplying the two G1s assumes that
+/// whether a microfacet is lit and whether it is visible are independent events.
+/// They are not: both depend on the facet&#x27;s height in the same landscape, so a
+/// facet down in a valley tends to be hidden from *both* directions at once, and
+/// treating the two as independent counts that facet as hidden twice.
+///
+/// Kept, named, and measured rather than quietly replaced — see `smith_g`.
+[[nodiscard]] inline float smith_g_separable(float n_dot_l, float n_dot_v, float alpha)
+{
+    return smith_g1(n_dot_l, alpha) * smith_g1(n_dot_v, alpha);
+}
+
+/// **Height-correlated Smith** (Heitz 2014), and the default, because the
+/// correlation is not a small effect.
+///
+/// Same idea as the separable form with the independence assumption dropped: the
+/// two maskings are resolved together, over the shared height distribution.
+///
+/// Measured against the separable version (verify_63 §D): identical to four
+/// decimals on smooth surfaces and at steep angles, and **1.715x apart at
+/// `alpha = 0.8` with both directions 80 degrees off the normal** — 0.1255 against
+/// 0.2152. The separable form loses that light. Grazing angles on rough surfaces
+/// are exactly where sunset lighting, wet roads and worn metal live, so this is
+/// not a corner case, and &quot;either is fine&quot; would have been a comfortable thing to
+/// write and wrong.
+[[nodiscard]] inline float smith_g(float n_dot_l, float n_dot_v, float alpha)
+{
+    if (n_dot_l &lt;= 0.0f || n_dot_v &lt;= 0.0f) { return 0.0f; }
+    const float a = std::max(k_min_alpha, alpha);
+    const float a2 = a * a;
+    const float lv = n_dot_l * std::sqrt(a2 + (1.0f - a2) * n_dot_v * n_dot_v);
+    const float ll = n_dot_v * std::sqrt(a2 + (1.0f - a2) * n_dot_l * n_dot_l);
+    return 2.0f * n_dot_l * n_dot_v / (lv + ll);
+}
+
+
+// ===========================================================================
+//  LESSON 6.4 — FRESNEL, AND THE ASSEMBLY
+// ===========================================================================
+//
+// Everything above describes the surface. Nothing above says how much light it
+// actually reflects, and that is the missing third: `D` says which facets face
+// the right way, `G` says which of those you can see, and **`F` says what
+// fraction of the light that reaches a facet bounces off it instead of going
+// in.** That last sentence is why Fresnel is not one more multiplier. It is the
+// only term in the model that talks about the light that DOESN&#x27;T reflect, and
+// the diffuse lobe is made of exactly that light.
+//
+// Lesson 6.2 measured a white surface with a white highlight reflecting 1.1386
+// of what hit it, and named the cause: the two lobes were added with no coupling,
+// so the same photon was counted once as having bounced off the surface and once
+// as having gone into it. Normalising D (Lesson 6.3) does not touch that, and
+// 6.3 said so and left the number standing. `F` is the coupling.
+
+/// The reflectance of a smooth interface at NORMAL incidence, for the ordinary
+/// dielectrics — plastic, glass, skin, wood, water, most of the world.
+///
+/// **This is not a tuning constant, it is a measurement**, and one line of
+/// algebra away from the index of refraction. `f0_from_ior(1.5)` is exactly
+/// 0.04, and 1.5 is roughly every common dielectric: glass is 1.5, most plastics
+/// 1.46-1.55, skin 1.4, water 1.33. The whole visible range of dielectric F0 is
+/// **0.02 to 0.08**, which is a remarkably small box, and it is the reason a
+/// single default is defensible where `specular::colour` never was.
+///
+/// Compare what it replaces. This engine shipped `specular::colour` values of
+/// 0.85, 0.60, 0.55 and 0.30 — between seven and twenty-one times a physically
+/// possible dielectric reflectance. They were not wrong, exactly; they were
+/// absorbing the 17x normalisation error Lesson 6.3 measured, plus an exposure,
+/// plus taste. An error a PARAMETER can absorb is invisible, and this is the
+/// constant that makes it visible.
+inline constexpr float k_dielectric_f0 = 0.04f;
+
+/// Normal-incidence reflectance from an index of refraction, for light arriving
+/// from air.
+///
+/// Derived in Lesson 6.4 §5.1 from the Fresnel equations at `theta = 0`, where
+/// the s- and p-polarised forms collapse to the same expression:
+///
+///     F0 = ((n1 - n2) / (n1 + n2))^2,  with n1 = 1 for air
+///
+/// It is squared because the Fresnel equations give an *amplitude* ratio and
+/// reflectance is a ratio of POWERS. That squaring is the single most common
+/// place to lose a factor of two in this subject.
+[[nodiscard]] inline float f0_from_ior(float ior)
+{
+    const float n = std::max(1.0f, ior);
+    const float r = (1.0f - n) / (1.0f + n);
+    return r * r;
+}
+
+/// The inverse: what index of refraction an authored F0 is claiming.
+///
+/// Worth having for exactly one reason, and it is a debugging reason: an F0 of
+/// 0.85 comes back as an IOR of **25.3**, and there is no such material. A
+/// number that round-trips into an absurdity is a number somebody guessed.
+[[nodiscard]] inline float ior_from_f0(float f0)
+{
+    const float r = std::sqrt(std::clamp(f0, 0.0f, 0.9999f));
+    return (1.0f + r) / (1.0f - r);
+}
+
+/// **Schlick&#x27;s approximation to the Fresnel equations.**
+///
+/// The exact equations need the transmitted angle (so Snell&#x27;s law, so a square
+/// root), separate s- and p-polarised terms, and an average of the two — about
+/// twenty operations, per light, per pixel. Schlick 1994 replaces all of it with
+///
+///     F(cos) = F0 + (1 - F0) * (1 - cos)^5
+///
+/// and the shape is right for a reason that is worth seeing rather than
+/// accepting: **every interface reflects everything at grazing incidence.** Look
+/// along a table top, a puddle, a sheet of paper — all of them turn into mirrors.
+/// So F must rise to exactly 1 at `cos = 0` no matter what F0 is, and the
+/// expression above does that by construction: at `cos = 0` it is `F0 + 1 - F0`.
+/// It is also exactly F0 at `cos = 1` by construction. Schlick&#x27;s contribution is
+/// the *fifth power* in between, and that is the part that is fitted.
+///
+/// **HOW GOOD IS THE FIT? Measured against the exact equations rather than
+/// asserted** (verify_64 §C), and the answer is less flattering than the folklore:
+///
+///   - worst ABSOLUTE error 0.0357 for glass (ior 1.5), out at 85 degrees;
+///   - worst RELATIVE error **23.2%**, and it sits at 55 degrees, in the middle
+///     of the range where surfaces are usually seen. At 60 degrees the exact
+///     answer is 0.0892 and Schlick says 0.0700.
+///
+/// A 23% error in a term that is itself 0.04 is a 0.019 error in reflectance,
+/// which is invisible — and that is the honest defence of Schlick, not that the
+/// fit is tight. It is cheap, it is exact at both ends, and it is wrong in the
+/// middle by an amount that does not matter *at dielectric F0*. It matters more
+/// as F0 rises: at ior 2.4 (diamond) the worst absolute error doubles to 0.074.
+///
+/// `cos_theta` is the cosine between the view direction and the MICROFACET
+/// normal — that is, `v.h`, not `n.v`. The facet is the mirror; its own normal
+/// is the one the light is bouncing off. Lesson 6.4 §5.3 is about how easy that
+/// is to get wrong and what it looks like when you do.
+[[nodiscard]] inline float fresnel_schlick(float cos_theta, float f0)
+{
+    const float m = 1.0f - std::clamp(cos_theta, 0.0f, 1.0f);
+    const float m2 = m * m;
+    return f0 + (1.0f - f0) * (m2 * m2 * m);   // (1-cos)^5, four multiplies
+}
+
+/// The same, per channel — which is what makes a metal a metal.
+///
+/// **A metal&#x27;s F0 is COLOURED, and that is very nearly the whole of what
+/// separates it from a dielectric.** Gold reflects about (1.00, 0.71, 0.29) at
+/// normal incidence, copper (0.95, 0.64, 0.54), silver (0.97, 0.96, 0.92) — so a
+/// gold surface tints the light it mirrors, where a plastic one does not. A
+/// dielectric&#x27;s F0 is grey because its index of refraction barely varies across
+/// the visible spectrum; a metal&#x27;s does not have that courtesy.
+[[nodiscard]] inline linear_rgb fresnel_schlick(float cos_theta, linear_rgb f0)
+{
+    const float m = 1.0f - std::clamp(cos_theta, 0.0f, 1.0f);
+    const float m2 = m * m;
+    const float w = m2 * m2 * m;
+    return {f0.r + (1.0f - f0.r) * w,
+            f0.g + (1.0f - f0.g) * w,
+            f0.b + (1.0f - f0.b) * w};
+}
+
+/// How the diffuse lobe is told about the light the specular lobe already took.
+///
+/// **This is a real choice with a measured answer, kept as an enum for the same
+/// reason `smith_g_separable` was kept in Lesson 6.3: the difference is large
+/// enough that picking one is a decision rather than a default.**
+enum class diffuse_coupling
+{
+    /// `(1 - F(n.l)) * (1 - F(n.v))` — **the default, and the one the physics
+    /// actually says.** Light crosses the interface TWICE: once going in, at the
+    /// light&#x27;s angle, and once coming out, at the eye&#x27;s. Each crossing reflects
+    /// its own Fresnel fraction and only the remainder gets through.
+    ///
+    /// Reciprocal (it is symmetric in `l` and `v`, which a BRDF must be), and
+    /// measured never to exceed 1: worst hemispherical reflectance **0.9255**
+    /// over a full sweep of roughness and view angle (verify_64 §E).
+    two_crossing,
+
+    /// `1 - F(v.h)` — what most real-time renderers ship, including the glTF 2.0
+    /// reference BRDF.
+    ///
+    /// **VERIFIED IN LESSON 6.6** against Khronos glTF 2.0, Appendix B &quot;BRDF
+    /// Implementation&quot;, which gives the dielectric as
+    ///
+    ///     dielectric_brdf = mix(diffuse_brdf, specular_brdf,
+    ///                           0.04 + 0.96 * (1 - |V.H|)^5)
+    ///
+    /// The claim was true in substance and imprecise in a way worth recording:
+    /// `mix(a, b, F)` is `(1-F)a + Fb`, so the SAME Fresnel that scales the
+    /// diffuse down scales the specular UP — and `cook_torrance_specular`
+    /// already carries that factor. The divergence between this engine and the
+    /// spec is therefore exactly ONE factor, on the diffuse lobe alone, and
+    /// nothing else in the model differs: same GGX, same height-correlated
+    /// Smith, same `alpha = roughness^2`, same 0.04 from an IOR of 1.5.
+    ///
+    /// **And the metallic blend is not even a divergence.** The spec lerps two
+    /// whole BRDFs by `metallic`; `f0_of` lerps the F0 and evaluates one. Those
+    /// commute EXACTLY, because Schlick is affine in f0 — `F(f0) = f0(1-w) + w`
+    /// — which `verify_66` §E measures at 1.19e-07 worst over 4,851 points.
+    ///
+    /// The spec permits the remaining difference outright (§3.9.6:
+    /// &quot;Implementations of the bidirectional reflectance distribution function
+    /// (BRDF) itself **MAY** vary based on device performance and resource
+    /// constraints&quot;) and requires of a physically accurate one that it be
+    /// &quot;positive, reciprocal, and energy conserving&quot; — which is the requirement
+    /// `two_crossing` meets at 0.9255 and this form fails at 1.3395. So the
+    /// engine loads glTF materials and shades them with `two_crossing`, and is
+    /// conformant in doing so.
+    ///
+    /// **It is exact at normal incidence and over-unity at grazing**, and Lesson
+    /// 6.4 §7 diagnoses exactly why: `1 - F(v.h)` is the fraction of light that
+    /// got IN. It says nothing about the light that fails to get OUT. A diffuse
+    /// ray leaving toward an eye 75 degrees off the normal meets the interface at
+    /// 75 degrees, where a quarter of it reflects back inside — and this form
+    /// lets all of it out.
+    ///
+    /// Measured (verify_64 §E): white furnace reads **0.9999** at normal
+    /// incidence, which is better than `two_crossing` manages, and **1.2002** for
+    /// a smooth surface at 75 degrees, which is a surface emitting a fifth more
+    /// light than reaches it. Worst over the sweep: 1.3395.
+    ///
+    /// Kept, named and measured rather than quietly dropped, because it is what
+    /// the student will find in every engine they read next.
+    half_vector
+};
+
+/// The fraction of arriving light that is available to the diffuse lobe.
+///
+/// Derived in Lesson 6.4 §6. The sentence the whole lesson turns on is short:
+/// **F is what bounces off, so 1 - F is what goes in**, and only what goes in
+/// can scatter around under the surface and come back out as diffuse. Before
+/// this function the two lobes were independent and their sum was unbounded;
+/// after it, every photon is spent once.
+///
+/// `f0` is the coloured F0 (see `f0_of`), because a metal&#x27;s coupling is coloured
+/// too — though a metal has no diffuse lobe to couple, so in practice this
+/// matters only for the partly-metallic values in between.
+[[nodiscard]] inline linear_rgb diffuse_transmission(diffuse_coupling coupling,
+                                                     linear_rgb f0,
+                                                     float n_dot_l, float n_dot_v,
+                                                     float v_dot_h)
+{
+    if (coupling == diffuse_coupling::half_vector)
+    {
+        const linear_rgb f = fresnel_schlick(v_dot_h, f0);
+        return {1.0f - f.r, 1.0f - f.g, 1.0f - f.b};
+    }
+
+    // TWO CROSSINGS: in at the light&#x27;s angle, out at the eye&#x27;s.
+    const linear_rgb fi = fresnel_schlick(n_dot_l, f0);
+    const linear_rgb fo = fresnel_schlick(n_dot_v, f0);
+    return {(1.0f - fi.r) * (1.0f - fo.r),
+            (1.0f - fi.g) * (1.0f - fo.g),
+            (1.0f - fi.b) * (1.0f - fo.b)};
+}
+
+/// **What a surface is, in four numbers** — the struct that replaces `specular`.
+///
+/// The rename is the point, exactly as it was when Lesson 6.2 turned
+/// `intensity` into `irradiance`. `specular::colour = 0.85f` and `f0 = 0.04f`
+/// are both plausible-looking floats, so keeping the old name would let every
+/// material in the engine keep compiling while meaning something twenty-one
+/// times different. A rename is the only tool that reaches every call site, and
+/// the name it reaches them with should say what changed: this struct no longer
+/// describes the highlight, it describes THE SURFACE — including, through
+/// `metallic`, whether there is a diffuse lobe at all.
+///
+/// It lives in this header rather than `light.hpp` because these are the
+/// parameters of the microfacet model, and this file is the model.
+///
+/// **It is still not a `material`.** A material is also the albedo, the
+/// textures, the cull and blend modes, and eventually the shader; Lesson 6.5
+/// builds that, with the arguments for its shape. This is the reflectance half,
+/// and it is the half that had to change now because the constants moved.
+struct microsurface
+{
+    /// Perceptual roughness in [0,1]; `alpha_from_roughness` squares it.
+    ///
+    /// **The parameter that replaces `shininess`, and the difference is that
+    /// this one measures something.** 0 is a mirror, 1 is chalk. Lesson 6.3&#x27;s
+    /// `alpha_from_blinn_exponent` translates the old values: the engine&#x27;s
+    /// default shininess of 32 was asking for roughness 0.49.
+    float roughness = 0.5f;
+
+    /// 0 = dielectric, 1 = metal. Nothing in between is a real material.
+    ///
+    /// **This is a switch wearing a float&#x27;s clothes, and that is deliberate** —
+    /// not because half-metals exist, but because a *texture* that says &quot;this
+    /// pixel is the painted part and that one is the bare metal&quot; has to filter
+    /// across the boundary, and a filtered switch is a float. Lesson 6.6&#x27;s glTF
+    /// materials store exactly this.
+    ///
+    /// It does two things at once, and both are consequences rather than rules:
+    /// a metal&#x27;s F0 becomes its albedo (`f0_of`), and a metal loses its diffuse
+    /// lobe entirely (`diffuse_albedo_of`). Both follow from one fact — metals
+    /// conduct, so light that crosses the interface is absorbed within a few
+    /// atoms instead of scattering back out.
+    float metallic = 0.0f;
+
+    /// Normal-incidence reflectance for the DIELECTRIC case, in [0.02, 0.08].
+    ///
+    /// Defaults to `k_dielectric_f0`, which covers most of the world. Raise it
+    /// for gemstones, lower it for water. Ignored entirely when `metallic` is 1,
+    /// because a metal&#x27;s F0 comes from its albedo instead.
+    float f0 = k_dielectric_f0;
+};
+
+/// The coloured normal-incidence reflectance this surface actually has.
+///
+/// **The metallic workflow in one line**, and it arrives as a consequence rather
+/// than a checkbox: a dielectric reflects a grey 4% and scatters the rest
+/// coloured, so its F0 is grey and its albedo is the colour you see. A metal
+/// absorbs everything that gets in, so the only light leaving it is the mirrored
+/// part — which means the colour has to live in F0 instead. Gold&#x27;s albedo IS its
+/// F0, (1.00, 0.71, 0.29).
+///
+/// So one `albedo` field serves both, and `metallic` chooses which question it
+/// is answering. That is why every modern pipeline authors base colour +
+/// metallic + roughness: it is not a compression, it is the physics.
+[[nodiscard]] inline linear_rgb f0_of(microsurface surface, linear_rgb albedo)
+{
+    const float m = std::clamp(surface.metallic, 0.0f, 1.0f);
+    const float d = surface.f0;
+    return {d + (albedo.r - d) * m,
+            d + (albedo.g - d) * m,
+            d + (albedo.b - d) * m};
+}
+
+/// The albedo the DIFFUSE lobe gets, which is nothing at all for a metal.
+///
+/// See `microsurface::metallic`: light that crosses into a conductor is absorbed
+/// within a few atomic layers, so there is no subsurface scattering to come back
+/// out. A metal is a mirror and nothing else, which is why a rough metal looks
+/// dark rather than pale — and why Lesson 6.3&#x27;s missing 69% at full roughness
+/// is a visible problem for metals specifically and barely matters for plastic.
+[[nodiscard]] inline linear_rgb diffuse_albedo_of(microsurface surface, linear_rgb albedo)
+{
+    const float k = 1.0f - std::clamp(surface.metallic, 0.0f, 1.0f);
+    return {albedo.r * k, albedo.g * k, albedo.b * k};
+}
+
+/// **The Cook-Torrance specular BRDF**: `D * G * F / (4 (n.l)(n.v))`.
+///
+/// Every part of that expression is derived in Lesson 6.4 §4, including the
+/// denominator, which is the single most quoted and least explained line in
+/// real-time graphics. In brief, because it is short enough to state here:
+///
+///   - **the 4 is a Jacobian.** The distribution `D` is a density over
+///     MICROFACET NORMALS, and the BRDF is a density over LIGHT DIRECTIONS.
+///     Converting between them needs the stretch factor of the map `l -&gt; h`.
+///     Put spherical coordinates on the fixed direction: a facet tilted by
+///     `theta_h` swings the reflected ray by `2 theta_h`, so
+///     `dw_out = sin(2 theta_h) * 2 dtheta_h dphi` against
+///     `dw_h = sin(theta_h) dtheta_h dphi`, and the ratio is
+///     `2 sin(2 theta_h)/sin(theta_h) = 4 cos(theta_h) = 4 (v.h)`.
+///     The double-angle identity supplies both the 4 and the cosine.
+///     Measured against a finite-difference change of variables in verify_64 §B.
+///
+///   - **the (v.h) that Jacobian leaves behind cancels**, against the projected
+///     area of the facets toward the light — which is also `(l.h)`, and
+///     `l.h == v.h` because `h` bisects them. That cancellation is why the
+///     denominator has no `(v.h)` in it, and its absence is what makes the
+///     formula look unmotivated.
+///
+///   - **the (n.v) converts flux to radiance** (radiance is per unit PROJECTED
+///     area) and **the (n.l) is the BRDF&#x27;s own definition** (a BRDF is per unit
+///     irradiance, and irradiance already carries a cosine).
+///
+/// The dots are passed in rather than the vectors, so this function is pure
+/// arithmetic that a test can drive directly — and so the shader can compute
+/// them once and share them with the diffuse half.
+///
+/// Returns black rather than a NaN when either cosine is non-positive: light
+/// below the horizon and a surface facing away are both real cases, not
+/// degeneracies to guard against.
+[[nodiscard]] inline linear_rgb cook_torrance_specular(microsurface surface,
+                                                       linear_rgb f0,
+                                                       float n_dot_l, float n_dot_v,
+                                                       float n_dot_h, float v_dot_h,
+                                                       ndf_model model = ndf_model::ggx)
+{
+    if (n_dot_l &lt;= 0.0f || n_dot_v &lt;= 0.0f) { return {}; }
+
+    const float alpha = alpha_from_roughness(surface.roughness);
+    const float d = ndf(model, n_dot_h, alpha);
+    const float g = smith_g(n_dot_l, n_dot_v, alpha);
+    const linear_rgb f = fresnel_schlick(v_dot_h, f0);
+
+    // The whole denominator, computed once. `n_dot_l` and `n_dot_v` are both
+    // strictly positive here, so this cannot divide by zero — but they can be
+    // small, and `smith_g` goes to zero faster than they do, which is what keeps
+    // the quotient finite at grazing angles rather than exploding.
+    const float k = d * g / (4.0f * n_dot_l * n_dot_v);
+    return {f.r * k, f.g * k, f.b * k};
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/include/engine/gfx/texture.hpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/include/engine/gfx/texture.hpp — images, and how to ask one what colour is at (u, v).
+//
+// Lesson 3.9. Everything before this lesson computed a fragment&#x27;s colour from a
+// RULE: a blend of three corner colours (2.4), a checkerboard evaluated from a
+// formula (3.2), a lighting equation (3.6-3.8). A texture is the other answer —
+// look it up in an array somebody painted — and the whole subject of this file is
+// that the lookup is not as simple as an array index.
+//
+// Three questions have to be settled before `image[y][x]` is a defensible answer,
+// and each one has a visible failure if you get it wrong:
+//
+//   WHERE IS (0, 0)?          Top-left, v downwards. Not a taste question: it is
+//                             what SDL_GPU does, quoted below, and Module 4 is a
+//                             port rather than a redesign.
+//   WHAT IS OUTSIDE [0, 1]?   Three answers, all useful, all different — and the
+//                             wrong one shows as a smeared edge or a visible seam.
+//   WHAT IS BETWEEN TEXELS?   A texel is a SAMPLE, not a square. Its value belongs
+//                             at its CENTRE, and forgetting the half-texel that
+//                             follows from that is the single most common texture
+//                             bug there is.
+//
+// The types here mirror `SDL_GPUSampler` deliberately — same names, same
+// enumerator order — so that when Module 4 replaces this file with a GPU sampler
+// object, the change is a rename and not a re-education.
+
+#pragma once
+
+#include &lt;engine/core/handle.hpp&gt;   // 6.5: a texture is referenced, not pointed at
+#include &lt;engine/core/pool.hpp&gt;
+#include &lt;engine/gfx/colour.hpp&gt;   // linear_rgb: what a sample IS, once decoded
+#include &lt;engine/gfx/image.hpp&gt;    // 6.6: image_data, the thing a file decodes to
+#include &lt;engine/math/vec2.hpp&gt;
+
+#include &lt;SDL3/SDL.h&gt;
+
+#include &lt;cstddef&gt;
+#include &lt;span&gt;
+#include &lt;vector&gt;
+
+namespace engine {
+
+// ---- The sampler&#x27;s two enums -----------------------------------------------
+
+/// How to combine texels when the sample point falls between them.
+///
+/// Enumerator order matches `SDL_GPUFilter` exactly — verified in
+/// `SDL3/SDL_gpu.h`, where it is `SDL_GPU_FILTER_NEAREST`, `SDL_GPU_FILTER_LINEAR`
+/// in that order — so Module 4&#x27;s port is a rename.
+enum class filter
+{
+    /// Take the one texel the sample point lands in. Sharp, cheap, exact — and
+    /// the reason a magnified texture looks like a mosaic of hard squares.
+    nearest,
+
+    /// Blend the four texels whose centres surround the sample point, weighted by
+    /// how close each one is. **Bilinear filtering**, and the default, because a
+    /// magnified texture is the common case and blocky is worse than soft.
+    ///
+    /// Note the exact claim: *four texels whose CENTRES surround the point*. Not
+    /// &quot;the four texels nearest the point&quot;, which is the same thing said loosely
+    /// and the sentence that produces the half-texel bug.
+    linear
+};
+
+/// What a texture coordinate outside `[0, 1]` means.
+///
+/// Enumerator order matches `SDL_GPUSamplerAddressMode` exactly — `REPEAT`,
+/// `MIRRORED_REPEAT`, `CLAMP_TO_EDGE` — verified in `SDL3/SDL_gpu.h`.
+///
+/// **This is a real choice with three right answers**, not a default plus two
+/// curiosities. A tiled floor wants `repeat`; a decal or a skybox face wants
+/// `clamp_to_edge`, because repeating it would wrap the far edge into view; a
+/// pattern that must not show a seam and was not authored to tile wants
+/// `mirrored_repeat`, which makes every boundary a reflection and therefore
+/// continuous by construction.
+enum class address_mode
+{
+    /// Wrap around: texel `n` is texel `0`, texel `-1` is texel `n-1`. The tiling
+    /// mode. Shows a **seam** if the image&#x27;s last column and first column are not
+    /// continuous with each other — which is a property of the image, not a bug in
+    /// the sampler.
+    repeat,
+
+    /// Wrap around, reflecting every other copy. Period `2n`, and the edge texel
+    /// appears twice at each fold. Never seams, at the price of a pattern that
+    /// reads as mirrored rather than repeated.
+    mirrored_repeat,
+
+    /// Clamp to the outermost texel. Outside the image, the edge row or column
+    /// **smears outward forever** — which is exactly right for a decal and exactly
+    /// wrong for a floor, where it turns everything past the first tile into a
+    /// stretched streak.
+    clamp_to_edge
+};
+
+/// Where in a texel its value is deemed to live. **There is only one right
+/// answer**; the other is kept so it can be switched on and seen failing.
+///
+/// The ninth keep-the-wrong-thing bargain in this engine, after `draw_line_naive`
+/// (2.1), Pong&#x27;s naive collision test (1.8), `blend_space::encoded` (2.4), the `w`
+/// toggles (2.7), `trs_order` (2.8), `interpolation::affine` (3.2), `near_mode`
+/// (3.3), `cull_choice::back_by_forward` (3.4) and Phong (3.7).
+enum class texel_origin
+{
+    /// **Correct.** Texel `i` holds the value of the image at `(i + 0.5) / n`. A
+    /// texel is a *sample of a continuous image*, and a sample has a position, not
+    /// an extent — the little square you draw when you visualise a texture is a
+    /// rendering convenience, not what the number means.
+    centre,
+
+    /// **Wrong**, and wrong in the most plausible possible way: treat texel `i` as
+    /// occupying the square starting at `i / n`. Nearest-neighbour sampling cannot
+    /// tell the difference — §5.3 measures exactly zero pixels changed — and
+    /// bilinear sampling shifts the whole image by half a texel *and* blurs it,
+    /// because the sample point that should have landed on a texel centre now
+    /// lands exactly between two.
+    corner
+};
+
+/// Everything about *how* to read a texture, gathered into one object.
+///
+/// The shape is `SDL_GPUSamplerCreateInfo` with the fields we can honestly
+/// implement. That struct has thirteen members; three of them are ours today, and
+/// naming the gap is more useful than pretending there is none:
+///
+///   - `min_filter` / `mag_filter` / `mipmap_mode` are **one** field here, because
+///     without mipmaps there is nothing different for a minification filter to do.
+///     That is not a simplification being hidden — it is §7&#x27;s entire subject. The
+///     sparkle on a floor running to the horizon *is* the missing minification
+///     filter, and Module 6&#x27;s mipmaps are what fills the gap.
+///   - `address_mode_w` is absent because we have no 3-D textures.
+///   - anisotropy, LOD clamping and comparison sampling are all Module 6.
+struct sampler
+{
+    /// How to combine texels. One field standing in for SDL&#x27;s three; see above.
+    filter texel_filter = filter::linear;
+
+    /// Addressing per axis, and **per axis for a reason**: a strip of road wants to
+    /// repeat along its length and clamp across its width, and one mode for both
+    /// cannot say that.
+    address_mode address_u = address_mode::repeat;
+    address_mode address_v = address_mode::repeat;
+
+    /// Always `centre` in anything that is not a demonstration.
+    texel_origin origin = texel_origin::centre;
+};
+
+// ---- The image itself -------------------------------------------------------
+
+/// A 2-D array of texels, owned.
+///
+/// **Row 0 is the TOP row**, and that is the load-bearing sentence of this whole
+/// file. SDL3&#x27;s `SDL_gpu.h` states the convention in its &quot;Coordinate System&quot;
+/// section, verbatim:
+///
+///   &gt; **Texture Coordinates:** The top-left corner has an x,y coordinate of
+///   &gt; `(0, 0)` and extends to the bottom-right corner at `(1.0, 1.0)`. +Y is down.
+///
+/// So `v = 0` is the top of the image and `v` increases downwards, which lines up
+/// with the framebuffer&#x27;s own +y-down convention (Lesson 1.5) and with the
+/// viewport transform&#x27;s y-flip (2.11). Every space this engine touches on the
+/// screen side of the projection now agrees.
+///
+/// **It does not agree with an OBJ file.** Wavefront writes `vt` with the origin
+/// at the *bottom* left, which is the older, mathematician&#x27;s convention, and the
+/// disagreement is a straight vertical flip — see `flip_uv_v` in `mesh.hpp`.
+///
+/// Texels are `Uint32` ARGB8888, byte-identical to a framebuffer pixel. That is
+/// not laziness: it means a texture drawn at 1:1 is a copy rather than a
+/// conversion, and §5.1 uses exactly that to check the sampler against the image
+/// it is sampling.
+///
+/// **Texels are sRGB-ENCODED**, like every other stored colour in this engine and
+/// like every PNG an artist will ever hand you. Decoding is the *sampler&#x27;s* job
+/// (`sample` returns `linear_rgb`), which is also what hardware does: an
+/// `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB` texture is decoded in the sampler,
+/// before filtering, for free. Lesson 1.6&#x27;s argument, arriving for the third time.
+class texture
+{
+public:
+    texture() = default;
+
+    /// An image of `w` x `h` texels, every one set to `fill`.
+    ///
+    /// A non-positive dimension gives an **empty** texture rather than a thrown
+    /// exception or an undefined one — the engine core has no exceptions (§4 of the
+    /// course conventions) and `sample` has a defined answer for an empty image.
+    texture(int w, int h, Uint32 fill = 0xFF000000u);
+
+    [[nodiscard]] int width() const { return width_; }
+    [[nodiscard]] int height() const { return height_; }
+    [[nodiscard]] bool empty() const { return texels_.empty(); }
+
+    /// The texel at integer coordinates, **clamped** into range.
+    ///
+    /// The clamp is not the addressing mode — addressing happens in the sampler,
+    /// which decides what `x = -1` *means* before it ever gets here. This clamp is
+    /// the last line of defence: it guarantees this function cannot read memory the
+    /// texture does not own, whatever a caller does. An empty texture returns
+    /// opaque black, because there is no texel to return and a debug magenta here
+    /// would fire on every pixel of a legitimately-unbound sampler.
+    [[nodiscard]] Uint32 texel(int x, int y) const;
+
+    void set_texel(int x, int y, Uint32 colour);
+
+    /// The raw texels, row-major, top row first. For blits and for tests that
+    /// compare an image against what was drawn from it.
+    [[nodiscard]] std::span&lt;const Uint32&gt; texels() const { return texels_; }
+
+private:
+    std::vector&lt;Uint32&gt; texels_;
+    int width_ = 0;
+    int height_ = 0;
+};
+
+// ---- Addressing --------------------------------------------------------------
+
+/// Fold an out-of-range texel index into `[0, n)` according to `mode`.
+///
+/// Exposed rather than hidden inside the sampler because it is the piece with the
+/// most arithmetic per line and the least visible failure, so it deserves to be
+/// testable on its own — the same argument `is_top_left` (2.4) and
+/// `is_front_facing` (3.4) made. §5.2 tabulates its output.
+///
+/// `n &lt;= 0` returns 0, so an empty texture cannot produce an index.
+[[nodiscard]] int wrap_texel(int i, int n, address_mode mode);
+
+// ---- Sampling ----------------------------------------------------------------
+
+/// **The one to call.** What colour is the image at texture coordinate `(u, v)`?
+///
+/// Returns **linear light**, not a stored pixel, because a texture is a material
+/// input and material inputs get multiplied by quantities of light. Decoding here
+/// rather than at the call site also puts the decode *before* the filter, which is
+/// the correct order and not the obvious one: blending four encoded bytes and
+/// decoding the result is a different (and wrong) answer, for exactly the reason
+/// Lesson 2.4 gave about blending vertex colours. §4.4 measures the difference.
+///
+/// An empty texture samples as opaque **magenta** — the debug convention this
+/// engine already uses for &quot;this value is invalid&quot; (`checker_at`, 3.2) — because a
+/// fill configured to sample a texture that is not there is a mistake worth seeing
+/// rather than a black surface worth misreading as unlit.
+[[nodiscard]] linear_rgb sample(const texture&amp; image, const sampler&amp; samp, float u, float v);
+
+/// `sample` with the `vec2` a mesh actually stores.
+[[nodiscard]] inline linear_rgb sample(const texture&amp; image, const sampler&amp; samp, vec2 uv)
+{
+    return sample(image, samp, uv.x, uv.y);
+}
+
+/// The two halves of `sample`, separated so each can be measured against the other.
+///
+/// Both take the sampler for its addressing and origin fields and ignore
+/// `texel_filter`, which is what selects between them.
+[[nodiscard]] linear_rgb sample_nearest(const texture&amp; image, const sampler&amp; samp,
+                                        float u, float v);
+[[nodiscard]] linear_rgb sample_bilinear(const texture&amp; image, const sampler&amp; samp,
+                                         float u, float v);
+
+// ---- Binding -----------------------------------------------------------------
+
+/// An image and the rules for reading it, travelling together.
+///
+/// `SDL_GPUTextureSamplerBinding` is exactly this pair — `{ SDL_GPUTexture*,
+/// SDL_GPUSampler* }` — and it is a pair for a good reason: the same image is
+/// legitimately read two ways in one frame (clamped for a decal, repeated for a
+/// floor), and the same rules are legitimately applied to a hundred images. They
+/// are independent objects joined at the point of use.
+///
+/// **Non-owning.** The texture outlives the binding, exactly as `fill_style`&#x27;s
+/// `lighting*` does (3.8).
+struct texture_binding
+{
+    const texture* image = nullptr;
+    sampler samp{};
+
+    /// Is there anything to sample? A binding with no image is not an error — it
+    /// is a pipeline that was never given one, and the fill falls back to vertex
+    /// colours.
+    [[nodiscard]] bool bound() const { return image != nullptr &amp;&amp; !image-&gt;empty(); }
+};
+
+// ---- Lesson 6.5: storing textures, as opposed to pointing at them -----------
+
+/// A reference to a texture held in a `texture_pool`.
+///
+/// **The same argument `image_handle` made in Lesson 5.5, arriving one layer
+/// further down.** `image_data` is what was *loaded*; `texture` is what was
+/// *derived* from it and is ready to sample. Both want stable, checkable
+/// references, and for the same reason: a raw `const texture*` stored in a
+/// material outlives nothing in particular, and the day the pool reallocates is
+/// the day every material in the scene points at freed memory.
+using texture_handle = handle&lt;texture&gt;;
+
+/// Storage for the textures a scene samples.
+///
+/// **Lesson 6.5 kept this out of `asset_store` and Lesson 6.6 put it in.** The
+/// reasoning 6.5 gave was that the store is about *files* — a search path, a
+/// name, a cache, a load count (5.5) — and every texture in the engine at that
+/// point was generated in memory. glTF is what expired that: a material now
+/// arrives naming an image on disk, two materials routinely name the same one,
+/// and &quot;load it once and hand out the same reference&quot; is precisely the store&#x27;s
+/// job description.
+///
+/// The pool itself did not move or change. What the store adds around it is the
+/// three things 5.5 named: a name -&gt; handle map, an unload, and — because a
+/// texture is MADE FROM an image rather than loaded directly — a derivation
+/// edge, so that unloading the image unloads the textures built from it. See
+/// `asset_store::load_texture`.
+using texture_pool = pool&lt;texture&gt;;
+
+// ---- Lesson 6.6: the bridge that had never been built -----------------------
+
+/// Turn decoded file pixels into something `sample` can read.
+///
+/// **This function should have existed since Lesson 5.3 and did not**, and the
+/// reason it did not is worth more than the twelve lines it takes. The engine
+/// has been able to decode a PNG since 5.3 (`load_image` -&gt; `image_data`) and to
+/// sample a texture since 3.9 (`texture` -&gt; `sample`), and nothing ever joined
+/// them — because every CPU texture was *generated* (`make_checker`,
+/// `make_uv_grid`) and every *loaded* image went straight to the GPU as bytes
+/// (`gpu_texture::create_sampled`). Two complete halves with no middle, and no
+/// test could see the gap because no code path crossed it.
+///
+/// glTF is what forces the join: a material names an image file, and the
+/// software renderer has to be able to sample it. Lesson 6.6 §5.
+///
+/// **It is a channel shuffle, not a memcpy**, and that is the part to get right.
+/// `image_data::pixels` is R, G, B, A in that byte order, as stb hands it over.
+/// `texture` stores `Uint32` in ARGB8888 — the framebuffer&#x27;s own format (1.5) —
+/// which on a little-endian machine is the bytes B, G, R, A. Copying the buffer
+/// wholesale therefore swaps red and blue, which is the single most recognisable
+/// wrong-looking texture there is and the reason `pack_argb` exists rather than
+/// a cast.
+///
+/// An invalid image gives an empty texture, which `sample` already answers with
+/// debug magenta — a visible failure rather than a silent black one.
+[[nodiscard]] texture to_texture(const image_data&amp; src);
+
+// ---- Generated test images ---------------------------------------------------
+//
+// No image DECODER this lesson, and that is a deliberate boundary rather than an
+// omission. Decoding PNG or JPEG is a compression problem, not a graphics one:
+// stb_image is the approved answer (course conventions §4) and it arrives with the
+// asset pipeline. Everything in this file takes an array of texels and does not
+// care where the array came from — which is precisely why generating it in memory
+// costs the lesson nothing.
+
+/// A checkerboard of `cells` x `cells` squares over a `size` x `size` image.
+///
+/// The classic texture-debugging image, now as actual texels rather than 3.2&#x27;s
+/// procedural rule. `size` should be a multiple of `cells` or the squares come out
+/// uneven — which is itself worth seeing once, so it is not forbidden.
+[[nodiscard]] texture make_checker(int size, int cells, Uint32 a, Uint32 b);
+
+/// An orientation chart: four differently-coloured quadrants, a grid, and a mark
+/// in the top-left corner.
+///
+/// Its whole job is to make **which way up** unmistakable. A checkerboard is
+/// symmetric under every flip and rotation, so it cannot show you that your `v` is
+/// upside down; this can, at a glance, and §3.2 uses it to settle the OBJ-versus-
+/// SDL_GPU disagreement by looking at it rather than by arguing about it.
+///
+/// Quadrant colours, which §5.4 asserts by sampling:
+///   top-left RED, top-right GREEN, bottom-left BLUE, bottom-right AMBER.
+[[nodiscard]] texture make_uv_grid(int size);
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/src/gfx/texture.cpp</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cpp">C++</span>
+    </figcaption>
+    <pre><code class="lang-cpp">// engine/src/gfx/texture.cpp — the sampler, in about a hundred lines of arithmetic.
+//
+// Read `wrap_texel` first, then `to_texel_space`, then the two samplers. Every
+// subtlety in this file lives in one of those three places, and none of it is
+// subtle once the picture is right.
+
+#include &lt;engine/gfx/texture.hpp&gt;
+
+#include &lt;algorithm&gt;
+#include &lt;cmath&gt;
+
+namespace engine {
+
+texture::texture(int w, int h, Uint32 fill)
+{
+    if (w &lt;= 0 || h &lt;= 0) { return; }   // stays empty; `sample` has an answer for that
+
+    width_ = w;
+    height_ = h;
+    texels_.assign(static_cast&lt;std::size_t&gt;(w) * static_cast&lt;std::size_t&gt;(h), fill);
+}
+
+Uint32 texture::texel(int x, int y) const
+{
+    if (texels_.empty()) { return pack_argb(0, 0, 0); }
+
+    // The clamp is defence, not addressing — see the header. Addressing already
+    // happened in the sampler; by the time an index arrives here it is supposed to
+    // be in range, and this makes &quot;supposed to&quot; unnecessary.
+    const int cx = std::clamp(x, 0, width_ - 1);
+    const int cy = std::clamp(y, 0, height_ - 1);
+    return texels_[static_cast&lt;std::size_t&gt;(cy) * static_cast&lt;std::size_t&gt;(width_)
+                 + static_cast&lt;std::size_t&gt;(cx)];
+}
+
+void texture::set_texel(int x, int y, Uint32 colour)
+{
+    if (texels_.empty()) { return; }
+    if (x &lt; 0 || y &lt; 0 || x &gt;= width_ || y &gt;= height_) { return; }
+    texels_[static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(width_)
+          + static_cast&lt;std::size_t&gt;(x)] = colour;
+}
+
+// ---- Addressing --------------------------------------------------------------
+
+int wrap_texel(int i, int n, address_mode mode)
+{
+    if (n &lt;= 0) { return 0; }
+
+    switch (mode)
+    {
+    case address_mode::clamp_to_edge:
+        return std::clamp(i, 0, n - 1);
+
+    case address_mode::repeat:
+    {
+        // `%` in C++ truncates toward zero, so `-1 % 8` is `-1` and not `7`. That
+        // is the bug this line exists to not have: a texture coordinate goes
+        // negative the moment a mesh is offset or a uv is animated, and an index
+        // of -1 clamps to the edge texel, which paints a one-texel stripe along
+        // exactly the boundary a tiling texture was supposed to cross invisibly.
+        //
+        // Adding `n` once is enough because `i % n` is already in `(-n, n)`.
+        const int m = i % n;
+        return (m &lt; 0) ? m + n : m;
+    }
+
+    case address_mode::mirrored_repeat:
+    {
+        // Period 2n: n texels forwards, then the same n backwards. Fold into
+        // `[0, 2n)` with the same trick as above, then reflect the upper half.
+        const int period = 2 * n;
+        int m = i % period;
+        if (m &lt; 0) { m += period; }
+        return (m &lt; n) ? m : (period - 1 - m);
+    }
+    }
+
+    return 0;   // unreachable; silences -Wreturn-type on compilers that want it
+}
+
+namespace {
+
+/// Where `u` lands in **texel space**: the coordinate in which integers are texel
+/// *edges* and `i + 0.5` is the centre of texel `i`.
+///
+/// This one line is the whole of §4.3. `u = 0` is the left edge of texel 0, `u = 1`
+/// is the right edge of texel `n-1`, and the image occupies exactly `n` units.
+[[nodiscard]] float to_texel_space(float u, int n)
+{
+    return u * static_cast&lt;float&gt;(n);
+}
+
+/// The debug answer for a sampler with nothing to sample.
+[[nodiscard]] linear_rgb unbound_colour()
+{
+    return to_linear(pack_argb(255, 0, 200));
+}
+
+/// A stored texel, decoded. **Every** read of the image goes through here, which
+/// is what puts the decode before the filter rather than after it.
+[[nodiscard]] linear_rgb fetch(const texture&amp; image, const sampler&amp; samp, int x, int y)
+{
+    const int tx = wrap_texel(x, image.width(), samp.address_u);
+    const int ty = wrap_texel(y, image.height(), samp.address_v);
+    return to_linear(image.texel(tx, ty));
+}
+
+} // namespace
+
+linear_rgb sample_nearest(const texture&amp; image, const sampler&amp; samp, float u, float v)
+{
+    if (image.empty()) { return unbound_colour(); }
+
+    // &quot;Which texel does this point land in&quot; — and that question is INDEPENDENT of
+    // the half-texel argument, which is why `samp.origin` does not appear in this
+    // function at all. Texel `i` covers the interval `[i, i+1)` in texel space no
+    // matter where inside it you decide the value lives.
+    //
+    // `std::floor`, never a cast: a cast truncates toward zero, so u = -0.4 and
+    // u = +0.4 would both land in texel 0 and the image would grow a doubled
+    // column at the origin. Same argument `checker_at` made in 3.2, and the same
+    // reason — texture coordinates go negative routinely.
+    const float x = std::floor(to_texel_space(u, image.width()));
+    const float y = std::floor(to_texel_space(v, image.height()));
+
+    // A uv that is infinite or NaN reaches here whenever the near plane is not
+    // clipped (3.3): the interpolated 1/w passes through zero and its reciprocal
+    // is an infinity. Converting that to an int is UNDEFINED BEHAVIOUR, not &quot;a
+    // large number&quot;, so it is caught rather than clamped. `!(|x| &lt; limit)` and not
+    // `|x| &gt;= limit` because every comparison with a NaN is false, and only the
+    // negated form catches it.
+    constexpr float k_index_limit = 1.0e7f;
+    if (!(std::fabs(x) &lt; k_index_limit) || !(std::fabs(y) &lt; k_index_limit))
+    {
+        return unbound_colour();
+    }
+
+    return fetch(image, samp, static_cast&lt;int&gt;(x), static_cast&lt;int&gt;(y));
+}
+
+linear_rgb sample_bilinear(const texture&amp; image, const sampler&amp; samp, float u, float v)
+{
+    if (image.empty()) { return unbound_colour(); }
+
+    // ---- The half texel (§4.3) ---------------------------------------------
+    //
+    // Bilinear asks a different question from nearest: not &quot;which texel is this
+    // in&quot; but &quot;which two texel CENTRES does this lie between&quot;. Texel i&#x27;s centre is
+    // at i + 0.5 in texel space, so subtracting the half shifts into a coordinate
+    // where the centres are the integers — and then `floor` picks the left one and
+    // the fraction is the weight, with no special cases at all.
+    //
+    // `texel_origin::corner` is that subtraction left out. It is exactly the
+    // version you write if you think of a texel as a little square, and it is
+    // wrong by half a texel everywhere: at a texel centre, where the answer should
+    // be that texel exactly, it lands halfway between two and returns their
+    // average.
+    const float half = (samp.origin == texel_origin::centre) ? 0.5f : 0.0f;
+
+    const float x = to_texel_space(u, image.width()) - half;
+    const float y = to_texel_space(v, image.height()) - half;
+
+    constexpr float k_index_limit = 1.0e7f;
+    if (!(std::fabs(x) &lt; k_index_limit) || !(std::fabs(y) &lt; k_index_limit))
+    {
+        return unbound_colour();
+    }
+
+    const float fx = std::floor(x);
+    const float fy = std::floor(y);
+
+    const int x0 = static_cast&lt;int&gt;(fx);
+    const int y0 = static_cast&lt;int&gt;(fy);
+
+    // The weights, each in [0, 1). `x - floor(x)` and not `fmod`, because this is
+    // the *distance past* the left centre, which is what the lerp wants.
+    const float tu = x - fx;
+    const float tv = y - fy;
+
+    // ---- Four fetches, each addressed INDEPENDENTLY -------------------------
+    //
+    // The order matters and the failure is invisible until it is not. Wrapping the
+    // COORDINATE first and then taking neighbours would put both neighbours inside
+    // the image, so a repeating texture would blend the last texel with the last
+    // texel instead of with the first — a hairline seam along every tile boundary,
+    // present only in the filtered mode, and easy to blame on the geometry.
+    // Addressing each of the four indices separately is what makes `repeat`
+    // actually seamless and `clamp_to_edge` actually smear.
+    const linear_rgb c00 = fetch(image, samp, x0,     y0);
+    const linear_rgb c10 = fetch(image, samp, x0 + 1, y0);
+    const linear_rgb c01 = fetch(image, samp, x0,     y0 + 1);
+    const linear_rgb c11 = fetch(image, samp, x0 + 1, y0 + 1);
+
+    // ---- Two lerps along u, one along v -------------------------------------
+    //
+    // That is all bilinear interpolation is, and the order does not matter: doing
+    // v first and u second gives the identical algebraic expression, because both
+    // routes multiply out to the same four weights
+    // (1-tu)(1-tv), tu(1-tv), (1-tu)tv, tu tv — which sum to 1, which is what makes
+    // it an average and not a scaling. Same family as barycentric interpolation
+    // (2.3): a weighted average of corner values whose weights sum to one.
+    const auto lerp = [](const linear_rgb&amp; a, const linear_rgb&amp; b, float t) {
+        return linear_rgb{a.r + (b.r - a.r) * t,
+                          a.g + (b.g - a.g) * t,
+                          a.b + (b.b - a.b) * t};
+    };
+
+    const linear_rgb top = lerp(c00, c10, tu);
+    const linear_rgb bottom = lerp(c01, c11, tu);
+    return lerp(top, bottom, tv);
+}
+
+linear_rgb sample(const texture&amp; image, const sampler&amp; samp, float u, float v)
+{
+    return (samp.texel_filter == filter::nearest)
+         ? sample_nearest(image, samp, u, v)
+         : sample_bilinear(image, samp, u, v);
+}
+
+// ---- Generated test images ---------------------------------------------------
+
+texture make_checker(int size, int cells, Uint32 a, Uint32 b)
+{
+    texture t(size, size);
+    if (t.empty() || cells &lt;= 0) { return t; }
+
+    // Integer arithmetic throughout, so the squares land on exact texel boundaries
+    // whenever `size` divides by `cells` and land *predictably* when it does not.
+    for (int y = 0; y &lt; size; ++y)
+    {
+        for (int x = 0; x &lt; size; ++x)
+        {
+            const int cx = x * cells / size;
+            const int cy = y * cells / size;
+            t.set_texel(x, y, ((cx + cy) % 2 == 0) ? a : b);
+        }
+    }
+    return t;
+}
+
+texture make_uv_grid(int size)
+{
+    texture t(size, size);
+    if (t.empty()) { return t; }
+
+    // Four quadrants, each an unmistakable hue. A checkerboard is symmetric under
+    // every flip and rotation and therefore cannot tell you your v is upside down;
+    // this can, from across the room.
+    constexpr Uint32 k_top_left     = 0xFFD8484Cu;   // red
+    constexpr Uint32 k_top_right    = 0xFF5FBF6Au;   // green
+    constexpr Uint32 k_bottom_left  = 0xFF4C7FD8u;   // blue
+    constexpr Uint32 k_bottom_right = 0xFFE0B24Cu;   // amber
+
+    const int half = size / 2;
+
+    for (int y = 0; y &lt; size; ++y)
+    {
+        for (int x = 0; x &lt; size; ++x)
+        {
+            const bool left = (x &lt; half);
+            const bool top = (y &lt; half);
+            Uint32 c = top ? (left ? k_top_left : k_top_right)
+                           : (left ? k_bottom_left : k_bottom_right);
+
+            // An eighth-scale grid, so magnification and minification both have
+            // something with a known spacing to distort. Drawn by darkening rather
+            // than by overwriting, so the quadrant colour still reads underneath.
+            const int step = std::max(1, size / 8);
+            if (x % step == 0 || y % step == 0)
+            {
+                const linear_rgb light = to_linear(c);
+                c = to_encoded({light.r * 0.45f, light.g * 0.45f, light.b * 0.45f});
+            }
+
+            t.set_texel(x, y, c);
+        }
+    }
+
+    // The corner mark: a solid white block in the TOP-LEFT, which is (u, v) =
+    // (0, 0) under SDL_GPU&#x27;s convention. One asymmetric feature is all it takes to
+    // read off an orientation, and unlike the quadrants it survives being sampled
+    // at a single point.
+    const int mark = std::max(2, size / 8);
+    for (int y = 0; y &lt; mark; ++y)
+    {
+        for (int x = 0; x &lt; mark; ++x)
+        {
+            t.set_texel(x, y, 0xFFF2EFE8u);
+        }
+    }
+
+    return t;
+}
+
+// ---- Lesson 6.6: decoded file pixels -&gt; a samplable texture ------------------
+
+texture to_texture(const image_data&amp; src)
+{
+    if (!src.valid()) { return {}; }
+
+    texture out(src.width, src.height);
+
+    // Row-major, top row first, in BOTH representations — so the loop is a
+    // straight walk with no vertical flip. `image_data` stores what the file
+    // contained (5.3) and `texture` puts row 0 at the top (3.9), and those are
+    // the same convention. The v flip that OBJ needs lives in the GEOMETRY
+    // import, which is the only place it can be decided from: it is the format
+    // of the MESH that disagrees about which way v points, not the image.
+    for (int y = 0; y &lt; src.height; ++y)
+    {
+        for (int x = 0; x &lt; src.width; ++x)
+        {
+            const std::size_t at =
+                (static_cast&lt;std::size_t&gt;(y) * static_cast&lt;std::size_t&gt;(src.width)
+                 + static_cast&lt;std::size_t&gt;(x)) * 4u;
+
+            // THE SHUFFLE. Four bytes in R, G, B, A order become one Uint32 in
+            // ARGB8888 order. Written through `pack_argb` rather than as shifts
+            // so the packing rule keeps exactly one definition in the engine
+            // (1.6) — and so a wholesale memcpy, which would swap red and blue
+            // on every little-endian machine, is not even expressible here.
+            out.set_texel(x, y, pack_argb(src.pixels[at + 0],
+                                          src.pixels[at + 1],
+                                          src.pixels[at + 2],
+                                          src.pixels[at + 3]));
+        }
+    }
+
+    return out;
+}
+
+} // namespace engine
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># CMakeLists.txt — the top of the build.
+#
+# Lesson 5.1 turned this file inside out. Through Module 4 it described one
+# executable and everything that went into it, which is exactly right for a
+# program. This project is no longer a program: it is a LIBRARY and the programs
+# built on it, and this file&#x27;s job is now to acquire the dependencies, declare the
+# rules everybody shares, and then get out of the way.
+#
+#     engine/   the library. Public headers under engine/include/engine/.
+#     demos/    executables that link it and may include only those headers.
+#     tools/    (Module 9) the editor and the asset pipeline.
+#
+# Read this file, then engine/CMakeLists.txt, then demos/CMakeLists.txt. Together
+# they are about a hundred lines of actual instruction, and the boundary the whole
+# lesson is about is drawn by three of them.
+
+# 3.24 is our floor: new enough for modern FetchContent behaviour and the
+# target/property model we rely on. Older CMake will refuse to configure, which
+# is what we want — a clear failure, not a subtle one.
+cmake_minimum_required(VERSION 3.24)
+
+project(engine LANGUAGES CXX)
+
+# The C++ standard, set once for every target in the project. STANDARD_REQUIRED
+# makes a compiler that cannot do C++20 an error rather than a silent downgrade;
+# EXTENSIONS OFF asks for -std=c++20, not -std=gnu++20, so we stay portable.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ---- Dependencies ----------------------------------------------------------
+# FetchContent acquires SDL3 at configure time and adds it to our build. We pin
+# an exact release tag: a moving branch would mean a fresh clone could build
+# different source than yours, which is how &quot;works on my machine&quot; is born.
+include(FetchContent)
+
+# SDL build options must be set BEFORE SDL is configured. We only need the
+# library itself, so skip SDL&#x27;s own test helpers — it shaves real time off a
+# from-source build.
+set(SDL_TEST_LIBRARY OFF)
+
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.4.12   # pinned — never a branch name
+    GIT_SHALLOW    TRUE             # only this tag&#x27;s snapshot, not all of history
+)
+FetchContent_MakeAvailable(SDL3)
+
+# stb_image — Lesson 4.7. A PNG/JPEG/BMP decoder in one header, and the first
+# third-party code in this project that is not SDL.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Every other &quot;we could write that&quot; in this course
+# has been written: the maths, the rasterizer, the OBJ parser, the ECS to come.
+# An image decoder is different in kind, and the difference is not difficulty —
+# a baseline PNG decoder is an afternoon — it is that PNG is DEFLATE plus five
+# filter modes plus interlacing plus sixteen-bit channels plus palettes plus
+# transparency chunks, and a decoder that handles only the files you happened to
+# test is worse than no decoder at all. There is nothing about the ENGINE to be
+# learned from the fifth filter mode.
+#
+# stb has no releases and no tags, so we pin a COMMIT — the same rule Lesson 4.3
+# had to apply to SDL_shadercross for the same reason. A branch name would mean a
+# fresh clone could decode differently from yours.
+#
+# Header-only, so there is nothing to build. Note where it is USED: only
+# engine/src/gfx/image.cpp, and only PRIVATELY (engine/CMakeLists.txt), so the
+# dependency stops at the library boundary and no demo can see it.
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20   # pinned — no tags exist
+    GIT_SHALLOW    FALSE   # a SHA cannot be shallow-fetched by name
+)
+FetchContent_MakeAvailable(stb)
+
+# Dear ImGui — Lesson 5.11. The course&#x27;s first third-party USER INTERFACE, and
+# the first third-party library whose types reach our PUBLIC headers.
+#
+# WHY WE DO NOT HAND-ROLL THIS. The test this course applies to every library is
+# not &quot;is it hard?&quot; — the rasterizer was hard and we wrote it — it is **whether
+# the hard part is the subject**. A debug UI is four subjects at once: a font
+# rasterizer and text shaper, a layout engine, an input router with focus and
+# capture rules, and a widget state machine that has to remember what you were
+# dragging across frames. Not one of those is graphics or engine architecture,
+# and a half-built version of all four is precisely the tool you stop trusting
+# the first time it misreports a number.
+#
+# What we get in exchange is worth naming too, because it is not just &quot;saved
+# time&quot;: ImGui is IMMEDIATE MODE, so a debug panel is a function that runs every
+# frame and owns no state. There is no widget tree to keep in sync with the
+# world, which is the failure every retained-mode debug UI eventually has.
+#
+# TOOLING ONLY, NEVER GAMEPLAY UI. That is a binding rule of this course and it
+# is a real engineering line, not a stylistic one: ImGui rebuilds its geometry
+# from scratch every frame and knows nothing about controllers, localisation,
+# safe areas or artists. It is the right tool for the people building the game
+# and the wrong one for the people playing it.
+#
+# IMGUI SHIPS SOURCES, NOT A BUILD. There is no CMakeLists.txt in that
+# repository, which is deliberate on its author&#x27;s part — the library is nine
+# .cpp files and a backend pair, and every project wants to compile them its own
+# way. FetchContent_MakeAvailable notices the absence and only POPULATES; the
+# target below is ours to declare, and being forced to declare it is how you
+# find out exactly which files you are compiling.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.92.9b   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(imgui)
+
+# The core, plus exactly ONE backend pair. ImGui separates &quot;what a window looks
+# like&quot; (the core) from &quot;how events get in and triangles get out&quot; (a platform
+# backend and a renderer backend), and you pick one of each.
+#
+#   imgui_impl_sdl3         the PLATFORM backend: SDL_Event in, mouse/keyboard/
+#                           text/focus out. Independent of how we draw.
+#   imgui_impl_sdlrenderer3 the RENDERER backend: ImGui&#x27;s vertex+index draw
+#                           lists out through an SDL_Renderer.
+#
+# Lesson 5.11 §5 explains why the SDL_Renderer pair goes first and what the
+# SDL_GPU one (imgui_impl_sdlgpu3) would need instead. The platform half is
+# shared between them; only the renderer half would change.
+#
+# imgui_demo.cpp is 8,000 lines of showcase and it is included ON PURPOSE:
+# ImGui::ShowDemoWindow() is the fastest widget reference there is, and its
+# source is the documentation. Drop it from this list when a real game ships.
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+)
+add_library(imgui::imgui ALIAS imgui)
+
+# PUBLIC, because anything that includes &lt;imgui.h&gt; needs these two directories
+# and ImGui&#x27;s headers are reached BY NAME rather than through a prefix — the
+# spelling is &lt;imgui.h&gt;, not &lt;imgui/imgui.h&gt;. That is a real cost of using it and
+# it is worth seeing: two directories go onto the include path of everything that
+# links this target.
+target_include_directories(imgui PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends)
+
+# Both backends include SDL3 headers, and imgui_impl_sdlrenderer3 calls into it.
+target_link_libraries(imgui PUBLIC SDL3::SDL3)
+
+# NOT engine_set_warnings(imgui). Third-party code is compiled with its own
+# flags, for the reason cmake/EngineHelpers.cmake gives: warnings we cannot act
+# on train us to ignore the ones we can.
+
+# cgltf — Lesson 6.6. The third approved third-party library, and the one whose
+# &quot;why we don&#x27;t hand-roll this&quot; argument is the least obvious of the three,
+# because on the face of it glTF is JSON and we have already written a parser.
+#
+# WHY WE DO NOT HAND-ROLL THIS. Lesson 3.5 wrote an OBJ loader in three hundred
+# lines, and it was the right call: OBJ is a line-oriented text format with six
+# keywords that matter, and writing it taught the index problem, fan
+# triangulation and vertex unification — all of which are ENGINE subjects.
+#
+# glTF is a different kind of thing, and the difference is not &quot;harder&quot;. It is
+# that glTF is a CONTAINER: JSON describing accessors, which describe strides
+# into buffer views, which describe windows into buffers, which may be external
+# files, base64 data URIs, or a binary chunk glued to the JSON in a .glb. An
+# accessor may be any of five component types, normalized or not, interleaved
+# with its neighbours or not, sparse (a base array plus a patch list) or not.
+# That is a combinatorial matrix with roughly a hundred cells, every one of them
+# legal, and none of them about graphics. `cgltf_accessor_read_float` is the
+# function that collapses the matrix — and writing our own would teach byte
+# offsets, not rendering.
+#
+# The test this course applies is never &quot;is it hard?&quot; but WHETHER THE HARD PART
+# IS THE SUBJECT. For stb_image the hard part was DEFLATE; for ImGui it was text
+# layout and input routing; here it is a strided, typed, optionally-sparse view
+# of somebody else&#x27;s bytes. In all three cases the answer is no.
+#
+# WHY cgltf RATHER THAN tinygltf. Both are approved (CLAUDE.md §4). cgltf is one
+# C header with no dependencies; tinygltf is C++ and pulls in a JSON library and
+# stb (which we already have, at a different pin — two copies of stb_image in one
+# binary is a diagnosable problem we would rather not have). cgltf also matches
+# the shape we already use: header-only, PRIVATE to one translation unit, wrapped
+# behind our own types so the dependency stops at the library boundary.
+#
+# Pinned to a TAG, because cgltf has releases — unlike stb, which forced a commit.
+FetchContent_Declare(
+    cgltf
+    GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+    GIT_TAG        v1.15   # pinned — never a branch name
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(cgltf)
+
+# ---- Shared build rules ----------------------------------------------------
+# Two modules, both of ours. EngineHelpers defines the three functions every
+# target calls; Shaders defines the HLSL toolchain and probes it once, here, at
+# configure time.
+list(APPEND CMAKE_MODULE_PATH &quot;${CMAKE_CURRENT_SOURCE_DIR}/cmake&quot;)
+include(EngineHelpers)
+include(Shaders)
+
+# ---- Shaders ---------------------------------------------------------------
+# Lesson 4.3. One HLSL source per stage, compiled to every format this machine&#x27;s
+# toolchain can produce, plus a JSON reflection file per shader.
+#
+# Declared HERE rather than in engine/ or demos/, and the reason is worth a
+# sentence. A compiled shader is not the property of a library (the engine never
+# loads one by name) nor of any single program (three of them want the same
+# scene.frag). It is a build artifact of the repository. Each executable then
+# asks for a copy beside itself with engine_use_shaders().
+add_hlsl_shader(triangle.vert vertex)
+add_hlsl_shader(triangle.frag fragment)
+add_hlsl_shader(textured.vert vertex)
+add_hlsl_shader(textured.frag fragment)
+add_hlsl_shader(mesh.vert vertex)             # Lesson 4.5
+add_hlsl_shader(mesh.frag fragment)           # Lesson 4.5
+add_hlsl_shader(uniform_probe.vert vertex)    # Lesson 4.6 — the instrument
+add_hlsl_shader(uniform_probe.frag fragment)
+add_hlsl_shader(depth_probe.vert vertex)      # Lesson 4.7 — the instrument
+add_hlsl_shader(depth_probe.frag fragment)
+add_hlsl_shader(texture_probe.frag fragment)
+add_hlsl_shader(scene.vert vertex)            # Lesson 4.8 — the ported scene
+add_hlsl_shader(scene.frag fragment)
+add_hlsl_shader(matrix_probe.frag fragment)   # Lesson 4.8 — the instrument
+
+# ---- The project -----------------------------------------------------------
+# ORDER MATTERS, and it is the dependency direction made visible: engine/ knows
+# nothing of demos/ and is added first; demos/ links the engine and is added
+# second. Swap these two lines and the configure fails, because `engine::engine`
+# would not exist yet — which is a build system enforcing an architecture rule,
+# and is the cheapest such enforcement you will ever get.
+add_subdirectory(engine)
+add_subdirectory(demos)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">demos/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># demos/CMakeLists.txt — programs built ON the engine.
+#
+# Lesson 5.1. Everything here links `engine::engine` and may include only its
+# public headers; none of it is compiled into the library. That rule is not
+# advice, it is the include path (see engine/CMakeLists.txt), and it is what
+# makes &quot;does the public API suffice?&quot; a question the build answers rather than a
+# question somebody remembers to ask.
+
+# ---- demo_common: the content, so it can be shared ------------------------
+#
+# The scene the demos draw, and Pong. A LIBRARY rather than a header in each
+# demo, for a reason with four receipts: Lessons 4.6 through 4.9 each had a
+# verification harness that transcribed `build_scene` by hand, because it was
+# trapped in an anonymous namespace inside main.cpp. Copy number four could have
+# drifted from the original and nothing in the build would have noticed.
+#
+# It is deliberately NOT part of the engine. Nothing in it would survive contact
+# with a real game: it exists so that several programs can draw the same picture.
+add_library(demo_common STATIC
+    common/demo_scene.cpp
+    common/pong.cpp)
+
+# PUBLIC, so anything linking demo_common can include &quot;demo_scene.hpp&quot; by that
+# name. The directory is `common/` and not the demos/ root, which keeps the
+# spelling short and — more usefully — makes it impossible for one demo to
+# include another demo&#x27;s private headers by accident.
+target_include_directories(demo_common PUBLIC common)
+target_link_libraries(demo_common PUBLIC engine::engine)
+engine_set_warnings(demo_common)
+
+# ---- pong: Lesson 1.8&#x27;s game, as its own program --------------------------
+#
+# Lesson 5.2. Until this lesson Pong was a branch inside sandbox&#x27;s five-way
+# switch, reachable only by pressing [Tab] four times, and it was there for one
+# reason: a demo needs a loop and there was exactly one loop in the repository.
+# `engine::app` is a loop you do not have to write, so the branch came out.
+#
+# It links demo_common for the simulation (which was always shared) and gets the
+# engine transitively — demo_common links it PUBLIC. No assets and no shaders:
+# Pong draws with nothing but a framebuffer, which is the whole of what Module 1
+# had and is still enough for a complete game.
+add_executable(pong pong/main.cpp)
+target_link_libraries(pong PRIVATE demo_common)
+engine_set_warnings(pong)
+
+# ---- sandbox: every demo the course has built so far ----------------------
+#
+# Lessons 2.1 through 4.9, on [Tab] and a handful of flags. Lesson 5.1 said the
+# splitting needed an application layer to split it INTO; Lesson 5.2 built one
+# and took the first demo out (see `pong` above).
+#
+# What sandbox KEPT is a hand-written main() and its own `while` loop, and that
+# is a decision rather than a leftover. It chooses between three incompatible
+# loops at runtime — software, GPU probe, GPU scene — and it is the instrument
+# every measurement in Modules 2 to 4 was taken with. A program with that job
+# wants the library arrangement, and Lesson 5.2 §6 argues it out. It still uses
+# `engine::platform`, so the SDL lifecycle is no longer its problem; what it
+# owns is the loop.
+# NOTE THE NAME. Through Lesson 4.9 this executable was called `engine`, and
+# that name is now taken by the library — by the thing it links, which is
+# precisely the confusion the old name was papering over. It is `sandbox` from
+# here on, and it lives at build/demos/sandbox.
+add_executable(sandbox sandbox/main.cpp)
+target_link_libraries(sandbox PRIVATE demo_common)
+engine_set_warnings(sandbox)
+engine_use_assets(sandbox)
+engine_use_shaders(sandbox)
+
+# ---- hello_cube: the smallest program that proves the boundary -------------
+#
+# A hundred lines against the public API and nothing else. It is the acceptance
+# test for this entire lesson: if a spinning, lit, textured cube cannot be
+# written from outside the library, then the library does not have an API — it
+# has an inside that some programs happen to be able to reach.
+add_executable(hello_cube hello_cube/main.cpp)
+target_link_libraries(hello_cube PRIVATE engine::engine)
+engine_set_warnings(hello_cube)
+engine_use_assets(hello_cube)
+
+# ---- gltf_view: Lesson 6.6&#x27;s acceptance test for the ASSET SYSTEM ---------
+#
+# `hello_cube` proved a program outside the library could draw. This one proves
+# a program outside the library can LOAD — one call to `asset_store::load_model`
+# and a loop that turns handles into `scene_object`s, with no path assembly, no
+# parser, no cache and no lifetime rule anywhere in it.
+#
+# It links `engine::engine` directly rather than `demo_common`, on purpose: it
+# shares no content with the other demos, and a demo that reaches for the shared
+# scene when it does not need one is how demo_common stops being optional.
+add_executable(gltf_view gltf_view/main.cpp)
+target_link_libraries(gltf_view PRIVATE engine::engine)
+engine_set_warnings(gltf_view)
+engine_use_assets(gltf_view)
+
+# ---- ecs_swarm: Lesson 5.8&#x27;s world, built out of components ---------------
+#
+# The acceptance test for the ECS, and the answer to &quot;what is this FOR&quot; at a
+# scale where the performance argument does not apply. It links `engine::engine`
+# directly rather than `demo_common`, for the same reason `hello_cube` does: a
+# program that reaches for the shared demo scene is not proving anything about
+# the public API. Everything it draws it builds itself, out of five component
+# types the engine has never heard of.
+#
+# `engine_use_assets` because `asset_store` brings a search path with it, not
+# because this demo loads a file — every mesh in it is generated.
+add_executable(ecs_swarm ecs_swarm/main.cpp)
+target_link_libraries(ecs_swarm PRIVATE engine::engine)
+engine_set_warnings(ecs_swarm)
+engine_use_assets(ecs_swarm)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
+      <span class="path">engine/CMakeLists.txt</span>
+      <span class="tag modified">modified</span>
+      <span class="lang" data-lang="cmake">CMake</span>
+    </figcaption>
+    <pre><code class="lang-cmake"># engine/CMakeLists.txt — the engine, as a library.
+#
+# Lesson 5.1. Everything above this line in the course built ONE executable, and
+# a single executable can be arranged however you like because nothing outside it
+# can tell. A library is different in kind: it has an outside, and the outside is
+# the part you can never take back once somebody depends on it.
+#
+# Three properties below do the entire job of drawing that boundary, and it is
+# worth reading them as a group before reading them one at a time.
+
+# STATIC, not SHARED, and not a choice made by shrugging.
+#
+# A static library is copied into each executable at link time. A shared one is a
+# separate file the program finds at startup, which buys you the ability to swap
+# the engine without relinking the game — and costs you an ABI you must not break,
+# per-call indirection, and a deployment story (&quot;which .dll did it load?&quot;).
+#
+# We are one repository building both sides from the same source, so we get none
+# of the benefit and all of the cost. Engines that DO ship shared libraries do it
+# for hot reload and for plugin boundaries; hot reload arrives in Module 9 and it
+# reloads shaders and assets, not code. If that ever changes, this word is the
+# only thing that has to.
+add_library(engine STATIC
+    # Lesson 5.5. A new directory rather than another file in gfx/: an asset
+    # system is not a graphics subsystem — it loads meshes, images, and in
+    # Module 7 sounds — and putting it under gfx/ would make the audio loader&#x27;s
+    # home a joke six lessons before it is written.
+    src/asset/asset_store.cpp
+    src/asset/search_path.cpp
+    # Lesson 5.10. The action layer has a source file where the ECS did not,
+    # and the reason is that it has real per-frame work to do: `update()` walks
+    # the binding table and derives every action&#x27;s level and edges. A header-only
+    # version would put that loop in every translation unit that asks a question
+    # about input, which is most of them.
+    src/core/actions.cpp
+    src/core/clock.cpp
+    src/core/fixed_step.cpp
+    src/core/input.cpp
+    src/core/log.cpp          # Lesson 5.3
+    src/core/profile.cpp
+    src/gfx/clip.cpp
+    src/gfx/colour.cpp
+    src/gfx/debug_draw.cpp
+    # Lesson 5.11. The QUEUE, split from the drawing above it. Two files rather
+    # than one because their include lists must differ: this one is reachable
+    # from a physics system, debug_draw.cpp is reachable only from a renderer.
+    src/gfx/debug_lines.cpp
+    src/gfx/depth_buffer.cpp
+    src/gfx/framebuffer.cpp
+    src/gfx/gpu_buffer.cpp
+    src/gfx/gpu_debug.cpp
+    src/gfx/gpu_device.cpp
+    src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_pipeline.cpp
+    src/gfx/gpu_present.cpp
+    src/gfx/gpu_scene.cpp
+    src/gfx/gpu_shader.cpp
+    src/gfx/gpu_texture.cpp
+    # Lesson 6.6. The second asset format, and it gets its own translation
+    # unit for the same reason obj.cpp has one: it is the ONLY file allowed
+    # to see cgltf, so the dependency has exactly one place to leak from.
+    src/gfx/gltf.cpp
+    src/gfx/image.cpp
+    src/gfx/mesh.cpp
+    src/gfx/obj.cpp
+    src/gfx/raster.cpp
+    src/gfx/soft_renderer.cpp
+    src/gfx/texture.cpp
+    # Lesson 5.2. Note what is NOT here: platform/main.hpp, which carries
+    # ENGINE_MAIN. It is header-only and deliberately so — including it emits a
+    # real `main`, and an entry point is not a library&#x27;s to own. See the comment
+    # block at the top of that file.
+    src/platform/app.cpp
+    src/platform/platform.cpp
+    # Lesson 5.11. A new directory again, and the same argument asset/ made in
+    # 5.5: tooling UI is not a graphics subsystem. Module 9&#x27;s editor lands here
+    # beside it, and the top-level tools/ directory is a different thing — the
+    # executables that USE the engine, not part of it.
+    src/ui/debug_ui.cpp
+)
+
+# `engine::engine` is an ALIAS, and aliases exist for one reason: a name with a
+# double colon in it CANNOT be mistaken for a file. If a demo asks to link
+# `engine::engine` and no such target exists, CMake stops at configure time with
+# &quot;target not found&quot;. If it asks to link plain `engine` and no such target
+# exists, CMake happily passes `-lengine` to the linker and you find out much
+# later, in a different language, from a different tool. Every library worth
+# using exports a namespaced alias — SDL3::SDL3 is one — and now so do we.
+add_library(engine::engine ALIAS engine)
+
+# ---- The boundary ----------------------------------------------------------
+#
+# THIS IS THE MOST IMPORTANT PROPERTY IN THE PROJECT, so read it slowly.
+#
+#   PUBLIC  include/ : everything that links this library gets this directory on
+#                      its include path. It contains ONE thing — a directory
+#                      called `engine` — so from outside, the only spellings that
+#                      resolve are &lt;engine/gfx/raster.hpp&gt; and its siblings.
+#   PRIVATE src/     : the engine&#x27;s own sources get this, and nobody else does.
+#
+# The consequence is the whole point of Lesson 5.1: a demo that writes
+# `#include &quot;gfx/raster.hpp&quot;` — the spelling every file in this repository used
+# until today — does not compile. Not &quot;is discouraged&quot;, not &quot;fails review&quot;. Does
+# not compile, with a message naming the file it could not find.
+#
+# A boundary maintained by discipline is a boundary that lasts until the week
+# somebody is in a hurry. This one is maintained by the include path, which is
+# never in a hurry.
+target_include_directories(engine
+    PUBLIC  include
+    PRIVATE src)
+
+# PUBLIC because SDL is in our public headers: `framebuffer.hpp` says `Uint32`,
+# `gpu_device.hpp` takes an `SDL_Window*`, and `input.hpp` reads `SDL_Event`.
+# Anybody who includes those needs SDL&#x27;s headers too, and PUBLIC is CMake&#x27;s word
+# for &quot;this dependency is contagious, and it has to be&quot;.
+#
+# It is also an admission. A renderer whose public API names another library&#x27;s
+# types has adopted that library&#x27;s vocabulary permanently — port to a different
+# platform layer and every one of those signatures changes. §6 of the lesson
+# weighs that honestly; we keep it, and we keep knowing about it.
+target_link_libraries(engine PUBLIC SDL3::SDL3)
+
+# stb_image, by contrast, is PRIVATE: exactly one translation unit
+# (src/gfx/image.cpp) includes it, and `image.hpp` deliberately exposes our own
+# `engine::image` instead. So the dependency stops at the boundary — a demo can
+# neither see stb nor accidentally start depending on it. That is what a good
+# wrapper buys, and this line is the proof it worked.
+target_include_directories(engine PRIVATE ${stb_SOURCE_DIR})
+
+# cgltf, PRIVATE for the identical reason and with the identical receipt: exactly
+# one translation unit (src/gfx/gltf.cpp) includes &lt;cgltf.h&gt;, and `gltf.hpp`
+# exposes our own `gltf_scene_data` instead. A demo can neither see cgltf nor
+# start depending on it — which is what makes &quot;swap the glTF library&quot; a
+# one-file change rather than a project-wide one.
+target_include_directories(engine PRIVATE ${cgltf_SOURCE_DIR})
+
+# Dear ImGui, PUBLIC — the opposite call from stb above, argued at length in
+# engine/include/engine/ui/debug_ui.hpp. The short version: with stb we wrapped a
+# CONCEPT (decode bytes into pixels), which is one function and one type. ImGui&#x27;s
+# value IS its vocabulary — four hundred widget calls — and a wrapper around that
+# is a re-spelling with no content that has to be re-spelled again forever.
+#
+# So demos include &lt;imgui.h&gt; and call ImGui:: directly, and this line is what
+# makes that legal. Note precisely what it costs: two more directories on the
+# include path of everything that links the engine, and a second third-party
+# vocabulary inside our public API. What makes it acceptable is that the only
+# code allowed to speak it is TOOLING code.
+target_link_libraries(engine PUBLIC imgui::imgui)
+
+engine_set_warnings(engine)
+</code></pre>
+  </figure>
+
+
+    <figure class="listing">
+    <figcaption>
       <span class="path">scratch/make_gltf_assets.py</span>
       <span class="tag new">new</span>
       <span class="lang" data-lang="python">Python</span>

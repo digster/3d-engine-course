@@ -116,11 +116,30 @@ LISTING_META = {
     "shaders/shadow.vert.hlsl":                 ("new", "new"),
     "shaders/scene.frag.hlsl":                  ("modified", "modified"),
     "scratch/verify_68.cpp":                    ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_texture.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/light.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/raster.hpp": ("modified", "modified"),
+    "engine/include/engine/math/mat4.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_scene.cpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_texture.cpp": ("modified", "modified"),
+    "engine/src/gfx/raster.cpp": ("modified", "modified"),
+    "shaders/shadow.frag.hlsl": ("new", "new"),
+    "CMakeLists.txt": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "shaders/shadow.vert.hlsl": ("hlsl", "HLSL"),
     "shaders/scene.frag.hlsl":  ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "shaders/shadow.frag.hlsl": ("hlsl", "HLSL"),
+    "CMakeLists.txt": ("cmake", "CMake"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -138,6 +157,21 @@ LISTING_SOURCE = {
     "shaders/shadow.vert.hlsl":                  "scratch/l68_shadow.vert.hlsl",
     "shaders/scene.frag.hlsl":                   "scratch/l68_scene.frag.hlsl",
     "scratch/verify_68.cpp":                     "scratch/l68_verify_68.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/gpu_scene.hpp": "scratch/l68_engine_include_engine_gfx_gpu_scene.hpp",
+    "engine/include/engine/gfx/gpu_texture.hpp": "scratch/l68_engine_include_engine_gfx_gpu_texture.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l68_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/light.hpp": "scratch/l68_engine_include_engine_gfx_light.hpp",
+    "engine/include/engine/gfx/raster.hpp": "scratch/l68_engine_include_engine_gfx_raster.hpp",
+    "engine/include/engine/math/mat4.hpp": "scratch/l68_engine_include_engine_math_mat4.hpp",
+    "engine/src/gfx/gpu_scene.cpp": "scratch/l68_engine_src_gfx_gpu_scene.cpp",
+    "engine/src/gfx/gpu_texture.cpp": "scratch/l68_engine_src_gfx_gpu_texture.cpp",
+    "engine/src/gfx/raster.cpp": "scratch/l68_engine_src_gfx_raster.cpp",
+    "shaders/shadow.frag.hlsl": "scratch/l68_shaders_shadow.frag.hlsl",
+    "CMakeLists.txt": "scratch/l68_CMakeLists.txt",
+    "engine/CMakeLists.txt": "scratch/l68_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l68_demos_gltf_view_main.cpp",
+    "demos/sandbox/main.cpp": "scratch/l68_demos_sandbox_main.cpp",
 }
 
 # NOTHING PINNED YET, and this page lists EIGHT files whole.

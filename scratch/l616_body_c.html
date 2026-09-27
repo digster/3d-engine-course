@@ -318,11 +318,13 @@ SDL_BindGPUVertexBuffers(pass, 1, &amp;instance_binding, 1);</code></pre>
   <h2 id="listings"><span class="num">12</span>Complete code listings</h2>
 
   <p>
-    Six files in full. The remaining changes — <code>bounds.hpp</code>'s sphere,
-    <code>gpu_pipeline</code>'s cap and assertion, <code>gpu_scene</code>'s tenth pipeline,
+    Every file this lesson changed, in full. The new ones come first — the frustum, the instancing
+    batcher and the instanced vertex shader. Then every file it modified: <code>bounds.hpp</code>'s
+    sphere, <code>gpu_pipeline</code>'s cap and assertion, <code>gpu_scene</code>'s tenth pipeline,
     <code>begin_frame</code>, <code>render_batched</code> and the <code>destroy()</code> fix, and the
-    two <code>CMakeLists.txt</code> entries — are quoted in full at the point where they are argued
-    for, above and below.
+    two <code>CMakeLists.txt</code> entries, each already quoted at the point where it is argued for,
+    and each here whole so that your copy can be checked rather than assembled. The harness is
+    last.
   </p>
 
   @@LISTING:engine/include/engine/gfx/frustum.hpp@@
@@ -373,6 +375,20 @@ SDL_BindGPUVertexBuffers(pass, 1, &amp;instance_binding, 1);</code></pre>
 # which is the clearest statement of what instancing is.
 add_hlsl_shader(scene_instanced.vert vertex)</code></pre>
   </figure>
+
+  @@LISTING:engine/include/engine/gfx/bounds.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_pipeline.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+
+  @@LISTING:engine/src/gfx/gpu_pipeline.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+  @@LISTING:CMakeLists.txt@@
+
+  @@LISTING:engine/CMakeLists.txt@@
 
   @@LISTING:scratch/verify_616.cpp@@
 

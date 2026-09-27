@@ -104,6 +104,18 @@ LISTING_META = {
     "engine/src/gfx/gpu_post.cpp": ("modified", "modified"),
     "shaders/tonemap.frag.hlsl": ("modified", "modified"),
     "scratch/verify_613.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/draw_order.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_pipeline.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/gpu_uniform.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/hdr.hpp": ("modified", "modified"),
+    "engine/src/gfx/gpu_pipeline.cpp": ("modified", "modified"),
+    "engine/src/gfx/hdr.cpp": ("modified", "modified"),
+    "CMakeLists.txt": ("modified", "modified"),
+    "cmake/EngineHelpers.cmake": ("modified", "modified"),
+    "cmake/Shaders.cmake": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
+    "demos/gltf_view/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
@@ -111,6 +123,11 @@ LISTING_LANG = {
     "shaders/bloom_down.frag.hlsl": ("hlsl", "HLSL"),
     "shaders/bloom_up.frag.hlsl": ("hlsl", "HLSL"),
     "shaders/tonemap.frag.hlsl": ("hlsl", "HLSL"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "CMakeLists.txt": ("cmake", "CMake"),
+    "cmake/EngineHelpers.cmake": ("cmake", "CMake"),
+    "cmake/Shaders.cmake": ("cmake", "CMake"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 LISTING_SOURCE = {
@@ -128,6 +145,18 @@ LISTING_SOURCE = {
     "shaders/tonemap.frag.hlsl": "scratch/l613_tonemap.frag.hlsl",
     # gitignored, so its only provenance is a working-tree copy taken before edits.
     "scratch/verify_613.cpp": "scratch/l613_verify_613.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/draw_order.hpp": "scratch/l613_engine_include_engine_gfx_draw_order.hpp",
+    "engine/include/engine/gfx/gpu_pipeline.hpp": "scratch/l613_engine_include_engine_gfx_gpu_pipeline.hpp",
+    "engine/include/engine/gfx/gpu_uniform.hpp": "scratch/l613_engine_include_engine_gfx_gpu_uniform.hpp",
+    "engine/include/engine/gfx/hdr.hpp": "scratch/l613_engine_include_engine_gfx_hdr.hpp",
+    "engine/src/gfx/gpu_pipeline.cpp": "scratch/l613_engine_src_gfx_gpu_pipeline.cpp",
+    "engine/src/gfx/hdr.cpp": "scratch/l613_engine_src_gfx_hdr.cpp",
+    "CMakeLists.txt": "scratch/l613_CMakeLists.txt",
+    "cmake/EngineHelpers.cmake": "scratch/l613_cmake_EngineHelpers.cmake",
+    "cmake/Shaders.cmake": "scratch/l613_cmake_Shaders.cmake",
+    "engine/CMakeLists.txt": "scratch/l613_engine_CMakeLists.txt",
+    "demos/gltf_view/main.cpp": "scratch/l613_demos_gltf_view_main.cpp",
 }
 
 # PINNED. (Historical note, kept because the prediction is worth grading.)

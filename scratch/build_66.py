@@ -95,10 +95,21 @@ LISTING_META = {
     "demos/gltf_view/main.cpp":                        ("new", "new"),
     "scratch/make_gltf_assets.py":                     ("new", "new"),
     "scratch/verify_66.cpp":                           ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/microfacet.hpp": ("modified", "modified"),
+    "engine/include/engine/gfx/texture.hpp": ("modified", "modified"),
+    "engine/src/gfx/texture.cpp": ("modified", "modified"),
+    "CMakeLists.txt": ("modified", "modified"),
+    "demos/CMakeLists.txt": ("modified", "modified"),
+    "engine/CMakeLists.txt": ("modified", "modified"),
 }
 
 LISTING_LANG = {
     "scratch/make_gltf_assets.py": ("python", "Python"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "CMakeLists.txt": ("cmake", "CMake"),
+    "demos/CMakeLists.txt": ("cmake", "CMake"),
+    "engine/CMakeLists.txt": ("cmake", "CMake"),
 }
 
 # NOTHING PINNED YET. Five lessons running, the following lesson has pinned the
@@ -154,6 +165,13 @@ LISTING_SOURCE = {
     "demos/gltf_view/main.cpp":                    "scratch/l66_demos_gltf_view_main.cpp",
     "scratch/make_gltf_assets.py":                 "scratch/l66_scratch_make_gltf_assets.py",
     "scratch/verify_66.cpp":                       "scratch/l66_scratch_verify_66.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/include/engine/gfx/microfacet.hpp": "scratch/l66_engine_include_engine_gfx_microfacet.hpp",
+    "engine/include/engine/gfx/texture.hpp": "scratch/l66_engine_include_engine_gfx_texture.hpp",
+    "engine/src/gfx/texture.cpp": "scratch/l66_engine_src_gfx_texture.cpp",
+    "CMakeLists.txt": "scratch/l66_CMakeLists.txt",
+    "demos/CMakeLists.txt": "scratch/l66_demos_CMakeLists.txt",
+    "engine/CMakeLists.txt": "scratch/l66_engine_CMakeLists.txt",
 }
 
 

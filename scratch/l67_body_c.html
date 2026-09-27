@@ -188,6 +188,42 @@ float normal_mapped; // 28 — was `pad0`. The block is STILL exactly 32 bytes.<
             <td>the fragment</td></tr>
         <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
             <td>the same fragment, in HLSL</td></tr>
+        <tr><td><code>engine/include/engine/asset/asset_store.hpp</code></td><td>modified</td>
+            <td><code>load_texture(name, texel_space)</code>: normal maps load linear, and are counted</td></tr>
+        <tr><td><code>engine/include/engine/gfx/clip.hpp</code></td><td>modified</td>
+            <td>a tangent on the clip vertex, so clipping carries it</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gltf.hpp</code></td><td>modified</td>
+            <td>the material's normal texture and scale; how many primitives carried <code>TANGENT</code></td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_mesh.hpp</code></td><td>modified</td>
+            <td><code>gpu_vertex_pnu</code> gains a tangent (48 bytes); <code>describe(…, with_tangent)</code></td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
+            <td>a normal map per draw, and the 1×1 flat normal every unmapped surface samples</td></tr>
+        <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+            <td><code>normal_mapped</code>: which surfaces the shader perturbs</td></tr>
+        <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+            <td>a tangent per vertex and a <code>normal_map</code> binding, for the CPU path</td></tr>
+        <tr><td><code>engine/include/engine/gfx/soft_renderer.hpp</code></td><td>modified</td>
+            <td>scratch space for world-space tangents</td></tr>
+        <tr><td><code>engine/src/asset/asset_store.cpp</code></td><td>modified</td>
+            <td>loads a material's normal map in linear space</td></tr>
+        <tr><td><code>engine/src/gfx/clip.cpp</code></td><td>modified</td>
+            <td>interpolates the tangent at a clipped edge</td></tr>
+        <tr><td><code>engine/src/gfx/gltf.cpp</code></td><td>modified</td>
+            <td>reads the normal texture, its scale, and <code>TANGENT</code></td></tr>
+        <tr><td><code>engine/src/gfx/gpu_mesh.cpp</code></td><td>modified</td>
+            <td>uploads the tangent, renormalised</td></tr>
+        <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+            <td>creates the flat-normal texture and binds each draw's normal map</td></tr>
+        <tr><td><code>engine/src/gfx/soft_renderer.cpp</code></td><td>modified</td>
+            <td>tangents to world space, and the normal perturbed per pixel</td></tr>
+        <tr><td><code>shaders/mesh.vert.hlsl</code></td><td>modified</td>
+            <td>a note on why its attribute locations did not move: it reads no tangent</td></tr>
+        <tr><td><code>shaders/scene.vert.hlsl</code></td><td>modified</td>
+            <td>passes the world-space tangent and its handedness to the fragment stage</td></tr>
+        <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+            <td><code>--bumps</code> and the normal-mapping views</td></tr>
+        <tr><td><code>demos/sandbox/main.cpp</code></td><td>modified</td>
+            <td>describes its vertex layout without the tangent it does not read</td></tr>
         <tr><td><code>scratch/verify_67.cpp</code></td><td>new</td>
             <td>33 checks in seven sections</td></tr>
       </tbody>
@@ -198,6 +234,48 @@ float normal_mapped; // 28 — was `pad0`. The block is STILL exactly 32 bytes.<
   @@LISTING:engine/src/gfx/mesh.cpp@@
   @@LISTING:engine/include/engine/gfx/material.hpp@@
   @@LISTING:shaders/scene.frag.hlsl@@
+  @@LISTING:engine/include/engine/asset/asset_store.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/clip.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gltf.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_mesh.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/mesh.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/raster.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/soft_renderer.hpp@@
+
+  @@LISTING:engine/src/asset/asset_store.cpp@@
+
+  @@LISTING:engine/src/gfx/clip.cpp@@
+
+  @@LISTING:engine/src/gfx/gltf.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_mesh.cpp@@
+
+  @@LISTING:engine/src/gfx/gpu_scene.cpp@@
+
+  @@LISTING:engine/src/gfx/raster.cpp@@
+
+  @@LISTING:engine/src/gfx/soft_renderer.cpp@@
+
+  @@LISTING:engine/src/gfx/texture.cpp@@
+
+  @@LISTING:shaders/mesh.vert.hlsl@@
+
+  @@LISTING:shaders/scene.vert.hlsl@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
+  @@LISTING:demos/sandbox/main.cpp@@
+
   @@LISTING:scratch/verify_67.cpp@@
 
   <!-- =================================================================

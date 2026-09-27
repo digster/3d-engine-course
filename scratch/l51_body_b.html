@@ -604,9 +604,19 @@ git mv src/game/pong.hpp demos/common/pong.hpp
 git mv src/game/pong.cpp demos/common/pong.cpp
 git mv src/main.cpp      demos/sandbox/main.cpp
 
-# "core/x.hpp" | "gfx/x.hpp" | "math/x.hpp"  ->  &lt;engine/core/x.hpp&gt; etc.
-grep -rl '#include "' engine demos | xargs sed -i '' -E \
-  's|#include "(core\|gfx\|math)/([a-z0-9_]+\.hpp)"|#include &lt;engine/\1/\2&gt;|'</code></pre>
+# Two mechanical rewrites, in every moved file:
+#   the include spelling   "core/x.hpp" | "gfx/x.hpp" | "math/x.hpp"  ->  &lt;engine/core/x.hpp&gt; etc.,
+#                          and pong's own header, which now sits beside it;
+#   the path comment       on line 1, which still names the file's old home.
+# `-i.bak` is the one in-place spelling GNU sed (Linux; Git Bash on Windows) and BSD
+# sed (macOS) agree on, and `@` delimits because it appears in no pattern here.
+find engine demos -name '*.[hc]pp' | xargs sed -i.bak -E \
+  -e 's@#include "(core|gfx|math)/([a-z0-9_]+\.hpp)"@#include &lt;engine/\1/\2&gt;@' \
+  -e 's@#include "game/pong\.hpp"@#include "pong.hpp"@' \
+  -e '1s@^// src/(core|gfx|math)/([a-z0-9_]+\.hpp)@// engine/include/engine/\1/\2@' \
+  -e '1s@^// src/(core|gfx)/([a-z0-9_]+\.cpp)@// engine/src/\1/\2@' \
+  -e '1s@^// src/game/(pong\.[hc]pp)@// demos/common/\1@'
+find engine demos -name '*.bak' -delete</code></pre>
   </figure>
 
   <p>

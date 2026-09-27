@@ -171,6 +171,8 @@
           <td>The <code>collide</code> target.</td></tr>
       <tr><td><code>demos/collide/main.cpp</code></td><td>new</td>
           <td>Fifteen bars against a zero line, and a key that throws nine of them away.</td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td>its include follows <code>bounds.hpp</code> to <code>math/</code></td></tr>
       <tr><td><code>scratch/verify_84.cpp</code></td><td>new</td>
           <td>Nine measured sections, and the certificate checker they are built on.</td></tr>
       <tr><td><code>scratch/build_verify_84.sh</code></td><td>new</td>
@@ -188,6 +190,14 @@
   @@LISTING:engine/CMakeLists.txt@@
   @@LISTING:demos/CMakeLists.txt@@
   @@LISTING:demos/collide/main.cpp@@
+  @@LISTING:engine/include/engine/gfx/cascade.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/frustum.hpp@@
+
+  @@LISTING:engine/include/engine/gfx/shadow.hpp@@
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+
   @@LISTING:scratch/verify_84.cpp@@
   @@LISTING:scratch/build_verify_84.sh@@
 

@@ -605,11 +605,44 @@ exist and are scheduled for repair. The check fails on any defect *not* in it (a
 regression) and on any entry that no longer fails — delete the line when you
 repair it. The list can only shrink, and every run prints how many remain.
 
-**Repairing an R2 omission.** Pin the file from the lesson's commit
-(`git show <sha>:<path> > scratch/lNN_<path with / as _>`), add it to the
-builder's `LISTING_META`/`LISTING_SOURCE`, fix its manifest row, `git add -f` the
-pin, rebuild, and delete the `R2` line. A file shown only as a snippet keeps the
-snippet in Implementation and gains the whole file in Code Listings.
+**All of it was repaired on 2026-09-26/27: R1 0, R2 0, and the known list is
+empty.** 195 whole listings were added across 24 lessons (and 46 manifest rows),
+which grew `docs/lessons/` from 32 to 39 MB — the price of the rule, paid once.
+
+**Repairing an R2 omission** — mechanically, with `scratch/repair_continuity.py`:
+
+```sh
+python3 scratch/repair_continuity.py 615          # show what it would do
+python3 scratch/repair_continuity.py 615 --apply  # pin, register, place, rebuild
+```
+
+It pins each omitted file from the lesson's commit, replays any later erratum
+commit onto the pin (the 2026-09-08 roadmap reshape renumbered comments in 27
+engine files; a pin taken from an older commit must carry the rename too — line
+by line where the patch's context has moved on), registers the pin in the
+builder, inserts the placeholder before the lesson's harness, and names every
+file the page never mentions, which also needs a **manifest row** — prose, so by
+hand. Then `git add -f` the pins and `check-continuity.py --prune`. Afterwards,
+**read the prose around the listings**: 5.3 said three files were "listed whole
+in Lesson 5.2", 8.8 called itself "the only place in this course where a changed
+file is not listed whole", and 6.15/6.16 opened with "Five/Six files in full" —
+every one of them true of the old page and false of the repaired one.
+
+**Only the Code Listings section counts.** 6.9 captioned a ten-line excerpt of a
+372-line `shadow.cpp` with the `modified` tag in its Implementation section; a
+tag-only rule took the excerpt for the file, and the real change never reached
+the page. A listing is whole only inside **Complete Code Listings** (§6.7 of the
+master prompt). Outside it, **an excerpt never carries a `new`/`modified` tag** —
+caption it `path — what it is` (`engine/src/phys/cast.cpp — cast`), or use the
+tag's text to name the step (`step 3`, `the resolve`), never the bare word a
+student will read as "replace your file with this".
+
+**5.1's move script is replayed exactly, and tested by running it.** Its sed now
+rewrites both mechanical changes the page promises (the include spelling,
+including `pong.hpp`'s own, and the path comment on line 1) using `-i.bak`, the
+one in-place spelling GNU and BSD sed share. `test_the_published_script_does_what_
+the_replay_models` runs the published text with the machine's own sed — BSD on a
+Mac, GNU in CI — and compares with the replay.
 
 **Consequence for inserted lessons.** A `6.17b` sits *before* 6.18–8.13 in course
 order, so any file it adds must also appear in every later full listing of

@@ -85,6 +85,9 @@ LISTING_META = {
     "engine/include/engine/gfx/colour.hpp": ("unchanged", "unchanged"),
     "engine/src/gfx/colour.cpp": ("unchanged", "unchanged"),
     "scratch/verify_61.cpp": ("new", "new"),
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/src/gfx/gpu_present.cpp": ("modified", "modified"),
+    "demos/sandbox/main.cpp": ("modified", "modified"),
 }
 
 LISTING_LANG = {
@@ -130,6 +133,9 @@ LISTING_SOURCE = {
     "engine/include/engine/gfx/colour.hpp":      "scratch/l61_engine_include_engine_gfx_colour.hpp",
     "engine/src/gfx/colour.cpp":                 "scratch/l61_engine_src_gfx_colour.cpp",
     "scratch/verify_61.cpp":                     "scratch/l61_scratch_verify_61.cpp",
+    # Added 2026-09-26 (repair_continuity.py): changed by this lesson's commit, never listed whole.
+    "engine/src/gfx/gpu_present.cpp": "scratch/l61_engine_src_gfx_gpu_present.cpp",
+    "demos/sandbox/main.cpp": "scratch/l61_demos_sandbox_main.cpp",
 }
 
 
