@@ -249,8 +249,9 @@ t2 = cross(n, t1);</code></pre>
     average            wins   0.00% of the time</code></pre>
 
   <p>
-    <strong>So this engine's default is <code>minimum</code>, and Box2D, Bullet and PhysX all ship
-    <code>sqrt(a·b)</code>.</strong> The minimum has a physical story behind it — the interface is
+    <strong>So this engine's default is <code>minimum</code>, which none of the three engines this
+    module draws on uses:</strong> Box2D ships <code>sqrt(a·b)</code>, Bullet the product
+    <code>a·b</code>, and PhysX the average by default. The minimum has a physical story behind it — the interface is
     governed by the more lubricious of the two surfaces, which is why PTFE on anything behaves like
     PTFE, and why the geometric mean predicts steel on PTFE at 0.172 where the real number is 0.04.
   </p>

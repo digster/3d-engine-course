@@ -9215,3 +9215,14 @@ tests that create repositories strip `GIT_*` from their environment. Separately,
 "to unstage one thing" unstaged 1,394 uncommitted files; it was recoverable only because a
 `git write-tree` taken earlier had saved the index as a tree (`git read-tree <tree>` restores it).
 Snapshot the index with `git write-tree` before any bulk index operation.
+
+## A harness cannot check a claim about somebody else's engine
+
+Module 8's measurements were rigorous and its comparisons were not: "Bullet and PhysX both ship
+the gyroscopic term off" (Bullet has shipped it on since 2.83), "Box2D, Bullet and PhysX all ship
+`sqrt(a·b)`" (Bullet multiplies, PhysX averages), "1.0 m/s is the number every engine ships"
+(Box2D's; Bullet 0.2, PhysX 2 at defaults), "Box2D lands on four manifold points" (it is 2D: two),
+and "the coupling nearly every engine ships is 1 − F(v·h)" (Filament does not couple at all). All
+were copied into shipped headers and five lessons' listings. Each was a universal resting on one
+example, and 8.3's even carried a ⚠ VERIFY for seven lessons. Cite the header and symbol; never
+say "every". The authoring guide's §11 now says so.

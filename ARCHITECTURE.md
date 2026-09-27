@@ -429,7 +429,7 @@ unexplained line in real-time graphics. Spherical coordinates on the fixed direc
 cancels against the facets' projected area toward the light, which is `(l·h)` and equal to it
 because **h** bisects. That cancellation is exactly why the shipped formula looks arbitrary.
 
-**The diffuse coupling is a measured decision, not a default.** The form nearly every engine ships,
+**The diffuse coupling is a measured decision, not a default.** The form the glTF reference BRDF uses,
 `1 − F(v·h)`, is exact at normal incidence and reaches **1.3395** at grazing — it accounts for the
 light that got *in* and says nothing about the light that fails to get *out*. Adding an exit factor
 fixes the energy and **fails reciprocity**, which disqualifies it as a BRDF at all; the symmetric

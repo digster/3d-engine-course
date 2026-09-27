@@ -585,7 +585,7 @@
     </svg>
     <figcaption>
       <span class="fignum">Figure 3.</span>
-      The part of importing a format that actually goes wrong, checked before a line of conversion code was written. Handedness, winding and texture origin all AGREE, so the loader contains no basis change, no index reversal and no <code>1 - v</code> &#8212; and that is Lesson 2.6 having argued the choice rather than picking one: FBX is Z-up, Unity and Unreal are left-handed, and any of those would have cost a mirroring basis change here, which reverses winding, which needs a second correction. The fourth row differs and is <strong>not a conversion</strong>: an asset&#8217;s front facing +Z against a camera looking down &#8722;Z is an authoring fact, fixed with a yaw. Note the third row&#8217;s trap &#8212; OBJ disagrees where glTF agrees, so <code>flip_uv_v</code> is correct for every mesh this engine has ever loaded and wrong for every one it loads next.
+      The part of importing a format that actually goes wrong, checked before a line of conversion code was written. Handedness, winding and texture origin all AGREE, so the loader contains no basis change, no index reversal and no <code>1 - v</code> &#8212; and that is Lesson 2.6 having argued the choice rather than picking one: 3ds Max and Blender are Z-up, Unity and Unreal are left-handed, and any of those would have cost a mirroring basis change here, which reverses winding, which needs a second correction. The fourth row differs and is <strong>not a conversion</strong>: an asset&#8217;s front facing +Z against a camera looking down &#8722;Z is an authoring fact, fixed with a yaw. Note the third row&#8217;s trap &#8212; OBJ disagrees where glTF agrees, so <code>flip_uv_v</code> is correct for every mesh this engine has ever loaded and wrong for every one it loads next.
     </figcaption>
   </figure>
 
@@ -599,8 +599,8 @@
 
   <p>
     That is not luck. It is Lesson 2.6 having argued the choice rather than picking one, and it is
-    worth appreciating how easily it could have gone the other way: FBX and 3ds Max are Z-up, Unity
-    is left-handed, Unreal is left-handed and Z-up. Any of those would have cost a basis change
+    worth appreciating how easily it could have gone the other way: 3ds Max and Blender are Z-up (and an FBX file carries whatever axis system its exporter chose),
+    Unity is left-handed, Unreal is left-handed and Z-up. Any of those would have cost a basis change
     here — and a basis change that <em>mirrors</em>, which reverses winding, which then needs a
     second correction, which is how importers acquire the reputation they have.
   </p>
@@ -1045,7 +1045,7 @@ material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
        <code>two_crossing</code> has at 0.9255 and <code>half_vector</code> lacks at 1.3395.</p>
     <p><strong>So the engine loads glTF materials and shades them with its own coupling, and is
        conformant in doing so.</strong> <code>half_vector</code> stays in the enum, named, measured,
-       and selectable — because it is what the student will find in every engine they read next,
+       and selectable — because it is the glTF reference BRDF's own coupling and the student will meet it again,
        and because 6.3's two geometry terms set the precedent: a choice you can run beats a choice
        you can read about.</p>
   </div>
@@ -4929,8 +4929,9 @@ enum class diffuse_coupling
     /// a smooth surface at 75 degrees, which is a surface emitting a fifth more
     /// light than reaches it. Worst over the sweep: 1.3395.
     ///
-    /// Kept, named and measured rather than quietly dropped, because it is what
-    /// the student will find in every engine they read next.
+    /// Kept, named and measured rather than quietly dropped, because it is the
+    /// glTF reference BRDF&#x27;s coupling and the student will meet it again. Not
+    /// everywhere: Filament, for one, simply adds its lobes, `Fd + Fr`.
     half_vector
 };
 

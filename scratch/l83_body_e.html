@@ -164,11 +164,11 @@
 
   <p>
     <strong>And the gyroscopic default is <code>off</code></strong>, which means that out of the box
-    this engine's bodies do not tumble. That is what Bullet and PhysX both ship (⚠ VERIFY the exact
-    spellings against the headers: Bullet's <code>BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY</code>
-    flag on <code>btRigidBody</code>, and PhysX's
-    <code>PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES</code>, both opt-in), and it is a defensible
-    default — but it means the most interesting thing in this lesson is something you have to ask
+    this engine's bodies do not tumble. It is PhysX's default too — its
+    <code>PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES</code> is opt-in — while Bullet decided the
+    other way: since 2.83 every <code>btRigidBody</code> starts with
+    <code>BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY</code> set, which is this lesson's
+    <code>implicit</code> mode. Off is a defensible default — but it means the most interesting thing in this lesson is something you have to ask
     for.
   </p>
 
@@ -291,7 +291,7 @@ sh scratch/build_verify_83.sh</code></pre>
 
   <p>
     Press <kbd>G</kbd> to cycle the gyroscopic mode. On <strong>off</strong> the green trace becomes
-    a flat line and the box spins like a badly animated prop — that is what most engines ship.
+    a flat line and the box spins like a badly animated prop — that is PhysX's default.
     <strong>Explicit</strong> flips and speeds up, and at 30 Hz (four presses of <kbd>Down</kbd>)
     it comes apart entirely. <strong>Implicit</strong> flips and visibly slows down. Watch the
     <code>|L| drift</code> readout in the panel rather than the picture: it is the number that tells
@@ -516,7 +516,7 @@ sh scratch/build_verify_83.sh</code></pre>
         rigour than one worked example.</li>
     <li><strong>Terzopoulos/Witkin's and Bullet's source</strong> — specifically
         <code>btRigidBody::computeGyroscopicImpulseImplicit_Body</code>, which is §9.2's Newton step
-        as a shipping engine writes it (⚠ VERIFY the exact spelling against the current headers).</li>
+        as a shipping engine writes it.</li>
     <li><strong>"Dzhanibekov effect"</strong> — the original orbital footage is thirty seconds long
         and worth watching once, because a wing-nut flipping in free fall is more convincing than any
         amount of §10.</li>

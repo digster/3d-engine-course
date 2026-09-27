@@ -84,7 +84,7 @@
 <pre><code class="lang-cpp">enum class diffuse_coupling
 {
     two_crossing,   ///&lt; (1-F(n.l))(1-F(n.v)) — the default. Worst R = 0.9255.
-    half_vector     ///&lt; 1-F(v.h) — what glTF and most engines ship. Worst R = 1.3395.
+    half_vector     ///&lt; 1-F(v.h) — glTF’s reference coupling. Worst R = 1.3395.
 };
 
 [[nodiscard]] inline linear_rgb diffuse_transmission(diffuse_coupling coupling,
@@ -679,8 +679,8 @@ cmake --build build --config Debug</code></pre>
     <li><strong>The metallic workflow</strong>, arriving as a consequence of where a metal's colour
         can live rather than as a pipeline convention.</li>
     <li><strong>Energy conservation, measured.</strong> Worst hemispherical reflectance 0.9255
-        against 1.4300 before — and the discovery that the coupling nearly every engine ships
-        reaches 1.3395.</li>
+        against 1.4300 before — and the discovery that the coupling the glTF reference BRDF
+        uses reaches 1.3395.</li>
     <li><strong>A better characterization test</strong>, extended at the one moment it was free.</li>
   </ul>
 

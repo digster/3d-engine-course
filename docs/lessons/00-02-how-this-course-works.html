@@ -252,14 +252,18 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
   </figure>
 
   <div class="callout verify">
-    <span class="label">⚠ Verify</span>
+    <span class="label">⚠ Verify — discharged</span>
     <p>
-      ⚠ VERIFY: exact field names and nesting of <code>SDL_GPUGraphicsPipelineCreateInfo</code>
-      against <code>SDL3/SDL_gpu.h</code> before Module 4 uses this for real. The enum
-      <em>values</em> above are verified (see <a href="../conventions.html#verified">Conventions
-      §10</a>); the surrounding struct layout is shown here for the shape of the idea, not to be
-      typed. This lesson is illustrating a point, and I would rather flag the uncertainty than
-      have you trust a struct I have not checked.
+      <strong>Discharged since this was written:</strong> every field above exists with exactly this
+      nesting in <code>SDL3/SDL_gpu.h</code> — <code>rasterizer_state.cull_mode</code> and
+      <code>front_face</code>, <code>depth_stencil_state.enable_depth_test</code>,
+      <code>enable_depth_write</code> and <code>compare_op</code> — checked against SDL 3.4.12, the
+      tag this course pins, and used for real from Lesson 4.4. The enum
+      <em>values</em> were verified from the start (see <a href="../conventions.html#verified">Conventions
+      §10</a>). It is still shown for the shape of the idea, not to be typed: a real pipeline also
+      needs shaders and a description of its target, which Module 4 supplies. The flag stays visible
+      because this is what one looks like, and what closing one looks like: a named header and a
+      checked tag, not a feeling of confidence.
     </p>
   </div>
 

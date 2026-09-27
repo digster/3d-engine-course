@@ -308,6 +308,27 @@ curl -sL https://raw.githubusercontent.com/libsdl-org/SDL/main/include/SDL3/SDL_
 
 Record anything surprising in [LEARNINGS.md](../../LEARNINGS.md) so it is settled once.
 
+### Claims about other engines
+
+**Name the engine, cite the source, never say "every".** On 2026-09-26 three
+confident claims in Module 8 turned out wrong at the source: Bullet has shipped
+gyroscopic forces *on* since 2.83 (the page said Bullet and PhysX both ship them
+off); Bullet *multiplies* frictions and PhysX *averages* them (the page said all
+three take `sqrt(a·b)`); and "1.0 m/s is the number every engine ships" was
+Box2D's number — Bullet's is 0.2, PhysX's 2 m/s at defaults. A fourth put Box2D
+among engines keeping four manifold points; being 2D, it keeps two. Every one was
+a universal resting on one example, and none could be caught by a harness, because
+a harness only measures the engine it is linked against.
+
+- Quote the **header and symbol** (`btRigidBody::setupRigidBody` sets
+  `m_rigidbodyFlags = BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY`) or the doc line,
+  from the project's own repository (Bullet, PhysX, Box2D, Jolt and Filament are
+  all readable on GitHub).
+- "Every engine", "most engines", "the industry" — only for things that are
+  definitional (every engine has *a* restitution threshold). For values and
+  defaults, list the engines you checked.
+- A closed-source engine's internals (Havok) are not a citation.
+
 ## 12. Pre-flight checklist
 
 Run silently before emitting any lesson (master prompt §11):

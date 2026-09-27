@@ -4887,7 +4887,7 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
             no coupling            worst R(v) = 1.4300
             1 - F(v.h)   [glTF]    worst R(v) = 1.3395   <- STILL EMITS LIGHT
             (1-F(n.l))(1-F(n.v))   worst R(v) = 0.9255   <- ships, the default
-        1-F(v.h) is what nearly every engine ships and is EXACT at normal incidence
+        1-F(v.h) is glTF's reference coupling (Filament does not couple at all) and is EXACT at normal incidence
         (furnace 0.9999). It accounts for the light that got IN and says nothing
         about the light that fails to get OUT: a diffuse ray leaving toward a
         grazing eye meets the interface at a grazing angle, where a quarter of it
@@ -6065,8 +6065,8 @@ capabilities:
          Velocity Verlet's second half would need the tensor rebuilt at the new
          orientation and a second renormalisation, to correct by less than the
          renormalisation's own error.
-      5. GYROSCOPIC DEFAULTS TO `off`, which is what Bullet and PhysX both ship
-         (⚠ VERIFY the flag spellings). So out of the box this engine's bodies
+      5. GYROSCOPIC DEFAULTS TO `off`, which is PhysX's default (Bullet's, since 2.83, is the implicit form;
+         flag spellings verified against both headers 2026-09-26). So out of the box this engine's bodies
          do NOT tumble, and the most interesting thing in the lesson is
          something you have to ask for. Said out loud in §13.
     THE INSTRUMENT THAT MEASURES SOMEBODY ELSE: step_report::max_unit_error

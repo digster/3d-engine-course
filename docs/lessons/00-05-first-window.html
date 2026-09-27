@@ -338,10 +338,11 @@
       <line x1="538" y1="64" x2="624" y2="64" class="ink" stroke-width="1.3" marker-end="url(#w2-a)"/>
 
       <!-- handler -->
-      <rect x="150" y="120" width="384" height="70" rx="8" fill="none" stroke="var(--rule-strong)" stroke-width="1"/>
+      <rect x="150" y="120" width="384" height="86" rx="8" fill="none" stroke="var(--rule-strong)" stroke-width="1"/>
       <text x="342" y="140" class="xs" text-anchor="middle" font-weight="700">while (SDL_PollEvent(&amp;event))  — one at a time, until empty</text>
       <text x="342" y="160" class="xs muted" text-anchor="middle">type == QUIT → running = false</text>
-      <text x="342" y="176" class="xs muted" text-anchor="middle">type == KEY_DOWN &amp;&amp; key == Esc → running = false · everything else: drained, ignored</text>
+      <text x="342" y="176" class="xs muted" text-anchor="middle">type == KEY_DOWN &amp;&amp; key == Esc → running = false</text>
+      <text x="342" y="192" class="xs muted" text-anchor="middle">everything else: drained, ignored</text>
     </svg>
     <figcaption>
       <span class="fignum">Figure 2.</span> The event queue. We drain it completely every frame.
@@ -965,9 +966,9 @@ cmake --build build
       <summary>Hint</summary>
       <p>
         A window event's payload is in <code>event.window</code>. For a resize, the new width and
-        height arrive as its two integer data fields. <code>⚠ VERIFY</code> their exact names
-        (<code>data1</code>/<code>data2</code>) against <code>SDL3/SDL_events.h</code> for your
-        pinned tag before relying on them — this is the header-reading skill 0.6 makes routine.
+        height arrive as its two integer data fields. They are <code>data1</code> and <code>data2</code>, both <code>Sint32</code> — checked against
+        <code>SDL3/SDL_events.h</code> at the pinned tag, and opening that header yourself is exactly the
+        header-reading skill 0.6 makes routine.
       </p>
     </details>
     <details>

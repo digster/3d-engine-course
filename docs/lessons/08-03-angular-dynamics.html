@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>8.3 — Angular Dynamics: Torque and the Inertia Tensor · Build a Professional 3D Game Engine</title>
-<meta name="description" content="Eighty-five lessons in, nothing in this engine can tumble. 8.2 gave a body a mass, which answers one question — how hard is it to push? — and this lesson answers the other one, which turns out to need nine numbers rather than one. Spin a book about its three axes and you get three different resistances; spin it about an axis between two of them and the angular momentum does not point along the spin axis at all, and a thing that eats a vector and hands back one pointing somewhere else is a matrix. We derive the inertia tensor in four lines from the vector triple product, and then find that the expression the derivation produces returns exactly zero for a plank, because |r| squared minus x squared is a sum of three squares with one subtracted straight off again and a float at a million cannot hold a millionth. Then the parallel-axis theorem, checked by a test that passes only if the theorem is exactly true; the basis change R I R transpose, and the plausible wrong one that has the same trace, the same determinant, the same symmetry and the same principal moments; and the integration of an orientation, which is not an addition at all — two 90-degree turns in the other order land 120 degrees away while the sum of the rotation vectors is identical, so no vector can be a rotation's running total. The update that replaces it inflates a unit quaternion by 0.35 percent every step and still turns 0.23 percent short after you renormalise, both predictable in advance. Then the payoff: a torque-free body conserves L and does not conserve omega, swinging its angular speed over 10.85 percent with nothing acting on it, between two bounds derived by hand and then measured to four digits. Spin it about its middle axis and it flips end over end forever, at a rate Euler's equations predict to a tenth of a percent. And the term that makes all of it happen is the one almost every engine drops, because integrating it explicitly gains 162 percent of a body's angular momentum in a minute and diverges by 3.3e11 at 30 Hz. There are four answers to that, the last of which is that the term is not physics at all — it is the price of choosing omega as the state variable, and storing the momentum instead makes it vanish from the equations, at the cost of the one table in this course where a smaller step size is a worse answer. Also: a compound body assembled without the theorem is 15 times too small and passes every validity test, and a step that was 20 times slower than 8.2's turned out to be building the same rotation matrix twice.">
+<meta name="description" content="Eighty-five lessons in, nothing in this engine can tumble. 8.2 gave a body a mass, which answers one question — how hard is it to push? — and this lesson answers the other one, which turns out to need nine numbers rather than one. Spin a book about its three axes and you get three different resistances; spin it about an axis between two of them and the angular momentum does not point along the spin axis at all, and a thing that eats a vector and hands back one pointing somewhere else is a matrix. We derive the inertia tensor in four lines from the vector triple product, and then find that the expression the derivation produces returns exactly zero for a plank, because |r| squared minus x squared is a sum of three squares with one subtracted straight off again and a float at a million cannot hold a millionth. Then the parallel-axis theorem, checked by a test that passes only if the theorem is exactly true; the basis change R I R transpose, and the plausible wrong one that has the same trace, the same determinant, the same symmetry and the same principal moments; and the integration of an orientation, which is not an addition at all — two 90-degree turns in the other order land 120 degrees away while the sum of the rotation vectors is identical, so no vector can be a rotation's running total. The update that replaces it inflates a unit quaternion by 0.35 percent every step and still turns 0.23 percent short after you renormalise, both predictable in advance. Then the payoff: a torque-free body conserves L and does not conserve omega, swinging its angular speed over 10.85 percent with nothing acting on it, between two bounds derived by hand and then measured to four digits. Spin it about its middle axis and it flips end over end forever, at a rate Euler's equations predict to a tenth of a percent. And the term that makes all of it happen is the one many engines drop, because integrating it explicitly gains 162 percent of a body's angular momentum in a minute and diverges by 3.3e11 at 30 Hz. There are four answers to that, the last of which is that the term is not physics at all — it is the price of choosing omega as the state variable, and storing the momentum instead makes it vanish from the equations, at the cost of the one table in this course where a smaller step size is a worse answer. Also: a compound body assembled without the theorem is 15 times too small and passes every validity test, and a step that was 20 times slower than 8.2's turned out to be building the same rotation matrix twice.">
 
 <!-- SHARED-CSS:BEGIN -->
 <!-- The shared course stylesheet, linked rather than inlined. Single source of
@@ -79,7 +79,7 @@
       two bounds we derive by hand and then measure to four digits. Spin it about its middle axis
       and it <strong>flips end over end, forever</strong>, at a rate Euler's equations predict —
       4.8038 s⁻¹ against a measured 4.8084. And the term that makes all of it happen is the one
-      almost every engine drops, because integrating it explicitly gains <strong>162% of a body's
+      many engines drop, because integrating it explicitly gains <strong>162% of a body's
       angular momentum in a minute</strong> and diverges by <strong>3.3 × 10¹¹</strong> at 30 Hz.
       There are four answers to that, the last of which is the interesting one: the term is not
       physics at all, it is the price of choosing <code>ω</code> as the state variable, and storing
@@ -2491,7 +2491,7 @@
     anecdote. Turn the gyroscopic term off and the perturbation does not merely flip less — it
     <em>does not move at all</em>, at the sixth significant figure, over forty seconds. There is
     nothing left to couple the three components, so the flip is not a numerical artefact or an
-    emergent surprise. It is a direct consequence of the one term most engines drop.
+    emergent surprise. It is a direct consequence of the one term many engines drop.
   </p>
 
     <figure class="dia bleed">
@@ -4763,7 +4763,7 @@
     </svg>
     <figcaption>
       <span class="fignum">Figure 10.</span>
-      <strong>The flip, as the demo draws it, and what everything in the lesson cost.</strong> Both panels are twelve seconds of the same box spun at 10 rad/s about its intermediate axis with a 1e−3 nudge, plotted in <em>body</em> axes — which is the frame Euler's equations are written in, and measuring in world space instead is what made the first version of this measurement miss by 20%. With the gyroscopic term <strong>off</strong> the spin component is a flat line and the perturbation never moves: the box spins about a fixed axis forever, which is what most engines ship. With the <strong>momentum</strong> formulation it drops through zero to its negative and back, twice, while the other two components pulse at each crossing — the box is turning end over end with nothing acting on it. The measured growth rate walks in on the rate Euler's equations predict as the step shrinks (2.1%, 0.56%, 0.19%, <strong>0.096%</strong>), and the flips arrive every <strong>2.6651 s</strong>, forever. Below, the budget — including the last row, which is not an algorithm but the discovery that a rotation matrix was being built twice from the same quaternion, twenty lines apart.
+      <strong>The flip, as the demo draws it, and what everything in the lesson cost.</strong> Both panels are twelve seconds of the same box spun at 10 rad/s about its intermediate axis with a 1e−3 nudge, plotted in <em>body</em> axes — which is the frame Euler's equations are written in, and measuring in world space instead is what made the first version of this measurement miss by 20%. With the gyroscopic term <strong>off</strong> the spin component is a flat line and the perturbation never moves: the box spins about a fixed axis forever, which is PhysX's default. With the <strong>momentum</strong> formulation it drops through zero to its negative and back, twice, while the other two components pulse at each crossing — the box is turning end over end with nothing acting on it. The measured growth rate walks in on the rate Euler's equations predict as the step shrinks (2.1%, 0.56%, 0.19%, <strong>0.096%</strong>), and the flips arrive every <strong>2.6651 s</strong>, forever. Below, the budget — including the last row, which is not an algorithm but the discovery that a rotation matrix was being built twice from the same quaternion, twenty lines apart.
     </figcaption>
   </figure>
 
@@ -5060,11 +5060,11 @@
 
   <p>
     <strong>And the gyroscopic default is <code>off</code></strong>, which means that out of the box
-    this engine's bodies do not tumble. That is what Bullet and PhysX both ship (⚠ VERIFY the exact
-    spellings against the headers: Bullet's <code>BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY</code>
-    flag on <code>btRigidBody</code>, and PhysX's
-    <code>PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES</code>, both opt-in), and it is a defensible
-    default — but it means the most interesting thing in this lesson is something you have to ask
+    this engine's bodies do not tumble. It is PhysX's default too — its
+    <code>PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES</code> is opt-in — while Bullet decided the
+    other way: since 2.83 every <code>btRigidBody</code> starts with
+    <code>BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY</code> set, which is this lesson's
+    <code>implicit</code> mode. Off is a defensible default — but it means the most interesting thing in this lesson is something you have to ask
     for.
   </p>
 
@@ -7037,11 +7037,10 @@ enum class body_kind : std::uint8_t
 enum class gyroscopic_mode : std::uint8_t
 {
     /// Drop the term. Fast, unconditionally stable, and visibly wrong for
-    /// anything the player watches tumble. **The default**, and the default
-    /// every engine ships — it is what Bullet and PhysX both do (⚠ VERIFY the
-    /// exact spellings against the headers: Bullet&#x27;s
-    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` flag on `btRigidBody`, and
-    /// PhysX&#x27;s `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES`, both opt-in).
+    /// anything the player watches tumble. **The default**, and PhysX&#x27;s too:
+    /// its `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES` is opt-in. Bullet chose
+    /// the other way — since 2.83 every `btRigidBody` starts with
+    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` set, which is `implicit` below.
     off,
 
     /// The term, evaluated at the start of the step and added explicitly.
@@ -9610,7 +9609,7 @@ engine_set_warnings(spin)
 // wing-nut doing it in orbit in 1985 and reportedly assumed something was wrong
 // with the spacecraft. It is a consequence of the inertia tensor having three
 // different eigenvalues, and it falls out of the one term in Euler&#x27;s equations
-// that most engines drop.
+// that many engines drop.
 //
 //   LEFT PANEL   the box itself, wireframe, orthographic, with its three body
 //                axes drawn in the course&#x27;s x/y/z = red/green/blue.
@@ -9623,7 +9622,7 @@ engine_set_warnings(spin)
 // them visible rather than tabular:
 //
 //   OFF        omega never changes. The box spins about a fixed world axis like
-//              a badly animated prop. This is what most engines ship.
+//              a badly animated prop. This is PhysX&#x27;s default.
 //   EXPLICIT   the term, added explicitly. It flips — and it also gains energy
 //              until the box is spinning too fast to look at. At 30 Hz it
 //              diverges outright.
@@ -11622,7 +11621,7 @@ void section_h()
 
     // CONTROL: turn the term off and nothing can couple the three components at
     // all, so the perturbation cannot grow — the flip is a consequence of the
-    // one term most engines drop.
+    // one term many engines drop.
     {
         rigid_body b = box;
         b.gyroscopic = gyroscopic_mode::off;
@@ -12003,7 +12002,7 @@ sh scratch/build_verify_83.sh</code></pre>
 
   <p>
     Press <kbd>G</kbd> to cycle the gyroscopic mode. On <strong>off</strong> the green trace becomes
-    a flat line and the box spins like a badly animated prop — that is what most engines ship.
+    a flat line and the box spins like a badly animated prop — that is PhysX's default.
     <strong>Explicit</strong> flips and speeds up, and at 30 Hz (four presses of <kbd>Down</kbd>)
     it comes apart entirely. <strong>Implicit</strong> flips and visibly slows down. Watch the
     <code>|L| drift</code> readout in the panel rather than the picture: it is the number that tells
@@ -12228,7 +12227,7 @@ sh scratch/build_verify_83.sh</code></pre>
         rigour than one worked example.</li>
     <li><strong>Terzopoulos/Witkin's and Bullet's source</strong> — specifically
         <code>btRigidBody::computeGyroscopicImpulseImplicit_Body</code>, which is §9.2's Newton step
-        as a shipping engine writes it (⚠ VERIFY the exact spelling against the current headers).</li>
+        as a shipping engine writes it.</li>
     <li><strong>"Dzhanibekov effect"</strong> — the original orbital footage is thirty seconds long
         and worth watching once, because a wing-nut flipping in free fall is more convincing than any
         amount of §10.</li>

@@ -43,7 +43,7 @@ FIGURES = {
         "The part of importing a format that actually goes wrong, checked before a line of "
         "conversion code was written. Handedness, winding and texture origin all AGREE, so the "
         "loader contains no basis change, no index reversal and no <code>1 - v</code> &#8212; and "
-        "that is Lesson 2.6 having argued the choice rather than picking one: FBX is Z-up, Unity "
+        "that is Lesson 2.6 having argued the choice rather than picking one: 3ds Max and Blender are Z-up, Unity "
         "and Unreal are left-handed, and any of those would have cost a mirroring basis change "
         "here, which reverses winding, which needs a second correction. The fourth row differs and "
         "is <strong>not a conversion</strong>: an asset&#8217;s front facing +Z against a camera "

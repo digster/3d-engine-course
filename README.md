@@ -31,8 +31,8 @@ inaccurate — it is **not a rotation**. And then the payoff, which is one of th
 mechanics. A torque-free body **conserves L and does not conserve ω**, swinging its angular speed by
 **10.85%** with nothing acting on it, between bounds derived *by hand* and then measured to four
 digits; and spun about its middle axis it **flips end over end, forever**, every 2.6651 s, at a rate
-Euler's equations predict to a tenth of a percent. The term that causes all of it is the one almost
-every engine drops, for a measured reason — integrated explicitly it diverges by **3.3 × 10¹¹** at
+Euler's equations predict to a tenth of a percent. The term that causes all of it is the one many
+engines drop, for a measured reason — integrated explicitly it diverges by **3.3 × 10¹¹** at
 30 Hz — and the fourth answer to it is the interesting one: the gyroscopic term is **not physics at
 all**, it is the price of choosing `ω` as the state variable, and storing the momentum instead makes
 it vanish from the equations. Which produces the one table in the course where a *smaller* step is a
@@ -625,8 +625,7 @@ whatever crosses its interface, so it has no diffuse lobe and its colour has now
 F0 — and the demo's teal slab, faked since 3.7 by hand-typing a matching highlight colour beside
 its tint, becomes `metallic = 1` and can no longer disagree with itself.
 
-Then the finding. The coupling **nearly every engine ships**, `1 − F(v·h)` including the glTF
-reference BRDF, is exact at normal incidence and still reaches **1.3395** at grazing: it accounts
+Then the finding. The coupling the **glTF reference BRDF** ships, `1 − F(v·h)`, is exact at normal incidence and still reaches **1.3395** at grazing: it accounts
 for the light that got *in* and says nothing about the light that fails to get *out*. The obvious
 repair fixes the energy and **fails reciprocity** — 0.2623 one way against 0.2932 the other — and
 a BRDF that is not symmetric in **l** and **v** is not a BRDF. That is what selects the
@@ -706,7 +705,7 @@ format that assumes it.
 
 Same story on conventions: handedness, winding and texture origin **all agree**, so `gltf.cpp`
 contains **zero conversion code** — no basis change, no index reversal, no `1 − v`. That is Module
-2 having argued the choice rather than picking one; FBX is Z-up and Unity and Unreal are
+2 having argued the choice rather than picking one; 3ds Max and Blender are Z-up and Unity and Unreal are
 left-handed, and any of those costs a *mirroring* basis change, which reverses winding, which then
 needs a second correction. The trap runs the other way round: `flip_uv_v` defaults to `true` and is
 correct for every mesh this engine has ever loaded and **wrong for every one it loads next**.

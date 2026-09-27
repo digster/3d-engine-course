@@ -487,8 +487,9 @@ enum class diffuse_coupling
     /// a smooth surface at 75 degrees, which is a surface emitting a fifth more
     /// light than reaches it. Worst over the sweep: 1.3395.
     ///
-    /// Kept, named and measured rather than quietly dropped, because it is what
-    /// the student will find in every engine they read next.
+    /// Kept, named and measured rather than quietly dropped, because it is the
+    /// glTF reference BRDF's coupling and the student will meet it again. Not
+    /// everywhere: Filament, for one, simply adds its lobes, `Fd + Fr`.
     half_vector
 };
 

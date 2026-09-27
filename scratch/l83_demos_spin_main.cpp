@@ -10,7 +10,7 @@
 // wing-nut doing it in orbit in 1985 and reportedly assumed something was wrong
 // with the spacecraft. It is a consequence of the inertia tensor having three
 // different eigenvalues, and it falls out of the one term in Euler's equations
-// that most engines drop.
+// that many engines drop.
 //
 //   LEFT PANEL   the box itself, wireframe, orthographic, with its three body
 //                axes drawn in the course's x/y/z = red/green/blue.
@@ -23,7 +23,7 @@
 // them visible rather than tabular:
 //
 //   OFF        omega never changes. The box spins about a fixed world axis like
-//              a badly animated prop. This is what most engines ship.
+//              a badly animated prop. This is PhysX's default.
 //   EXPLICIT   the term, added explicitly. It flips — and it also gains energy
 //              until the box is spinning too fast to look at. At 30 Hz it
 //              diverges outright.

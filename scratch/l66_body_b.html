@@ -315,7 +315,7 @@ material = mix(dielectric_brdf, metal_brdf, metallic)</code></pre>
        <code>two_crossing</code> has at 0.9255 and <code>half_vector</code> lacks at 1.3395.</p>
     <p><strong>So the engine loads glTF materials and shades them with its own coupling, and is
        conformant in doing so.</strong> <code>half_vector</code> stays in the enum, named, measured,
-       and selectable — because it is what the student will find in every engine they read next,
+       and selectable — because it is the glTF reference BRDF's own coupling and the student will meet it again,
        and because 6.3's two geometry terms set the precedent: a choice you can run beats a choice
        you can read about.</p>
   </div>

@@ -1319,7 +1319,7 @@ void section_h()
 
     // CONTROL: turn the term off and nothing can couple the three components at
     // all, so the perturbation cannot grow — the flip is a consequence of the
-    // one term most engines drop.
+    // one term many engines drop.
     {
         rigid_body b = box;
         b.gyroscopic = gyroscopic_mode::off;

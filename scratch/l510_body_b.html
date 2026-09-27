@@ -295,10 +295,13 @@ static_assert(engine::input_snapshot&lt;fake_input&gt;);</code></pre>
     <li>Two enumerators on <code>input_source</code>: <code>gamepad_button</code> and
         <code>gamepad_axis</code>.</li>
     <li>Two arms in <code>update()</code>'s switch, reading <code>SDL_GetGamepadButton</code> and
-        <code>SDL_GetGamepadAxis</code>. <strong>⚠ VERIFY</strong> both signatures and the axis
-        range against <code>SDL3/SDL_gamepad.h</code> before typing them: SDL3 renamed this whole
-        family from SDL2's <code>SDL_GameController*</code>, and the axis value is a signed 16-bit
-        integer that has to be normalised before it can be scaled.</li>
+        <code>SDL_GetGamepadAxis</code>. Both checked against <code>SDL3/SDL_gamepad.h</code> at the pinned tag:
+        <code>SDL_GetGamepadButton(SDL_Gamepad*, SDL_GamepadButton)</code> returns <code>bool</code>, and
+        <code>SDL_GetGamepadAxis(SDL_Gamepad*, SDL_GamepadAxis)</code> returns a <code>Sint16</code> — a
+        thumbstick from −32768 (up/left) to 32767 (down/right), a trigger from 0 to 32767. SDL3 renamed
+        this whole family from SDL2's <code>SDL_GameController*</code>; the value has to be normalised
+        before it can be scaled, and <em>up is negative</em>, which is the sign a jump binding gets
+        wrong first.</li>
     <li>Two more accessors on the <code>input_snapshot</code> concept, which is the only part
         that touches existing code — and it touches it additively.</li>
     <li>A deadzone, which belongs on the <em>binding</em> rather than the action, because two

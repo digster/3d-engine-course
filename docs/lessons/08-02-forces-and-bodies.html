@@ -1669,11 +1669,9 @@
 
   <ul>
     <li><strong>Contact slop</strong> — the small overlap a solver tolerates so that resting bodies
-        do not jitter. Box2D's default is 0.005 m, and its manual is explicit that the library is
-        tuned for objects between 0.1 and 10 metres. <em>⚠ VERIFY:</em> the
-        <code>b2_linearSlop</code> value and the recommended size range, against the Box2D manual's
-        “Units” section — the principle does not depend on the constant, but the constant is quoted
-        here and should be checked before it is repeated.</li>
+        do not jitter. Box2D's is 0.005 m (<code>b2_linearSlop</code>, v2.4), and its manual is explicit that the
+        library is “tuned to work well with moving shapes between 0.1 and 10 meters” — both checked
+        against Box2D's own header and manual.</li>
     <li><strong>Sleep thresholds</strong> — how slowly a body must be moving, and for how long,
         before 8.10 stops simulating it.</li>
     <li><strong>Penetration recovery limits</strong>, restitution velocity cutoffs, broadphase cell

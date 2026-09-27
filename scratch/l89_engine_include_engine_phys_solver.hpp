@@ -172,8 +172,9 @@ struct contact_material
 /// that a reader knows a choice was made.
 enum class combine_rule : std::uint8_t
 {
-    /// `sqrt(a*b)`. **What Box2D, Bullet and PhysX all ship for friction, and
-    /// what this engine does NOT use** — see `minimum` below, and §8.
+    /// `sqrt(a*b)`. **Box2D's rule for friction, and what this engine does NOT
+    /// use** — see `minimum` below, and §8. The others differ again: Bullet
+    /// multiplies the two coefficients, and PhysX averages them by default.
     ///
     /// It behaves sensibly at the extremes (one frictionless surface makes the
     /// pair frictionless) and, unlike the minimum, it is *sensitive to both
@@ -224,7 +225,7 @@ enum class combine_rule : std::uint8_t
 /// sweep to check the answer survives how much those tables disagree. It does,
 /// 100% of the time.
 ///
-/// Pass `combine_rule::geometric_mean` for the industry-standard behaviour; the
+/// Pass `combine_rule::geometric_mean` for Box2D's behaviour; the
 /// argument for it is in `combine_rule` and it is about knobs rather than
 /// surfaces.
 [[nodiscard]] contact_material combine_material(contact_material a, contact_material b,
@@ -368,7 +369,8 @@ struct solver_config
     friction_model friction = friction_model::cone;
 
     /// **Below this approach speed, restitution is switched off.** Metres per
-    /// second, and 1.0 is the number every engine ships.
+    /// second. 1.0 is Box2D's default; Bullet ships 0.2, and PhysX 0.2 times its
+    /// speed scale, 2 m/s at the defaults. Every engine has one; no two agree.
     ///
     /// Without it a resting body with any `e > 0` never comes to rest: gravity
     /// gives it a few millimetres per second of approach each step, the solver

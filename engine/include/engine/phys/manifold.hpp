@@ -108,8 +108,9 @@ namespace engine::phys
 /// contact system rank-deficient and the solver's answer non-unique. A physical
 /// four-legged table wobbles for the same reason a five-point manifold does.
 ///
-/// Every engine this course draws on lands on four — Box2D, Bullet's persistent
-/// manifold, Havok — and 8.7 §8 measures what the fifth point would buy on this
+/// Bullet's persistent manifold lands on four too (`MANIFOLD_CACHE_SIZE`), and
+/// Box2D's two is the same choice in 2D, where a flat contact is a segment
+/// rather than a polygon; 8.7 §8 measures what a fifth point would buy on this
 /// engine's own geometry. The four kept points span **96.3% of the area of the
 /// best four there are**, brute-forced over every four-subset, and lose
 /// **exactly zero** depth.

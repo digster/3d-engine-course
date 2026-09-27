@@ -1137,7 +1137,7 @@
     </svg>
     <figcaption>
       <span class="fignum">Figure 6.</span>
-      Lesson 6.2&#8217;s hemispherical-reflectance integrator, unchanged for the third lesson running, pointed at the finished BRDF. Without coupling the surface emits light at every roughness, worst <strong>1.2353</strong> at grazing. With it, R never reaches 1. But read the panel, because the finding is there: <strong>the coupling nearly every engine ships &#8212; 1 &#8722; F(v&#183;h), including the glTF reference BRDF &#8212; still reaches 1.3395.</strong> It accounts for the light that got IN and says nothing about the light that fails to get OUT, and a diffuse ray leaving toward a grazing eye meets the interface at a grazing angle. The two-crossing form fixes that and is reciprocal, which the obvious repair was not. It also never quite reaches 1, and &#167;10 says where that goes.
+      Lesson 6.2&#8217;s hemispherical-reflectance integrator, unchanged for the third lesson running, pointed at the finished BRDF. Without coupling the surface emits light at every roughness, worst <strong>1.2353</strong> at grazing. With it, R never reaches 1. But read the panel, because the finding is there: <strong>the coupling the glTF reference BRDF uses &#8212; 1 &#8722; F(v&#183;h) &#8212; still reaches 1.3395.</strong> It accounts for the light that got IN and says nothing about the light that fails to get OUT, and a diffuse ray leaving toward a grazing eye meets the interface at a grazing angle. The two-crossing form fixes that and is reciprocal, which the obvious repair was not. It also never quite reaches 1, and &#167;10 says where that goes.
     </figcaption>
   </figure>
 
@@ -1347,7 +1347,7 @@
 <pre><code class="lang-cpp">enum class diffuse_coupling
 {
     two_crossing,   ///&lt; (1-F(n.l))(1-F(n.v)) — the default. Worst R = 0.9255.
-    half_vector     ///&lt; 1-F(v.h) — what glTF and most engines ship. Worst R = 1.3395.
+    half_vector     ///&lt; 1-F(v.h) — glTF’s reference coupling. Worst R = 1.3395.
 };
 
 [[nodiscard]] inline linear_rgb diffuse_transmission(diffuse_coupling coupling,
@@ -2174,8 +2174,9 @@ enum class diffuse_coupling
     /// a smooth surface at 75 degrees, which is a surface emitting a fifth more
     /// light than reaches it. Worst over the sweep: 1.3395.
     ///
-    /// Kept, named and measured rather than quietly dropped, because it is what
-    /// the student will find in every engine they read next.
+    /// Kept, named and measured rather than quietly dropped, because it is the
+    /// glTF reference BRDF&#x27;s coupling and the student will meet it again. Not
+    /// everywhere: Filament, for one, simply adds its lobes, `Fd + Fr`.
     half_vector
 };
 
@@ -14811,8 +14812,8 @@ cmake --build build --config Debug</code></pre>
     <li><strong>The metallic workflow</strong>, arriving as a consequence of where a metal's colour
         can live rather than as a pipeline convention.</li>
     <li><strong>Energy conservation, measured.</strong> Worst hemispherical reflectance 0.9255
-        against 1.4300 before — and the discovery that the coupling nearly every engine ships
-        reaches 1.3395.</li>
+        against 1.4300 before — and the discovery that the coupling the glTF reference BRDF
+        uses reaches 1.3395.</li>
     <li><strong>A better characterization test</strong>, extended at the one moment it was free.</li>
   </ul>
 

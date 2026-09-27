@@ -191,11 +191,10 @@ enum class body_kind : std::uint8_t
 enum class gyroscopic_mode : std::uint8_t
 {
     /// Drop the term. Fast, unconditionally stable, and visibly wrong for
-    /// anything the player watches tumble. **The default**, and the default
-    /// every engine ships — it is what Bullet and PhysX both do (⚠ VERIFY the
-    /// exact spellings against the headers: Bullet's
-    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` flag on `btRigidBody`, and
-    /// PhysX's `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES`, both opt-in).
+    /// anything the player watches tumble. **The default**, and PhysX's too:
+    /// its `PxRigidBodyFlag::eENABLE_GYROSCOPIC_FORCES` is opt-in. Bullet chose
+    /// the other way — since 2.83 every `btRigidBody` starts with
+    /// `BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY` set, which is `implicit` below.
     off,
 
     /// The term, evaluated at the start of the step and added explicitly.

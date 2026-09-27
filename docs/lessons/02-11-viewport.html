@@ -3059,8 +3059,9 @@ scr   (81.8 75.5  d=0.959) px
           <dd>Fill <code>SDL_GPUViewport</code> from our fields by name, and pin the GPU's NDC/viewport
             conventions on the Conventions page before relying on them (§4–5 there, and the SDL wiki).
             We designed <code>engine::viewport</code> to mirror the C struct precisely so this stays a
-            copy, not a translation — but "mirrors" is a claim to verify against the header, which is
-            why it carries a <code>⚠ VERIFY</code> above.</dd>
+            copy, not a translation — and the header bears it out: <code>SDL_GPUViewport</code> is <code>x, y, w, h, min_depth,
+            max_depth</code>, all <code>float</code>, in that order (<code>SDL3/SDL_gpu.h</code>, checked at
+            the tag this course pins).</dd>
         </dl>
       </div>
     </details>

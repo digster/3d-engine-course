@@ -44,7 +44,7 @@
   </nav>
 
   <div class="lesson-head">
-    <div class="eyebrow">Living reference · Read before Module 2</div>
+    <div class="eyebrow">Living reference · the table first, each section when its module arrives</div>
     <h1>Conventions</h1>
     <p class="deck">
       The handful of arbitrary-but-binding choices this course makes about direction, order,
@@ -61,6 +61,47 @@
       genuinely open, this page says why we chose as we did, because a convention you
       understand is one you can debug.
     </p>
+  </div>
+
+  <div class="recap" id="at-a-glance">
+    <h2>The page in one table</h2>
+    <p>
+      Every binding choice on this page, one line each, linked to the section that argues it. The
+      last column is the module that settled it: read that section when you reach that module, and
+      treat the line as law from then on.
+    </p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Topic</th><th>Convention</th><th>Module</th></tr></thead>
+        <tbody>
+          <tr><td><strong><a href="#world">World</a></strong></td><td>Right-handed, Y-up, −Z forward</td><td class="mono">2</td></tr>
+          <tr><td><strong><a href="#ndc">Clip / NDC</a></strong></td><td>Left-handed, +Y up, <code>z ∈ [0,1]</code> — fixed by SDL_GPU</td><td class="mono">2</td></tr>
+          <tr><td><strong><a href="#flip">Handedness flip</a></strong></td><td>Inside the projection matrix (the <code>−1</code> in the bottom row)</td><td class="mono">2</td></tr>
+          <tr><td><strong><a href="#ndc">Viewport / UV</a></strong></td><td>Top-left origin, +Y down</td><td class="mono">2</td></tr>
+          <tr><td><strong><a href="#matrices">Matrices</a></strong></td><td>Column vectors <code>v' = M·v</code>, stored column-major</td><td class="mono">2</td></tr>
+          <tr><td><strong><a href="#depth">Depth</a></strong></td><td>Smaller is nearer; clear to 1.0; compare <code>&lt;</code> strictly (<code>LESS</code>); store device depth, <code>f32</code> by default</td><td class="mono">3</td></tr>
+          <tr><td><strong><a href="#winding">Winding</a></strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td><td class="mono">3</td></tr>
+          <tr><td><strong><a href="#units">Units</a></strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td><td class="mono">1</td></tr>
+          <tr><td><strong><a href="#euler">Euler angles</a></strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#quat">Quaternions</a></strong></td><td><code>{w, v}</code>, <code>w</code> first, <code>w = cos(θ/2)</code>; rotate by <code>q v q*</code>; <code>q·p</code> means “do <code>p</code>, then <code>q</code>”</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#slerp">Interpolating rotations</a></strong></td><td>Every blend takes <code>nearest(a, b)</code> first; <code>nlerp</code> under 73.5° of arc</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#skinning">Skinning</a></strong></td><td><code>model_from_joint(posed) · joint_from_model(bind)</code>, exactly <code>I</code> at the bind pose; a parent's index is below its child's</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#clips">Clips</a></strong></td><td>A function from time to pose, with no state; per-channel tracks with absolute times</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#audio">Audio</a></strong></td><td>One runtime format: interleaved 32-bit float in [−1, 1] at the device's rate; lengths in frames</td><td class="mono">7</td></tr>
+          <tr><td><strong><a href="#simulation">The frame</a></strong></td><td>Events → clock → input → N fixed steps → render; render interpolates the last two states</td><td class="mono">1</td></tr>
+          <tr><td><strong><a href="#bodies">Bodies</a></strong></td><td>Position and velocity in world space; forces accumulate and are cleared after the step</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#rotating">Inertia</a></strong></td><td>The one quantity kept in body axes; into the world by <code>R I Rᵀ</code></td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#collision">Collision axis</a></strong></td><td><code>collide(a, b)</code> points from <code>a</code> toward <code>b</code>; depth &gt; 0 is penetration</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#distance">Distance and casts</a></strong></td><td>GJK, EPA and <code>collide</code> point first-to-second; a cast's <code>surface_normal</code> points obstacle-to-mover — the one exception</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#contacts">Contacts</a></strong></td><td>At most four points per manifold, each with a feature <code>contact_id</code></td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#solver">Solver</a></strong></td><td>Integrate velocities → solve → integrate positions; <code>+J</code> on <code>b</code>, <code>−J</code> on <code>a</code>; clamp the accumulated impulse</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#joints">Joints</a></strong></td><td>A Jacobian row and two bounds, <code>C ≥ 0</code> satisfied; joints before contacts in every sweep</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#ragdolls">Ragdolls</a></strong></td><td><code>q = swing · twist</code>, twist first, about the bone; every body has exactly one owner</td><td class="mono">8</td></tr>
+          <tr><td><strong><a href="#character">Character</a></strong></td><td>Not a rigid body: a massless capsule, walkable where <code>normal.y ≥ cos(max_slope)</code>, moved after the physics step</td><td class="mono">8</td></tr>
+          <tr><td><strong>Axis colours</strong></td><td>x/y/z = red/green/blue, always</td><td class="mono">0</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <details class="toc" open>
@@ -3600,7 +3641,7 @@
               <code>off</code>, so out of the box this engine's bodies do not tumble.</td>
           <td>Integrated explicitly it is 8.1's determinant in the last place this engine integrates
               explicitly &mdash; <strong>3.3&nbsp;&times;&nbsp;10&sup1;&sup1;</strong> of drift at
-              30&nbsp;Hz. Bullet and PhysX both ship it off. Turn it on for the bodies whose tumbling
+              30&nbsp;Hz. PhysX ships it off; Bullet has shipped the implicit form on since 2.83. Turn it on for the bodies whose tumbling
               the player will look at.</td>
         </tr>
       </tbody>
@@ -4259,21 +4300,10 @@
 
   <div class="recap">
     <h2>The whole page in one table</h2>
-    <div class="tbl-scroll">
-      <table>
-        <tbody>
-          <tr><td><strong>World</strong></td><td>Right-handed, Y-up, −Z forward</td></tr>
-          <tr><td><strong>Clip / NDC</strong></td><td>Left-handed, +Y up, <code>z ∈ [0,1]</code> — fixed by SDL_GPU</td></tr>
-          <tr><td><strong>Handedness flip</strong></td><td>Inside the projection matrix (the <code>−1</code> in the bottom row)</td></tr>
-          <tr><td><strong>Viewport / UV</strong></td><td>Top-left origin, +Y down</td></tr>
-          <tr><td><strong>Matrices</strong></td><td>Column vectors <code>v' = M·v</code>, stored column-major</td></tr>
-          <tr><td><strong>Winding</strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td></tr>
-          <tr><td><strong>Units</strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td></tr>
-          <tr><td><strong>Euler angles</strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td></tr>
-          <tr><td><strong>Axis colours</strong></td><td>x/y/z = red/green/blue, always</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <p>
+      It is <a href="#at-a-glance">at the top of the page</a>, one line per decision, each linked to
+      the section that argues it.
+    </p>
     <p>
       Naming, header layout, and ownership rules live in the
       <a href="cpp-style.html">C++ Style Guide</a>. The maths itself accumulates in the
