@@ -36,6 +36,13 @@ WHAT IT CHECKS
  10. index.html's <meta name="description"> states the same lesson count the
      table does.
  11. Each published lesson page's own "Time: ~ N hours" matches its index row.
+ 12. shared/course.js's lesson map (the one its cross-reference links use) names
+     exactly the published lessons, each with its file. `--write-lesson-map`
+     regenerates it from the index.
+ 13. Every "N.M §X" reference in a lesson or living page resolves to a heading
+     of lesson N.M numbered X — printed, or the h2's number plus the h3's
+     ordinal where Module 2's headings print none. course.js turns these into
+     links under the same rule, so a stale number is a link to the wrong place.
 
 CHECK 8 WAS ADDED BY LESSON 7.4, AND STATE.md ASKED FOR IT BY NAME. That file's
 own note beside the list reads: "check-curriculum.py verifies the INDEX against
@@ -60,6 +67,7 @@ USAGE
 -----
     python3 docs/_template/check-curriculum.py            # report everything
     python3 docs/_template/check-curriculum.py --quiet    # only failures
+    python3 docs/_template/check-curriculum.py --write-lesson-map   # after a lesson lands
 
 Exit codes: 0 = everything agrees, 1 = disagreement found, 2 = error.
 """
@@ -76,6 +84,7 @@ DOCS = Path(__file__).parent.parent
 INDEX = DOCS / "index.html"
 LESSONS = DOCS / "lessons"
 STATE = DOCS.parent / "STATE.md"
+COURSE_JS = DOCS / "shared" / "course.js"
 
 # One lesson row. The table is hand-written on one line per row, which is what
 # makes a line-oriented regex the right tool here rather than an HTML parser:
@@ -620,9 +629,102 @@ def check_state_header(report: "Report") -> None:
         )
 
 
+MAP_RE = re.compile(r"/\* LESSON-MAP:BEGIN \*/(?P<body>.*?)/\* LESSON-MAP:END \*/", re.S)
+MAP_ENTRY_RE = re.compile(r'"(?P<id>[0-9]+\.[0-9]+[a-z]?)": "(?P<file>[^"]+)"')
+
+
+def published_files(ordered: list[Lesson]) -> dict[str, str]:
+    return {row.lesson_id: row.href.split("/")[-1]
+            for row in ordered if row.published and row.href}
+
+
+def write_lesson_map(ordered: list[Lesson]) -> int:
+    """Regenerate course.js's lesson map from the index. Returns the entry count."""
+    js = COURSE_JS.read_text(encoding="utf-8")
+    m = MAP_RE.search(js)
+    if not m:
+        raise SystemExit("error: no LESSON-MAP markers in shared/course.js")
+    files = published_files(ordered)
+    body = "\n" + ",\n".join(f'    "{lid}": "{name}"' for lid, name in files.items()) + "\n  "
+    COURSE_JS.write_text(js[:m.start("body")] + body + js[m.end("body"):], encoding="utf-8")
+    return len(files)
+
+
+def check_lesson_map(ordered: list[Lesson], report: Report) -> None:
+    js = COURSE_JS.read_text(encoding="utf-8")
+    m = MAP_RE.search(js)
+    if not m:
+        report.fail("lesson map", "no LESSON-MAP markers in shared/course.js")
+        return
+    have = {e.group("id"): e.group("file") for e in MAP_ENTRY_RE.finditer(m.group("body"))}
+    want = published_files(ordered)
+    if have == want:
+        report.ok(f"course.js lesson map names all {len(want)} published lessons")
+        return
+    for lid in sorted(set(want) - set(have)):
+        report.fail("lesson map", f"{lid} missing - run with --write-lesson-map")
+    for lid in sorted(set(have) - set(want)):
+        report.fail("lesson map", f"{lid} is not a published lesson")
+    for lid in sorted(k for k in set(have) & set(want) if have[k] != want[k]):
+        report.fail("lesson map", f"{lid} -> {have[lid]}, but the index says {want[lid]}")
+
+
+XREF_RE = re.compile(r"\b(?P<id>\d\.\d{1,2}[a-z]?)(?:\u2019s|'s)?\s*\u00a7\s*(?P<sec>\d+[a-z]?(?:\.\d+)?)")
+HEADING_RE = re.compile(r"<h(?P<lvl>[23])\b[^>]*>(?P<inner>.*?)</h(?P=lvl)>", re.S)
+LEADING_NUMBER_RE = re.compile(r"^(\d+[a-z]?(?:\.\d+)*)\.?(?:\s|$)")
+
+
+def heading_numbers(page: str) -> set[str]:
+    """The section numbers a page answers to, by course.js's rule: the printed
+    number (a `.num` span, or a leading "6.2 "), else the h2's number plus the
+    h3's ordinal. textContent semantics - tags vanish without adding spaces."""
+    import html as htmlmod
+    numbers: set[str] = set()
+    current, ordinal = None, 0
+    for h in HEADING_RE.finditer(page):
+        inner = h.group("inner")
+        num = re.search(r'<span class="num">(.*?)</span>', inner, re.S)
+        text = htmlmod.unescape(re.sub(r"<[^>]+>", "", num.group(1) if num else inner)).lstrip()
+        lead = LEADING_NUMBER_RE.match(text)
+        n = lead.group(1) if lead else None
+        if h.group("lvl") == "2":
+            current, ordinal = n, 0
+        else:
+            ordinal += 1
+            if not n and current:
+                n = f"{current}.{ordinal}"
+        if n:
+            numbers.add(n)
+    return numbers
+
+
+def check_cross_references(ordered: list[Lesson], report: Report) -> None:
+    import html as htmlmod
+    pages = {row.lesson_id: DOCS / row.href for row in ordered if row.published and row.href}
+    numbers = {lid: heading_numbers(p.read_text(encoding="utf-8")) for lid, p in pages.items()}
+    sources = list(pages.values()) + [DOCS / "index.html", DOCS / "conventions.html",
+                                      DOCS / "math-toolbox.html"]
+    count = 0
+    for src in sources:
+        page = re.sub(r"<(pre|code|svg|script|style|h[1-4])\b.*?</\1>", " ",
+                      src.read_text(encoding="utf-8"), flags=re.S)
+        text = htmlmod.unescape(re.sub(r"<[^>]+>", "", page))
+        for m in XREF_RE.finditer(text):
+            if m.group("id") not in pages:
+                continue            # an unpublished lesson is not linked either
+            count += 1
+            if m.group("sec") not in numbers[m.group("id")]:
+                report.fail("cross-reference",
+                            f"{src.name}: {m.group(0)!r} names a section lesson "
+                            f"{m.group('id')} does not have")
+    report.ok(f"{count} section cross-references resolve")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quiet", action="store_true", help="print failures only")
+    parser.add_argument("--write-lesson-map", action="store_true",
+                        help="regenerate shared/course.js's lesson map from the index, then check")
     args = parser.parse_args()
 
     if not INDEX.exists():
@@ -645,6 +747,10 @@ def main() -> int:
     check_state_manifest(report)
     check_state_completed(report)
     check_state_header(report)
+    if args.write_lesson_map:
+        print(f"  wrote  course.js lesson map: {write_lesson_map(ordered)} lessons")
+    check_lesson_map(ordered, report)
+    check_cross_references(ordered, report)
 
     if report.failures:
         print(f"\n{len(report.failures)} problem(s):")

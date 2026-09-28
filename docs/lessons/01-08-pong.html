@@ -2178,7 +2178,7 @@ void award_point(state&amp; s, bool to_left)
     // The ball did not travel to the centre — it *appeared* there. Interpolating
     // between last step's position (off the edge of the court) and this one would
     // draw a ball streaking across the whole screen at a speed it never had.
-    // Lesson 1.4 §5.4; the loop reads this flag and snaps instead.
+    // Lesson 1.4 §4.4; the loop reads this flag and snaps instead.
     s.teleported = true;
 
     if (s.left_score &gt;= court::winning_score || s.right_score &gt;= court::winning_score)
@@ -2918,7 +2918,7 @@ int main(int argc, char* argv[])
             // the centre after a point has no meaningful "in between", and
             // lerping to it would draw a streak across the court at a speed the
             // ball never had. Snapping the history forward makes this frame's
-            // lerp a no-op. Lesson 1.4 §5.4.
+            // lerp a no-op. Lesson 1.4 §4.4.
             if (current.teleported) { previous = current; }
         }
 
@@ -3320,7 +3320,7 @@ cmake --build build</code></pre>
             Interpolating across a teleport. <code>previous</code> holds the ball just off the edge
             of the court, <code>current</code> holds it at the centre, and the renderer dutifully
             draws a point <code>alpha</code> of the way between two positions that were never
-            connected by motion. Lesson 1.4 §5.4.
+            connected by motion. Lesson 1.4 §4.4.
           </dd>
           <dt>Fix</dt>
           <dd>

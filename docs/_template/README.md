@@ -221,6 +221,23 @@ Inline SVG, authored by hand. Nothing else.
   Enlarge layer draws them at 9 px or more on a narrow one. (Until 2026-09-27 `.bleed` was a
   `max-width` inside a narrower parent and widened nothing; 8.5's labels were 3.8 px on a phone.)
 
+### Cross-references are links
+
+Write another lesson's section as **`N.M §X`** (or `N.M's §X`) and `course.js` makes it a link
+to that section; nothing to author. Two rules make it work:
+
+- **The number is the heading's printed number** (`6.2 The interface`, or the `.num` span),
+  and where a heading prints none — Module 2's `<h3>`s — it is the `<h2>`'s number plus the
+  `<h3>`'s ordinal (`§3.5` is the fifth sub-section of section 3). Renumbering a section
+  breaks every reference to it, so `check-curriculum.py` check 13 resolves all of them.
+- **`N.M §X` always means lesson N.M.** A Conventions or Toolbox section is `Conventions
+  §9b` — 7.2 once wrote "Lesson 7.1 §9b of the Conventions page", which would have linked
+  to lesson 7.1.
+
+The lesson map the links use lives in `shared/course.js` between `LESSON-MAP` markers;
+`python3 docs/_template/check-curriculum.py --write-lesson-map` regenerates it when a lesson
+lands, and check 12 fails until you do.
+
 ### Class vocabulary
 
 | Class | Use |

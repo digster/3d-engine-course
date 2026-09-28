@@ -243,7 +243,7 @@ void award_point(state& s, bool to_left)
     // The ball did not travel to the centre — it *appeared* there. Interpolating
     // between last step's position (off the edge of the court) and this one would
     // draw a ball streaking across the whole screen at a speed it never had.
-    // Lesson 1.4 §5.4; the loop reads this flag and snaps instead.
+    // Lesson 1.4 §4.4; the loop reads this flag and snaps instead.
     s.teleported = true;
 
     if (s.left_score >= court::winning_score || s.right_score >= court::winning_score)

@@ -296,6 +296,196 @@
     setAll(wantOpen, false);
   }
 
+  /* ---- Cross-references: "8.10 §6" becomes a link ---------------------------
+     About 220 sentences send the reader to another lesson's section ("8.4
+     §3.2's argument"), and until 2026-09-27 every one was plain text. Two
+     halves, and both work without touching a page:
+
+     1. Every numbered heading gains an anchor, id="sec-N". Headings number
+        themselves in two styles: Modules 3 onward print the number ("6.2 The
+        interface"), Module 2 prints only a title and means "the second h3 of
+        section 6". The number is the printed one when there is one, and the
+        h2's number plus the h3's ordinal otherwise — the rule the references
+        were written against. check-curriculum.py checks every reference
+        resolves under the same rule.
+     2. The text "N.M §X" (optionally "N.M's §X") outside code, links and
+        diagrams becomes <a class="xref"> to that lesson's #sec-X.
+
+     The map from lesson id to file is generated from the index by
+     `check-curriculum.py --write-lesson-map`, which also fails when the two
+     disagree. Without this script the text simply stays text. */
+  var LESSONS = {/* LESSON-MAP:BEGIN */
+    "0.1": "00-01-what-is-an-engine.html",
+    "0.2": "00-02-how-this-course-works.html",
+    "0.3": "00-03-toolchain.html",
+    "0.4": "00-04-cmake-from-zero.html",
+    "0.5": "00-05-first-window.html",
+    "0.6": "00-06-headers-and-debugger.html",
+    "1.1": "01-01-events-properly.html",
+    "1.2": "01-02-input-state-vs-events.html",
+    "1.3": "01-03-delta-time.html",
+    "1.4": "01-04-fixed-timestep.html",
+    "1.5": "01-05-framebuffer.html",
+    "1.6": "01-06-colour.html",
+    "1.7": "01-07-vectors-2d.html",
+    "1.8": "01-08-pong.html",
+    "2.1": "02-01-lines.html",
+    "2.2": "02-02-triangle-edge-functions.html",
+    "2.3": "02-03-barycentric.html",
+    "2.4": "02-04-attribute-interpolation.html",
+    "2.5": "02-05-matrices.html",
+    "2.6": "02-06-mat4.html",
+    "2.7": "02-07-homogeneous.html",
+    "2.8": "02-08-space-chain.html",
+    "2.9": "02-09-view-matrix.html",
+    "2.10": "02-10-perspective.html",
+    "2.11": "02-11-viewport.html",
+    "2.12": "02-12-wireframe-mesh.html",
+    "3.1": "03-01-z-buffer.html",
+    "3.2": "03-02-perspective-correct.html",
+    "3.3": "03-03-near-plane-clipping.html",
+    "3.4": "03-04-back-face-culling.html",
+    "3.5": "03-05-obj-loader.html",
+    "3.6": "03-06-normals-and-lambert.html",
+    "3.7": "03-07-specular-blinn-phong.html",
+    "3.8": "03-08-shading-models.html",
+    "3.9": "03-09-textures.html",
+    "3.10": "03-10-profiling-capstone.html",
+    "4.1": "04-01-how-gpus-work.html",
+    "4.2": "04-02-sdl-gpu-model.html",
+    "4.3": "04-03-shader-toolchain.html",
+    "4.4": "04-04-first-triangle.html",
+    "4.5": "04-05-vertex-buffers.html",
+    "4.6": "04-06-uniforms.html",
+    "4.7": "04-07-textures-and-depth.html",
+    "4.8": "04-08-porting-the-scene.html",
+    "4.9": "04-09-renderdoc.html",
+    "5.1": "05-01-the-refactor.html",
+    "5.2": "05-02-platform-layer.html",
+    "5.3": "05-03-logging-and-errors.html",
+    "5.4": "05-04-handles.html",
+    "5.5": "05-05-asset-system.html",
+    "5.6": "05-06-data-oriented-design.html",
+    "5.7": "05-07-ecs-storage.html",
+    "5.8": "05-08-ecs-runtime.html",
+    "5.9": "05-09-transform-hierarchy.html",
+    "5.10": "05-10-input-mapping.html",
+    "5.11": "05-11-imgui-debug-draw.html",
+    "5.12": "05-12-checkpoint-game.html",
+    "6.1": "06-01-linear-and-srgb.html",
+    "6.2": "06-02-what-a-brdf-is.html",
+    "6.3": "06-03-microfacet-theory.html",
+    "6.4": "06-04-cook-torrance.html",
+    "6.5": "06-05-material-system.html",
+    "6.6": "06-06-gltf.html",
+    "6.7": "06-07-normal-mapping.html",
+    "6.8": "06-08-shadow-mapping.html",
+    "6.9": "06-09-cascaded-shadows.html",
+    "6.10": "06-10-mipmaps.html",
+    "6.11": "06-11-transparency.html",
+    "6.12": "06-12-hdr-tonemapping.html",
+    "6.13": "06-13-bloom-post-stack.html",
+    "6.14": "06-14-antialiasing.html",
+    "6.15": "06-15-skybox-ibl.html",
+    "6.16": "06-16-frustum-culling.html",
+    "6.17": "06-17-frame-graph.html",
+    "6.18": "06-18-text-overlay.html",
+    "7.1": "07-01-euler-angles.html",
+    "7.2": "07-02-axis-angle.html",
+    "7.3": "07-03-complex-numbers.html",
+    "7.4": "07-04-quaternions.html",
+    "7.5": "07-05-slerp.html",
+    "7.6": "07-06-skeletal-animation.html",
+    "7.7": "07-07-sampling-blending.html",
+    "7.8": "07-08-audio.html",
+    "8.1": "08-01-integrators.html",
+    "8.2": "08-02-forces-and-bodies.html",
+    "8.3": "08-03-angular-dynamics.html",
+    "8.4": "08-04-collision-primitives.html",
+    "8.5": "08-05-gjk.html",
+    "8.6": "08-06-epa.html",
+    "8.7": "08-07-contact-manifolds.html",
+    "8.8": "08-08-broadphase.html",
+    "8.9": "08-09-impulse-response.html",
+    "8.10": "08-10-sequential-impulses.html",
+    "8.11": "08-11-constraints-and-joints.html",
+    "8.12": "08-12-ragdolls.html",
+    "8.13": "08-13-character-controller.html"
+  /* LESSON-MAP:END */};
+
+  function headingNumber(h) {
+    var num = h.querySelector(".num");
+    var text = (num ? num.textContent : h.textContent).replace(/^\s+/, "");
+    var m = /^(\d+[a-z]?(?:\.\d+)*)\.?(?:\s|$)/.exec(text);
+    return m ? m[1] : null;
+  }
+
+  function anchorSections() {
+    var current = null, ordinal = 0;
+    var heads = document.querySelectorAll("h2, h3");
+    for (var i = 0; i < heads.length; i++) {
+      var h = heads[i], n = headingNumber(h);
+      if (h.tagName === "H2") { current = n; ordinal = 0; }
+      else { ordinal += 1; if (!n && current) { n = current + "." + ordinal; } }
+      if (n && !document.getElementById("sec-" + n)) {
+        var a = document.createElement("span");
+        a.id = "sec-" + n;
+        a.className = "sec-anchor";
+        h.insertBefore(a, h.firstChild);
+      }
+    }
+  }
+
+  var XREF = /\b(\d\.\d{1,2}b?)((?:’s|'s)?\s*§\s*)(\d+[a-z]?(?:\.\d+)?)/g;
+  var XREF_ONE = new RegExp(XREF.source);
+  var SKIP = /^(A|PRE|CODE|SCRIPT|STYLE|TEXTAREA|BUTTON|H1|H2|H3|H4|svg|SVG)$/;
+
+  function linkCrossReferences() {
+    var prefix = /\/lessons\/[^\/]*$/.test(location.pathname) ? "" : "lessons/";
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        if (!XREF_ONE.test(node.nodeValue)) { return NodeFilter.FILTER_SKIP; }
+        for (var p = node.parentNode; p && p !== document.body; p = p.parentNode) {
+          if (SKIP.test(p.nodeName) || p.namespaceURI === "http://www.w3.org/2000/svg") {
+            return NodeFilter.FILTER_SKIP;
+          }
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var found = [];
+    while (walker.nextNode()) { found.push(walker.currentNode); }
+    found.forEach(function (node) {
+      var text = node.nodeValue, last = 0, frag = document.createDocumentFragment(), m;
+      XREF.lastIndex = 0;
+      while ((m = XREF.exec(text)) !== null) {
+        var file = LESSONS[m[1]];
+        if (!file) { continue; }                       // an unpublished lesson stays text
+        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        var link = document.createElement("a");
+        link.className = "xref";
+        link.href = prefix + file + "#sec-" + m[3];
+        link.textContent = m[0];
+        frag.appendChild(link);
+        last = m.index + m[0].length;
+      }
+      if (last === 0) { return; }
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  anchorSections();
+  linkCrossReferences();
+  // The anchors are created by this script, and KaTeX (async) reflows the page
+  // after it runs, so land on a #sec- target explicitly once everything is in.
+  window.addEventListener("load", function () {
+    if (/^#sec-/.test(location.hash)) {
+      var target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (target) { target.scrollIntoView(); }
+    }
+  });
+
   /* ---- Figure widths: legible labels at every screen size ------------------
      A diagram is authored in a viewBox a few hundred units wide, with labels
      sized for that width (.xs is 9.5 units). CSS alone scales it to the text
