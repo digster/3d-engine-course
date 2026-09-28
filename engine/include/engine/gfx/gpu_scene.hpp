@@ -587,7 +587,8 @@ private:
     /// 6.8. A 1x1 sampled depth texture holding 1.0 — "nothing occludes". Its
     /// contents come from a render pass that clears it and draws nothing, which
     /// is the only way to write a depth texture at all: `SDL_UploadToGPUTexture`
-    /// cannot target one.
+    /// cannot target one. A ONE-LAYER ARRAY since the fix after 6.17b, because
+    /// slot 2 has been declared `Texture2DArray` since 6.9 (see `create`).
     gpu_texture far_depth_;
 
     /// 6.15's identity fallbacks — a black cube and a black table. Both are

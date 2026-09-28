@@ -48,6 +48,24 @@ decisions:
            Renders correctly on Metal here; ⚠ VERIFY under MTL_DEBUG_LAYER=1 and the
            Vulkan validation layers. One-line fix (create_depth_array(..., 1 layer));
            posed as Exercise 6.17b.5.
+           FIXED 2026-09-28 (own commit). Reproduced first: under MTL_DEBUG_LAYER=1
+           Metal reports "incorrect type of texture (MTLTextureType2D) bound at Texture
+           binding at index 2 (expect MTLTextureType2DArray) for shadow_map[0]" —
+           twelve times in verify_617b. far_depth_ is now create_depth_array(..., 1
+           layer); zero reports, 40/40, and all 26 Module 6–7 harnesses unchanged but
+           for timing. gpu_scene.cpp's 6.17b comment ("Metal tolerates the mismatch")
+           was wrong and is corrected; 6.17b's page tells the story in §10.8 and
+           Exercise 5 is now the wide-spot case (item 6).
+        5. FOUND WHILE FIXING 2, OPEN: the frame graph creates a pooled depth texture
+           with layers == 1 as a plain 2D texture (frame_graph.cpp,
+           `r.desc.layers > 1 ? create_depth_array : create_depth`), so a sun shadow
+           map POOLED by the graph hits the same mismatch — verify_617's pool frame
+           reports it twice under validation. Its home is frame_graph.cpp, last listed
+           by 6.18; not in the four fixes asked for.
+        6. OPEN: a spot wider than k_max_spot_shadow_angle (80°). The GPU calls the ring
+           beyond the map lit; the CPU clamps to the edge texel — and shadow.cpp's
+           comment says that clamp only touches points the cone has zeroed, true only
+           up to 80°. Now Exercise 6.17b.5.
         3. 6.8's HARNESS DOES NOT BUILD AT HEAD: scratch/verify_68.cpp fails in
            engine/math/quat.hpp (a mat3 assigned to a quat), and it, 6.9's and 6.16's
            include <engine/gfx/bounds.hpp>, which 8.4 moved to engine/math/.

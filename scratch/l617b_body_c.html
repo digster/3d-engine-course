@@ -293,7 +293,14 @@ StructuredBuffer&lt;LocalLight&gt; local_lights : register(t8, space2);</code></
         <em>identity elements</em> for the case where the caller has no lamps or no shadows: a zeroed
         one-record light buffer, a one-layer depth array and a one-cube depth cube array, both cleared
         to the far plane at creation (seven empty render passes, once). 6.15 established the pattern for
-        its environment maps; the caller never has to know the shader has these slots.</li>
+        its environment maps; the caller never has to know the shader has these slots. And they are
+        created with the <em>types their slots declare</em>, which 6.8's own fallback for the sun's
+        slot turned out not to be: it was a plain 2D texture in the slot 6.9 re-declared
+        <code>Texture2DArray</code>. It rendered correctly, and Metal's validation layer
+        (<code>MTL_DEBUG_LAYER=1</code>) reported it on every draw that used it — twelve times in this
+        lesson's harness. The first version of this page said Metal tolerated it and set it as an
+        exercise; run under the validation layer, it did not, and it is now a one-layer array like
+        the other two.</li>
     <li><strong>The frame-constant samplers are bound together</strong>, now eight of them, in
         <code>bind_fragment_samplers</code>, and the storage buffer at slot 0 in
         <code>bind_local_lights</code>, which records a <code>bind_storage</code> event in 4.9's frame

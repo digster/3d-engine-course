@@ -1769,6 +1769,13 @@ measurement that disagreed with a claim, and several by an instrument that was i
   not the caller, writes the count, so length and contents cannot disagree. Every member a
   `float4`, matrices as rows.
 
+- **"The platform tolerates it" is a claim, and the validation layer is the instrument.** 6.17b's
+  gpu_scene.cpp said Metal tolerated 6.8's 2D fallback in a `Texture2DArray` slot, because it
+  rendered correctly. `MTL_DEBUG_LAYER=1` reported it on every draw that used it ("incorrect type
+  of texture (MTLTextureType2D) … expect MTLTextureType2DArray"). Correct output is not the same as
+  a correct binding; run the GPU harnesses under the validation layer before writing either. The
+  same run found a sibling: the frame graph pools a one-layer depth texture as plain 2D.
+
 - **A difference in a figure can be real — check before captioning either way.** The demo's spot
   pool came out bluer with shadows on than off. It looked like the quantiser flipping a borderline
   colour; the renders said otherwise (R and G down four codes, B unchanged): the bulb's shadow of

@@ -319,8 +319,17 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
     // A device that supports no sampled depth format at all gets no shadows,
     // which is a capability report rather than an error — the same shape
     // `ensure_depth` already has for a device with no depth format.
+    //
+    // THE FALLBACK HAS THE TYPE ITS SLOT DECLARES. 6.8 made it a plain 2D
+    // texture, which matched its `Texture2D` slot; 6.9's cascades re-declared the
+    // slot `Texture2DArray` and nobody changed the fallback. It rendered
+    // correctly — a 1x1 array and a 1x1 texture answer 1.0 alike — and Metal's API
+    // validation (`MTL_DEBUG_LAYER=1`) reported it on every draw that used it:
+    // "incorrect type of texture (MTLTextureType2D) bound at Texture binding at
+    // index 2 (expect MTLTextureType2DArray)", twelve times in verify_617b. A
+    // one-layer array is the declared type, and the clear below targets layer 0.
     if (shadow_fmt != SDL_GPU_TEXTUREFORMAT_INVALID
-        && far_depth_.create_depth(dev, shadow_fmt, 1, 1, "far 1x1 (no shadow)", true)
+        && far_depth_.create_depth_array(dev, shadow_fmt, 1, 1, 1, "far 1x1 (no shadow)", true)
         && shadow_sampler_.create_comparison(dev, "shadow comparison (fallback)"))
     {
         SDL_GPUDepthStencilTargetInfo dsi{};
@@ -341,11 +350,11 @@ bool gpu_scene_renderer::create(const gpu_device& dev,
         // cube of six. Every layer is cleared by its own empty pass, because a
         // pass targets ONE layer; seven empty passes, once, at startup.
         //
-        // (The 6.8 fallback above is a plain 2D texture sitting in a slot 6.9
-        // re-declared as `Texture2DArray`. Metal tolerates the mismatch and the
-        // harnesses have drawn through it since; these two are created with the
-        // declared types from the start, and Exercise 6.17b.5 asks what the
-        // older one would cost to correct.)
+        // (The 6.8 fallback above was, until the fix after this lesson, a plain
+        // 2D texture in that `Texture2DArray` slot. This comment first said "Metal
+        // tolerates the mismatch": it renders correctly, and Metal's validation
+        // layer reports it on every draw. These two had the declared types from
+        // the start.)
         const bool local_ok =
             far_spot_.create_depth_array(dev, shadow_fmt, 1, 1, 1, "far 1x1 (no spot shadows)", true)
             && far_point_.create_depth_cube_array(dev, shadow_fmt, 1, 1,
