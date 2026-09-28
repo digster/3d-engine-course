@@ -10,10 +10,12 @@ place and never regenerate: a lesson updates `updated:`, `completed:`, `capabili
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-27 (after Lesson 8.13 — 96 of 107 lessons; Module 8 complete. Since then
-         the post-Module 8 review and its fixes: 195 missing listings restored, claims about
-         other engines corrected, CI on four toolchains, figures legible, cross-references
-         linked, and this file split. Per-lesson history: state/updated.md.)
+updated: 2026-09-27 (after Lesson 8.13 — 96 of 113 lessons published. Since then the
+         post-Module 8 review and its fixes: 195 missing listings restored, claims about other
+         engines corrected, CI on four toolchains, figures legible, cross-references linked,
+         this file split, 113 exercise solutions (which corrected fifteen published claims),
+         hours measured (~772 h), and four lessons inserted with Module 9 re-planned at 13.
+         Per-lesson history: state/updated.md.)
 
 conventions:   (headline of each key, verbatim; full text: state/conventions.md;
                the reader's version: docs/conventions.html)
@@ -100,7 +102,7 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to SCANLINE — what a CPU rasterizer should do, and what every measurement before 4.1 was taken against.
   measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A FEATURE'S.
 
-curriculum: 107 lessons, ~724 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+curriculum: 113 lessons, ~772 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
   (reshapes and their reasons: state/curriculum.md)
 
@@ -210,6 +212,8 @@ completed:
   - 8.9  Impulse Response: Restitution and Friction
   - 8.13 A Character Controller
   ===> MODULE 8 COMPLETE — 13 lessons, ~72 h. Physics built, none imported. <===
+  (2026-09-27: 6.17b, 6.18b, 7.7b and 8.14 were inserted into Modules 6–8 and are not
+   written yet, so those modules read "in progress" in the index until they land.)
 
 capabilities:   (the first headline of each lesson, verbatim; every entry in full:
                  state/capabilities.md)
@@ -296,8 +300,8 @@ decisions:   (headlines; full: state/decisions.md)
   builder-byte-count: 46 OF 47 BUILDERS PRINT A CHARACTER COUNT AND CALL IT BYTES.
 
 files:   (paths only, from `git ls-files`; commentary: state/files.md)
-  /: .gitignore, ARCHITECTURE.md, CLAUDE.md, CMakeLists.txt, LEARNINGS.md, LICENSE, PROMPT.md,
-     README.md, STATE.md
+  /: .gitignore, ARCHITECTURE.md, CHANGELOG.md, CLAUDE.md, CMakeLists.txt, LEARNINGS.md, LICENSE,
+     PROMPT.md, README.md, STATE.md
   .github/workflows/: ci.yml
   assets/: cube.bin, cube.gltf, cube.obj, quirks.obj, shapes.glb, torus.obj, twisted.obj,
      uv_grid.png
@@ -310,7 +314,8 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   demos/common/: demo_scene.cpp, demo_scene.hpp, pong.cpp, pong.hpp
   docs/: conventions.html, cpp-style.html, index.html, math-toolbox.html
   docs/_template/: README.md, apply-shared.py, check-builders.py, check-continuity.py,
-     check-curriculum.py, check-page.js, continuity-known.txt, lesson-template.html
+     check-curriculum.py, check-page.js, continuity-known.txt, estimate-hours.py,
+     lesson-template.html
   docs/_template/tests/: test_checkers.py
   docs/lessons/: 00-01-what-is-an-engine.html, 00-02-how-this-course-works.html,
      00-03-toolchain.html, 00-04-cmake-from-zero.html, 00-05-first-window.html,
@@ -396,69 +401,51 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      uniform_probe.frag.hlsl, uniform_probe.vert.hlsl
   memory/: 59 dated session logs (memory/YYYY-MM-DD.md)
   scratch/: 1579 authoring sources, force-added (builders, fragments, figures, pins, harnesses)
+  learnings/: foundations.md, module-2.md … module-8.md, tooling.md
   state/: updated.md, conventions.md, curriculum.md, completed.md, capabilities.md, decisions.md, files.md, roadmap.md, README.md
 
 roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLINE.
          (the whole of it: state/roadmap.md)
 
-next: 9.1 — Multithreading: Data Hazards and Safety Rules
+next: 6.17b — Local Lights: Point and Spot, and Their Shadows
 
-      MODULE 9 OPENS. Module 8 is complete: 13 lessons, ~72 h. The next
-      lesson is the first of Professional Polish & Capstone, and the first in
-      the course to run code on more than one thread.
+      THE FIRST OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27), then
+      6.18b (compute: GPU particles), 7.7b (glTF skins and clips), 8.14 (scene
+      queries and a static mesh collider), then Module 9 from 9.1 Hardening the
+      Build. Written in that order because Module 9's editor, gizmos and
+      capstone lean on all four. Modules 6–8 are "in progress" until they land.
 
-      WHAT 9.1 INHERITS, AND MUST NOT RE-DERIVE:
-        - Every system so far is single-threaded and several are already
-          partitioned: 8.10's ISLANDS are independent by construction (no
-          contact or joint crosses one), 8.8's grid emits pairs per cell, and
-          8.13's casts are pure functions of a const world. Those are the
-          natural first jobs, and the lesson should say so rather than invent
-          a toy.
-        - The one shared mutable thing the engine already has is 7.8's audio
-          voice table, behind one mutex, touched from SDL's audio thread. 9.1's
-          data-hazard vocabulary should be shown on THAT before anything new.
-        - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
-        - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
-        - Timing a threaded harness adds an instrument problem the course has
-          not met yet: the OS scheduler. Minima over repetitions, as since 8.8,
-          and say how many cores the machine has.
+      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17. In short:
+      additive only (later goldens, harnesses and renders byte-identical); carry
+      every hunk to shared files (engine/CMakeLists.txt, engine.hpp,
+      demos/CMakeLists.txt) into every LATER pin that lists them whole; re-point
+      build_617.py's next and build_618.py's prev; update 6.18's module tree;
+      `check-continuity.py` must stay 0/0. Hours from estimate-hours.py.
 
-      OPEN DEFECTS, STILL DELIBERATELY NOT FIXED:
-        1. `epa_config::max_iterations = 32` gives a sphere-sphere normal
-           4.2602 deg off (8.6's knob). Did not bite in 8.12 or 8.13.
-        2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER, a chest off an arm, or a
-           hanging body; SUB-STEPPING is the measured answer three times.
-           Module 9 prices it with contacts in the loop.
-        3. NO SPECULATIVE CONTACTS (8.10 §6). The CHARACTER no longer tunnels
-           (8.13 §9 casts); every other body still does, at 8.10's odds.
-        4. The M^-1 J^T hoist into contact_constraint (8.11 ex. 3).
-        5. Joints-before-contacts is argued, not measured (8.11 ex. 4).
-        6. SLEEP THRESHOLDS ARE PER-BODY SPEEDS tuned on crates (8.12 ex. 3).
-        7. `check-builders.py --figures` fails 511 because build/swarm511.ppm
-           (a gitignored render capture) is gone, and the known 45/46/48.
-           PLAIN check-builders is green: 511's truncated fig7 SVG was restored
-           from its own page on 2026-09-24.
-        8. NEW: THE CONTROLLER IS NOT PUSHED BY ANYTHING (one-way coupling; the
-           proxy is kinematic) and puts no weight on what it stands on. Both
-           are 8.13 ex. 4, with the proxy's contact impulses as the input.
-        9. NEW: THE CONTROLLER'S CULL IS LINEAR IN THE SCENE (847 us at
-           10,000 bodies). A region query on 8.8's uniform_grid is 8.13 ex. 5,
-           and a natural Module 9 profiling case study.
-       10. NEW: GJK's certified lower bound is loose by about the obstacle's
-           SIZE times its angular error; a 60 m ramp as one box leaves the
-           character up to 2.3 mm above its skin. An authoring rule, not a fix.
+      WHAT 6.17b INHERITS, AND MUST NOT RE-DERIVE:
+        - 6.8's derived bias and PCF; 6.9's cascades; Exercise 6.8.3's sketch
+          already names what a PERSPECTIVE shadow map breaks (depth_range is
+          per-fragment, the lookup divides by w, near must be positive).
+        - 6.15's cube textures and face-direction table (and its handedness
+          note), 6.16's frustum_of (it works on any clip matrix — a light's
+          too), 6.17's frame graph (each shadow map is a declared pass), 6.12's
+          light units (a directional light is an irradiance; a point light is
+          an intensity, and inverse-square is where the units finally bite).
+        - MANY LIGHTS ARE A STORAGE BUFFER, NOT A PUSH: 4.6 §4.6 (corrected)
+          — SDL copies pushes into 32 KiB blocks and Vulkan binds only 4 KiB
+          of one, so a light list sized by the scene cannot be a uniform push.
+        - ⚠ VERIFY before writing the point-light path: whether SDL_GPU can
+          sample a DEPTH cube texture through a comparison sampler on all three
+          backends, or whether the portable answer is distance written to an
+          R32_FLOAT cube and compared in the shader. SDL_gpu.h and each
+          backend's texture-creation code, at release-3.4.12.
 
-      CARRY FORWARD from 8.13:
-        - EIGHT MEASUREMENTS REFUSED THEIR SECTION'S CLAIM (the 18th to 25th in
-          Module 8). Four of them were the engine's OWN first drafts caught by
-          their controls: stepping a cast from the upper bound, clipping the
-          remainder, a tangent-plane snap, and a recover() that let the solver
-          move the character. Keep writing the first draft as a control arm.
-        - INSTRUMENT ERRORS THIS TIME: reading a quaternion's angle with
-          2 atan2(v, w) across a full turn (q = -1 reads +-360); a "last
-          second" window that caught the tail of an approach and read it as
-          jitter; an x-reach initialised to 0 when the quantity is negative;
-          a GJK re-run WITHOUT the cast's warm start used to explain the
-          cast's own stop; and a gap measured with the same loose GJK as the
-          thing it was judging (the reference now runs GJK at 1e-7).
+      PENDING CODE CORRECTIONS THIS LESSON SHOULD CARRY (decisions:
+      pending-code-corrections): the two partial-bind comments in
+      engine/src/gfx/gpu_scene.cpp — this lesson will list gpu_scene.cpp whole.
+      frustum.cpp's near-plane comment waits for whichever lesson lists it.
+
+      The standing defect list and the notes for Module 9's multithreading
+      lesson (now 9.3) are in state/roadmap.md, under "CARRIED FROM STATE.md".
+
 ```

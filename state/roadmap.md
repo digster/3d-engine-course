@@ -795,4 +795,99 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
          4 of 12 sleep at 8.10's crate-tuned thresholds (5 crushed, 3 thin
          limbs turning); angular damping 1/s -> 7 of 12. 12.4 us a falling
          ragdoll a step (solve 8.1), 81 per ms.
+
+  CARRIED FROM STATE.md `next:` ON 2026-09-27, VERBATIM. When the post-Module 8
+  review inserted 6.17b, 6.18b, 7.7b and 8.14 and re-planned Module 9, `next:`
+  moved to 6.17b. The notes below were written for "9.1 — Multithreading",
+  which is now 9.3; they apply to it unchanged, and their OPEN DEFECTS list is
+  the engine's standing defect list.
+
+  next: 9.1 — Multithreading: Data Hazards and Safety Rules
+
+        MODULE 9 OPENS. Module 8 is complete: 13 lessons, ~72 h. The next
+        lesson is the first of Professional Polish & Capstone, and the first in
+        the course to run code on more than one thread.
+
+        WHAT 9.1 INHERITS, AND MUST NOT RE-DERIVE:
+          - Every system so far is single-threaded and several are already
+            partitioned: 8.10's ISLANDS are independent by construction (no
+            contact or joint crosses one), 8.8's grid emits pairs per cell, and
+            8.13's casts are pure functions of a const world. Those are the
+            natural first jobs, and the lesson should say so rather than invent
+            a toy.
+          - The one shared mutable thing the engine already has is 7.8's audio
+            voice table, behind one mutex, touched from SDL's audio thread. 9.1's
+            data-hazard vocabulary should be shown on THAT before anything new.
+          - A LESSON PAGE ENDS AT FURTHER READING. STATE.md is the sole resume key.
+          - `scratch/build_verify_NN.sh` REFUSES an unoptimised libengine.a.
+          - Timing a threaded harness adds an instrument problem the course has
+            not met yet: the OS scheduler. Minima over repetitions, as since 8.8,
+            and say how many cores the machine has.
+
+        OPEN DEFECTS, STILL DELIBERATELY NOT FIXED:
+          1. `epa_config::max_iterations = 32` gives a sphere-sphere normal
+             4.2602 deg off (8.6's knob). Did not bite in 8.12 or 8.13.
+          2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER, a chest off an arm, or a
+             hanging body; SUB-STEPPING is the measured answer three times.
+             Module 9 prices it with contacts in the loop.
+          3. NO SPECULATIVE CONTACTS (8.10 §6). The CHARACTER no longer tunnels
+             (8.13 §9 casts); every other body still does, at 8.10's odds.
+          4. The M^-1 J^T hoist into contact_constraint (8.11 ex. 3).
+          5. Joints-before-contacts is argued, not measured (8.11 ex. 4).
+          6. SLEEP THRESHOLDS ARE PER-BODY SPEEDS tuned on crates (8.12 ex. 3).
+          7. `check-builders.py --figures` fails 511 because build/swarm511.ppm
+             (a gitignored render capture) is gone, and the known 45/46/48.
+             PLAIN check-builders is green: 511's truncated fig7 SVG was restored
+             from its own page on 2026-09-24.
+          8. NEW: THE CONTROLLER IS NOT PUSHED BY ANYTHING (one-way coupling; the
+             proxy is kinematic) and puts no weight on what it stands on. Both
+             are 8.13 ex. 4, with the proxy's contact impulses as the input.
+          9. NEW: THE CONTROLLER'S CULL IS LINEAR IN THE SCENE (847 us at
+             10,000 bodies). A region query on 8.8's uniform_grid is 8.13 ex. 5,
+             and a natural Module 9 profiling case study.
+         10. NEW: GJK's certified lower bound is loose by about the obstacle's
+             SIZE times its angular error; a 60 m ramp as one box leaves the
+             character up to 2.3 mm above its skin. An authoring rule, not a fix.
+
+        CARRY FORWARD from 8.13:
+          - EIGHT MEASUREMENTS REFUSED THEIR SECTION'S CLAIM (the 18th to 25th in
+            Module 8). Four of them were the engine's OWN first drafts caught by
+            their controls: stepping a cast from the upper bound, clipping the
+            remainder, a tangent-plane snap, and a recover() that let the solver
+            move the character. Keep writing the first draft as a control arm.
+          - INSTRUMENT ERRORS THIS TIME: reading a quaternion's angle with
+            2 atan2(v, w) across a full turn (q = -1 reads +-360); a "last
+            second" window that caught the tail of an approach and read it as
+            jitter; an x-reach initialised to 0 when the quantity is negative;
+            a GJK re-run WITHOUT the cast's warm start used to explain the
+            cast's own stop; and a gap measured with the same loose GJK as the
+            thing it was judging (the reference now runs GJK at 1e-7).
+
+  RE-PLANNED 2026-09-27 (post-Module 8 review, at the user's direction):
+    INSERTED, as b-lessons in their home modules (planned rows, not written):
+      6.17b Local Lights: Point and Spot, and Their Shadows        ~10 h
+      6.18b Compute Shaders: GPU Particles                          ~10 h
+      7.7b  Animated Characters from glTF: Skins and Clips          ~8 h
+      8.14  Scene Queries and a Static Mesh Collider                ~11 h
+    MODULE 9, 13 lessons (was 11; nothing in it was published):
+      9.1  Hardening the Build: Exceptions Off, Warnings as Errors  (new)
+      9.2  A Testing Strategy for Engine Code                       (was 9.9)
+      9.3  Multithreading: Data Hazards and Safety Rules            (was 9.1)
+      9.4  A Job System                                             (was 9.2)
+      9.5  CPU and GPU Profiling: Case Studies                      (was 9.3)
+      9.6  Custom Allocators: Arena and Pool                        (was 9.4)
+      9.7  Serialization and a Scene Format                         (was 9.5)
+      9.8  Hot Reloading                                            (was 9.6)
+      9.9  The Editor: Hierarchy and Inspector                      (was 9.7)
+      9.10 Transform Gizmos                                         (was 9.8)
+      9.11 Packaging and Distribution                   (was 9.10, first half)
+      9.12 Documentation: Public API Reference and a Docs Site  (9.10, second)
+      9.13 Capstone: A Complete Game on the Public API              (was 9.11)
+    WHY THIS ORDER: hardening first because §4's no-exceptions/no-RTTI rule was
+    never enforced by a flag and CI v1 stops short of -Werror and shaders;
+    testing second so the rest of Module 9 is written against tests; the four
+    insertions before all of it because the editor, gizmos and capstone lean
+    on them. Totals: 10 modules, 113 lessons, ~772 h (planned rows keep
+    placeholder hours; each is measured by estimate-hours.py when it lands).
+    Insertion protocol: docs/_template/README.md §17.
 ```

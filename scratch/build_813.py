@@ -272,7 +272,7 @@ TAIL = """
     </a>
     <a class="next-l" href="../index.html">
       <span class="dir">Next →</span>
-      <span class="ttl">9.1 — Multithreading: Data Hazards and Safety Rules (not yet written)</span>
+      <span class="ttl">8.14 — Scene Queries and a Static Mesh Collider (not yet written)</span>
     </a>
   </nav>
 

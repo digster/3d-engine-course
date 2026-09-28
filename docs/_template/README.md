@@ -700,3 +700,41 @@ order, so any file it adds must also appear in every later full listing of
 `engine/CMakeLists.txt`, `engine/include/engine/engine.hpp` and
 `demos/CMakeLists.txt`. R1 enforces that: a later listing without the insertion's
 lines leaves the replay short of HEAD.
+
+## 17. Inserting a lesson into a published sequence
+
+Four lessons were inserted after the post-Module 8 review — 6.17b, 6.18b, 7.7b and 8.14 — and
+CLAUDE.md §9 has always allowed it ("insertions are numbered `2.4b`; approved lessons are never
+renumbered"). What it did not say is that an insertion is written *after* the lessons that follow
+it in course order, so git history and course order disagree, and every page after it was built
+from a tree that never contained it. This section is how an insertion keeps
+`check-continuity.py` exact.
+
+1. **Design it additively.** The insertion adds; it does not change behaviour later lessons
+   measured. Every later harness, golden and render must come out byte-identical (timing lines
+   aside). If a later lesson's number moves, the insertion has changed something it should not
+   have — fix the insertion, not the later page.
+2. **Prefer the files that already exist.** New engine files force the build lists to change,
+   and those lists are listed whole on many later pages.
+3. **When shared files must change, carry the hunk forward.** For each file the insertion
+   changes that a *later* lesson lists whole — typically `engine/CMakeLists.txt`,
+   `engine/include/engine/engine.hpp` and `demos/CMakeLists.txt` — apply the insertion's hunk to
+   every later pin of that file (`git apply --check` first, then `git apply`), so a student who
+   copies listings in course order keeps the insertion's lines. Expect roughly twenty later pins
+   for a Module 6 insertion, a dozen for 7.7b, none for 8.14. The last pin must equal HEAD (R1).
+4. **Re-point the neighbours.** The previous lesson's `next` and the following lesson's `prev`
+   are hard-coded in their builders (for 6.17b: `build_617.py` and `build_618.py`); rebuild both.
+   `check-curriculum.py` checks the chain once the new page is published.
+5. **Update the module's project tree** (the annotated tree at the end of the module's last
+   lesson: 6.18, 7.8, 8.13 §18) with any new file, and regenerate the lesson map
+   (`check-curriculum.py --write-lesson-map`).
+6. **Bookkeeping.** The row already exists (planned); publish it with the hours
+   `estimate-hours.py` gives, a filename `NN-NNb-slug.html`, the STATE.md completed roll in course
+   order, and `next:`. Carry any `pending-code-corrections` (STATE.md `decisions:`) for files the
+   insertion lists whole — those corrections were waiting for exactly this.
+
+`check-continuity.py` orders lessons by the index, b-lessons included, so steps 3–5 are enforced:
+a missing hunk shows as R1 (HEAD differs from the last listing) or as a later lesson that no
+longer reproduces the tree. Git history is not the course: after an insertion, a checkout of a
+later lesson's commit lacks the insertion's code, and the pages are the canonical per-lesson
+state.

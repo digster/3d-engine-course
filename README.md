@@ -7,10 +7,12 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** 96 of 107 lessons published — **Modules 0–8 are complete**: orientation and
-toolchain, the loop and the pixel, two modules of software rasterizer, SDL_GPU, the refactor into
-an engine with an ECS, advanced rendering, rotation and animation and audio, and physics. **Module
-9 — Professional Polish & Capstone** is next. The [course index](docs/index.html) has the module
+**Status:** 96 of 113 lessons published. **Modules 0–5 are complete** — orientation and toolchain,
+the loop and the pixel, two modules of software rasterizer, SDL_GPU, and the refactor into an
+engine with an ECS — and Modules 6–8 (advanced rendering; rotation, animation and audio; physics)
+are complete except for four lessons inserted after the post-Module 8 review: local lights (6.17b),
+compute shaders (6.18b), glTF skins and clips (7.7b) and scene queries (8.14). Those come next,
+then **Module 9 — Professional Polish & Capstone**. The [course index](docs/index.html) has the module
 map, every lesson and its hours; what each lesson added to the engine, and the keys and flags
 that show it, is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -38,7 +40,7 @@ moving to the GPU is an *API change, not a math change*.
   appears.
 - **No assumed background** in graphics, linear algebra, or calculus. All math is built from
   zero, geometrically — intuition first, then derivation, then formula, then code.
-- Budget roughly **700–850 hours** across ~107 lessons. The figures are measured from each lesson's
+- Budget roughly **700–850 hours** across ~113 lessons. The figures are measured from each lesson's
   reading, the code its commit adds, and its exercises — [`docs/_template/estimate-hours.py`](docs/_template/estimate-hours.py) says how.
 
 **Exit profile:** implement techniques straight from papers, debug GPU work in RenderDoc, reason
@@ -162,13 +164,15 @@ collects every key and flag in one place.
 ## What gets built
 
 By the final module the engine has: a documented public C++ API; an SDL_GPU forward **PBR**
-renderer with shadow-mapped lights, HDR, tonemapping and a post-processing stack; skybox and
-image-based lighting; an asset pipeline (images, OBJ, glTF); a handle-based resource system; a
-from-scratch **ECS** with transform hierarchy; skeletal animation; a **rigid-body physics
-engine** (angular dynamics, GJK/EPA, persistent manifolds, a warm-started sequential-impulse
-solver, joints and ragdolls) and a **character controller**; 3D audio; symplectic integration; input mapping; an **ImGui editor** with hierarchy, inspector and gizmos;
-profiling hooks; serialization and a scene format; hot reload; a job system; and a **capstone
-game built solely against the public API**.
+renderer with shadow-mapped directional, point and spot lights, HDR, tonemapping and a
+post-processing stack; skybox and image-based lighting; a compute-shader path (GPU particles); an
+asset pipeline (images, OBJ, glTF — including skinned, animated characters); a handle-based
+resource system; a from-scratch **ECS** with transform hierarchy; skeletal animation; a
+**rigid-body physics engine** (angular dynamics, GJK/EPA, persistent manifolds, a warm-started
+sequential-impulse solver, joints and ragdolls, scene queries and a static mesh collider) and a
+**character controller**; 3D audio; symplectic integration; input mapping; an **ImGui editor**
+with hierarchy, inspector and gizmos; profiling hooks; serialization and a scene format; hot
+reload; a job system; and a **capstone game built solely against the public API**.
 
 Hand-rolled on purpose: the math library (no GLM), rasterizer, OBJ parser, ECS, renderer, asset
 system, allocators, and the whole physics engine — collision, the solver, joints, ragdolls
