@@ -354,11 +354,17 @@
   <div class="callout note">
     <p>
       <strong>What happens if you copy it.</strong> With <code>r₂ + r₃</code> under a 0-to-<em>w</em>
-      depth range, the plane you get sits roughly a <em>far</em> distance behind the camera instead
-      of a <em>near</em> distance in front of it. Nothing within the entire visible range is ever
-      rejected by the near plane. The culler still works — it just never culls anything behind you,
-      which is the single most common thing there is to cull. The symptom is "frustum culling
-      doesn't seem to help much", which is not a symptom anyone debugs.
+      depth range the condition becomes <em>z</em><sub>clip</sub> + <em>w</em><sub>clip</sub> ≥ 0,
+      and for our projection that holds at distances <em>d</em> ≥ <em>nf</em>/(2<em>f</em> −
+      <em>n</em>) — for <em>n</em> = 0.3 and <em>f</em> = 100, 0.150: a plane parallel to the
+      real one at <em>half</em> the near distance. Everything behind you is still rejected; what
+      is no longer rejected is the sliver between 0.15 and 0.3, which the near-plane clipper
+      removes anyway. So the picture does not change at all, and that is the danger: a wrong
+      plane with no symptom. Only a check against a fact — the eye must be exactly
+      <em>near</em> behind the near plane — can see it.
+      <em>Corrected after Module 8: this box used to say the plane lands a far distance behind the
+      camera and never culls anything behind you, which the algebra above does not support.
+      Exercise 6.16.2 walks through it.</em>
     </p>
   </div>
 

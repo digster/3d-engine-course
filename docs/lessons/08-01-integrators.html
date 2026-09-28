@@ -6732,6 +6732,16 @@ sh scratch/build_verify_81.sh</code></pre>
         there is no ellipse. Watch the <em>shape</em>, not the size. If you overshoot, <kbd>R</kbd>
         resets.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the ellipse ends at <code>h*w</code> = 2, and the panel's <code>max_stable_step</code> is
+        2/ω for the same reason. The invariant v² + ω²x² − hω²·xv is a quadratic form whose
+        cross term grows with h; it describes an ellipse while (hω²)² &lt; 4ω², that is hω &lt; 2,
+        degenerates into a pair of lines at hω = 2, and becomes a hyperbola beyond — and a
+        trajectory on a hyperbola runs away. That is the narrowing and slanting you see: the
+        ellipse is not growing, it is being sheared flat. The harness bisected the boundary at
+        0.3182939 s against the predicted 2/(2π) = 0.3183099 s for the 1 Hz spring, and your
+        hands should land within a key-press of 2.
+      </p>
     </li>
     <li>
       <p>
@@ -6746,6 +6756,15 @@ sh scratch/build_verify_81.sh</code></pre>
         <code>ω²[u + (1−u)² + u(1−u)] = ω²[u + 1 − 2u + u² + u − u²] = ω²</code>. If your
         <code>xv</code> coefficient comes out as anything but <code>−hω²</code>, check the sign of the
         cross term you got from squaring <code>x'</code>.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> with u = h²ω², the three coefficients come from v′², ω²x′² and −hω²x′v′. For
+        <code>v²</code>: 1 + ω²h² − h²ω² = 1. For <code>x²</code>: the hint's collapse to ω². For
+        <code>xv</code>: −2hω² from v′², +2hω²(1 − u) from ω²x′², and −hω²[(1 − u) − u] from the
+        cross term, which sum to −2hω² + 2hω² − 2hω²u − hω² + 2hω²u = −hω². All three match, so
+        the quantity is conserved exactly by the discrete map — not approximately, and not only for
+        small h. It is also why the orbit is exactly closed: a conserved positive-definite
+        quadratic form confines the state to one ellipse forever.
       </p>
     </li>
     <li>
@@ -6763,6 +6782,18 @@ sh scratch/build_verify_81.sh</code></pre>
         body in flight, then work out why from the fact that <code>h</code> is baked into the stored
         history rather than into a velocity.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> in the state (x<sub>n</sub>, x<sub>n−1</sub>) the step is the matrix [[2 − u, −1], [1, 0]]:
+        determinant exactly 1, so it is symplectic, and trace 2 − u, so it is stable for
+        |2 − u| &lt; 2, which is hω &lt; 2 — the same limit as semi-implicit Euler. Its order
+        measures 2. The weakness is that the velocity lives inside the stored difference
+        x<sub>n</sub> − x<sub>n−1</sub>, measured over the <em>old</em> step: halve h and the next
+        step still advances by one old displacement in half the time, so every body in flight
+        suddenly moves twice as fast. The standard repair scales the difference by
+        h<sub>new</sub>/h<sub>old</sub> ("time-corrected Verlet"). A fixed-timestep loop never
+        changes h, which is why Verlet is popular in exactly the engines that have one — and why
+        it is a trap in any that later decides to vary it.
+      </p>
     </li>
     <li>
       <p>
@@ -6775,6 +6806,16 @@ sh scratch/build_verify_81.sh</code></pre>
         steps, times <code>h</code> seconds each, so the time should go as <code>1/(hω²)</code> —
         a slope of −2 in <code>ω</code>. Stiffness hurts twice as fast as step size helps, which is
         the real reason a stiff spring is the dangerous case.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> sweep ω over a decade or two at fixed h, record the time for the explicit Euler energy to
+        double, and fit a line to log T against log ω: the slope should be −2, and it should
+        bend away from −2 as hω grows, because ln(1 + u) stops being u. The anchor from the
+        lesson: a 1 Hz spring at 60 Hz has u = 0.01097, so the energy doubles in
+        ln 2 / ln 1.01097 ≈ 63.5 steps, 1.06 s — the "×1.92 per second" figure. Double ω and the
+        time falls to a quarter. That quadratic dependence on stiffness, against a linear one on
+        step size, is why halving the step never keeps up with a spring someone made four times
+        stiffer.
       </p>
     </li>
     <li>
@@ -6789,6 +6830,17 @@ sh scratch/build_verify_81.sh</code></pre>
         than 1, so it is the backward-Euler disease in fifth-order clothing: it damps, very gently,
         forever. Now weigh that against four force evaluations per step, which in Module 8 means four
         broadphase queries. The interesting part of this exercise is the argument, not the code.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the numbers to argue with: for the 1 Hz spring at 60 Hz, u = 0.01097, so each step multiplies
+        the energy by 1 − u³/72 ≈ 1 − 1.8 × 10⁻⁸, which is 0.007% lost over a minute — damping no
+        player will ever see. Its stability limit is also better, hω &lt; 2√2 ≈ 2.83 against
+        semi-implicit Euler's 2, since |R(iθ)|² = 1 − θ⁶/72 + θ⁸/576 stays at or below 1 up to
+        θ² = 8. Against that: four force evaluations per step, and the order it buys assumes a
+        smooth right-hand side. A contact is not smooth — an impulse is a jump — so at every
+        collision RK4's fourth order collapses to first while its fourfold cost remains. Ship it
+        for orbits and springs; not for a rigid-body engine whose interesting moments are
+        exactly the non-smooth ones.
       </p>
     </li>
     <li>
@@ -6805,6 +6857,16 @@ sh scratch/build_verify_81.sh</code></pre>
         <code>hk</code> approaches 1. Then ask the design question the measurement raises: is an exact
         drag integrator worth a special case in the step, or is the honest answer that anything with
         <code>hk</code> near 1 is already outside what this loop should be asked to do?
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> for a body coasting under drag alone, the exact total distance is v₀/k. Applying the drag
+        first and then moving with the new velocity covers v₀h·e<sup>−kh</sup>/(1 − e<sup>−kh</sup>),
+        which is short by a factor that depends only on kh: 0.8% short at kh = 1/60 (k = 1 s⁻¹ at
+        60 Hz), 4.9% at kh = 0.1, 23% at 0.5, 42% at 1. Applying it after instead overshoots by the
+        mirror amount (+0.8%, +5.1%, +27%, +58%). So at 60 Hz with any plausible drag the order of
+        the calls is worth under a per cent, and the exact integral buys nothing a player can see;
+        at kh near 1 the error is gross either way — and the honest answer is that such a body is
+        stiff, and asking a 10 Hz step to resolve it is the mistake.
       </p>
     </li>
   </ol>

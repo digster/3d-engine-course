@@ -467,6 +467,19 @@ distinct red values: 1x = 166   4x = 184</code></pre>
         the crossover to land at a <em>higher</em> roughness than the sphere's.
       </p>
     </details>
+      <details><summary>Solution sketch</summary>
+      <p>
+        set §3.3's half-width equal to §3.4's turn per pixel and solve. For small α (= roughness²)
+        the half-width is 0.6436 r², so the crossover is r ≈ √((π/2)/(0.6436 R)) = √(2.44/R), with
+        <em>R</em> the tube's minor radius in pixels; bisecting the exact form gives 0.2468 at R =
+        40 (§3.4's sphere), 0.348 at 20, 0.400 at 15, 0.486 at 10 and 0.539 at 8. Measure
+        <em>R</em> from a <code>--shot</code> as half the tube's apparent thickness where it is
+        seen side-on, read the crossover off that curve, and set <code>--polish</code> a few
+        hundredths either side. The torus crosses over at a higher roughness than the sphere
+        because its minor radius is the small one: the normal makes its quarter turn across a few
+        pixels, so a lobe that the sphere resolves comfortably is already too narrow for the tube.
+      </p>
+    </details>
   </div>
 
   <div class="exercise">
@@ -482,6 +495,21 @@ distinct red values: 1x = 166   4x = 184</code></pre>
       and working out <em>why</em> not is the real exercise. (Start with what <code>ddx</code>
       actually computes across a 2×2 quad at a triangle edge.)
     </p>
+      <details><summary>Solution sketch</summary>
+      <p>
+        the rasterizer already has everything: the normal is an interpolated attribute, so its
+        screen-space derivatives come from the same plane equations <code>uv_gradients</code>
+        uses — differentiate <em>n</em>/<em>w</em> and 1/<em>w</em> and apply the quotient rule,
+        which is exact at the pixel centre. The GPU's <code>ddx</code> is not a derivative but a
+        <em>difference</em> across a 2×2 quad: a secant over one pixel instead of a tangent at a
+        point, shared by the pair of pixels it spans. That alone makes the two disagree wherever
+        the normal varies non-linearly across a pixel, which perspective guarantees. At triangle
+        edges it is worse: the quad's other pixels are helper lanes (Lesson 4.1), shading
+        positions <em>outside</em> the triangle by extrapolating its attributes, so the
+        difference is taken against a normal no surface has. Expect close agreement in triangle
+        interiors and the outliers on edges — and that is the answer to "why not exactly".
+      </p>
+    </details>
   </div>
 
   <div class="exercise">
@@ -496,12 +524,26 @@ distinct red values: 1x = 166   4x = 184</code></pre>
       <strong>Report honestly whether it was comfortable</strong> — and if it was not, you have found
       6.17's motivation a lesson early, which is worth more than the effect.
     </p>
+      <details><summary>Solution sketch</summary>
+      <p>
+        FXAA works on the final, <em>tonemapped and encoded</em> image, because its edge thresholds
+        are contrasts a viewer perceives; run on linear HDR it misses edges in the darks and
+        over-blurs the brights. So it must come after the tonemap, and that is where the stack
+        pushes back: if the tonemap writes straight to the swapchain, a stage after it needs the
+        tonemap to write to an intermediate instead, of a new format, and someone has to own that
+        target and order the two passes. If you had to edit the tonemap stage to add FXAA, the
+        stack is not composing stages — it is hard-coding a sequence, and that is 6.17's
+        motivation found a lesson early. The filter itself is Lottes's: luma from the encoded RGB,
+        local contrast against a threshold, edge direction from the luma gradient, a search along
+        the edge for its ends, and one blended sample.
+      </p>
+    </details>
   </div>
 
   <div class="exercise">
     <h3>10.4 — Measure MSAA's real cost <span class="tag">guided</span></h3>
     <p>
-      §6.4 claims 4× MSAA costs about 1.3× rather than 4×. Verify it on your own hardware: time the
+      §1 claims 4× MSAA costs about 1.3× rather than 4×. Verify it on your own hardware: time the
       scene pass at 1×, 2× and 4× with the profiling hooks from Lesson 3.10, and plot cost against
       sample count.
     </p>
@@ -510,6 +552,22 @@ distinct red values: 1x = 166   4x = 184</code></pre>
         The scaling depends on what your frame is limited by. A scene that is fragment-shading bound
         will scale close to 1×, because the shader count does not change; one that is bandwidth bound
         will scale much worse, because the target really is four times the size. Say which yours is.
+      </p>
+    </details>
+      <details><summary>Solution sketch</summary>
+      <p>
+        treat §1's 1.3× as a claim to test, not a result: this lesson never measured it. Shading
+        work stays nearly flat (one fragment-shader run per primitive per pixel, plus extra runs
+        only along edges), while the targets grow exactly as §6.4 counts — 3.96 MB of colour
+        becomes 15.84 MB. So the ratio you measure says what the frame is limited by. On a
+        tile-based GPU — Apple silicon, the machine this course was written on, and most mobile
+        parts — the samples can stay in on-chip tile memory and be resolved at the end of each
+        tile, so 4× the <em>memory</em> need not become 4× the <em>bandwidth</em>, provided the
+        multisample target's store op discards its samples after the resolve, as
+        <code>SDL_GPU_STOREOP_RESOLVE</code> does. On an immediate-mode desktop GPU the samples
+        go to memory (usually compressed), and the cost tracks bandwidth more closely. Time the
+        scene pass with vsync off and report the GPU as well as the ratio; the ratio alone is not
+        a fact about MSAA.
       </p>
     </details>
   </div>
@@ -526,6 +584,21 @@ distinct red values: 1x = 166   4x = 184</code></pre>
       Then consider what a better filter would need to know. (This is an open research area; Kaplanyan
       et al.'s "Filtering Distributions of Normals" is the place to start.)
     </p>
+      <details><summary>Solution sketch</summary>
+      <p>
+        take a mirror-like crease (α = 0.01) whose faces lean ±20° from the bisector, running
+        vertically so only <code>ddx</code> sees it. Across the quad the normal changes by
+        2 sin 20° = 0.684, so with the lesson's constants 2σ² = 0.684²/π ≈ 0.149 (under the 0.18
+        clamp) and α′² ≈ 0.149: one broad lobe centred on the <em>bisector</em>, peaking at
+        D = 1/(π·0.149) ≈ 2.1. Now light it so the half-vector is the bisector. The ground truth —
+        supersample the pixel, say 64 samples, each shaded with its own face's normal and the
+        unfiltered NDF — is almost exactly zero, because both real normals sit 20° from that
+        half-vector and each lobe is 0.37° wide. The filter has invented a highlight where none
+        exists, and removed the two real ones. Treating a two-spike distribution as one Gaussian
+        is the failure; a better filter needs more than a variance — the distribution's
+        <em>shape</em>, which is what the Kaplanyan et al. line of work stores.
+      </p>
+    </details>
   </div>
 
   <!-- =================================================================

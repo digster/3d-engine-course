@@ -5,6 +5,30 @@ a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in s
 
 ```text
 decisions:
+  pending-code-corrections: THREE ENGINE COMMENTS ARE WRONG (TWO IN gpu_scene.cpp,
+        ONE IN frustum.cpp), AND THE NEXT LESSON THAT LISTS EACH FILE WHOLE CORRECTS IT.
+        (Added 2026-09-27, while writing Exercise 6.8.4's solution.) Both six-slot
+        SDL_BindGPUFragmentSamplers calls in gpu_scene.cpp — in `render` and in the
+        instanced path — carry a comment saying a partial bind "REPLACES the range
+        it names", leaving slots outside it unbound. SDL release-3.4.12 says
+        otherwise: METAL_/VULKAN_/D3D12_BindFragmentSamplers each write only
+        firstSlot + i, and what DOES reset every binding is EndRenderPass (all
+        three backends SDL_zeroa their binding arrays; the debug layer asserts
+        "Missing fragment sampler binding!" at draw time). Binding all six
+        together stays correct and costs the same call, so no behaviour changes —
+        only the reason. The prose was corrected in place (6.8's pitfall row and
+        Exercise 6.8.4, 6.15's paragraph); the CODE comments follow
+        shipped-lesson-fixes, because changing HEAD without a page that lists the
+        file would break check-continuity R1. 6.17b (local lights) will touch
+        gpu_scene.cpp and is the natural carrier.
+        THE THIRD (added the same day, from Exercise 6.16.2): engine/src/gfx/
+        frustum.cpp's near-plane comment says copying OpenGL's row2 + row3 "lands
+        the near plane at the FAR plane's distance behind the camera, so nothing
+        within far units of the eye is ever culled". The algebra says the plane
+        lands at nf/(2f - n) = 0.150, half the near distance, IN FRONT; everything
+        behind is still culled and the picture does not change. The code (row2
+        alone) is right; only the comment's account of the wrong version is not.
+        Prose corrected in place (6.16 §3.2's callout and its pitfall entry).
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE
         CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER
         PAGE STAYS AN ARCHIVE OF WHAT SHIPPED. *** 8.10's tangent basis set the

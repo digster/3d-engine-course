@@ -54,6 +54,14 @@ to the list just below.
   confirm a claim have disproved it again and again, most of all in Module 8. *module-3: "Predict,
   then measure — and write the prediction down where it can be wrong", "The measurement is allowed
   to prove *you* wrong".*
+- **A measurement can be right and its explanation wrong** — 4.6 measured SDL's push crash
+  correctly and blamed a pool; the source (`build/_deps/sdl3-src`) showed a 32 KiB per-push
+  overrun. A partial sampler bind was said to unbind other slots from 6.8 onward; the source
+  says bindings are per slot and reset at pass end. Read the mechanism before naming it.
+  *module-4, module-6.*
+- **A hint is a claim, and nobody checks a claim until they have to use it** — writing 113
+  solution sketches found fifteen wrong statements in published hints and prose. Compute the
+  number before writing the sentence. *tooling.*
 - **A harness cannot check a claim about somebody else's engine** — cite the header or source
   line, never "every engine does X". *tooling.*
 
@@ -202,7 +210,7 @@ sub-headings, which are not repeated here.
 - Amdahl's law is an arithmetic check on your own work, not a slogan (Lesson 3.10)
 - An engine-wide default is a decision about the repository, not about renderers (Lesson 3.10)
 
-### [`learnings/module-4.md`](learnings/module-4.md) — learnings from its lessons (18)
+### [`learnings/module-4.md`](learnings/module-4.md) — learnings from its lessons (19)
 
 - I fell into 3.10's own pitfall within a day (Lesson 4.1)
 - Helper lanes are not waste, they are what derivatives cost (Lesson 4.1)
@@ -222,6 +230,7 @@ sub-headings, which are not repeated here.
 - Depth and texture facts, verified at SDL 3.4.12 (Lesson 4.7)
 - Scene-porting facts, verified at SDL 3.4.12 (Lesson 4.8)
 - Frame-debugging facts, verified at SDL 3.4.12 (Lesson 4.9)
+- A measurement can be right and its explanation wrong — read the source before naming a cause
 
 ### [`learnings/module-5.md`](learnings/module-5.md) — learnings from its lessons (23)
 
@@ -249,7 +258,7 @@ sub-headings, which are not repeated here.
 - The inverse of a product reverses, and the wrong order is not visibly wrong
 - Writing a lesson out of order needs two trees, and the delta is the finding
 
-### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (32)
+### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (33)
 
 - Colour pipeline facts (Lesson 6.1)
 - Course-infrastructure facts (docs/, Lesson 6.1)
@@ -283,6 +292,7 @@ sub-headings, which are not repeated here.
 - Return the quantity a caller would need to judge you
 - A tool that relocates a claim has not verified it
 - Figure numbers follow page order, and a moved label lands on the next obstacle
+- A rule inherited from a comment outlives the lesson that wrote it — the partial-bind "rule"
 
 ### [`learnings/module-7.md`](learnings/module-7.md) — learnings from its lessons (46)
 
@@ -398,7 +408,7 @@ sub-headings, which are not repeated here.
 - A quaternion's angle wraps at a full turn
 - A zero-byte generated file is a silent regression
 
-### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (14)
+### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (15)
 
 - A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
 - Two correct branches can leave a hole between them (docs tooling)
@@ -414,3 +424,4 @@ sub-headings, which are not repeated here.
 - A move script is code: it can break a build, and it can be non-portable
 - `GIT_INDEX_FILE` leaks into every child `git`, and `git reset` empties a staged index
 - A harness cannot check a claim about somebody else's engine
+- Writing an exercise's solution audits the lesson it belongs to

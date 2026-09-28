@@ -13426,6 +13426,18 @@ cmake --build build --config Debug
         worth more than the policy's current value. Report the crossover point if you can find
         one.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> alternating styles is the worst case for an unsorted
+        list — every draw changes pipeline, 60 binds — and the sort makes it 2. Time the thing
+        the binds actually cost, which is CPU time spent recording: wrap the draw loop in
+        <code>SDL_GetTicksNS</code>, turn vsync off, and take the minimum over many frames. Frame
+        time will not move, because the frame is not waiting on command recording. Watch for the
+        confound the sort brings with it: grouping by pipeline also reorders the draws in depth,
+        and front-to-back order is what lets the depth test reject hidden pixels early, so on a
+        fill-heavy scene the "sorted" frame can be slower for a reason that has nothing to do
+        with binds. That is why production sort keys pack the pipeline <em>and</em> a coarse
+        depth into one integer.
+      </p>
     </li>
     <li>
       <p>
@@ -13439,6 +13451,18 @@ cmake --build build --config Debug
         really about the milliseconds — it is about noticing that you have just built the first
         two steps of an asset pipeline: a source format that is convenient to author and a cooked
         format that is convenient to load. Module 9 formalises the distinction.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> call <code>save_obj</code> on the
+        <code>with_normals</code> result (it writes <code>vn</code> lines and
+        <code>v//vn</code> faces), load the saved file, and compare the two
+        <code>mesh_data</code>s field by field before timing anything — a cooked file that loads
+        different geometry is not a cache. Then predict before you measure: generating the
+        normals is a few thousand cross products, microseconds, while the cooked file hands the
+        parser a thousand or so extra lines of text floats, and parsing a float from text costs
+        far more than a cross product. Do not be surprised if the "cooked" load is
+        <em>slower</em>. That result is the real argument for Module 9's binary cooked format: a
+        cache is only a cache if reading it is cheaper than recomputing it.
       </p>
     </li>
     <li>
@@ -13455,6 +13479,19 @@ cmake --build build --config Debug
         can put a number on how much of the highlight it loses. Two pipelines sharing one vertex
         buffer is also the cleanest possible illustration of what a pipeline object <em>is</em>.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the Gouraud vertex shader needs the light, so push the
+        light block to the vertex stage as well; it outputs one colour, and its fragment shader
+        returns the interpolated colour. Same vertex buffer, same layout, two pipelines. Predict
+        the loss from geometry: neighbouring icosahedron vertices are arctan 2 ≈ 63.4° apart,
+        while an exponent-128 highlight falls to half at n·h = 0.5<sup>1/128</sup> ≈ 0.9946,
+        about 6° from its centre. The highlight is a tenth of a vertex spacing wide, so Gouraud has
+        two outcomes and both are wrong: no vertex inside the lobe, and the highlight vanishes;
+        a vertex inside it, and its peak is smeared across the five triangles that share that
+        vertex. Count pixels above a brightness threshold in each render while the object turns,
+        and the Gouraud count jumps between zero and a pentagon while the per-pixel count barely
+        moves.
+      </p>
     </li>
     <li>
       <p>
@@ -13469,6 +13506,17 @@ cmake --build build --config Debug
         live before you start. If you get the count down substantially, you have measured your
         hardware's sub-pixel precision from the outside, which is a genuinely satisfying thing to
         have done.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the rounding belongs at the point where a corner becomes
+        an integer, which should now be never: store the projected corner in fixed point (say
+        with <em>k</em> fractional bits), evaluate the edge functions at pixel centres in the same
+        fixed point, and keep the top-left rule exactly as Lesson 2.2 derived it. Then run the
+        comparison for k = 0, 2, 4, 6, 8. k = 0 is today's 42 and 60; if the disagreement falls to
+        near zero at some k and stays there, that k matches your hardware. Direct3D specifies 8
+        fractional bits (the 1/256 in §3.6), and Vulkan reports its value as
+        <code>subPixelPrecisionBits</code>, which must be at least 4. What is left after that is
+        the interpolation, not the coverage.
       </p>
     </li>
     <li>
@@ -13485,6 +13533,17 @@ cmake --build build --config Debug
         on exactly this shape. <code>pong.cpp</code> already has a 3×5 digit font if you want
         numbers before Module 6 gives you letters.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> clear the HUD framebuffer to alpha 0 each frame, draw the
+        HUD with alpha 255, and upload it to a 320 × 180 texture through a cycled transfer buffer
+        (4.5's streaming pattern). <code>ARGB8888</code> on a little-endian machine is B, G, R, A in
+        memory, so the texture format is <code>B8G8R8A8_UNORM</code>; the bytes are already
+        encoded, so do not let the sampler decode them a second time. Draw one full-screen
+        triangle after the scene with <code>SRC_ALPHA</code> /
+        <code>ONE_MINUS_SRC_ALPHA</code> blending and a <code>NEAREST</code> sampler, so the 4×
+        upscale stays crisp. Nothing about the scene pass changes; that is the point of a pass
+        drawn on top.
+      </p>
     </li>
     <li>
       <p>
@@ -13493,11 +13552,27 @@ cmake --build build --config Debug
         it on one side only. Predict the picture <em>before</em> you build, then look.
       </p>
       <p class="hint">
-        <strong>Hint:</strong> some of these produce nothing at all (winding), some produce an
-        upside-down scene (the y flip), and one produces a picture that is subtly, plausibly
-        wrong in a way you would ship (the matrix order, on a symmetric scene). Rank them by how
-        long you think each would survive code review. That ranking is the real content of this
-        exercise.
+        <strong>Hint:</strong> one of these produces nothing at all, some produce a picture that is
+        obviously wrong, and one produces a picture that is subtly, plausibly wrong in a way you
+        would ship (the matrix order, on a symmetric scene). Rank them by how long you think each
+        would survive code review. That ranking is the real content of this exercise.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the <strong>depth comparison</strong> is the blank
+        screen: with <code>GREATER</code> and a clear of 1, nothing ever passes. The
+        <strong>winding</strong> does not blank the scene: the floor is drawn
+        <code>two_sided</code> and does not care, and every closed object keeps its silhouette
+        but shows its far inside walls, because culling now removes the faces that face you.
+        The <strong>y flip</strong> turns the picture upside down — and a mirror reverses winding
+        too, so if the flip is in the matrix rather than after rasterization, the closed objects
+        also turn inside out. The <strong>matrix order</strong> is the survivor. Transposing a
+        symmetric matrix changes nothing, and the matrices a test scene is full of — identity, a
+        diagonal scale — are symmetric; a rotation's transpose is its inverse, so an object spins
+        the other way, which on a torus turning about its own axis cannot be seen at all. Only a
+        translation gives it away: it lands in the bottom row, feeds <em>w</em>, and the object
+        smears. So the ranking by survival is depth (seconds), y flip (seconds), winding
+        (minutes), and matrix order (until something moves off the origin) — the same shape of
+        failure as §3.5's normal matrix, which a scene of crates proves nothing about.
       </p>
     </li>
   </ol>

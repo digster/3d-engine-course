@@ -452,12 +452,14 @@ cmake --build build --config RelWithDebInfo</code></pre>
       exactly opposite values, that is the tell.
     </dd>
 
-    <dt>Culling works, but never rejects anything behind the camera.</dt>
+    <dt>The near plane is in the wrong place, and nothing on screen says so.</dt>
     <dd>
       <strong>Cause:</strong> the OpenGL near plane. You wrote <code>r₂ + r₃</code>, which is correct
-      for a <code>−w ≤ z ≤ w</code> depth range and wrong for SDL_GPU's <code>0 ≤ z ≤ w</code>.
+      for a <code>−w ≤ z ≤ w</code> depth range and wrong for SDL_GPU's <code>0 ≤ z ≤ w</code>: it
+      puts the plane at <em>nf</em>/(2<em>f</em> − <em>n</em>), about half the near distance, so
+      the culler keeps a sliver the clipper then removes and the picture never changes.
       <strong>Diagnosis:</strong> <code>signed_distance(near, eye)</code> must be <code>−near</code>.
-      If it is roughly <code>−far</code>, this is it.
+      If it is about <code>−near/2</code> (−0.150 for our camera), this is it.
     </dd>
 
     <dt>Objects pop out of view at the edge of the screen.</dt>
@@ -529,17 +531,51 @@ cmake --build build --config RelWithDebInfo</code></pre>
       eight are. So the two tests are identical in outcome and differ only by a factor of eight in
       dot products — which is the honest reason to prefer one: not that it is more correct, but that
       it does one eighth of the work for the same answer.</details>
+          <details><summary>Solution sketch</summary>The proof is the hint's sentence: the positive vertex maximises
+      <code>n · c</code> over the eight corners, so "it is outside" and "all eight are outside" are
+      the same statement. Predict the cost before timing it, because it is not simply 8×: the
+      eight-corner loop can stop at the first corner that is inside a plane, so for a box wholly
+      inside (25,859 of §5's 45,512 kept) it does one dot product per plane — the same count as the
+      positive vertex, minus the three selects that find it. It pays all eight only on the plane
+      that rejects a box, and partially on boxes that straddle. So the measured ratio depends on the
+      scene's mix of inside, straddling and rejected boxes, and a number well under 8× on §D's
+      boxes is the expected result, not a mistake.</details>
     </li>
     <li>
       <strong>6.16.2 — An OpenGL near plane.</strong> Change <code>k_near_z</code>'s extraction to
       <code>r₂ + r₃</code> and run §A. Which checks fail, and which still pass? Then predict, before
       running §H, what happens to the measured cull rate.
+          <details><summary>Solution sketch</summary>Solve it before running it. The OpenGL condition is
+      <em>z</em><sub>clip</sub> + <em>w</em><sub>clip</sub> ≥ 0; with <em>z</em><sub>clip</sub> =
+      (<em>f</em>/(<em>f</em> − <em>n</em>))(<em>d</em> − <em>n</em>) and
+      <em>w</em><sub>clip</sub> = <em>d</em>, it holds for <em>d</em> ≥ <em>nf</em>/(2<em>f</em>
+      − <em>n</em>) = 0.150 — half the near distance, in front of the camera. So exactly one of
+      §A's checks fails: the eye's signed distance to the near plane reads −0.150 instead of −0.300.
+      The apex still lies on all four side planes (they do not involve row 2), the target is still
+      inside all six, opposite planes are still not negatives, and every normal is still unit
+      length. The cull rate does not move: the only objects the new plane keeps are ones between
+      0.15 and 0.3 metres from the eye, and §H's scenes have none. That is the lesson of the
+      exercise — the wrong plane is invisible to every picture and every rate, and only the check
+      against a fact finds it. (This lesson's §3.2 originally predicted a plane a <em>far</em>
+      distance behind the camera; working this exercise is what corrected it.)</details>
     </li>
     <li>
       <strong>6.16.3 — Reversed-Z and the far plane.</strong> §4 claims that <code>A + 1</code> does
       not cancel under a reversed-Z projection. Build one (swap near and far in
       <code>perspective</code>), extract its planes, and measure the far plane's error. Does the
       claim hold? What happens to the <em>near</em> plane's error?
+          <details><summary>Solution sketch</summary>Under reversed-Z the far plane is <em>z</em><sub>clip</sub> ≥ 0 — row
+      2 on its own, like our near plane now — and the near plane becomes
+      <em>w</em> − <em>z</em> ≥ 0, a difference of two rows. The far plane's position no longer
+      comes from dividing by <em>A</em> + 1: with near and far swapped the corresponding term is
+      <em>n</em>/(<em>f</em> − <em>n</em>) ≈ 0.003, a small number computed directly rather than
+      as a difference of two nearly equal ones, so §4's 332× amplification is gone. A float32
+      model of the matrix builder, which reproduces §4's −99.998217257 exactly for the ordinary
+      mapping, puts the reversed far plane at −99.999996905: an error of 3.1 × 10⁻⁶ instead of
+      1.8 × 10⁻³, about 580× smaller. The claim holds. And the near plane does not inherit the
+      problem: it is now r₃ − r₂, a difference, but of −1 and 0.003 — magnitudes that add rather
+      than cancel — so it stays exact to the last digit. Reversed-Z removes the cancellation from
+      both planes rather than moving it.</details>
     </li>
     <li>
       <strong>6.16.4 — Cull to the shadow frustum.</strong> Lesson 6.8 renders every object into the
@@ -547,6 +583,16 @@ cmake --build build --config RelWithDebInfo</code></pre>
       it unchanged. Wire it up and measure how many objects the shadow pass was drawing for nothing.
       <details><summary>Hint</summary>Careful: an object outside the <em>view</em> frustum may still
       cast a shadow into it. The correct volume is not the view frustum.</details>
+          <details><summary>Solution sketch</summary>The volume to cull against is the <em>light's</em> frustum — the
+      orthographic box <code>fit_directional</code> builds — because that is exactly the region
+      whose depth the shadow map records; an object inside it can cast into the view even when
+      the camera cannot see it, which is the hint's warning. Extract its planes with
+      <code>frustum_of(light_clip_from_world)</code> and cull the caster list against them. How
+      much it saves depends on how tightly the box is fitted: 6.8 fits it around the whole scene,
+      so on the demo it rejects almost nothing, and that null result is worth reporting with the
+      same care as §9's — then move an object far outside the box and confirm the count goes to 1.
+      The saving becomes real with 6.9's cascades, where each cascade's box covers a slice of the
+      view.</details>
     </li>
     <li>
       <strong>6.16.5 — Where does <code>collect_triangles</code> want the cull?</strong> Wiring the
@@ -555,23 +601,58 @@ cmake --build build --config RelWithDebInfo</code></pre>
       rectangle inside a 320×180 framebuffer, and the software rasterizer clips to the
       <em>framebuffer</em>. Construct a scene where those two facts combine to make a correct cull
       change the picture, and say which of the two behaviours is the bug.
+          <details><summary>Solution sketch</summary>Make an object that is inside the camera frustum but falls entirely
+      outside the 172×97 <em>viewport</em> rectangle inside the framebuffer — impossible, since
+      the viewport transform maps the frustum onto exactly that rectangle. So go the other way: an
+      object <em>outside</em> the frustum, just beyond a side plane, whose projected triangles land
+      outside the viewport but still inside the 320×180 framebuffer. Uncull'd, the software
+      rasterizer clips only to the framebuffer and draws it in the margin around the scene;
+      culled, it vanishes. The cull is right and the rasterizer is the bug: geometry outside the
+      frustum is outside the viewport by construction, and a rasterizer that draws there is
+      ignoring the viewport's scissor. The fix belongs in the rasterizer — clip to the viewport
+      rectangle — and then the cull becomes invisible, as a correct cull should be.</details>
     </li>
     <li>
       <strong>6.16.6 — A better sphere.</strong> Implement Welzl's algorithm for the minimal
       enclosing sphere of a mesh's vertices and use it instead of <code>bounding_sphere</code>. Does
       the pre-test now pay? Measure with §G, not with intuition.
+          <details><summary>Solution sketch</summary>Welzl's algorithm finds the minimal enclosing sphere in expected
+      linear time by recursing on a random order with up to four support points. It shrinks the
+      radius from the box's half-diagonal to the true minimum — for a sphere-like mesh, from √3
+      times the box's half-extent down to about 1× — which makes the pre-test's volume much
+      closer to the box's. Measure with §G's two scenes and expect the mostly-off-screen case to
+      improve (fewer boxes survive the sphere and get tested twice) and the mostly-on-screen case
+      not to, because there the pre-test is pure added work whatever its selectivity. §5.2's
+      condition for a cascade to pay — much cheaper <em>and</em> nearly as selective — may now be
+      met in one regime and still not in the other, and that split verdict is the answer.</details>
     </li>
     <li>
       <strong>6.16.7 — A hierarchy.</strong> §5 reports that 25,859 of 45,512 kept boxes were
       <em>wholly</em> inside. Build a two-level grid over the draw list, classify each cell, and
       accept whole cells on an <code>inside</code>. Predict the saving from that ratio before you
       measure it.
+          <details><summary>Solution sketch</summary>Predict from §5's ratio: 25,859 of 45,512 kept boxes, 57%, were wholly
+      inside. A cell classified <code>inside</code> accepts its boxes without testing them, so
+      the saving is bounded by that 57% of the kept boxes' tests, minus the cost of classifying
+      the cells, and it is only realised to the extent that inside boxes cluster in inside cells
+      — boxes near the frustum's edges share cells with outside ones and still get tested. Expect
+      a saving somewhat below the ratio, growing as the cells shrink until the per-cell cost
+      catches up. The general shape is a hierarchy's promise: test the parent, and skip the
+      children when the answer is unanimous.</details>
     </li>
     <li>
       <strong>6.16.8 — A material handle.</strong> <code>batch_key</code> compares 32 bytes of
       material with <code>memcmp</code>. Give <code>material_uniforms</code> a handle and compare one
       pointer. Measure the batching pass on a 10,000-object scene both ways — and then say what the
       handle costs elsewhere.
+          <details><summary>Solution sketch</summary>A handle turns a 32-byte <code>memcmp</code> into one integer compare,
+      and the batching pass should speed up in proportion to how much of its time was the
+      compare. What it costs elsewhere is the real answer: two materials with identical values
+      but different handles no longer batch together, so the draw count can go <em>up</em> —
+      equality by value becomes equality by identity. The handle also needs a table (and a
+      lifetime) somewhere, which is 5.4's lesson again. Deduplicate at creation (hash the 32 bytes
+      once, return the existing handle for identical values) and you get both: the cheap compare
+      and the old batching.</details>
     </li>
   </ol>
 

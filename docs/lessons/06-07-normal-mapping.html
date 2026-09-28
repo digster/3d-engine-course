@@ -19085,6 +19085,20 @@ cmake --build build --config Debug
     mirrored chart and is uniformly scaled. Work out which two, then write the asset that would
     catch them. That is how a test suite actually grows.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> the two that stay green are <em>forcing</em> <code>handed = 1</code> and using
+    <code>normal_matrix</code> for the tangent. The torus's UV chart is never mirrored, so every
+    vertex already has <code>handed = +1</code> and forcing it changes nothing; and its scale is
+    uniform, so <code>normal_matrix</code> = (sR)<sup>−T</sup> = R/s is parallel to the model
+    matrix and the normalisation erases the difference — the same theorem as Lesson 4.8 §3.5,
+    met a second time. The assets that catch them: a quad whose right half mirrors the left
+    half's UVs (u′ = 1 − u), where forcing the handedness turns every bump on the mirrored half
+    into a dent; and the torus scaled (1.7, 0.5, 1.0), where the wrongly transformed tangent is
+    re-orthogonalised against the correct normal and the whole bump pattern visibly rotates about
+    it. The other three break on any asset: sRGB decoding moves 128 to 0.216 and tilts every
+    normal, skipping <code>*2−1</code> leans them all toward +x+y, and skipping Gram-Schmidt lets
+    the frame shear wherever interpolation has pulled the tangent off perpendicular.
+  </p>
 
   <h3>13.2 — Remove the duplicated frame <span class="tag">guided</span></h3>
   <p>
@@ -19099,6 +19113,19 @@ cmake --build build --config Debug
     the real argument, not tidiness. The HLSL copy cannot be shared — and thinking about why not is
     worth more than the refactor: what would it take, and what does Module 9's shader work need to
     exist first?
+  </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> the C++ function takes the interpolated normal, the four-component tangent and the decoded
+    sample and returns the perturbed normal; <code>raster.cpp</code> and <code>verify_67</code>
+    both call it, so the harness now tests the renderer's arithmetic rather than a copy that
+    agrees with it by construction. The HLSL cannot join, because it is a different language
+    compiled by a different compiler — a common-subset header with macros for
+    <code>float3</code>/<code>vec3</code> and <code>mul</code> is possible and brittle. The
+    durable answer is to test the HLSL <em>itself</em>: run the shader's function on the GPU over
+    the same inputs and compare, the way Lesson 4.6's uniform probe asked the shader what it
+    received. That needs a way to run shader code as a test — a probe pass today, a compute
+    dispatch later — and a build that can rebuild shaders on demand, which is Module 9's
+    shader work.
   </p>
 
   <h3>13.3 — Honour <code>normalTexture.scale</code> <span class="tag">engine challenge</span></h3>
@@ -19116,6 +19143,19 @@ cmake --build build --config Debug
     <code>verify_46</code>'s uniform benchmark before choosing, and write down which you picked and
     why.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> there is a third option, and it dissolves the decision: <code>normal_mapped</code> is a derived
+    0/1 flag, and a scale of 0 already means "shade with the geometric normal" — the sample's
+    <em>x</em> and <em>y</em> become 0, and the frame returns <em>N</em> exactly. So replace the
+    flag with the scale itself (0 for an unmapped material, the file's value otherwise) and
+    multiply the sample's <em>x</em> and <em>y</em> by it. The fragment's
+    <code>lerp(geometric, mapped, normal_mapped)</code> then disappears rather than changing — a
+    scale of 0 already yields the geometric normal — and the block stays at 32 bytes with no
+    precision lost. The measurement still belongs in the write-up:
+    Lesson 4.6 found a push costs about 14 ns plus a copy at ~65 GB/s, so growing to 48 bytes
+    would cost a quarter of a nanosecond per draw — which says the size was never the real
+    argument; redundancy was.
+  </p>
 
   <h3>13.4 — Two-channel normal maps <span class="tag">open</span></h3>
   <p>
@@ -19130,6 +19170,20 @@ cmake --build build --config Debug
     the reconstruction is ill-conditioned — <code>x² + y²</code> slightly above 1 after filtering,
     which is a negative square root in a shader.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> store <em>x</em> and <em>y</em> in a two-channel target (<code>R8G8_UNORM</code>, or BC5 when
+    compressed) and reconstruct <code>z = sqrt(saturate(1 − x² − y²))</code>. If a map's
+    <em>x</em> and <em>y</em> never exceed ±<em>m</em>, rescaling them by 1/<em>m</em> gains
+    log₂(1/<em>m</em>) bits each — one bit, and half the quantisation step, for this map's ±0.5 —
+    at the price of storing <em>m</em> with the texture. The <code>saturate</code> is not
+    optional: rounding and bilinear filtering both produce <em>x</em>² + <em>y</em>² slightly
+    above 1 near steep texels, and <code>sqrt</code> of a negative is NaN, which then spreads
+    through every sum it touches. And the reconstruction is ill-conditioned exactly there:
+    ∂<em>z</em>/∂<em>x</em> = −<em>x</em>/<em>z</em>, so a one-code error in <em>x</em> becomes
+    an error in <em>z</em> that grows without bound as <em>z</em> → 0 — harmless in practice
+    because real normal maps rarely lean past 60°, and worth measuring on the egg-carton's
+    steepest texels anyway.
+  </p>
 
   <h3>13.5 — Compress the tangent <span class="tag">open</span></h3>
   <p>
@@ -19139,9 +19193,20 @@ cmake --build build --config Debug
   </p>
   <p class="hint">
     <strong>Hint.</strong> Implement it on the CPU first and measure the worst angular error over a
-    few million random directions before touching the vertex format; the answer for 16 bits is
-    around a tenth of a degree, which you should confirm rather than take. Then note what the same
-    trick would do to the <em>normal</em>, which has the same problem and twice the history.
+    few million random directions before touching the vertex format — at 8 bits per component and
+    at 16 — and predict the answer before you run it. Then note what the same trick would do to
+    the <em>normal</em>, which has the same problem and twice the history.
+  </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> measured over 400,000 random directions with rounding quantisation
+    (<code>scratch/oct_67.py</code>): 8 + 8 bits gives a worst case of 0.95° and a mean of 0.34°;
+    16 + 16 gives 0.0037° and 0.0013°; and 16 + 15, with a bit taken for the handedness, 0.0056°.
+    So two 16-bit values are about twenty times better than a tenth of a degree — and 8 bits per
+    component, not 16, is where the error becomes visible. Read the pair as
+    <code>SHORT2</code> (integers) and unpack in the shader, because a <code>_NORM</code> format
+    gives you no bit to reach. The vertex goes from 48 bytes to 36; doing the same to the normal
+    takes it to 28, below the 32 it was before this lesson — which is why production vertex
+    formats carry octahedral normals and tangents, often as a single packed quaternion.
   </p>
 
   <!-- =================================================================

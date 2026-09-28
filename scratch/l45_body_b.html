@@ -936,7 +936,7 @@ cmake --build build --config Debug -j
       <p>
         <strong>4.5.1 — Shrink the vertex.</strong> The normal is three floats and it is a unit
         vector, so every component is in −1…+1. Change it to <code>SHORT4_NORM</code> or
-        <code>BYTE4_NORM</code> and take the vertex from 32 bytes to 24 or 20. Measure the
+        <code>BYTE4_NORM</code> and take the vertex from 32 bytes to 28 or 24. Measure the
         difference in the picture the way §G does — same pipeline, both buffers, compare per
         pixel.
       </p>
@@ -946,6 +946,22 @@ cmake --build build --config Debug -j
         component next to a normal is exactly where a tangent's handedness goes in Module 6.
         Encode with <code>round(x * 127.0f)</code> for <code>BYTE4_NORM</code>. Expect visible
         banding on smooth shading at 8 bits and none at 16; that difference is the exercise.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> write the normal as
+        <code>int8_t(std::lround(n * 127.0f))</code> for x, y and z and 0 for w, declare it
+        <code>BYTE4_NORM</code> at offset 12, move the uv to offset 16 and the pitch to 24
+        (<code>SHORT4_NORM</code>: <code>int16_t</code>, ×32767, uv at 20, pitch 28). The shader
+        keeps its <code>float3</code>, and <code>check_layout</code> now reports one
+        <em>widening</em> line — four components supplied into three, "fetched and thrown away" —
+        which is the note §3.4 predicts, not a problem. Expect the difference before you measure it:
+        rounding moves each component by at most 1/254 ≈ 0.0039, which after the fragment shader's
+        <code>normalize</code> tilts the normal by at most about 0.0056 rad (0.32°), so
+        <code>n·l</code> moves by at most 0.0056 — about 1.4 of 255 levels before the output
+        encode. The per-pixel diff therefore shows ones and twos in a blotchy pattern that follows
+        the vertices; with <code>SHORT4_NORM</code> the error is about 258× smaller and the diff
+        should be empty. Reaching 20 bytes also needs the uv packed, as <code>HALF2</code> (four
+        bytes).
       </p>
     </li>
     <li>
@@ -961,6 +977,17 @@ cmake --build build --config Debug -j
         deliberate — some hardware prefers 4- or 16-byte-aligned pitches, so a note is right and
         an error would be wrong.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> after the attribute loop, walk <code>buffers_</code>; for
+        each slot take the largest <code>offset + size_of(format)</code> among its attributes, and
+        if that is below the pitch, log "slot N: attributes end at byte E of a P-byte vertex — P − E
+        bytes per vertex are fetched and never read" and add the bytes to a new
+        <code>unused_bytes</code> field of <code>layout_report</code>, left out of
+        <code>problems()</code> like <code>widening</code>. On §4.4's too-long pipeline it reports
+        4 bytes (attributes end at 32, pitch 36). Summing the attribute sizes as well catches a
+        hole <em>between</em> attributes, which the largest-end test misses; and a slot with no
+        attributes at all is the degenerate case to decide deliberately — all P bytes unused.
+      </p>
     </li>
     <li>
       <p>
@@ -973,8 +1000,19 @@ cmake --build build --config Debug -j
         <strong>Hint:</strong> it almost certainly will not, at 2,304 triangles — and that is the
         finding, not a failure. The layout matters when you are fetch-bound, and a torus on a
         modern GPU is not. Write down the number of triangles at which you would expect it to
-        start mattering, then check with <a href="04-01-how-gpus-work.html">4.1</a>'s bandwidth
-        figures.
+        start mattering, then check it against your GPU's published memory bandwidth.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> <code>describe</code> declares two buffers — slot 0,
+        pitch 12, the position at offset 0; slot 2, pitch 20, the normal at 0 and the uv at 12 —
+        and the instance buffer keeps slot 1. Bindings are contiguous from the first slot, so one
+        <code>SDL_BindGPUVertexBuffers(pass, 0, bindings, 3)</code> binds positions, instances and
+        attributes together; the upload writes the two arrays into two buffers (or two regions of
+        one). The bytes fetched per frame are unchanged — 1,225 × 32 per instance, at most 274 KB for
+        seven — and at 60 Hz that is roughly 16 MB/s, four orders of magnitude under a GPU whose
+        bandwidth is quoted in hundreds of GB/s. The split starts to pay only where some passes
+        read positions alone (a depth pre-pass, Lesson 6.8's shadow pass), which is the reason
+        §2.2 gives for it, and never through total bytes on a mesh this small.
       </p>
     </li>
     <li>
@@ -989,6 +1027,20 @@ cmake --build build --config Debug -j
         The prediction is a unit sphere; the interesting part is what happens to the
         <em>shading</em>, since the normal is now the position.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> build the swapped pipeline at startup beside the correct
+        one (position attribute at offset 12, normal at 0, pitch 32 for both) and let the key choose
+        which to bind. The shape is §4.4's blob: every vertex is placed at its own unit normal. The
+        shading is the part to predict with numbers. The fragment shader normalizes what it
+        receives, so each point is lit by the direction of its <em>old position</em> from the
+        torus's centre, and for this torus (tube radius 0.4 around a ring of radius 1.0) that
+        direction is never more than atan(0.4/√(1.0² − 0.4²)) ≈ 23.6° from horizontal. The
+        sphere's poles are lit as if they faced the horizon: a band of lighting that ignores the
+        shape it is painted on. A second prediction to check: a torus's normals cover the sphere
+        <em>twice</em>, once from the outer half and once from the saddle-shaped inner half, whose
+        triangles land with their winding reversed — so back-face culling, not the geometry,
+        decides which copy you see where.
+      </p>
     </li>
     <li>
       <p>
@@ -1001,6 +1053,18 @@ cmake --build build --config Debug -j
         constant; then a rise in frame time is not simply more pixels. If the time tracks
         instances × 1,225 you are vertex-bound. The per-frame upload grows too — 200 instances is
         5,600 bytes, still nothing — which is the point being demonstrated a second time.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the constant sizes both the instance buffer and the
+        placement array, so raising it is one edit; <code>place_instances</code> then lays out a
+        √N × √N grid with the scale shrunk by 1/√N so that the tori cover about the same pixels at
+        every N. Turn vsync off before timing anything. At 200 instances the frame is
+        200 × 1,225 = 245,000 vertices, about 15 million a second at 60 Hz, well below what any
+        current GPU transforms — so expect no rise at 200, and keep going (the buffer size is the
+        only limit) until one appears. Then change one thing at a time: if the time tracks N at
+        constant coverage you are vertex-bound; if it tracks coverage at constant N (grow the tori
+        instead) you are fill-bound; and bandwidth is ruled out by arithmetic before you start,
+        since the per-frame upload is 28 bytes an instance.
       </p>
     </li>
   </ol>

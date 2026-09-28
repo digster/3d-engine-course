@@ -212,6 +212,17 @@ sh scratch/build_verify_85.sh</code></pre>
         rectangle, which makes the hull step trivial and the answer checkable against the
         two-interval formula. The true distance is <code>√(3² + 2²)</code>.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> with each rectangle's origin at its centre, delta = (9.5, 5) − (4, 1.5) = (5.5, 3.5), and the
+        difference set is A ⊖ B = [3 − 11, 5 − 8] × [1 − 6, 2 − 4] = [−8, −3] × [−5, −2] — a
+        rectangle whose corner nearest the origin is (−3, −2). The first support, in direction
+        +delta, is A's corner (5, 2) minus B's corner (8, 4) = (−3, −2): the answer, on the first
+        call. So v = (−3, −2), |v| = √13 = 3.6056; the next support, in −v = (3, 2), is the same
+        corner, and dot(v, w)/|v| = 13/√13 = 3.6056. The bounds meet after one iteration. The
+        seed did all the work, and that is §6.4's measurement in miniature; try the seed −delta
+        and the first support is (−8, −5), the corner farthest away, and the hand run gets
+        interesting.
+      </p>
     </li>
 
     <li>
@@ -229,6 +240,15 @@ sh scratch/build_verify_85.sh</code></pre>
         point — the value is a tie, so only reproducibility is at stake. Then ask yourself why 8.4
         could not have added a cylinder at all.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> with unit axis â, half-height h and radius r, the support is sign(d · â) h â + r p̂, where p̂
+        is d − (d · â) â normalised; when that perpendicular part is (nearly) zero, return a fixed
+        rim point — r times one chosen perpendicular — so the tie is at least reproducible. Check
+        it the way §B.2 checks the capsule: sample the surface densely and confirm no sample
+        projects further along d than the support does. 8.4 could not have added it because the
+        SAT needs a finite list of candidate axes, and a curved rim against an edge offers
+        infinitely many; GJK never asks for axes, only for the farthest point in a direction.
+      </p>
     </li>
 
     <li>
@@ -245,6 +265,14 @@ sh scratch/build_verify_85.sh</code></pre>
         answer; for a box it is a vertex that may or may not be the nearest feature. One seed
         wastes exactly one iteration; the other wastes one and then still has work to do.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the sentence: for a ball, the support in +delta already <em>is</em> the closest point, so the
+        wrong seed costs exactly the one iteration it takes to turn round (1.00 → 2.00), while a
+        box's first support is only a vertex that may not be the nearest feature — the wrong seed
+        costs that same turn-round and the search that was left still has to happen, so the box
+        column moves by about one. Compare means and full histograms, not just the mean: the
+        22% should appear as the whole distribution shifting by roughly one iteration.
+      </p>
     </li>
 
     <li>
@@ -259,6 +287,17 @@ sh scratch/build_verify_85.sh</code></pre>
         rarely produces a sliver. The pair of runs is the point: the second one shows how much of
         the damage the invariant was absorbing silently, which is the argument for having
         invariants you can check.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> record, per section, pass or fail and the size of any error, in both runs. The first run shows
+        what the invariant protects: with the textbook triangle case, sliver triangles can
+        choose the wrong Voronoi region, and the monotonicity check catches the step at which |v|
+        fails to decrease and stops with the last good answer — a correct distance with a lost
+        certificate, the §11.1 kind of failure. The second run removes that net: the same
+        slivers now run to the iteration cap or return a v that is not the minimum, and the
+        sections that compare distances against the reference turn red. The difference between
+        the two runs is the damage the invariant had been absorbing without a word — which is the
+        case for invariants you can check rather than ones you believe.
       </p>
     </li>
 
@@ -277,9 +316,22 @@ sh scratch/build_verify_85.sh</code></pre>
         closing speed, so advancing by <code>d / v<sub>max</sub></code> can never step past the
         impact. Rotation makes <code>v<sub>max</sub></code> harder — you need a bound involving the
         angular velocity and the shape's bounding radius — so start with translation only and say
-        so in the doc comment. Then notice which of this lesson's guarantees you are relying on:
-        the distance must be an <em>upper</em> bound for the advance to stay conservative, which
-        §11.1 measured and §A.5 checked.
+        so in the doc comment. Then notice which of this lesson's guarantees you are relying on —
+        and check which side of the true distance GJK's number errs on before you step by it.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the loop: at time t, run GJK at the advanced positions; if the gap is within the margin,
+        report t; otherwise take the closing speed along the reported direction n (a closing speed
+        of zero or less means no impact this step) and advance t by gap / closing speed. The gap
+        you divide must be a <em>lower</em> bound on the true distance, or the step can pass the
+        impact — and GJK's <code>distance</code> is the other kind: §11.1 and §A.5 establish it
+        is the gap between two real surface points, an <strong>upper</strong> bound. So compute
+        the lower bound yourself from two more support calls, the slab between the supporting
+        planes along n: n · s<sub>B</sub>(−n) − n · s<sub>A</sub>(n). Under a pure translation
+        that slab narrows at exactly the closing speed, for any n, so the step is safe even when
+        n is slightly wrong. Lesson 8.13 learned this the hard way: its first draft stepped from
+        the upper bound, and 377 of 6,049 casts finished inside the skin. The thin wall from 8.4
+        §9 is the test — it must be hit at the right time, not tunnelled.
       </p>
     </li>
   </ol>

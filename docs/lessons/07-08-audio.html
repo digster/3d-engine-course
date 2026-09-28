@@ -1616,8 +1616,8 @@ B.3  CONTROL  zero voices: peak 0.0  rms 0.0</pre>
     <strong>1.2%.</strong> Only a fiftieth of the injected energy sits at the frequency of the sound
     being played; the other 98.8% is spread across every frequency there is, which is what a step
     discontinuity contains and what the ear is exquisitely good at noticing. You are not hearing a
-    level change. You are hearing sixty impulses a second, and impulses sixty times a second is a
-    200 Hz buzz riding on top of your sound effect.
+    level change. You are hearing sixty impulses a second, and impulses sixty times a second are a
+    60 Hz buzz riding on top of your 200 Hz tone.
   </p>
 
   <p>
@@ -9688,6 +9688,16 @@ sh scratch/build_verify_78.sh</code></pre>
         ramp. Then check your ears against the meter: render both offline and compare
         <code>max_step</code>, exactly as §G.2 does.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the offline render should reproduce §G.2 on the fly-by: with <code>--step</code> the largest
+        sample-to-sample jump is several times the signal's own (G.2 measured 7.70× on a tone),
+        and without it the ratio returns to 1.00×. What you hear is not a louder or quieter sound
+        but a buzz at the rate the gain <em>changes</em>: one step each time
+        <code>set_gain</code> runs — sixty times a second in §7's measurement, every 800 samples at
+        48 kHz — so the fly-by acquires a low hum that has nothing to do with its sound. The ears and
+        the meter should agree; if they do not, check that the two renders used identical
+        emitter paths.
+      </p>
     </li>
     <li>
       <p>
@@ -9703,6 +9713,16 @@ sh scratch/build_verify_78.sh</code></pre>
         filter coefficient that jumps is a click too, and this is the cheapest way to prove to
         yourself that §7's rule was about reconstruction and not about gain.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the one-pole filter's corner frequency is f<sub>c</sub> = −ln(1 − a) · f<sub>s</sub> / 2π, so
+        a = 0.15 at 48 kHz is about 1.24 kHz — a distant sound keeps its body and loses its
+        brightness, which is the effect wanted — and a = 1 passes everything. Map a by the same
+        normalised distance the attenuation already computes, rather than inventing a second
+        curve, so loudness and brightness fall together. Keep y per voice and per channel beside
+        the cursor, reset it when the voice starts, and ramp a across the buffer exactly as the
+        gain is ramped. The proof that §7 was about reconstruction is to step a instead: the same
+        buzz returns with no gain change at all.
+      </p>
     </li>
     <li>
       <p>
@@ -9717,6 +9737,16 @@ sh scratch/build_verify_78.sh</code></pre>
         (typically to about [0.5, 2]) because a correct Doppler on a fast projectile is unlistenable.
         Also: your velocity must be measured over the fixed step, not over the frame — Lesson 1.4.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> take the unit vector from listener to emitter, project both velocities onto it (signs
+        chosen so that approach raises the pitch), and feed the ratio to <code>set_pitch</code>. A
+        car passing at 30 m/s gives 340/310 = 1.097 approaching — up 1.6 semitones — and 340/370 =
+        0.919 receding, down 1.5: a three-semitone drop, which is the sound of a fly-by. The
+        breaking case is the denominator reaching zero at the speed of sound, and the ratio going
+        negative beyond it; clamp to [0.5, 2] before it can. Take both velocities as position
+        differences over the fixed step, not over the frame: a frame-rate velocity jitters with
+        frame time, and a jittering pitch is audible as a warble.
+      </p>
     </li>
     <li>
       <p>
@@ -9729,6 +9759,17 @@ sh scratch/build_verify_78.sh</code></pre>
         voice mid-sample is a step to zero, which is §7 again; a real implementation ramps the stolen
         voice to silence over a few milliseconds before reusing its slot. Your subtraction should
         show the stealing policy is <em>worse</em> until you do that.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> with the default 64 voices, 96 overlapping sounds means 32 are refused under the current
+        policy and 32 steal under the new one. Scan for the lowest current gain (the one the
+        listener hears least), and replace it. The subtraction shows the steal is worse at first
+        because the stolen voice stops from whatever amplitude it had to zero in one sample — the
+        same discontinuity as §7, now at full size. The fix is to mark the voice as stopping,
+        ramp its gain to zero over a few milliseconds (5 ms is 240 samples at 48 kHz), and start
+        the new sound in that slot only after the ramp; the new sound needs a free slot for those
+        milliseconds, so keep one in reserve for stealing. After that, the stealing render should
+        be the better of the two.
       </p>
     </li>
     <li>
@@ -9746,6 +9787,18 @@ sh scratch/build_verify_78.sh</code></pre>
         <code>0</code>, <code>i1 = (i0 + 1) % frames</code> is one modulo — but a modulo is a divide,
         so measure that too rather than assuming it is cheaper than a well-predicted branch.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> measure at a pitch other than 1.0. At exactly 1.0 the cursor lands on whole frames, the
+        fraction is always zero, <code>i1</code> is never read, and the bug is invisible — a
+        null result that would pass any test run at the default pitch. At pitch 1.5, the last
+        interpolation holds the final sample instead of moving toward frame 0, and then the next
+        sample jumps: with a sound whose last and first samples differ by D, the step at the wrap
+        approaches D. The fix is one comparison: if <code>i0 + 1 == frames</code>, use frame 0 for
+        a looping voice and the last frame otherwise. Predict before measuring that the branch
+        costs close to nothing, since it goes the same way on every sample except one per loop,
+        while the <code>%</code> version pays an integer division on every sample; then measure
+        both against §I.1's table and report whichever surprised you.
+      </p>
     </li>
     <li>
       <p>
@@ -9760,6 +9813,18 @@ sh scratch/build_verify_78.sh</code></pre>
         slowly — and if you make it ramp per sample you have already written the mechanism, in §7.
         Measure it by playing 32 voices at 0.1 and comparing <code>clipped</code> and the THD of
         §D against the clamp.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> allocate the delay line in <code>open()</code> — 5 ms is 240 frames at 48 kHz — and each buffer:
+        push the new mix in, find the largest absolute sample in the window ahead, compute the gain
+        that brings it to the ceiling (min(1, ceiling / peak)), and move the applied gain toward it
+        per sample: fast enough downward to arrive before the peak leaves the delay line, slowly
+        upward (tens to hundreds of milliseconds) so the level does not pump. A sliding maximum
+        over a fixed window can be kept in a fixed-size ring too, so nothing allocates on the audio
+        thread. Thirty-two voices at 0.1 sum to peaks near 3.2: the clamp clips them and the
+        limiter should report zero clipped samples, with a much lower distortion in §D's measure,
+        at the price of turning everything down while the peak passes — which is the trade to
+        listen for.
       </p>
     </li>
   </ol>

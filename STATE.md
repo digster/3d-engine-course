@@ -289,6 +289,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - (39 earlier entries, Modules 0-3, predate lesson tags; they close state/capabilities.md)
 
 decisions:   (headlines; full: state/decisions.md)
+  pending-code-corrections: THREE ENGINE COMMENTS ARE WRONG (TWO IN gpu_scene.cpp, ONE IN frustum.cpp), AND THE NEXT LESSON THAT LISTS EACH FILE WHOLE CORRECTS IT.
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER PAGE STAYS AN ARCHIVE OF WHAT SHIPPED.
   quat-swap-deferred: THE FIELD IS CALLED `rotation` AND ONE CALLER DOES NOT PUT A ROTATION IN IT.
   fill-shot: A RENDER FIGURE KEEPS THE PROGRAM'S OWN BACKGROUND.

@@ -593,9 +593,9 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
           <td>The whole screen goes black, or nothing draws</td>
           <td>A declared sampler slot with nothing bound. The shader declares
               <code>t2</code> and the draw bound only <code>t0</code> and <code>t1</code>.</td>
-          <td>Bind the fallback. And bind all three in ONE
-              <code>SDL_BindGPUFragmentSamplers</code>: a partial bind <em>replaces</em> the range
-              it names rather than merging.</td>
+          <td>Bind the fallback — in <em>every</em> pass that draws with this pipeline, because
+              SDL clears all bindings when a render pass ends. With the debug layer on, the draw
+              stops on <code>Missing fragment sampler binding!</code>, which names the problem.</td>
         </tr>
         <tr>
           <td>A validation error the moment the shadow texture is bound</td>
@@ -660,6 +660,15 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
          texel is downhill regardless of how big a texel is. What changes is the spatial frequency,
          and therefore how it aliases against the screen. Predicting "less acne" and measuring "the
          same acne, finer" is the useful failure here.</p>
+      <p class="hint"><em>Solution sketch.</em> Predict first: the error being cancelled is half a
+         texel's depth change across a sloped receiver, and half of every texel lies below its own
+         sample whatever the texel's size, so the speckled <em>fraction</em> should stay roughly
+         constant while the speckle's period halves with each doubling. Measure the fraction over
+         several camera poses rather than one, because at 1024 and 2048 the pattern is finer than
+         a screen pixel and aliases into moiré, which can make one frame look cleaner or dirtier
+         than the rest. The finding worth writing down is that resolution changes the acne's
+         frequency, not its existence — which is why §5 fixes it with a bias that scales with
+         <code>world_per_texel</code> rather than with more texels.</p>
     </li>
 
     <li>
@@ -668,6 +677,17 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
          the light direction to something nearer vertical and put a box on the ground, then sweep
          <code>--constant-bias</code> from 0 to 0.1 and find where the contact shadow disappears.
          Check that the value matches <code>gap / depth_range</code>.</p>
+      <p class="hint"><em>Solution sketch.</em> §5.1's rule, applied to a box of height
+         <em>h</em> under a light at elevation φ: a ground point at distance <em>x</em> behind the
+         box reaches it after <em>x</em>/cos φ along the ray, so a bias <em>b</em> unshadows every
+         point with <em>x</em> &lt; <em>b</em> · <code>depth_range</code> · cos φ — the shadow's
+         inner edge retreats from the box's foot by that much. The shadow's far tip is
+         <em>h</em>/sin φ from the box's top edge along the ray, so the whole shadow is gone at
+         <em>b</em> = <em>h</em> / (<code>depth_range</code> · sin φ). Near-vertical light makes
+         that nearly <em>h</em>/<code>depth_range</code> — for a one-unit box in a twenty-unit
+         depth range, 0.05, inside the sweep. <code>verify_68</code> §D brackets the same rule
+         from both sides — fully shadowed at half the gap, fully lit at 1.5× — so the value to
+         report is where between those the shadow actually goes, with PCF on and off.</p>
     </li>
 
     <li>
@@ -679,6 +699,17 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
          And <em>w</em> stops being 1, so §8.5's argument for computing the light-space position in
          the fragment shader needs re-examining. (It survives, but for a different reason: a
          homogeneous coordinate is still affine in the world position. Work out why.)</p>
+      <p class="hint"><em>Solution sketch.</em> The two the hint names: device depth under
+         perspective is the 1/<em>d</em> curve of Lesson 4.7 §3.2, so a world-space error becomes
+         a device-space bias that shrinks as (<em>n</em>·<em>f</em>)/((<em>f</em> −
+         <em>n</em>)<em>d</em>²) and has to be computed per fragment; and the lookup now divides by
+         <em>w</em> before sampling. The varying still works because the light's clip position is
+         a linear function of the world position — so interpolating it with the camera's
+         perspective-correct weights and dividing <em>afterwards</em> is exact, where dividing in
+         the vertex shader and interpolating the quotient would not be. And a third casualty the
+         hint does not name: §3.4's fit may put the near plane <em>behind</em> the light, which an
+         orthographic box tolerates and a perspective frustum cannot — near must be positive, so
+         the spot light's near and far come from the scene's distance along its axis instead.</p>
     </li>
 
     <li>
@@ -687,8 +718,24 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
          count the binds in a frame, then work out whether hoisting the shadow binding out of the
          per-item loop is possible at all.</p>
       <p class="hint"><em>Hint.</em> Read the comment in <code>gpu_scene.cpp</code> about what a
-         partial <code>SDL_BindGPUFragmentSamplers</code> does to slots outside its range. This is a
-         "the obvious optimisation is a bug" exercise.</p>
+         partial <code>SDL_BindGPUFragmentSamplers</code> does to slots outside its range, and
+         then read what SDL's source says it does.</p>
+      <p class="hint"><em>Solution sketch.</em> The frame log counts one three-slot bind per
+         texture change, so the shadow map is re-bound as many times as the albedo is. The comment
+         in <code>gpu_scene.cpp</code> says hoisting is a bug — that a partial bind of slots 0–1
+         would leave slot 2 unbound — and <strong>the comment is wrong</strong>. In SDL
+         <code>release-3.4.12</code> all three backends store sampler bindings per slot
+         (<code>METAL_BindFragmentSamplers</code>, <code>VULKAN_BindFragmentSamplers</code> and
+         <code>D3D12_BindFragmentSamplers</code> each write only <code>firstSlot + i</code>), so a
+         bind never touches a slot outside its range. What is true, and is probably what the
+         comment was remembering, is that <em>every</em> binding is cleared when a render pass
+         ends. So the hoist is correct: bind slot 2 once, right after
+         <code>SDL_BeginGPURenderPass</code>, then bind two slots per texture change. The saving is
+         one slot's worth of work per change — small, and not the point: this exercise was written
+         to teach "the obvious optimisation is a bug", and reading the library's source turned it
+         into "the obvious optimisation was fine, and the rule everyone was obeying was about
+         passes, not ranges". The engine's comment is corrected by the next lesson that ships
+         <code>gpu_scene.cpp</code>.</p>
     </li>
 
     <li>
@@ -700,6 +747,17 @@ build\Debug\gltf_view.exe --model torus.obj --shadow 1024</code></pre>
       <p class="hint"><em>Hint.</em> It is called <em>light bleeding</em>, and it shows up wherever
          two occluders at very different depths share a filter footprint. Notice that this is the
          same 0.3/0.9/0.5 situation from §6.1, arriving from the other side.</p>
+      <p class="hint"><em>Solution sketch.</em> Render depth <em>d</em> and <em>d</em>² into an
+         <code>R32G32_FLOAT</code> target, blur or mipmap it freely, and at the lookup read the mean
+         μ = E[<em>d</em>] and variance σ² = E[<em>d</em>²] − μ². For a receiver at depth
+         <em>t</em> &gt; μ, Chebyshev's one-sided inequality bounds the lit fraction by
+         σ² / (σ² + (<em>t</em> − μ)²); for <em>t</em> ≤ μ it is fully lit. Clamp σ² to a small
+         minimum, or flat receivers produce 0/0. The bleeding case, with numbers: occluders at 0.3
+         and 0.5 sharing a footprint over a receiver at 0.9 give μ = 0.4 and σ² = 0.01, so the
+         bound is 0.01/(0.01 + 0.25) ≈ 0.04 — correct, nearly dark. But a receiver at 0.51, just
+         behind the 0.5 occluder, gets 0.01/(0.01 + 0.0121) ≈ 0.45: almost half-lit where it
+         should be in full shadow. That is the bleed. The standard cure remaps the bound so that
+         values under a threshold go to zero, trading some softness for the leak.</p>
     </li>
   </ol>
 

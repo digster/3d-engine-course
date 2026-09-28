@@ -565,6 +565,10 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
         SIX FRAGMENT SAMPLER SLOTS NOW (was three). 6.8's rule holds and is why
         they travel together: a partial SDL_BindGPUFragmentSamplers REPLACES the
         range it names, so slot 3 would be unbound the moment slot 0 changed.
+        CORRECTED 2026-09-27: FALSE. A bind writes only the slots it names (SDL
+        release-3.4.12, all three backends); bindings are cleared at the END OF A
+        PASS, which is the rule that actually holds. See decisions:
+        pending-code-corrections.
         THE FOURTH IDENTITY-ELEMENT FALLBACK: white for a multiply (3.9),
         lavender for a basis change (6.7), 1.0 for a depth comparison (6.8), and
         **BLACK for the ADDITION the ambient term performs**. Bound whether or

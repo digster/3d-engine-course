@@ -2962,3 +2962,8 @@ compute shaders; **split** STATE.md/LEARNINGS.md into compact heads plus verbati
 legibility, cross-reference links, the index cards — and Phase 3, which split STATE.md,
 LEARNINGS.md and README.md into short heads with verbatim archives in `state/`, `learnings/` and
 `CHANGELOG.md`. Logged in `memory/2026-09-27.md`.)
+
+> continue
+
+(A second "continue" in the same session: Phase 1.5 — solution sketches for the 113 exercises in
+the 20 lessons that had none — finished, verified and parked, then Phase 4.)

@@ -503,3 +503,33 @@ and "the coupling nearly every engine ships is 1 − F(v·h)" (Filament does not
 were copied into shipped headers and five lessons' listings. Each was a universal resting on one
 example, and 8.3's even carried a ⚠ VERIFY for seven lessons. Cite the header and symbol; never
 say "every". The authoring guide's §11 now says so.
+
+## Writing an exercise's solution audits the lesson it belongs to
+
+Phase 1.5 of the post-Module 8 review wrote solution sketches for the 113 exercises in the twenty
+lessons that had none, and required every number in a sketch to be computed or read from source.
+That requirement turned the job into an audit. Fifteen published statements failed it:
+
+- **Wrong mechanisms, found in library source** (`build/_deps/*-src`): 4.6's "pool being exhausted"
+  was a 32 KiB per-push overrun; the partial-bind "rule" from 6.8 (and 6.15's prose) was false —
+  SDL resets bindings at the end of a pass, not outside a range; 6.18's hint had Dear ImGui cropping
+  in vertex data "instead" of scissoring, when its SDL_GPU backend scissors per draw command.
+- **Wrong algebra**: 6.16 §3.2 put OpenGL's near plane "a far distance behind the camera"; it lands
+  at nf/(2f − n), half the near distance, in front. 7.4.4's hint looked for the largest gap where
+  1 − 2s⁴ is most negative, which is exactly where the gap is zero.
+- **Wrong numbers in hints**: 4.5.1's "24 or 20" bytes (28 or 24); 6.7.5's "a tenth of a degree"
+  for 16-bit octahedral tangents (0.0037°); 7.4.1's "not 180°" (exactly 180° about ŷ); 4.9.6's
+  "small win" from Forsyth (34% fewer invocations); 7.8's "200 Hz buzz" (60 Hz).
+- **Wrong direction**: 8.5.5 told students to advance by an *upper* bound — the mistake 8.13 then
+  made and measured (377 of 6,049 casts inside the skin).
+- **Dangling references**: 4.5.3 cited bandwidth figures 4.1 never gave; 6.14.4 cited §6.4 for a
+  claim that lives, unmeasured, in §1.
+
+Three of them live in engine comments too, and wait for the next lesson that lists those files
+(STATE.md `decisions: pending-code-corrections`). The general rule: a hint is a claim, and a claim
+nobody has had to *use* has not been checked. Where a sketch's number came from a model
+(`scratch/vcache_49.py`, `oct_67.py`, `isrot_74.py`, `roundtrip_82.py`), the model first had to
+reproduce the lesson's own published figure — 2,400 invocations, −99.998217257, 15.99% — before
+anything new it said was used. One sketch (8.7.2) contradicts its hint by code reading alone and
+says so; it has not been run.
+

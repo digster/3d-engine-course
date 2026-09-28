@@ -605,6 +605,17 @@ cmake --build build --config Debug
         debugger is almost entirely in how quickly you reach for it, and the only way to make that
         reflex is to use it on a bug whose answer you already know.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> each bug has a question that finds it in one step. No
+        texture bound: question 2 — the fragment sampler slot is empty in Pipeline State. The
+        wrong pitch: question 4 — the Mesh Viewer's <em>input</em> positions are already garbage
+        after the first few vertices, and the vertex input state shows the stride. The reversed
+        winding: question 1 says the draw is there, question 4 says the geometry is fine after
+        the vertex shader, and the rasterizer block of Pipeline State shows the cull mode and
+        front face that removed it. The transposed camera: question 3 — the matrix at b0 has its
+        translation in the bottom row rather than the last column. If you found it by browsing
+        rather than by asking one of these, that is the thing to practise.
+      </p>
     </li>
     <li>
       <p>
@@ -618,6 +629,17 @@ cmake --build build --config Debug
         every legitimate edit gets deleted within a month. Consider asserting on the counts rather
         than the whole tree.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the durable version compares <em>structure</em>, not
+        text: the group names in order, and per group the number of draws, binds and uniform
+        bytes — <code>frame_log::draws()</code> and <code>uniform_bytes()</code> already compute
+        two of them. A new draw then fails with a message naming the group it landed in, and a
+        renamed buffer does not fail at all. The honest caveat is where it runs: the trace needs
+        a GPU device, and a hosted CI runner has no GPU, so this repository's CI cannot run it as
+        it stands. The usual route is a software Vulkan driver (Mesa's lavapipe) plus a virtual
+        display if the program still opens a window — which this course has not verified, and
+        which Module 9's CI lesson is the place to try.
+      </p>
     </li>
     <li>
       <p>
@@ -629,6 +651,15 @@ cmake --build build --config Debug
         <strong>Hint:</strong> the honest finding here may be that some cannot be named because you
         did not create them. Report that rather than working around it; knowing which objects in a
         capture are yours is itself worth having.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> §4.1 names buffers, textures, transfer buffers and
+        shaders at creation. Two more kinds are nameable and are not named — samplers and
+        graphics pipelines, through <code>SDL_PROP_GPU_SAMPLER_CREATE_NAME_STRING</code> and
+        <code>SDL_PROP_GPU_GRAPHICSPIPELINE_CREATE_NAME_STRING</code> — and those are the fix. What
+        stays unnamed belongs to SDL: the swapchain textures, the uniform buffers your pushes
+        are copied into, and the pipeline, shaders and sampler SDL creates for itself inside
+        <code>SDL_BlitGPUTexture</code>. Listing those, rather than hiding them, is the answer.
       </p>
     </li>
     <li>
@@ -642,6 +673,15 @@ cmake --build build --config Debug
         ~18 µs — about 0.1% of a 60 Hz frame. That is affordable and it is not free, which is
         exactly the sort of judgement this lesson is trying to make routine. Consider making it
         conditional on a debug build and then argue with yourself about whether that is wise.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> a <code>debug_group</code> per item, opened and closed
+        inside the scene pass around that item's binds and draw — inside, because §3.4's Metal
+        caveat scopes a group pushed in a pass to that pass, so it must also end there. The RAII
+        type makes that automatic if its scope is the loop body. The argument about debug builds
+        usually lands the other way from the instinct: 18 µs is affordable, and a capture of a
+        release build is exactly when you most need to know which object a draw belongs to, so
+        gate it on a runtime flag rather than on the build type.
       </p>
     </li>
     <li>
@@ -657,6 +697,17 @@ cmake --build build --config Debug
         something about your GPU that no documentation states, which is the whole reason the
         counters exist.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> read <code>VERTEX_SHADER_INVOCATIONS</code> for the one
+        torus draw (on D3D12, <code>VSInvocations</code>), and divide by the instance count if the
+        draw is instanced, since the counter is per draw. There is no right answer to check
+        against, only a reading of it: near 1,225, the hardware's reuse spans more than a ring (a
+        cache of 50 or more, or smarter than FIFO); near 2,400, the FIFO-32 model is a fair
+        description; well above 2,400, vertices are being re-shaded across batch boundaries —
+        the "indices processed strictly in order" assumption is the one that failed. Report the
+        GPU, the driver and the number; the model's table is only worth keeping if someone checks
+        it.
+      </p>
     </li>
     <li>
       <p>
@@ -665,10 +716,24 @@ cmake --build build --config Debug
         vertex-cache optimiser and re-run the simulation on the reordered indices.
       </p>
       <p class="hint">
-        <strong>Hint:</strong> the torus is already emitted in a good order, so expect a small win
-        — which makes it a poor test. Optimise the <em>shuffled</em> indices instead and see how
-        much of the 2.83× you recover; that is the number that tells you whether your
+        <strong>Hint:</strong> the torus is already emitted in a regular order, which makes it
+        tempting to expect only a small win there. Optimise the <em>shuffled</em> indices as well
+        and see how much of the 2.83× you recover; that is the number that tells you whether your
         implementation works.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> Forsyth scores each vertex by its cache position (0.75
+        for the last triangle's three, then (1 − (p − 3)/29)<sup>1.5</sup> down the rest of a
+        32-entry cache) plus a valence boost of 2/√(triangles still using it), scores a triangle
+        as the sum of its three, and repeatedly emits the best-scoring triangle among those
+        touching the cache. A Python model of the same FIFO cache, run over
+        <code>torus.obj</code>'s own indices, reproduces §3.6 exactly (2,400 at cache 8, 16 and
+        32; 1,225 at 64) and then says the "small win" expectation is wrong
+        (<code>scratch/vcache_49.py</code> in the repository). At cache 32 the
+        optimiser takes the <em>shipped</em> order from 2,400 to 1,580 invocations, 34% fewer,
+        and a shuffled order from 6,754 to 1,572 — all of the 2.83× back and more. The ring
+        order captures everything a cache of 8 can hold and nothing more until the cache reaches
+        50; an optimiser that knows the cache size walks the surface in bands it can hold.
       </p>
     </li>
   </ol>

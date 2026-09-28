@@ -1254,15 +1254,28 @@ static_assert(offsetof(light_uniforms, diffuse) == packed_offset(28, 1), "");</c
   <div class="callout warn">
     <span class="label">There is a ceiling, and it is not documented</span>
     <p>
-      Repeating a <em>large</em> push into one command buffer exhausts something and the process
-      dies with <strong>no message at all</strong>: no SDL error, no validation warning, no log
-      line. Measured in an isolated program — this lesson's harness deliberately does not do it,
+      Repeating a <em>large</em> push into one command buffer kills the process with
+      <strong>no message at all</strong>: no SDL error, no validation warning, no log line.
+      Measured in an isolated program — this lesson's harness deliberately does not do it,
       because Lesson 4.4 settled that a test which destabilises the process is not a test — 16,000
       pushes of 4 KB (62 MB) are fine, while 64 KB pushes die somewhere between 24 and 32 of them,
-      and <em>not at the same count twice</em>. That non-determinism is the signature of a pool
-      being exhausted rather than a limit being enforced. Keep pushes small and this never comes
-      up; the point of knowing it is that the symptom is a silent crash, which you would otherwise
-      spend a long time blaming on something else.
+      and <em>not at the same count twice</em>.
+    </p>
+    <p>
+      <strong>Corrected after Module 8.</strong> This paragraph used to call that non-determinism
+      "the signature of a pool being exhausted". The cause is in SDL's source, not in the count,
+      and Exercise 4.6.5 is how it was found. Every backend carves pushes out of
+      <strong>32 KiB uniform blocks</strong> (<code>UNIFORM_BUFFER_SIZE</code> in
+      <code>src/gpu/SDL_sysgpu.h</code> at <code>release-3.4.12</code>), and none of them checks
+      <code>length</code>: a push that does not fit takes a fresh block and is copied into it
+      whole, so a 64 KB push writes 32 KB past the end of its block. The crash is that overrun
+      landing on something, which is why the count wanders — non-determinism is the signature of
+      memory corruption. So the ceiling is <strong>per push, not per command buffer</strong>: any
+      number of 32 KiB pushes is safe, and one byte more never is. On Vulkan the practical limit
+      is lower still, because the descriptor SDL binds covers 4 KiB of each push
+      (<code>MAX_UBO_SECTION_SIZE</code>), so a shader cannot see past that. Keep pushes small and
+      none of this comes up; the point of knowing it is that the symptom is a silent crash, which
+      you would otherwise spend a long time blaming on something else.
     </p>
   </div>
 
@@ -9780,6 +9793,21 @@ cmake --build build --config Debug -j
         feature working. Comment them out to see the runtime behaviour, and note that your
         prediction should be "everything up to the inserted field". Put them back afterwards.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> add the field to the HLSL block too, as a real
+        programmer would, and work both layouts out before building. C++ packs tightly:
+        <code>to_light</code> 0, <code>extra</code> 12, <code>ambient</code> 24, <code>sky</code>
+        28, <code>diffuse</code> 40, and <code>sizeof</code> is 44. HLSL cannot start a
+        <code>float3</code> at 12 without straddling the boundary at 16, so it reads
+        <code>extra</code> at 16, <code>ambient</code> at 28, <code>sky</code> at 32 and
+        <code>diffuse</code> at 44. Only <code>to_light</code> survives. The shader's
+        <code>ambient</code> is your <code>sky.x</code>, its <code>sky</code> is your
+        <code>(sky.y, sky.z, diffuse)</code> — the tint's channels rotated by one, with the diffuse
+        weight in blue — and its <code>diffuse</code> is byte 44, one float past the 44 you pushed,
+        so it is whatever that block held before. The repair is §3.2's rule: pair the new
+        <code>float3</code> with a <code>float</code> and put the pair at the end, which makes the
+        struct 48 bytes and the two layouts identical again.
+      </p>
     </li>
     <li>
       <p>
@@ -9795,6 +9823,19 @@ cmake --build build --config Debug -j
         opcode 72 (<code>OpMemberDecorate</code>) and decoration 35 (<code>Offset</code>). Making
         it a build step that fails the build is the version worth having.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> a SPIR-V module is a five-word header (magic
+        <code>0x07230203</code>, version, generator, id bound, schema) followed by instructions
+        whose first word is <code>(word_count &lt;&lt; 16) | opcode</code>. Walk them; for opcode 72
+        with a third operand of 35, print the struct id, member index and offset; for opcode 6
+        (<code>OpMemberName</code>) record the same struct id and member index against the name,
+        so the output reads <code>Light.ambient @ 12</code> rather than
+        <code>%17[1] @ 12</code>. On <code>mesh.frag.spv</code> it should print 0, 12, 16 and 28 —
+        the four offsets the <code>static_assert</code>s already check. The build-step version
+        writes those offsets into a generated header of <code>constexpr</code> values, and the C++
+        asserts <code>offsetof</code> against the header instead of against hand-typed numbers; a
+        shader edit that moves a field then fails the C++ compile.
+      </p>
     </li>
     <li>
       <p>
@@ -9809,6 +9850,21 @@ cmake --build build --config Debug -j
         before and after and decide whether you would take that trade for seven instances, and
         for a thousand.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> the instance becomes four <code>FLOAT4</code> columns at
+        locations 3–6, with the tint's four bytes moving to 7 (Lesson 4.3: the TEXCOORD numbers
+        have no gaps): 68 bytes, not 64, against 28. Build the matrix on the
+        C++ side from the same offset, scale and rotation, so the picture must not change — that is
+        the test. In HLSL, <code>float4x4(c0, c1, c2, c3)</code> fills <em>rows</em>, so four
+        columns go in transposed; either <code>transpose</code> it or write
+        <code>mul(float4(p, 1), m)</code>, which is the same numbers (§3.4's column-major point,
+        met again from the other side). The upload goes from 196 to 476 bytes a frame for seven
+        instances, and from 28 KB to 68 KB for a thousand — both nothing at 60 Hz. The real cost is
+        elsewhere: the old shader reused the rotation for the normal because the scale was
+        uniform, and a general matrix breaks that, so the normal now needs the inverse-transpose
+        (Lesson 3.6) — three more columns per instance, or a promise that the matrix stays
+        rotation × uniform scale.
+      </p>
     </li>
     <li>
       <p>
@@ -9819,6 +9875,16 @@ cmake --build build --config Debug -j
         <strong>Hint:</strong> this is what §2.2's measurement was really about — push, draw,
         push, draw. You will need <code>SDL_SetGPUViewport</code> between them (Lesson 4.5:
         viewport is pass state). No second pipeline, no second buffer, nothing rebound.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> one render pass, then for each half: push that camera's
+        <code>clip_from_world</code>, set an <code>SDL_GPUViewport</code> of
+        <code>{x, 0, w/2, h, 0, 1}</code>, draw. The one thing to get right is the projection's
+        aspect ratio, which is now (w/2)/h; with the full-window aspect both views are squashed
+        horizontally by half, and that is the bug to recognise. Order is the only rule — §2.2's
+        "a draw sees the most recent push before it" is doing all the work. If you want a hard
+        guarantee that neither view draws into the other's half, add a matching
+        <code>SDL_SetGPUScissor</code> per view; it costs nothing.
       </p>
     </li>
     <li>
@@ -9833,6 +9899,17 @@ cmake --build build --config Debug -j
         whole reason it is not in the harness. Bisect on repetition count for a fixed size, then
         on size for a fixed count, and plot the boundary. If it is a clean product of the two, you
         have found a pool size.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> run each trial as a child process and record whether it
+        exits cleanly, since the failure is a crash. The plot is not a product: every size up to
+        32 KiB should survive any count (memory permitting), and every size above it fails — sooner
+        or later, at a count that wanders. That is a per-push limit, and the updated §4.6 shows where it lives:
+        <code>UNIFORM_BUFFER_SIZE</code> is 32 KiB in SDL's source, and a longer push is copied
+        whole into a block that size. The validation layer says nothing because
+        <code>SDL_PushGPU*UniformData</code> never looks at <code>length</code>. The lesson's first
+        version of §4.6 called this "a pool being exhausted"; this exercise is how that was found
+        to be wrong.
       </p>
     </li>
   </ol>

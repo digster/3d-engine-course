@@ -7870,6 +7870,18 @@ py scratch\make_gltf_assets.py
     and why it depends on the target: SDL_GPU supports both index widths, mobile GPUs used to
     prefer 16.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> 260 × 260 is 67,600 vertices, over the 65,536 a 16-bit index can name. Widening costs exactly
+    what the arithmetic says: <code>torus.obj</code> loads as 1,225 vertices at 32 bytes
+    (position, uv, normal) and 6,912 indices, so the indices go from 13,824 to 27,648 bytes and
+    the mesh from 53,024 to 66,848 — 26% more for a model that never needed the range. The split
+    walks triangles in order with one remap table per chunk (source index → chunk index, or −1),
+    emits a vertex the first time a chunk sees it, and closes the chunk when a triangle would push
+    it past 65,536 — checking all three corners <em>before</em> emitting any, so a triangle never
+    straddles two chunks. Vertices on a chunk boundary are duplicated; count them, because that
+    duplication is the split's cost. Engines targeting desktop GPUs mostly widen per mesh (16-bit
+    when it fits, 32-bit when it does not) and split only when a platform forces them to.
+  </p>
 
   <h3>14.2 — Make the factor multiply <span class="tag">guided</span></h3>
   <p>
@@ -7886,6 +7898,17 @@ py scratch\make_gltf_assets.py
     glTF's rule or keep 3.9's, and write the argument down — both are defensible and the point is
     that you can say which you chose.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> the change is one multiply in each renderer, and the prediction you can make before running is
+    a direction: a factor in [0, 1] per channel can only darken, so every pixel that moves must
+    move <em>down</em> in at least one channel and up in none. A re-baseline that shows any pixel
+    getting brighter has found a second change you did not intend. <code>verify_48</code> §F
+    should still agree to within its earlier tolerance, because both renderers changed the same
+    way; if it does not, one of them multiplied before the decode and the other after. The
+    argument either way: glTF's rule composes (a tint and a texture both survive), while 3.9's
+    rule lets a texture silently ignore colour the asset asked for — which is an argument for
+    adopting glTF's rule in an engine whose assets are glTF.
+  </p>
 
   <h3>14.3 — Frame from the accessors <span class="tag">engine challenge</span></h3>
   <p>
@@ -7901,6 +7924,19 @@ py scratch\make_gltf_assets.py
     <code>shapes.glb</code>. This is the same conservative-bounds problem Lesson 6.16's frustum
     culling has to live with, and meeting it here first is the point of the exercise.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> <code>cgltf_accessor</code> carries <code>has_min</code>/<code>min[16]</code> and
+    <code>has_max</code>/<code>max[16]</code>; copy the first three of each into
+    <code>gltf_primitive</code> with a flag, since the fields are required for
+    <code>POSITION</code> but a hand-made file can omit them. Transform the eight corners by the
+    node's world matrix and take their component-wise bounds (or, cheaper, Arvo's form: the new
+    half-extent on axis <em>i</em> is Σ<sub>j</sub> |M<sub>ij</sub>| e<sub>j</sub>). The
+    inflation is bounded and worth knowing: each row of a rotation has unit length, so a cube's
+    half-extent grows by at most √3 on any axis, and by exactly √2 for a 45° turn about one axis —
+    while a round object's true bounds do not grow at all. Measure yours against the vertex walk
+    on <code>shapes.glb</code> and expect the framing distance to come out somewhat larger, never
+    smaller.
+  </p>
 
   <h3>14.4 — Strips and fans <span class="tag">open</span></h3>
   <p>
@@ -7915,6 +7951,17 @@ py scratch\make_gltf_assets.py
     other triangle is back-facing, which is invisible until culling is on — so test it with
     <code>validate()</code>'s <code>reversed_edges</code> rather than by looking.
   </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> convert at import into the same triangle-list index buffer everything else produces. Strip:
+    for <em>i</em> in 0 … <em>n</em> − 3, emit (<em>i</em>, <em>i</em>+1, <em>i</em>+2) for
+    even <em>i</em> and (<em>i</em>+1, <em>i</em>, <em>i</em>+2) for odd. Fan: (0, <em>i</em>+1,
+    <em>i</em>+2). Both are expressed on the primitive's index sequence when it has one and on
+    0 … <em>n</em> − 1 when it does not. Drop triangles with a repeated index — strips are often
+    stitched together with deliberately degenerate triangles — and count them in the import
+    report rather than silently. The test is the hint's: a strip converted with the parity
+    backwards makes half the triangles disagree with their neighbours, which is exactly what
+    <code>reversed_edges</code> counts, and zero on a correct conversion.
+  </p>
 
   <h3>14.5 — Prove the coupling difference on screen <span class="tag">open</span></h3>
   <p>
@@ -7928,6 +7975,17 @@ py scratch\make_gltf_assets.py
     legitimately live and what that implies about a scene mixing the two. Then predict, before you
     run it, where in the image the difference will be largest. If your prediction is "the middle of
     the bright face", re-read §6.
+  </p>
+  <p class="hint">
+    <strong>Solution sketch.</strong> the coupling belongs on the material, because it changes the fragment shader and a pipeline is
+    what a material <em>is</em> (6.5) — so a scene mixing the two is a scene with two pipelines and
+    a batch boundary between them, which is the real cost of offering the choice. The prediction:
+    the difference is a factor on the <em>diffuse</em> term, near 1 when both n·l and n·v are
+    large and up to 5.6× apart at grazing angles. So the largest absolute difference is on a face
+    that is well lit but seen nearly edge-on — lit enough to have diffuse to lose, oblique enough
+    to lose most of it — and on a tetrahedron, whose faces are flat, that is a whole face at once
+    rather than a gradient. The middle of the bright, camera-facing face barely changes, which is
+    why the difference is so easy to miss.
   </p>
 
   <!-- =================================================================

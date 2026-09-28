@@ -1243,6 +1243,10 @@ conventions:
         our range puts the near plane roughly a FAR distance behind the camera —
         so nothing within the visible range is ever culled and the symptom is
         "culling doesn't seem to help much", which nobody debugs.
+        CORRECTED 2026-09-27: FALSE. Under 0 <= z <= w, row2 + row3 >= 0 holds for
+        d >= nf/(2f - n) — 0.150 for n = 0.3, f = 100: HALF the near distance, in
+        front of the camera. Everything behind is still culled; the picture never
+        changes; only signed_distance(near, eye) = -0.150 (not -0.300) shows it.
         NORMALISED AT EXTRACTION, always, though the box test does not need it
         (sign survives any positive scale). Two things do: the sphere test
         compares a distance against a RADIUS, and every printed distance is
@@ -2915,6 +2919,11 @@ conventions:
         the signature of a pool being exhausted rather than a limit enforced. KEPT
         OUT OF THE HARNESS per 4.4's rule: a test that destabilises the process is
         not a test.
+        CORRECTED 2026-09-27: NOT A POOL. SDL (release-3.4.12) takes every push
+        from a 32 KiB block (UNIFORM_BUFFER_SIZE, src/gpu/SDL_sysgpu.h) and no
+        backend checks `length`, so a 64 KB push overruns its block by 32 KB —
+        heap corruption, hence the wandering count. The limit is PER PUSH: 32 KiB,
+        and 4 KiB on Vulkan, whose descriptor range is MAX_UBO_SECTION_SIZE.
         FOR BULK DATA USE A STORAGE BUFFER: GRAPHICS_STORAGE_READ, declared as a
         StructuredBuffer in space0/space2, BOUND rather than pushed, so the bytes
         move once instead of once per draw. Module 6.

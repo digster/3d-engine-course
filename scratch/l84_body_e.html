@@ -373,6 +373,17 @@ sh scratch/build_verify_84.sh</code></pre>
         axis. If you find yourself re-implementing the search, you have answered a harder question
         than the one asked.</em>
       </p>
+      <p>
+        <em>Solution sketch: for an oriented box the shadow's half-length is r(L) = Σ eᵢ |aᵢ · L|, with eᵢ the half-extents
+        and aᵢ the box's unit axes, and the certificate is |t · L| − r<sub>A</sub>(L) −
+        r<sub>B</sub>(L) with t the offset between the centres. Normalise L first if it came from a
+        cross product: every term is linear in L, so an unnormalised axis scales the gap by |L|
+        and the 0.05000 m comes out wrong by exactly that factor — the one mistake this check
+        catches. For a losing candidate the same formula gives a negative number, which says only
+        that the two shadows overlap along <em>that</em> direction. A positive gap on one axis
+        proves separation; a negative one on fourteen proves nothing, because separation needs
+        only one axis to exist.</em>
+      </p>
     </li>
     <li>
       <p>
@@ -387,6 +398,16 @@ sh scratch/build_verify_84.sh</code></pre>
         sphere test. Do not reach for the SAT — a capsule's surface is curved and the theorem's
         candidate list is finite only for polytopes.</em>
       </p>
+      <p>
+        <em>Solution sketch: capsule against sphere is the closest point on the segment to the sphere's centre — the
+        parameter clamped to [0, 1] — and then §5's sphere test with the radii summed.
+        Capsule against capsule is the closest pair of points between two segments (the
+        standard formulation clamps one parameter, solves for the other, and re-clamps), then the
+        same sphere test on those two points. The case to handle deliberately is parallel
+        segments, where the closest pair is not unique: pick one — the midpoint of the overlap
+        is the stable choice — and report a single contact, noting that a resting capsule on its
+        side really wants two, which is 8.7's manifold.</em>
+      </p>
     </li>
     <li>
       <p>
@@ -400,6 +421,16 @@ sh scratch/build_verify_84.sh</code></pre>
         real. To measure it properly you need pairs that persist across calls, so animate one box
         slowly rather than generating fresh random pairs.</em>
       </p>
+      <p>
+        <em>Solution sketch: predict first. On the spread population the face axes usually separate, so testing the nine
+        cross products first makes most separated pairs pay nine extra axes before reaching the
+        one that would have ended the test — the mean axis count for separated pairs should rise
+        from about three to about ten or more, and overlapping pairs, which test all fifteen
+        either way, should not change. Caching the previous winner is the opposite extreme: for a
+        slowly moving pair the last separating axis is almost always still separating, so most
+        calls end after one axis. Measure it on an animated pair as the hint says, because on
+        fresh random pairs a cache has nothing to remember and only its miss cost shows.</em>
+      </p>
     </li>
     <li>
       <p>
@@ -411,6 +442,18 @@ sh scratch/build_verify_84.sh</code></pre>
       <p>
         <em>Hint: the jump happens when two candidates swap which is smaller. Plot all fifteen
         depths against the offset and it becomes obvious.</em>
+      </p>
+      <p>
+        <em>Solution sketch: each candidate's depth is a continuous function of the offset, and the MTV reports the
+        <em>smallest</em> — so its axis jumps wherever two depth curves cross, while the depth
+        itself stays continuous. Two identical axis-aligned cubes walked out along an exact
+        diagonal give three face depths that are equal for the entire walk: you will see the
+        tie-break, not a jump, which is a result about your test rather than about the MTV.
+        Rotate one cube a few degrees, or bend the path, so the curves are distinct, and the jump
+        appears where they cross. No implementation removes it, because it is in the definition:
+        "the shallowest way out" is a minimum over directions, and a minimum of continuous
+        functions has a discontinuous argmin — which is §8.2's point that the MTV is an answer for
+        shallow overlaps and not a record of how the objects got there.</em>
       </p>
     </li>
     <li>
@@ -428,6 +471,17 @@ sh scratch/build_verify_84.sh</code></pre>
         not happened yet. The answer — allow the objects to approach at exactly the speed that
         closes the gap this step, and no faster — is 8.9's, and the margin is what makes it
         possible.</em>
+      </p>
+      <p>
+        <em>Solution sketch: report a contact when depth &gt; −margin, keep the signed depth, and give the result a flag
+        (or let the sign say) that the contact is speculative. On §E's population the new
+        contacts are the pairs whose gap lies in (0, 5 mm], so the fraction with negative depth is
+        the density of pairs in that thin band — small for random placements, dominant for a
+        resting stack, where every pair sits at a gap of about zero. What a solver does with one,
+        per the hint, is a velocity constraint rather than a push: let the bodies close along the
+        normal by at most gap/h this step, so they arrive exactly in contact and never pass
+        through. With h = 1/60 s and a 5 mm margin that permits 0.3 m/s of closing speed before
+        the constraint bites, which is why the margin must grow with the speeds you expect.</em>
       </p>
     </li>
   </ol>

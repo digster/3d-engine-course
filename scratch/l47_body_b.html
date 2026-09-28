@@ -620,6 +620,16 @@ cmake --build build --config Debug -j
         the near plane out is the cheapest depth-precision fix there is, and it is usually
         available — most scenes have nothing within a metre of the camera.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> predict from Δd = (f − n)d²/(f n N) before running.
+        With f = 100 and D16 (N = 65,535) at 90 m: n = 0.1 gives 1.235 m, n = 0.3 gives
+        0.411 m (the harness measured 412.4 mm), and n = 1.0 gives 0.122 m. The ratios are
+        10.09× between 0.1 and 1.0, 3.006× between 0.1 and 0.3, and 3.357× between 0.3 and 1.0 —
+        not quite 10 and 3, because the factor (f − n) moves slightly with n. If the harness
+        agrees to a percent at all three, the formula has earned its place; if one is off by
+        more, check that <code>k_depth_a = f/(n − f)</code> was recomputed, which is the easy
+        thing to forget.
+      </p>
     </li>
     <li>
       <p>
@@ -632,6 +642,18 @@ cmake --build build --config Debug -j
         wrong answer. You need motion, and the interesting part is that the pattern of which
         surface wins is a <em>map</em> of the depth buffer's quantisation.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> force <code>D16_UNORM</code> so the numbers are big
+        enough to see: at 5 m one code is (99.7 × 25)/(100 × 0.3 × 65,535) ≈ 1.27 mm, so move the
+        second torus about 1.1 mm toward the camera. Now predict with the test itself
+        (<code>LESS</code>). If the nearer torus is drawn <em>first</em>, the farther one never
+        passes and the picture is correct — draw order alone decides whether you see any fighting.
+        If the farther one is drawn first, the nearer one wins only where a code boundary falls
+        between the two depths, which happens for about 1.1/1.27 ≈ 87% of pixels. The rest show
+        the far surface, in thin stripes that follow lines of equal depth, getting wider as the
+        distance grows (the code size grows as d²). Orbit and the stripes sweep across the
+        surface: that is the flicker, and it is a moving picture of the quantisation.
+      </p>
     </li>
     <li>
       <p>
@@ -643,6 +665,16 @@ cmake --build build --config Debug -j
         <strong>Hint:</strong> §E of the harness already renders both; the addition is a
         difference image and a maximum. Expect the largest errors in the <em>midtones</em>, not at
         the extremes — sRGB and linear agree at 0 and at 1 by construction.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> with <code>_UNORM</code> the sampler hands back the stored
+        value <em>x</em> instead of its decode, so the albedo is too bright by x − decode(x). That
+        gap is largest where decode's slope is 1: ((x + 0.055)/1.055)<sup>1.4</sup> = 1.055/2.4 gives
+        x ≈ 0.532 (byte 136), where decode(x) ≈ 0.244, so the ceiling is <strong>0.287 of full
+        range</strong>. The same 0.287 bounds the error after the output encode, because encode is
+        decode's inverse; lighting scales the texel before the encode, so a pixel reaches it only
+        where a mid-grey texel is lit at full strength. Expect a measured maximum a little under
+        0.287 (about 73 of 255), in the midtones, and zero on pure black and pure white texels.
       </p>
     </li>
     <li>
@@ -658,6 +690,18 @@ cmake --build build --config Debug -j
         to the ordinary mapping if it is absent, because reversed-Z on a UNORM format buys
         nothing (§3.4) and complicates everything.
       </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> swapping n and f in the depth row gives
+        z<sub>ndc</sub> = (n/(f − n))(f/d − 1): 1 at d = n and 0 at d = f, as wanted. Then
+        <code>COMPAREOP_GREATER</code> and a depth clear of 0. One trap the hint glosses:
+        <code>engine::perspective</code> is also what the <em>software</em> scene calls, and its
+        z-buffer clears to <code>depth_buffer::k_far</code> = 1 and tests "less" (Lesson 3.1), so
+        flipping the function unconditionally inverts every CPU depth test. Give it a parameter
+        (or a sibling function) and pass "reversed" only on the GPU path. The check is two
+        renders compared per pixel — identical except where two surfaces were within a code of each other — and then §3.4's
+        probe again: D32_FLOAT at 90 m should go from 2.2 mm to about 0.012 mm, and D16 should not
+        move.
+      </p>
     </li>
     <li>
       <p>
@@ -671,6 +715,18 @@ cmake --build build --config Debug -j
         <code>COLOR_TARGET</code> usage bit as well as <code>SAMPLER</code>. Compare against
         Lesson 3.9's shimmering floor, which is the same phenomenon and the reason that lesson
         named mipmaps and deferred them.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch:</strong> for the 256 × 256 image, <code>num_levels</code> is
+        1 + log₂ 256 = 9. Upload level 0 as now, then call
+        <code>SDL_GenerateMipmapsForGPUTexture(cb, texture)</code> on the command buffer
+        <em>outside</em> any pass — the header says it must not be called inside one. On the
+        sampler, set <code>mipmap_mode</code> to <code>LINEAR</code> and — the step that makes or
+        breaks it — raise <code>max_lod</code>. This lesson's sampler sets it to
+        <code>0.0f</code>, which clamps every level but the first away, so a correct chain changes
+        nothing on screen; Lesson 6.10 met exactly that and uses <code>1000.0f</code>, SDL's "no
+        clamp" idiom. With <kbd>R</kbd> tiling the texture the boil becomes a soft grey at a
+        distance, which is correct: a minified checkerboard <em>is</em> its average.
       </p>
     </li>
   </ol>

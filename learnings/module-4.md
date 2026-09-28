@@ -667,6 +667,13 @@ somewhere between 24 and 32 of them, and *not at the same count twice*. Non-dete
 resource boundary is the signature of a pool being exhausted rather than a limit being enforced.
 Kept out of the harness per Lesson 4.4's rule: a test that destabilises the process is not a test.
 
+**Corrected 2026-09-27 — the measurement was right and the explanation was wrong.** SDL's source
+at `release-3.4.12` says why: every backend takes pushes from 32 KiB blocks (`UNIFORM_BUFFER_SIZE`,
+`src/gpu/SDL_sysgpu.h`) and none checks `length`, so a push larger than a block is copied whole
+into a fresh one — a 64 KB push overruns it by 32 KB. Non-determinism was the signature of memory
+corruption, not of a pool. The ceiling is per push (32 KiB), and on Vulkan the bound descriptor
+covers only 4 KiB of each push (`MAX_UBO_SECTION_SIZE`). Found while writing 4.6.5's solution.
+
 ### Reading a uniform back, when no API offers it
 
 Uniform data goes one way, so the only way to find out what arrived is to ask the shader and let
@@ -1181,3 +1188,15 @@ bytes what I think; where did the geometry go. **Predict before you look** — b
 without a prediction produces the feeling of investigating and no information.
 
 ---
+
+## A measurement can be right and its explanation wrong — read the source before naming a cause
+
+Lesson 4.6 measured SDL_GPU's uniform-push crash correctly (4 KB × 16,000 fine, 64 KB dying between
+24 and 32 pushes, never at the same count) and then *explained* it — "the signature of a pool being
+exhausted" — without looking. The explanation stood through the next fifty-four lessons. Writing the exercise that
+asks students to find the pool is what exposed it: a pool predicts a boundary at a constant
+*product* of size and count, and the source (`UNIFORM_BUFFER_SIZE`, 32 KiB, no length check in any
+backend) predicts a boundary at a *size*, which the 4 KB result already fitted and the pool did not.
+When the library's source is on disk (`build/_deps/sdl3-src`), a mechanism is a grep away; a
+plausible story about the numbers is a hypothesis, and should be written as one.
+

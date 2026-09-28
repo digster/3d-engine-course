@@ -7295,7 +7295,16 @@ golden_74: identical=YES</pre>
     intended one for a 30° turn about <code>ŷ</code>.
   </p>
   <p class="hint"><strong>Hint.</strong> Use <code>angle_between_rotations</code> on the two
-    matrices. The answer is large and it is not 180° — work out why before you run it.</p>
+    matrices. The answer is large, and whether it is exactly 180° depends on the axis — work out
+    which axes give 180° before you run it.</p>
+  <p class="hint"><strong>Solution sketch.</strong> the stored buffer is (cos 15°, 0, sin 15°, 0); read as x, y, z, w it becomes the quaternion
+    w = 0, (x, y, z) = (cos 15°, 0, sin 15°). The angle between two rotations is
+    2 arccos|q₁ · q₂|, and here the dot product is c·0 + 0·c + s·0 + 0·s = 0 — so for any turn
+    about ŷ the misread is exactly <strong>180°</strong> from the intended rotation. About x̂ or ẑ
+    the misread keeps one product, cos · sin = 0.25 for 30°, and the answer is 2 arccos 0.25 =
+    151.04°. Either way the error is enormous and scene-shaped rather than noisy, which is why the
+    helper pair and its round-trip test are worth their four lines: a swapped layout does not
+    produce a slightly-wrong model, it produces a model facing somewhere else entirely.</p>
 
   <h3>Exercise 7.4.2 — <code>is_rotation</code>, finally <span class="ex-tag">guided</span></h3>
   <p>
@@ -7310,6 +7319,16 @@ golden_74: identical=YES</pre>
   <p class="hint"><strong>Hint.</strong> Both halves are needed. <code>MᵀM = I</code> alone accepts
     a reflection, whose determinant is −1 — and a reflection composed into a scene graph turns a
     model inside out while every normal still looks unit.</p>
+  <p class="hint"><strong>Solution sketch.</strong> check every entry of MᵀM against the identity and the determinant against 1, both within
+    <code>tol</code>. Measured in a float32 model of <code>mat3_from_quat</code> (three calls to
+    <code>rotate</code>) over 20,000 random unit quaternions (<code>scratch/isrot_74.py</code>),
+    the worst |MᵀM − I| is 5.3 × 10⁻⁷ and the worst |det − 1| is 4.3 × 10⁻⁷. So 10⁻⁶ passes with
+    barely a factor of two to spare, and 10⁻⁵ passes with twenty — pick 10⁻⁵, because a
+    quaternion that has been composed many times without renormalising drifts further than a
+    fresh one. The 1.65-determinant matrix fails any tolerance below 0.65, so rejecting it says
+    nothing about how tight the tolerance is; a better test of the predicate is a rotation
+    scaled by 1.00001, which it should reject, and a reflection, which only the determinant
+    catches.</p>
 
   <h3>Exercise 7.4.3 — The crossover on your machine <span class="ex-tag">measurement</span></h3>
   <p>
@@ -7322,6 +7341,16 @@ golden_74: identical=YES</pre>
     <code>rotation_from_axis_angle</code> and found the closed form 1.3–1.6× faster, never the 3×
     its multiply count predicted, because both spellings paid for one <code>sin</code>. There is no
     trigonometry here at all, so predict the answer first.</p>
+  <p class="hint"><strong>Solution sketch.</strong> the break-even is cost(<code>mat3_from_quat</code>) / (cost(<code>rotate</code>) − cost(a
+    matrix-vector product)), so any saving in building the matrix moves it down in proportion:
+    a closed form twice as fast would put the crossover near 3.8 vectors. Predict before timing
+    that the saving will be smaller than the multiply count says, for a new reason this time:
+    <code>rotate</code> is being called on the basis vectors, whose zeros the compiler folds, so
+    the "three general rotations" are cheaper than they look. On checkability, keep the
+    three-rotate version as the reference: the closed form's nine entries are nine chances for
+    a sign error that a symmetric test case hides, and the only honest way to ship it is a test
+    comparing the two over random quaternions — at which point the slow one has become the
+    oracle rather than the product.</p>
 
   <h3>Exercise 7.4.4 — Where does the gap grow fastest? <span class="ex-tag">derivation</span></h3>
   <p>
@@ -7331,8 +7360,19 @@ golden_74: identical=YES</pre>
     <code>φ</code> at which the gap is largest, and check it against the demo.
   </p>
   <p class="hint"><strong>Hint.</strong> <code>c⁴ + 2c²s² − s⁴ = (c² + s²)² − 2s⁴ = 1 − 2s⁴</code>,
-    which makes both questions easy. The gap is maximal where <code>1 − 2s⁴</code> is most
-    negative, and <code>s ≤ 1</code> bounds that.</p>
+    which makes both questions easy. Mind the absolute value: the gap is largest where
+    <code>|1 − 2s⁴|</code> is smallest, which is not where <code>1 − 2s⁴</code> is most
+    negative.</p>
+  <p class="hint"><strong>Solution sketch.</strong> with s = sin(φ/2) ≈ φ/2, 1 − 2s⁴ ≈ 1 − φ⁴/8, and arccos(1 − ε) ≈ √(2ε), so the gap is
+    2√(φ⁴/4) = φ² — quadratic, which is why small rotations nearly commute (at 30° the exact gap
+    is 15.36° against φ² = 15.71°). The maximum is where the dot product crosses zero:
+    s⁴ = ½, s = 2<sup>−1/4</sup>, φ = 2 arcsin 2<sup>−1/4</sup> = <strong>114.47°</strong>, where
+    the two orders are a full 180° apart. Past it the gap falls again — 84.4° at 150° — and at
+    φ = 180° it is <em>zero</em>: two half-turns about perpendicular axes commute, both
+    products being the half-turn about the third axis, with opposite signs that the double cover
+    identifies. The "most negative" reading lands exactly there, on the one angle where there is
+    no gap at all. Check with the demo: <code>--commute 90</code> reports 120°,
+    <code>--commute 114.47</code> should report 180°, and <code>--commute 180</code> 0°.</p>
 
   <h3>Exercise 7.4.5 — A rotation from one vector to another <span class="ex-tag">engine challenge</span></h3>
   <p>
@@ -7350,6 +7390,16 @@ golden_74: identical=YES</pre>
     normalise. For the opposite case, <code>from</code> and any vector not parallel to it give you a
     perpendicular by one cross product — and choosing "any vector" robustly means choosing the
     coordinate axis <code>from</code> is <em>least</em> aligned with.</p>
+  <p class="hint"><strong>Solution sketch.</strong> reflect in the plane perpendicular to <code>from</code>, then in the plane perpendicular to the
+    bisector h = normalised(from + to); the composite turns by twice the angle between the planes,
+    which is the angle from <code>from</code> to <code>to</code>, about their common line. In
+    quaternion form that is simply q = normalised(1 + from · to, from × to) — no trigonometry,
+    and when the vectors are parallel it is (2, 0) → the identity, gracefully. The failure is the
+    other end: as from · to → −1 both parts go to zero and the normalise divides nothing by
+    nothing. So test 1 + from · to against a small threshold (10⁻⁶ is plenty) and, below it,
+    return the half-turn (0, â), where â = normalised(from × eₖ) and eₖ is the coordinate axis
+    with the smallest |fromₖ| — the least-aligned axis gives the best-conditioned cross
+    product.</p>
 
   <h3>Exercise 7.4.6 — Integrate an angular velocity <span class="ex-tag">engine challenge</span></h3>
   <p>
@@ -7366,6 +7416,15 @@ golden_74: identical=YES</pre>
     at which it stops being acceptable is the point of the exercise. Guard <code>|ω| = 0</code> in
     the exact version — <code>normalised</code> of a zero vector is the reason
     <code>normalised_or</code> exists.</p>
+  <p class="hint"><strong>Solution sketch.</strong> the Euler step is q ← q + ½h ω q = (1 + ½h ω) q, and after renormalising, (1, ½h ω) is a
+    rotation about ω̂ by 2 arctan(θ/2) with θ = |ω|h — not by θ. So the cheap way turns too
+    slowly by θ − 2 arctan(θ/2) ≈ θ³/12 every step, always in the same direction, and the error
+    accumulates linearly while the axis stays exact. Over ten seconds at 60 Hz: 0.013° at
+    1 rad/s, 3.3° at one revolution a second, 13.2° at 10 rad/s and 104° at 20 rad/s. The
+    total goes as ω³/(12 f²) × T, so 1° in ten seconds is reached at about 4.2 rad/s at 60 Hz —
+    fine for a tumbling crate, marginal for a spinning wheel. Lesson 8.3 meets exactly this
+    choice: its <code>body_world</code> offers both rules, keeps the cheap one as the default, and
+    predicts this lag — θ²/12 relative, 0.23% per step at 10 rad/s — before measuring it.</p>
 
   <h2 id="recap">17. Recap &amp; next</h2>
 

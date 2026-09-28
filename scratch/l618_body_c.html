@@ -580,6 +580,15 @@ cmake --build build --config Debug
         barely move, because the heights still cluster. If it moves a lot, look at which glyph is
         setting the first shelf's height.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> predict the side from the area: 4 × 7,145 ≈ 28,600 texels exceeds 128² = 16,384, so the
+        next power of two, 256, and the atlas is 256 × 256. If the shelf efficiency holds at the
+        83.3% it measured at the default size, the glyphs fill about 28,600 / (256 × 0.833) ≈ 134
+        rows of the 256; expect slightly fewer, and a slightly <em>higher</em> efficiency, because
+        the per-glyph padding does not double when the glyphs do. The headline number is the
+        other one: the whole-atlas occupancy falls to about 44% again, because the square
+        power-of-two side is chosen before packing — the same 43.6% the lesson computed at the default size.
+      </p>
     </li>
     <li>
       <p>
@@ -593,6 +602,15 @@ cmake --build build --config Debug
         <em>heavier</em>, because the eye is better at noticing ink appear than disappear. That is
         itself worth knowing: the version of this bug that ships is usually the light-on-dark one.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> put numbers on it first. At half coverage the correct blend of white over black is the encode
+        of 0.5, which is 0.735 — byte 188; the encoded blend writes 128. So every edge pixel is
+        about 60 levels too dark in <em>both</em> arrangements, and what differs is what "too dark"
+        does: on a dark background it eats into light text, which looks thinner; on a light
+        background it thickens dark text, which looks bolder. The same arithmetic error changes
+        the stroke weight in opposite directions, and the side-by-side shots are the evidence;
+        count the edge pixels whose value moved, not just the look.
+      </p>
     </li>
     <li>
       <p>
@@ -604,8 +622,21 @@ cmake --build build --config Debug
         <em>Hint:</em> cropping a quad means moving a vertex <em>and</em> its uv by the same
         fraction. The arithmetic is a lerp of the uv by <code>(new_x - x0) / (x1 - x0)</code>. The
         GPU alternative is <code>SDL_SetGPUScissor</code>, which is free but is per-<em>draw</em> —
-        so using it splits the one draw call into one per clip region, and that trade is the whole
-        reason ImGui does it in the vertex data instead. Measure both.
+        so using it splits the one draw call into one per clip region. Measure both, and then look
+        at which one Dear ImGui chose.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> on the CPU, drop quads wholly outside the rectangle, and for the rest clamp each edge and move
+        the matching uv by the same fraction, so the glyph is cut rather than squeezed; do it in
+        the one place both renderers consume, and §J's comparison extends without a second copy.
+        For the comparison with ImGui, read its backend rather than assuming: in the version this
+        course vendors (1.92.9b), <code>imgui_impl_sdlgpu3.cpp</code> calls
+        <code>SDL_SetGPUScissor</code> once per draw command, with the command's
+        <code>ClipRect</code>, and ImGui keeps that affordable by merging consecutive commands
+        that share a rectangle. It crops in the vertex data only for text, and only when asked —
+        <code>AddText</code>'s optional <code>cpu_fine_clip_rect</code>. So the answer is both,
+        each where it is cheap: the scissor for coarse regions, CPU cropping where a region would
+        otherwise cost a draw per glyph.
       </p>
     </li>
     <li>
@@ -619,6 +650,18 @@ cmake --build build --config Debug
         <code>"e-mail"</code> and <code>"1,000"</code> and any CJK text are not, because break
         opportunities are a property of Unicode (UAX #14) rather than of the space character. The
         exercise is worth doing precisely to arrive at that sentence honestly.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the greedy algorithm keeps the position of the last break opportunity; when the pen passes
+        <code>max_width</code> it breaks there, and a word longer than the line is split where it
+        overflows. Then test it against the cases the hint names, and notice what they teach
+        about <em>your</em> rule: a space-only breaker never breaks inside "e-mail" or "1,000" —
+        correct for the number, and a missed opportunity for the compound — and it cannot break
+        CJK text at all, which has no spaces and permits a break between almost any two
+        ideographs, so the line simply overflows. Add the hyphen as a break point and "−5" and
+        "2026-09-27" become breakable in places they must not be. Every patch trades one case for
+        another, because the right answer is a table of character classes and pair rules, which
+        is what UAX #14 is.
       </p>
     </li>
     <li>
@@ -636,6 +679,20 @@ cmake --build build --config Debug
         set by the distance <em>range</em> rather than by the filter, because a texel outside the
         glyph still carries meaningful data. That last one is §5.2's argument arriving with a
         completely different constant.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> bake with <code>stbtt_GetCodepointSDF(info, scale, cp, padding, onedge_value,
+        pixel_dist_scale, …)</code> — for example <code>onedge_value</code> 128 and a
+        <code>pixel_dist_scale</code> that maps the padding to the full byte range — and pack with
+        a padding at least as large as the distance range, since those texels now carry data.
+        In the shader, <code>alpha = smoothstep(0.5 − w, 0.5 + w, d)</code> with
+        <code>w</code> from <code>fwidth(d)</code>, so the edge stays about one screen pixel wide
+        at every magnification; with a fixed <code>w</code> the text blurs when enlarged and
+        aliases when shrunk, and moving the threshold off 0.5 visibly changes the weight. At 16×
+        the SDF stays sharp where the coverage atlas turns to blur, and its corners are round:
+        near a corner the nearest outline point is the corner itself, so the iso-lines are
+        circles, and multi-channel SDF is the fix. At 1×, the coverage atlas usually looks
+        better — it was rasterised for that size.
       </p>
     </li>
   </ol>

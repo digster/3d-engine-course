@@ -282,6 +282,16 @@ sh scratch/build_verify_82.sh</code></pre>
         caller and a helper costs only the one that asks — and §11 measured what a report field costs
         at 27% of the step.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> <code>weight_of</code> returns <code>gravity * (mass_of(b) * b.gravity_scale)</code> for a
+        dynamic body and zero for fixed and kinematic ones, whose "weight" moves nothing (and whose
+        <code>mass_of</code> is infinite); the panel adds it
+        to the accumulated force for display only. Keep it a helper: the step already computes the
+        acceleration without ever forming the weight, which is the whole point of §5's route, and
+        a report field would make every caller pay — per body, per step — for a number only a
+        debugging panel reads. §11 measured what one extra per-body quantity costs in this loop.
+        A helper costs the one caller who asks, when it asks.
+      </p>
     </li>
     <li>
       <p>
@@ -297,6 +307,18 @@ sh scratch/build_verify_82.sh</code></pre>
         looking for is about where <code>1/m</code> lands relative to the boundaries between
         exponents.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> model the force route's three roundings exactly — w = 1/m, then (g · (1/w)) · w, every step
+        rounded to float — and check the model first: a log-uniform sweep from 1 g to 1000 t
+        should reproduce §5.3's 16% (<code>scratch/roundtrip_82.py</code> gets 15.99%). Walking
+        down from 10 kg one ulp at a time, the first failure is <strong>9.99999809 kg</strong>
+        (0x1.3ffffcp+3), two ulps below 10. The set is dense and it has structure, and the
+        structure is exact: doubling a mass halves w with no rounding at all, so a mass fails
+        exactly when its double does, and every binade [2ᵏ, 2ᵏ⁺¹) fails the same 16.5% of its
+        floats. Within a binade the rate is not uniform — about 12–13% through most of it and
+        21–24% between 1.6 and 1.9 times its start — which is also why a log-uniform sweep, which
+        weights the low end of each binade, reads slightly lower.
+      </p>
     </li>
     <li>
       <p>
@@ -311,6 +333,18 @@ sh scratch/build_verify_82.sh</code></pre>
         <em>Hint:</em> the answer is the platform's velocity, which is exactly why a kinematic body
         has one and why teleporting it every frame instead is the bug this exercise is about. The
         relative velocity at a contact point is the quantity 8.9 solves against.
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> the crate falls straight through the platform, and while it is still level with it, it stays
+        put as the platform slides away — nothing couples them. What 8.9 needs is the relative
+        velocity at the contact point: v<sub>crate</sub> − v<sub>platform</sub> (plus
+        ω<sub>platform</sub> × r once 8.3 gives bodies an angular velocity). A friction impulse
+        then drives that to zero, and that is "carrying". <code>rigid_body</code> already stores
+        <code>velocity</code> for a kinematic body and integrates it, so a platform driven by
+        setting its velocity supplies exactly this; a platform driven by writing its
+        position each frame has a velocity of zero, and the solver will correctly carry nothing.
+        Lesson 8.12 comes back to this with both halves: drive kinematic bodies by velocity, and
+        wake the bodies resting on them yourself.
       </p>
     </li>
     <li>
@@ -328,6 +362,17 @@ sh scratch/build_verify_82.sh</code></pre>
         <em>tightens as the body speeds up</em>. That is a different and nastier shape of bug than
         8.1's, because the simulation is stable until it is fast.
       </p>
+      <p class="hint">
+        <em>Solution sketch:</em> with c = ½ρC<sub>d</sub>A/m the acceleration is −c|v|v, and the terminal speed √(g/c) is the
+        closed form; a 1 kg ball of radius 0.1 m (A = 0.0314 m², C<sub>d</sub> = 0.47, ρ = 1.225)
+        falls to about 32.9 m/s. For stability, linearise about the current speed: the effective
+        rate is 2c|v|, so the explicit step is stable only while h &lt; 1/(c|v|) — a limit that
+        shrinks as the body speeds up, which is the nastier shape the hint describes. At terminal
+        speed it reads h &lt; v<sub>t</sub>/g, loose for the ball (3.4 s) and tight only for
+        light, fast things: a ping-pong ball thrown at 30 m/s needs h &lt; 0.25 s, and still
+        passes at 60 Hz. A cheap cure that removes the limit altogether is to treat the speed
+        implicitly, v ← v / (1 + hc|v|), which can never reverse the velocity.
+      </p>
     </li>
     <li>
       <p>
@@ -344,6 +389,20 @@ sh scratch/build_verify_82.sh</code></pre>
         <code>place_in_parent</code>, which is the one function that sees both spaces; or an
         ECS-side rule that a body component may not be attached below a scaled node. Ask of each: does
         it catch the spinning case? (§9.4 says nothing can.)
+      </p>
+      <p class="hint">
+        <em>Solution sketch:</em> evaluate each candidate against the three failure kinds §9 distinguishes — scale, shear and
+        motion. A validation pass on load catches a scaled or sheared parent above any body and
+        reports every offender at once, but it sees one instant. An assertion in
+        <code>place_in_parent</code> sees both spaces at the moment they meet, and also only one
+        instant. An ECS rule forbidding a body under a scaled node is enforced when the scene is
+        authored, which is the cheapest time to learn it, and is structural too. None of them
+        can see a spinning parent from a single snapshot, which is §9.4's point. What can is a
+        comparison over time: keep each body-parent's world transform from the previous step and
+        flag any change — but that also fires on a legitimately moving platform, so it is a
+        debug warning, not an assertion. A defensible resolution is the load-time validation for
+        the structural cases plus the previous-step warning for motion, with the limitation
+        stated in the API's documentation rather than discovered by a user.
       </p>
     </li>
   </ol>

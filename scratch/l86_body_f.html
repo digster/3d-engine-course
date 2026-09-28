@@ -213,6 +213,15 @@ sh scratch/build_verify_86.sh</code></pre>
       <code>h<sub>A</sub> + h<sub>B</sub></code> and centre
       <code>c<sub>A</sub> − c<sub>B</sub></code>. The answer is 0.3 along <code>−x</code> — note
       the sign, and say what it means for which box you would move.</p>
+      <p class="hint"><em>Solution sketch.</em> with side-1 cubes (half extents 0.5), A ⊖ B is the axis-aligned box centred at
+      c<sub>A</sub> − c<sub>B</sub> = (−0.7, −0.4, 0) with half extents 1: x ∈ [−1.7, 0.3],
+      y ∈ [−1.4, 0.6], z ∈ [−1, 1]. The origin is inside, and its distances to the six faces are
+      0.3 (+x), 1.7 (−x), 0.6 (+y), 1.4 (−y), 1 and 1 (±z). The depth is the smallest, 0.3, through
+      the +x face — the same 0.3 as the overlap of the two cubes' x intervals, 1 − 0.7. Moving A by
+      −0.3 x̂ or B by +0.3 x̂ is the same fix: B sits on A's +x side, and the shallowest way out
+      pushes the two further apart along the axis they already differ on. Check which of those
+      two <code>collide(obb, obb)</code> reports; the sign is a convention, the 0.3 and the x axis
+      are not.</p>
     </li>
 
     <li>
@@ -223,6 +232,15 @@ sh scratch/build_verify_86.sh</code></pre>
       <p class="hint"><em>Hint.</em> The tear needs the new support point to be exactly coplanar
       with existing faces. What does a capsule's support function return for a direction
       perpendicular to its axis, and is it ever the same point twice?</p>
+      <p class="hint"><em>Solution sketch.</em> predict the hulls row, or lower. A capsule's support is an endpoint of its segment plus r
+      times the unit direction, so for directions perpendicular to the axis the segment term ties
+      but the rounded term moves with every change of direction: the support is a different point
+      for every direction and never the same point twice. The difference of two capsules is a
+      parallelogram swept by a sphere, so its surface is curved almost everywhere and its flat
+      patches are met only by exactly one direction each. The tear needs a new support point
+      coplanar with existing faces, which crates on a floor produce constantly (flat faces,
+      repeated vertices) and swept spheres essentially never. If the capsule row tears as often
+      as the crates, suspect the capsule's support function before the flood fill.</p>
     </li>
 
     <li>
@@ -232,6 +250,12 @@ sh scratch/build_verify_86.sh</code></pre>
       what it saves on §I.1's mix. Report the answer even if it is “nothing”.</p>
       <p class="hint"><em>Hint.</em> Think about what the expansion does to a face whose support
       point is already on it. §10's duplicate check may be getting there first.</p>
+      <p class="hint"><em>Solution sketch.</em> record, per call, which test ended it. The expected answer is "nothing", and the reason is
+      structural: when the upper bound stops improving, it is because the new support point lies
+      on the face it was sought from, and §10's duplicate check terminates on exactly that — a
+      point already on the polytope — one pass before three stalled passes could accumulate. A
+      second test that never fires first costs a comparison and saves no work. Report the count
+      of calls it would have ended, which should be zero or nearly so, and that is the result.</p>
     </li>
 
     <li>
@@ -242,6 +266,14 @@ sh scratch/build_verify_86.sh</code></pre>
       <p class="hint"><em>Hint.</em> §F measured the worst polytope at 60 faces and the mean far
       below it. A heap has a constant factor and a scan of 30 contiguous 32-byte structs is one
       cache line every other element. Predict the sign of the result before you measure it.</p>
+      <p class="hint"><em>Solution sketch.</em> predict a loss. A binary heap is O(log n) per operation with a constant that includes
+      scattered memory and an extra indirection per comparison; expansion deletes arbitrary faces,
+      so it also needs lazy deletion — dead faces left in the heap and skipped on pop — which
+      grows the heap past the live count. Against that, the scan reads a few dozen contiguous
+      32-byte faces, two per cache line, prefetched perfectly. At §F's sizes — worst 60, mean far
+      below — the scan should win or tie, and the heap would start to pay only for polytopes in
+      the hundreds of faces, which EPA on game shapes does not build. Measure on §I.1's mix and
+      report the sign; a loss here is the expected, useful result.</p>
     </li>
 
     <li>
@@ -256,6 +288,16 @@ sh scratch/build_verify_86.sh</code></pre>
       honest answer may well be that the shortcut is a bad trade, because 8.10's solver is about to
       keep every contact in exactly this regime, and a systematically wrong normal on the
       commonest contact in the scene is worse than a slow correct one.</p>
+      <p class="hint"><em>Solution sketch.</em> when GJK reports a separation smaller than the margin, return its last direction as the
+      normal and the margin minus the distance as the depth, skipping EPA entirely. On a stack of
+      crates almost every contact takes that path, so the saving approaches EPA's whole share of
+      §I.1's cost. The accuracy half is the one to weigh: GJK's direction near contact is the
+      direction to the nearest <em>feature</em>, and for two boxes resting face to face that can
+      point at an edge or corner rather than straight along the face normal — §H.2's table gives
+      the size of that error. A tilted normal on a resting contact becomes a sideways push every
+      step, and the sequential-impulse solver (8.10) then spends its iterations fighting it. So
+      ship it only if the normal error is below what the solver tolerates, measured on the
+      stacked fixture, not on isolated pairs.</p>
     </li>
   </ol>
 

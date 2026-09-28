@@ -1675,3 +1675,16 @@ Two authoring lessons from 6.18's diagrams, both caught by `check-page.js` and n
   on the plotted curve. Three placements before it reached empty space. `check-page.js` has a
   separate check for text-on-text and for text-on-shape, which is the only reason each move was
   caught rather than one hiding behind the other. Budget for the iterations.
+
+## A rule inherited from a comment outlives the lesson that wrote it — the partial-bind "rule"
+
+6.8's `gpu_scene.cpp` said a partial `SDL_BindGPUFragmentSamplers` "REPLACES the range it names",
+so slot 2 "would be unbound the moment slot 0 changed". 6.15 repeated it as "the rule Lesson 6.8
+discovered", STATE carried it, and Exercise 6.8.4 was built on it ("the obvious optimisation is a
+bug"). SDL `release-3.4.12` disagrees: all three backends store bindings per slot and write only
+`firstSlot + i`. What does reset every binding is **the end of a render pass** (`SDL_zeroa` on
+each backend's arrays), with the debug layer asserting `Missing fragment sampler binding!` at draw
+time — which is probably the real failure the comment was generalising from. Binding all slots in
+one call remains correct; only the reason was wrong. Found by writing the exercise's solution
+against the library's source (`build/_deps/sdl3-src`), not against the comment.
+

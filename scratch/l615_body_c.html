@@ -195,10 +195,13 @@ SDL_BindGPUFragmentSamplers(pass, 0, binds, 6);</code></pre>
 
   <p>
     Slots 3 to 5 do not change within a frame, so binding them here rather than once at the top is
-    redundant work — but the rule Lesson 6.8 discovered still applies: <strong>a partial
-    <code>SDL_BindGPUFragmentSamplers</code> does not merge with an earlier one, it REPLACES the
-    range it names.</strong> Slot 3 would be unbound the moment slot 0 changed. One call for the
-    whole set is the only spelling that is correct, and it costs the same.
+    redundant work, and one call for the whole set costs the same as a call for two.
+    <strong>Corrected after Module 8:</strong> this paragraph used to say that a partial
+    <code>SDL_BindGPUFragmentSamplers</code> replaces the range it names and so leaves the other
+    slots unbound, calling it "the rule Lesson 6.8 discovered". SDL's source says otherwise — each
+    backend writes only the slots in the range — and binding slots 3 to 5 once after the pass
+    begins would be equally correct. The rule that does hold is about <em>passes</em>: every
+    binding is cleared when a render pass ends. Exercise 6.8.4 has the details.
   </p>
 
   <p>
@@ -657,6 +660,18 @@ needed by `demos/sandbox_shaders.stamp'</code></pre>
         The answer is that a fixed absolute error on a multiplier is a <em>relative</em> error on the
         result, so it is invisible in a bright reflection and significant in a dark one.
       </p>
+      <p class="hint">
+        <strong>Solution sketch.</strong> the specular term is the prefiltered radiance times <code>F0 · scale + bias</code>, so an
+        absolute error δ in the table is a <em>relative</em> error of δ/(F0 · scale + bias) in the
+        result, independent of how bright the reflection is. What changes it is F0: near normal
+        incidence on a smooth dielectric the multiplier is close to F0 = 0.04, so the worst
+        0.01118 is an error of roughly a quarter of the reflection's strength, while on a metal
+        (F0 near 1) the same δ is about one per cent. The artist's number is the relative one,
+        and it lands on plastic and wood, never on chrome. Moving the table to a 16-bit format
+        (<code>R16G16_UNORM</code>, or <code>R16G16_FLOAT</code>) removes the quantisation part —
+        about 256× smaller — and leaves the part that comes from sampling a smooth function on a
+        finite grid, which only more resolution or a better fit can reduce.
+      </p>
     </li>
 
     <li>
@@ -672,6 +687,19 @@ needed by `demos/sandbox_shaders.stamp'</code></pre>
         <span class="eq-plain">2π(1 − cos θ)</span> — at 1° that is 9.57 × 10⁻⁴ sr. The comparison
         should improve dramatically for rough materials and barely move for smooth ones; explaining
         <em>why</em> is the exercise.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch.</strong> a small disc of radiance L and solid angle Ω delivers irradiance L · Ω along its axis, so
+        the directional light's intensity is <code>sun_radiance</code> × 9.57 × 10⁻⁴ in the
+        disc's direction. Rough materials improve dramatically because the split sum's
+        assumption — that radiance is smooth across the lobe, so it can be integrated separately
+        from the BRDF — is exactly what a tiny, enormously bright disc violates; with the disc
+        removed the environment is smooth and the split sum is accurate, and the sun, as an
+        analytic light, is evaluated against the full BRDF with no approximation at all. Smooth
+        materials barely move because their lobe is so narrow that the split sum was never far
+        wrong for them — and for a near-mirror the change can even go slightly the wrong way,
+        since an analytic light treats a 1° disc as a point and draws its reflection smaller and
+        more intense than the disc.
       </p>
     </li>
 
@@ -691,6 +719,18 @@ needed by `demos/sandbox_shaders.stamp'</code></pre>
         Evaluation is a quadratic form in the normal. You should find 27 floats replacing 73 KB, and
         the bake time going from four seconds to a few milliseconds.
       </p>
+      <p class="hint">
+        <strong>Solution sketch.</strong> the nine real basis functions have the constants 0.282095 (l = 0), 0.488603 (l = 1),
+        1.092548, 0.315392 and 0.546274 (l = 2). Weight each cube texel by its solid angle,
+        Δu Δv / (1 + u² + v²)<sup>3/2</sup> with Δu = Δv = 2/N, and check before anything else
+        that the weights over all six faces sum to 4π — the same kind of self-test the harness
+        uses everywhere. Evaluate E(n) = Σ Â<sub>l</sub> L<sub>lm</sub> Y<sub>lm</sub>(n) with
+        Â₀ = π, Â₁ = 2π/3, Â₂ = π/4; those three numbers are the clamped cosine's own harmonic
+        coefficients, and the reason nine suffice is that together they hold about 99.2% of its
+        energy. Expect the largest texel errors where the sky has a compact bright feature — the
+        sun disc — and much smaller errors elsewhere, and report both, because the average hides
+        the one that matters.
+      </p>
     </li>
 
     <li>
@@ -708,6 +748,19 @@ needed by `demos/sandbox_shaders.stamp'</code></pre>
         the two should agree to within the sampler's filtering differences, and where they do not,
         the likely cause is the handedness note in §3.1.
       </p>
+      <p class="hint">
+        <strong>Solution sketch.</strong> create the cube with <code>COLOR_TARGET</code> as well as <code>SAMPLER</code> usage, then
+        for each level and each face begin a pass whose <code>SDL_GPUColorTargetInfo</code> names
+        that <code>mip_level</code> and <code>layer_or_depth_plane</code>, draw one full-screen
+        triangle, and in the fragment shader turn the pixel into the face's direction and
+        importance-sample GGX at that level's roughness with <em>N</em> = <em>V</em> = <em>R</em>,
+        as the CPU version does. Use the CPU's exact sample sequence (the same Hammersley
+        points) so the comparison measures the port rather than the noise. Level 0 is a copy;
+        sampling the <em>previous</em> level instead of the source makes each pass cheaper but
+        compounds the blur — acceptable, and worth quantifying against the CPU reference. If a
+        whole face disagrees, or a seam appears, suspect the face-direction table and §3.1's
+        handedness note before the sampling.
+      </p>
     </li>
 
     <li>
@@ -724,6 +777,18 @@ needed by `demos/sandbox_shaders.stamp'</code></pre>
         already have, so it costs no new table. Watch out that it must not push the table
         <em>above</em> 1 — a surface that reflects more than arrives is the failure Lesson 6.2
         measured at 1.1386 and 6.4 fixed.
+      </p>
+      <p class="hint">
+        <strong>Solution sketch.</strong> with A = <code>scale</code> and B = <code>bias</code> from the table, Fdez-Agüera's terms are
+        E<sub>ss</sub> = A + B, E<sub>ms</sub> = 1 − E<sub>ss</sub>, F<sub>avg</sub> = F0 +
+        (1 − F0)/21, and F<sub>ms</sub> = (F0·A + B) F<sub>avg</sub> / (1 − E<sub>ms</sub>
+        F<sub>avg</sub>); the specular becomes (F0·A + B) × prefiltered radiance +
+        F<sub>ms</sub> E<sub>ms</sub> × irradiance. Check it by hand at roughness 1 for a white
+        metal, F0 = 1: E<sub>ss</sub> = 0.3276, F<sub>avg</sub> = 1, so F<sub>ms</sub> = 0.3276 /
+        0.3276 = 1, and the total is 0.3276 + 0.6724 = 1 exactly — under a uniform environment the
+        metal reflects precisely the radiance it stands in. For any F0 &lt; 1, F<sub>avg</sub>
+        &lt; 1 and the total stays below 1, which is the guarantee the hint asks for rather than a
+        clamp that hides a violation.
       </p>
     </li>
   </ol>

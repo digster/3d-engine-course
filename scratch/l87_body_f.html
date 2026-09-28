@@ -198,6 +198,15 @@ sh scratch/build_verify_87.sh</code></pre>
       measurement should come out a couple of per cent <em>low</em>, for the reason §1 gives: the
       crate's effective lip is inside its geometric one by however much penetration the solver
       allows.</p>
+      <p class="hint"><em>Solution sketch.</em> four contact points at the base corners give a support polygon 0.8 m wide, so the crate tips
+      when the applied moment exceeds m·g·(w/2) = 78.48 N·m. Bisect on the applied moment with a
+      fixed number of settle steps per trial and a clear tip criterion (for example, one base
+      corner rising more than 1 cm), and expect a result a couple of per cent below 78.48. The sign
+      is the useful part: a solver that allows the crate to sink a little into the floor puts its
+      contact points slightly inside the geometric corners, so the lever arm the floor can use is
+      w/2 minus that inset, and the measured capacity falls short of the ideal by the same
+      fraction. A result <em>above</em> 78.48 would mean the contact points were outside the
+      crate, which is a bug, not a tolerance.</p>
     </li>
 
     <li>
@@ -206,9 +215,26 @@ sh scratch/build_verify_87.sh</code></pre>
       <code>f.v[3]</code>. Rebuild and run the demo. What does preset 1 show? What does the harness
       say? Then swap them back and instead reverse the sign of <code>side</code> in the clipper, and
       compare the two failures.</p>
-      <p class="hint"><em>Hint.</em> One of them empties the manifold; the other keeps everything,
-      including points outside the reference face. Both are silent, and only one of them is caught by
-      a test that checks the points are on the surfaces.</p>
+      <p class="hint"><em>Hint.</em> Both edits change which way the side planes face. Work out
+      what Sutherland–Hodgman keeps when they face the wrong way, and what
+      <code>manifold.cpp</code> does with an empty clip, before you look. Both failures are silent,
+      and only a test that checks the points lie on both surfaces can tell a correct manifold from
+      a plausible fallback.</p>
+      <p class="hint"><em>Solution sketch.</em> read the clipper first. Each side plane's outward direction is cross(edge, n), which points
+      away from the face only if the face is wound counter-clockwise about n — the rule
+      <code>shape.hpp</code> states — so swapping <code>f.v[1]</code> and <code>f.v[3]</code>
+      (which reverses the cycle 0-1-2-3 into 0-3-2-1) turns every side plane inward, and negating
+      <code>side</code> does exactly the same. By the code as shipped, the two edits should
+      therefore fail identically: Sutherland–Hodgman keeps what lies outside every edge of a
+      convex face, which is nothing. The manifold then takes its last fallback: one point, at the
+      midpoint of the two shapes' support points along the normal, with status
+      <code>clip_empty</code>. For a box resting on a large floor those support points are
+      arbitrary corners of each face, so the point can sit outside the box's footprint entirely —
+      the fabricated answer the code's own comment warns about. Preset 1's box balances on it;
+      a count test sees one point instead of four, a test that the point lies on both surfaces
+      rejects it, and the status field names the path. If your two runs differ, find what else
+      the vertex order feeds (the feature ids are built from vertex indices): that difference
+      would be the finding.</p>
     </li>
 
     <li>
@@ -218,6 +244,15 @@ sh scratch/build_verify_87.sh</code></pre>
       solver can do.</p>
       <p class="hint"><em>Hint.</em> Five points span more <em>area</em>. The question a solver asks
       is whether the resultant can act anywhere in the support polygon, and it already could.</p>
+      <p class="hint"><em>Solution sketch.</em> the case with room to measure is two equal squares with one turned 45°: their clipped
+      polygon is a regular octagon, the best four of its eight vertices (a square on alternate
+      vertices) span 70.7% of its area, and the best five span 78.0%. So a fifth point buys about
+      seven points of area on the most favourable shape there is. It does not buy stability:
+      what a solver needs, by §2's arithmetic, is for the resultant force to be able to act at
+      the projection of the centre of mass, anywhere inside the support polygon — and the
+      four-point polygon already contains every point the resultant needs for any load the
+      contact can bear without tipping. The extra area lies at the edges, where it would matter
+      only for a load already beyond the tipping limit.</p>
     </li>
 
     <li>
@@ -229,6 +264,14 @@ sh scratch/build_verify_87.sh</code></pre>
       <p class="hint"><em>Hint.</em> With real faces the sweep should be <em>flat</em>: the
       tolerance has nothing to decide, because the face is named rather than recovered. That flatness
       is the whole argument for doing it.</p>
+      <p class="hint"><em>Solution sketch.</em> a hexagonal prism has 8 faces — two hexagons and six quads — so the index array holds
+      6 + 6 + 24 = 36 entries, each face wound counter-clockwise seen from outside (the rule the
+      clipper depends on; see the previous exercise). <code>support_face</code> then returns the
+      named face whose normal has the largest dot product with the direction, instead of gathering
+      vertices within a tolerance of the supporting plane. Re-run §5's sweep: every tolerance
+      should produce the same manifold, because there is no longer a decision for the tolerance to
+      make. That flat line is the argument for authored faces — a shape that knows its faces
+      cannot be confused by vertices that happen to lie near a plane.</p>
     </li>
 
     <li>
@@ -242,6 +285,15 @@ sh scratch/build_verify_87.sh</code></pre>
       normal's basis (keeps magnitude, and is wrong if the flip is genuine). Measure which one
       settles a stack faster, and note that you now have a reason to prefer one rather than a
       preference.</p>
+      <p class="hint"><em>Solution sketch.</em> detect a flip as a drop in dot(n<sub>previous</sub>, n<sub>current</sub>) below a threshold
+      (0.9 is a reasonable start), log the ids either side, and count the frames each id survives.
+      Then compare the two policies on the thing that matters, a stack's settling: run the same
+      fixture with each, and record the steps until every body's velocity falls below a rest
+      threshold. Dropping is the safe default because a warm impulse along a stale normal can
+      push in a direction no constraint now resists; rotating keeps convergence when the swing is
+      an artefact of feature switching rather than a real change of contact. The measurement
+      decides between them for your scenes, which is the point: a policy with a number behind it,
+      not a preference.</p>
     </li>
   </ol>
 
