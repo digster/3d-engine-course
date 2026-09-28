@@ -302,7 +302,11 @@ void gpu_shadow_map::fill_uniforms(scene_light_uniforms& out, const light_camera
     out.shadow_bias = set.constant_bias + quantisation_bias(depth_format::f32);
     out.shadow_slope_scale = set.slope_scale;
     out.shadow_max_slope = set.max_slope;
-    out.shadow_reach = pcf_reach_texels(set.pcf_radius);
+    // THE GPU'S REACH, NOT THE CPU'S: this lookup is a 2x2 comparison per tap
+    // (gpu_shadow.hpp's `gpu_pcf_reach_texels`). Until the fix after 6.17b this
+    // was `pcf_reach_texels`, and a one-tap sun left a third of a bare ground
+    // as acne on the GPU while the CPU's picture was clean.
+    out.shadow_reach = gpu_pcf_reach_texels(set.pcf_radius);
     out.shadow_pcf = static_cast<float>(set.pcf_radius);
 
     // The mode as a NUMBER, spelled out rather than cast from the enum. Lesson

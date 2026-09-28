@@ -786,12 +786,16 @@ void section_g_gpu()
            "the light's matrix crosses into the uniform block byte for byte — "
            "the same `memcpy`-is-the-whole-conversion claim 4.6 measured for the "
            "camera's");
-    checkf(light.shadow_reach == engine::pcf_reach_texels(set.pcf_radius)
+    // REPAIRED 2026-09-28: the GPU's reach is `gpu_pcf_reach_texels`, not the
+    // CPU's `pcf_reach_texels` — its lookup compares a 2x2 block per tap, and
+    // with one tap the CPU's number left a third of a bare ground as acne on the
+    // GPU (verify_617b §K). The claim below is otherwise unchanged.
+    checkf(light.shadow_reach == engine::gpu_pcf_reach_texels(set.pcf_radius)
                && light.shadow_texel == cam.world_per_texel
                && light.shadow_depth_range == cam.depth_range,
            "…and the eleven shadow floats come from ONE function, so the two "
-           "renderers cannot disagree about what a bias means: reach %.4f, "
-           "texel %.6f, range %.4f",
+           "renderers cannot disagree about what a bias means (the reach is the "
+           "GPU's own, for its 2x2 comparison): reach %.4f, texel %.6f, range %.4f",
            static_cast<double>(light.shadow_reach),
            static_cast<double>(light.shadow_texel),
            static_cast<double>(light.shadow_depth_range));

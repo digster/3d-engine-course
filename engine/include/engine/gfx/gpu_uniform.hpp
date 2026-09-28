@@ -281,7 +281,7 @@ struct scene_light_uniforms
     float shadow_bias;        ///< 140 — the constant term, in device depth
     float shadow_slope_scale; ///< 144 — a multiplier on the derived slope term
     float shadow_max_slope;   ///< 148 — the clamp on tan(theta)
-    float shadow_reach;       ///< 152 — `pcf_reach_texels(radius)`
+    float shadow_reach;       ///< 152 — `gpu_pcf_reach_texels(radius)` (was the CPU's before the 6.17b fix)
     float shadow_pcf;         ///< 156 — the kernel radius, as a float
     float shadow_mode;        ///< 160 — 0 none, 1 constant, 2 slope, 3 normal
     float shadow_normal_scale;///< 164 — texels of normal offset at grazing

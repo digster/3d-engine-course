@@ -543,12 +543,36 @@
   </p>
 
   <p>
-    Which raises an uncomfortable question about the sun. 6.8's GPU path samples through the same
-    kind of sampler and sizes its bias with the CPU's <code>pcf_reach_texels</code> — with its default
-    3×3 kernel, 2.12 texel diagonals where 2.83 are reachable, a quarter short. This lesson does not
-    change it: the sun's picture is not this lesson's to move, and every later lesson's harness would
-    move with it. It is recorded in <code>STATE.md</code> as a pending correction, with the number to
-    check, for the lesson that next has reason to measure the sun's shadow on the GPU.
+    Which raised an uncomfortable question about the sun. 6.8's GPU path samples through the same
+    kind of sampler and sized its bias with the CPU's <code>pcf_reach_texels</code> — with its default
+    3×3 kernel, 2.12 texel diagonals where 2.83 are reachable. The first version of this page left it
+    there, "a quarter short", as a pending correction. Then it was measured, the way that cannot be
+    argued with: a bare ground under the sun and nothing else in the map. Nothing can shadow a plane
+    under a directional light, so every pixel darker than the unshadowed frame is acne. §K of the
+    harness:
+  </p>
+
+  <pre><code>   pcf    theta      tan  (r + 1/2) sqrt2    (r + 1) sqrt2    as filled
+     0    20.0°    0.364            20388                0            0
+     0    45.0°    1.000            17821                0            0
+     0    63.4°    1.997            23756                0            0
+     0    75.0°    3.732            23562                0            0
+     1    20.0°    0.364                0                0            0
+     1    45.0°    1.000                0                0            0
+     1    63.4°    1.997                0                0            0
+     1    75.0°    3.732                0                0            0</code></pre>
+
+  <p>
+    Both halves of that table matter. With one tap the shortfall is enormous — 27–36% of a bare
+    ground is acne at every elevation, where the CPU's picture of the same scene is clean. With the
+    default 3×3 kernel the old reach shows <em>nothing</em>, at any elevation. That is why the sun
+    carried the CPU's number from 6.8 to here: every picture anyone looked at used the default. The
+    "quarter short" was true arithmetic that predicted a symptom the default configuration does not
+    have, which is exactly the kind of claim that needs a measurement before it goes in a sentence.
+    The fix is one named function, <code>gpu_pcf_reach_texels</code>, beside the GPU shadow code,
+    and <code>fill_uniforms</code> now writes it. Rerunning the harnesses of 6.1 to 6.18 and 7.1 to
+    7.8 against the fixed engine moves no number but timings: the enlarged bias removes acne that
+    only a one-tap sun had, and no harness had measured one.
   </p>
 
   <h3>9.2 — The CPU snaps its vertices</h3>

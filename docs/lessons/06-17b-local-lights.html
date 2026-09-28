@@ -115,7 +115,7 @@
             <code>scratch/verify_617b.cpp</code> <em>(new)</em></dd>
 
         <dt>Milestone</dt>
-        <dd>The engine has lamps. <strong>40 checks green</strong>, on the GPU and off it; the
+        <dd>The engine has lamps. <strong>44 checks green</strong>, on the GPU and off it; the
             inverse square measured as the same power through spheres of 0.5, 2 and 8 metres to
             2.6&nbsp;×&nbsp;10<sup>−6</sup>; a derived perspective bias with <strong>zero</strong>
             acne and <strong>zero</strong> leaks over 411,075 points judged by ray-casting; CPU and
@@ -4254,12 +4254,36 @@
   </p>
 
   <p>
-    Which raises an uncomfortable question about the sun. 6.8's GPU path samples through the same
-    kind of sampler and sizes its bias with the CPU's <code>pcf_reach_texels</code> — with its default
-    3×3 kernel, 2.12 texel diagonals where 2.83 are reachable, a quarter short. This lesson does not
-    change it: the sun's picture is not this lesson's to move, and every later lesson's harness would
-    move with it. It is recorded in <code>STATE.md</code> as a pending correction, with the number to
-    check, for the lesson that next has reason to measure the sun's shadow on the GPU.
+    Which raised an uncomfortable question about the sun. 6.8's GPU path samples through the same
+    kind of sampler and sized its bias with the CPU's <code>pcf_reach_texels</code> — with its default
+    3×3 kernel, 2.12 texel diagonals where 2.83 are reachable. The first version of this page left it
+    there, "a quarter short", as a pending correction. Then it was measured, the way that cannot be
+    argued with: a bare ground under the sun and nothing else in the map. Nothing can shadow a plane
+    under a directional light, so every pixel darker than the unshadowed frame is acne. §K of the
+    harness:
+  </p>
+
+  <pre><code>   pcf    theta      tan  (r + 1/2) sqrt2    (r + 1) sqrt2    as filled
+     0    20.0°    0.364            20388                0            0
+     0    45.0°    1.000            17821                0            0
+     0    63.4°    1.997            23756                0            0
+     0    75.0°    3.732            23562                0            0
+     1    20.0°    0.364                0                0            0
+     1    45.0°    1.000                0                0            0
+     1    63.4°    1.997                0                0            0
+     1    75.0°    3.732                0                0            0</code></pre>
+
+  <p>
+    Both halves of that table matter. With one tap the shortfall is enormous — 27–36% of a bare
+    ground is acne at every elevation, where the CPU's picture of the same scene is clean. With the
+    default 3×3 kernel the old reach shows <em>nothing</em>, at any elevation. That is why the sun
+    carried the CPU's number from 6.8 to here: every picture anyone looked at used the default. The
+    "quarter short" was true arithmetic that predicted a symptom the default configuration does not
+    have, which is exactly the kind of claim that needs a measurement before it goes in a sentence.
+    The fix is one named function, <code>gpu_pcf_reach_texels</code>, beside the GPU shadow code,
+    and <code>fill_uniforms</code> now writes it. Rerunning the harnesses of 6.1 to 6.18 and 7.1 to
+    7.8 against the fixed engine moves no number but timings: the enlarged bias removes acne that
+    only a one-tap sun had, and no harness had measured one.
   </p>
 
   <h3>9.2 — The CPU snaps its vertices</h3>
@@ -6121,7 +6145,7 @@ if (local_light_count &gt; 0.5f)
   <h2 id="instruments"><span class="num">11</span>The instruments, and the judge that was wrong four times</h2>
 
   <p>
-    <code>verify_617b</code> runs forty checks in ten sections, and each section's shape is 5.3's rule:
+    <code>verify_617b</code> runs forty-four checks in eleven sections, and each section's shape is 5.3's rule:
     a measurement, a claim, and a <strong>control</strong> that proves the measurement could have
     failed. Three instruments carry most of the lesson, and each has a story about being wrong.
   </p>
@@ -7902,10 +7926,12 @@ if (local_light_count &gt; 0.5f)
       <tr><td><code>engine/src/gfx/gpu_debug.cpp</code></td><td>modified</td>
           <td>Its name in dumps.</td></tr>
       <tr><td><code>engine/include/engine/gfx/gpu_shadow.hpp</code></td><td>modified</td>
-          <td><code>pack_local_light</code>, <code>local_shadow_job</code>,
+          <td><code>gpu_pcf_reach_texels</code> (the GPU's own reach, for the sun too),
+              <code>pack_local_light</code>, <code>local_shadow_job</code>,
               <code>gpu_local_shadows</code>.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_shadow.cpp</code></td><td>modified</td>
-          <td>The depth-only pipeline and draw loop shared by the sun and the lamps; the new class.</td></tr>
+          <td>The depth-only pipeline and draw loop shared by the sun and the lamps; the new class;
+              the sun's reach in <code>fill_uniforms</code>.</td></tr>
       <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
           <td><code>scene_local_lights</code>; a trailing parameter on both render calls.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
@@ -7917,7 +7943,7 @@ if (local_light_count &gt; 0.5f)
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
       <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
-          <td>The harness: forty checks in ten sections.</td></tr>
+          <td>The harness: forty-four checks in eleven sections.</td></tr>
     </tbody>
   </table>
   </div>
@@ -16016,7 +16042,7 @@ struct scene_light_uniforms
     float shadow_bias;        ///&lt; 140 — the constant term, in device depth
     float shadow_slope_scale; ///&lt; 144 — a multiplier on the derived slope term
     float shadow_max_slope;   ///&lt; 148 — the clamp on tan(theta)
-    float shadow_reach;       ///&lt; 152 — `pcf_reach_texels(radius)`
+    float shadow_reach;       ///&lt; 152 — `gpu_pcf_reach_texels(radius)` (was the CPU&#x27;s before the 6.17b fix)
     float shadow_pcf;         ///&lt; 156 — the kernel radius, as a float
     float shadow_mode;        ///&lt; 160 — 0 none, 1 constant, 2 slope, 3 normal
     float shadow_normal_scale;///&lt; 164 — texels of normal offset at grazing
@@ -18331,6 +18357,28 @@ void frame_log::print() const
 
 namespace engine {
 
+/// **How far a GPU shadow lookup reads, in texels: `(radius + 1) * sqrt(2)`.**
+///
+/// Not `pcf_reach_texels`, which is the CPU&#x27;s `(radius + 1/2) * sqrt(2)`, and the
+/// difference is the FILTER, not the kernel. The CPU compares the nearest texel,
+/// whose sample is at most half a texel away along each axis. Every GPU tap here
+/// is `SampleCmp` through a LINEAR comparison sampler, which compares a 2x2 block
+/// and blends the four answers — and any of the four can carry weight while a
+/// whole texel away along each axis. The bias has to cover the furthest depth
+/// the filter reads, so it is sized for this.
+///
+/// Lesson 6.17b found it for the lamps (11,098 disagreeing pixels -&gt; 0) and the
+/// fix after it measured it for the sun: on a bare ground, with one tap, the
+/// CPU&#x27;s reach left 27-36% of the pixels as acne at every elevation from 20 to
+/// 75 degrees, and this reach leaves none (`verify_617b` §K). With the default
+/// 3x3 kernel neither shows acne, which is how the sun&#x27;s lookup carried the
+/// CPU&#x27;s number from 6.8 to here.
+[[nodiscard]] inline float gpu_pcf_reach_texels(int radius)
+{
+    const int r = (radius &lt; 0) ? 0 : radius;
+    return (static_cast&lt;float&gt;(r) + 1.0f) * 1.41421356f;
+}
+
 /// Owns the depth texture, the depth-only pipeline and the comparison sampler
 /// that a GPU shadow map is made of.
 ///
@@ -18904,7 +18952,11 @@ void gpu_shadow_map::fill_uniforms(scene_light_uniforms&amp; out, const light_ca
     out.shadow_bias = set.constant_bias + quantisation_bias(depth_format::f32);
     out.shadow_slope_scale = set.slope_scale;
     out.shadow_max_slope = set.max_slope;
-    out.shadow_reach = pcf_reach_texels(set.pcf_radius);
+    // THE GPU&#x27;S REACH, NOT THE CPU&#x27;S: this lookup is a 2x2 comparison per tap
+    // (gpu_shadow.hpp&#x27;s `gpu_pcf_reach_texels`). Until the fix after 6.17b this
+    // was `pcf_reach_texels`, and a one-tap sun left a third of a bare ground
+    // as acne on the GPU while the CPU&#x27;s picture was clean.
+    out.shadow_reach = gpu_pcf_reach_texels(set.pcf_radius);
     out.shadow_pcf = static_cast&lt;float&gt;(set.pcf_radius);
 
     // The mode as a NUMBER, spelled out rather than cast from the enum. Lesson
@@ -23782,6 +23834,7 @@ ENGINE_MAIN(gltf_app)
 // §H  additive: with no lamps nothing that existed can move
 // §I  the frame graph: seven passes declared, then a frame that declares none
 // §J  the budget, and what a lamp&#x27;s shadow costs
+// §K  the sun&#x27;s reach: §G&#x27;s finding in the sun&#x27;s own lookup (the fix after 6.17b)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson&#x27;s derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -25629,6 +25682,170 @@ void section_j(rig&amp; r)
 
 } // namespace
 
+// ===========================================================================
+//  §K — THE SUN&#x27;S REACH: §G&#x27;s finding, turned on the light that had it first
+// ===========================================================================
+//
+// §G found that a GPU lookup through a LINEAR comparison sampler needs a bias
+// sized for (r + 1)·√2 texels, because one tap blends a 2x2 block, where the
+// CPU&#x27;s nearest-texel lookup needs (r + ½)·√2. The lamps were built with the
+// right one. The SUN&#x27;s lookup (6.8, cascaded in 6.9) goes through the same kind
+// of sampler and was fed `pcf_reach_texels` — the CPU&#x27;s number.
+//
+// The instrument that cannot be argued with: a bare ground, nothing else in the
+// map. Nothing can shadow a plane under a directional light, so every pixel of
+// the shadowed frame that is darker than the unshadowed one is acne. Three sun
+// elevations, because the error is the reach times tan(theta).
+
+struct sun_rig
+{
+    engine::gpu_shadow_map map;
+    engine::gpu_shader vs;
+    engine::gpu_shader fs;
+    static constexpr int k_res = 512;
+};
+
+/// One cascade that is the whole map — the block a caller with a single map
+/// must push, since the shader reads the texel size and depth range from it.
+engine::cascade_uniforms one_cascade(const engine::light_camera&amp; cam)
+{
+    engine::cascade_uniforms c{};
+    for (mat4&amp; m : c.light_clip_from_world) { m = cam.clip_from_world; }
+    c.splits = engine::vec4{1e30f, 1e30f, 1e30f, 1e30f};
+    c.world_per_texel = engine::vec4{cam.world_per_texel, cam.world_per_texel,
+                                     cam.world_per_texel, cam.world_per_texel};
+    c.depth_range = engine::vec4{cam.depth_range, cam.depth_range, cam.depth_range,
+                                 cam.depth_range};
+    c.cascade_count = 1.0f;
+    c.view_forward = engine::vec4{0.0f, -1.0f, 0.0f, 0.0f};
+    return c;
+}
+
+std::vector&lt;float&gt; sun_frame(rig&amp; r, sun_rig&amp; s, const engine::light_camera&amp; cam,
+                             const engine::scene_light_uniforms&amp; light,
+                             const engine::cascade_uniforms* casc, bool with_box)
+{
+    const engine::gpu_draw_item items[2] = {ground_item(r), box_item(r)};
+    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(r.gpu.handle());
+    if (cb == nullptr) { return {}; }
+    s.map.render(cb, items, with_box ? 2 : 1, cam);
+
+    if (!r.scene.ensure_depth(r.gpu, k_size, k_size)) { return {}; }
+    SDL_GPUColorTargetInfo ct{};
+    ct.texture = r.image.colour;
+    ct.load_op = SDL_GPU_LOADOP_CLEAR;
+    ct.store_op = SDL_GPU_STOREOP_STORE;
+    ct.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    const SDL_GPUDepthStencilTargetInfo dsi = r.scene.depth_target_info();
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, &amp;ct, 1, &amp;dsi);
+    if (pass == nullptr) { return {}; }
+    const engine::camera_uniforms camera{top_clip()};
+    (void)r.scene.render(cb, pass, items, 1, camera, light, r.samp.handle(), nullptr,
+                         s.map.texture(), s.map.sampler(), casc);
+    SDL_EndGPURenderPass(pass);
+    return download(r.image, cb);
+}
+
+/// Pixels darker than the reference by more than a part in a thousand.
+int darker(const std::vector&lt;float&gt;&amp; a, const std::vector&lt;float&gt;&amp; ref)
+{
+    int n = 0;
+    for (std::size_t i = 0; i + 2 &lt; a.size() &amp;&amp; i + 2 &lt; ref.size(); i += 4)
+    {
+        const float la = a[i] + a[i + 1] + a[i + 2];
+        const float lr = ref[i] + ref[i + 1] + ref[i + 2];
+        if (lr &gt; 1e-4f &amp;&amp; la &lt; lr * 0.999f) { ++n; }
+    }
+    return n;
+}
+
+void section_k(rig&amp; r)
+{
+    section(&quot;K  THE SUN&#x27;S REACH — the GPU shortfall §G found, in the sun&#x27;s own lookup&quot;);
+
+    sun_rig s;
+    const bool ok = s.vs.load(r.gpu, &quot;shadow.vert&quot;, engine::shader_stage::vertex)
+                 &amp;&amp; s.fs.load(r.gpu, &quot;shadow.frag&quot;, engine::shader_stage::fragment)
+                 &amp;&amp; s.map.create(r.gpu, s.vs.handle(), s.fs.handle(), sun_rig::k_res,
+                                 r.depth_format);
+    if (!ok) { std::printf(&quot;  (sun shadow map did not create)\n&quot;); return; }
+
+    engine::aabb box;
+    box.expand(vec3{-k_ground_half, -0.1f, -k_ground_half});
+    box.expand(vec3{k_ground_half, 1.2f, k_ground_half});
+
+    std::printf(&quot;  a bare ground under the sun, a 512 map, nothing to cast; pixels darker &quot;
+                &quot;than the unshadowed frame, of %d:\n&quot;, k_size * k_size);
+    std::printf(&quot;  %4s %8s %8s %16s %16s %12s\n&quot;, &quot;pcf&quot;, &quot;theta&quot;, &quot;tan&quot;, &quot;(r + 1/2) sqrt2&quot;,
+                &quot;(r + 1) sqrt2&quot;, &quot;as filled&quot;);
+
+    // Four sun elevations, both kernels. The arms override `shadow_reach` and
+    // nothing else; &quot;as filled&quot; is whatever `fill_uniforms` chose.
+    int worst_old_one_tap = 1 &lt;&lt; 30;
+    int worst_new = 0;
+    int worst_filled = 0;
+    int worst_old_nine_tap = 0;
+    bool filled_is_gpu_reach = true;
+    engine::shadow_settings set;   // the defaults: slope-scaled, 3x3 PCF
+    for (const int radius : {0, 1})
+    {
+        for (const float deg : {20.0f, 45.0f, 63.4f, 75.0f})
+        {
+            set.pcf_radius = radius;
+            const float th = deg * 0.017453293f;
+            const vec3 to_sun = engine::normalised(vec3{std::sin(th) * 0.866f, std::cos(th),
+                                                        std::sin(th) * 0.5f});
+            engine::directional_light sun;
+            sun.direction = -to_sun;
+            const engine::light_camera cam = engine::fit_directional(sun, box, sun_rig::k_res);
+
+            engine::scene_light_uniforms light = lamps_only_light(vec3{3.0f, 3.0f, 3.0f});
+            light.to_light = to_sun;
+            engine::gpu_shadow_map::fill_uniforms(light, cam, set, sun_rig::k_res);
+            filled_is_gpu_reach = filled_is_gpu_reach
+                &amp;&amp; light.shadow_reach == engine::gpu_pcf_reach_texels(radius);
+            const engine::cascade_uniforms casc = one_cascade(cam);
+
+            engine::scene_light_uniforms off = light;
+            off.shadow_strength = 0.0f;
+            const std::vector&lt;float&gt; ref = sun_frame(r, s, cam, off, &amp;casc, false);
+
+            engine::scene_light_uniforms a = light;
+            a.shadow_reach = engine::pcf_reach_texels(radius);
+            const int n_old = darker(sun_frame(r, s, cam, a, &amp;casc, false), ref);
+            engine::scene_light_uniforms b = light;
+            b.shadow_reach = (static_cast&lt;float&gt;(radius) + 1.0f) * 1.41421356f;
+            const int n_new = darker(sun_frame(r, s, cam, b, &amp;casc, false), ref);
+            const int n_filled = darker(sun_frame(r, s, cam, light, &amp;casc, false), ref);
+            std::printf(&quot;  %4d %7.1f° %8.3f %16d %16d %12d\n&quot;, radius, static_cast&lt;double&gt;(deg),
+                        static_cast&lt;double&gt;(std::tan(th)), n_old, n_new, n_filled);
+
+            if (radius == 0) { worst_old_one_tap = std::min(worst_old_one_tap, n_old); }
+            else { worst_old_nine_tap = std::max(worst_old_nine_tap, n_old); }
+            worst_new = std::max(worst_new, n_new);
+            worst_filled = std::max(worst_filled, n_filled);
+        }
+    }
+
+    checkf(worst_old_one_tap &gt; k_size * k_size / 10,
+           &quot;the CPU&#x27;s reach through the GPU&#x27;s sampler, one tap: at least %d of %d pixels &quot;
+           &quot;of a bare ground are acne at every elevation — the shortfall is real&quot;,
+           worst_old_one_tap, k_size * k_size);
+    checkf(worst_new == 0,
+           &quot;(r + 1) sqrt2, the reach of a 2x2 comparison: 0 acne at every elevation &quot;
+           &quot;and both kernels (worst %d)&quot;, worst_new);
+    checkf(worst_old_nine_tap == 0,
+           &quot;and at 3x3 PCF, the default, the old reach showed nothing either (%d) — &quot;
+           &quot;which is how it survived from 6.8 to here&quot;, worst_old_nine_tap);
+    checkf(filled_is_gpu_reach &amp;&amp; worst_filled == 0,
+           &quot;fill_uniforms now writes gpu_pcf_reach_texels: 0 acne as filled (worst %d)&quot;,
+           worst_filled);
+
+    s.map.destroy();
+    s.vs.destroy();
+    s.fs.destroy();
+}
+
 int main()
 {
     std::printf(&quot;verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n&quot;);
@@ -25647,7 +25864,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf(&quot;\n  (no GPU device — §G to §J skipped)\n&quot;);
+        std::printf(&quot;\n  (no GPU device — §G to §K skipped)\n&quot;);
     }
     else
     {
@@ -25655,6 +25872,7 @@ int main()
         section_h(r);
         section_i(r);
         section_j(r);
+        section_k(r);
         r.image.destroy();
     }
     SDL_Quit();
@@ -25710,7 +25928,7 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
   <h3>Expected result</h3>
 
   <p>
-    The harness ends with <code>40 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    The harness ends with <code>44 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
     prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
     and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
     bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every
@@ -27732,8 +27950,9 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
     <strong>Symptom:</strong> the CPU image is clean and the GPU image has stripes.<br>
     <strong>Cause:</strong> the bias reach was sized for a nearest-texel comparison, and the GPU's
     linear comparison sampler reads four texels (§9.1).<br>
-    <strong>Fix:</strong> (<em>r</em>&nbsp;+&nbsp;1)√2 on the GPU. If you change the sampler to
-    nearest, change the reach back — the comment says which filter it is sized for.
+    <strong>Fix:</strong> (<em>r</em>&nbsp;+&nbsp;1)√2 on the GPU, <code>gpu_pcf_reach_texels</code>.
+    If you change the sampler to nearest, change the reach back — the comment says which filter it
+    is sized for. The sun had this too, visible only with one tap (§9.1).
   </p>
 
   <h3>The CPU's lamp shadow map is wrong, and no bias fixes it</h3>

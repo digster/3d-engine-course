@@ -54,10 +54,12 @@
       <tr><td><code>engine/src/gfx/gpu_debug.cpp</code></td><td>modified</td>
           <td>Its name in dumps.</td></tr>
       <tr><td><code>engine/include/engine/gfx/gpu_shadow.hpp</code></td><td>modified</td>
-          <td><code>pack_local_light</code>, <code>local_shadow_job</code>,
+          <td><code>gpu_pcf_reach_texels</code> (the GPU's own reach, for the sun too),
+              <code>pack_local_light</code>, <code>local_shadow_job</code>,
               <code>gpu_local_shadows</code>.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_shadow.cpp</code></td><td>modified</td>
-          <td>The depth-only pipeline and draw loop shared by the sun and the lamps; the new class.</td></tr>
+          <td>The depth-only pipeline and draw loop shared by the sun and the lamps; the new class;
+              the sun's reach in <code>fill_uniforms</code>.</td></tr>
       <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
           <td><code>scene_local_lights</code>; a trailing parameter on both render calls.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
@@ -69,7 +71,7 @@
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
       <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
-          <td>The harness: forty checks in ten sections.</td></tr>
+          <td>The harness: forty-four checks in eleven sections.</td></tr>
     </tbody>
   </table>
   </div>
@@ -159,7 +161,7 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
   <h3>Expected result</h3>
 
   <p>
-    The harness ends with <code>40 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    The harness ends with <code>44 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
     prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
     and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
     bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every
@@ -262,8 +264,9 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
     <strong>Symptom:</strong> the CPU image is clean and the GPU image has stripes.<br>
     <strong>Cause:</strong> the bias reach was sized for a nearest-texel comparison, and the GPU's
     linear comparison sampler reads four texels (§9.1).<br>
-    <strong>Fix:</strong> (<em>r</em>&nbsp;+&nbsp;1)√2 on the GPU. If you change the sampler to
-    nearest, change the reach back — the comment says which filter it is sized for.
+    <strong>Fix:</strong> (<em>r</em>&nbsp;+&nbsp;1)√2 on the GPU, <code>gpu_pcf_reach_texels</code>.
+    If you change the sampler to nearest, change the reach back — the comment says which filter it
+    is sized for. The sun had this too, visible only with one tap (§9.1).
   </p>
 
   <h3>The CPU's lamp shadow map is wrong, and no bias fixes it</h3>

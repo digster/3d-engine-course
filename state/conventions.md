@@ -1243,6 +1243,9 @@ conventions:
         rasterizer snaps vertices — the same number for two reasons, each commented
         where it lives. Under perspective the lookup CLAMPS to the face, never
         rejects. The orthographic path is bit-for-bit 6.8's.
+        (2026-09-28: the SUN's GPU lookup now uses the GPU reach too —
+        engine::gpu_pcf_reach_texels, written by gpu_shadow_map::fill_uniforms.
+        Every GPU comparison lookup in the engine sizes its bias for a 2x2 read.)
   cube_face: A CUBE FACE'S CAMERA IS A MIRROR — rows (u, -v, -major), determinant -1 — NEVER look_at.
         6.17b, shadow.cpp fit_cube_face + cubemap.hpp cube_face_axes (derived from
         6.15's k_rules, so both directions of the table cannot disagree). SDL face

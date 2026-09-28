@@ -43,6 +43,28 @@
 
 namespace engine {
 
+/// **How far a GPU shadow lookup reads, in texels: `(radius + 1) * sqrt(2)`.**
+///
+/// Not `pcf_reach_texels`, which is the CPU's `(radius + 1/2) * sqrt(2)`, and the
+/// difference is the FILTER, not the kernel. The CPU compares the nearest texel,
+/// whose sample is at most half a texel away along each axis. Every GPU tap here
+/// is `SampleCmp` through a LINEAR comparison sampler, which compares a 2x2 block
+/// and blends the four answers — and any of the four can carry weight while a
+/// whole texel away along each axis. The bias has to cover the furthest depth
+/// the filter reads, so it is sized for this.
+///
+/// Lesson 6.17b found it for the lamps (11,098 disagreeing pixels -> 0) and the
+/// fix after it measured it for the sun: on a bare ground, with one tap, the
+/// CPU's reach left 27-36% of the pixels as acne at every elevation from 20 to
+/// 75 degrees, and this reach leaves none (`verify_617b` §K). With the default
+/// 3x3 kernel neither shows acne, which is how the sun's lookup carried the
+/// CPU's number from 6.8 to here.
+[[nodiscard]] inline float gpu_pcf_reach_texels(int radius)
+{
+    const int r = (radius < 0) ? 0 : radius;
+    return (static_cast<float>(r) + 1.0f) * 1.41421356f;
+}
+
 /// Owns the depth texture, the depth-only pipeline and the comparison sampler
 /// that a GPU shadow map is made of.
 ///

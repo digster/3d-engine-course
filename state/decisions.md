@@ -33,9 +33,11 @@ decisions:
         lists gpu_scene.cpp whole and rewrote the bind as bind_fragment_samplers
         (eight slots now), whose comment tells the corrected story; the instanced
         path calls the same function and says so. Only frustum.cpp's remains.
-  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE AND FIXED NONE OF THEM,
-        BECAUSE AN INSERTION MUST NOT MOVE ANOTHER LESSON'S NUMBERS. (2026-09-28.)
-        1. THE SUN'S GPU SHADOW UNDER-REACHES. scene.frag.hlsl's cascade lookup
+  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE; ALL FOUR WERE FIXED THE SAME
+        DAY IN THEIR OWN COMMITS, AND FIXING THEM FOUND THREE MORE, STILL OPEN.
+        (2026-09-28. The lesson itself fixed none, because an insertion must not move
+        another lesson's numbers; the user then asked for the four as separate commits.)
+        1. THE SUN'S GPU SHADOW UNDER-REACHED. scene.frag.hlsl's cascade lookup
            sizes its bias with pcf_reach_texels(r) = (r+1/2)sqrt2 — the CPU's
            nearest-texel reach — through a LINEAR comparison sampler, which reads
            four texels: (r+1)sqrt2 is reachable. At the default r = 1 that is 2.12
@@ -43,6 +45,15 @@ decisions:
            (11,098 GPU/CPU disagreements off any edge -> 0). Unmeasured for the sun;
            fixing it moves 6.8/6.9's GPU numbers, so it belongs to a lesson that
            re-measures them (Module 9's testing or profiling pass). Page: 6.17b §9.1.
+           FIXED 2026-09-28 (own commit), and the measurement refused half the claim.
+           verify_617b §K (new): a bare ground under the sun, nothing in the map, every
+           pixel darker than the unshadowed frame counted as acne, at 20/45/63.4/75°.
+           ONE TAP: 17,821-23,756 of 65,536 pixels (27-36%) with the old reach, 0 with
+           (r+1)sqrt2. 3x3 (THE DEFAULT): 0 with EITHER — "a quarter short" predicted a
+           symptom the default does not have, which is how it survived. Fix:
+           gpu_pcf_reach_texels() in gpu_shadow.hpp, written by fill_uniforms; verify_68
+           §G's check updated. All 26 Module 6–7 harnesses: no number moved but timings.
+           6.17b's §9.1, manifest and pitfall retell it; 44 checks now.
         2. 6.8's FALLBACK far_depth_ IS A 2D TEXTURE IN A Texture2DArray SLOT
            (gpu_scene.cpp create_depth, slot t2 declared Texture2DArray since 6.9).
            Renders correctly on Metal here; ⚠ VERIFY under MTL_DEBUG_LAYER=1 and the
@@ -66,6 +77,17 @@ decisions:
            beyond the map lit; the CPU clamps to the edge texel — and shadow.cpp's
            comment says that clamp only touches points the cone has zeroed, true only
            up to 80°. Now Exercise 6.17b.5.
+        7. FOUND WHILE FIXING 1, OPEN — AND THE LARGEST: A SINGLE SUN MAP WITH NO CASCADE
+           BLOCK DRAWS NO SHADOW AT ALL. The sun's lookup reads its texel size and depth
+           range from the CASCADE block (6.9); when render() gets no cascades,
+           gpu_scene_renderer pushes a fallback with world_per_texel = depth_range =
+           1.0, so the slope-scaled bias is ~reach*tan(theta) in DEVICE units — larger
+           than the whole depth range. Measured with the §K rig: a box's shadow at 45°
+           is 792 px with a one-cascade block and 0 px without. demos/sandbox draws
+           exactly this way (gpu_shadow_map + fill_uniforms, no cascades), so its GPU
+           shadows have been invisible since 6.9; no harness renders that path.
+           Likely fix: the fallback copies light.shadow_texel/shadow_depth_range, which
+           fill_uniforms already writes. Home: gpu_scene.cpp (last listed by 6.17b).
         3. 6.8's HARNESS DOES NOT BUILD AT HEAD: scratch/verify_68.cpp fails in
            engine/math/quat.hpp (a mat3 assigned to a quat), and it, 6.9's and 6.16's
            include <engine/gfx/bounds.hpp>, which 8.4 moved to engine/math/.

@@ -1723,9 +1723,13 @@ measurement that disagreed with a claim, and several by an instrument that was i
   (r+½)√2 + ½√2 = the same number, because the rasterizer snaps vertices to whole pixels and slides
   a guard-clipped plane by up to half a texel (measured 0.36 of a texel's depth step; 713 → 0 on a
   bare floor, 1,895 → 0 in gltf_view). Each comment names its own reason; a shared constant would
-  be wrong for one side the day either filter changes. The SUN's GPU path still uses the CPU reach
-  through a linear sampler — a quarter short at r = 1, unmeasured, recorded in STATE decisions
-  `found-by-617b`.
+  be wrong for one side the day either filter changes. The SUN's GPU path had the CPU's reach too.
+  Measured afterwards (verify_617b §K, a bare ground and nothing to cast): with ONE tap, 27–36% of
+  the ground was acne; with the default 3×3, none at any elevation — so "a quarter short" was true
+  arithmetic predicting a symptom the default never shows, which is how it survived eleven
+  lessons. Fixed with `gpu_pcf_reach_texels`. And the same rig found a single sun map with no
+  cascade block draws NO shadow (the fallback block's 1 m texel inflates the bias) — open, STATE
+  decisions `found-by-617b` item 7.
 
 - **Finite is not small: a clamp that moves geometry.** Near clipping bounds x/w; it does not keep
   it small. A 5 cm lamp near plane over an 8 m floor projects clipped corners ~40,000 px out, and

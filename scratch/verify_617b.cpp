@@ -13,6 +13,7 @@
 // §H  additive: with no lamps nothing that existed can move
 // §I  the frame graph: seven passes declared, then a frame that declares none
 // §J  the budget, and what a lamp's shadow costs
+// §K  the sun's reach: §G's finding in the sun's own lookup (the fix after 6.17b)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson's derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -1860,6 +1861,170 @@ void section_j(rig& r)
 
 } // namespace
 
+// ===========================================================================
+//  §K — THE SUN'S REACH: §G's finding, turned on the light that had it first
+// ===========================================================================
+//
+// §G found that a GPU lookup through a LINEAR comparison sampler needs a bias
+// sized for (r + 1)·√2 texels, because one tap blends a 2x2 block, where the
+// CPU's nearest-texel lookup needs (r + ½)·√2. The lamps were built with the
+// right one. The SUN's lookup (6.8, cascaded in 6.9) goes through the same kind
+// of sampler and was fed `pcf_reach_texels` — the CPU's number.
+//
+// The instrument that cannot be argued with: a bare ground, nothing else in the
+// map. Nothing can shadow a plane under a directional light, so every pixel of
+// the shadowed frame that is darker than the unshadowed one is acne. Three sun
+// elevations, because the error is the reach times tan(theta).
+
+struct sun_rig
+{
+    engine::gpu_shadow_map map;
+    engine::gpu_shader vs;
+    engine::gpu_shader fs;
+    static constexpr int k_res = 512;
+};
+
+/// One cascade that is the whole map — the block a caller with a single map
+/// must push, since the shader reads the texel size and depth range from it.
+engine::cascade_uniforms one_cascade(const engine::light_camera& cam)
+{
+    engine::cascade_uniforms c{};
+    for (mat4& m : c.light_clip_from_world) { m = cam.clip_from_world; }
+    c.splits = engine::vec4{1e30f, 1e30f, 1e30f, 1e30f};
+    c.world_per_texel = engine::vec4{cam.world_per_texel, cam.world_per_texel,
+                                     cam.world_per_texel, cam.world_per_texel};
+    c.depth_range = engine::vec4{cam.depth_range, cam.depth_range, cam.depth_range,
+                                 cam.depth_range};
+    c.cascade_count = 1.0f;
+    c.view_forward = engine::vec4{0.0f, -1.0f, 0.0f, 0.0f};
+    return c;
+}
+
+std::vector<float> sun_frame(rig& r, sun_rig& s, const engine::light_camera& cam,
+                             const engine::scene_light_uniforms& light,
+                             const engine::cascade_uniforms* casc, bool with_box)
+{
+    const engine::gpu_draw_item items[2] = {ground_item(r), box_item(r)};
+    SDL_GPUCommandBuffer* cb = SDL_AcquireGPUCommandBuffer(r.gpu.handle());
+    if (cb == nullptr) { return {}; }
+    s.map.render(cb, items, with_box ? 2 : 1, cam);
+
+    if (!r.scene.ensure_depth(r.gpu, k_size, k_size)) { return {}; }
+    SDL_GPUColorTargetInfo ct{};
+    ct.texture = r.image.colour;
+    ct.load_op = SDL_GPU_LOADOP_CLEAR;
+    ct.store_op = SDL_GPU_STOREOP_STORE;
+    ct.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    const SDL_GPUDepthStencilTargetInfo dsi = r.scene.depth_target_info();
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cb, &ct, 1, &dsi);
+    if (pass == nullptr) { return {}; }
+    const engine::camera_uniforms camera{top_clip()};
+    (void)r.scene.render(cb, pass, items, 1, camera, light, r.samp.handle(), nullptr,
+                         s.map.texture(), s.map.sampler(), casc);
+    SDL_EndGPURenderPass(pass);
+    return download(r.image, cb);
+}
+
+/// Pixels darker than the reference by more than a part in a thousand.
+int darker(const std::vector<float>& a, const std::vector<float>& ref)
+{
+    int n = 0;
+    for (std::size_t i = 0; i + 2 < a.size() && i + 2 < ref.size(); i += 4)
+    {
+        const float la = a[i] + a[i + 1] + a[i + 2];
+        const float lr = ref[i] + ref[i + 1] + ref[i + 2];
+        if (lr > 1e-4f && la < lr * 0.999f) { ++n; }
+    }
+    return n;
+}
+
+void section_k(rig& r)
+{
+    section("K  THE SUN'S REACH — the GPU shortfall §G found, in the sun's own lookup");
+
+    sun_rig s;
+    const bool ok = s.vs.load(r.gpu, "shadow.vert", engine::shader_stage::vertex)
+                 && s.fs.load(r.gpu, "shadow.frag", engine::shader_stage::fragment)
+                 && s.map.create(r.gpu, s.vs.handle(), s.fs.handle(), sun_rig::k_res,
+                                 r.depth_format);
+    if (!ok) { std::printf("  (sun shadow map did not create)\n"); return; }
+
+    engine::aabb box;
+    box.expand(vec3{-k_ground_half, -0.1f, -k_ground_half});
+    box.expand(vec3{k_ground_half, 1.2f, k_ground_half});
+
+    std::printf("  a bare ground under the sun, a 512 map, nothing to cast; pixels darker "
+                "than the unshadowed frame, of %d:\n", k_size * k_size);
+    std::printf("  %4s %8s %8s %16s %16s %12s\n", "pcf", "theta", "tan", "(r + 1/2) sqrt2",
+                "(r + 1) sqrt2", "as filled");
+
+    // Four sun elevations, both kernels. The arms override `shadow_reach` and
+    // nothing else; "as filled" is whatever `fill_uniforms` chose.
+    int worst_old_one_tap = 1 << 30;
+    int worst_new = 0;
+    int worst_filled = 0;
+    int worst_old_nine_tap = 0;
+    bool filled_is_gpu_reach = true;
+    engine::shadow_settings set;   // the defaults: slope-scaled, 3x3 PCF
+    for (const int radius : {0, 1})
+    {
+        for (const float deg : {20.0f, 45.0f, 63.4f, 75.0f})
+        {
+            set.pcf_radius = radius;
+            const float th = deg * 0.017453293f;
+            const vec3 to_sun = engine::normalised(vec3{std::sin(th) * 0.866f, std::cos(th),
+                                                        std::sin(th) * 0.5f});
+            engine::directional_light sun;
+            sun.direction = -to_sun;
+            const engine::light_camera cam = engine::fit_directional(sun, box, sun_rig::k_res);
+
+            engine::scene_light_uniforms light = lamps_only_light(vec3{3.0f, 3.0f, 3.0f});
+            light.to_light = to_sun;
+            engine::gpu_shadow_map::fill_uniforms(light, cam, set, sun_rig::k_res);
+            filled_is_gpu_reach = filled_is_gpu_reach
+                && light.shadow_reach == engine::gpu_pcf_reach_texels(radius);
+            const engine::cascade_uniforms casc = one_cascade(cam);
+
+            engine::scene_light_uniforms off = light;
+            off.shadow_strength = 0.0f;
+            const std::vector<float> ref = sun_frame(r, s, cam, off, &casc, false);
+
+            engine::scene_light_uniforms a = light;
+            a.shadow_reach = engine::pcf_reach_texels(radius);
+            const int n_old = darker(sun_frame(r, s, cam, a, &casc, false), ref);
+            engine::scene_light_uniforms b = light;
+            b.shadow_reach = (static_cast<float>(radius) + 1.0f) * 1.41421356f;
+            const int n_new = darker(sun_frame(r, s, cam, b, &casc, false), ref);
+            const int n_filled = darker(sun_frame(r, s, cam, light, &casc, false), ref);
+            std::printf("  %4d %7.1f° %8.3f %16d %16d %12d\n", radius, static_cast<double>(deg),
+                        static_cast<double>(std::tan(th)), n_old, n_new, n_filled);
+
+            if (radius == 0) { worst_old_one_tap = std::min(worst_old_one_tap, n_old); }
+            else { worst_old_nine_tap = std::max(worst_old_nine_tap, n_old); }
+            worst_new = std::max(worst_new, n_new);
+            worst_filled = std::max(worst_filled, n_filled);
+        }
+    }
+
+    checkf(worst_old_one_tap > k_size * k_size / 10,
+           "the CPU's reach through the GPU's sampler, one tap: at least %d of %d pixels "
+           "of a bare ground are acne at every elevation — the shortfall is real",
+           worst_old_one_tap, k_size * k_size);
+    checkf(worst_new == 0,
+           "(r + 1) sqrt2, the reach of a 2x2 comparison: 0 acne at every elevation "
+           "and both kernels (worst %d)", worst_new);
+    checkf(worst_old_nine_tap == 0,
+           "and at 3x3 PCF, the default, the old reach showed nothing either (%d) — "
+           "which is how it survived from 6.8 to here", worst_old_nine_tap);
+    checkf(filled_is_gpu_reach && worst_filled == 0,
+           "fill_uniforms now writes gpu_pcf_reach_texels: 0 acne as filled (worst %d)",
+           worst_filled);
+
+    s.map.destroy();
+    s.vs.destroy();
+    s.fs.destroy();
+}
+
 int main()
 {
     std::printf("verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n");
@@ -1878,7 +2043,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf("\n  (no GPU device — §G to §J skipped)\n");
+        std::printf("\n  (no GPU device — §G to §K skipped)\n");
     }
     else
     {
@@ -1886,6 +2051,7 @@ int main()
         section_h(r);
         section_i(r);
         section_j(r);
+        section_k(r);
         r.image.destroy();
     }
     SDL_Quit();
