@@ -64,6 +64,11 @@ decisions:
            "the whole material is 64 bytes" and "material_uniforms is still exactly
            32 bytes" — sizes later lessons grew on purpose; the checks were never
            updated. Same class as 3: harness rot nothing measures.
+           FIXED 2026-09-28 (own commit): the material check is now "within one
+           64-byte cache line" (the claim was always "small enough to copy"; 6.7,
+           6.10 and 6.11 grew it to exactly 64), and the uniform check is 48, the
+           number gpu_uniform.hpp itself static_asserts since 6.11. 27/27. The
+           repaired harness is tracked; its pin stays as 6.5 shipped it.
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE
         CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER
         PAGE STAYS AN ARCHIVE OF WHAT SHIPPED. *** 8.10's tangent basis set the

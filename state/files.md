@@ -555,8 +555,8 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
-  scratch/ (REPAIRED HARNESSES, tracked since 2026-09-28): verify_68.cpp, verify_69.cpp,
-           verify_616.cpp and their build_verify_*.sh. Until then every lesson's working
+  scratch/ (REPAIRED HARNESSES, tracked since 2026-09-28): verify_65.cpp, verify_68.cpp,
+           verify_69.cpp, verify_616.cpp and their build_verify_*.sh. Until then every lesson's working
            harness was gitignored and its only tracked record was the PIN printed on its
            page (l68_verify_68.cpp …) — which must stay as it shipped, because it compiles
            against the engine AS IT WAS at that lesson. A harness repaired to build at HEAD
