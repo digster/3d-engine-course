@@ -431,8 +431,8 @@ next: 6.18b — Compute Shaders: GPU Particles
           lNN_ pin, after 6.18b in course order, of a path it changes.
         - scratch/_base617b/run_all.sh + classify.py   the additivity check: 26
           harnesses before/after; only timing lines may differ. Take the BEFORE run
-          before the first edit. (6.8's harness does not build at HEAD; 6.9's and
-          6.16's need run_shim.sh — see found-by-617b.)
+          before the first edit. All 26 build at HEAD since 2026-09-28 (6.8's,
+          6.9's and 6.16's were repaired and are now TRACKED — found-by-617b).
         - 6.18b sits between 6.18 and 7.1, so re-point build_618.py's next and
           build_71.py's prev. Update 6.18's module tree if a file is added.
 

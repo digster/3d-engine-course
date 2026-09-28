@@ -564,6 +564,9 @@ The first use of the authoring guide's §17. Three tools, kept for 6.18b, 7.7b a
   diffed with only timing lines masked. Take the BEFORE run before the first edit. It found that
   6.8's harness no longer builds at HEAD and 6.5's fails two size checks — harness rot nothing
   measures, because check-builders covers pages only.
+  (Both repaired the same day in their own commits. A harness repaired to build at HEAD is
+  tracked under its own name; its PIN stays as it shipped, because the pin must compile against
+  the engine as it was at its lesson — two files, two jobs.)
 
 ## A checker's file pattern is part of what it checks — build_\d+\.py skipped every b-lesson
 

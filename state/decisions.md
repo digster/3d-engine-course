@@ -54,6 +54,12 @@ decisions:
            scratch/_base617b/run_shim.sh forwards the include (6.9 and 6.16 then
            build and pass); 6.8's still fails. Harnesses are not covered by any
            checker — check-builders covers pages only.
+           FIXED 2026-09-28 (own commit): the include moved to <engine/math/bounds.hpp>
+           in all three, and 6.8's plane now sets its rotation with
+           quat_from_rotation(mat3{...}) — the matrix it always had, converted. 6.8:
+           53/53; 6.9 and 6.16 give the same verdicts as their shimmed runs. The
+           repaired harnesses are TRACKED (their pins stay the 6.8/6.9/6.16-era
+           listings); the shim is deleted.
         4. 6.5's HARNESS REPORTS 2 FAILURES AT HEAD, before and after 6.17b alike:
            "the whole material is 64 bytes" and "material_uniforms is still exactly
            32 bytes" — sizes later lessons grew on purpose; the checks were never

@@ -2987,3 +2987,17 @@ message came twice, and each time the work resumed where it stopped. Logged in
 
 Produced Lesson 6.17b — Local Lights: Point and Spot, and Their Shadows (Module 6, inserted
 between 6.17 and 6.18).
+
+---
+
+## 2026-09-28 — The four defects 6.17b found, fixed
+
+> Explain simply what do you mean by this? *(a screenshot of the "Found but not fixed" list)*
+
+> * ok, fix them as separate commits.
+> * do the commits on my behalf.
+
+(Four commits, one per defect, each starting from a test that shows it: 6.8's harness repaired
+to build at HEAD (with 6.9's and 6.16's, same cause); 6.5's size checks; 6.8's fallback shadow
+texture given the type its slot declares; the sun's GPU shadow bias sized for the sampler it
+uses. Committed as the user, with no co-author line. Logged in `memory/2026-09-28.md`.)

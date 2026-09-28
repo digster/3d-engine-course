@@ -555,6 +555,13 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (REPAIRED HARNESSES, tracked since 2026-09-28): verify_68.cpp, verify_69.cpp,
+           verify_616.cpp and their build_verify_*.sh. Until then every lesson's working
+           harness was gitignored and its only tracked record was the PIN printed on its
+           page (l68_verify_68.cpp …) — which must stay as it shipped, because it compiles
+           against the engine AS IT WAS at that lesson. A harness repaired to build at HEAD
+           is a different file with a different job, so it is tracked under its own name.
+           (8.4 moved bounds.hpp to engine/math/; 7.4 made transform::rotation a quat.)
   scratch/ (6.17b, not shipped with the engine — an INSERTED lesson): verify_617b.cpp,
            build_verify_617b.sh, figs_617b.py (13 figures; inputs l617b_{gpu,cpu,
            mask,gpu_nobias,floor_68,floor_snap,demo,demo_noshadow}.ppm from
@@ -566,8 +573,9 @@ files:
            make_t617b.py (`tree`: listings = tree at 6.17 + 6.17b's hunks;
            `carry`: the hunks onto every LATER pin; each result PROVED by delta, with
            an undo-later-lines fallback when a later lesson rewrote a context line),
-           _base617b/ (run_all.sh, run_shim.sh, classify.py, shim/: the additivity
-           check across 26 harnesses. Its before/ and after_final/ transcripts were
+           _base617b/ (run_all.sh, classify.py: the additivity check across 26
+           harnesses; run_shim.sh and its include shim were removed 2026-09-28 once
+           6.8's, 6.9's and 6.16's harnesses were repaired to build at HEAD. Its before/ and after_final/ transcripts were
            local evidence and are NOT tracked; the .ppm figure inputs are not either,
            as for every lesson — the SVGs are the tracked product).
            (40 checks in ten sections; §D is the golden; §J's timing needs a
