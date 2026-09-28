@@ -76,6 +76,17 @@ table.lessons td.hrs {
 }
 table.lessons .t { font-weight: 650; display: block; margin-bottom: 0.15rem; }
 table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.45; }
+/* A published lesson's description is a paragraph-length digest. The script at
+   the end of this page clamps the long ones to two lines with a More/Less
+   toggle, so the table scans as a map; without it every digest shows whole. */
+table.lessons .d.clamp {
+  display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+table.lessons .more {
+  display: inline-block; margin-top: 0.2rem; padding: 0; border: 0; background: none;
+  font: 600 0.74rem var(--font-ui); color: var(--accent-text); cursor: pointer;
+}
 .stage-tag {
   display: inline-block; font-family: var(--font-ui); font-size: 0.62rem;
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
@@ -747,5 +758,31 @@ table.lessons .d { color: var(--text-muted); font-size: 0.95em; line-height: 1.4
           throwOnError: false
         });"></script>
 <!-- SHARED-SCRIPT:END -->
+<script>
+  /* Page-specific, and outside the SHARED-SCRIPT markers on purpose (the
+     stamper must not reach it). Clamps each long lesson digest to two lines;
+     220 characters is about two lines of the table at its widest. */
+  (function () {
+    var cells = document.querySelectorAll("table.lessons .d");
+    for (var i = 0; i < cells.length; i++) {
+      var d = cells[i];
+      if (d.textContent.length < 220) { continue; }
+      d.classList.add("clamp");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "more";
+      b.textContent = "More";
+      b.setAttribute("aria-expanded", "false");
+      b.addEventListener("click", (function (cell, btn) {
+        return function () {
+          var open = cell.classList.toggle("clamp") === false;
+          btn.textContent = open ? "Less" : "More";
+          btn.setAttribute("aria-expanded", open ? "true" : "false");
+        };
+      })(d, b));
+      d.parentNode.insertBefore(b, d.nextSibling);
+    }
+  })();
+</script>
 </body>
 </html>
