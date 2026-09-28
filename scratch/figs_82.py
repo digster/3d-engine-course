@@ -598,7 +598,10 @@ def fig5():
             b.append(f'<rect x="{bx:.1f}" y="{top:.1f}" width="{bw_:.1f}" '
                      f'height="{py + ph - top:.1f}" fill="{col}" '
                      f'fill-opacity="0.45" stroke="{col}" stroke-width="1.2"/>')
-            b.append(label(bx + bw_ / 2, top - 8, f"{v:.3f}", cls="xs mono"))
+            # Above the bar, unless that would put the digits on the frame's top
+            # edge (3.853 at 30 Hz nearly fills the axis) — then just inside it.
+            ly = top - 8 if top - 18 > py else top + 14
+            b.append(label(bx + bw_ / 2, ly, f"{v:.3f}", cls="xs mono"))
             b.append(label(bx + bw_ / 2, py + ph + 16, f"{rate:.0f} Hz",
                            cls="xs mono muted"))
         b.append(label(x0 + pw / 2, py + ph + 36, "peak height, metres, log axis",

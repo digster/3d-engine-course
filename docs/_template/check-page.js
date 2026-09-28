@@ -62,6 +62,11 @@
 //      page that looks perfectly normal. Check that nothing is clipped without
 //      a way to open it, and that both controls carry working ARIA.
 //
+//   7. FIGURE LEGIBILITY. A figure whose labels render under 8.5 px on a wide
+//      screen fails; on a narrow one it must offer Enlarge, and the enlarged
+//      layer must draw labels of at least 9 px — checked by opening one. The
+//      overflow checks above passed figures whose labels were 4 px tall.
+//
 // What none of these catch: a label on a filled <rect>, and a line drawn
 // through the wrong row of a stacked diagram. Look at the rendered figure.
 
@@ -302,6 +307,57 @@
     return bad;
   })();
 
+  // ---- 7. FIGURE LEGIBILITY ------------------------------------------------
+  // Labels are authored in viewBox units, so a label is only as big as the
+  // scale its figure is drawn at. On a 390 px phone a 900-unit figure put every
+  // .xs label near 3.8 px — and this script passed it, because it measured
+  // overflow and never size (found 2026-09-26). Rendered size is computed
+  // font-size × rendered width ÷ viewBox width; never getBBox(), which is
+  // local-space (§3a).
+  //   Wide screens:   every label at least 8.5 px, inline.
+  //   Narrow screens: the inline figure may be small, but it must offer
+  //                   Enlarge — and the enlarged layer must really draw labels
+  //                   of at least 9 px, which is proven by opening one.
+  const minLabelPx = (svg) => {
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    if (!vb || !vb.width) return null;
+    const k = svg.getBoundingClientRect().width / vb.width;
+    let min = Infinity;
+    svg.querySelectorAll('text').forEach(t => {
+      const fs = parseFloat(getComputedStyle(t).fontSize);
+      if (fs > 0 && t.textContent.trim()) { min = Math.min(min, fs * k); }
+    });
+    return min === Infinity ? null : min;
+  };
+  const narrow = window.innerWidth < 720;
+  out.smallFigureText = [];
+  out.figEnlargeMissing = [];
+  document.querySelectorAll('figure.dia').forEach((fig, fi) => {
+    const svg = fig.querySelector('svg');
+    const px = svg ? minLabelPx(svg) : null;
+    if (px === null || px >= 8.5) { return; }
+    if (!narrow) {
+      out.smallFigureText.push({ fig: fi + 1, px: Number(px.toFixed(2)) });
+      return;
+    }
+    const b = fig.querySelector('.fig-enlarge');
+    if (!b || getComputedStyle(b).display === 'none') { out.figEnlargeMissing.push(fi + 1); }
+  });
+  out.zoomOk = true;
+  if (narrow) {
+    const b = document.querySelector('figure.dia .fig-enlarge');
+    if (b) {
+      b.click();
+      const layerSvg = document.querySelector('.fig-zoom svg');
+      const px = layerSvg ? minLabelPx(layerSvg) : null;
+      out.zoomLabelPx = px === null ? null : Number(px.toFixed(2));
+      const close = document.querySelector('.fig-zoom-close');
+      if (close) { close.click(); }
+      out.zoomClosed = !document.querySelector('.fig-zoom');
+      out.zoomOk = px !== null && px >= 9 && out.zoomClosed;
+    }
+  }
+
   // ---- 4. SHARED ASSETS ---------------------------------------------------
   // The CSS and page script are linked from docs/shared/, not inlined, so a
   // wrong relative href is now a real failure mode — and a silent one. Nothing
@@ -400,7 +456,9 @@
             && !out.pageScrollsX && out.wrappedListings === 0
             && out.unknownTagClasses.length === 0
             && out.clippedWithoutToggle.length === 0 && out.listingA11y.length === 0
-            && out.figOrder.length === 0;
+            && out.figOrder.length === 0
+            && out.smallFigureText.length === 0 && out.figEnlargeMissing.length === 0
+            && out.zoomOk;
     return out;
   });
 })();

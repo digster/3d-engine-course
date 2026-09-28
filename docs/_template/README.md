@@ -212,6 +212,14 @@ Inline SVG, authored by hand. Nothing else.
 - `viewBox` + no `width`/`height` — the CSS makes it fluid.
 - Always include `<title>` and `<desc>`.
 - Place each diagram at its exact point of use. Never dump them at the end of a section.
+- **Author labels for the viewBox you draw in: `.xs` (9.5) is the floor.** A figure is drawn
+  at its native width on a desktop — `course.js` publishes it as `--vbw`, and `.bleed` lets it
+  break out of the reading column up to `--measure-wide` (58rem, 928 px) — so keep viewBoxes
+  at 928 units or less and every label renders at its authored size. On a phone the figure
+  fits the screen and gains an **Enlarge** button that opens it at native size. `check-page.js`
+  check 7 fails a figure whose labels render under 8.5 px on a wide screen, and proves the
+  Enlarge layer draws them at 9 px or more on a narrow one. (Until 2026-09-27 `.bleed` was a
+  `max-width` inside a narrower parent and widened nothing; 8.5's labels were 3.8 px on a phone.)
 
 ### Class vocabulary
 

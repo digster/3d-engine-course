@@ -702,6 +702,82 @@ figure.dia svg {
   border: 1px solid var(--rule);
   border-radius: 9px;
 }
+
+/* ---- Figures at a legible size -------------------------------------------
+   Labels are authored in viewBox units (.xs 9.5, .sm 11), so a figure is only
+   as legible as the scale it is drawn at. course.js publishes each figure's
+   native width as --vbw and marks it .has-vbw; without the script none of
+   this applies and figures fit the column as they always have.
+
+   DESKTOP: `.bleed` has always meant "may breathe past the reading column",
+   but a max-width inside a 42rem parent never widened anything — every one of
+   the 612 figures rendered at the column's width, the widest at about 7px a
+   label. Now a figure is as wide as its own viewBox, up to --measure-wide,
+   centred on the column by a negative margin. Never narrower than the column. */
+@media (min-width: 45rem) {
+  figure.dia.has-vbw {
+    --fig-w: max(100%, min(var(--vbw), var(--measure-wide), 100vw - 2.5rem));
+    width: var(--fig-w);
+    max-width: none;
+    margin-left: calc((100% - var(--fig-w)) / 2);
+    margin-right: 0;
+  }
+  /* The caption is prose: it keeps the reading column's measure while the
+     drawing above it widens, instead of running to 140 characters a line. */
+  figure.dia.has-vbw figcaption {
+    max-width: calc(var(--measure) - 2.5rem);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* PHONES: the figure still fits the screen, so the whole diagram is seen at
+   once, and course.js adds an "Enlarge" button that opens it at native size
+   in a full-screen layer that scrolls both ways (labels at 9.5–11px). Sideways
+   scrolling every inline figure was the alternative, and still left .xs labels
+   near 7px while hiding half of every diagram. */
+.fig-enlarge {
+  display: none;
+  margin-top: 0.5rem;
+  font: 600 0.78rem var(--font-ui);
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+@media (max-width: 44.99rem) {
+  figure.dia.has-vbw .fig-enlarge { display: inline-block; }
+}
+.fig-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: auto;
+  background: var(--bg);
+  padding: 3.25rem 1rem 1.5rem;
+  -webkit-overflow-scrolling: touch;
+}
+/* The layer holds a clone of the whole <figure class="dia">, not a bare <svg>:
+   every diagram style is scoped `figure.dia svg …`, so an SVG lifted out of
+   its figure would lose its label sizes and axis colours. Only the width is
+   overridden — to the native viewBox width, which is the point of the layer. */
+.fig-zoom figure.dia { margin: 0; }
+.fig-zoom figure.dia svg { width: var(--vbw); max-width: none; }
+.fig-zoom figure.dia figcaption { max-width: var(--measure); }
+.fig-zoom-close {
+  position: fixed;
+  top: 0.6rem;
+  right: 0.6rem;
+  font: 600 0.85rem var(--font-ui);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--rule-strong, var(--rule));
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
 figure.dia figcaption,
 figure.tbl figcaption {
   font-family: var(--font-ui);

@@ -295,4 +295,88 @@
     }
     setAll(wantOpen, false);
   }
+
+  /* ---- Figure widths: legible labels at every screen size ------------------
+     A diagram is authored in a viewBox a few hundred units wide, with labels
+     sized for that width (.xs is 9.5 units). CSS alone scales it to the text
+     column, which on a 390 px phone puts every label near 4 px — unreadable —
+     and on a desktop shrinks the widest figures to about 7 px.
+
+     So publish each figure's NATIVE width to CSS as --vbw. course.css then
+     lets a wide figure break out of the column up to 1:1 on a desktop, and on
+     a phone gives it a minimum width (3/4 of native) inside its own sideways
+     scroll, the way code listings already scroll rather than wrap. Without
+     this script nothing changes: figures fit the column exactly as before. */
+  var figures = document.querySelectorAll("figure.dia");
+  for (var f = 0; f < figures.length; f++) {
+    var svg = figures[f].querySelector("svg");
+    var box = svg && svg.viewBox && svg.viewBox.baseVal;
+    if (box && box.width > 0) {
+      figures[f].style.setProperty("--vbw", box.width + "px");
+      figures[f].classList.add("has-vbw");
+      addEnlarge(figures[f]);
+    }
+  }
+
+  /* The "Enlarge" button (shown by course.css on narrow screens only) opens a
+     full-screen layer holding a clone of the figure at its native width. The
+     clone's ids are stripped — the page must not hold two elements with one
+     id — and its `url(#…)` marker references still resolve to the original
+     figure's <defs>, which stays in the document underneath. */
+  function addEnlarge(fig) {
+    var num = fig.querySelector(".fignum");
+    var name = num ? num.textContent.replace(/[.\s]+$/, "") : "Figure";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "fig-enlarge";
+    btn.textContent = "Enlarge";
+    btn.setAttribute("aria-label", "Enlarge " + name);
+    btn.addEventListener("click", function () { openZoom(fig, btn, name); });
+    // Directly under the drawing, not after a caption that can run to a
+    // screen and a half on a phone.
+    var caption = fig.querySelector("figcaption");
+    fig.insertBefore(btn, caption && caption.parentNode === fig ? caption : null);
+  }
+
+  function openZoom(fig, btn, name) {
+    var layer = document.createElement("div");
+    layer.className = "fig-zoom";
+    layer.setAttribute("role", "dialog");
+    layer.setAttribute("aria-modal", "true");
+    layer.setAttribute("aria-label", name + ", enlarged");
+
+    var copy = fig.cloneNode(true);
+    copy.classList.remove("has-vbw", "bleed");
+    var stale = copy.querySelectorAll("[id], .fig-enlarge");
+    for (var i = 0; i < stale.length; i++) {
+      if (stale[i].classList.contains("fig-enlarge")) { stale[i].remove(); }
+      else { stale[i].removeAttribute("id"); }
+    }
+    copy.removeAttribute("id");
+
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "fig-zoom-close";
+    close.textContent = "Close";
+    layer.appendChild(close);
+    layer.appendChild(copy);
+    document.body.appendChild(layer);
+
+    // The page beneath must not scroll while the layer is up, or a swipe
+    // meant for the figure moves the lesson instead.
+    var root = document.documentElement;
+    var before = root.style.overflow;
+    root.style.overflow = "hidden";
+
+    function shut() {
+      layer.remove();
+      root.style.overflow = before;
+      document.removeEventListener("keydown", onKey);
+      btn.focus();
+    }
+    function onKey(e) { if (e.key === "Escape") { shut(); } }
+    close.addEventListener("click", shut);
+    document.addEventListener("keydown", onKey);
+    close.focus();
+  }
 })();

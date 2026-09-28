@@ -911,7 +911,9 @@ def fig8():
     body.append(label(px + pw - 6, y_floor + 18,
                       f"{PASSES[-1][1]:.2f} mm — the depth it ARRIVED with", "xs", "end"))
 
-    body.append(label(xs[0], pts[0][1] - 14, "sinks forever", "xs"))
+    # Beside the first point, not centred over it: centred, the words overhung
+    # the frame's left edge.
+    body.append(label(xs[0] + 9, pts[0][1] - 5, "sinks forever", "xs", "start"))
 
     # ---- right --------------------------------------------------------------
     tx = 540

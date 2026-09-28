@@ -385,8 +385,13 @@ def fig3():
             ex = ox + 90 + dx * 56
             ey = oy + 70 - dy * 40
             body.append(carrow(ox + 90, oy + 70, ex, ey, uid, "amber", AMBER, width=1.7))
-            body.append(label(ex + (10 if dx else 0), ey - (8 if dy else -4),
-                              f"t{j + 1}", cls="xs mono"))
+            if dx == 0 and dy < 0:
+                # Straight down: a label centred on the tip sits on its own shaft,
+                # so this one goes beside the arrow instead.
+                body.append(label(ex + 8, ey + 4, f"t{j + 1}", cls="xs mono", anchor="start"))
+            else:
+                body.append(label(ex + (10 if dx else 0), ey - (8 if dy else -4),
+                                  f"t{j + 1}", cls="xs mono"))
 
     body.append(carrow(236, 160, 286, 160, uid, "red", RED, width=1.8))
     body.append(label(261, 148, "90°", cls="xs mono"))
