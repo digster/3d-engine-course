@@ -1,0 +1,94 @@
+<svg viewBox="0 0 780 380" role="img" aria-labelledby="l617bf10-t l617bf10-d">
+  <title id="l617bf10-t">The light record layout</title>
+  <desc id="l617bf10-d">Eleven rows of four floats: position and range, radiance and kind, spot axis and cone scale, cone offset and shadow slot and planes, texel and pcf and strength, the bias knobs, the normal-offset scale, and four rows of the spot shadow matrix, 176 bytes in all.</desc>
+  <defs>
+    <marker id="e-i-l617bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="24" class="sm" text-anchor="start">gpu_local_light: eleven float4s, 176 bytes, one per lamp, in a StructuredBuffer at t8.</text>
+<rect x="110.0" y="50.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="50.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="50.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="50.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="65.0" class="xs mono" text-anchor="end">0</text>
+<text x="378.0" y="65.0" class="xs mono" text-anchor="start">position_range</text>
+<text x="484.0" y="65.0" class="xs muted" text-anchor="start">xyz position; w range</text>
+<rect x="110.0" y="74.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="74.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="74.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="74.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="89.0" class="xs mono" text-anchor="end">16</text>
+<text x="378.0" y="89.0" class="xs mono" text-anchor="start">radiance</text>
+<text x="484.0" y="89.0" class="xs muted" text-anchor="start">xyz colour x intensity; w kind</text>
+<rect x="110.0" y="98.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="98.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="98.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="98.0" width="64.0" height="21.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="113.0" class="xs mono" text-anchor="end">32</text>
+<text x="378.0" y="113.0" class="xs mono" text-anchor="start">axis_cone</text>
+<text x="484.0" y="113.0" class="xs muted" text-anchor="start">xyz spot axis; w cone scale</text>
+<rect x="110.0" y="122.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="122.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="122.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="122.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="137.0" class="xs mono" text-anchor="end">48</text>
+<text x="378.0" y="137.0" class="xs mono" text-anchor="start">cone_shadow</text>
+<text x="484.0" y="137.0" class="xs muted" text-anchor="start">x cone offset, y slot; z near, w far</text>
+<rect x="110.0" y="146.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="146.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="146.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="146.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="161.0" class="xs mono" text-anchor="end">64</text>
+<text x="378.0" y="161.0" class="xs mono" text-anchor="start">shadow_texel</text>
+<text x="484.0" y="161.0" class="xs muted" text-anchor="start">x texel at 1 m, y 1/res; z pcf, w strength</text>
+<rect x="110.0" y="170.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="170.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="170.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="170.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="185.0" class="xs mono" text-anchor="end">80</text>
+<text x="378.0" y="185.0" class="xs mono" text-anchor="start">shadow_bias</text>
+<text x="484.0" y="185.0" class="xs muted" text-anchor="start">x constant, y mode; z slope scale, w max</text>
+<rect x="110.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="209.0" class="xs mono" text-anchor="end">96</text>
+<text x="378.0" y="209.0" class="xs mono" text-anchor="start">shadow_normal</text>
+<text x="484.0" y="209.0" class="xs muted" text-anchor="start">x normal-offset scale; yzw spare</text>
+<rect x="110.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="233.0" class="xs mono" text-anchor="end">112</text>
+<text x="378.0" y="233.0" class="xs mono" text-anchor="start">shadow_row[0]</text>
+<text x="484.0" y="233.0" class="xs muted" text-anchor="start">the spot map's; clip_from_world</text>
+<rect x="110.0" y="242.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="242.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="242.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="242.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="257.0" class="xs mono" text-anchor="end">128</text>
+<text x="378.0" y="257.0" class="xs mono" text-anchor="start">shadow_row[1]</text>
+<text x="484.0" y="257.0" class="xs muted" text-anchor="start">matrix, stored; as four ROWS</text>
+<rect x="110.0" y="266.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="266.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="266.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="266.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="281.0" class="xs mono" text-anchor="end">144</text>
+<text x="378.0" y="281.0" class="xs mono" text-anchor="start">shadow_row[2]</text>
+<rect x="110.0" y="290.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="174.0" y="290.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="238.0" y="290.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<rect x="302.0" y="290.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
+<text x="100.0" y="305.0" class="xs mono" text-anchor="end">160</text>
+<text x="378.0" y="305.0" class="xs mono" text-anchor="start">shadow_row[3]</text>
+<text x="142.0" y="44.0" class="xs mono" text-anchor="middle">x</text>
+<text x="206.0" y="44.0" class="xs mono" text-anchor="middle">y</text>
+<text x="270.0" y="44.0" class="xs mono" text-anchor="middle">z</text>
+<text x="334.0" y="44.0" class="xs mono" text-anchor="middle">w</text>
+<text x="100.0" y="326.0" class="xs mono" text-anchor="end">176</text>
+<text x="20" y="344.0" class="xs" text-anchor="start">every member a float4, so DXC, glslang and SPIRV-Cross lay it out identically; the matrix by ROWS, so no default packing can transpose it</text>
+<text x="20" y="360.0" class="xs muted" text-anchor="start">the COUNT is not in here: it is 6.15's spare float at offset 180 of the light block, set by the renderer, never by the caller</text>
+</svg>

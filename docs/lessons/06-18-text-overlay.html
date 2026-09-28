@@ -37,9 +37,9 @@
 <div class="wrap">
 
   <nav class="lesson-nav" aria-label="Lesson navigation (top)">
-    <a class="prev-l" href="06-17-frame-graph.html">
+    <a class="prev-l" href="06-17b-local-lights.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+      <span class="ttl">6.17b — Local Lights: Point and Spot, and Their Shadows</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>
@@ -4406,6 +4406,38 @@ public:
                                           Uint32 layers, const char* name = nullptr,
                                           bool sampled = false);
 
+    /// **A stack of depth CUBES** — Lesson 6.17b, for point-light shadows.
+    ///
+    /// `SDL_GPU_TEXTURETYPE_CUBE_ARRAY` with `layer_count_or_depth = 6 * cubes`,
+    /// and the layers are faces: cube `c`&#x27;s face `f` is layer `6c + f`, in
+    /// SDL&#x27;s face order (`engine::cube_face`). It is 6.9&#x27;s depth array with two
+    /// differences, and both are the lesson:
+    ///
+    ///   - **The shader binds it as `TextureCubeArray`** and samples it with a
+    ///     `float4` — a direction and a cube index — so the hardware chooses
+    ///     the face, divides by the major axis, and filters ACROSS face edges.
+    ///     A 2D array holding the same six images could not do the last one.
+    ///   - **Support is asked for, not assumed.** SDL&#x27;s debug layer checks
+    ///     `SDL_GPUTextureSupportsFormat(..., CUBE_ARRAY, DEPTH | SAMPLER)`,
+    ///     and at release-3.4.12 the three backends answer it three ways:
+    ///     Metal accepts any depth format for any type (and refuses cube
+    ///     ARRAYS only on iOS GPUs older than Apple4), Vulkan asks the driver
+    ///     with `VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT`, and D3D12 checks
+    ///     `D3D12_FORMAT_SUPPORT1_TEXTURECUBE` on the R32 view format and
+    ///     `DEPTH_STENCIL` on the D32 one. This function asks the same
+    ///     question first and fails with a message, rather than letting a
+    ///     release build create a texture the debug layer would have refused.
+    ///
+    /// A render pass writes ONE face of one cube, through the same `layer`
+    /// field 6.9 used for cascades: all three backends build a per-layer view
+    /// for cube and cube-array depth textures (checked in SDL&#x27;s source at
+    /// release-3.4.12), so a point light&#x27;s shadow is six ordinary depth passes.
+    [[nodiscard]] bool create_depth_cube_array(const gpu_device&amp; dev,
+                                               SDL_GPUTextureFormat format,
+                                               Uint32 size, Uint32 cubes,
+                                               const char* name = nullptr,
+                                               bool sampled = true);
+
     void destroy();
 
     [[nodiscard]] bool valid() const { return texture_ != nullptr; }
@@ -5263,6 +5295,64 @@ bool gpu_texture::create_depth_array(const gpu_device&amp; dev, SDL_GPUTextureFo
         ENGINE_LOG_ERROR(engine::log_gpu,
                 &quot;SDL_CreateGPUTexture(depth array %ux%ux%u %s) failed: %s&quot;,
                 width_, height_, layers, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    uploaded_bytes_ = 0;
+    return true;
+}
+
+bool gpu_texture::create_depth_cube_array(const gpu_device&amp; dev, SDL_GPUTextureFormat format,
+                                          Uint32 size, Uint32 cubes, const char* name,
+                                          bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || size == 0 || cubes == 0 || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    const SDL_GPUTextureUsageFlags usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                                         | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+
+    // ASK FIRST. The debug layer asks this exact question and refuses the
+    // texture; a release build does not ask, and the backend&#x27;s own behaviour on
+    // an unsupported combination is not something to find out in the field.
+    if (!SDL_GPUTextureSupportsFormat(dev.handle(), format,
+                                      SDL_GPU_TEXTURETYPE_CUBE_ARRAY, usage))
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                &quot;gpu_texture: %s is not supported as a sampled depth CUBE ARRAY &quot;
+                &quot;on this device&quot;, name_of(format));
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = size;
+    height_ = size;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD, again. `TextureCubeArray` in the shader, and nothing else
+    // will bind here — a `Texture2DArray` of the same 6N layers is a different
+    // binding type, and loses the seamless filtering across face edges.
+    ti.type = SDL_GPU_TEXTURETYPE_CUBE_ARRAY;
+    ti.format = format_;
+    ti.usage = usage;
+    ti.width = size;
+    ti.height = size;   // a cube face is square; SDL&#x27;s debug layer asserts it
+    ti.layer_count_or_depth = 6u * cubes;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                &quot;SDL_CreateGPUTexture(depth cube array %ux%u x%u cubes %s) failed: %s&quot;,
+                size, size, cubes, name_of(format_), SDL_GetError());
         destroy();
         return false;
     }
@@ -8198,9 +8288,9 @@ cmake --build build --config Debug
   </ul>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
-    <a class="prev-l" href="06-17-frame-graph.html">
+    <a class="prev-l" href="06-17b-local-lights.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+      <span class="ttl">6.17b — Local Lights: Point and Spot, and Their Shadows</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>

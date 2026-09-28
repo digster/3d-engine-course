@@ -1,0 +1,43 @@
+<svg viewBox="0 0 800 330" role="img" aria-labelledby="l617bf1-t l617bf1-d">
+  <title id="l617bf1-t">The inverse-square law from a sphere</title>
+  <desc id="l617bf1-d">A lamp at the left with two concentric spherical shells at distance d and 2d. A beam of rays cuts a patch of area A from the first and 4A from the second, so the same power is spread four times as thinly. The measured values from the harness sit to the right.</desc>
+  <defs>
+    <marker id="e-i-l617bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="24" class="sm" text-anchor="start">A lamp spreads its power over spheres, and a sphere of twice the radius has four times the area.</text>
+<path d="M 234.26,245.71 L 236.68,242.72 L 238.99,239.66 L 241.19,236.51 L 243.29,233.29 L 245.26,230.00 L 247.12,226.64 L 248.87,223.22 L 250.49,219.74 L 251.99,216.21 L 253.37,212.62 L 254.62,208.99 L 255.74,205.32 L 256.73,201.61 L 257.60,197.87 L 258.33,194.10 L 258.93,190.31 L 259.40,186.50 L 259.73,182.67 L 259.93,178.84 L 260.00,175.00 L 259.93,171.16 L 259.73,167.33 L 259.40,163.50 L 258.93,159.69 L 258.33,155.90 L 257.60,152.13 L 256.73,148.39 L 255.74,144.68 L 254.62,141.01 L 253.37,137.38 L 251.99,133.79 L 250.49,130.26 L 248.87,126.78 L 247.12,123.36 L 245.26,120.00 L 243.29,116.71 L 241.19,113.49 L 238.99,110.34 L 236.68,107.28 L 234.26,104.29" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<path d="M 318.53,316.41 L 323.36,310.45 L 327.98,304.31 L 332.39,298.02 L 336.57,291.58 L 340.53,285.00 L 344.25,278.28 L 347.73,271.44 L 350.98,264.48 L 353.98,257.41 L 356.73,250.24 L 359.23,242.98 L 361.48,235.64 L 363.47,228.22 L 365.19,220.74 L 366.66,213.20 L 367.86,205.62 L 368.79,198.00 L 369.46,190.35 L 369.87,182.68 L 370.00,175.00 L 369.87,167.32 L 369.46,159.65 L 368.79,152.00 L 367.86,144.38 L 366.66,136.80 L 365.19,129.26 L 363.47,121.78 L 361.48,114.36 L 359.23,107.02 L 356.73,99.76 L 353.98,92.59 L 350.98,85.52 L 347.73,78.56 L 344.25,71.72 L 340.53,65.00 L 336.57,58.42 L 332.39,51.98 L 327.98,45.69 L 323.36,39.55 L 318.53,33.59" fill="none" stroke="#8f918a" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="150.0" y1="175.0" x2="364.4" y2="224.5" stroke="#f0961e" stroke-width="1.1" fill="none"/>
+<line x1="150.0" y1="175.0" x2="364.4" y2="125.5" stroke="#f0961e" stroke-width="1.1" fill="none"/>
+<line x1="257.2" y1="150.3" x2="257.2" y2="199.7" stroke="#f0961e" stroke-width="3.0" fill="none"/>
+<line x1="364.4" y1="125.5" x2="364.4" y2="224.5" stroke="#f0961e" stroke-width="3.0" fill="none"/>
+<circle cx="150.0" cy="175.0" r="7" fill="#f0961e" stroke="none"/>
+<text x="150.0" y="201.0" class="xs mono" text-anchor="middle">lamp, intensity I</text>
+<text x="263.18070712637586" y="179.0" class="xs" text-anchor="start">A at d</text>
+<text x="378.0" y="179.0" class="xs" text-anchor="start">4A at 2d</text>
+<text x="255" y="262" class="xs muted" text-anchor="middle">same rays, same power</text>
+<text x="255" y="280" class="xs t-hi" text-anchor="middle">spread 4x as thin: E = I / d²</text>
+<text x="480.0" y="70" class="sm" text-anchor="start">measured, verify_617b §A</text>
+<text x="480.0" y="92" class="xs muted" text-anchor="start">intensity pi, white surface facing it:</text>
+<text x="488.0" y="109" class="xs mono" text-anchor="start">  1 m</text>
+<text x="550.0" y="109" class="xs mono" text-anchor="start">E = 3.1416   renders 1.0000</text>
+<text x="488.0" y="126" class="xs mono" text-anchor="start">  2 m</text>
+<text x="550.0" y="126" class="xs mono" text-anchor="start">E = 0.7854   renders 0.2500</text>
+<text x="488.0" y="143" class="xs mono" text-anchor="start">  4 m</text>
+<text x="550.0" y="143" class="xs mono" text-anchor="start">E = 0.1963   renders 0.0625</text>
+<text x="480.0" y="160" class="xs muted" text-anchor="start">power through spheres of 0.5, 2, 8 m:</text>
+<text x="488.0" y="177" class="xs mono" text-anchor="start"></text>
+<text x="550.0" y="177" class="xs mono" text-anchor="start">39.47852 each (4πI = 39.47842)</text>
+<text x="480.0" y="194" class="xs muted" text-anchor="start">a lamp D m above a 1 m patch vs the sun:</text>
+<text x="488.0" y="211" class="xs mono" text-anchor="start">  D = 2</text>
+<text x="550.0" y="211" class="xs mono" text-anchor="start">16.19% off at the corner</text>
+<text x="488.0" y="228" class="xs mono" text-anchor="start">  D = 10</text>
+<text x="550.0" y="228" class="xs mono" text-anchor="start">0.745%  — (D/d)³, as derived</text>
+<text x="488.0" y="245" class="xs mono" text-anchor="start">  D = 100</text>
+<text x="550.0" y="245" class="xs mono" text-anchor="start">0.0075%</text>
+<text x="480.0" y="274" class="xs t-hi" text-anchor="start">at one metre a lamp of intensity π IS the engine's sun</text>
+</svg>

@@ -2967,3 +2967,23 @@ LEARNINGS.md and README.md into short heads with verbatim archives in `state/`, 
 
 (A second "continue" in the same session: Phase 1.5 — solution sketches for the 113 exercises in
 the 20 lessons that had none — finished, verified and parked, then Phase 4.)
+
+---
+
+## 2026-09-28 — `next` (Lesson 6.17b)
+
+> next
+
+> Try again
+
+> continue
+
+> I hit my usage limit while you were working, but it has reset now. Please continue from where you left off.
+
+(The first of the four inserted lessons, written after 8.13 by the authoring guide's §17
+protocol. "Try again" and "continue" followed tool-classifier outages mid-lesson; the usage-limit
+message came twice, and each time the work resumed where it stopped. Logged in
+`memory/2026-09-28.md`.)
+
+Produced Lesson 6.17b — Local Lights: Point and Spot, and Their Shadows (Module 6, inserted
+between 6.17 and 6.18).

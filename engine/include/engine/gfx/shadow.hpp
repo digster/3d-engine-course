@@ -32,7 +32,9 @@
 //     two maps and two lookups, which is a linear cost and no new ideas.
 //   - **Directional only.** A spot light needs a perspective projection here
 //     instead of an orthographic one, and inherits `perspective`'s non-uniform
-//     depth distribution along with it — see §4.6.
+//     depth distribution along with it — see §4.6. (Lesson 6.17b does exactly
+//     that: `fit_spot`, `fit_cube_face` and `local_shadow_set` at the bottom of
+//     this file, and a perspective branch in `visibility`.)
 //   - **One cascade.** A single map stretched over a whole outdoor scene gives
 //     the near field far too few texels. Splitting the camera frustum into
 //     ranges and giving each its own map is *cascaded* shadow mapping, and it is
@@ -46,6 +48,7 @@
 #define ENGINE_GFX_SHADOW_HPP
 
 #include <engine/math/bounds.hpp>
+#include <engine/gfx/cubemap.hpp>   // 6.17b: cube_face, cube_face_axes
 #include <engine/gfx/cull.hpp>
 #include <engine/gfx/depth_buffer.hpp>
 #include <engine/gfx/framebuffer.hpp>
@@ -114,9 +117,111 @@ struct light_camera
     /// §4.6, and Lesson 4.9 measured what it costs.
     float depth_range = 1.0f;
 
+    // ---- Lesson 6.17b: a camera with a position ---------------------------
+    //
+    // A spot light and each face of a point light's cube are PERSPECTIVE
+    // cameras, and that changes the meaning of the two numbers above. Both were
+    // single numbers because an orthographic box resolves every depth equally;
+    // a pyramid does not. Rather than invent a second struct that every consumer
+    // of this one would need a second overload for, the struct says which kind
+    // it is and `world_per_texel` is REDEFINED under perspective:
+
+    /// True for a spot light or a cube face. Defaults to false, so every camera
+    /// built before 6.17b — `fit_directional`, the cascades — is unchanged.
+    bool perspective = false;
+
+    /// Under perspective, `world_per_texel` is the footprint of one texel **at
+    /// one metre** of axial distance, and a fragment at axial distance `d` sees
+    /// texels `d` times that size: the pyramid widens linearly. So the ortho
+    /// case's constant becomes a slope, and the bias derivation of 6.8 §4.4
+    /// needs the fragment's own distance before it can be evaluated.
+    ///
+    /// The near and far planes the projection was built with, in world units.
+    /// Needed because perspective device depth is NOT affine in distance — see
+    /// `perspective_depth` — so converting a bias measured in metres into
+    /// device units needs the curve itself, not a single `depth_range`.
+    float near_plane = 0.0f;
+    float far_plane = 0.0f;
+
+    /// Where the lamp is and which way the camera looks, in world space. Under
+    /// perspective the bias needs both: the stored depth is AXIAL (`w`, the
+    /// distance along `axis`), and how fast axial depth changes across a texel
+    /// depends on the angle between the surface and the axis, not only the ray —
+    /// see `perspective_slope`. Unused by an orthographic camera.
+    vec3 eye{0.0f, 0.0f, 0.0f};
+    vec3 axis{0.0f, 0.0f, -1.0f};
+
     /// Is this a real fit, or the default?
     [[nodiscard]] bool valid() const { return world_per_texel > 0.0f; }
 };
+
+/// **The slope term under a perspective light camera** — Lesson 6.17b, and the
+/// place where 6.8's derivation stopped being enough.
+///
+/// 6.8 §4.4 sized the bias by `tan(theta)`, theta between the normal and the
+/// light's direction, and for an orthographic map that is exact: every ray IS
+/// the axis. A perspective map stores AXIAL depth `w`, and its rays diverge.
+/// Differentiate `w` across one texel of a plane with normal `n` and the answer
+/// is (§6.4 of the lesson):
+///
+///     dw per texel  =  texel * sin(alpha) * cos(phi) / cos(theta)
+///
+///   alpha  between the normal and the camera's AXIS
+///   phi    between the ray and the axis     (cos(phi) = w / distance)
+///   theta  between the normal and the ray   (cos(theta) = n . l)
+///
+/// With phi = 0, alpha = theta and this IS `tan(theta)`: 6.8's formula is the
+/// on-axis special case. Off axis they part company, and most sharply for a
+/// wall that faces the lamp squarely (theta = 0) near the edge of the cone:
+/// `tan(theta)` says no bias is needed, and the axial depth still changes by
+/// `sin(phi) cos(phi)` of a texel per texel. `verify_617b` §G found it as a
+/// GPU/CPU disagreement 5 px from any shadow edge, and §F measures it.
+///
+/// Clamped at `max_slope` for 6.8's reason; 0 for a surface facing away.
+[[nodiscard]] inline float perspective_slope(float n_dot_axis, float cos_phi,
+                                             float n_dot_l, float max_slope)
+{
+    if (n_dot_l <= 0.0f) { return 0.0f; }
+    const float c = (n_dot_l > 1.0f) ? 1.0f : n_dot_l;
+    const float s2 = 1.0f - n_dot_axis * n_dot_axis;
+    const float sin_alpha = (s2 <= 0.0f) ? 0.0f : std::sqrt(s2);
+    const float t = sin_alpha * cos_phi / c;
+    return (t > max_slope) ? max_slope : t;
+}
+
+/// **The rounding floor under a perspective bias: four float ULPs near 1.**
+///
+/// `perspective_slope` can be exactly zero where 6.8's `tan(theta)` never was:
+/// the floor under a point light's -Y face has the SAME axial depth everywhere
+/// (every point is exactly the lamp's height below it), so the derivation
+/// rightly asks for no geometric bias at all. And then the comparison sits on a
+/// knife edge that float rounding decides — `verify_617b` measured the stored
+/// and recomputed depths there disagreeing by one ULP either way, and 90 points
+/// of acne appeared out of nothing.
+///
+/// Device depth near 1 is spaced 2^-24 apart in a float, and both values can be
+/// half a spacing off before they meet; four spacings (2^-22) covers both with
+/// room to spare, and is 0.03 mm at 2.5 m on verify_617b's spot. It is the term
+/// 6.8 called quantisation and set to zero for f32, because an orthographic bias
+/// with the sun at an angle never reached zero to expose it.
+inline constexpr float k_perspective_depth_floor = 2.384185791e-7f;   // 2^-22
+
+/// **Device depth at axial distance `d`, for this engine's `perspective()`.**
+///
+/// `far * (d - near) / ((far - near) * d)` — Lesson 2.10's `z_ndc`, written as a
+/// function of distance. 0 at the near plane, 1 at the far one, and a
+/// hyperbola between: half the depth codes are spent before `d = 2 * near`.
+///
+/// Lesson 6.17b needs it for one job. A bias derived in metres (6.8 §4.4, with
+/// a texel that now grows with distance) has to become a bias in the units the
+/// comparison runs in, and under perspective no single scale factor does that.
+/// The exact conversion is the DIFFERENCE of two values of this curve —
+/// `perspective_depth(d) - perspective_depth(d - bias)` — which is what
+/// `shadow_map::visibility` and `scene.frag.hlsl` both compute.
+[[nodiscard]] inline float perspective_depth(float d, float near_plane, float far_plane)
+{
+    return far_plane * (d - near_plane) / ((far_plane - near_plane) * d);
+}
 
 /// Fit a directional light's orthographic box around `scene`.
 ///
@@ -137,6 +242,48 @@ struct light_camera
 /// @param resolution the map's side, in texels. Must be > 0.
 [[nodiscard]] light_camera fit_directional(const directional_light& key,
                                            const aabb& scene, int resolution);
+
+/// The near plane every local light's shadow camera uses unless told otherwise:
+/// **5 cm**. Lesson 6.17b.
+///
+/// A perspective near plane is the master precision knob (2.10's finding, and
+/// 4.9 measured it), so the temptation is to push it out. Here it cannot go far:
+/// anything closer to the lamp than the near plane is CLIPPED from the shadow
+/// pass, casts no shadow at all, and lets light through — a moth on a bulb, a
+/// hand on a torch. 5 cm keeps half of a D32 map's codes inside the first 10 cm
+/// and still lets a caster sit a hand's width from the lamp.
+inline constexpr float k_local_shadow_near = 0.05f;
+
+/// The widest cone a spot shadow is fitted to: **80 degrees from the axis**, a
+/// 160-degree frustum. Past it the texels at the edge of the map stretch by
+/// `1 / cos^2`, 33x at 80 degrees and unbounded at 90, and a cube (six 90-degree
+/// faces) is the right tool instead — which is what a point light is.
+inline constexpr float k_max_spot_shadow_angle = 1.3962634f;
+
+/// **A spot light's camera**: a perspective pyramid from the lamp down its axis,
+/// just wide enough to hold the outer cone. Lesson 6.17b.
+///
+/// Square, with half-angle `outer_angle`, so the cone's circular cross-section
+/// is INSCRIBED in the map: the four corners are wasted texels (21.5% of the
+/// map, `1 - pi/4`) and that is the price of a square texture holding a round
+/// pool of light. Far is the light's `range` — nothing beyond it is lit, so
+/// nothing beyond it can matter — or 50 m for an infinite one.
+[[nodiscard]] light_camera fit_spot(const local_light& light, int resolution,
+                                    float near_plane = k_local_shadow_near);
+
+/// **One face of a point light's cube**: a 90-degree square pyramid along the
+/// face's major axis. Lesson 6.17b.
+///
+/// Built from `cube_face_axes` and NOT from `look_at`, and that is the lesson's
+/// sharpest trap. The camera's right is the face's `u`, its up is `-v` (the
+/// face's v grows down the image) and it looks along `major` — a frame whose
+/// determinant is -1, a MIRROR, which is exactly what makes its image land on
+/// the face the way the hardware's cube lookup reads it. `look_at` would build
+/// the rotation instead and every face would come out left-right flipped.
+/// (Winding reverses too; the shadow pass culls nothing, so it does not care.)
+[[nodiscard]] light_camera fit_cube_face(const local_light& light, cube_face face,
+                                         int resolution,
+                                         float near_plane = k_local_shadow_near);
 
 /// Which bias policy to apply. [B] cycles in the demo, and every one of them is
 /// reachable **because the failures are the lesson** (Lesson 3.5's rule).
@@ -419,6 +566,110 @@ private:
     /// frame allocates nothing (`collect_triangles`' bargain, Lesson 3.10).
     std::vector<raster_triangle> tris_;
     projection_scratch scratch_;
+};
+
+// ===========================================================================
+// Lesson 6.17b — shadows for lights that are somewhere
+// ===========================================================================
+
+/// How big the maps are and how they are biased. One block for every local
+/// light in a set, the same argument `shadow_settings` made: the knobs travel
+/// together, and a per-light copy would be seven floats per lamp that nobody
+/// would ever set differently.
+struct local_shadow_settings
+{
+    /// Side of a spot light's map. 512: a spot covers less of the scene than
+    /// the sun's box does, so it needs fewer texels for the same footprint.
+    int spot_resolution = 512;
+
+    /// Side of EACH of a point light's six faces. 256, because it is paid six
+    /// times — a 256 cube is 393,216 texels, three quarters of a 1024 map.
+    int point_resolution = 256;
+
+    float near_plane = k_local_shadow_near;
+
+    /// The bias policy and its knobs — 6.8's struct, reused whole. The
+    /// derivation carries over; only `world_per_texel` stopped being constant.
+    ///
+    /// **`pcf_radius` defaults to 0 here**, where 6.8's default is 1: a point
+    /// light's lookup goes through a CUBE, and a wider kernel has to walk across
+    /// face edges, which the GPU does seamlessly and this CPU implementation
+    /// cannot (it would read past the edge of one face's map). One tap is 2x2
+    /// PCF in hardware already. Spot lights honour a wider radius on both
+    /// renderers; Exercise 6.17b.4 widens the cube's.
+    shadow_settings bias = [] {
+        shadow_settings s;
+        s.pcf_radius = 0;
+        return s;
+    }();
+};
+
+/// **The shadow maps for a list of local lights** — one per shadowed spot, six
+/// per shadowed point. Lesson 6.17b.
+///
+/// Built on `shadow_map` rather than beside it, and that is the evidence for
+/// 6.9's design: `render(objects, meshes, cam, bounds)` already takes a camera
+/// somebody else fitted, so a spot light is `fit_spot` plus a map and a cube
+/// face is `fit_cube_face` plus a map. The rasterizer, the depth format, the
+/// PCF loop and the bias policy are all 6.8's, unmodified — what 6.17b added
+/// to `shadow_map` itself is only the perspective branch of the bias.
+///
+/// **Indexed by LIGHT**, parallel to the span `render` was given, because that
+/// is the question the shading asks: "is this point lit by lamp k?". A light
+/// with `casts_shadow == false` has no maps and is always visible.
+class local_shadow_set
+{
+public:
+    local_shadow_set() = default;
+
+    local_shadow_set(const local_shadow_set&) = delete;
+    local_shadow_set& operator=(const local_shadow_set&) = delete;
+    local_shadow_set(local_shadow_set&&) noexcept = default;
+    local_shadow_set& operator=(local_shadow_set&&) noexcept = default;
+
+    [[nodiscard]] local_shadow_settings& settings() { return set_; }
+    [[nodiscard]] const local_shadow_settings& settings() const { return set_; }
+
+    /// Render every shadow map `lights` asks for.
+    ///
+    /// Maps are kept across calls and only re-allocated when the lights'
+    /// shadow needs change shape, so a steady scene allocates nothing. Every
+    /// map is re-RENDERED every call — which is the honest cost, and the one
+    /// real engines avoid by caching static lights (the GPU half of this lesson
+    /// imports its maps into the frame graph precisely so it can skip them).
+    void render(std::span<const scene_object> objects, const mesh_pool& meshes,
+                std::span<const local_light> lights, shadow_stats* stats = nullptr);
+
+    /// Is `world_pos` lit by light `light_index`? 1 lit, 0 shadowed, between
+    /// is PCF. Exactly `shadow_map::visibility`'s contract, per lamp.
+    ///
+    /// For a point light the FACE is chosen here, by `direction_to_cube` on the
+    /// vector from the lamp to the point — the same rule a `TextureCube`
+    /// lookup applies in hardware, so both renderers ask the same face.
+    ///
+    /// @param n_dot_l the GEOMETRIC normal's cosine with THIS light's direction
+    ///        (6.8's rule: acne is about triangles, and a normal map moves none).
+    [[nodiscard]] float visibility(std::size_t light_index, vec3 world_pos,
+                                   vec3 geometric_normal, float n_dot_l) const;
+
+    /// How many maps exist, and the first one light `i` owns (-1 for none).
+    [[nodiscard]] int map_count() const { return static_cast<int>(maps_.size()); }
+    [[nodiscard]] int first_map(std::size_t light_index) const;
+    [[nodiscard]] const shadow_map& map(int i) const { return maps_[static_cast<std::size_t>(i)]; }
+
+private:
+    local_shadow_settings set_{};
+
+    /// Heap-owned maps, spots first-come and points in blocks of six faces in
+    /// SDL's face order — the order `cube_face` shares with the GPU's layers.
+    std::vector<shadow_map> maps_;
+
+    /// Per light: the index of its first map, or -1; its kind; its position.
+    /// Copied from the span at `render`, so a later `visibility` cannot be
+    /// handed a different list than the one the maps were rendered for.
+    std::vector<int> first_;
+    std::vector<local_light_kind> kinds_;
+    std::vector<vec3> positions_;
 };
 
 } // namespace engine

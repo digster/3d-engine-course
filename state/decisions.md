@@ -29,6 +29,35 @@ decisions:
         behind is still culled and the picture does not change. The code (row2
         alone) is right; only the comment's account of the wrong version is not.
         Prose corrected in place (6.16 §3.2's callout and its pitfall entry).
+        UPDATED 2026-09-28 (6.17b): BOTH gpu_scene.cpp COMMENTS CORRECTED. 6.17b
+        lists gpu_scene.cpp whole and rewrote the bind as bind_fragment_samplers
+        (eight slots now), whose comment tells the corrected story; the instanced
+        path calls the same function and says so. Only frustum.cpp's remains.
+  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE AND FIXED NONE OF THEM,
+        BECAUSE AN INSERTION MUST NOT MOVE ANOTHER LESSON'S NUMBERS. (2026-09-28.)
+        1. THE SUN'S GPU SHADOW UNDER-REACHES. scene.frag.hlsl's cascade lookup
+           sizes its bias with pcf_reach_texels(r) = (r+1/2)sqrt2 — the CPU's
+           nearest-texel reach — through a LINEAR comparison sampler, which reads
+           four texels: (r+1)sqrt2 is reachable. At the default r = 1 that is 2.12
+           where 2.83 is needed, a quarter short. 6.17b found exactly this for lamps
+           (11,098 GPU/CPU disagreements off any edge -> 0). Unmeasured for the sun;
+           fixing it moves 6.8/6.9's GPU numbers, so it belongs to a lesson that
+           re-measures them (Module 9's testing or profiling pass). Page: 6.17b §9.1.
+        2. 6.8's FALLBACK far_depth_ IS A 2D TEXTURE IN A Texture2DArray SLOT
+           (gpu_scene.cpp create_depth, slot t2 declared Texture2DArray since 6.9).
+           Renders correctly on Metal here; ⚠ VERIFY under MTL_DEBUG_LAYER=1 and the
+           Vulkan validation layers. One-line fix (create_depth_array(..., 1 layer));
+           posed as Exercise 6.17b.5.
+        3. 6.8's HARNESS DOES NOT BUILD AT HEAD: scratch/verify_68.cpp fails in
+           engine/math/quat.hpp (a mat3 assigned to a quat), and it, 6.9's and 6.16's
+           include <engine/gfx/bounds.hpp>, which 8.4 moved to engine/math/.
+           scratch/_base617b/run_shim.sh forwards the include (6.9 and 6.16 then
+           build and pass); 6.8's still fails. Harnesses are not covered by any
+           checker — check-builders covers pages only.
+        4. 6.5's HARNESS REPORTS 2 FAILURES AT HEAD, before and after 6.17b alike:
+           "the whole material is 64 bytes" and "material_uniforms is still exactly
+           32 bytes" — sizes later lessons grew on purpose; the checks were never
+           updated. Same class as 3: harness rot nothing measures.
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE
         CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER
         PAGE STAYS AN ARCHIVE OF WHAT SHIPPED. *** 8.10's tangent basis set the

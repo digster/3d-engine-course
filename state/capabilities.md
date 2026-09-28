@@ -602,6 +602,32 @@ capabilities:
       checks. And the honest half: `discard_write` on a blended target compiles
       happily and derives DONT_CARE. **A frame graph relocates a dataflow claim;
       it does not verify it.**
+  - 6.17b THE ENGINE HAS LAMPS, AND EACH ONE CAN CAST A SHADOW.
+    light.hpp: local_light {kind point|spot, position, direction (of TRAVEL),
+    colour, intensity = irradiance at 1 m (default k_reference_irradiance, so a
+    default lamp at 1 m IS the sun), range (<= 0 infinite), inner/outer half-angles
+    (glTF's 0 and pi/4), casts_shadow}; inverse_square (Frostbite's 1 cm floor),
+    range_window ((1 - (d/r)^4)^2, Karis/Frostbite), cone_terms_of + spot_cone
+    (glTF's scale/offset, squared), sample_local_light, shade_local;
+    surface_brdf lifted out of shade() statement for statement.
+    shadow.hpp/.cpp: light_camera gains perspective/near/far/eye/axis;
+    perspective_depth, perspective_slope (sin a cos p / cos t), the 2^-22
+    rounding floor, fit_spot (80-degree cap), fit_cube_face (a MIRROR from
+    cube_face_axes), local_shadow_settings (512 spot, 256 cube face, radius 0),
+    local_shadow_set (built ON shadow_map); visibility's perspective branch.
+    cubemap: cube_axes + cube_face_axes. clip/soft_renderer: GUARD-BAND
+    CLIPPING at +-7936 px, only under near_mode::clip and only outside the band;
+    clip_stats::guard_clipped. raster: fill_style::local_lights (span) +
+    local_shadows; the loop after shade().
+    GPU: gpu_local_light (11 float4, 176 B, matrix as ROWS), local_light_count in
+    6.15's pad at offset 180, create_depth_cube_array (asks SupportsFormat
+    first), gpu_local_shadows (budgets 4 spots / 2 points, jobs, render and
+    render_into), a depth-only pipeline shared with the sun, scene_local_lights
+    as a trailing render()/render_batched() argument, renderer-set count, three
+    identity fallbacks, an 8-slot sampler bind, the storage bind at slot 0
+    (HLSL t8, space2), gpu_event_kind::bind_storage. scene.frag.hlsl: the lamp
+    loop, spot and cube lookups with reach (r+1)sqrt2.
+    demo: gltf_view --lights [--lamp-shadows 0] (CPU renderer).
   - 6.17 THE FRAME IS A DECLARATION, AND FOUR FACTS STOPPED BEING MAINTAINED.
     74 -> 75 public headers, 46 -> 47 sources, 24 shaders (unchanged — this
     lesson added none). 40 checks green, 0 failures (7 CPU-only, 33 needing a

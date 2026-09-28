@@ -100,6 +100,7 @@
       <li><a href="#interchange">Reading somebody else&rsquo;s material model</a></li>
       <li><a href="#tangent">Tangent space</a></li>
       <li><a href="#shadows">Shadows, and the size of a sampling error</a></li>
+      <li><a href="#local-lights">Local lights: distance, the cone, and a depth curve</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#rotation">Parameterising a rotation</a></li>
@@ -2843,6 +2844,98 @@
       has a log-average of zero. Reinhard&rsquo;s 2002 paper specifies it for this reason.
     </p>
 
+  <h2 id="local-lights"><span class="num">7h</span>Local lights: distance, the cone, and a depth curve</h2>
+
+  <p>
+    Lesson 6.17b. Five tools: two about how much light arrives from a lamp, one about the shape of a
+    spot, and two about what a shadow map made by a camera with a position is actually storing.
+  </p>
+
+  <div class="card">
+    <h3>The inverse-square law <span class="from">Lesson 6.17b</span></h3>
+    <div class="eq">
+      \[ E_{\perp}(d) = \frac{\Phi}{4\pi d^{2}} = \frac{I}{d^{2}}, \qquad I = \frac{\Phi}{4\pi} \]
+      <span class="eq-plain">Irradiance square-on at distance d is the lamp's intensity over d squared; the intensity is its power shared over the 4 pi steradians of a sphere.</span>
+    </div>
+    <p>
+      All the power crosses every sphere around the lamp, and a sphere's area is 4&pi;<em>d</em>&sup2;.
+      Nothing is absorbed; the light is spread thinner. With <em>I</em> defined as the irradiance at
+      one metre, a lamp of intensity &pi; delivers the engine&rsquo;s reference irradiance there.
+      Measured: spheres of 0.5, 2 and 8&nbsp;m collect 39.47852 each against 4&pi;<sup>2</sup> =
+      39.47842. A lamp <em>D</em> above a patch, scaled to deliver <em>E</em> beneath it, delivers
+      <em>E</em>(<em>D</em>/<em>d</em>)&sup3; at a point <em>d</em> away &mdash; distance and cosine
+      together &mdash; so it is a sun to 0.75% across a patch a tenth of its height.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A window that meets zero without a crease <span class="from">Lesson 6.17b</span></h3>
+    <div class="eq">
+      \[ w(x) = \operatorname{saturate}\!\left(1 - x^{4}\right)^{2}, \quad x = \frac{d}{r}; \qquad \left.\frac{d}{dd}\frac{I\,(1-x^{4})}{d^{2}}\right|_{d=r} = -\frac{4I}{r^{3}} \]
+      <span class="eq-plain">The engine's range window; and the slope at the range of glTF's unsquared recipe, which is twice the inverse square's own -2I/r^3 and then zero immediately after.</span>
+    </div>
+    <p>
+      At the range <em>w</em> = 0 and <em>w&prime;</em> = &minus;4 for the unsquared form, so the
+      product&rsquo;s slope jumps from &minus;4<em>I</em>/<em>r</em>&sup3; to 0: a crease, which the
+      eye sees as a ring. Squaring makes the window&rsquo;s own derivative
+      2<em>w</em>&middot;(&minus;4<em>x</em>&sup3;) vanish where <em>w</em> does. The price is paid in
+      the outer half: 0.879 at half the range, 0.577 at 0.7.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A cone ramped in cosine, and its solid angle <span class="from">Lesson 6.17b</span></h3>
+    <div class="eq">
+      \[ \text{cone}(\theta) = \operatorname{saturate}\!\left(\frac{\cos\theta - \cos\theta_o}{\cos\theta_i - \cos\theta_o}\right)^{2}, \qquad \Omega(\theta_o) = 2\pi\,(1 - \cos\theta_o) \]
+      <span class="eq-plain">The spot's falloff between its inner and outer half-angles, linear in cosine then squared; and the solid angle of a cone of half-angle theta_o.</span>
+    </div>
+    <p>
+      Cosine because a fragment has vectors, not angles: the dot product is three multiplies and the
+      angle is an <code>acos</code>. The two constants fold into a scale and an offset per lamp. It is
+      not linear in angle &mdash; 0.2999 at the angular midpoint of 0.30&ndash;0.45&nbsp;rad, not 0.25.
+      The solid angle is the area of the sphere&rsquo;s cap, 2&pi;<em>h</em> with <em>h</em> =
+      1&nbsp;&minus;&nbsp;cos&nbsp;&theta;<sub>o</sub>: 1.8403&nbsp;sr for 45&deg;, 14.64% of the
+      sphere. It converts between a <em>masking</em> spot (what the engine stores) and a
+      <em>focusing</em> one (<em>I</em> = &Phi;/&Omega;).
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A bias through the depth curve <span class="from">Lesson 6.17b</span></h3>
+    <div class="eq">
+      \[ z(w) = \frac{f\,(w-n)}{(f-n)\,w}, \qquad \Delta z = z(w) - z(w - b) \;\approx\; \frac{f\,n}{(f-n)\,w^{2}}\; b \]
+      <span class="eq-plain">Perspective device depth as a function of axial distance w; a bias of b metres becomes the difference of two values of that curve, about fn/((f-n)w^2) times b.</span>
+    </div>
+    <p>
+      An orthographic map&rsquo;s depth is affine in distance, so one scale factor converts metres to
+      device units everywhere. A perspective map&rsquo;s is a hyperbola: half its codes are spent
+      before <em>w</em> = 2<em>n</em>. With a texel that grows like <em>w</em>, the device bias a
+      surface needs falls like 1/<em>w</em>, and a constant is right at exactly one distance,
+      <em>w</em> = <em>nf</em>/1&nbsp;m. Worked: <em>n</em> = 0.05, <em>f</em> = 8, <em>b</em> =
+      1.168&nbsp;mm at 1&nbsp;m gives 5.88&nbsp;&times;&nbsp;10<sup>&minus;5</sup>, where dividing by
+      the depth range gives 1.469&nbsp;&times;&nbsp;10<sup>&minus;4</sup>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The slope of axial depth across a texel <span class="from">Lesson 6.17b</span></h3>
+    <div class="eq">
+      \[ \frac{\Delta w}{\text{texel}} = (t\,w)\,\frac{\sin\alpha\,\cos\varphi}{\cos\theta} \]
+      <span class="eq-plain">How much a plane's axial depth changes per texel of a perspective map: the texel's width at w, times sin(alpha) cos(phi) / cos(theta), with alpha between the normal and the camera's axis, phi between the ray and the axis, theta between the normal and the ray.</span>
+    </div>
+    <p>
+      From the ray <em>w</em>(<strong>a</strong> + <em>x</em><strong>e</strong>) meeting the plane
+      <strong>n</strong>&middot;<strong>P</strong> = <em>c</em>: <em>dw</em>/<em>dx</em> =
+      &minus;<em>w</em>&sup2;(<strong>n</strong>&middot;<strong>e</strong>)/<em>c</em>, with
+      |<em>c</em>| = distance&middot;cos&nbsp;&theta; and the worst image direction giving
+      |<strong>n</strong>&middot;<strong>e</strong>| = sin&nbsp;&alpha;. On the axis &phi; = 0 and
+      &alpha; = &theta;, which is 6.8&rsquo;s tan&nbsp;&theta;. A wall facing the lamp 30&deg; off
+      axis has tan&nbsp;&theta; = 0 and a slope of sin&nbsp;30&deg;&nbsp;cos&nbsp;30&deg; = 0.433. And
+      it can be exactly zero where the light still falls &mdash; a floor seen through a cube&rsquo;s
+      &minus;Y face &mdash; which is why a rounding floor of 2<sup>&minus;22</sup> goes under it.
+    </p>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>
@@ -4491,7 +4584,9 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     <strong>the roughness remap</strong> · <strong>Smith masking</strong> (§7c, all from 6.3) · <strong>F0 from an index of refraction</strong> · <strong>Schlick</strong> · <strong>the half-vector Jacobian</strong> · <strong>the Cook–Torrance BRDF</strong> (§7d, all from 6.4) · the rendering
     equation, honestly scoped · the Fresnel term · Schlick's approximation · <strong>the sRGB
     transfer function</strong> · the TBN basis · tonemapping curves · spherical harmonics
-    for irradiance.
+    for irradiance · <strong>the inverse-square law</strong> · <strong>the range window at its
+    edge</strong> · <strong>a cone in cosine, and its solid angle</strong> · <strong>a bias through
+    the depth curve</strong> · <strong>the axial slope</strong> (§7h, all five from 6.17b).
   </div>
 
   <div class="pending">

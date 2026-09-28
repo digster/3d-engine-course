@@ -555,6 +555,23 @@ files:
                   directly. Candidate for 9.10.)
   docs/shared/: course.css, course.js      (THE stylesheet + page script; one copy each)
   docs/_template/: lesson-template.html, README.md, apply-shared.py, check-page.js
+  scratch/ (6.17b, not shipped with the engine — an INSERTED lesson): verify_617b.cpp,
+           build_verify_617b.sh, figs_617b.py (13 figures; inputs l617b_{gpu,cpu,
+           mask,gpu_nobias,floor_68,floor_snap,demo,demo_noshadow}.ppm from
+           VERIFY617B_DUMP and gltf_view --lights --shot), build_617b.py,
+           l617b_body_{a..d}.html, l617b_fig{1..13}.svg, and the LISTING PINS
+           l617b_<path> (22 engine/shader/demo files + the harness).
+           THE INSERTION TOOLING, reusable for 6.18b, 7.7b and 8.14:
+           replay_tree.py (the student's tree at any lesson, from pins; --check),
+           make_t617b.py (`tree`: listings = tree at 6.17 + 6.17b's hunks;
+           `carry`: the hunks onto every LATER pin; each result PROVED by delta, with
+           an undo-later-lines fallback when a later lesson rewrote a context line),
+           _base617b/ (run_all.sh, run_shim.sh, classify.py, shim/: the additivity
+           check across 26 harnesses. Its before/ and after_final/ transcripts were
+           local evidence and are NOT tracked; the .ppm figure inputs are not either,
+           as for every lesson — the SVGs are the tracked product).
+           (40 checks in ten sections; §D is the golden; §J's timing needs a
+           release libengine.a.)
   scratch/ (8.13, not shipped with the engine): verify_813.cpp,
            build_verify_813.sh, figs_813.py, build_813.py, gen_l813_body_e.py
            (one-off: §13's snippets into the STATIC l813_body_e.html),

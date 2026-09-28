@@ -718,6 +718,64 @@ bool gpu_texture::create_depth_array(const gpu_device& dev, SDL_GPUTextureFormat
     return true;
 }
 
+bool gpu_texture::create_depth_cube_array(const gpu_device& dev, SDL_GPUTextureFormat format,
+                                          Uint32 size, Uint32 cubes, const char* name,
+                                          bool sampled)
+{
+    destroy();
+
+    if (!dev.valid() || size == 0 || cubes == 0 || format == SDL_GPU_TEXTUREFORMAT_INVALID)
+    {
+        return false;
+    }
+
+    const SDL_GPUTextureUsageFlags usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                                         | (sampled ? SDL_GPU_TEXTUREUSAGE_SAMPLER : 0u);
+
+    // ASK FIRST. The debug layer asks this exact question and refuses the
+    // texture; a release build does not ask, and the backend's own behaviour on
+    // an unsupported combination is not something to find out in the field.
+    if (!SDL_GPUTextureSupportsFormat(dev.handle(), format,
+                                      SDL_GPU_TEXTURETYPE_CUBE_ARRAY, usage))
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                "gpu_texture: %s is not supported as a sampled depth CUBE ARRAY "
+                "on this device", name_of(format));
+        return false;
+    }
+
+    device_ = dev.handle();
+    width_ = size;
+    height_ = size;
+    format_ = format;
+
+    SDL_GPUTextureCreateInfo ti{};
+    // THE ONE FIELD, again. `TextureCubeArray` in the shader, and nothing else
+    // will bind here — a `Texture2DArray` of the same 6N layers is a different
+    // binding type, and loses the seamless filtering across face edges.
+    ti.type = SDL_GPU_TEXTURETYPE_CUBE_ARRAY;
+    ti.format = format_;
+    ti.usage = usage;
+    ti.width = size;
+    ti.height = size;   // a cube face is square; SDL's debug layer asserts it
+    ti.layer_count_or_depth = 6u * cubes;
+    ti.num_levels = 1;
+    ti.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    texture_ = create_named_texture(device_, ti, name);
+    if (texture_ == nullptr)
+    {
+        ENGINE_LOG_ERROR(engine::log_gpu,
+                "SDL_CreateGPUTexture(depth cube array %ux%u x%u cubes %s) failed: %s",
+                size, size, cubes, name_of(format_), SDL_GetError());
+        destroy();
+        return false;
+    }
+
+    uploaded_bytes_ = 0;
+    return true;
+}
+
 void gpu_texture::destroy()
 {
     if (device_ != nullptr && texture_ != nullptr)

@@ -1,0 +1,491 @@
+  <!-- =================================================================
+       13 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">13</span>Complete code listings</h2>
+
+  <p>
+    Every file this lesson changed, in full, as it stands at the end of 6.17b — the tree a student has
+    after 6.17, plus this lesson and nothing later. Twenty-two engine, shader and demo files change and
+    none is created; the harness is the one new file.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/light.hpp</code></td><td>modified</td>
+          <td><code>local_light</code>, <code>inverse_square</code>, <code>range_window</code>,
+              <code>cone_terms_of</code>/<code>spot_cone</code>, <code>sample_local_light</code>,
+              <code>shade_local</code>; <code>surface_brdf</code> lifted out of <code>shade()</code>.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/shadow.hpp</code></td><td>modified</td>
+          <td>Perspective <code>light_camera</code>; <code>perspective_depth</code>,
+              <code>perspective_slope</code>, the rounding floor; <code>fit_spot</code>,
+              <code>fit_cube_face</code>; <code>local_shadow_settings</code>,
+              <code>local_shadow_set</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/shadow.cpp</code></td><td>modified</td>
+          <td>The two fitters, the set, and the perspective branch of <code>visibility</code>.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/cubemap.hpp</code></td><td>modified</td>
+          <td><code>cube_axes</code> and <code>cube_face_axes</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/cubemap.cpp</code></td><td>modified</td>
+          <td>The face axes, derived from 6.15's <code>k_rules</code>.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/clip.hpp</code></td><td>modified</td>
+          <td>The guard band: planes, test and clipper.</td></tr>
+      <tr><td><code>engine/src/gfx/clip.cpp</code></td><td>modified</td>
+          <td>Their implementation.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/soft_renderer.hpp</code></td><td>modified</td>
+          <td><code>clip_stats::guard_clipped</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/soft_renderer.cpp</code></td><td>modified</td>
+          <td>Guard clipping, only under <code>near_mode::clip</code> and only outside the band.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/raster.hpp</code></td><td>modified</td>
+          <td><code>fill_style::local_lights</code> and <code>local_shadows</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/raster.cpp</code></td><td>modified</td>
+          <td>The lamp loop after <code>shade()</code>.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_uniform.hpp</code></td><td>modified</td>
+          <td><code>local_light_count</code> in 6.15's pad; <code>gpu_local_light</code>.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_texture.hpp</code></td><td>modified</td>
+          <td><code>create_depth_cube_array</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_texture.cpp</code></td><td>modified</td>
+          <td>Its implementation, asking <code>SDL_GPUTextureSupportsFormat</code> first.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_debug.hpp</code></td><td>modified</td>
+          <td><code>gpu_event_kind::bind_storage</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_debug.cpp</code></td><td>modified</td>
+          <td>Its name in dumps.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_shadow.hpp</code></td><td>modified</td>
+          <td><code>pack_local_light</code>, <code>local_shadow_job</code>,
+              <code>gpu_local_shadows</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_shadow.cpp</code></td><td>modified</td>
+          <td>The depth-only pipeline and draw loop shared by the sun and the lamps; the new class.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_scene.hpp</code></td><td>modified</td>
+          <td><code>scene_local_lights</code>; a trailing parameter on both render calls.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
+          <td>The renderer's count, three fallbacks, the eight-slot bind with the corrected comment,
+              the storage bind.</td></tr>
+      <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
+          <td>Two shadow arrays, the storage buffer, <code>surface_brdf</code> lifted, the lamp
+              loop.</td></tr>
+      <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
+          <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
+      <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
+          <td>The harness: forty checks in ten sections.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The light first — the four factors and the lift — and then the shadows it casts on the CPU.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/light.hpp@@
+  @@LISTING:engine/include/engine/gfx/shadow.hpp@@
+  @@LISTING:engine/src/gfx/shadow.cpp@@
+  @@LISTING:engine/include/engine/gfx/cubemap.hpp@@
+  @@LISTING:engine/src/gfx/cubemap.cpp@@
+
+  <p>
+    The guard band, and the software renderer that uses it.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/clip.hpp@@
+  @@LISTING:engine/src/gfx/clip.cpp@@
+  @@LISTING:engine/include/engine/gfx/soft_renderer.hpp@@
+  @@LISTING:engine/src/gfx/soft_renderer.cpp@@
+  @@LISTING:engine/include/engine/gfx/raster.hpp@@
+  @@LISTING:engine/src/gfx/raster.cpp@@
+
+  <p>
+    The GPU: the record, the texture, the debug event, the shadow passes, the renderer and the shader.
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/gpu_uniform.hpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_texture.hpp@@
+  @@LISTING:engine/src/gfx/gpu_texture.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_debug.hpp@@
+  @@LISTING:engine/src/gfx/gpu_debug.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_shadow.hpp@@
+  @@LISTING:engine/src/gfx/gpu_shadow.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_scene.hpp@@
+  @@LISTING:engine/src/gfx/gpu_scene.cpp@@
+  @@LISTING:shaders/scene.frag.hlsl@@
+
+  <p>
+    The demo, and the harness that produced every number above.
+  </p>
+
+  @@LISTING:demos/gltf_view/main.cpp@@
+  @@LISTING:scratch/verify_617b.cpp@@
+
+  <!-- =================================================================
+       14 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">14</span>Build &amp; run</h2>
+
+  <p>
+    The build's shape is unchanged: no new translation unit, no new shader, so
+    <code>engine/CMakeLists.txt</code> and the shader list are as 6.17 left them. The fragment shader
+    recompiles because it changed.
+  </p>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>Then the harness:</p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_617b.sh                                # as configured
+ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timing</code></pre>
+
+  <p>
+    §J's timing line means something only when <em>both</em> the harness and
+    <code>libengine.a</code> are optimised. <code>ENGINE_CFLAGS</code> optimises the harness; the
+    library is optimised by the <code>CMAKE_BUILD_TYPE</code> above. Configure without a build type and
+    the library is built unoptimised: the same run then prints about 3.9&nbsp;ms and 2.7&nbsp;ms where
+    a release library gives 0.72 and 0.35.
+  </p>
+
+  <p>And the demo — the CPU renderer, with and without the lamps' shadows:</p>
+
+  <pre><code class="lang-bash">cd build/demos
+./gltf_view --lights                   # a warm bulb and a cool spot, both shadowed
+./gltf_view --lights --lamp-shadows 0  # the same light, with no occlusion
+./gltf_view                            # yesterday's picture, unchanged</code></pre>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The harness ends with <code>40 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
+    and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
+    bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every
+    disagreement is in the <code>&lt;=1 px</code> column.
+  </p>
+
+  <p>
+    The demo logs its lamps before the first frame. With the default model:
+  </p>
+
+  <pre><code class="lang-text">lamps         : point (2.3, -0.1, 0.8) I=9.05, spot I=67.50 cone 20-29 deg, shadows on (1 spot map, 6 cube faces)</code></pre>
+
+  <p>
+    and the picture is Figure 13's. The sun is at a tenth of its usual strength, so the scene reads as
+    a room at night — dark enough on a monitor that the figure is brightened for the page. A warm glow
+    spreads from the bulb behind and to the right of the model, and a cool, sharper-edged pool lies
+    in front of it from the spot. The bulb is low and close, so its shadows are long: it throws the
+    slab's and the cube's shadows to the left across the floor, away from itself, which no light from
+    a single fixed direction would do from that side of the scene. It also falls across the spot's
+    pool and takes the bulb's warm light out of it, so the pool is bluer with shadows on — lights
+    add, and so do their absences. <code>--lamp-shadows 0</code> removes the occlusion and leaves the
+    pools, which is the fastest way to see how much of the picture's depth the shadows were
+    carrying.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <p>
+    The GPU path is exercised by the harness, not by a demo: <code>gltf_view</code> is the CPU
+    renderer's demo, and the GPU scene demos predate lamps. Module 9's editor is the first program
+    that will place lamps on the GPU interactively.
+  </p>
+
+  <!-- =================================================================
+       15 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">15</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfalls">
+
+  <h3>A spot light lights the ceiling instead of the floor</h3>
+  <p>
+    <strong>Symptom:</strong> the pool of light is on the wrong side of the lamp, or nowhere at all.<br>
+    <strong>Cause:</strong> <code>direction</code> is the direction the light <em>travels</em> — from
+    the lamp toward what it lights — the same convention as <code>directional_light</code> since 3.6.
+    Computing it as <code>position − target</code> points it backwards.<br>
+    <strong>Fix:</strong> <code>normalised(target − position)</code>. The demo's spot does exactly this.
+  </p>
+
+  <h3>An imported lamp is a million times too bright, or invisible</h3>
+  <p>
+    <strong>Symptom:</strong> a glTF scene's lamps blow the image to white, or contribute nothing.<br>
+    <strong>Cause:</strong> glTF gives punctual intensity in candela and directional in lux, and the
+    engine's units are exposure-normalised so that the sun's default is π.<br>
+    <strong>Fix:</strong> one exposure factor, applied to both kinds (Exercise 6.17b.2). Because
+    candela at one metre <em>is</em> lux, the same factor keeps a scene's lamps and sun in proportion.
+  </p>
+
+  <h3>A faint ring on the floor at each lamp's range</h3>
+  <p>
+    <strong>Symptom:</strong> a circle, barely visible, where the light ends.<br>
+    <strong>Cause:</strong> a hard cutoff, or the unsquared window, whose slope jumps from twice the
+    inverse square's to zero at the edge (§4.4).<br>
+    <strong>Fix:</strong> square the window. If the ring persists with the squared window, the range is
+    too short for the intensity: the light is still visibly bright where it is being forced to zero.
+  </p>
+
+  <h3>A point light's shadows fall on the wrong side of their casters</h3>
+  <p>
+    <strong>Symptom:</strong> shadows that look plausible but are mirrored about the centre line of
+    each cube face; worse near face centres than you would expect from any bias problem.<br>
+    <strong>Cause:</strong> the face cameras were built with <code>look_at</code>, which can only build
+    rotations. The face the hardware reads is a reflection (§7.2).<br>
+    <strong>Fix:</strong> <code>fit_cube_face</code>, rows (<strong>u</strong>, −<strong>v</strong>,
+    −<strong>major</strong>). Test it the way §E does: push a direction through the camera and through
+    <code>direction_to_cube</code> and require the same texel.
+  </p>
+
+  <h3>Shadows detach from thin casters, and only far from the lamp</h3>
+  <p>
+    <strong>Symptom:</strong> a fence or a sign has a lit gap at its base that widens with distance
+    from the lamp; solid objects look fine.<br>
+    <strong>Cause:</strong> 6.8's constant device-depth bias reused under a perspective map. It is
+    right at <em>n·f</em>/1&nbsp;m and too large beyond it, in proportion to distance (§6.3).<br>
+    <strong>Fix:</strong> convert the bias through the depth curve per fragment. And test with a thin
+    caster — a solid one will not show it (§6.6).
+  </p>
+
+  <h3>A square of acne directly under a point light</h3>
+  <p>
+    <strong>Symptom:</strong> speckled self-shadowing in a patch under the lamp, nowhere else.<br>
+    <strong>Cause:</strong> the −Y face sees the floor at constant axial depth, the derived slope is
+    exactly zero, and float rounding decides the comparison (§6.5).<br>
+    <strong>Fix:</strong> the rounding floor, <code>k_perspective_depth_floor</code>. Not a larger
+    constant bias: that brings back §6.3's problem everywhere else.
+  </p>
+
+  <h3>Acne on the GPU only, across both pools, away from any edge</h3>
+  <p>
+    <strong>Symptom:</strong> the CPU image is clean and the GPU image has stripes.<br>
+    <strong>Cause:</strong> the bias reach was sized for a nearest-texel comparison, and the GPU's
+    linear comparison sampler reads four texels (§9.1).<br>
+    <strong>Fix:</strong> (<em>r</em>&nbsp;+&nbsp;1)√2 on the GPU. If you change the sampler to
+    nearest, change the reach back — the comment says which filter it is sized for.
+  </p>
+
+  <h3>The CPU's lamp shadow map is wrong, and no bias fixes it</h3>
+  <p>
+    <strong>Symptom:</strong> acne over most of a large floor under a spot; reading the map shows
+    depths that do not match the geometry.<br>
+    <strong>Cause:</strong> near-clipped vertices landing beyond ±8,000 px and being clamped
+    (§8) — or, on a guard-clipped floor, the half-texel slide from vertex snapping (§9.2).<br>
+    <strong>Fix:</strong> guard-band clipping, and the extra half texel of reach under perspective.
+    <code>clip_stats::guard_clipped</code> tells you whether the first is happening.
+  </p>
+
+  <h3>Light leaks in thin lines along a point light's 45° seams</h3>
+  <p>
+    <strong>Symptom:</strong> hairline lit streaks through a shadow, radiating from the lamp.<br>
+    <strong>Cause:</strong> the lookup rejects points that project a hair outside the face that owns
+    them, calling them lit (§7.4).<br>
+    <strong>Fix:</strong> under perspective, clamp to the face instead of rejecting.
+  </p>
+
+  <h3>Culling front faces in the shadow pass makes a point light's acne worse</h3>
+  <p>
+    <strong>Symptom:</strong> 6.8's third acne cure works for the sun and spots, and makes cube shadows
+    worse.<br>
+    <strong>Cause:</strong> a cube face's camera is a mirror, so screen-space winding reverses, and
+    "front" and "back" swap.<br>
+    <strong>Fix:</strong> flip the cull mode for cube faces. The engine does not do this for you: both
+    shadow passes cull nothing by default, which is why the engine never needed to.
+  </p>
+
+  <h3>SDL asserts "Missing fragment storage buffer binding", or the shader reads garbage lamps</h3>
+  <p>
+    <strong>Symptom:</strong> an assertion at draw time, or lamps with random positions and colours.<br>
+    <strong>Cause:</strong> the storage buffer bound at slot 8 because the shader says
+    <code>t8</code>; or no buffer bound at all because there were no lamps; or a count that describes
+    a different list from the buffer.<br>
+    <strong>Fix:</strong> slot 0 — each resource kind counts from zero on the C++ side (§10.6). Let the
+    renderer bind its one-record fallback when there are no lamps, and let it set the count.
+  </p>
+
+  <h3>The spot's shadow matrix is transposed on one backend</h3>
+  <p>
+    <strong>Symptom:</strong> the spot shadow is right on one API and garbage on another.<br>
+    <strong>Cause:</strong> a <code>float4x4</code> member in a structured buffer, whose packing is
+    exactly where compilers and cross-compilers disagree.<br>
+    <strong>Fix:</strong> store the matrix as four <code>float4</code> rows and take four dot products,
+    as <code>gpu_local_light</code> does.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       16 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">16</span>Exercises</h2>
+
+  <div class="exercises">
+
+  <h3>1 — From a bulb's lumens to an intensity (guided)</h3>
+  <p>
+    A 60&nbsp;W incandescent bulb emits about 800 lumens. Compute its intensity as a point light in
+    candela; the illuminance it delivers 2&nbsp;m away, square-on; its intensity as a spot light under
+    Frostbite's masking convention, <em>I</em>&nbsp;=&nbsp;<em>Φ</em>/π; and its intensity as a
+    <em>focusing</em> spot with a 30° cone. Then write
+    <code>intensity_from_flux(flux, kind, outer_angle, focusing)</code> and check it against your hand
+    arithmetic.
+  </p>
+  <p>
+    <em>Solution sketch:</em> as a point, 800/(4π) = 63.7&nbsp;cd, and 63.7/2² = 15.9&nbsp;lux at two
+    metres. As a masking spot, 800/π = 254.6&nbsp;cd — four times the point's, and independent of the
+    cone. As a focusing spot, 800 over §5.3's 0.8418&nbsp;sr = 950&nbsp;cd, and it doubles if you
+    halve the cone's solid angle. Which convention an editor's "lumens" slider uses is a choice, and
+    the engine stores <em>I</em> either way — so the conversion belongs in the importer or the editor,
+    never in the shader. <em>Watch for:</em> lumens and candela are photometric; converting them into
+    the engine's exposure-normalised units needs Exercise 2's factor too.
+  </p>
+
+  <h3>2 — Import <code>KHR_lights_punctual</code> (engine challenge)</h3>
+  <p>
+    The engine's glTF loader (<code>engine/src/gfx/gltf.cpp</code>, 6.6) ignores lights. cgltf already
+    parses them: <code>cgltf_data::lights</code> holds <code>cgltf_light</code> records with
+    <code>color[3]</code>, <code>intensity</code>, <code>type</code>
+    (<code>cgltf_light_type_directional</code>, <code>_point</code>, <code>_spot</code>),
+    <code>range</code>, <code>spot_inner_cone_angle</code> and <code>spot_outer_cone_angle</code>, and
+    a node that carries one has a non-null <code>cgltf_node::light</code>. Produce a
+    <code>std::vector&lt;local_light&gt;</code> and an optional <code>directional_light</code> from a
+    file, with one exposure factor <em>k</em> applied to every intensity.
+  </p>
+  <p>
+    <em>Hint:</em> position and direction come from the node's <em>world</em> transform
+    (<code>cgltf_node_transform_world</code>), and a glTF light shines down its node's local
+    <strong>−Z</strong>. <em>Solution sketch:</em> <code>position</code> is the matrix's translation
+    column; <code>direction</code> is the matrix applied to (0,&nbsp;0,&nbsp;−1,&nbsp;0), normalised —
+    already a direction of travel, which is the engine's convention. glTF's undefined range means
+    infinite, which is the engine's <code>range&nbsp;≤&nbsp;0</code>; the cone angles map across
+    unchanged, including their defaults. For <em>k</em>, pick the value that maps the file's sun (in
+    lux) to π, or 1/1000 if there is none, and log it — the same factor then keeps candela lamps in
+    proportion, because a candela at one metre is a lux. <em>Watch for:</em> a scaled node scales the
+    direction vector too; normalise after transforming.
+  </p>
+
+  <h3>3 — Bind the frame constants once (guided)</h3>
+  <p>
+    §10.8's corrected rule says a partial <code>SDL_BindGPUFragmentSamplers</code> writes only the slots
+    it names, and bindings reset only when a pass ends. Change the renderer to bind slots 2–7 once per
+    pass, after <code>begin_frame</code>, and only slots 0–1 per draw. Count the binding events in the
+    frame log before and after, and prove the picture did not change.
+  </p>
+  <p>
+    <em>Solution sketch:</em> <code>SDL_BindGPUFragmentSamplers(pass, 2, binds + 2, 6)</code> once,
+    <code>SDL_BindGPUFragmentSamplers(pass, 0, binds, 2)</code> per material change. On the harness
+    scenes that saves six descriptor writes per draw — a few dozen a frame, which is honest about how
+    little it buys here and how much it would buy with a thousand draws. The proof is §I's comparison:
+    0 of 196,608 channels. <em>Watch for:</em> every pass that draws must bind its own frame constants
+    — a shadow pass, then the scene pass, is two passes and two binds — and a stale binding from a
+    <em>previous</em> pass is exactly what the old, wrong explanation feared.
+  </p>
+
+  <h3>4 — PCF across cube seams on the CPU (engine challenge)</h3>
+  <p>
+    Point lights default to PCF radius 0 because the CPU's six maps cannot filter across a face edge.
+    Make a radius-1 kernel work on the cube: take each tap as a <em>direction</em>, not a texel, and let
+    <code>direction_to_cube</code> choose the face for it. Then compare against the GPU in §G's
+    instrument.
+  </p>
+  <p>
+    <em>Hint:</em> for the fragment's face, a tap one texel over is the direction
+    <strong>major</strong> + (<em>sc</em> + 2<em>dx</em>/<em>res</em>)<strong>u</strong> +
+    (<em>tc</em> + 2<em>dy</em>/<em>res</em>)<strong>v</strong> — which, past the edge, belongs to the
+    neighbouring face, and the lookup will say so. <em>Solution sketch:</em> each tap then compares
+    against the depth of <em>its</em> face, computed from its own major axis; the reach grows to
+    (1&nbsp;+&nbsp;1)√2 plus the snap's half texel, and the GPU needs the same radius with the same
+    direction-space taps, since its one tap is already 2×2. Expect the 259 edge disagreements of §G
+    to change and not to vanish — the two filters are still different filters.
+  </p>
+
+  <h3>5 — A texture of the wrong type in 6.8's fallback (investigation)</h3>
+  <p>
+    When the caller passes no sun shadow map, <code>gpu_scene</code> binds <code>far_depth_</code> —
+    created by <code>create_depth</code>, a <em>2D</em> texture — to slot 2, which the shader has
+    declared <code>Texture2DArray</code> since 6.9's cascades. 6.17b's own fallbacks are created with
+    the declared types (a one-layer depth array, a one-cube depth cube array). Find out whether the
+    mismatch matters, and fix it if it does.
+  </p>
+  <p>
+    <em>Solution sketch:</em> ⚠ VERIFY: on Metal, run with <code>MTL_DEBUG_LAYER=1</code> and see
+    whether the validation layer reports a texture-type mismatch for <code>shadow_map</code>; on Vulkan,
+    whether the validation layers report an image-view type that does not match the descriptor's
+    <code>OpTypeImage</code> (<code>Arrayed</code> = 1). The engine renders correctly on the machines
+    this course was measured on, which is not the same as being correct. The fix is one line —
+    <code>create_depth_array(dev, shadow_fmt, 1, 1, 1, …)</code> — and the proof it changed nothing is
+    every GPU harness from 6.8 on.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       17 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">17</span>Recap &amp; next</h2>
+
+  <p>
+    The engine has lamps. A <code>local_light</code> is a point or a spot with an intensity in the
+    sun's own units, so a lamp of intensity π at one metre <em>is</em> the engine's sun; it falls with
+    the inverse square — derived from a sphere and measured as the same power through three of them —
+    to zero at its range through a window that meets zero without a crease, and a spot masks that
+    light with a cone ramped in cosine. Both renderers draw them, through one BRDF lifted out of
+    <code>shade()</code> without moving a pixel of the reference render.
+  </p>
+
+  <p>
+    Each lamp can cast a shadow: a perspective map for a spot, six mirrored cameras into a cube for a
+    point. Carrying 6.8's bias to a camera with a position exposed the three things an orthographic
+    derivation could not see — the depth curve, the axial slope sin&nbsp;α&nbsp;cos&nbsp;φ&nbsp;/&nbsp;cos&nbsp;θ,
+    and the knife edge where that slope is exactly zero — and a pixel-by-pixel comparison of two
+    renderers found each of them, plus two different reasons for one reach. Along the way a Module 3
+    clamp that moves geometry became guard-band clipping. The GPU hands the fragment stage a light
+    list sized by the scene through its first storage buffer, and the frame graph schedules the
+    shadow passes — or, for a frame that declares none, reuses last frame's maps.
+  </p>
+
+  <p>
+    <strong>Next: <a href="06-18-text-overlay.html">6.18 — Text and 2D Overlay Rendering</a>.</strong>
+    The engine can light a room now and still cannot put a single character on the screen: every
+    number this lesson measured went to a terminal. 6.18 rasterizes glyphs with
+    <code>stb_truetype</code>, packs them into an atlas, and composites them over the frame — in
+    linear light, which turns out to be the part that decides whether text looks thin or fat — so the
+    picture and the measurement finally share a surface.
+  </p>
+
+  <!-- =================================================================
+       18 — READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">18</span>Further reading</h2>
+
+  <ul class="reading">
+    <li><a href="https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md">Khronos, <em>KHR_lights_punctual</em></a>
+        — the units (candela, lux), the cone angles and their defaults, the range and its recommended
+        window, and the spot's scale-and-offset form. Short, and the reference for Exercise 2.</li>
+    <li>Sébastien Lagarde and Charles de Rousiers, <em>Moving Frostbite to Physically Based
+        Rendering 3.0</em>, SIGGRAPH 2014 course notes — §4.7's punctual lights: the 1&nbsp;cm size,
+        the windowed falloff (eq. 26), and the masking-versus-focusing argument for spots (eqs. 16–17).
+        The chapters after it are the area lights §12 leaves out.</li>
+    <li>Brian Karis, <em>Real Shading in Unreal Engine 4</em>, SIGGRAPH 2013 course notes — the
+        windowed inverse square this engine uses, and the <em>1/(d²+1)</em> form it measures and
+        declines.</li>
+    <li>Tomas Akenine-Möller et al., <em>Real-Time Rendering</em>, 4th ed. — §5.2 on light sources and
+        falloff; chapter 7 on shadows, including omnidirectional shadow maps and bias; chapter 20 on
+        tiled and clustered shading, the culling §12 names.</li>
+    <li>Philipp Gerasimov, "Omnidirectional Shadow Mapping", <em>GPU Gems</em>, chapter 12 — the cube
+        shadow map in its original form, with the distance-in-a-cube encoding this lesson's
+        <code>perspective_depth(major)</code> makes unnecessary.</li>
+    <li>Ola Olsson, Markus Billeter and Ulf Assarsson, "Clustered Deferred and Forward Shading",
+        HPG 2012 — what a lamp's range is ultimately for.</li>
+    <li>Fabian Giesen, <a href="https://fgiesen.wordpress.com/2011/07/05/a-trip-through-the-graphics-pipeline-2011-part-5/">"A trip through the Graphics Pipeline 2011, part 5"</a>
+        — clipping, and why hardware has a guard band at all. §8 is this post's argument, found the hard
+        way.</li>
+    <li><code>SDL_gpu.h</code> at <code>release-3.4.12</code> — the resource-layout comment above
+        <code>SDL_CreateGPUShader</code> (why the storage buffer is <code>t8</code> and slot 0),
+        <code>SDL_GPUTextureSupportsFormat</code>, and <code>SDL_BindGPUFragmentStorageBuffers</code>;
+        the <a href="https://wiki.libsdl.org/SDL3/CategoryGPU">SDL3 GPU wiki category</a> for the same,
+        rendered.</li>
+    <li>Microsoft, <a href="https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/texturecubearray-samplecmplevelzero">TextureCubeArray::SampleCmpLevelZero</a>
+        — the comparison lookup both shadow paths use, and what "comparison filtering" means.</li>
+  </ul>

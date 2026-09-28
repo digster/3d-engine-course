@@ -713,4 +713,8 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
         AND THERE IS NO SPECULATIVE MARGIN. A pair a micron short of touching
         produces `status == none`. `keep_slop` is the hook and 8.9 owns the
         decision.
+  6.17b PUBLISHED 2026-09-28 at 12 h (planned 10): estimate-hours.py on the
+  working-tree diff (the lesson commit is exactly it) — 16,449 prose words, 1,194
+  code + 1,030 comment lines, 5 exercises, raw 11.79. M6 ~155 -> ~157 h; course
+  ~772 -> ~774 h; 0.2's planner cum M6..M9 +2 (476/552/708/774).
 ```

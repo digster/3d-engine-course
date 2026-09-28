@@ -267,9 +267,9 @@ HEAD = """<!DOCTYPE html>
 
 TAIL = """
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
-    <a class="prev-l" href="06-17-frame-graph.html">
+    <a class="prev-l" href="06-17b-local-lights.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+      <span class="ttl">6.17b — Local Lights: Point and Spot, and Their Shadows</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>

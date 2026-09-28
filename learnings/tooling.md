@@ -545,3 +545,44 @@ nothing to change. The rule that page-specific scripts live outside the SHARED-S
 fails if the planner's data is missing, not only if it is wrong — the check for existence is the
 one that would have mattered.
 
+
+## An inserted lesson is written after its successors — replay, carry, prove (6.17b, 2026-09-28)
+
+The first use of the authoring guide's §17. Three tools, kept for 6.18b, 7.7b and 8.14:
+
+- `scratch/replay_tree.py N.M` rebuilds the student's tree at any lesson from the pages' pins.
+  The insertion's LISTINGS are that tree at the previous lesson plus the insertion's hunks — not
+  HEAD's files, which already hold every later lesson.
+- `scratch/make_t617b.py tree|carry` applies the insertion's hunk (working tree vs HEAD) to the
+  replayed file and to every LATER pin of it, and PROVES each result: `delta(result, ours)` must
+  equal `delta(other, head)`. When a later lesson rewrote a context line the hunk will not apply
+  (8.4 moved shadow.hpp's `bounds.hpp` include; zero-context `git apply` then put the new include
+  OUTSIDE the header guard, and the proof refused it) — the fallback undoes the later lesson's
+  one-for-one line replacements in OUR file instead. Five later pins were carried; each rebuilt
+  page changed by exactly the insertion's lines, checked by diffing page against pins.
+- `scratch/_base617b/run_all.sh` + `classify.py`: every Module 6–7 harness before and after,
+  diffed with only timing lines masked. Take the BEFORE run before the first edit. It found that
+  6.8's harness no longer builds at HEAD and 6.5's fails two size checks — harness rot nothing
+  measures, because check-builders covers pages only.
+
+## A checker's file pattern is part of what it checks — build_\d+\.py skipped every b-lesson
+
+`check-builders.py` found builders with `build_\d+\.py`. `build_617b.py` does not match, so the
+first inserted lesson's builder would have been skipped with a green report — "64/64 reproduce"
+while the 65th was never run. Found only because the report did not list it. The pattern is now
+`builder_key()` (module, lesson, suffix), sorted in course order and unit-tested with b-lessons.
+When a numbering scheme grows a new form, grep every tool that parses it: a pattern that does
+not match fails silently.
+
+## RLE render panels: crispEdges, and quantisation can hide or invent a difference
+
+Two figure lessons from 6.17b's raster panels (`figs_617b.render_panel`):
+
+- At a fractional scale, adjacent RLE rows antialias into hairline seams, which on a dark page read
+  as horizontal stripes — indistinguishable from the shadow-acne stripes Figure 4 existed to show.
+  `shape-rendering="crispEdges"` on the panel group removes them. Applied locally, because
+  `figs_45.rle_rects` is shared and other lessons' figures must not move.
+- Averaging 2×2 over a whole frame with four tonal levels aliased the acne's nested squares into
+  streaks; six levels kept them. A full-resolution crop cost 200–470 KB for less of the story.
+  And a colour flip between two panels may be the quantiser or may be real (see module-6's
+  "A difference in a figure can be real") — read the source pixels before writing the caption.

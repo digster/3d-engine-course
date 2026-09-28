@@ -6150,6 +6150,7 @@ ENGINE_MAIN(cube_app)
 //     ./build/demos/gltf_view                          shapes.glb, spinning
 //     ./build/demos/gltf_view --model cube.gltf        the textured cube
 //     ./build/demos/gltf_view --shot out.ppm           one frame, no window
+//     ./build/demos/gltf_view --lights                 6.17b: a point and a spot
 //
 // WHAT TO LOOK FOR. Three shapes with three materials, and the materials came
 // out of the FILE: the octahedron is gold because `baseColorFactor` said
@@ -6259,6 +6260,18 @@ public:
                 // map is GENERATED rather than shipped, which is the same door
                 // `insert_mesh` has used for generated geometry since 5.5.
                 bump_cells_ = SDL_atoi(argv[++i]);
+            }
+            else if (SDL_strcmp(argv[i], &quot;--lights&quot;) == 0)
+            {
+                // Lesson 6.17b: a warm point light and a cool spot light, both
+                // casting shadows, with the sun turned down so their pools
+                // read. `--lamp-shadows 0` keeps the lamps and drops their
+                // maps, which is the before picture: light with no occlusion.
+                lamps_ = true;
+            }
+            else if (SDL_strcmp(argv[i], &quot;--lamp-shadows&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
+            {
+                lamp_shadows_ = SDL_atoi(argv[++i]) != 0;
             }
             else if (SDL_strcmp(argv[i], &quot;--shadow&quot;) == 0 &amp;&amp; i + 1 &lt; argc)
             {
@@ -6789,6 +6802,74 @@ public:
             objects_.push_back(g);
         }
 
+        // ---- LESSON 6.17b: TWO LAMPS ---------------------------------------
+        //
+        // Placed from the scene&#x27;s own bounds, so any model gets lamps that are
+        // near it rather than lamps that are near the origin. A WARM point
+        // light above and in front of the model, low enough that its falloff
+        // is visible across the ground; a COOL spot light off to one side,
+        // aimed at the centre, with a cone narrow enough that its edge lands
+        // on the ground in frame. Different colours so a pixel&#x27;s source can
+        // be read off the picture.
+        //
+        // THE SUN IS TURNED DOWN TO A FIFTH, and that is a statement about
+        // exposure rather than a trick: a lamp of intensity `k_reference_
+        // irradiance` delivers the sun&#x27;s irradiance at one metre and a
+        // sixteenth of it at four, so beside a full-strength sun every pool of
+        // lamplight is a rounding error. Night, not noon.
+        if (lamps_)
+        {
+            const float span = SDL_max(SDL_max(extent.x, extent.z), 1e-3f);
+
+            // LOW, where the inverse square is steep: a third of the scene&#x27;s
+            // span above the floor, off to one side of the model, so the pool
+            // it throws falls off visibly within the frame. A lamp hung far
+            // above everything lights the floor almost evenly and reads as a
+            // dimmer sun, which is exactly what §3&#x27;s far-lamp limit predicts.
+            engine::local_light bulb;
+            bulb.kind = engine::local_light_kind::point;
+            const float floor_y = bounds_.min.y;
+            bulb.position = {centre_.x + 0.55f * span, floor_y + 0.5f * span,
+                             centre_.z + 0.35f * span};
+            bulb.colour = {1.0f, 0.72f, 0.42f};
+            // Twice the sun&#x27;s irradiance on the floor straight below it:
+            // I / h^2 = 2 pi, so the middle of the pool clips to white and the
+            // falloff away from it is the thing on screen.
+            const float drop = bulb.position.y - floor_y;
+            bulb.intensity = 2.0f * engine::k_reference_irradiance * drop * drop;
+            bulb.range = 2.5f * span;
+            bulb.casts_shadow = lamp_shadows_;
+
+            // From the other side and higher, aimed at the floor beside the
+            // model, with a cone narrow enough that its rim lands in frame.
+            engine::local_light spot;
+            spot.kind = engine::local_light_kind::spot;
+            spot.position = {centre_.x - 0.9f * span, floor_y + 1.2f * span,
+                             centre_.z + 0.6f * span};
+            const engine::vec3 aim{centre_.x - 0.35f * span, floor_y, centre_.z + 0.25f * span};
+            spot.direction = engine::normalised(aim - spot.position);
+            spot.colour = {0.55f, 0.75f, 1.0f};
+            const float reach = engine::length(aim - spot.position);
+            spot.intensity = 2.0f * engine::k_reference_irradiance * reach * reach;
+            spot.inner_angle = 0.35f;   // ~20 degrees of full intensity
+            spot.outer_angle = 0.50f;   // ~29 degrees to darkness
+            spot.range = 3.0f * span;
+            spot.casts_shadow = lamp_shadows_;
+
+            locals_ = {bulb, spot};
+            lights_.key.irradiance *= 0.1f;
+            lights_.ambient = {0.02f, 0.02f, 0.03f};
+
+            SDL_Log(&quot;  lamps         : point (%.1f, %.1f, %.1f) I=%.2f, spot I=%.2f &quot;
+                    &quot;cone %.0f-%.0f deg, shadows %s&quot;,
+                    static_cast&lt;double&gt;(bulb.position.x), static_cast&lt;double&gt;(bulb.position.y),
+                    static_cast&lt;double&gt;(bulb.position.z), static_cast&lt;double&gt;(bulb.intensity),
+                    static_cast&lt;double&gt;(spot.intensity),
+                    static_cast&lt;double&gt;(spot.inner_angle * 57.29578f),
+                    static_cast&lt;double&gt;(spot.outer_angle * 57.29578f),
+                    lamp_shadows_ ? &quot;on (1 spot map, 6 cube faces)&quot; : &quot;OFF&quot;);
+        }
+
         // ---- The map ------------------------------------------------------
         //
         // `shadow_res_` is a side, so the storage is its square: 1024 costs 4 MB
@@ -7217,6 +7298,17 @@ public:
             shadows_.render(casters(), assets_.meshes(), lights_.key, &amp;shadow_stats_);
         }
 
+        // ---- LESSON 6.17b: THE LAMPS&#x27; DEPTH PASSES --------------------------
+        //
+        // Seven of them: one for the spot, six for the bulb&#x27;s cube. Every frame,
+        // for the reason the sun&#x27;s comment gives — and for a static scene and
+        // static lamps this is exactly the work a real engine caches, which the
+        // GPU half of the lesson does by importing its maps into the graph.
+        if (!locals_.empty() &amp;&amp; lamp_shadows_)
+        {
+            local_shadows_.render(casters(), assets_.meshes(), locals_, &amp;lamp_stats_);
+        }
+
         // ---- LESSON 6.11: THE ORDER, DECIDED BEFORE ANYTHING IS DRAWN ------
         //
         // The first thing in this course that has to happen *before* the frame
@@ -7340,6 +7432,13 @@ public:
                 // appear in DECLARATION order.
                 .env = env_.valid() ? &amp;env_ : nullptr,
                 .env_intensity = env_intensity_,
+
+                // 6.17b. An empty span and a null pointer when `--lights` is
+                // absent — the seventh bargain of its kind, and the reason
+                // every picture this demo drew before the lesson is unchanged.
+                .local_lights = locals_,
+                .local_shadows = (lamp_shadows_ &amp;&amp; !locals_.empty()) ? &amp;local_shadows_
+                                                                     : nullptr,
 
                 // ---- 6.11 -------------------------------------------------
                 //
@@ -7626,6 +7725,13 @@ private:
     bool ground_casts_ = true;    ///&lt; is the ground in the map? See casters().
     float constant_bias_ = 0.0f;
     engine::shadow_bias bias_ = engine::shadow_bias::slope_scaled;
+
+    // ---- Lesson 6.17b ------------------------------------------------------
+    bool lamps_ = false;                        ///&lt; --lights: a point and a spot
+    bool lamp_shadows_ = true;                  ///&lt; --lamp-shadows 0 drops their maps
+    std::vector&lt;engine::local_light&gt; locals_;   ///&lt; the fill borrows these as a span
+    engine::local_shadow_set local_shadows_;    ///&lt; 1 spot map + 6 cube faces
+    engine::shadow_stats lamp_stats_{};
     engine::cull_mode shadow_cull_ = engine::cull_mode::none;
     engine::shadow_map shadows_;
     engine::cascaded_shadow_map cascade_;   // 6.9

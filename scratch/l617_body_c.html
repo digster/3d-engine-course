@@ -637,7 +637,13 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617.sh   # for §H</code></
   </ul>
 
   <p>
-    <strong>Next:</strong> Lesson 6.18, <em>Text and 2D Overlay Rendering</em> — glyph atlases via
+    <strong>Next:</strong> <a href="06-17b-local-lights.html">Lesson 6.17b, <em>Local Lights: Point and
+    Spot, and Their Shadows</em></a> — the first new passes to arrive since the graph did. A point
+    light's shadow is six of them, each clearing one layer of one texture, and a frame that reuses
+    last frame's maps declares none at all.
+  </p>
+  <p>
+    Then Lesson 6.18, <em>Text and 2D Overlay Rendering</em> — glyph atlases via
     <code>stb_truetype</code>, and a 2D overlay that survives contact with a 3D renderer. It arrives
     at a good moment: an overlay is a pass that reads nothing, writes the backbuffer after the
     resolve, and must not be culled. Declaring it will take one line, and the fact that it is the

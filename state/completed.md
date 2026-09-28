@@ -113,6 +113,7 @@ completed:
          now caught by a tool; deriving `completed:` from the same source is the
          other half and remains work.)
   - 6.17 A Lightweight Frame Graph
+  - 6.17b Local Lights: Point and Spot, and Their Shadows   (inserted; written 2026-09-28, after 8.13)
         (Appended at the time, and check-curriculum.py's badge-vs-hero-stat
          cross-check was run BEFORE the commit rather than after: it caught the
          orphan page, then the 4h-vs-5h subtotal drift when the hours moved, then

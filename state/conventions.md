@@ -1219,6 +1219,53 @@ conventions:
         Write `expand(vec3{...})`. The general shape: an overload set where one
         type is constructible from a prefix of another's initialiser is ambiguous
         under brace elision, and only aggregate-initialised call sites reveal it.
+  local_light: INTENSITY IS THE IRRADIANCE AT ONE METRE, SO A LAMP OF INTENSITY pi AT 1 m IS THE ENGINE'S SUN.
+        6.17b, engine/include/engine/gfx/light.hpp + docs/conventions.html §7p.
+        E = intensity * attenuation * cos(theta), attenuation =
+        1/max(d^2, 0.01^2) * saturate(1 - (d/r)^4)^2 [* cone]. Radiometric twin of
+        glTF's candela (points, spots) the way the sun's irradiance is the twin of
+        lux: ONE exposure factor converts both. `direction` is the direction the
+        light TRAVELS (as directional_light's, since 3.6). range <= 0 is infinite
+        (no window). Spots are a MASK (Frostbite eq. 17, glTF): narrowing the cone
+        does not brighten it; on the axis a spot IS its point light. The cone is
+        interpolated in COSINE and squared: 0.2999 at the angular midpoint, not 0.25.
+  perspective_bias: UNDER A CAMERA WITH A POSITION, 6.8's BIAS GOES THROUGH THE DEPTH CURVE, WITH THE AXIAL SLOPE, OVER A ROUNDING FLOOR.
+        6.17b, shadow.hpp. world_per_texel is the footprint AT 1 m under
+        perspective; a texel at axial w is w times it. The bias in metres,
+        reach * texel * slope, becomes device units as perspective_depth(w) -
+        perspective_depth(w - bias) — never divided by a depth_range (6.8's constant
+        is right only at w = near*far/1 m, 0.40 m for 0.05/8, and 20x too large at
+        8 m). slope = sin(alpha) cos(phi) / cos(theta), alpha normal-vs-AXIS, phi
+        ray-vs-axis, theta normal-vs-ray; = tan(theta) on the axis. Plus
+        k_perspective_depth_floor = 2^-22 where the slope is exactly zero (the floor
+        under a cube's -Y face). REACH: GPU (r+1)sqrt2 because a linear comparison
+        sampler reads four texels; CPU (r+1/2)sqrt2 + 1/2 texel diagonal because the
+        rasterizer snaps vertices — the same number for two reasons, each commented
+        where it lives. Under perspective the lookup CLAMPS to the face, never
+        rejects. The orthographic path is bit-for-bit 6.8's.
+  cube_face: A CUBE FACE'S CAMERA IS A MIRROR — rows (u, -v, -major), determinant -1 — NEVER look_at.
+        6.17b, shadow.cpp fit_cube_face + cubemap.hpp cube_face_axes (derived from
+        6.15's k_rules, so both directions of the table cannot disagree). SDL face
+        order +X -X +Y -Y +Z -Z; layer = 6*cube + face. look_at builds right =
+        forward x up = -u, a rotation, and every face comes out mirrored (0.970 of
+        a face at worst). Depth to read back = perspective_depth(max |component|):
+        no matrix. The mirror reverses winding: a shadow pass that culls must flip
+        its cull mode for cube faces (both cull NONE by default).
+  guard_band: NEAR-CLIPPED IS FINITE, NOT SMALL: CLIP AT +-7936 px WHEN A POLYGON LEAVES THE BAND, NEVER CLAMP.
+        6.17b, clip.hpp + soft_renderer.cpp. to_pixel's +-8000 clamp (projector.hpp)
+        is for near_mode::none and MOVES vertices; under near_mode::clip the four
+        guard planes (clip space, derived from the viewport map) run only when
+        outside_guard_band says so, so every frame that never reached the band is
+        bit-identical (golden E917C06C). k_guard_max_vertices = 8.
+  storage: A LIST SIZED BY THE SCENE IS A STORAGE BUFFER, AND ITS COUNT IS SET BY WHOEVER BINDS IT.
+        6.17b, gpu_scene.cpp + gpu_uniform.hpp. GRAPHICS_STORAGE_READ, bound not
+        pushed; every member a float4, matrices as ROWS. C++ slot numbers count
+        per KIND from 0; HLSL puts sampled textures, storage textures, storage
+        buffers in ONE t sequence in space2 — 8 samplers, so the first storage
+        buffer is t8 and slot 0 (MSL: [[buffer(3)]] after three uniform blocks).
+        A declared resource must be bound even when the loop runs zero times: the
+        renderer binds identity fallbacks (a zeroed one-record buffer, a 1-layer
+        depth array, a 1-cube depth cube array).
   frustum: SIX PLANES, FROM THE ROWS OF clip_from_world, NEVER FROM A CAMERA.
         Built in 6.16, engine/include/engine/gfx/frustum.{hpp,cpp}.
         THE DERIVATION IS ONE OBSERVATION: a clip coordinate IS a signed distance.

@@ -4,6 +4,22 @@ Moved verbatim from STATE.md's `updated:` block on 2026-09-27, when that file be
 a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in step.
 
 ```text
+updated: 2026-09-28 (after Lesson 6.17b — 97 of 113 lessons published; the FIRST of the
+         four lessons inserted by the post-Module 8 review. Written after 8.13 and placed
+         between 6.17 and 6.18 by the authoring guide's §17 protocol, which it is the first
+         use of. 22 files changed, none created; 40 checks green at -O0 and -O2, and on the
+         student's post-6.17b tree (replayed from pins: 287 TUs, 0 warnings).
+         ADDITIVE, PROVED: 26 harnesses (6.1-6.18, 7.1-7.8) rerun before/after; only timing
+         lines, timing-derived ratios, two log timestamps and one heap pointer differ.
+         Golden E917C06C byte-identical. Later pins carried: l618 gpu_texture x2, l75 and
+         l84 gltf_view, l84 shadow.hpp — 6.18, 7.5 and 8.4 rebuilt, each changing by exactly
+         6.17b's lines (6.18 also by its prev link). 6.17's next link and Recap bridge
+         re-pointed to 6.17b. Hours 10 -> 12 (estimate-hours.py: 16,449 words, 1,194 code +
+         1,030 comment lines, 5 exercises); M6 ~155 -> ~157 h, course ~772 -> ~774 h; 0.2's
+         planner moved with it. Carried the two gpu_scene.cpp partial-bind comment
+         corrections. Found four defects outside its scope and fixed none (decisions:
+         found-by-617b).)
+
 updated: 2026-09-24 (after Lesson 8.13 — 96 of 107 lessons; *** MODULE 8 COMPLETE ***,
          13 of 13, 72 h. PLANNED AT 5 AND SHIPPED AT 6, like 8.12, and the
          index moved with it: M8 71 -> 72 h, the course ~524 -> ~525 h.

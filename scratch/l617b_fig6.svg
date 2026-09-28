@@ -1,0 +1,37 @@
+<svg viewBox="0 0 800 360" role="img" aria-labelledby="l617bf6-t l617bf6-d">
+  <title id="l617bf6-t">Axial depth versus radial distance</title>
+  <desc id="l617bf6-d">A lamp with its axis drawn horizontally and a wall that faces the lamp squarely 30 degrees off the axis. Two rays a texel apart meet the wall at almost the same distance from the lamp but with different feet on the axis, so the stored axial depth changes across the texel; the perspective bias needs sine alpha times cosine phi over cosine theta rather than tangent theta.</desc>
+  <defs>
+    <marker id="e-i-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amber-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-grn-l617bf6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<text x="20" y="24" class="sm" text-anchor="start">The map stores AXIAL depth. A wall facing the lamp squarely still changes axial depth across a texel.</text>
+<circle cx="80.0" cy="250.0" r="6" fill="#f0961e"/>
+<text x="80.0" y="274.0" class="xs" text-anchor="middle">lamp</text>
+<line x1="80.00" y1="250.00" x2="420.00" y2="250.00" stroke="#5ac878" stroke-width="1.4" marker-end="url(#e-grn-l617bf6)"/>
+<text x="426.0" y="254.0" class="xs" text-anchor="start">axis</text>
+<line x1="222.2" y1="96.3" x2="284.2" y2="203.7" stroke="#8f918a" stroke-width="3.0" fill="none"/>
+<text x="230.20508075688775" y="90.3064249653648" class="xs" text-anchor="start">a wall facing the lamp squarely</text>
+<line x1="80.00" y1="250.00" x2="260.22" y2="162.14" stroke="#f0961e" stroke-width="1.1" marker-end="url(#e-amber-l617bf6)"/>
+<line x1="260.2" y1="162.1" x2="260.2" y2="250.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 3"/>
+<line x1="80.00" y1="250.00" x2="246.19" y2="137.86" stroke="#f0961e" stroke-width="1.1" marker-end="url(#e-amber-l617bf6)"/>
+<line x1="246.2" y1="137.9" x2="246.2" y2="250.0" stroke="#8f918a" stroke-width="0.8" fill="none" stroke-dasharray="2 3"/>
+<text x="146.0" y="240.0" class="sm t-hi" text-anchor="middle">φ</text>
+<text x="150.0" y="294.0" class="xs t-bad" text-anchor="start">one texel apart on the wall, the two feet on the axis differ:</text>
+<text x="150.0" y="308.0" class="xs muted" text-anchor="start">axial depth w changes, though θ = 0 and tan θ says it cannot</text>
+<text x="470.0" y="90" class="sm" text-anchor="start">per texel, axial depth changes by</text>
+<text x="470.0" y="110" class="sm mono t-hi" text-anchor="start">texel · sin α · cos φ / cos θ</text>
+<text x="470.0" y="130" class="xs" text-anchor="start">α  normal vs the AXIS</text>
+<text x="470.0" y="146" class="xs" text-anchor="start">φ  ray vs the axis   (cos φ = w / distance)</text>
+<text x="470.0" y="162" class="xs" text-anchor="start">θ  normal vs the ray  (cos θ = n · l)</text>
+<text x="470.0" y="194" class="xs" text-anchor="start">on the axis (φ = 0), α = θ: it is 6.8's tan θ</text>
+<text x="470.0" y="210" class="xs" text-anchor="start">a wall facing the lamp (θ = 0): sin φ cos φ —</text>
+<text x="470.0" y="226" class="xs t-bad" text-anchor="start">where tan θ says no bias at all</text>
+<text x="470.0" y="258" class="xs muted" text-anchor="start">found as CPU/GPU disagreement five pixels from</text>
+<text x="470.0" y="274" class="xs muted" text-anchor="start">any shadow edge; verify_617b §G</text>
+</svg>

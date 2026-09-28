@@ -825,6 +825,7 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
             and say how many cores the machine has.
 
         OPEN DEFECTS, STILL DELIBERATELY NOT FIXED:
+          (2026-09-28: four more, found by 6.17b — see state/decisions.md `found-by-617b`.)
           1. `epa_config::max_iterations = 32` gives a sphere-sphere normal
              4.2602 deg off (8.6's knob). Did not bite in 8.12 or 8.13.
           2. EIGHT SWEEPS DO NOT HOLD A TEN-CRATE TOWER, a chest off an arm, or a

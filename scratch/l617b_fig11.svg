@@ -1,0 +1,53 @@
+<svg viewBox="0 0 820 360" role="img" aria-labelledby="l617bf11-t l617bf11-d">
+  <title id="l617bf11-t">Local shadows in the frame graph</title>
+  <desc id="l617bf11-d">Frame one declares six cube-face passes in a chain and one spot pass, each clearing and storing, before the scene pass samples the final versions. Frame two declares no shadow passes and samples version zero of the imported maps, which is last frame's contents, and renders the same image.</desc>
+  <defs>
+    <marker id="e-i-l617bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="24" class="sm" text-anchor="start">Two frames. The first declares seven shadow passes; the second declares none and reads last frame's maps.</text>
+<text x="200" y="52" class="xs" text-anchor="middle">frame 1: everything declared</text>
+<rect x="40.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="65.0" y="81.0" class="xs mono" text-anchor="middle">face +X</text>
+<rect x="96.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="121.0" y="81.0" class="xs mono" text-anchor="middle">face -X</text>
+<line x1="90.0" y1="77.0" x2="96.0" y2="77.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<rect x="152.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="177.0" y="81.0" class="xs mono" text-anchor="middle">face +Y</text>
+<line x1="146.0" y1="77.0" x2="152.0" y2="77.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<rect x="208.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="233.0" y="81.0" class="xs mono" text-anchor="middle">face -Y</text>
+<line x1="202.0" y1="77.0" x2="208.0" y2="77.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<rect x="264.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="289.0" y="81.0" class="xs mono" text-anchor="middle">face +Z</text>
+<line x1="258.0" y1="77.0" x2="264.0" y2="77.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<rect x="320.0" y="64.0" width="50.0" height="26.0" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="345.0" y="81.0" class="xs mono" text-anchor="middle">face -Z</text>
+<line x1="314.0" y1="77.0" x2="320.0" y2="77.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<rect x="40.0" y="108.0" width="110" height="26.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="95.0" y="125.0" class="xs mono" text-anchor="middle">spot 1</text>
+<rect x="190.0" y="164.0" width="180" height="30.0" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="280.0" y="183.0" class="xs mono" text-anchor="middle">scene: samples @6 and @1</text>
+<line x1="345.0" y1="90.0" x2="280.0" y2="164.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<line x1="95.0" y1="134.0" x2="240.0" y2="164.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<text x="40.0" y="224.0" class="xs" text-anchor="start">every face: CLEAR, STORE (derived)</text>
+<text x="40.0" y="240.0" class="xs muted" text-anchor="start">the faces form a CHAIN: each clear consumes</text>
+<text x="40.0" y="254.0" class="xs muted" text-anchor="start">the previous version, so layers survive</text>
+<text x="40.0" y="278.0" class="xs t-ok" text-anchor="start">vs the hand-recorded frame: 0 of 196,608 channels differ</text>
+<text x="620.0" y="52" class="xs" text-anchor="middle">frame 2: the cache</text>
+<rect x="470.0" y="64" width="130" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.0" stroke-dasharray="3 3" fill-opacity="0.15"/>
+<text x="535.0" y="81" class="xs mono" text-anchor="middle">point shadows @0</text>
+<rect x="470.0" y="108" width="130" height="26" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.0" stroke-dasharray="3 3" fill-opacity="0.15"/>
+<text x="535.0" y="125" class="xs mono" text-anchor="middle">spot shadows @0</text>
+<rect x="640.0" y="164" width="150" height="30" rx="3" fill="#5ac878" stroke="#5ac878" stroke-width="1.0" fill-opacity="0.22"/>
+<text x="715.0" y="183" class="xs mono" text-anchor="middle">scene: samples @0</text>
+<line x1="600.0" y1="77.0" x2="670.0" y2="164.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<line x1="600.0" y1="121.0" x2="660.0" y2="164.0" stroke="#8f918a" stroke-width="1.0" fill="none"/>
+<text x="470.0" y="224" class="xs" text-anchor="start">an IMPORT's version 0 is real: whatever the</text>
+<text x="470.0" y="238" class="xs" text-anchor="start">texture holds when the frame begins</text>
+<text x="470.0" y="262" class="xs t-ok" text-anchor="start">1 live pass; 0 channels differ from frame 1</text>
+<text x="470.0" y="278" class="xs muted" text-anchor="start">control: clear the maps first — 18,015 change</text>
+</svg>

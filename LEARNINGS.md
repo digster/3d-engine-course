@@ -64,6 +64,9 @@ to the list just below.
   number before writing the sentence. *tooling.*
 - **A harness cannot check a claim about somebody else's engine** — cite the header or source
   line, never "every engine does X". *tooling.*
+- **The ground truth is an instrument too** — 6.17b's ray-cast judge was wrong four times, every
+  time by measuring ambiguity in the wrong coordinates. Probe one flagged point until it explains
+  itself before changing the thing being judged. *module-6: "Lesson 6.17b — local lights…".*
 
 **Bookkeeping and the pages**
 - **One fact in N places will be wrong in one** — and the check you add watches the wrong list
@@ -75,6 +78,9 @@ to the list just below.
 - **Generators rot silently** — a crashing builder writes nothing, and "the file did not change"
   is not evidence; a zero-byte generated file is a silent regression. *tooling: "The builder
   reproducibility repair"; module-8: "A zero-byte generated file is a silent regression".*
+- **A checker's file pattern is part of what it checks** — `build_\d+\.py` skipped the first
+  b-lesson with a green report. When numbering grows a form, grep every tool that parses it.
+  *tooling.*
 
 **Figures and the browser**
 - **CSS beats SVG presentation attributes** — `svg text { fill }` overrides `fill="…"`; theme
@@ -258,7 +264,7 @@ sub-headings, which are not repeated here.
 - The inverse of a product reverses, and the wrong order is not visibly wrong
 - Writing a lesson out of order needs two trees, and the delta is the finding
 
-### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (33)
+### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (34)
 
 - Colour pipeline facts (Lesson 6.1)
 - Course-infrastructure facts (docs/, Lesson 6.1)
@@ -293,6 +299,7 @@ sub-headings, which are not repeated here.
 - A tool that relocates a claim has not verified it
 - Figure numbers follow page order, and a moved label lands on the next obstacle
 - A rule inherited from a comment outlives the lesson that wrote it — the partial-bind "rule"
+- Lesson 6.17b — local lights and their shadows (2026-09-28)
 
 ### [`learnings/module-7.md`](learnings/module-7.md) — learnings from its lessons (46)
 
@@ -408,7 +415,7 @@ sub-headings, which are not repeated here.
 - A quaternion's angle wraps at a full turn
 - A zero-byte generated file is a silent regression
 
-### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (16)
+### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (19)
 
 - A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
 - Two correct branches can leave a hole between them (docs tooling)
@@ -426,3 +433,6 @@ sub-headings, which are not repeated here.
 - A harness cannot check a claim about somebody else's engine
 - Writing an exercise's solution audits the lesson it belongs to
 - A widget that renders dashes is not an error, so it can be dead for ninety lessons
+- An inserted lesson is written after its successors — replay, carry, prove (6.17b, 2026-09-28)
+- A checker's file pattern is part of what it checks — build_\d+\.py skipped every b-lesson
+- RLE render panels: crispEdges, and quantisation can hide or invent a difference

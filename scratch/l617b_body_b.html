@@ -1,0 +1,585 @@
+  <!-- =================================================================
+       6 — SPOT SHADOWS
+       ================================================================= -->
+  <h2 id="spot-shadow"><span class="num">6</span>A spot's shadow: 6.8's machinery through a pyramid</h2>
+
+  <p>
+    Lesson 6.8 built the whole shadow-mapping apparatus — a depth-only pass from the light, a
+    comparison against the stored depth, a bias sized from the surface's slope and the filter's reach,
+    PCF — and every part of it was written for a camera that happened to be orthographic. Most of that
+    was a coincidence of the sun, not a dependency. <code>shadow_map</code> takes a
+    <code>light_camera</code> and never asks how it was built; the depth-only pass draws through
+    whatever matrix it is handed; the comparison compares. So the plan for a spot light is the obvious
+    one: build a perspective camera at the lamp, looking down its axis, and let everything else run.
+    This section is about the one part of 6.8 for which that plan fails, and it opens with the
+    failure, because the failure is the clearest statement of what a bias is for.
+  </p>
+
+  <h3>6.1 — The failure first</h3>
+
+  <p>
+    Render the two lamps of the harness scene — a warm point light on the right, a cool spot from the
+    left, a box hovering above the ground and a thin sign standing on it — with shadows on and no bias
+    at all. The left half of Figure 4 is the result, seen from straight above. The ground shadows
+    <em>itself</em>, across both pools of light. This is the acne of 6.8, and it
+    is here for 6.8's reason: the map stores the depth of the surface at each texel's sample point,
+    a fragment between samples recomputes its own depth, and on a surface tilted with respect to the
+    light half of all fragments are "downhill" of the sample they are compared with, and lose.
+    <code>verify_617b</code> §F judges 67,715 points on the spot light's side and calls 19,502 of them
+    acne — <strong>29%</strong>. The right half is the bias this section derives: zero acne, and
+    zero leaks, against a ground truth that shares no code with the engine.
+  </p>
+
+  @@FIG_ACNE@@
+
+  <p>
+    The shape of the pattern is the tell that these are <em>perspective</em> maps. An orthographic
+    map's acne is straight stripes, because its texels are the same size everywhere. Here the bulb's
+    comes in nested squares, one family per face of its cube, and the spot's bends into arcs centred
+    under the lamp, because a perspective map's texels grow with distance from it.
+  </p>
+
+  <h3>6.2 — The camera</h3>
+
+  <p>
+    <code>fit_spot</code> puts a square perspective pyramid at the lamp, looking along
+    <code>direction</code>, with half-angle equal to the outer cone angle so the round pool of light is
+    inscribed in the square map. Three decisions are worth defending.
+  </p>
+
+  <ul>
+    <li><strong>The corners are wasted, deliberately.</strong> A circle inscribed in a square covers
+        π/4 of it, so 21.5% of every spot map's texels lie outside the cone and are never read. The
+        alternative, a circular map, does not exist; the alternative of fitting the square
+        <em>inside</em> the circle would leave the edge of the pool unshadowed.</li>
+    <li><strong>The near plane is 5&nbsp;cm, and it cannot go far.</strong> Lesson 2.10 showed that a
+        perspective depth buffer spends half its codes before twice the near distance, and 4.9
+        measured what pushing the near plane out buys. Here it cannot be pushed: anything nearer the
+        lamp than the near plane is <em>clipped from the shadow pass</em>, casts nothing, and lets the
+        light straight through. A moth on a bulb, a hand on a torch. Five centimetres is
+        <code>k_local_shadow_near</code>.</li>
+    <li><strong>The far plane is the range, and the cone is capped at 80°.</strong> Nothing beyond the
+        range is lit, so nothing beyond it can matter. A spot wider than 80° from its axis is not given
+        a spot map: its edge texels would stretch by 1/cos²&nbsp;80° = 33 times, and at 90° without
+        bound. That is a job for a cube, which is what a point light is (§7).</li>
+  </ul>
+
+  <p>
+    Figure 5 draws the pyramid and the property the rest of this section turns on. One texel of a 512
+    map on this spot covers <strong>1.652&nbsp;mm at one metre</strong>, 3.3&nbsp;mm at two, and
+    13.2&nbsp;mm at eight. An orthographic texel has one size; a perspective texel's size is
+    proportional to the axial distance <em>w</em> of whatever it lands on. So
+    <code>light_camera::world_per_texel</code> is <em>redefined</em> under perspective — it is the
+    footprint at one metre — and every use of it multiplies by <em>w</em> first.
+  </p>
+
+  @@FIG_PYRAMID@@
+
+  <h3>6.3 — 6.8's bias, carried through the depth curve</h3>
+
+  <p>
+    6.8 §4.4 derived the bias in three steps. The farthest filter tap is <em>reach</em> texels from
+    the fragment; a texel is <em>texel</em> metres; walking that far across a surface tilted at
+    <em>θ</em> changes its depth by that distance times <em>tan θ</em>. That is a bias in
+    <strong>metres</strong>. The fourth step converted metres into the device units the comparison
+    runs in by dividing by <code>depth_range</code>, the depth of the orthographic box — correct,
+    because an orthographic projection makes device depth an <em>affine</em> function of distance, so
+    one scale factor converts everywhere.
+  </p>
+
+  <p>
+    A perspective projection makes device depth a hyperbola. Written as a function of axial distance
+    <em>w</em> — which is exactly what Lesson 2.10's <em>z</em><sub>ndc</sub> is — the engine's
+    <code>perspective()</code> stores
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \text{depth}(w) = \frac{f\,(w - n)}{(f - n)\,w} \]</span>
+    <span class="eq-plain">depth(w) = far * (w - near) / ((far - near) * w)</span></div>
+
+  <p>
+    — zero at the near plane, one at the far one, and steep near the lamp. There is no single scale
+    factor. The honest conversion is also the simplest: move the point back toward the lamp by the
+    bias in metres and ask the curve how far that moved it.
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \text{bias}_{\text{device}} = \text{depth}(w) - \text{depth}(w - b), \qquad b = \text{reach}\cdot(\text{texel}_{1\,\text{m}}\, w)\cdot\text{slope} \]</span>
+    <span class="eq-plain">bias_device = depth(w) - depth(w - b),  where b = reach * (texel_at_1m * w) * slope</span></div>
+
+  <p>
+    No derivative taken, nothing assumed small. Both renderers compute exactly this — the CPU in
+    <code>shadow_map::visibility</code>, the GPU in <code>local_depth_bias</code> — with
+    <em>w</em> clamped so the moved point never goes behind the near plane.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The harness's spot: near 0.05&nbsp;m, far 8&nbsp;m, a 512 map.
+       A surface at 45° on the axis, one metre out, one tap (reach ½√2 = 0.7071 texel).</p>
+    <p class="mono">texel here&nbsp;&nbsp; = 1.652 mm × 1.0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 1.652 mm<br>
+       b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = 0.7071 × 1.652 mm × tan 45°&nbsp;&nbsp;&nbsp;&nbsp;= 1.168 mm<br>
+       depth(1.000000) = 8 × 0.950000 / (7.95 × 1.000000) = 0.9559748<br>
+       depth(0.998832) = 8 × 0.948832 / (7.95 × 0.998832) = 0.9559160<br>
+       bias&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = 5.88 × 10<sup>−5</sup></p>
+    <p>
+      6.8's formula, applied unchanged, divides the same 1.168&nbsp;mm by the depth range of 7.95&nbsp;m
+      and gets 1.469&nbsp;×&nbsp;10<sup>−4</sup> — two and a half times too much. §F of the harness
+      prints both across the whole range:
+    </p>
+  </div>
+
+  <pre><code>   d (m)   texel mm    bias mm    derived dev  6.8 as-is dev     ratio
+     0.5      0.826      0.584      1.177e-04      1.469e-04     1.248
+     1.0      1.652      1.168      5.883e-05      1.469e-04     2.497
+     2.0      3.303      2.336      2.939e-05      1.469e-04     4.999
+     4.0      6.606      4.671      1.472e-05      1.469e-04     9.978
+     8.0     13.212      9.342      7.331e-06      1.469e-04    20.036
+  (6.8's formula is right at one distance only, d = near * far / 1 m = 0.40 m;
+   inside it too small, outside it too large, in proportion to the distance)</code></pre>
+
+  <p>
+    Why a constant in device units goes so wrong is visible in the two curves. The texel grows like
+    <em>w</em>; the depth curve's slope, <em>fn/((f−n)w²)</em>, shrinks like <em>1/w²</em>; their
+    product — the right device bias — falls like <em>1/w</em>. 6.8's constant is right exactly where
+    those meet: at <em>w</em>&nbsp;=&nbsp;<em>n·f</em>/(1&nbsp;m) = 0.40&nbsp;m, the crossover the
+    harness prints. (The "/1&nbsp;m" is there because <code>world_per_texel</code> was defined at
+    one metre; the first draft of that line printed "0.40&nbsp;m²" and meant something dimensionally
+    wrong.) Beyond it the constant is too large in proportion to distance. Too large is not acne —
+    it is <strong>peter-panning</strong>, the shadow detaching from the foot of its caster — and §6.6
+    finds out how badly.
+  </p>
+
+  <h3>6.4 — The slope that an orthographic derivation cannot see</h3>
+
+  <p>
+    That conversion was the change this section set out to make. With it in place, the CPU and GPU
+    renderers were compared pixel by pixel (§11 describes the instrument), and they disagreed about
+    nineteen pixels that were nowhere near any shadow edge — five pixels and more from one, all on the
+    ground inside the spot's pool, where the GPU's spot read slightly occluded and the CPU's read fully
+    lit. Both were using 6.8's <em>tan&nbsp;θ</em>. A bias that is merely too small does not show up
+    identically through two different filters, and that is how the disagreement exposed it: somewhere
+    the slope was bigger than <em>tan&nbsp;θ</em> said.
+  </p>
+
+  <p>
+    The reason is in Figure 6, and it is the one assumption 6.8's derivation made without saying so.
+    <strong>The map stores axial depth</strong> — the distance along the camera's axis, <em>w</em> —
+    not the distance along the ray. Under an orthographic camera every ray <em>is</em> the axis and
+    the two are the same number. Under perspective the rays diverge, and a wall that faces the lamp
+    squarely, but sits off to one side of the axis, has points whose distance from the lamp is the
+    same while their axial depth is not.
+  </p>
+
+  @@FIG_AXIAL@@
+
+  <p>
+    So derive the slope again, for axial depth. Put the lamp at the origin with its axis
+    <strong>a</strong>. Lay the image plane at <em>w</em>&nbsp;=&nbsp;1, and let a unit vector
+    <strong>e</strong> in it, perpendicular to <strong>a</strong>, be the direction one texel step
+    moves; a step of one texel moves the image point by <em>t</em>, the footprint at one metre. The
+    ray through image point <em>x</em> along <strong>e</strong> is
+    <em>w</em>·(<strong>a</strong> + <em>x</em><strong>e</strong>) — every point on it at axial depth
+    <em>w</em>. The receiving surface is a plane <strong>n</strong>·<strong>P</strong> = <em>c</em>.
+    The ray meets it where
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ w(x) = \frac{c}{\mathbf n\cdot\mathbf a + x\,\mathbf n\cdot\mathbf e}, \qquad \frac{dw}{dx} = -\frac{w^{2}\,(\mathbf n\cdot\mathbf e)}{c} \]</span>
+    <span class="eq-plain">w(x) = c / (n.a + x n.e);  dw/dx = -w^2 (n.e) / c</span></div>
+
+  <p>
+    and <em>c</em> is <strong>n</strong>·<strong>P</strong> for the point hit, which is the distance
+    to it, <em>dist</em>, times the cosine between the normal and the ray: <em>|c|</em> =
+    <em>dist</em>·cos&nbsp;<em>θ</em>. One texel is <em>dx</em>&nbsp;=&nbsp;<em>t</em>, and the worst
+    direction <strong>e</strong> in the image plane — the one along the surface's steepest descent —
+    makes <em>|</em><strong>n</strong>·<strong>e</strong><em>|</em> as large as it can be for a unit
+    vector perpendicular to <strong>a</strong>, which is <em>sin&nbsp;α</em>, α the angle between the
+    normal and the <em>axis</em>. Collecting, with <em>w</em>/<em>dist</em> = cos&nbsp;<em>φ</em>, φ
+    the angle between the ray and the axis:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \frac{\Delta w}{\text{texel}} = (t\,w)\cdot\frac{\sin\alpha\,\cos\varphi}{\cos\theta} \]</span>
+    <span class="eq-plain">axial depth change per texel = (t * w) * sin(alpha) * cos(phi) / cos(theta)</span></div>
+
+  <p>
+    Three angles, each doing something you can name. <em>θ</em> (normal against ray) is the grazing
+    term, and it diverges at the silhouette exactly as 6.8's did. <em>α</em> (normal against axis) is
+    how steeply the surface cuts across the map's depth, and <em>φ</em> (ray against axis) is how
+    far off-centre the texel is. <strong>On the axis φ&nbsp;=&nbsp;0, the ray is the axis, α&nbsp;=&nbsp;θ,
+    and the expression is tan&nbsp;θ</strong> — 6.8's result, recovered as the on-axis special case
+    of this one. Off the axis they part company — on the harness's ground, lit obliquely by the spot,
+    by enough to acne through one filter and not the other — and most sharply for a wall that faces
+    the lamp squarely, which has θ&nbsp;=&nbsp;0 but α&nbsp;=&nbsp;φ, and a slope of
+    sin&nbsp;φ&nbsp;cos&nbsp;φ where 6.8's says zero.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A wall facing the spot squarely, 30° off its axis, at axial
+       distance 1&nbsp;m.</p>
+    <p class="mono">tan θ&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= tan 0° = 0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(6.8: no slope bias)<br>
+       sin α cos φ / cos θ = sin 30° · cos 30° / 1 = 0.4330<br>
+       per texel&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; = 1.652 mm × 0.4330&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 0.715 mm of axial depth</p>
+    <p>
+      Nearly half the depth change of a 45° surface, on a surface 6.8 says needs none. The fix is
+      one function, <code>perspective_slope</code>, used by both renderers in place of
+      <em>tan&nbsp;θ</em> under perspective; it cleared sixteen of the nineteen. (The last three were
+      not a bias at all — §11 tells that story.) The normal-offset policy keeps using
+      <em>sin&nbsp;θ</em>, correctly: it moves the point across the surface toward the lamp, and that
+      is still about the ray.
+    </p>
+  </div>
+
+  <h3>6.5 — A slope of exactly zero, and the knife edge it exposes</h3>
+
+  <p>
+    The new slope does something 6.8's never did: it reaches exactly zero on a surface the light still
+    sees. Take a point light directly above a floor and look at the floor through the cube's −Y face.
+    The normal is +Y and the face's axis is −Y, so α&nbsp;=&nbsp;180° and sin&nbsp;α&nbsp;=&nbsp;0.
+    That is not an approximation — every point of the floor really is the lamp's height below it, so
+    the axial depth really is constant, and the derivation is right to ask for no geometric bias at
+    all.
+  </p>
+
+  <p>
+    And then the comparison is on a knife edge. The pass stored the depth the rasterizer interpolated;
+    the lookup recomputes it from the fragment's position; the two are the same real number, computed
+    two different ways in float, and they disagree in the last bit roughly half the time. §F saw 90
+    points of acne appear out of nothing, in a clean square under the lamp. The cure is the term 6.8
+    called <em>quantisation</em> and set to zero for a 32-bit depth format, because an orthographic
+    bias with the sun at an angle never reached zero to expose it: <code>k_perspective_depth_floor</code>,
+    2<sup>−22</sup>. Device depth near 1 is spaced 2<sup>−24</sup> apart in a float; both values can
+    be half a spacing off before they meet, and four spacings covers both with room to spare. It is
+    0.03&nbsp;mm at 2.5&nbsp;m on the harness's spot, and 90 became 0.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Why a floor and not an epsilon</span>
+    <p>
+      "Add a tiny constant" is the folklore version of this fix, and the reason to derive it anyway is
+      that the size is not arbitrary. Too small and the knife edge is back; too large and it is a
+      constant bias again, with every one of §6.3's problems. The floor is sized from the float format
+      and the depth curve near 1, where a local light's depths live — half the codes are spent before
+      <em>w</em>&nbsp;=&nbsp;0.1&nbsp;m, so every surface a lamp shadows is in the part of the curve
+      where the spacing is 2<sup>−24</sup>.
+    </p>
+  </div>
+
+  <h3>6.6 — What the judge said</h3>
+
+  <p>
+    Four policies, the same spot light, the same 67,715 judged points (§11 explains "judged"). The
+    ground truth casts a ray from each point to the lamp against the analytic box, sign and ground,
+    and shares no code with the engine.
+  </p>
+
+  <pre><code>  spot light, 512 map        judged     acne     leak
+  no bias (the acne)          67715    19502        0
+  6.8's formula, as-is        67715        0       50
+  derived, per fragment       67715        0        0
+  normal offset               67715        0        0</code></pre>
+
+  <p>
+    The 50 leaks were harder to find than the acne, and the finding is worth recording because the
+    prediction was refused twice first. §6.3 said 6.8's constant is too large beyond 0.4&nbsp;m, so it
+    should peter-pan: the shadow should come away from the base of whatever casts it. The first test
+    scene put a solid half-metre crate on the ground and found <em>no</em> leaks. The second stood a
+    3&nbsp;cm wall there, and again found none. Both refusals were right. An over-large bias pushes the
+    comparison <em>back</em>, away from the lamp, by a distance that grows with the square of the
+    distance and with the receiver's slope — 2.9&nbsp;mm for a 45° surface one metre out, several
+    centimetres for the floor meeting a caster at a grazing angle — and a receiver can only leak if
+    the caster in front of it is <em>thinner</em> than that. Behind a solid crate, the floor lies half
+    a metre beyond the crate's lit face along the ray, which no bias of centimetres reaches. Behind the
+    3&nbsp;cm wall, the floor is within the bias of the lit face for about 1.3&nbsp;cm — all of it
+    inside the two-texel band around the wall's base that the judge rightly calls ambiguous (§11.2). A
+    sign 4&nbsp;mm thick leaves a predicted band of about 3.9&nbsp;cm, and the third scene found 50 lit
+    points in it where the derived bias finds none.
+  </p>
+
+  <p>
+    That is the honest size of 6.8's formula's error on a local light: it is always wrong by
+    <em>d</em>/(<em>n·f</em>), but it is only <em>visible</em> through casters thinner than the
+    over-bias. Leaves, cloth, paper, a fence of thin boards. The derived bias has no such floor on
+    what it can shadow, and costs one call to a function both renderers already have.
+  </p>
+
+  <!-- =================================================================
+       7 — CUBE
+       ================================================================= -->
+  <h2 id="cube"><span class="num">7</span>A point's shadow: six cameras and a mirror</h2>
+
+  <h3>7.1 — Six faces</h3>
+
+  <p>
+    A point light shines everywhere, and a perspective camera cannot see more than a hemisphere even in
+    principle; in practice its texels stretch without bound long before that (§6.2's 1/cos²). The
+    standard answer, and the one the hardware is built for, is a <strong>cube map</strong>: six square
+    90° cameras, one down each axis, whose pyramids tile the sphere around the lamp with no gap and no
+    overlap. Lesson 6.15 built cube maps for the sky, by evaluating a function of direction into each
+    face texel. The table that says which direction lands on which texel of which face was written
+    there, once, as <code>k_rules</code> in <code>cubemap.cpp</code>, and verified against the
+    hardware's own lookup:
+  </p>
+
+  <pre><code>{ 2, 1, 0, -1.0f, -1.0f },   // +X : sc = -z, tc = -y
+{ 2, 1, 0, +1.0f, -1.0f },   // -X : sc = +z, tc = -y
+{ 0, 2, 1, +1.0f, +1.0f },   // +Y : sc = +x, tc = +z
+{ 0, 2, 1, +1.0f, -1.0f },   // -Y : sc = +x, tc = -z
+{ 0, 1, 2, +1.0f, -1.0f },   // +Z : sc = +x, tc = -y
+{ 0, 1, 2, -1.0f, -1.0f },   // -Z : sc = -x, tc = -y</code></pre>
+
+  <p>
+    This lesson <em>renders</em> into a cube for the first time, and so needs the same table in the
+    other direction: for each face, which camera draws an image that lands on that face the way the
+    lookup reads it. <code>cube_face_axes</code> turns each row into three vectors — the face's
+    <strong>u</strong> (the direction that increases the horizontal texture coordinate),
+    <strong>v</strong> (the vertical one, which grows <em>down</em> the image) and <strong>major</strong>
+    (the axis the face looks along) — derived from <code>k_rules</code> itself, so the two directions
+    of the table can never disagree. SDL orders the faces +X, −X, +Y, −Y, +Z, −Z, so face
+    <em>f</em> of cube <em>c</em> in an array is layer 6<em>c</em>&nbsp;+&nbsp;<em>f</em>.
+  </p>
+
+  @@FIG_CUBE@@
+
+  <h3>7.2 — The camera that is a mirror</h3>
+
+  <p>
+    The obvious camera for the +X face is <code>look_at(lamp, lamp + (1,0,0), up)</code> with some
+    sensible up vector, and it is wrong in a way that looks right. Work it through with one direction.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The direction <strong>d</strong> = (1, 0.2, −0.5) from the lamp.
+       Its largest component is <em>x</em>, so the hardware reads it from the +X face.</p>
+    <p class="mono">the lookup (k_rules, +X): sc = −z = 0.5, tc = −y = −0.2, ma = 1<br>
+       texture coordinates&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: u = (0.5 + 1)/2 = 0.75, v = (−0.2 + 1)/2 = 0.40<br><br>
+       fit_cube_face, rows (u, −v, −major) = ((0,0,−1), (0,1,0), (−1,0,0)):<br>
+       view space&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: (0.5, 0.2, −1)&nbsp;&nbsp;→ ndc (0.5, 0.2)<br>
+       viewport, y down&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: x = 0.75, y = (1 − 0.2)/2 = 0.40&nbsp;&nbsp;✓<br><br>
+       look_at's right-hand frame, rows (−u, −v, −major):<br>
+       view space&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: (−0.5, 0.2, −1) → x = 0.25&nbsp;&nbsp;✗ (half a face away)</p>
+    <p>
+      The two frames differ in the sign of one row. The face's (u, v, major) with v flipped for the
+      image is a <strong>left-handed</strong> frame — its determinant is −1 — and no rotation, which is
+      all <code>look_at</code> can build, has determinant −1. So the correct camera for a cube face is
+      a <em>reflection</em>, and <code>fit_cube_face</code> builds it from the rows directly.
+    </p>
+  </div>
+
+  <p>
+    This is the trap that looks entirely right, and it is worth being precise about why. A mirrored
+    face still contains the scene's depth, drawn from the right place, in the right direction, at the
+    right resolution. Rendered to the screen, each face looks like a perfectly good picture. The error
+    only shows as shadows that land on the wrong side of their casters, mirrored about each face's
+    centre line — which in a busy scene looks like "the shadows are a bit off", not "the image is
+    flipped". §E of the harness measures both frames on all six faces, 1,089 directions each:
+  </p>
+
+  <pre><code>   face  det(ours)  det(look_at)   worst uv err   look_at err
+     +X    -1.0000        1.0000       1.19e-07        0.9697
+     -X    -1.0000        1.0000       1.64e-07        0.9697
+     +Y    -1.0000        1.0000       1.64e-07        0.9697
+     -Y    -1.0000        1.0000       1.34e-07        0.9697
+     +Z    -1.0000        1.0000       1.34e-07        0.9697
+     -Z    -1.0000        1.0000       1.79e-07        0.9697</code></pre>
+
+  <p>
+    The mirror lands every direction on the texel the lookup reads, to 1.8&nbsp;×&nbsp;10<sup>−7</sup>
+    of a face — rounding. <code>look_at</code> misses by up to 0.97 of a face on every one of them.
+    (The mirror reverses triangle winding too. Both shadow passes cull nothing by default, so they do
+    not care — but 6.8's third acne cure, culling front faces, would cull the <em>wrong</em> faces on
+    a cube, and §15 lists it as a pitfall.)
+  </p>
+
+  <h3>7.3 — Reading it back with no matrix at all</h3>
+
+  <p>
+    A spot's lookup projects the fragment through the map's <code>clip_from_world</code>, as 6.8's did.
+    A point light's needs none, and this is the elegant part. The hardware picks the face from the
+    direction's largest component; that same component is the distance along the face's axis —
+    <em>w</em> in the face camera's clip space — so the depth the pass stored for this direction is
+    <code>perspective_depth(max(|dx|, |dy|, |dz|), near, far)</code>, predicted from the direction
+    alone. The shader passes the direction and the reference depth to one
+    <code>SampleCmpLevelZero</code> on a <code>TextureCubeArray</code>; the CPU asks
+    <code>direction_to_cube</code> for the face and texel, and runs the ordinary map lookup on that
+    face. §E checks the claim: the stored depth is <code>perspective_depth(major axis)</code> to
+    1.8&nbsp;×&nbsp;10<sup>−7</sup>.
+  </p>
+
+  <h3>7.4 — The seams</h3>
+
+  <p>
+    A direction exactly on the 45° seam between two faces has two largest components. The lookup picks
+    one; the other face's camera also contains it, on its edge. With float rounding, a point the
+    lookup assigns to face A can project a hair <em>past</em> −1 on face A's own camera. 6.8's
+    orthographic lookup rejects anything outside [−1,&nbsp;1] as "not in this map, so lit" — the right
+    answer for a box fitted around the scene, and the wrong one here, where the face was chosen
+    <em>because</em> it owns this direction. The CPU found 54 points on the seams leaking light through
+    a crate's shadow before the rule changed. Under perspective the lookup now clamps to the face
+    instead of rejecting (for a spot the clamp can only touch points outside the fitted square, where
+    the cone is already zero), and §E closes the argument from the other side: of 20,000 random
+    directions, <strong>0</strong> fall outside the frustum of the face that owns them.
+  </p>
+
+  <h3>7.5 — What a cube costs</h3>
+
+  <p>
+    A 256² cube is six 256² faces: 393,216 texels against a 512² spot map's 262,144, 1.5 times the
+    texels and six render passes to one. The defaults — 512 for a spot, 256 for a cube face — are a
+    budget, not a law, and they buy different sharpness: a cube face spreads 90° over 256 texels,
+    7.8&nbsp;mm per texel at one metre, while a spot with glTF's default 45° cone spreads the same 90°
+    over 512, 3.9&nbsp;mm. A default point light's shadow is exactly twice as coarse as a default
+    spot's, for 1.5 times the memory. On the CPU, in a release build, the harness's spot map takes
+    0.72&nbsp;ms and its six-face cube 0.35&nbsp;ms, which says the cost is covered texels, not
+    passes: most of a point light's six faces see only a little of the scene. On the GPU, <code>gpu_local_shadows</code> gives
+    each kind its own budget — four spots and two points by default, as a depth
+    <code>Texture2DArray</code> and a depth <code>TextureCubeArray</code> — and a shadowed lamp past
+    its budget is drawn <em>unshadowed</em> with a warning, not dropped (§J: one dropped, slot −1).
+  </p>
+
+  <div class="callout verify">
+    <span class="label">⚠ VERIFY discharged</span>
+    <p>
+      Whether SDL_GPU offers a <em>depth</em> cube <em>array</em> on every backend was not assumed.
+      <code>create_depth_cube_array</code> asks <code>SDL_GPUTextureSupportsFormat</code> with
+      <code>SDL_GPU_TEXTURETYPE_CUBE_ARRAY</code> first and logs a refusal. Read at the SDL
+      <code>release-3.4.12</code> tag: Metal's texture creation is type-agnostic for depth formats,
+      Vulkan's queries <code>CUBE_COMPATIBLE</code> support per format, and D3D12's creates
+      <code>TEXTURECUBEARRAY</code> views of depth resources; each backend builds a per-layer
+      depth-stencil view, so rendering into one face of one cube is a normal render pass with
+      <code>layer_or_depth_plane</code> set. The harness ran on Metal. ⚠ VERIFY on your platform:
+      that the capability query returns true on your GPU — the engine will say so in the log if it
+      does not.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       8 — GUARD BAND
+       ================================================================= -->
+  <h2 id="guard"><span class="num">8</span>A Module 3 bug, found by a lamp</h2>
+
+  <p>
+    With the bias of §6 derived and the cube of §7 built, the CPU renderer's spot light still had acne
+    on 88% of the floor, and no amount of bias removed it. The map was checked directly: at a point
+    where the floor sat at device depth 0.987, the map held 0.950. Not a bias problem. The map
+    itself was wrong.
+  </p>
+
+  <p>
+    The cause had been in the software rasterizer since Lesson 3.3, and it is a lesson in the
+    difference between <em>finite</em> and <em>small</em>. Near-plane clipping bounds the perspective
+    divide: every vertex that survives has <em>w</em>&nbsp;≥&nbsp;<em>near</em>, so <em>x/w</em> is
+    finite. But a vertex on the near plane sits <em>near</em> metres in front of the camera and may
+    sit metres to the side, and its screen coordinate is that sideways distance over <em>near</em>,
+    times the focal length, times half the width of the target. A player camera 1.7&nbsp;m above a
+    floor with a 0.1&nbsp;m near plane keeps that within a few thousand pixels, which is why nothing
+    in Modules 3–6 ever noticed. A lamp's camera has a 5&nbsp;cm near plane over an 8&nbsp;m floor,
+    and its clipped corners project to about <strong>40,000 pixels</strong>.
+  </p>
+
+  <p>
+    <code>to_pixel</code> clamps every coordinate to ±8,000, and it was written for a good reason: under
+    <code>near_mode::none</code> — Lesson 3.3's "watch it break" mode — coordinates can be anything,
+    and the clamp keeps the float-to-integer conversion and <code>edge_function</code>'s products
+    defined. Under <code>near_mode::clip</code> it was never supposed to fire. When it does, it
+    <em>moves the vertex</em>. The triangle changes shape; the plane of depths across it tilts; every
+    depth interpolated inside the 512-pixel map is wrong, by an amount that depends on how far the
+    corner was dragged. Figure 8 draws it.
+  </p>
+
+  @@FIG_GUARD@@
+
+  <p>
+    The fix is the one GPUs use, and it is the reason hardware has a <strong>guard band</strong> at
+    all. Clip against four more planes, placed where the rasterizer's integers stop being exact, so
+    nothing reaching the rasterizer can land outside that range. A clipped vertex is placed <em>on
+    the true edge</em>, by the same interpolation 3.3's near clip uses, so the plane of depths is
+    untouched. The planes are derived in clip space from the viewport map: screen
+    <em>x</em>&nbsp;=&nbsp;<em>vp.x</em>&nbsp;+&nbsp;<em>vp.w</em>(<em>x/w</em>&nbsp;+&nbsp;1)/2 stays
+    below the band exactly when <em>x/w</em>&nbsp;≤&nbsp;<em>h<sub>x</sub></em>, and multiplying through
+    by <em>w</em> — positive, because the near clip ran first — gives the plane
+    <em>h<sub>x</sub>w</em>&nbsp;−&nbsp;<em>x</em>&nbsp;≥&nbsp;0. The band sits at ±7,936 rather than
+    8,000, leaving 64 pixels for the rounding of a vertex that lands exactly on a guard plane, so the
+    clamp can never fire on geometry that went through the guard clip.
+  </p>
+
+  <p>
+    Two properties make the fix safe to put under fifty lessons of pictures.
+  </p>
+
+  <ul>
+    <li><strong>It runs only when it must.</strong> <code>outside_guard_band</code> checks the
+        near-clipped polygon first; a triangle that never touched the band takes exactly the path it
+        always took, bit for bit. <code>clip_stats::guard_clipped</code> counts the ones that did.</li>
+    <li><strong>The reference render proves it.</strong> §D compares the eight-frame golden render
+        byte for byte: 1,382,416 bytes, <strong>0</strong> differing, E917C06C. No frame in Modules 3
+        to 6 ever reached the band, so none of them changes; and the harnesses of every later lesson
+        agree (§11).</li>
+  </ul>
+
+  <p>
+    The polygon bound follows the same argument as 3.3's: a triangle is three vertices, each plane can
+    add at most one, and there are five planes in total — the near plane's one extra (3.3's
+    <code>k_clip_max_vertices</code> = 4) and four guards' — so <code>k_guard_max_vertices</code> is 8.
+  </p>
+
+  <!-- =================================================================
+       9 — FILTERS
+       ================================================================= -->
+  <h2 id="filters"><span class="num">9</span>Two renderers, two filters, one reach</h2>
+
+  <p>
+    6.8 sized the bias from the filter's <em>reach</em>: how far, in texels, the farthest sample the
+    filter reads can be from the point being shaded. With the lamps in place, the two renderers turned
+    out to need different reaches for different reasons — and to end at the same number.
+  </p>
+
+  <h3>9.1 — The GPU reads four texels</h3>
+
+  <p>
+    The CPU's lookup compares against the <em>nearest</em> texel, whose sample is at most half a texel
+    away along each axis: a reach of (<em>r</em>&nbsp;+&nbsp;½)√2 for a PCF radius <em>r</em>,
+    6.8's <code>pcf_reach_texels</code>. The GPU's one tap is <code>SampleCmpLevelZero</code> through
+    a <strong>linear</strong> comparison sampler, which compares four texels and blends the results —
+    hardware 2×2 PCF — and any of those four can carry weight while a whole texel away along each
+    axis. Sized for the CPU's reach, the GPU showed acne across both pools: 11,098 pixels on which the
+    renderers disagreed, none near a shadow edge. With (<em>r</em>&nbsp;+&nbsp;1)√2, zero.
+  </p>
+
+  <p>
+    Which raises an uncomfortable question about the sun. 6.8's GPU path samples through the same
+    kind of sampler and sizes its bias with the CPU's <code>pcf_reach_texels</code> — with its default
+    3×3 kernel, 2.12 texel diagonals where 2.83 are reachable, a quarter short. This lesson does not
+    change it: the sun's picture is not this lesson's to move, and every later lesson's harness would
+    move with it. It is recorded in <code>STATE.md</code> as a pending correction, with the number to
+    check, for the lesson that next has reason to measure the sun's shadow on the GPU.
+  </p>
+
+  <h3>9.2 — The CPU snaps its vertices</h3>
+
+  <p>
+    Then a bare floor under a bulb, with nothing at all to cast a shadow, came out striped along one
+    cube face on the CPU — Figure 9, 713 points of acne out of 128,122. Nothing casts there; every
+    dark mark is the map disagreeing with itself. The cause is Lesson 2.2's integer edge functions:
+    the rasterizer snaps every vertex to a whole pixel before it fills. Snapping moves a triangle's
+    corners by up to half a pixel, and so slides its plane of depths sideways by up to half a texel's
+    worth of slope. A small triangle barely notices. A floor clipped to the guard band is thousands of
+    pixels across, and a sub-pixel shift at a corner 7,936 pixels away is a real tilt across the map.
+    The harness measured a stored depth 0.36 of a texel's depth step nearer than the analytic floor —
+    1.19&nbsp;×&nbsp;10<sup>−4</sup> in device units.
+  </p>
+
+  @@FIG_FLOOR@@
+
+  <p>
+    So the CPU's perspective reach grows by half a texel diagonal, 0.7071: half a texel from the
+    nearest sample, half from the snap, (<em>r</em>&nbsp;+&nbsp;1)√2. 713 became 0; in
+    <code>gltf_view</code>'s scene, 1,895 became 0. The 713 is measured by running the same code with
+    its slope scale halved, which is exactly 6.8's reach again (½√2 of a texel instead of √2), so the
+    only thing that differs between the two panels of Figure 9 is the half texel — and the zero is
+    evidence that the reach did it rather than that the floor stopped being tested.
+  </p>
+
+  <p>
+    The two renderers now apply the same reach for two different reasons, and both comments say which
+    reason is theirs. That matters for the next person to touch either: "the GPU and CPU have the same
+    constant" invites someone to share it, and the day the GPU gets a nearest-texel sampler or the CPU
+    gets sub-pixel precision, a shared constant would be wrong for one of them without anything
+    changing in the file that defines it.
+  </p>

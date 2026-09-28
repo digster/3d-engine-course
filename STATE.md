@@ -10,11 +10,9 @@ place and never regenerate: a lesson updates `updated:`, `completed:`, `capabili
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-27 (after Lesson 8.13 — 96 of 113 lessons published. Since then the
-         post-Module 8 review and its fixes: 195 missing listings restored, claims about other
-         engines corrected, CI on four toolchains, figures legible, cross-references linked,
-         this file split, 113 exercise solutions (which corrected fifteen published claims),
-         hours measured (~772 h), and four lessons inserted with Module 9 re-planned at 13.
+updated: 2026-09-28 (after Lesson 6.17b, written after 8.13 — 97 of 113 lessons published;
+         the first of the four lessons inserted by the post-Module 8 review, placed between
+         6.17 and 6.18. Local lights, their shadows, a Module 3 guard-band fix; ~774 h.
          Per-lesson history: state/updated.md.)
 
 conventions:   (headline of each key, verbatim; full text: state/conventions.md;
@@ -36,6 +34,11 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   plane: COMPLEX NUMBERS ARE THE PLANE'S ROTATIONS, AND THE ROTOR IS NOT ONE.
   renderable: THE ENGINE DEFINES A COMPONENT WHEN, AND ONLY WHEN, AN ENGINE SYSTEM READS IT.
   boom: A PARENTED CAMERA IS NOT A FOLLOW CAMERA, AND THE ALGEBRA HAS ONE TRAP.
+  local_light: INTENSITY IS THE IRRADIANCE AT ONE METRE, SO A LAMP OF INTENSITY pi AT 1 m IS THE ENGINE'S SUN.
+  perspective_bias: UNDER A CAMERA WITH A POSITION, 6.8's BIAS GOES THROUGH THE DEPTH CURVE, WITH THE AXIAL SLOPE, OVER A ROUNDING FLOOR.
+  cube_face: A CUBE FACE'S CAMERA IS A MIRROR — rows (u, -v, -major), determinant -1 — NEVER look_at.
+  guard_band: NEAR-CLIPPED IS FINITE, NOT SMALL: CLIP AT +-7936 px WHEN A POLYGON LEAVES THE BAND, NEVER CLAMP.
+  storage: A LIST SIZED BY THE SCENE IS A STORAGE BUFFER, AND ITS COUNT IS SET BY WHOEVER BINDS IT.
   frustum: SIX PLANES, FROM THE ROWS OF clip_from_world, NEVER FROM A CAMERA.
   conservatism: CONSERVATIVE IN TWO DIRECTIONS, AND ONLY ONE IS ALLOWED TO BE WRONG.
   antialias: LESSON 6.14. TWO PROBLEMS SHARE THE NAME AND THE POPULAR CURE FIXES ONE.
@@ -102,7 +105,7 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to SCANLINE — what a CPU rasterizer should do, and what every measurement before 4.1 was taken against.
   measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A FEATURE'S.
 
-curriculum: 113 lessons, ~772 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+curriculum: 113 lessons, ~774 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
   (reshapes and their reasons: state/curriculum.md)
 
@@ -187,6 +190,7 @@ completed:
   - 6.15 Skybox and Image-Based Lighting
   - 6.16 Frustum Culling and Instanced Submission
   - 6.17 A Lightweight Frame Graph
+  - 6.17b Local Lights: Point and Spot, and Their Shadows   (inserted; written 2026-09-28, after 8.13)
   - 6.18 Text and 2D Overlay Rendering
   ===> MODULE 6 COMPLETE — 18 lessons, ~93 h, the longest module in the course.
   - 7.1  Euler Angles and Their Pathologies
@@ -212,8 +216,9 @@ completed:
   - 8.9  Impulse Response: Restitution and Friction
   - 8.13 A Character Controller
   ===> MODULE 8 COMPLETE — 13 lessons, ~72 h. Physics built, none imported. <===
-  (2026-09-27: 6.17b, 6.18b, 7.7b and 8.14 were inserted into Modules 6–8 and are not
-   written yet, so those modules read "in progress" in the index until they land.)
+  (2026-09-27: 6.17b, 6.18b, 7.7b and 8.14 were inserted into Modules 6–8. 6.17b landed
+   2026-09-28; the other three are not written yet, so those modules read "in progress" in
+   the index until they land.)
 
 capabilities:   (the first headline of each lesson, verbatim; every entry in full:
                  state/capabilities.md)
@@ -237,6 +242,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - 7.2 THE ENGINE CAN NAME THE SINGLE TURN A ROTATION IS, AND TRAVEL IT.
   - 7.1 THE ENGINE CAN BE TOLD AN ORIENTATION IN THREE NUMBERS.
   - 6.18 THE ENGINE CAN SAY SOMETHING.
+  - 6.17b THE ENGINE HAS LAMPS, AND EACH ONE CAN CAST A SHADOW.
   - 6.17 THE FRAME IS A DECLARATION, AND FOUR FACTS STOPPED BEING MAINTAINED.
   - 6.16 THE ENGINE DECIDES WHAT NOT TO DRAW, AND DRAWS THE REST IN FEWER CALLS.
   - 6.15 AN ENVIRONMENT LIGHTS THE SCENE AND IS THE SKY BEHIND IT, ON BOTH RENDERERS.
@@ -293,7 +299,8 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - (39 earlier entries, Modules 0-3, predate lesson tags; they close state/capabilities.md)
 
 decisions:   (headlines; full: state/decisions.md)
-  pending-code-corrections: THREE ENGINE COMMENTS ARE WRONG (TWO IN gpu_scene.cpp, ONE IN frustum.cpp), AND THE NEXT LESSON THAT LISTS EACH FILE WHOLE CORRECTS IT.
+  pending-code-corrections: ONE ENGINE COMMENT IS STILL WRONG (IN frustum.cpp), AND THE NEXT LESSON THAT LISTS IT WHOLE CORRECTS IT. (gpu_scene.cpp's two: corrected by 6.17b.)
+  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE AND FIXED NONE OF THEM, BECAUSE AN INSERTION MUST NOT MOVE ANOTHER LESSON'S NUMBERS.
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER PAGE STAYS AN ARCHIVE OF WHAT SHIPPED.
   quat-swap-deferred: THE FIELD IS CALLED `rotation` AND ONE CALLER DOES NOT PUT A ROTATION IN IT.
   fill-shot: A RENDER FIGURE KEEPS THE PROGRAM'S OWN BACKGROUND.
@@ -342,7 +349,7 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      06-09-cascaded-shadows.html, 06-10-mipmaps.html, 06-11-transparency.html,
      06-12-hdr-tonemapping.html, 06-13-bloom-post-stack.html, 06-14-antialiasing.html,
      06-15-skybox-ibl.html, 06-16-frustum-culling.html, 06-17-frame-graph.html,
-     06-18-text-overlay.html, 07-01-euler-angles.html, 07-02-axis-angle.html,
+     06-17b-local-lights.html, 06-18-text-overlay.html, 07-01-euler-angles.html, 07-02-axis-angle.html,
      07-03-complex-numbers.html, 07-04-quaternions.html, 07-05-slerp.html,
      07-06-skeletal-animation.html, 07-07-sampling-blending.html, 07-08-audio.html,
      08-01-integrators.html, 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
@@ -407,43 +414,44 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
 roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLINE.
          (the whole of it: state/roadmap.md)
 
-next: 6.17b — Local Lights: Point and Spot, and Their Shadows
+next: 6.18b — Compute Shaders: GPU Particles
 
-      THE FIRST OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27), then
-      6.18b (compute: GPU particles), 7.7b (glTF skins and clips), 8.14 (scene
-      queries and a static mesh collider), then Module 9 from 9.1 Hardening the
-      Build. Written in that order because Module 9's editor, gizmos and
-      capstone lean on all four. Modules 6–8 are "in progress" until they land.
+      THE SECOND OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27); 6.17b
+      landed 2026-09-28. Then 7.7b (glTF skins and clips), 8.14 (scene queries and a
+      static mesh collider), then Module 9 from 9.1 Hardening the Build. Modules 6–8
+      read "in progress" until all four land.
 
-      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17. In short:
-      additive only (later goldens, harnesses and renders byte-identical); carry
-      every hunk to shared files (engine/CMakeLists.txt, engine.hpp,
-      demos/CMakeLists.txt) into every LATER pin that lists them whole; re-point
-      build_617.py's next and build_618.py's prev; update 6.18's module tree;
-      `check-continuity.py` must stay 0/0. Hours from estimate-hours.py.
+      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17 — and 6.17b is now
+      its worked example (state/decisions.md, `found-by-617b`, and state/files.md):
+        - scratch/replay_tree.py N.M     the student's tree at any lesson, from pins.
+        - scratch/make_t617b.py          `tree` (the listings: tree at the previous
+          lesson + the insertion's hunks) and `carry` (the hunks onto every LATER pin),
+          each result PROVED by delta against the working tree. Copy it as
+          make_t618b.py and change CHANGED/LATER_PINS; LATER_PINS for 6.18b are every
+          lNN_ pin, after 6.18b in course order, of a path it changes.
+        - scratch/_base617b/run_all.sh + classify.py   the additivity check: 26
+          harnesses before/after; only timing lines may differ. Take the BEFORE run
+          before the first edit. (6.8's harness does not build at HEAD; 6.9's and
+          6.16's need run_shim.sh — see found-by-617b.)
+        - 6.18b sits between 6.18 and 7.1, so re-point build_618.py's next and
+          build_71.py's prev. Update 6.18's module tree if a file is added.
 
-      WHAT 6.17b INHERITS, AND MUST NOT RE-DERIVE:
-        - 6.8's derived bias and PCF; 6.9's cascades; Exercise 6.8.3's sketch
-          already names what a PERSPECTIVE shadow map breaks (depth_range is
-          per-fragment, the lookup divides by w, near must be positive).
-        - 6.15's cube textures and face-direction table (and its handedness
-          note), 6.16's frustum_of (it works on any clip matrix — a light's
-          too), 6.17's frame graph (each shadow map is a declared pass), 6.12's
-          light units (a directional light is an irradiance; a point light is
-          an intensity, and inverse-square is where the units finally bite).
-        - MANY LIGHTS ARE A STORAGE BUFFER, NOT A PUSH: 4.6 §4.6 (corrected)
-          — SDL copies pushes into 32 KiB blocks and Vulkan binds only 4 KiB
-          of one, so a light list sized by the scene cannot be a uniform push.
-        - ⚠ VERIFY before writing the point-light path: whether SDL_GPU can
-          sample a DEPTH cube texture through a comparison sampler on all three
-          backends, or whether the portable answer is distance written to an
-          R32_FLOAT cube and compared in the shader. SDL_gpu.h and each
-          backend's texture-creation code, at release-3.4.12.
+      WHAT 6.18b INHERITS, AND MUST NOT RE-DERIVE:
+        - 6.17b's first fragment STORAGE BUFFER (gpu_scene.cpp bind_local_lights):
+          SDL numbers each resource kind from 0 on the C++ side while HLSL puts
+          sampled textures, storage textures, storage buffers in ONE t sequence in
+          space2 (SDL_gpu.h's layout comment). A COMPUTE shader's layout is different
+          again — read SDL_gpu.h's SDL_CreateGPUComputePipeline comment, do not assume.
+        - 6.17b's rule that the renderer, not the caller, sets a list's count; and
+          the identity-element fallbacks (a zeroed one-record buffer) for a declared
+          resource that must be bound even when empty.
+        - 6.17's frame graph: a compute pass writing a buffer the scene pass reads is
+          the graph's first non-texture resource. ⚠ VERIFY whether frame_graph.hpp can
+          express a buffer at all before designing around it.
+        - 4.6 (corrected): pushes are 32 KiB blocks, 4 KiB bound on Vulkan.
 
-      PENDING CODE CORRECTIONS THIS LESSON SHOULD CARRY (decisions:
-      pending-code-corrections): the two partial-bind comments in
-      engine/src/gfx/gpu_scene.cpp — this lesson will list gpu_scene.cpp whole.
-      frustum.cpp's near-plane comment waits for whichever lesson lists it.
+      PENDING CODE CORRECTIONS (decisions: pending-code-corrections): frustum.cpp's
+      near-plane comment waits for whichever lesson lists it whole.
 
       The standing defect list and the notes for Module 9's multithreading
       lesson (now 9.3) are in state/roadmap.md, under "CARRIED FROM STATE.md".

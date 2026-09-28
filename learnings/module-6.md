@@ -1688,3 +1688,89 @@ time — which is probably the real failure the comment was generalising from. B
 one call remains correct; only the reason was wrong. Found by writing the exercise's solution
 against the library's source (`build/_deps/sdl3-src`), not against the comment.
 
+
+## Lesson 6.17b — local lights and their shadows (2026-09-28)
+
+Written after 8.13 and inserted between 6.17 and 6.18. Every entry below was found by a
+measurement that disagreed with a claim, and several by an instrument that was itself wrong first.
+
+- **The inverse square, the window and the cone, as the engine defines them.** `intensity` is the
+  irradiance at one metre, so a lamp of intensity π at 1 m renders white at exactly 1.0 — the sun,
+  to the bit. Flux through spheres of 0.5, 2 and 8 m: 39.47852 each against 4π² = 39.47842
+  (midpoint-rule error, identical at every radius because the d² cancels). Frostbite's 1 cm floor,
+  not Karis's 1/(d²+1), which is 0.5 of the true value at 1 m. The squared window
+  (1−x⁴)² is 0.879 at half the range, NOT "0.99" — a header comment said 0.99 and the harness
+  refused it before it shipped. glTF's unsquared recipe meets the range at −4/r³, twice the inverse
+  square's slope, then 0: a crease. The cone ramps in cosine: 0.2999 at the angular midpoint.
+
+- **A formula derived for one camera carries that camera in its assumptions.** 6.8's slope-scaled
+  bias used tan θ and a single `depth_range` — both exact for an orthographic map and both wrong
+  under perspective. The device-depth conversion must go through the curve
+  (depth(w) − depth(w − b)); 6.8's constant is right only at w = n·f/1 m (0.40 m for 0.05/8) and
+  20× too large at 8 m. And the slope of AXIAL depth is sin α cos φ / cos θ (α normal-vs-axis,
+  φ ray-vs-axis, θ normal-vs-ray), of which tan θ is the φ = 0 case. It was found as 19 CPU/GPU
+  disagreements far from any shadow edge, on ground the spot lit obliquely; the corrected slope
+  cleared 16.
+
+- **A derived quantity that is exactly zero exposes the rounding under it.** The floor under a
+  point light's −Y face has constant axial depth, so the derived slope is exactly 0 — correctly —
+  and the stored and recomputed depths then disagree by one ULP about half the time: 90 points of
+  acne from nothing. A 2⁻²² floor (four float spacings near 1) fixed it; "add an epsilon" would
+  have been the same fix without the reason for its size.
+
+- **One number, two reasons: say both, share neither.** The GPU needs a reach of (r+1)√2 because a
+  LINEAR comparison sampler reads four texels (11,098 off-edge disagreements → 0). The CPU needs
+  (r+½)√2 + ½√2 = the same number, because the rasterizer snaps vertices to whole pixels and slides
+  a guard-clipped plane by up to half a texel (measured 0.36 of a texel's depth step; 713 → 0 on a
+  bare floor, 1,895 → 0 in gltf_view). Each comment names its own reason; a shared constant would
+  be wrong for one side the day either filter changes. The SUN's GPU path still uses the CPU reach
+  through a linear sampler — a quarter short at r = 1, unmeasured, recorded in STATE decisions
+  `found-by-617b`.
+
+- **Finite is not small: a clamp that moves geometry.** Near clipping bounds x/w; it does not keep
+  it small. A 5 cm lamp near plane over an 8 m floor projects clipped corners ~40,000 px out, and
+  `to_pixel`'s ±8,000 clamp (written for `near_mode::none`) MOVED them — the map read 0.950 where
+  the floor was 0.987, acne on 88% of it, which no bias could touch. Guard-band clipping at ±7,936
+  px, only when a polygon leaves the band, left the golden byte-identical: no frame in Modules 3–6
+  had ever reached it. A latent bug is invisible until some caller's parameters leave the range
+  every earlier caller happened to stay in.
+
+- **A cube face's camera is a mirror.** The face table (u, v grows DOWN, major) is left-handed, so
+  the camera with rows (u, −v, −major) has determinant −1. `look_at` can only build rotations; with
+  any up vector it derives right = −u and every face is mirrored (0.970 of a face at worst) — which
+  renders a plausible picture with shadows on the wrong side. Test a face camera by pushing
+  directions through it and through `direction_to_cube` and requiring the same texel (1.8e-7).
+  The mirror also reverses winding: a shadow pass that culls must flip it for cube faces.
+
+- **Clamp, don't reject, at a face you chose.** 6.8 rejects outside [−1, 1] as "lit"; for a cube
+  face chosen by `direction_to_cube` the direction belongs to the face even when rounding puts it a
+  hair past −1 on the 45° seams — 54 lit points through a crate's shadow until the rule changed.
+
+- **Peter-panning needs a thin caster, and the prediction was refused twice.** 6.8's constant is
+  too large far from the lamp, so it "should" detach shadows. A half-metre crate: no leak (the
+  floor behind lies half a metre beyond the lit face). A 3 cm wall: no leak (1.3 cm of overlap,
+  inside the judge's ambiguous band). A 4 mm sign: 50 leaks. The over-bias is only visible through
+  casters thinner than it — leaves, cloth, fences — so test biases with one.
+
+- **The judge is an instrument, and it was wrong four times.** A ray-cast ground truth that shares
+  no code with the engine still has to decide which points are too close to a shadow edge to
+  judge. 6 cm on the floor, 1.5 texels on the floor, 2 texels on the floor (failed on a ray that
+  grazed the box by a fifth of a texel three metres up), 2 texels of angle tested only at the ends
+  (stepped over the half-texel sign). The shipped judge tilts the ray by every quarter texel out to
+  two, in the LIGHT's angles — the coordinates the map actually resolves. Each wrong judge was
+  caught by probing one flagged point until it explained itself, not by fixing the engine until
+  the count went to zero.
+
+- **A light list sized by the scene is a storage buffer, and its count is the binder's.** SDL numbers
+  resources per kind on the C++ side (storage slot 0) while HLSL puts sampled textures, storage
+  textures and storage buffers in one `t` sequence in space2 (so t8 after eight samplers; MSL
+  `[[buffer(3)]]`). A declared buffer must be bound even when the loop runs zero times ("Missing
+  fragment storage buffer binding"), so the renderer owns a one-record zero buffer; and the renderer,
+  not the caller, writes the count, so length and contents cannot disagree. Every member a
+  `float4`, matrices as rows.
+
+- **A difference in a figure can be real — check before captioning either way.** The demo's spot
+  pool came out bluer with shadows on than off. It looked like the quantiser flipping a borderline
+  colour; the renders said otherwise (R and G down four codes, B unchanged): the bulb's shadow of
+  the slab falls across the spot's pool and removes its warm light. The first draft of the caption
+  said "the pools are identical".

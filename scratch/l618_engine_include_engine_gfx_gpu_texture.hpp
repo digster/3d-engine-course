@@ -251,6 +251,38 @@ public:
                                           Uint32 layers, const char* name = nullptr,
                                           bool sampled = false);
 
+    /// **A stack of depth CUBES** — Lesson 6.17b, for point-light shadows.
+    ///
+    /// `SDL_GPU_TEXTURETYPE_CUBE_ARRAY` with `layer_count_or_depth = 6 * cubes`,
+    /// and the layers are faces: cube `c`'s face `f` is layer `6c + f`, in
+    /// SDL's face order (`engine::cube_face`). It is 6.9's depth array with two
+    /// differences, and both are the lesson:
+    ///
+    ///   - **The shader binds it as `TextureCubeArray`** and samples it with a
+    ///     `float4` — a direction and a cube index — so the hardware chooses
+    ///     the face, divides by the major axis, and filters ACROSS face edges.
+    ///     A 2D array holding the same six images could not do the last one.
+    ///   - **Support is asked for, not assumed.** SDL's debug layer checks
+    ///     `SDL_GPUTextureSupportsFormat(..., CUBE_ARRAY, DEPTH | SAMPLER)`,
+    ///     and at release-3.4.12 the three backends answer it three ways:
+    ///     Metal accepts any depth format for any type (and refuses cube
+    ///     ARRAYS only on iOS GPUs older than Apple4), Vulkan asks the driver
+    ///     with `VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT`, and D3D12 checks
+    ///     `D3D12_FORMAT_SUPPORT1_TEXTURECUBE` on the R32 view format and
+    ///     `DEPTH_STENCIL` on the D32 one. This function asks the same
+    ///     question first and fails with a message, rather than letting a
+    ///     release build create a texture the debug layer would have refused.
+    ///
+    /// A render pass writes ONE face of one cube, through the same `layer`
+    /// field 6.9 used for cascades: all three backends build a per-layer view
+    /// for cube and cube-array depth textures (checked in SDL's source at
+    /// release-3.4.12), so a point light's shadow is six ordinary depth passes.
+    [[nodiscard]] bool create_depth_cube_array(const gpu_device& dev,
+                                               SDL_GPUTextureFormat format,
+                                               Uint32 size, Uint32 cubes,
+                                               const char* name = nullptr,
+                                               bool sampled = true);
+
     void destroy();
 
     [[nodiscard]] bool valid() const { return texture_ != nullptr; }

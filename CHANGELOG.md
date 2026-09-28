@@ -73,6 +73,18 @@ for why Lesson 8.10 will solve impulses instead of penalty springs. The narrow p
 [`docs/index.html`](docs/index.html).
 
 
+**6.17b (inserted after 6.17; written 2026-09-28, after 8.13).** The engine has **lamps**. A
+`local_light` is a point or a spot whose `intensity` is the irradiance at one metre — so a lamp of
+intensity π at 1 m renders white at exactly 1.0, the engine's sun — falling off with the inverse
+square (Frostbite's 1 cm floor), forced to zero at its range by Karis's squared window, and, for a
+spot, masked by a cone ramped in cosine. Both renderers draw them through one BRDF lifted out of
+`shade()` without moving the golden. Each lamp can cast a shadow: a perspective map for a spot,
+six MIRRORED cameras into a depth cube array for a point, with a bias carried through the depth
+curve and an axial slope (sin α cos φ / cos θ) that 6.8's tan θ is the on-axis case of. The software
+rasterizer gains guard-band clipping, fixing a Module 3 clamp that moved near-clipped vertices. The
+GPU reads the lamps from its first fragment storage buffer; the frame graph schedules the shadow
+passes, or caches last frame's maps. `verify_617b`: 40 checks.
+
 ---
 
 ## The demo tour
@@ -132,6 +144,8 @@ demo of anything:
 # Lesson 6.7 — the comparison that is the whole lesson
 ./build/demos/gltf_view --model torus.obj --bumps 0   # flat
 ./build/demos/gltf_view --model torus.obj             # normal-mapped
+./build/demos/gltf_view --lights                       # 6.17b: a warm bulb and a cool spot, shadowed
+./build/demos/gltf_view --lights --lamp-shadows 0      # the same light, no occlusion
 
 # Lesson 6.8 — shadows, and the artefact FIRST
 ./build/demos/gltf_view --model torus.obj --bias none --pcf 0          # shadow acne

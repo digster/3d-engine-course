@@ -1,0 +1,588 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="06-17-frame-graph.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">6.17 — A Lightweight Frame Graph</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="06-18-text-overlay.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 6 — Advanced Rendering · Lesson 6.17b</div>
+    <h1>Local Lights: Point and Spot, and Their Shadows</h1>
+    <p class="deck">
+      Every light this engine has ever drawn is the sun: infinitely far away, arriving from one
+      direction at one strength everywhere. A desk lamp, a torch on a wall and a car's headlight are
+      all <em>somewhere</em>, and being somewhere changes two facts at once — the direction of the
+      light varies across the scene, and its strength falls with the square of the distance. This
+      lesson adds point and spot lights to both renderers, derives the inverse-square law from a
+      sphere and measures it, compares the three published ways of forcing a light to zero at its
+      range, and ramps a spot's cone in cosine. Then it gives both kinds of lamp a shadow: a
+      perspective map for a spot and six mirrored cameras for a point. That is where the lesson
+      stops being a port. 6.8's bias turns out to be the on-axis special case of a formula it never
+      needed; a cube map rendered with <code>look_at</code> is the mirror image of the one the
+      hardware reads; and a <strong>bug that has been in the CPU rasterizer since Module 3</strong>
+      — a clamp that quietly moves vertices — surfaces the first time a camera with a five-centimetre
+      near plane looks across a floor. Every claim is judged against a ray-cast ground truth that
+      shares no code with the engine, the two renderers agree to within one pixel of a shadow edge,
+      and twenty-five other lessons' harnesses produce the same results they did before a line of
+      this lesson existed.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 12 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-08-shadow-mapping.html">6.8 — Shadow Mapping: Bias, Acne, and PCF</a>,
+          <a href="06-09-cascaded-shadows.html">6.9 — Cascaded Shadow Maps</a>,
+          <a href="06-15-skybox-ibl.html">6.15 — Skybox and Image-Based Lighting</a>,
+          <a href="06-17-frame-graph.html">6.17 — A Lightweight Frame Graph</a>,
+          <a href="06-02-what-a-brdf-is.html">6.2 — Radiometry-Lite: What a BRDF Is</a>,
+          <a href="03-03-near-plane-clipping.html">3.3 — Near-Plane Clipping</a>,
+          <a href="04-06-uniforms.html">4.6 — Uniform Data and the Matrix Upload</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/gfx/light.hpp</code>,
+            <code>engine/include/engine/gfx/shadow.hpp</code>,
+            <code>engine/src/gfx/shadow.cpp</code>,
+            <code>engine/include/engine/gfx/cubemap.hpp</code>,
+            <code>engine/src/gfx/cubemap.cpp</code>,
+            <code>engine/include/engine/gfx/clip.hpp</code>,
+            <code>engine/src/gfx/clip.cpp</code>,
+            <code>engine/include/engine/gfx/soft_renderer.hpp</code>,
+            <code>engine/src/gfx/soft_renderer.cpp</code>,
+            <code>engine/include/engine/gfx/raster.hpp</code>,
+            <code>engine/src/gfx/raster.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_uniform.hpp</code>,
+            <code>engine/include/engine/gfx/gpu_texture.hpp</code>,
+            <code>engine/src/gfx/gpu_texture.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_debug.hpp</code>,
+            <code>engine/src/gfx/gpu_debug.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_shadow.hpp</code>,
+            <code>engine/src/gfx/gpu_shadow.cpp</code>,
+            <code>engine/include/engine/gfx/gpu_scene.hpp</code>,
+            <code>engine/src/gfx/gpu_scene.cpp</code>,
+            <code>shaders/scene.frag.hlsl</code>,
+            <code>demos/gltf_view/main.cpp</code>,
+            <code>scratch/verify_617b.cpp</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine has lamps. <strong>40 checks green</strong>, on the GPU and off it; the
+            inverse square measured as the same power through spheres of 0.5, 2 and 8 metres to
+            2.6&nbsp;×&nbsp;10<sup>−6</sup>; a derived perspective bias with <strong>zero</strong>
+            acne and <strong>zero</strong> leaks over 411,075 points judged by ray-casting; CPU and
+            GPU disagreeing on 259 of 61,043 lit pixels, every one within a pixel of a shadow edge;
+            a Module 3 clipping bug found and fixed without moving the reference render, which is
+            still E917C06C.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…derive the inverse-square law from the area of a sphere, and say what a light's
+          <em>intensity</em> is in the same units the engine's sun already uses.</li>
+      <li>…explain why a light needs a <em>range</em>, compare three published ways of imposing one,
+          and say why a window must meet zero with zero slope.</li>
+      <li>…build a spot light as a masked point light, and explain what interpolating its cone in
+          cosine does in angle.</li>
+      <li>…render a spot light's shadow through a perspective camera, and derive the bias it needs
+          — including the term an orthographic derivation cannot see.</li>
+      <li>…render a point light's shadow into a cube map, and explain why the correct face camera is
+          a <em>reflection</em>, not a rotation.</li>
+      <li>…recognise a clamp that moves geometry, and replace it with guard-band clipping.</li>
+      <li>…hand the fragment stage a light list sized by the scene, through a storage buffer, without
+          letting its length and its contents disagree.</li>
+      <li>…cache a shadow map across frames by importing it into a frame graph.</li>
+      <li>…build a ground truth that shares no code with the thing it judges, and recognise when
+          the judge is the thing that is wrong.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: one light, and it is the sun</a></li>
+      <li><a href="#intuition">Building intuition: a point that pours light over spheres</a></li>
+      <li><a href="#inverse">The inverse-square law, derived and measured</a></li>
+      <li><a href="#range">Range: forcing zero without drawing a ring</a></li>
+      <li><a href="#cone">The spot: a mask, ramped in cosine</a></li>
+      <li><a href="#spot-shadow">A spot's shadow: 6.8's machinery through a pyramid</a></li>
+      <li><a href="#cube">A point's shadow: six cameras and a mirror</a></li>
+      <li><a href="#guard">A Module 3 bug, found by a lamp</a></li>
+      <li><a href="#filters">Two renderers, two filters, one reach</a></li>
+      <li><a href="#implement">Implementation</a></li>
+      <li><a href="#instruments">The instruments, and the judge that was wrong four times</a></li>
+      <li><a href="#limits">The ninety-percent picture</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: one light, and it is the sun</h2>
+
+  <p>
+    <code>engine::lighting</code> has held exactly one light since Lesson 3.6, and its name says what
+    it is: <code>directional_light</code>. A direction of travel, a colour, and — since 6.2 — an
+    irradiance: the power landing on each square metre of a surface held square-on to the beam.
+    Everything Module 6 built on top of it is correct for that one kind of light. The microfacet
+    BRDF of 6.4 does not care where the light came from; the shadow map of 6.8 was fitted to a box
+    because the sun has no position to put a camera at; the cascades of 6.9 split the <em>camera's</em>
+    frustum because the sun is the same everywhere and only the viewer's need for detail varies.
+  </p>
+
+  <p>
+    Now put a lamp on a desk. Try to fake it with what the engine has, and the failure is not subtle.
+    A directional light pointed from the lamp toward the desk lights the desk — and it lights the
+    floor, the far wall and the ceiling behind the lamp with the same irradiance, from the same
+    direction, because a directional light is by definition the same everywhere. There is no pool of
+    light. There is no falloff. The object under the lamp and the object across the room are lit
+    identically, and the shadow of the lamp's own stand falls in parallel lines like the shadow of a
+    building at noon. You have drawn a small sun.
+  </p>
+
+  <p>
+    What is missing is two facts, and each is a part of this lesson.
+  </p>
+
+  <ul>
+    <li><strong>The direction varies.</strong> The light arrives at each surface point along the line
+        from the lamp to that point, so <code>l</code> stops being a constant and becomes
+        <code>normalise(position − p)</code>, different at every fragment.</li>
+    <li><strong>The strength falls with distance.</strong> A lamp's light spreads out as it travels,
+        and the irradiance a surface receives falls with the square of its distance from the lamp.
+        This is not a tuning curve; §3 derives it from the area of a sphere and then measures it.</li>
+  </ul>
+
+  <p>
+    And then the parts that are not about light at all, which are where most of the work turns out
+    to be.
+  </p>
+
+  <ul>
+    <li><strong>A scene has many lamps, and the shader must be handed all of them.</strong> Lesson
+        4.6 measured (and the post-Module 8 review corrected the explanation of) how SDL copies a
+        uniform push into a 32&nbsp;KiB block of which the Vulkan backend binds 4&nbsp;KiB. A light
+        list whose length the <em>scene</em> decides cannot live in a push. This lesson gives the
+        fragment stage its first <strong>storage buffer</strong>.</li>
+    <li><strong>A lamp needs a shadow, and 6.8's shadow was built for the sun.</strong> Its bias
+        derivation leaned, in one place, on the camera being orthographic — every ray parallel, every
+        texel the same size, device depth a linear function of distance. A spot light's camera is a
+        pyramid and a point light's is six of them. §6 and §7 find out which of 6.8's results survive
+        that, and one of them does not.</li>
+  </ul>
+
+  <p>
+    There is also something this lesson did not set out to find. It is in §8, and it is a bug that
+    has been in the software rasterizer since Lesson 3.3 — invisible for fifty lessons because no
+    camera in the course had ever looked the way a lamp looks.
+  </p>
+
+  <!-- =================================================================
+       2 — INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: a point that pours light over spheres</h2>
+
+  <p>
+    Picture the lamp as a single point, pouring out power in every direction at a steady rate. Now
+    draw a sphere around it of radius one metre. Every bit of the power the lamp emits crosses that
+    sphere — there is nowhere else for it to go. Draw a second sphere at two metres. The same power
+    crosses it too, but that sphere has four times the area, because a sphere's area grows with the
+    square of its radius. The same power over four times the area is a quarter of the power per
+    square metre. Figure 1 draws exactly this: a narrow beam of rays cuts a patch from each sphere,
+    and the far patch has twice the width in each direction and therefore four times the area.
+  </p>
+
+  @@FIG_SPHERES@@
+
+  <p>
+    That is the whole of the inverse-square law, and you should notice what it is <em>not</em>. It is
+    not a model of fog, or of the lamp getting tired, or of light "weakening" as it travels. Nothing
+    is lost in empty space. The light is simply <strong>spread thinner</strong>, the way paint spread
+    over a larger wall is a thinner coat. That framing matters, because it tells you which parts of
+    the shading equation change. The BRDF — what a surface does with the light that reaches it — is
+    untouched. Only the part that says how much light <em>arrives</em> gets a new factor.
+  </p>
+
+  <p>
+    A <strong>spot light</strong> is the same point with a hood over it. The hood blocks the light
+    outside a cone and lets it through inside; it does not concentrate anything. Seen that way a
+    spot light is a point light multiplied by a mask, and every result about point lights carries
+    over with one extra factor. §5 builds the mask, and discusses the other way to see it — a hood
+    that <em>focuses</em> — and why this engine, like Frostbite and like glTF's specification,
+    chose not to.
+  </p>
+
+  <p>
+    And a <strong>shadow</strong> for either is 6.8's idea — render the scene from the light, keep
+    the depth, compare — with a camera that is no longer a box. A spot light's camera is a pyramid
+    down its axis. A point light sees the whole sphere, and no single camera can: six cameras with
+    90-degree fields of view, one per face of a cube, tile the sphere with no gap and no overlap.
+    6.15 built cube maps for the sky, by <em>evaluating</em> a function of direction into each face.
+    This lesson is the first time the engine has to <em>render</em> into one, and §7 is about the one
+    way that goes wrong that looks entirely right.
+  </p>
+
+  <!-- =================================================================
+       3 — THE INVERSE SQUARE
+       ================================================================= -->
+  <h2 id="inverse"><span class="num">3</span>The inverse-square law, derived and measured</h2>
+
+  <h3>3.1 — From the sphere to the formula</h3>
+
+  <p>
+    Call the lamp's total emitted power <em>Φ</em> (the radiometric "flux", in watts). If it emits
+    equally in every direction, then a sphere of radius <em>d</em> centred on it — area
+    <em>4πd²</em> — receives all of it spread evenly, so the power per unit area on the sphere is
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ E(d) = \frac{\Phi}{4\pi d^{2}} \]</span>
+    <span class="eq-plain">E(d) = Phi / (4 * pi * d^2)</span></div>
+
+  <p>
+    That quantity — power per unit area on a surface held square-on to the light — is
+    <strong>irradiance</strong>, the same <em>E</em><sub>⊥</sub> Lesson 6.2 gave the sun. The
+    constant part, <em>Φ/4π</em>, is the power per unit <em>solid angle</em> leaving the lamp: its
+    <strong>intensity</strong> <em>I</em>, in watts per steradian (a whole sphere of directions is
+    4π steradians, so dividing the total by 4π shares it out). With that name the law is
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ E_{\perp}(d) = \frac{I}{d^{2}}, \qquad E(d) = \frac{I}{d^{2}}\,\cos\theta \]</span>
+    <span class="eq-plain">E_perp(d) = I / d^2 ;  on a tilted surface, E(d) = I / d^2 * cos(theta)</span></div>
+
+  <p>
+    and the cosine is Lesson 3.6's, unchanged: a surface tilted <em>θ</em> away from the direction to
+    the lamp intercepts less of the beam, by exactly <em>cos θ</em>. So a local light enters the
+    shading equation in the one place 6.2 cleared for it. Where the sun contributed
+    <code>E_perp · cos θ</code>, a lamp contributes <code>(I / d²) · cos θ</code>, and the BRDF
+    multiplying it is the same function.
+  </p>
+
+  <h3>3.2 — What the engine's <code>intensity</code> means</h3>
+
+  <p>
+    The engine stores <em>I</em>, not <em>Φ</em>, and it chooses the unit so that a lamp is directly
+    comparable with the sun: <strong><code>local_light::intensity</code> is the irradiance the lamp
+    delivers at one metre, square-on.</strong> That is literally what <em>I/d²</em> means at
+    <em>d</em>&nbsp;=&nbsp;1. It inherits 6.2's exposure convention for free. The sun's default
+    irradiance is <code>k_reference_irradiance</code> = π, chosen so a white Lambertian surface
+    facing it renders at exactly 1.0; a lamp of intensity π renders that same surface at 1.0 from
+    one metre away, and at a quarter of that from two.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A white surface (albedo 1) faces a lamp of intensity π, and
+       we use the pure Lambert BRDF, <em>albedo/π</em>, so the rendered radiance is
+       <em>(1/π) · E</em>.</p>
+    <p class="mono">d = 1 m:&nbsp; E = π/1&nbsp; = 3.14159&nbsp;&nbsp;→&nbsp; L = 1.0000<br>
+       d = 2 m:&nbsp; E = π/4&nbsp; = 0.78540&nbsp;&nbsp;→&nbsp; L = 0.2500<br>
+       d = 4 m:&nbsp; E = π/16 = 0.19635&nbsp;&nbsp;→&nbsp; L = 0.0625</p>
+    <p>
+      <code>verify_617b</code> §A pushes these three through <code>shade_local</code> and gets
+      1.0000000, 0.250000 and 0.062500 — to the bit, because every factor here is exact in float.
+      The first line is the one to hold on to: <strong>at one metre, a lamp of intensity π is the
+      engine's sun</strong>, and the rest of the lesson can compare the two without a conversion.
+    </p>
+  </div>
+
+  <p>
+    glTF's <code>KHR_lights_punctual</code> extension specifies point and spot intensity in
+    <strong>candela</strong> — lumens per steradian — which is <em>I</em>'s photometric twin: the same
+    shape of quantity, weighted by the eye's response. Its directional lights are in lux, which is
+    <em>E</em>'s twin. So the engine's two light types sit in exactly the relationship glTF's two do,
+    and an importer converts both with one exposure factor (Exercise 6.17b.2).
+  </p>
+
+  <h3>3.3 — Measuring it rather than believing it</h3>
+
+  <p>
+    The derivation made one claim that can be checked directly: <strong>the same power crosses every
+    sphere.</strong> So integrate. <code>verify_617b</code> §A walks spheres of radius 0.5, 2 and 8
+    metres on a 400×800 grid of latitude and longitude, evaluates <code>sample_local_light</code> at
+    every point, and adds up irradiance × area. If the attenuation really is <em>1/d²</em> every
+    sphere collects <em>4πI</em>, which for <em>I</em> = π is 39.47842.
+  </p>
+
+  <pre><code>flux through a sphere around the lamp (should be 4*pi*I = 39.47842):
+  r =  0.5 m   flux 39.47852   relative error 2.60e-06
+  r =  2.0 m   flux 39.47852   relative error 2.60e-06
+  r =  8.0 m   flux 39.47852   relative error 2.60e-06</code></pre>
+
+  <p>
+    Identical to the last digit across a sixteen-fold change in radius, and 2.6&nbsp;×&nbsp;10<sup>−6</sup>
+    from the exact value — which is the midpoint rule's own error on that grid, the same for every
+    radius because the integrand is the same after the <em>d²</em> cancels. That cancellation is the
+    law. A wrong exponent — <em>1/d</em>, say, which shows up in hand-rolled lighting more often than
+    you would think — would make the three numbers differ by factors of four.
+  </p>
+
+  <h3>3.4 — The singularity, and the size of a light bulb</h3>
+
+  <p>
+    <em>I/d²</em> is infinite at <em>d</em>&nbsp;=&nbsp;0, and a surface can touch a lamp. The
+    infinity is not physics: a real bulb has a size, and nothing gets inside it. The honest cure is to
+    give the point a size, and Frostbite's course notes do exactly this: a punctual light is treated
+    as having a physical size of one centimetre, and the squared distance is clamped below at 0.01²
+    (Lagarde and de Rousiers 2014, §4.7 and Listing 4). The engine does the same:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \text{inverse\_square}(d^{2}) = \frac{1}{\max(d^{2},\ 0.01^{2})} \]</span>
+    <span class="eq-plain">inverse_square(d_squared) = 1 / max(d_squared, 0.01^2)</span></div>
+
+  <p>
+    Measured: at 5&nbsp;mm the factor is 10,000 instead of the unclamped 40,000; at 2&nbsp;cm it is
+    2,500, exactly <em>1/d²</em>. Beyond one centimetre the clamp changes nothing at all.
+  </p>
+
+  <p>
+    Unreal's answer is different and worth knowing because you will read it: Karis's 2013 notes use
+    <em>1/(d² + 1)</em> (eq. 9), which removes the singularity by changing the curve everywhere.
+    §4 measures what that costs; the short version is that at one metre it delivers half the light
+    the inverse square says it should.
+  </p>
+
+  <h3>3.5 — A far lamp is a sun, and by how much</h3>
+
+  <p>
+    If a point light is moved far away and its intensity scaled up by the square of the distance,
+    it should become indistinguishable from a directional light. That is a good check of the whole
+    construction, and it also says precisely when you may <em>replace</em> a distant lamp with the
+    sun. Put the lamp <em>D</em> metres above the centre of a one-metre square patch, with intensity
+    <em>E·D²</em>. Directly beneath it the irradiance is exactly <em>E</em>. At a corner of the
+    patch, <em>r</em> = 0.7071&nbsp;m off axis, the distance is <em>√(D² + r²)</em> and the cosine is
+    <em>D/√(D² + r²)</em>, so the irradiance is <em>E · (D/d)³</em> — distance and cosine together.
+  </p>
+
+  <pre><code>   D (m)  worst deviation (D/d)^3 predicts
+       2         16.1947%         16.1948%
+      10          0.7453%          0.7453%
+     100          0.0075%          0.0075%</code></pre>
+
+  <p>
+    The harness measures the formula exactly. The practical reading: at ten times the size of what it
+    lights, a lamp is a sun to three-quarters of a percent, and at a hundred times, to a hundredth of
+    that. A street light over a car park is a local light; the moon is not.
+  </p>
+
+  <!-- =================================================================
+       4 — RANGE
+       ================================================================= -->
+  <h2 id="range"><span class="num">4</span>Range: forcing zero without drawing a ring</h2>
+
+  <h3>4.1 — Why a light that never reaches zero is a problem</h3>
+
+  <p>
+    The inverse square never reaches zero. A lamp in the kitchen contributes a tiny, nonzero amount
+    of light to a surface in the garage, and a shader that evaluates every lamp for every fragment
+    will dutifully compute it. That is the cost problem: with <em>N</em> lamps every pixel pays
+    <em>N</em> BRDF evaluations, including all the ones that add a millionth of a code. Real engines
+    solve it by <em>culling</em> — deciding per tile of the screen which lamps can reach it — and
+    culling needs every lamp to have a finite reach. So each lamp gets a <strong>range</strong>, a
+    distance beyond which its contribution is <em>defined</em> to be zero. glTF's
+    <code>KHR_lights_punctual</code> makes the same promise: when a light gives a range, its
+    contribution beyond that distance is to be treated as zero.
+  </p>
+
+  <p>
+    The question is how to get from <em>I/d²</em> to zero at the range without the picture showing
+    where it happened.
+  </p>
+
+  <h3>4.2 — Three published answers</h3>
+
+  <p>
+    A hard cutoff draws a visible circle on every surface a lamp reaches — a step in brightness,
+    which the eye finds instantly. So all three published answers multiply the inverse square by a
+    <strong>window</strong>, a function of <em>x = d/range</em> that is 1 near the lamp and 0 at the
+    range:
+  </p>
+
+  <ul>
+    <li><strong>glTF's recommended recipe:</strong> <em>clamp(1 − x⁴, 0, 1) / d²</em>. The
+        specification's README gives exactly this line.</li>
+    <li><strong>Karis's window, adopted by Frostbite:</strong> <em>saturate(1 − x⁴)² / d²</em> — the
+        same quartic, squared. Frostbite's notes adopt it "with value n = 4 … as presented by Karis"
+        (eq. 26) and apply it to every punctual and area light.</li>
+    <li><strong>Unreal's, from the same Karis notes:</strong> the squared window over
+        <em>d² + 1</em> instead of <em>d²</em>, which folds the singularity cure into the curve.</li>
+  </ul>
+
+  <p>
+    The engine uses the second, with Frostbite's 1&nbsp;cm clamp from §3.4 rather than Unreal's
+    <em>+1</em>. Figure 2 shows why, and the next two sections measure it.
+  </p>
+
+  @@FIG_WINDOWS@@
+
+  <h3>4.3 — What the window costs, and where it spends it</h3>
+
+  <p>
+    The fourth power keeps the window close to 1 near the lamp and spends its descent in the outer
+    half of the range:
+  </p>
+
+  <pre><code>       x  Karis/Frostbite    glTF recipe
+   0.250         0.992203       0.996094
+   0.333         0.975461       0.987654
+   0.500         0.878906       0.937500
+   0.700         0.577448       0.759900
+   0.900         0.118267       0.343900
+   0.990         0.001553       0.039404
+   1.000         0.000000       0.000000</code></pre>
+
+  <p>
+    Be honest about what that means: at half its range, a lamp windowed this way delivers 12% less
+    light than the inverse square says. That is a real change to the picture, and it is why a range
+    is chosen generously — the window bends the part of the curve where the light is already a
+    quarter of what it was at half the range, and dimming the dimmest part of a curve is the only
+    place bending it is cheap. The first draft of this lesson's header comment said the window was
+    "0.99 at half the range"; the harness says 0.879, and the comment was corrected before anything
+    shipped.
+  </p>
+
+  <h3>4.4 — The edge: a crease is a ring</h3>
+
+  <p>
+    Why square the quartic? Look at what each window does in the last few centimetres before the
+    range, which is the right-hand plot of Figure 2. The quantity that matters is the <em>slope</em>
+    of the light just inside the edge, because the eye's edge detectors respond to a change of slope
+    as readily as to a change of value — that is the machinery behind Mach bands, the bright and dark
+    fringes you see beside a gradient that suddenly stops.
+  </p>
+
+  <pre><code>dE/dd just inside the range, per unit intensity (r = 10 m):
+  inverse square alone     -0.002000   (-2/r^3)
+  glTF recipe              -0.004000   (-4/r^3: twice as steep, then 0)
+  Karis / Frostbite        -0.000000   (0: no crease)
+[PASS] glTF's edge falls 2.000x as steeply as the inverse square; the squared window's -4.8e-07</code></pre>
+
+  <p>
+    The derivation is two lines. With <em>w(x) = 1 − x⁴</em>, the product <em>E = I·w/d²</em> has
+    derivative <em>I·(w′/r)/d² + I·w·(−2/d³)</em>; at the range <em>w = 0</em> and
+    <em>w′ = −4</em>, so the slope is <em>−4I/r³</em> — twice the inverse square's own slope, and then
+    zero the instant after. That jump is a crease, and on a large floor it draws a faint ring at the
+    range. Squaring the window makes <em>w′</em> at the edge <em>2w·(−4x³) = 0</em>, and the light
+    meets zero tangentially. The harness's finite difference, taken a millimetre inside the edge, agrees: 2.000 times the inverse square's slope for glTF's recipe, and −4.8&nbsp;×&nbsp;10<sup>−7</sup> — zero to within the step — for the squared window.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    <p>
+      Unreal's <em>+1</em>, measured as a fraction of the true inverse square: 0.20 at half a metre,
+      <strong>0.50 at one metre</strong>, 0.80 at two, 0.96 at five, 0.99 at ten. Karis's notes are
+      candid that the <em>+1</em> is a practical choice rather than a physical one, and suggest
+      exposing it to artists where physical correctness is not wanted. The 1&nbsp;cm clamp measures exactly 1.0000 at every one of those
+      distances. The <em>+1</em> is also a statement in metres — it assumes the world's unit is a
+      metre — which is one more reason to prefer a clamp whose constant has a physical meaning.
+    </p>
+  </div>
+
+  <!-- =================================================================
+       5 — THE CONE
+       ================================================================= -->
+  <h2 id="cone"><span class="num">5</span>The spot: a mask, ramped in cosine</h2>
+
+  <h3>5.1 — Two angles, and what they mean</h3>
+
+  <p>
+    A spot light keeps everything a point light has and adds an axis — <code>direction</code>, the
+    direction the light <em>travels</em>, the same convention <code>directional_light</code> pinned in
+    capitals in Lesson 3.6 — and two <strong>half-angles</strong> measured from that axis. Inside the
+    inner angle the lamp is at full intensity; outside the outer angle it is dark; between them it
+    falls smoothly. These are glTF's <code>innerConeAngle</code> and <code>outerConeAngle</code>,
+    in radians, with glTF's defaults of 0 and π/4, so a light imported with no spot block means here
+    what it meant to the tool that exported it.
+  </p>
+
+  <h3>5.2 — Why cosine and not angle</h3>
+
+  <p>
+    The obvious ramp is linear in angle: compute the angle between the axis and the ray to the
+    surface, and interpolate from inner to outer. It needs the angle, and a fragment does not have
+    it — it has vectors. The dot product of the axis with the unit vector from the lamp to the
+    surface is the <em>cosine</em> of that angle for the price of three multiplies, and recovering
+    the angle would cost an <code>acos</code> per lamp per fragment. So the ramp is done in cosine,
+    in the form glTF's reference code gives, with the two constants computed once per lamp on the
+    CPU:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ s = \frac{1}{\max(0.001,\ \cos\theta_i - \cos\theta_o)}, \quad o = -\cos\theta_o \, s, \quad \text{cone} = \operatorname{saturate}(\cos\theta \cdot s + o)^{2} \]</span>
+    <span class="eq-plain">scale = 1 / max(0.001, cos(inner) - cos(outer));  offset = -cos(outer) * scale;  cone = saturate(cos(theta) * scale + offset)^2</span></div>
+
+  <p>
+    The <em>max</em> keeps a hard-edged cone (inner equal to outer) from dividing by zero; the square
+    is the range window's trick again — the ramp reaches zero with zero slope, so the edge of the
+    pool is soft rather than creased. glTF's reference code squares the ramp for the same reason:
+    a falloff that drops quickly past the inner cone and then eases into darkness.
+  </p>
+
+  @@FIG_CONE@@
+
+  <p>
+    Cosine is not linear in angle, so this ramp is not the linear-in-angle one, and Figure 3 plots
+    both. Worked through for the harness's cone (inner 0.30&nbsp;rad, outer 0.45):
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> The angular midpoint, 0.375&nbsp;rad.</p>
+    <p class="mono">cos 0.300 = 0.955336&nbsp;&nbsp; cos 0.450 = 0.900447&nbsp;&nbsp; cos 0.375 = 0.930508<br>
+       scale = 1 / (0.955336 − 0.900447) = 18.2185<br>
+       offset = −0.900447 × 18.2185 = −16.4048<br>
+       t = 0.930508 × 18.2185 − 16.4048 = 0.5477&nbsp;&nbsp;→&nbsp; t² = 0.2999</p>
+    <p>
+      Halfway in angle, the cosine ramp has fallen to 0.2999, where the linear-in-angle ramp would
+      give 0.25. The harness prints 0.29993. The difference is small and systematic — the cosine
+      ramp holds its light a little longer, then falls a little faster — and it is the price of never
+      calling <code>acos</code>, which is a price worth paying.
+    </p>
+  </div>
+
+  <h3>5.3 — A mask, not a lens</h3>
+
+  <p>
+    There is a second way to think of a spot light, and it matters because it changes what the
+    intensity field means. Give the lamp a fixed total power <em>Φ</em> and let the hood
+    <em>focus</em> it: all of it leaves through the cone, whose solid angle is
+    <em>2π(1 − cos θ<sub>o</sub>)</em>, so the intensity inside is <em>Φ</em> over that. Narrow the
+    cone and the pool gets brighter. That is how a real reflector behaves, and Frostbite's notes
+    derive it (eq. 16) before deliberately setting it aside: coupling brightness to the cone makes
+    spot lights harder for artists to control, because narrowing a cone to light fewer pixels would
+    also brighten them. Instead the reflector is treated as absorbing the light outside the cone,
+    "acting like a simple masking" (eq. 17), and glTF's specification makes the same choice by
+    defining a spot's intensity as the candela <em>inside</em> the cone.
+  </p>
+
+  <p>
+    The engine follows both, which is why the struct stores <em>I</em> directly and why §C of the
+    harness checks that <strong>on its axis a spot light is its point light exactly</strong> —
+    0.109318 against 0.109318. The solid angles are still worth having in your head, because
+    Exercise 6.17b.1 converts between the two conventions:
+  </p>
+
+  <pre><code> 15.0 deg   0.2141 sr    1.70% of the sphere
+ 30.0 deg   0.8418 sr    6.70% of the sphere
+ 45.0 deg   1.8403 sr   14.64% of the sphere
+ 90.0 deg   6.2832 sr   50.00% of the sphere</code></pre>
+
+  <p>
+    glTF's default cone, 45 degrees, masks 85% of the sphere. A focusing lamp of the same power would
+    be 6.8 times brighter inside it; a masking one is exactly as bright as the bare bulb.
+  </p>

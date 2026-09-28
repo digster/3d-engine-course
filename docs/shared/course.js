@@ -389,6 +389,7 @@
     "6.15": "06-15-skybox-ibl.html",
     "6.16": "06-16-frustum-culling.html",
     "6.17": "06-17-frame-graph.html",
+    "6.17b": "06-17b-local-lights.html",
     "6.18": "06-18-text-overlay.html",
     "7.1": "07-01-euler-angles.html",
     "7.2": "07-02-axis-angle.html",

@@ -1,0 +1,537 @@
+  <!-- =================================================================
+       10 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implement"><span class="num">10</span>Implementation</h2>
+
+  <p>
+    Twenty-two files change and none is created, which is itself a design statement: a local light is
+    a new <em>kind of term</em> in sums the engine already computes, a new <em>kind of camera</em> for
+    machinery it already has, and a new <em>kind of resource</em> in a shader interface it already
+    binds. The order below is the order the work was done in and the order a student should type it:
+    the CPU renderer first, completely, because the CPU renderer is the one you can step through;
+    then the GPU, held to it pixel by pixel.
+  </p>
+
+  <h3>10.1 — The light, and a function lifted out of <code>shade()</code></h3>
+
+  <p>
+    <code>light.hpp</code> gains the struct and the four factors of §3–§5, each a few lines, each
+    named for what it is:
+  </p>
+
+  <pre><code class="lang-cpp">struct local_light
+{
+    local_light_kind kind = local_light_kind::point;
+
+    vec3 position{0.0f, 0.0f, 0.0f};
+    vec3 direction{0.0f, -1.0f, 0.0f};   ///&lt; spot axis, direction of TRAVEL, unit length
+
+    linear_rgb colour{1.0f, 1.0f, 1.0f}; ///&lt; in linear light, as the sun's is
+    float intensity = k_reference_irradiance;   ///&lt; irradiance at 1 m, square-on
+
+    float range = 10.0f;
+
+    float inner_angle = 0.0f;                   ///&lt; spot only, radians from the axis
+    float outer_angle = 0.78539816f;            ///&lt; spot only, radians; pi/4
+
+    bool casts_shadow = false;
+};</code></pre>
+
+  <p>
+    Every default is someone else's default on purpose: the intensity is the sun's, so a
+    default-constructed lamp is comparable with the light the student already has; the cone is glTF's,
+    so an imported spot with no cone block means what its exporter meant; and
+    <code>casts_shadow</code> is off, because a shadow costs a render pass (six, for a point) and
+    should be asked for.
+  </p>
+
+  <p>
+    <code>range_window</code> takes the <em>squared</em> distance and never calls <code>sqrt</code>:
+    (<em>d</em>/<em>r</em>)⁴ is (<em>d</em>²/<em>r</em>²)², and <em>d</em>² is what
+    <code>dot(d,&nbsp;d)</code> produced anyway. A range of zero or less means infinite, which returns
+    1 and lets §A measure the bare inverse square.
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] inline local_light_sample sample_local_light(const local_light&amp; light,
+                                                           vec3 surface_pos)
+{
+    local_light_sample s;
+    const vec3 d = light.position - surface_pos;
+    s.distance_sq = dot(d, d);
+    s.to_light = normalised_or(d, vec3{0.0f, 0.0f, 0.0f});
+
+    s.attenuation = inverse_square(s.distance_sq) * range_window(s.distance_sq, light.range);
+    if (light.kind == local_light_kind::spot)
+    {
+        s.attenuation *= spot_cone(dot(light.direction, -s.to_light), cone_terms_of(light));
+    }
+    return s;
+}</code></pre>
+
+  <p>
+    <code>sample_local_light</code> is split from the shading because the shadow lookup needs the
+    same direction and distance, and <em>computing them twice is how a shadow and the light it belongs
+    to end up disagreeing about where the lamp is</em>. <code>shade_local</code> then does what
+    <code>shade()</code> does for the sun, with the arriving irradiance replaced: colour × intensity ×
+    attenuation × cos&nbsp;θ × visibility, times the BRDF.
+  </p>
+
+  <p>
+    And the BRDF is the same one, not a copy. <code>shade()</code>'s dispatch — Lambert, Blinn-Phong or
+    Cook–Torrance, with the NDF choice — is lifted into <code>surface_brdf()</code>
+    <strong>statement for statement</strong>, and both call it. The words "statement for statement"
+    carry the proof obligation: a lift that reordered one multiplication would change a float
+    somewhere in the reference render, and §D checks that it did not — 1,382,416 bytes,
+    <strong>0</strong> differing. A lamp a kilometre out, scaled to deliver the sun's irradiance,
+    then agrees with the sun to 2.84&nbsp;×&nbsp;10<sup>−5</sup> over 2,310 evaluations, which is the
+    same comparison from the other side: one BRDF, two ways of delivering light to it. (Why
+    2.84&nbsp;×&nbsp;10<sup>−5</sup> and not zero: with coordinates of a thousand metres the direction
+    to the lamp differs from the sun's in the last bits of a float, and a GGX lobe at roughness 0.2
+    turns a 10<sup>−7</sup> change in <strong>n</strong>·<strong>h</strong> into a relative change
+    hundreds of times larger. The bound is on the rounding, 10<sup>−4</sup>, and the harness says
+    why.)
+  </p>
+
+  <h3>10.2 — The CPU renderer: a loop after <code>shade()</code></h3>
+
+  <p>
+    <code>fill_style</code> gains two members — <code>local_lights</code>, a
+    <code>std::span&lt;const local_light&gt;</code>, and <code>local_shadows</code>, a pointer that
+    may be null — and the fragment path in <code>raster.cpp</code> gains one loop, after
+    <code>shade()</code> and before 6.15's ambient term:
+  </p>
+
+  <pre><code class="lang-cpp">if (!style.local_lights.empty())
+{
+    const vec3 gn = normalised_or(n, vec3{0.0f, 1.0f, 0.0f});
+    for (std::size_t k = 0; k &lt; style.local_lights.size(); ++k)
+    {
+        const local_light&amp; lamp = style.local_lights[k];
+        const local_light_sample at = sample_local_light(lamp, p);
+        if (at.attenuation &lt;= 0.0f) { continue; }
+
+        float lamp_visibility = 1.0f;
+        if (style.local_shadows != nullptr &amp;&amp; lamp.casts_shadow)
+        {
+            lamp_visibility = style.local_shadows-&gt;visibility(
+                k, p, gn, dot(gn, at.to_light));
+        }
+
+        const linear_rgb c = shade_local(albedo, p, shading_normal, style.eye - p,
+                                         lamp, style.surface, style.model,
+                                         ndf_model::ggx, lamp_visibility);
+        direct = {direct.r + c.r, direct.g + c.g, direct.b + c.b};
+    }
+}</code></pre>
+
+  <p>
+    Three decisions are in those lines. The loop sits <em>after</em> <code>shade()</code>, not inside
+    it, because light is additive (conventions §7c) — a second source is a second term in the sum and
+    nothing about the first changes, so an empty span leaves <code>direct</code> untouched to the bit.
+    The early out comes <em>before</em> the shadow lookup, because the lookup is the expensive part and
+    pointless for a pixel outside the lamp's reach. And the shadow's cosine is taken against the
+    <em>geometric</em> normal and this lamp's own direction: 6.8's rule, one cosine per light. A span
+    is the right type for a list the renderer only reads and the caller owns — the style guide's rule
+    for non-owning access — and it is what makes "no lamps" the default with no special case.
+  </p>
+
+  <h3>10.3 — The CPU shadows: two fitters and a set</h3>
+
+  <p>
+    <code>light_camera</code> learns it can be perspective: a flag (false by default, so every camera
+    built before this lesson is unchanged), the near and far planes (the depth curve needs them), and
+    the eye and axis (the slope of §6.4 needs them). <code>fit_spot</code> and
+    <code>fit_cube_face</code> produce such cameras. The cube face's view is built from rows, which is
+    the one line in the lesson worth reading twice:
+  </p>
+
+  <pre><code class="lang-cpp">const cube_axes ax = cube_face_axes(face);
+const vec3 r = ax.u;
+const vec3 upv = -ax.v;
+const vec3 back = -ax.major;
+const vec3 p = light.position;
+
+// Column-major storage (conventions §3): each braced group is a COLUMN.
+cam.view_from_world = mat4{
+    {r.x, upv.x, back.x, 0.0f},
+    {r.y, upv.y, back.y, 0.0f},
+    {r.z, upv.z, back.z, 0.0f},
+    {-dot(r, p), -dot(upv, p), -dot(back, p), 1.0f}};</code></pre>
+
+  <p>
+    A view matrix's rows are the camera's right, up and back axes — Lesson 2.9's definition, which
+    <code>look_at</code> builds from a forward and an up hint. Here all three are dictated by the face
+    table rather than chosen. <code>look_at(p, p&nbsp;+&nbsp;major, −v)</code> would compute the same
+    up and back and then <em>derive</em> right as forward&nbsp;×&nbsp;up, which for every face is
+    −<strong>u</strong>. Writing the rows out is the whole fix.
+  </p>
+
+  <p>
+    <code>local_shadow_set</code> then owns one <code>shadow_map</code> per shadowed spot and six per
+    shadowed point — <strong>built on 6.8's <code>shadow_map</code>, not beside it</strong>. The
+    rasterizer, the depth format, the PCF loop and the bias policies are all 6.8's; what 6.17b adds to
+    <code>shadow_map::visibility</code> is the perspective branch of §6 (texel × <em>w</em>, the new
+    slope, the depth curve, the rounding floor, the clamp at the face) and nothing else. The
+    orthographic path computes nothing new and is bit-identical, which the golden and every later
+    harness confirm. The set's own <code>visibility</code> picks the map: a spot's is its own; a
+    point's is the face <code>direction_to_cube(p&nbsp;−&nbsp;position)</code> says owns the direction.
+  </p>
+
+  <h3>10.4 — The guard band, in the one place it belongs</h3>
+
+  <p>
+    <code>clip.hpp</code> gains §8's four planes, the test and the clipper;
+    <code>soft_renderer.cpp</code> computes the planes once per call from the viewport and uses them in
+    exactly one case — <code>near_mode::clip</code>, on a polygon <code>outside_guard_band</code> says
+    has left the band — fanning the result into triangles from the same vertex the near clip fans from.
+    Every other triangle takes the path it took yesterday.
+  </p>
+
+  <h3>10.5 — To the GPU: one record per lamp, in a storage buffer</h3>
+
+  <p>
+    6.15 left one float of padding at offset 180 of the fragment light block. It becomes
+    <code>local_light_count</code>, guarded by a <code>static_assert</code> that says why it matters:
+    the count lands in the pad, or it is not free. Everything else about a lamp goes in a record the
+    fragment stage reads from a <strong>storage buffer</strong>, the first the engine has bound to a
+    fragment shader:
+  </p>
+
+  @@FIG_RECORD@@
+
+  <p>
+    Why not push the lamps as uniforms, like everything else so far? Lesson 4.6 measured the answer
+    without knowing it was one: SDL takes every uniform push from a 32&nbsp;KiB block, and the Vulkan
+    backend's descriptor covers only 4&nbsp;KiB of each. At 176 bytes a lamp, that is 23 lamps before
+    one backend silently reads past the end — a ceiling set by an implementation detail of a single
+    backend, on a list whose length the <em>scene</em> decides. A storage buffer
+    (<code>SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ</code>) is bound rather than pushed, so its bytes
+    move once per frame instead of once per draw, and its size is whatever the scene needs.
+  </p>
+
+  <p>
+    Two rules keep the record's layout honest across three compilers. <strong>Every member is a
+    <code>float4</code></strong>, so DXC, glslang and SPIRV-Cross have nothing to disagree about —
+    <code>StructuredBuffer</code> packing rules for mixed scalar and vector members are exactly where
+    they do. And <strong>the matrix is stored as four rows</strong>, not as a <code>float4x4</code>,
+    so no default matrix packing can transpose it on the way; the shader takes four dot products.
+    Three <code>static_assert</code>s pin the size (176) and two offsets.
+  </p>
+
+  <h3>10.6 — The resource layout, and two numbers that disagree on purpose</h3>
+
+  <p>
+    The fragment shader now declares eight sampled textures and one storage buffer:
+  </p>
+
+  <pre><code class="lang-hlsl">Texture2DArray&lt;float&gt;   spot_shadows  : register(t6, space2);
+SamplerComparisonState  spot_shadow_cmp  : register(s6, space2);
+TextureCubeArray&lt;float&gt; point_shadows : register(t7, space2);
+SamplerComparisonState  point_shadow_cmp : register(s7, space2);
+
+StructuredBuffer&lt;LocalLight&gt; local_lights : register(t8, space2);</code></pre>
+
+  <p>
+    and the C++ binds the storage buffer at <strong>slot 0</strong>. The shader says t8; the renderer
+    says 0. Both are right. SDL_GPU numbers each resource <em>kind</em> from zero on the C++ side —
+    sampler slot 0, storage-buffer slot 0 — while its HLSL resource layout (the comment block above
+    <code>SDL_CreateGPUShader</code> in <code>SDL_gpu.h</code>) puts sampled textures, then storage
+    textures, then storage buffers into <em>one</em> <code>t</code> sequence in space 2. Eight sampled
+    textures occupy t0–t7, so the first storage buffer is t8. On Metal the translated shader shows the
+    same thing from a third angle: the buffer lands at <code>[[buffer(3)]]</code>, after the three
+    uniform blocks, and the cube array becomes <code>depthcube_array&lt;float&gt;</code>. The comment
+    at the bind says all of this, because the next person to add a sampled texture moves the storage
+    buffer to t9 and must know that slot 0 does not change.
+  </p>
+
+  <h3>10.7 — <code>gpu_local_shadows</code>: budgets, jobs, and a shared depth pass</h3>
+
+  <p>
+    <code>gpu_shadow.cpp</code> already built a depth-only pipeline and recorded depth draws for the
+    sun's cascades. Those two pieces move into an anonymous namespace —
+    <code>build_depth_only_pipeline</code>, <code>record_depth_draws</code>,
+    <code>begin_depth_pass</code> — with every log string and debug event kept identical, so 6.8's and
+    6.9's harness transcripts do not move. The new class uses them for lamps:
+  </p>
+
+  <ul>
+    <li><code>create</code> makes one depth <code>Texture2DArray</code> of <code>max_spots</code>
+        layers and one depth <code>TextureCubeArray</code> of <code>max_points</code> cubes — the
+        latter through <code>gpu_texture::create_depth_cube_array</code>, which asks
+        <code>SDL_GPUTextureSupportsFormat</code> first (§7.5).</li>
+    <li><code>prepare(lights, out)</code> packs one <code>gpu_local_light</code> per lamp, assigns
+        shadow slots in list order within each kind's budget, and emits a <strong>job</strong> per
+        pass to record: one for a spot, six for a point. A shadowed lamp past its budget keeps slot −1
+        and is drawn unshadowed, with a warning naming the budget.</li>
+    <li><code>render</code> records every job as its own render pass; <code>render_into</code>
+        records one job into a pass somebody else began — the frame graph's shape, which §10.9 uses.</li>
+  </ul>
+
+  <p>
+    A point light's record carries no matrix, and §7.3 is why: the cube lookup takes a direction and
+    the depth is the major axis. Its four rows stay zero.
+  </p>
+
+  <h3>10.8 — <code>gpu_scene</code>: the caller's list, the renderer's count</h3>
+
+  <p>
+    <code>render</code> and <code>render_batched</code> take one more trailing argument, a
+    <code>const scene_local_lights*</code> defaulting to null, so every existing caller compiles and
+    behaves as before. The struct holds the light buffer, its count, the two shadow textures and the
+    comparison sampler. Three things happen with it.
+  </p>
+
+  <ul>
+    <li><strong>The count is the renderer's, not the caller's.</strong> The count the shader loops to
+        and the buffer it indexes must describe the same list, and the only place both are in hand is
+        <code>begin_frame</code>. So the light block is pushed from a <em>copy</em> whose
+        <code>local_light_count</code> the renderer sets — zero unless a real list arrived. A caller
+        cannot make the shader read past the end of a buffer by leaving a stale number in a struct.</li>
+    <li><strong>Every declared resource is bound, always.</strong> A shader that declares a storage
+        buffer must have one bound even if its loop runs zero times — SDL's debug layer asserts
+        "Missing fragment storage buffer binding" at draw time. The renderer owns three
+        <em>identity elements</em> for the case where the caller has no lamps or no shadows: a zeroed
+        one-record light buffer, a one-layer depth array and a one-cube depth cube array, both cleared
+        to the far plane at creation (seven empty render passes, once). 6.15 established the pattern for
+        its environment maps; the caller never has to know the shader has these slots.</li>
+    <li><strong>The frame-constant samplers are bound together</strong>, now eight of them, in
+        <code>bind_fragment_samplers</code>, and the storage buffer at slot 0 in
+        <code>bind_local_lights</code>, which records a <code>bind_storage</code> event in 4.9's frame
+        log, so a dump of the frame shows the binding.</li>
+  </ul>
+
+  <div class="callout note">
+    <span class="label">A correction carried here</span>
+    <p>
+      Until this lesson, the comment in <code>gpu_scene.cpp</code> explained binding all the samplers
+      in one call by saying a partial <code>SDL_BindGPUFragmentSamplers</code> "replaces the range it
+      names", unbinding everything outside it. The post-Module 8 review read SDL's source at
+      <code>release-3.4.12</code> and found otherwise: all three backends write only
+      <code>firstSlot&nbsp;+&nbsp;i</code>, and what resets bindings is <em>ending the pass</em>. The
+      measurement behind the old comment was right and its explanation wrong. This lesson rewrites the
+      function anyway, so it carries the correction: binding all eight together is still correct and
+      still one call — only the reason changed. Exercise 6.17b.3 cashes in what the corrected rule
+      permits.
+    </p>
+  </div>
+
+  <h3>10.9 — The frame graph: seven passes declared, and a frame that declares none</h3>
+
+  <p>
+    6.17 built the frame graph for passes like these, and a lamp's shadow is the first new pass to
+    arrive since. Each job becomes one declared pass with one statement: it clears one layer of an
+    imported texture. The scene pass samples both textures.
+  </p>
+
+  <pre><code class="lang-cpp">engine::fg_texture spots  = fg.import("spot shadows",  shadows.spot_texture(),  spot_desc);
+engine::fg_texture points = fg.import("point shadows", shadows.point_texture(), point_desc);
+
+for (int j = 0; j &lt; shadows.job_count(); ++j)
+{
+    const engine::local_shadow_job&amp; job = shadows.job(j);
+    const int p = fg.add_pass(names[j], &amp;exec_local, &amp;ctx[j]);
+    if (job.kind == local_light_kind::spot) { spots  = fg.clear_depth(p, spots,  1.0f, job.layer); }
+    else                                    { points = fg.clear_depth(p, points, 1.0f, job.layer); }
+}
+
+const int scene = fg.add_pass("scene", &amp;exec_scene, &amp;sctx);
+fg.sample(scene, spots);
+fg.sample(scene, points);</code></pre>
+
+  <p>
+    6.17's rules then derive everything. A clear of <em>one layer</em> keeps the other layers, so it
+    consumes the previous version and produces the next: the six faces form a <strong>chain</strong>,
+    and because the scene samples the chain's last version, every face's store op comes out
+    <code>STORE</code>. §I prints the derived ops — seven <code>CLEAR</code>/<code>STORE</code> shadow
+    passes, the scene's colour <code>CLEAR</code>/<code>STORE</code> and its depth
+    <code>CLEAR</code>/<code>DONT_CARE</code>, 4.7's choice derived again — and the declared frame
+    matches the hand-recorded one on all 196,608 channels.
+  </p>
+
+  @@FIG_GRAPH@@
+
+  <p>
+    The second frame in Figure 11 is the one to notice. Shadows of static lamps over static geometry
+    do not change between frames, and the graph already knows how to express "use what is there": an
+    <strong>import's version 0 is real</strong> — it is whatever the texture holds when the frame
+    begins. A frame that declares no shadow passes samples version 0 of both imports, and the graph
+    runs one pass. §I: 0 channels differ from the frame that rendered the maps, and the control —
+    clear the maps first, then run the cached frame — changes 18,015. Deciding <em>when</em> a cached
+    map is stale (a lamp moved, a caster moved into its range) is an engine policy this lesson does not
+    write; the graph's part, making the cached frame expressible and correct, is done.
+  </p>
+
+  <h3>10.10 — The shader loop</h3>
+
+  <p>
+    <code>scene.frag.hlsl</code> gets the same lift as <code>light.hpp</code> —
+    <code>surface_brdf</code> and <code>specular_alpha</code> move out of <code>main</code> so the sun
+    and the lamps share them — and then one line in <code>main</code>:
+  </p>
+
+  <pre><code class="lang-hlsl">float3 lit = f_r * e + ambient_term;
+if (local_light_count &gt; 0.5f)
+{
+    lit += shade_local_lights(p, n, geometric, v, base, diffuse_albedo, spec_f0, ct_alpha);
+}</code></pre>
+
+  <p>
+    <code>shade_local_lights</code> is <code>raster.cpp</code>'s loop in HLSL, in the same order —
+    where the lamp is, an early out, then the shadow, then the BRDF — because §G holds the two
+    renderers to one another pixel by pixel, and the easiest way to make two implementations agree is
+    to make them the same sequence of operations. The guard on the count is not an optimisation: with
+    no lamps the loop body is never reached and the sun's pixels are bit-for-bit what they were,
+    which §H checks.
+  </p>
+
+  <h3>10.11 — The demo</h3>
+
+  <p>
+    <code>gltf_view --lights</code> puts two lamps into the CPU renderer's scene, sized from the model's
+    bounds so any model works: a warm bulb to one side at half the model's span above the floor, and a
+    cool spot high on the other side, aimed at the floor beside the model. Each is given the intensity
+    that delivers <em>twice</em> the sun's reference irradiance where it is aimed —
+    <code>2π&nbsp;·&nbsp;d²</code> for a lamp <em>d</em> metres from that point, §3.2's unit doing
+    its job — and the sun is turned down to a tenth, so the lamps dominate and the picture reads as
+    night with a lamp on. <code>--lamp-shadows 0</code> drops both maps.
+  </p>
+
+  <!-- =================================================================
+       11 — INSTRUMENTS
+       ================================================================= -->
+  <h2 id="instruments"><span class="num">11</span>The instruments, and the judge that was wrong four times</h2>
+
+  <p>
+    <code>verify_617b</code> runs forty checks in ten sections, and each section's shape is 5.3's rule:
+    a measurement, a claim, and a <strong>control</strong> that proves the measurement could have
+    failed. Three instruments carry most of the lesson, and each has a story about being wrong.
+  </p>
+
+  <h3>11.1 — Two renderers held to each other</h3>
+
+  <p>
+    §G renders one lit ground from straight above through both renderers, with the same two lamps, and
+    compares every pixel in linear light. Each pixel is a known floor point, so a disagreement has a
+    location, and every disagreement is classified by its distance to the nearest shadow edge in the
+    CPU's image. Without shadows the renderers agree on all 62,940 lit pixels to
+    2&nbsp;×&nbsp;10<sup>−4</sup> relative, worst 1.66&nbsp;×&nbsp;10<sup>−5</sup>. With them:
+  </p>
+
+  <pre><code>  with shadows: 61043 lit pixels, 60784 agree, 259 differ; 6115 shadowed lamp-pixels
+  disagreeing pixels by distance to the nearest CPU shadow edge:
+    &lt;=1 px 259   &lt;=2 px 0   &lt;=3 px 0   &lt;=4 px 0   &lt;=5 px 0   beyond 0</code></pre>
+
+  @@FIG_BOTH@@
+
+  <p>
+    Every one of the 259 is within a pixel of a shadow edge, where the two <em>filters</em> legitimately
+    differ — nearest-texel on one side, a 2×2 bilinear comparison on the other — and they are 259 of
+    the 4,340 pixels in that band. The control widens the spot's cone by 5% and moves 9,992 pixels, so
+    an instrument that reports 259 can see ten thousand. This comparison is what found the GPU's reach
+    (§9.1, 11,098 disagreements off any edge) and the perspective slope (§6.4, nineteen). The last three
+    of those nineteen were not a bias at all: they sat on the rim of the spot's cone, where the
+    attenuation is a few parts in 10<sup>5</sup> and the two renderers' rounding of
+    <code>spot_cone</code> differed by more than the relative tolerance. The comparison gained an
+    absolute floor of 10<sup>−5</sup> — nearly four hundred times smaller than one step of an 8-bit
+    display — and the harness says why next to it.
+  </p>
+
+  <h3>11.2 — A judge that shares no code with the engine</h3>
+
+  <p>
+    §F's acne and leak counts need to know, at each point, whether the lamp <em>really</em> sees it.
+    The judge answers by casting a ray from the point to the lamp against the analytic box, sign and
+    ground — no shadow map, no rasterizer, no engine geometry. Then it has to decide which points it is
+    allowed to judge, because a point exactly at a shadow's edge has no right answer at a map's
+    resolution: the map cannot resolve anything finer than a texel, so both answers are defensible
+    there. Excluding those <em>ambiguous</em> points is correct. Deciding which they are was wrong four
+    times.
+  </p>
+
+  <ol>
+    <li><strong>A fixed 6&nbsp;cm on the floor</strong> around each shadow's edge. A texel's shadow at
+        grazing incidence is wider than that.</li>
+    <li><strong>One and a half texels on the floor.</strong> Scaled with the map, and still too
+        narrow.</li>
+    <li><strong>Two texels on the floor.</strong> It failed on a point whose ray clears the top edge of
+        the box by a fifth of a texel and then travels another three metres to the ground. No floor
+        position within half a metre of that point is anywhere near the box's shadow — and yet the
+        map, which resolves <em>directions</em> from the lamp one texel apart, cannot tell whether that
+        ray grazed the box or not. The ambiguity was never on the floor. It was in the angle.</li>
+    <li><strong>Two texels of angle, tested only at the two ends.</strong> The ray was tilted two
+        texels' worth each way, and stepped straight over the 4&nbsp;mm sign, which is half a texel
+        wide — the very aliasing the map itself suffers from.</li>
+  </ol>
+
+  <p>
+    The judge that shipped measures ambiguity in the <strong>light's own angles</strong>, densely: it
+    tilts the ray from the lamp by every quarter of a texel's angular size, out to two texels, in two
+    perpendicular directions each way, re-places the point along each tilted ray at its own distance,
+    and calls it ambiguous if any tilt changes the answer. That is the resolution the
+    map actually has, expressed in the only coordinates where it is the same everywhere. With it, the
+    derived bias scores 0 acne and 0 leaks over 67,715 spot points and 343,360 cube points — and the
+    controls (no bias: 19,502 and 119,886 acne) show the same judge can see failure in both.
+  </p>
+
+  <p>
+    The four wrong judges are recorded in the harness, above the one that replaced them, because the
+    pattern will recur. Each was caught the same way: by probing a single flagged point until it
+    explained itself — rather than excusing it, and rather than changing the engine until the count
+    went to zero. A judge that flags a point is making a claim about the engine <em>and</em> about
+    itself, and the question to ask first is whether it is measuring in the coordinates the thing it
+    judges actually has.
+  </p>
+
+  <h3>11.3 — Twenty-nine harnesses that must not move</h3>
+
+  <p>
+    An inserted lesson has an obligation an appended one does not: the lessons after it were written
+    first, and their measurements must survive it. <code>scratch/_base617b/run_all.sh</code> reruns the
+    harnesses of 6.1 through 6.18 and 7.1 through 7.8 on the engine before and after this lesson, and
+    <code>classify.py</code> diffs the transcripts, masking only lines that carry a unit of time.
+    Twenty-five of the twenty-six build at HEAD — two of them only through a one-line include shim,
+    because 8.4 moved <code>bounds.hpp</code> — and 6.8's does not build at HEAD at all, for a reason
+    older than this lesson. What differs is timing lines, ratios computed from timings, and one printed
+    heap pointer; nothing else. (6.5's harness reports the same two failures before and after — also
+    older than this lesson, and recorded as such.) The golden render is byte-identical. That is the
+    evidence behind "additive", and it is why the guard band could go under fifty lessons of
+    pictures.
+  </p>
+
+  <!-- =================================================================
+       12 — LIMITS
+       ================================================================= -->
+  <h2 id="limits"><span class="num">12</span>The ninety-percent picture</h2>
+
+  <p>
+    This is the ninety-percent picture of local lights. The missing ten percent, named so nobody
+    mistakes the silence for a claim:
+  </p>
+
+  <ul>
+    <li><strong>Every lamp is evaluated for every fragment.</strong> The range makes a lamp's reach
+        finite, which is the <em>precondition</em> for culling, but nothing culls yet. Real engines
+        bin lamps into screen tiles or clusters (a compute pass per frame) and loop only over each
+        pixel's own list — Olsson, Billeter and Assarsson's clustered shading (2012), and the
+        tiled and clustered forward shading of RTR4 chapter 20. 6.18b's compute shaders are the tool; the scale at which
+        it pays is dozens of lamps, not two.</li>
+    <li><strong>Lamps are points.</strong> A real bulb has a size, which softens its highlights and
+        its shadows. The 1&nbsp;cm clamp is the only acknowledgement of size here. Area lights —
+        spheres, tubes, rectangles — are the rest of Frostbite 2014's lighting chapter and the
+        subject of Karis 2013's representative-point trick, and their shadows need penumbra
+        estimation (PCSS). The
+        GGX highlight of a point light on a very smooth surface is therefore a pinprick that
+        aliases; 6.14's specular antialiasing reduces it and does not cure it.</li>
+    <li><strong>The cube's PCF stops at the face edge on the CPU.</strong> The GPU's one tap is 2×2
+        PCF and blends across face edges in hardware; the CPU's six maps cannot, so point lights
+        default to radius 0 on both renderers for parity. Exercise 6.17b.4 widens it.</li>
+    <li><strong>Shadow budgets are fixed at creation</strong> (four spots, two points), and a shadowed
+        lamp past its budget goes unshadowed. Choosing <em>which</em> lamps get shadows each frame —
+        by screen size, distance, importance — is a policy real engines spend real effort on, and the
+        budget-and-warning here is only its mechanism.</li>
+    <li><strong>Cached shadows need an invalidation policy</strong> (§10.9). The graph can express a
+        cached frame; deciding when a lamp's map is stale is not written.</li>
+    <li><strong>Lamps have no volumetric scattering and no IES profiles.</strong> Real luminaires
+        emit anisotropically, described by photometric profiles; the cone is a first approximation
+        of one.</li>
+  </ul>

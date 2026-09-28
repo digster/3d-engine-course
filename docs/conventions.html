@@ -81,6 +81,7 @@
           <tr><td><strong><a href="#matrices">Matrices</a></strong></td><td>Column vectors <code>v' = M·v</code>, stored column-major</td><td class="mono">2</td></tr>
           <tr><td><strong><a href="#depth">Depth</a></strong></td><td>Smaller is nearer; clear to 1.0; compare <code>&lt;</code> strictly (<code>LESS</code>); store device depth, <code>f32</code> by default</td><td class="mono">3</td></tr>
           <tr><td><strong><a href="#winding">Winding</a></strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td><td class="mono">3</td></tr>
+          <tr><td><strong><a href="#local-lights">Local lights</a></strong></td><td><code>intensity</code> = irradiance at 1&nbsp;m (π at 1&nbsp;m is the sun); <code>direction</code> is travel; cube-face cameras are mirrors, never <code>look_at</code></td><td class="mono">6</td></tr>
           <tr><td><strong><a href="#units">Units</a></strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td><td class="mono">1</td></tr>
           <tr><td><strong><a href="#euler">Euler angles</a></strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td><td class="mono">7</td></tr>
           <tr><td><strong><a href="#quat">Quaternions</a></strong></td><td><code>{w, v}</code>, <code>w</code> first, <code>w = cos(θ/2)</code>; rotate by <code>q v q*</code>; <code>q·p</code> means “do <code>p</code>, then <code>q</code>”</td><td class="mono">7</td></tr>
@@ -131,6 +132,7 @@
       <li><a href="#shadow-maps">Shadow maps &mdash; what the comparison assumes</a></li>
       <li><a href="#transparency">Transparency &mdash; six decisions, four of which draw a picture either way</a></li>
       <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
+      <li><a href="#local-lights">Local lights &mdash; units, falloff, the cone, and their shadows</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
       <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
@@ -2502,6 +2504,105 @@
     </p>
   </div>
 
+  <h2 id="local-lights"><span class="num">7p</span>Local lights &mdash; units, falloff, the cone, and their shadows</h2>
+
+  <p>
+    Added in Lesson 6.17b. A local light has a position, so it has two properties the sun does not:
+    its direction varies across the scene, and its strength falls with distance. Every decision below
+    has a published alternative that also draws a picture, which is why each is written down.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Local-light conventions, this course&rsquo;s answer for each,
+        and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>What <code>intensity</code> means</strong></td>
+          <td>The irradiance the lamp delivers at <strong>one metre</strong>, square-on &mdash;
+              <em>I</em> in <em>E</em> = <em>I</em>/<em>d</em>&sup2;. Default
+              <code>k_reference_irradiance</code> = &pi;, so a default lamp at one metre is the
+              engine&rsquo;s sun. glTF&rsquo;s candela is its photometric twin; one exposure factor
+              converts both candela and lux.</td>
+          <td>Lamps orders of magnitude too bright or invisible next to the sun.</td>
+        </tr>
+        <tr>
+          <td><strong><code>direction</code></strong></td>
+          <td>The direction the light <em>travels</em> &mdash; lamp toward target, unit length
+              &mdash; as <code>directional_light</code>&rsquo;s since 3.6. glTF: the node&rsquo;s
+              &minus;Z.</td>
+          <td>A spot lights the ceiling instead of the floor.</td>
+        </tr>
+        <tr>
+          <td><strong>The singularity</strong></td>
+          <td><code>1/max(d&sup2;, 0.01&sup2;)</code> &mdash; a lamp is 1&nbsp;cm across (Frostbite).
+              Not <code>1/(d&sup2;+1)</code>, which halves the light at 1&nbsp;m.</td>
+          <td>Infinite light at contact; or, with the <em>+1</em>, every lamp dim up close.</td>
+        </tr>
+        <tr>
+          <td><strong>The range</strong></td>
+          <td><code>saturate(1 &minus; (d/r)&#8308;)&sup2;</code> multiplying the inverse square
+              (Karis, Frostbite). <code>range &le; 0</code> is infinite: no window.</td>
+          <td>Unsquared (glTF&rsquo;s recipe) or a hard cutoff: a faint ring at the range.</td>
+        </tr>
+        <tr>
+          <td><strong>The cone</strong></td>
+          <td>Half-angles from the axis, glTF&rsquo;s defaults 0 and &pi;/4; ramped in
+              <em>cosine</em>, <code>saturate(cos&middot;scale + offset)&sup2;</code>. A spot is a
+              <strong>mask</strong>: narrowing it does not brighten it, and on its axis it is its
+              point light.</td>
+          <td>Brightness that changes when an artist narrows a cone; an <code>acos</code> per lamp
+              per fragment.</td>
+        </tr>
+        <tr>
+          <td><strong>Cube faces</strong></td>
+          <td>SDL&rsquo;s order +X &minus;X +Y &minus;Y +Z &minus;Z; face <em>f</em> of cube
+              <em>c</em> is layer 6<em>c</em>+<em>f</em>. Each face camera has rows
+              (<strong>u</strong>, &minus;<strong>v</strong>, &minus;<strong>major</strong>) from
+              <code>cube_face_axes</code>: a <strong>mirror</strong>, determinant &minus;1. Stored
+              depth = <code>perspective_depth(max |component|)</code>.</td>
+          <td><code>look_at</code> draws every face mirrored: shadows on the wrong side of their
+              casters, plausibly.</td>
+        </tr>
+        <tr>
+          <td><strong>Perspective bias</strong></td>
+          <td>6.8&rsquo;s bias in metres, with the texel scaled by the axial distance <em>w</em>,
+              the slope <code>sin&alpha; cos&phi; / cos&theta;</code>, converted as
+              <code>depth(w) &minus; depth(w &minus; b)</code>, plus a 2<sup>&minus;22</sup> rounding
+              floor. Reach (<em>r</em>+1)&radic;2 on both renderers, for different reasons.</td>
+          <td>6.8&rsquo;s constant reused: peter-panning behind thin casters beyond
+              <em>n&middot;f</em>/1&nbsp;m. Zero slope with no floor: acne under a point light.</td>
+        </tr>
+        <tr>
+          <td><strong>Outside the face</strong></td>
+          <td><strong>Clamp</strong> to the face under perspective &mdash; the face was chosen
+              because it owns the direction. The orthographic rule of &sect;7m (&ldquo;outside is
+              lit&rdquo;) is unchanged.</td>
+          <td>Hairline leaks along a point light&rsquo;s 45&deg; seams.</td>
+        </tr>
+        <tr>
+          <td><strong>On the GPU</strong></td>
+          <td>One <code>gpu_local_light</code> per lamp (11 <code>float4</code>, matrix as rows) in a
+              storage buffer at slot 0 = HLSL <code>t8</code>, space 2; the count in the light
+              block at offset 180, <strong>set by the renderer</strong>.</td>
+          <td>Reading past a buffer; a transposed spot matrix on one backend.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">And the rasterizer&rsquo;s guard band</span>
+    <p>Near-clipped is finite, not small: a corner clipped to a 5&nbsp;cm near plane can project
+       40,000 pixels off-screen. Under <code>near_mode::clip</code> the software rasterizer clips a
+       polygon that leaves &plusmn;7,936&nbsp;px against four guard planes; <code>to_pixel</code>&rsquo;s
+       &plusmn;8,000 clamp is for <code>near_mode::none</code> only, because a clamp <em>moves</em>
+       vertices. &sect;6d&rsquo;s near-plane rule is unchanged. Lesson 6.17b &sect;8.</p>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -4194,6 +4295,9 @@
     <table>
       <thead><tr><th>Fact</th><th>Value</th><th>Source</th></tr></thead>
       <tbody>
+        <tr><td>Depth cube arrays in SDL_GPU</td><td><code>SDL_GPU_TEXTURETYPE_CUBE_ARRAY</code> with a depth format, <code>layer_count</code> = 6&nbsp;&times; cubes, one depth target per layer; asked with <code>SDL_GPUTextureSupportsFormat</code> before creating</td><td>SDL <code>release-3.4.12</code>: <code>SDL_gpu.h</code> and each backend&rsquo;s texture creation; run on Metal in 6.17b</td></tr>
+        <tr><td>Fragment resource order</td><td>Sampled textures, then storage textures, then storage buffers, in one <code>t</code> sequence in space 2; C++ slots count per kind from 0</td><td><code>SDL_gpu.h</code>, the comment above <code>SDL_CreateGPUShader</code>; MSL output confirms <code>[[buffer(3)]]</code></td></tr>
+        <tr><td>glTF punctual lights</td><td>Point/spot intensity in candela, directional in lux; cone defaults 0 and &pi;/4; lights shine down the node&rsquo;s &minus;Z; no range = infinite</td><td><code>KHR_lights_punctual</code> README</td></tr>
         <tr><td>Standard gravity</td><td><strong>9.80665 m/s&sup2;</strong> exactly &mdash; a <em>defined</em> constant, not a measurement; local values run ~9.764 to ~9.834. This engine uses <strong>9.81</strong>.</td><td>CGPM, 3rd conference (1901)</td></tr>
         <tr><td>Newton's second law</td><td><code>F = ma</code>, and it is <strong>linear in F</strong> &mdash; which is the property the force accumulator depends on</td><td><em>Principia</em>, Law II</td></tr>
         <tr><td>Impulse</td><td><code>J = &int;F dt = m&Delta;v</code>, so <code>&Delta;v = J&middot;(1/m)</code> with <strong>no step size in it</strong></td><td>Definition; verified in 8.2 &sect;7</td></tr>

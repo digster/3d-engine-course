@@ -84,6 +84,21 @@ BUILDERS_DIR = os.path.join(REPO, "scratch")
 OUT_RE = re.compile(r'^OUT\s*=\s*[\'"]([^\'"]+)[\'"]', re.MULTILINE)
 
 
+def builder_key(filename: str) -> tuple[int, int, str] | None:
+    """(module, lesson, suffix) for a page builder's file name, or None if it is not one.
+
+    Sorting by it makes the report read in course order: build_39 before build_310,
+    which a plain string sort gets backwards, and an INSERTED lesson's builder
+    (build_617b.py, CLAUDE.md §9's `2.4b` numbering) right after the lesson it follows.
+    Until 6.17b the pattern was `build_\d+\.py`, which skipped every b-lesson
+    silently — the one failure a checker must not have.
+    """
+    m = re.fullmatch(r"build_(\d)(\d+)([a-z]?)\.py", filename)
+    if m is None:
+        return None
+    return int(m.group(1)), int(m.group(2)), m.group(3)
+
+
 def builder_target(path: str) -> str | None:
     """Return the repo-relative page a builder writes, or None if it declares none."""
     with open(path, encoding="utf-8") as fh:
@@ -253,11 +268,8 @@ def main() -> int:
 
     builders = sorted(
         (os.path.join(BUILDERS_DIR, f) for f in os.listdir(BUILDERS_DIR)
-         if re.fullmatch(r"build_\d+\.py", f)),
-        # Sort by (module, lesson) so the report reads in course order: build_39
-        # comes before build_310, which a plain string sort gets backwards.
-        key=lambda p: (lambda d: (int(d[0]), int(d[1:])))(
-            re.fullmatch(r"build_(\d+)\.py", os.path.basename(p)).group(1)),
+         if builder_key(f) is not None),
+        key=lambda p: builder_key(os.path.basename(p)),
     )
     if args.only:
         wanted = {f"build_{n}.py" for n in args.only}

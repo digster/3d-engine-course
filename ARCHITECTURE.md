@@ -2501,6 +2501,39 @@ Built roughly in dependency order — each module's milestone is the next module
   verification compares the two assembly paths bit for bit and two copies of the same draw code
   would make that comparison pass while proving nothing.
 
+- **Lights with a position are a second term in the same sum** (Module 6, Lesson 6.17b — an
+  insertion, written after 8.13). `engine/include/engine/gfx/light.hpp`'s `local_light` is a point
+  or a spot whose `intensity` is the irradiance at one metre, in the sun's own exposure units, so
+  the two kinds of light are directly comparable and one BRDF serves both: `shade()`'s dispatch was
+  lifted into `surface_brdf()` statement for statement, and the lamp loop runs **after** `shade()`
+  in both renderers (`raster.cpp`, `scene.frag.hlsl`) because light is additive — an empty list
+  leaves every existing pixel bit-identical, which is what let the golden and 26 other harnesses
+  stay put.
+
+  **Shadows reuse 6.8's machinery with a camera that has a position.** `light_camera` gained a
+  `perspective` flag (false for every earlier caller), near/far, eye and axis; `local_shadow_set` is
+  built *on* `shadow_map`, not beside it. What did not carry over is the bias's last step: a
+  perspective map's device depth is a hyperbola in axial distance and its stored depth is AXIAL, so
+  the bias goes through the curve and uses the slope `sin α cos φ / cos θ`, with a 2⁻²² floor where
+  that slope is exactly zero. A point light is six 90° faces whose cameras are **mirrors**
+  (`fit_cube_face`, from 6.15's face table via `cube_face_axes`) — `look_at` builds rotations and
+  draws every face flipped.
+
+  **The GPU side is the engine's first fragment storage buffer.** One `gpu_local_light` (eleven
+  `float4`s) per lamp, bound at storage slot 0 — HLSL `t8`, space 2, because SDL numbers resources
+  per kind on the C++ side and in one `t` sequence in HLSL. The count rides in 6.15's padding and is
+  **set by the renderer from the list it binds**, never by the caller; identity fallbacks (a zero
+  record, a one-layer depth array, a one-cube depth cube array) are bound when the caller has none,
+  continuing 6.8's "hand the shader the identity element of the feature it is missing".
+  `gpu_local_shadows` renders one pass per job through the depth-only pipeline it now shares with
+  the sun, and each job is a frame-graph pass that clears one layer of an imported texture — so a
+  frame that declares no shadow passes samples last frame's maps.
+
+  **It also moved one boundary below it.** The software rasterizer clips near-clipped polygons that
+  leave ±7,936 px against four guard planes (`clip.hpp`), because `to_pixel`'s ±8,000 clamp moved
+  vertices when a 5 cm lamp near plane projected corners 40,000 px out. The guard clip runs only
+  when a polygon leaves the band, so no earlier frame changes.
+
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype
   vs sparse-set is a justified choice made in the lesson, not a coin flip.

@@ -1,0 +1,45 @@
+<svg viewBox="0 0 820 380" role="img" aria-labelledby="l617bf7-t l617bf7-d">
+  <title id="l617bf7-t">Cube shadow faces and the mirror</title>
+  <desc id="l617bf7-d">Left: the six faces of a cube map laid out as a cross, +X highlighted. Middle: the +X face as the face table defines it, u growing toward minus z. Right: what a right-handed look_at camera renders there, the mirror image, which misses the lookup by up to 0.97 of the face.</desc>
+  <defs>
+    <marker id="e-i-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-red-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-blu-l617bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="20" y="24" class="sm" text-anchor="start">Six 90-degree cameras tile the sphere. Each must draw its face the way the hardware will READ it.</text>
+<rect x="102.0" y="70.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="133.0" y="105.0" class="sm mono" text-anchor="middle">+Y</text>
+<rect x="40.0" y="132.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="71.0" y="167.0" class="sm mono" text-anchor="middle">-X</text>
+<rect x="102.0" y="132.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="133.0" y="167.0" class="sm mono" text-anchor="middle">+Z</text>
+<rect x="164.0" y="132.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#f0961e" stroke-width="2.0"/>
+<text x="195.0" y="167.0" class="sm mono" text-anchor="middle">+X</text>
+<rect x="226.0" y="132.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="257.0" y="167.0" class="sm mono" text-anchor="middle">-Z</text>
+<rect x="102.0" y="194.0" width="62.0" height="62.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.2"/>
+<text x="133.0" y="229.0" class="sm mono" text-anchor="middle">-Y</text>
+<text x="164.0" y="278.0" class="xs muted" text-anchor="middle">SDL's face order: +X -X +Y -Y +Z -Z</text>
+<text x="164.0" y="292.0" class="xs mono" text-anchor="middle">layer = 6 · cube + face</text>
+<text x="430.0" y="72" class="xs" text-anchor="middle">the +X face, as the table defines it</text>
+<rect x="370.0" y="84" width="120" height="120" rx="3" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<path d="M 400.00,108.00 L 449.00,108.00 L 449.00,120.60 L 414.00,120.60 L 414.00,137.40 L 438.50,137.40 L 438.50,150.00 L 414.00,150.00 L 414.00,178.00 L 400.00,178.00 Z" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<line x1="370.00" y1="220.00" x2="490.00" y2="220.00" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-blu-l617bf7)"/>
+<text x="430.0" y="236" class="xs lbl-z" text-anchor="middle">u grows toward −z</text>
+<line x1="356.00" y1="84.00" x2="356.00" y2="204.00" stroke="#e05c5c" stroke-width="1.2" marker-end="url(#e-red-l617bf7)"/>
+<text x="350.0" y="150" class="xs" text-anchor="end">v</text>
+<text x="430.0" y="256" class="xs muted" text-anchor="middle">(v grows DOWN the image, toward −y)</text>
+<text x="680.0" y="72" class="xs" text-anchor="middle">what look_at draws there</text>
+<rect x="620.0" y="84" width="120" height="120" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<path d="M 720.00,108.00 L 671.00,108.00 L 671.00,120.60 L 706.00,120.60 L 706.00,137.40 L 681.50,137.40 L 681.50,150.00 L 706.00,150.00 L 706.00,178.00 L 720.00,178.00 Z" fill="none" stroke="#e05c5c" stroke-width="1.6"/>
+<line x1="740.00" y1="220.00" x2="620.00" y2="220.00" stroke="#5082e6" stroke-width="1.6" marker-end="url(#e-blu-l617bf7)"/>
+<text x="680.0" y="236" class="xs lbl-z" text-anchor="middle">its right is +z = −u</text>
+<text x="680.0" y="256" class="xs t-bad" text-anchor="middle">mirrored: misses by up to 0.970 of the face</text>
+<text x="370.0" y="300" class="xs mono t-hi" text-anchor="start">fit_cube_face: rows (u, −v, −major), determinant −1 — a MIRROR, on purpose</text>
+<text x="370.0" y="318" class="xs mono" text-anchor="start">look_at: rows (−u, −v, −major), determinant +1 — a rotation, and wrong</text>
+<text x="370.0" y="344" class="xs muted" text-anchor="start">measured on all six faces, 1,089 directions each: 1.8e-7 of a face</text>
+</svg>

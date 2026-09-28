@@ -212,6 +212,24 @@ class CourseOwnership(unittest.TestCase):
         self.assertFalse(owned("docs/CMakeLists.txt"))
 
 
+class BuilderOrder(unittest.TestCase):
+    """check-builders.py must find an INSERTED lesson's builder, in course order.
+
+    Its pattern was `build_\\d+\\.py` until 6.17b, so build_617b.py was skipped
+    without a word - a green report that had not looked."""
+
+    def test_b_lessons_sort_after_the_lesson_they_follow(self):
+        names = ["build_618.py", "build_617b.py", "build_310.py", "build_617.py", "build_39.py"]
+        ordered = sorted(names, key=builders.builder_key)
+        self.assertEqual(ordered, ["build_39.py", "build_310.py", "build_617.py",
+                                   "build_617b.py", "build_618.py"])
+
+    def test_non_builders_are_not_builders(self):
+        for name in ("build.py", "build_617b_old.py", "build_verify_617b.sh",
+                     "builder_617.py", "build_61B.py"):
+            self.assertIsNone(builders.builder_key(name), name)
+
+
 class TrackedClone(unittest.TestCase):
     def test_clone_holds_tracked_files_only(self):
         with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as dest:
