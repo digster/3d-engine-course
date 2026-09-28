@@ -79,7 +79,7 @@ public:
     explicit view(pool<Ts>*... pools)
         : pools_{pools...}
     {
-        if (((pools == nullptr) || ...)) { return; }
+        if ((!pools || ...)) { return; }
 
         // RULE 3, in five lines. `entities()` returns the same type for every
         // pool no matter what it stores, so the sizes can be compared in a plain

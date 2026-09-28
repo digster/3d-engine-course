@@ -4636,12 +4636,12 @@ int run_gpu_probe(SDL_Window* window)
                     // [C] selects a different PIPELINE, not a different flag —
                     // the depth test is baked in, which is Lesson 4.1's argument
                     // arriving for the fourth time.
-                    const engine::gpu_pipeline& chosen =
+                    const engine::gpu_pipeline& chosen_pipeline =
                         (view.depth_test && have_depth && mesh_pipeline_nodepth.valid())
                             ? mesh_pipelines[mesh_pitch_choice]
                             : (mesh_pipeline_nodepth.valid() ? mesh_pipeline_nodepth
                                                              : mesh_pipelines[mesh_pitch_choice]);
-                    SDL_BindGPUGraphicsPipeline(draw_pass, chosen.handle());
+                    SDL_BindGPUGraphicsPipeline(draw_pass, chosen_pipeline.handle());
 
                     // Lesson 4.7: the texture and the sampler, bound as a PAIR.
                     // Two objects, one binding — which is why one image can be

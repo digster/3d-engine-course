@@ -9550,8 +9550,8 @@ private:
             const int v = static_cast&lt;int&gt;((colour &gt;&gt; shift) &amp; 0xffu);
             return static_cast&lt;Uint32&gt;(static_cast&lt;int&gt;(static_cast&lt;float&gt;(v) * factor));
         };
-        return engine::pack_argb(static_cast&lt;int&gt;(ch(16)), static_cast&lt;int&gt;(ch(8)),
-                                 static_cast&lt;int&gt;(ch(0)));
+        return engine::pack_argb(static_cast&lt;Uint8&gt;(ch(16)), static_cast&lt;Uint8&gt;(ch(8)),
+                                 static_cast&lt;Uint8&gt;(ch(0)));
     }
 
     [[nodiscard]] Uint32 colour_of(std::size_t index) const

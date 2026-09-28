@@ -596,8 +596,8 @@ private:
             const int v = static_cast<int>((colour >> shift) & 0xffu);
             return static_cast<Uint32>(static_cast<int>(static_cast<float>(v) * factor));
         };
-        return engine::pack_argb(static_cast<int>(ch(16)), static_cast<int>(ch(8)),
-                                 static_cast<int>(ch(0)));
+        return engine::pack_argb(static_cast<Uint8>(ch(16)), static_cast<Uint8>(ch(8)),
+                                 static_cast<Uint8>(ch(0)));
     }
 
     [[nodiscard]] Uint32 colour_of(std::size_t index) const

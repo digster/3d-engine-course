@@ -329,7 +329,7 @@ public:
     <pre><code class="lang-cpp">explicit view(pool&lt;Ts&gt;*... pools)
     : pools_{pools...}
 {
-    if (((pools == nullptr) || ...)) { return; }
+    if ((!pools || ...)) { return; }
 
     const std::span&lt;const entity&gt; spans[] = {pools-&gt;entities()...};
     const pool_base* bases[] = {static_cast&lt;const pool_base*&gt;(pools)...};

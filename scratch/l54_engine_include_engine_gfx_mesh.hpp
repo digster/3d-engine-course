@@ -68,7 +68,7 @@ struct mesh
     /// **Empty is a valid state, not a missing one.** `uvs.empty()` means "this
     /// geometry has no texture coordinates", and a renderer that wants them
     /// substitutes zero rather than failing.
-    std::span<const vec2> uvs;
+    std::span<const vec2> uvs{};
 
     /// Surface normals, one per position — or **empty**, meaning this mesh has none.
     /// Added in Lesson 3.5 for a reason worth being honest about: **nothing draws
@@ -85,7 +85,7 @@ struct mesh
     /// file may contain whatever it contains. Lesson 3.6 normalises at the point of
     /// use, which is also where the normal matrix problem (a non-uniform scale does
     /// not transform normals the way it transforms points) finally has to be faced.
-    std::span<const vec3> normals;
+    std::span<const vec3> normals{};
 
     /// Number of triangles. Three indices each, so this is simply the count / 3.
     [[nodiscard]] constexpr std::size_t triangle_count() const { return indices.size() / 3; }
