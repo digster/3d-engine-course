@@ -100,7 +100,7 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to SCANLINE — what a CPU rasterizer should do, and what every measurement before 4.1 was taken against.
   measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A FEATURE'S.
 
-curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+curriculum: 107 lessons, ~724 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
   (reshapes and their reasons: state/curriculum.md)
 

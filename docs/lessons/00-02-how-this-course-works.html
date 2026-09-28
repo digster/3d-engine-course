@@ -75,7 +75,7 @@ table.milestones tr.big td { font-weight: 700; }
     <div class="eyebrow">Module 0 — Orientation &amp; Toolchain · Lesson 0.2</div>
     <h1>How This Course Works</h1>
     <p class="deck">
-      I am about to ask you to spend roughly a hundred hours building a renderer that no shipping
+      I am about to ask you to spend more than a hundred hours building a renderer that no shipping
       engine has used since 1999, and then replace it. That should bother you. Here is the
       argument, before I spend your time rather than after.
     </p>
@@ -83,7 +83,7 @@ table.milestones tr.big td { font-weight: 700; }
     <div class="meta">
       <dl>
         <dt>Time</dt>
-        <dd>≈ 2 hours</dd>
+        <dd>≈ 3 hours</dd>
 
         <dt>Prereqs</dt>
         <dd><a href="00-01-what-is-an-engine.html">0.1 — What a Game Engine Actually Is</a></dd>
@@ -143,8 +143,8 @@ table.milestones tr.big td { font-weight: 700; }
   <h2 id="problem"><span class="num">1</span>The Problem</h2>
 
   <p>
-    Here is the plan you did not agree to. Modules 1 through 3 — <strong>132 hours</strong>, a
-    third of the course — build a software rasterizer: a renderer that computes every pixel on
+    Here is the plan you did not agree to. Modules 1 through 3 — <strong>154 hours</strong>, a
+    fifth of the course — build a software rasterizer: a renderer that computes every pixel on
     the CPU. Then Module 4 opens by putting it aside and starting again on the GPU.
   </p>
 
@@ -380,7 +380,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     write in Module 2 — <code>vec3</code>, <code>mat4</code>, the projection matrix — is not a
     teaching exercise you discard. <strong>It is the maths library of the finished engine.</strong>
     It is in the capstone game in Module 9. You will have written every line of it, and it will
-    still be there four hundred hours later.
+    still be there seven hundred hours later.
   </p>
 
   <p>
@@ -746,7 +746,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
   </p>
 
   <p>
-    433 hours is a number that means nothing. "Twenty months at five hours a week" means
+    724 hours is a number that means nothing. "Thirty-three months at five hours a week" means
     something — you can look at that and know whether it is true. Most people who abandon a
     project this size do not hit a wall; they quietly discover that the pace they imagined was
     never real, and drift. So let us find out now.
@@ -780,6 +780,17 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     Drag it to the number you believe about yourself on an average week — including the bad ones.
     Not the number you would like to be true.
   </p>
+  <div class="callout note">
+  <p>
+    <strong>Updated after Module 8.</strong> The hours here were re-measured from what each published lesson
+    actually asks of you — its reading, the code its commit adds, its exercises — rather than
+    estimated in advance. The total was 433 hours when this lesson was written and is 724 now —
+    partly because the course gained a module, mostly because the later lessons had outgrown their
+    estimates. This planner
+    had also been silently broken for most of the course's life: its script was lost in a
+    shared-script update, and it now lives where that tool cannot reach it.
+  </p>
+  </div>
 
   <p>
     Two things are worth noticing:
@@ -788,8 +799,8 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
   <ul>
     <li>
       <strong>The first real milestone is closer than the end.</strong> At six hours a week you
-      have <em>spinning 3D wireframes you wrote every line of</em> in about four months — a
-      quarter of the way in. The course is not four hundred hours of nothing followed by a
+      have <em>spinning 3D wireframes you wrote every line of</em> in about four months — about
+      fifteen per cent of the way in. The course is not seven hundred hours of nothing followed by a
       payoff; it is a chain of things that work.
     </li>
     <li>
@@ -838,7 +849,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
   <div class="callout ok">
     <span class="label">Checkpoint — you should be able to say these five things</span>
     <ol>
-      <li>Modules 2–3 are worth ~132 hours because <strong>~60% of what I write survives as literal source</strong>, ~25% becomes GPU state I can configure knowingly, and only the rasterizer inner loop (~400 lines) is discarded.</li>
+      <li>Modules 2–3 are worth ~117 hours because <strong>~60% of what I write survives as literal source</strong>, ~25% becomes GPU state I can configure knowingly, and only the rasterizer inner loop (~400 lines) is discarded.</li>
       <li><strong>NDC parity</strong> means my projection matrix is numerically identical in both stages, so Module 4 is an API change, not a maths change — and when the first GPU triangle is wrong, I know it is the API.</li>
       <li>The cost of that: <strong>my projection matrix will not match LearnOpenGL's third row</strong>, and that is expected.</li>
       <li>The course spirals deliberately: Lambert → Blinn-Phong → BRDF → microfacets → Cook–Torrance, and the "wrong" steps are the questions that make the right one legible.</li>
@@ -1028,7 +1039,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
     <h3><span class="xnum">0.2.4</span>Argue against me<span class="difficulty">open</span></h3>
     <p>
       Build the strongest case that the software rasterizer is a mistake — that the course should
-      go straight to SDL_GPU in Module 1 and spend the recovered 132 hours on advanced rendering
+      go straight to SDL_GPU in Module 1 and spend the recovered 154 hours on advanced rendering
       instead. Steelman it; do not build a strawman to knock over. Then decide, and name the
       evidence that would change your mind.
     </p>
@@ -1036,7 +1047,7 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
       <summary>Solution sketch</summary>
       <p>
         <strong>The strong case against</strong> — and it is genuinely strong. (a) Nobody ships
-        software rasterizers, so the skill is not directly marketable. (b) 132 hours buys a lot
+        software rasterizers, so the skill is not directly marketable. (b) 154 hours buys a lot
         of PBR. (c) Plenty of excellent graphics programmers never wrote one and are fine. (d) You
         can learn the depth test <em>from</em> the GPU by toggling <code>compare_op</code> and
         observing — learning-by-experiment on the real thing. (e) Motivation is a real resource,
@@ -1205,5 +1216,69 @@ info.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;          // 3.1</c
           throwOnError: false
         });"></script>
 <!-- SHARED-SCRIPT:END -->
+<!-- PAGE-SCRIPT: the pace planner. Outside the SHARED-SCRIPT markers on purpose:
+     the shared-script stamper rewrites everything between them, and this script
+     lived there until one such rewrite deleted it (commit 225f7b1). -->
+<script>
+(function () {
+  /* ==================================================================
+     THE PACE PLANNER
+     ------------------------------------------------------------------
+     724 hours is an abstraction. "Thirty-three months at five hours a
+     week" is a decision. The cumulative hours are the index's module
+     subtotals, added up — and docs/_template/check-curriculum.py checks
+     that they still are, because this array is a second copy of them.
+     ================================================================== */
+  var MODULES = [
+    { id: "M0", cum:  18, what: "A window that opens, responds, and closes cleanly" },
+    { id: "M1", cum:  55, what: "A playable Pong, on a correct fixed-timestep loop" },
+    { id: "M2", cum: 111, what: "Spinning 3D wireframes — every line yours", big: true },
+    { id: "M3", cum: 172, what: "A textured, lit, z-buffered scene, all on the CPU", big: true },
+    { id: "M4", cum: 234, what: "That same scene, on the GPU via SDL_GPU" },
+    { id: "M5", cum: 319, what: "A real engine library with a public API and an ECS" },
+    { id: "M6", cum: 454, what: "PBR, shadows, HDR, image-based lighting" },
+    { id: "M7", cum: 522, what: "Rotation done right, skeletal animation, 3D audio" },
+    { id: "M8", cum: 667, what: "A rigid-body physics engine: stacks, joints, ragdolls" },
+    { id: "M9", cum: 724, what: "A shippable engine, an editor, and a finished game", big: true }
+  ];
+  var TOTAL = MODULES[MODULES.length - 1].cum;
+
+  var hpw   = document.getElementById("hpw");
+  var tbody = document.querySelector("#milestones tbody");
+  if (!hpw || !tbody) return;
+
+  function addWeeks(weeks) {
+    var d = new Date();
+    d.setDate(d.getDate() + Math.round(weeks * 7));
+    return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+
+  function recompute() {
+    var h = parseFloat(hpw.value);
+    var weeks = TOTAL / h;
+
+    document.getElementById("hpw-out").textContent = h + " h / week";
+    document.getElementById("p-weeks").textContent  = Math.round(weeks);
+    document.getElementById("p-months").textContent = (weeks / 4.345).toFixed(1);
+    document.getElementById("p-finish").textContent = addWeeks(weeks);
+    document.getElementById("p-perday").textContent = (h / 7).toFixed(1) + " h";
+
+    tbody.innerHTML = "";
+    MODULES.forEach(function (m) {
+      var w = m.cum / h;
+      var tr = document.createElement("tr");
+      if (m.big) tr.className = "big";
+      tr.innerHTML =
+        '<td class="mn">' + m.id + "</td>" +
+        "<td>" + m.what + "</td>" +
+        '<td class="wk">wk ' + Math.round(w) + "</td>" +
+        '<td class="dt">' + addWeeks(w) + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+  hpw.addEventListener("input", recompute);
+  recompute();
+})();
+</script>
 </body>
 </html>

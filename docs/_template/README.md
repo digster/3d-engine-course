@@ -368,6 +368,10 @@ Run silently before emitting any lesson (master prompt §11):
 - [ ] Prev/index/next correct in **both** navs, and `STATE.md` updated (in place, merged),
       with the lesson's detail appended to the matching `state/<section>.md` archive?
 - [ ] Does the length serve depth — nothing padded, nothing truncated?
+- [ ] The lesson's **hours come from `python3 docs/_template/estimate-hours.py`**, not from judgement:
+      its index row and its page's `<dt>Time</dt>` take the script's number, the module subtotal
+      and headline follow, and `check-curriculum.py` check 14 confirms 0.2's pace planner still adds
+      up (update its `MODULES` array when a subtotal moves).
 - [ ] Every code listing compiles at this point in the course?
 - [ ] **`python3 docs/_template/check-builders.py` green** — every `build_NN.py`
       still reproduces its published page byte for byte (§15)? Run it whenever a

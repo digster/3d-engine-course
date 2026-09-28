@@ -38,7 +38,8 @@ moving to the GPU is an *API change, not a math change*.
   appears.
 - **No assumed background** in graphics, linear algebra, or calculus. All math is built from
   zero, geometrically — intuition first, then derivation, then formula, then code.
-- Budget roughly **450–550 hours** across ~107 lessons.
+- Budget roughly **700–850 hours** across ~107 lessons. The figures are measured from each lesson's
+  reading, the code its commit adds, and its exercises — [`docs/_template/estimate-hours.py`](docs/_template/estimate-hours.py) says how.
 
 **Exit profile:** implement techniques straight from papers, debug GPU work in RenderDoc, reason
 about frame budgets and cache behaviour, design and defend engine architecture, and read real

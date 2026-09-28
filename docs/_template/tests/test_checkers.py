@@ -32,6 +32,7 @@ def load(filename: str, name: str):
 
 continuity = load("check-continuity.py", "check_continuity")
 builders = load("check-builders.py", "check_builders")
+hours = load("estimate-hours.py", "estimate_hours")
 
 
 def clean_git_env() -> dict[str, str]:
@@ -238,6 +239,46 @@ class TrackedClone(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(dest, "tracked.txt")))
             self.assertTrue(os.path.exists(os.path.join(dest, "scratch/forced.py")))
             self.assertFalse(os.path.exists(os.path.join(dest, "scratch/untracked.ppm")))
+
+
+class HourEstimates(unittest.TestCase):
+    """estimate-hours.py's two judgement calls, pinned."""
+
+    def section(self, body: str) -> str:
+        return '<h2 id="exercises">Exercises</h2>' + body + "<h2>Recap</h2>"
+
+    def test_a_list_inside_an_exercise_is_not_another_exercise(self):
+        # Lesson 2.5's shape: an <h3> per exercise, with a list inside one of them.
+        page = self.section("<h3>1</h3><ol><li>a</li><li>b</li><li>c</li></ol><h3>2</h3>")
+        self.assertEqual(hours.exercise_count(page), 2)
+
+    def test_only_top_level_items_count(self):
+        page = self.section("<ol><li>one<ul><li>x</li><li>y</li></ul></li><li>two</li></ol>")
+        self.assertEqual(hours.exercise_count(page), 2)
+
+    def test_numbered_paragraphs_are_the_fallback(self):
+        # Lesson 8.3's shape, and no other structure present.
+        page = self.section("<p><strong>1. A.</strong></p><p><strong>2. B.</strong></p>")
+        self.assertEqual(hours.exercise_count(page), 2)
+        # ...but a bold number inside a list item is not a second count.
+        page = self.section("<ol><li><p><strong>1. A.</strong></p></li></ol>")
+        self.assertEqual(hours.exercise_count(page), 1)
+
+    def test_the_model_is_the_documented_one(self):
+        # 9,000 words = 1 h of reading at 150 wpm; 250 code lines = 1 h; 900 comment
+        # lines = 1 h; 2 exercises = 1 h; four hours, plus 15%.
+        raw, rounded = hours.estimate(9000, 250, 900, 2)
+        self.assertAlmostEqual(raw, 4.6)
+        self.assertEqual(rounded, 5)
+        self.assertEqual(hours.estimate(0, 0, 0, 0)[1], 1)   # never zero hours
+
+    def test_the_refactor_is_priced_as_a_move_not_as_typing(self):
+        # Lesson 5.1 extracts ~2,000 lines from src/main.cpp into new files. With the
+        # move discount its code count is roughly a third of the raw additions.
+        commit = continuity.Git.lesson_commits()["5.1"]
+        code, comment = hours.added_lines(commit)
+        self.assertLess(code, 1500)
+        self.assertGreater(code, 500)
 
 
 if __name__ == "__main__":

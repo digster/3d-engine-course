@@ -43,6 +43,8 @@ WHAT IT CHECKS
      of lesson N.M numbered X — printed, or the h2's number plus the h3's
      ordinal where Module 2's headings print none. course.js turns these into
      links under the same rule, so a stale number is a link to the wrong place.
+ 14. Lesson 0.2's pace planner — a script with each module's cumulative hours —
+     exists, and its numbers are the index's module subtotals added up.
 
 CHECK 8 WAS ADDED BY LESSON 7.4, AND STATE.md ASKED FOR IT BY NAME. That file's
 own note beside the list reads: "check-curriculum.py verifies the INDEX against
@@ -629,6 +631,42 @@ def check_state_header(report: "Report") -> None:
         )
 
 
+PACE_RE = re.compile(r'\{ id: "M(?P<m>[0-9]+)", cum:\s*(?P<cum>[0-9]+)')
+
+
+def check_pace_planner(modules: list[Module], report: Report) -> None:
+    """Check 14 — Lesson 0.2's pace planner must add up to the index.
+
+    ADDED AFTER MODULE 8, AND IT WOULD HAVE CAUGHT TWO FAILURES AT ONCE. The
+    planner embeds each module's cumulative hours in a script, a second copy of
+    the index's subtotals, and its comment asked a human to "keep them in sync".
+    Nobody did: the course grew from nine modules to ten and from 433 hours to
+    724 while the array still said 433. Worse, the script itself was deleted by a
+    shared-script update in Module 1 and the widget sat inert, showing dashes,
+    for ninety lessons — because nothing checked that the data existed at all.
+    So this fails on a missing array as loudly as on a wrong number.
+    """
+    pages = sorted(LESSONS.glob("00-02-*.html"))
+    if not pages:
+        report.fail("pace planner", "Lesson 0.2's page not found")
+        return
+    found = {int(m.group("m")): int(m.group("cum"))
+             for m in PACE_RE.finditer(pages[0].read_text(encoding="utf-8"))}
+    if not found:
+        report.fail("pace planner", "0.2 has no MODULES array — the planner's script is missing")
+        return
+    running = 0
+    bad = []
+    for module in modules:
+        running += module.declared_hours
+        if found.get(module.num) != running:
+            bad.append(f"M{module.num}: page {found.get(module.num)} vs index {running}")
+    if bad:
+        report.fail("pace planner", "0.2's cumulative hours disagree with the index: " + "; ".join(bad))
+    else:
+        report.ok(f"0.2's pace planner adds up to the index ({running} h over {len(modules)} modules)")
+
+
 MAP_RE = re.compile(r"/\* LESSON-MAP:BEGIN \*/(?P<body>.*?)/\* LESSON-MAP:END \*/", re.S)
 MAP_ENTRY_RE = re.compile(r'"(?P<id>[0-9]+\.[0-9]+[a-z]?)": "(?P<file>[^"]+)"')
 
@@ -751,6 +789,7 @@ def main() -> int:
         print(f"  wrote  course.js lesson map: {write_lesson_map(ordered)} lessons")
     check_lesson_map(ordered, report)
     check_cross_references(ordered, report)
+    check_pace_planner(modules, report)
 
     if report.failures:
         print(f"\n{len(report.failures)} problem(s):")

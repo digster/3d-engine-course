@@ -408,7 +408,7 @@ sub-headings, which are not repeated here.
 - A quaternion's angle wraps at a full turn
 - A zero-byte generated file is a silent regression
 
-### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (15)
+### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (16)
 
 - A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
 - Two correct branches can leave a hole between them (docs tooling)
@@ -425,3 +425,4 @@ sub-headings, which are not repeated here.
 - `GIT_INDEX_FILE` leaks into every child `git`, and `git reset` empties a staged index
 - A harness cannot check a claim about somebody else's engine
 - Writing an exercise's solution audits the lesson it belongs to
+- A widget that renders dashes is not an error, so it can be dead for ninety lessons

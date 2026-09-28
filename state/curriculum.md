@@ -5,6 +5,13 @@ a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in s
 
 ```text
 curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+  RE-MEASURED 2026-09-27 (post-Module 8 review, Phase 4): ~724 h. Published
+  lessons re-priced by docs/_template/estimate-hours.py — 1.15 × (words/150 wpm
+  + new code lines/250 h + new comment lines/900 h + 0.5 h per exercise), moved
+  lines free — 667 h for the 96 published against 468 before; M9's planned
+  rows unchanged (57 h). Per module: M0 18, M1 37, M2 56, M3 61, M4 62, M5 85,
+  M6 135, M7 68, M8 145, M9 57. §2 and §5's bands are now 700-850 h. A new
+  lesson's row takes the script's number.
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
   (M8 IS PHYSICS, NEW. M9 is the old M8, Professional Polish & Capstone.
    M5:10 in the previous line of this file was ALREADY STALE — 5.10 split

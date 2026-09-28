@@ -533,3 +533,15 @@ reproduce the lesson's own published figure — 2,400 invocations, −99.9982172
 anything new it said was used. One sketch (8.7.2) contradicts its hint by code reading alone and
 says so; it has not been run.
 
+## A widget that renders dashes is not an error, so it can be dead for ninety lessons
+
+Lesson 0.2's pace planner — a slider that turns hours per week into a finish date — lost its
+script in commit 225f7b1, when the shared-script stamper was extended and rewrote the region the
+widget's code sat in. The page still rendered: the slider moved, the cards said "—", the table was
+empty, and there was no console error because there was no code left to throw one. It was found
+during the hours re-estimate, only because the planner's numbers needed changing and there was
+nothing to change. The rule that page-specific scripts live outside the SHARED-SCRIPT markers
+(CLAUDE.md §7) came later and was never applied backwards. `check-curriculum.py` check 14 now
+fails if the planner's data is missing, not only if it is wrong — the check for existence is the
+one that would have mattered.
+

@@ -3177,6 +3177,15 @@ order, with Lesson 5.1's move script replayed exactly — and fails if a lesson'
 file its page never lists whole (R2) or if the replay does not end at HEAD (R1). Known defects
 live in `continuity-known.txt`, a ratchet that may only shrink. See `docs/_template/README.md` §16.
 
+### Hours are measured, not estimated
+
+`docs/_template/estimate-hours.py` prices a lesson from what it asks of the student — reading
+(150 wpm), the code its own commit adds to typed files (250 lines/h, comments 900/h, moved lines
+free), and its exercises (half an hour each) — plus 15%. It is read-only; the figures it produced
+on 2026-09-27 were applied once by `scratch/apply_hours.py`, and a new lesson copies its number
+into the index row and the page. Lesson 0.2's pace planner embeds the cumulative subtotals, and
+`check-curriculum.py` check 14 keeps that copy honest.
+
 ### Process documents: a head to read, archives to search
 
 `STATE.md`, `LEARNINGS.md` and `README.md` each grew by a section per lesson until none could be
