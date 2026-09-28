@@ -4,7 +4,7 @@ This document describes the **big picture**: how the repository is shaped, why i
 at Module 5, how the engine's subsystems relate, and the structural decisions that are expensive
 to reverse. It is the map you want before reading multiple files at once.
 
-For per-lesson detail, read the lessons. For verified SDL facts, read [LEARNINGS.md](LEARNINGS.md).
+For per-lesson detail, read the lessons. For verified SDL facts and the hazards that recur, read [LEARNINGS.md](LEARNINGS.md), which indexes `learnings/`.
 For the binding spec, read [CLAUDE.md](CLAUDE.md).
 
 ---
@@ -990,6 +990,11 @@ Module 5 opened with a dedicated refactor arc, taught as a **first-class archite
 chore. What follows is on disk.
 
 ```
+├── STATE.md                # the resume key: headlines only                 [split 2026-09-27]
+├── state/                  # the full text behind each STATE.md section, verbatim
+├── LEARNINGS.md            # the recurring hazards, and an index of every entry
+├── learnings/              # the entries: foundations, module-2 … module-8, tooling
+├── CHANGELOG.md            # per-lesson notes and the demo tour, moved out of README.md
 ├── CMakeLists.txt          # acquires SDL3 + stb + ImGui, declares the shaders and the
 │                           #   imgui target ImGui does not ship, adds the two subdirs
 ├── cmake/
@@ -2233,7 +2238,7 @@ Two measurement disciplines came out of this lesson and belong to the whole proj
 negative cost for adding work), and **when an effect is below the floor, scale the workload until
 it clears and divide** — two independent estimates converging is the evidence, not either number.
 
-See [LEARNINGS.md](LEARNINGS.md) for the verified SDL_GPU convention table.
+See [`learnings/foundations.md`](learnings/foundations.md) (indexed from [LEARNINGS.md](LEARNINGS.md)) for the verified SDL_GPU convention table.
 
 ---
 
@@ -3171,6 +3176,17 @@ pages say *enough*. It replays the course as a student would — every whole lis
 order, with Lesson 5.1's move script replayed exactly — and fails if a lesson's commit changed a
 file its page never lists whole (R2) or if the replay does not end at HEAD (R1). Known defects
 live in `continuity-known.txt`, a ratchet that may only shrink. See `docs/_template/README.md` §16.
+
+### Process documents: a head to read, archives to search
+
+`STATE.md`, `LEARNINGS.md` and `README.md` each grew by a section per lesson until none could be
+read whole — 838 KB, 569 KB and 130 KB by Module 8. On 2026-09-27 each became a short head with
+its body moved **verbatim** into archives: `state/<section>.md`, `learnings/<module>.md` and
+`CHANGELOG.md`. The three scripts that did it (`scratch/split_state.py`, `split_learnings.py`,
+`split_readme.py`) read a pinned commit and prove coverage, so the move can be audited later;
+they must not be re-run with `--apply` once a lesson has appended to an archive. A lesson now
+updates the head (a headline, a hazard line, the status) and appends its detail to the archive
+(CLAUDE.md §9). `check-curriculum.py`'s three STATE checks read only the head.
 
 ### Continuous integration
 

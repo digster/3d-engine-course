@@ -365,7 +365,8 @@ Run silently before emitting any lesson (master prompt §11):
 - [ ] Manifest table, per-platform build/run commands, and expected result present?
 - [ ] Pitfalls (symptom → cause → fix) and 2–5 exercises included?
 - [ ] Conventions consistent with `conventions.html`?
-- [ ] Prev/index/next correct in **both** navs, and `STATE.md` updated (in place, merged)?
+- [ ] Prev/index/next correct in **both** navs, and `STATE.md` updated (in place, merged),
+      with the lesson's detail appended to the matching `state/<section>.md` archive?
 - [ ] Does the length serve depth — nothing padded, nothing truncated?
 - [ ] Every code listing compiles at this point in the course?
 - [ ] **`python3 docs/_template/check-builders.py` green** — every `build_NN.py`

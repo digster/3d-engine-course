@@ -2955,3 +2955,10 @@ compute shaders; **split** STATE.md/LEARNINGS.md into compact heads plus verbati
 **re-estimate published hours**. The plan is `~/.claude/plans/let-s-make-a-plan-cozy-feigenbaum.md`.)
 
 > implement the plan.
+
+> continue
+
+(After the usage limit, continuing the same plan: the CI warning fixes, Phase 2 — figure
+legibility, cross-reference links, the index cards — and Phase 3, which split STATE.md,
+LEARNINGS.md and README.md into short heads with verbatim archives in `state/`, `learnings/` and
+`CHANGELOG.md`. Logged in `memory/2026-09-27.md`.)

@@ -1,96 +1,65 @@
-# Build a Professional 3D Game Engine
+#!/usr/bin/env python3
+"""Move README.md's per-lesson notes, verbatim, into CHANGELOG.md.
 
-A complete course that takes you from "I can program a little" to "I can design, build, and ship
-a 3D game engine" — by actually building one, in **C++20** on **SDL3**, lesson by lesson.
+One-off, kept for provenance (2026-09-27), the third of the process-doc splits
+(see split_state.py and split_learnings.py). README.md had grown to 130 KB, most
+of it two things a student opening the repository does not need first: a
+"newest lesson" narrative that had been prepended at every lesson (one paragraph
+of 46 KB, still announcing 8.3 as the newest when 8.13 was), and a tour of every
+demo key and flag, lesson by lesson, inside "Building the code".
 
-There is no engine to download here and no framework doing the interesting parts for you. You
-write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
-the end you have a real engine and a game built on its public API.
+Both move to CHANGELOG.md unchanged. README.md keeps its introduction, the
+spine, the audience, how to read, how to build (now with the per-platform
+prerequisites beside the commands), a table of the 23 demos, what gets built,
+the layout and the documents - with a short, current status line and an
+up-to-date layout written fresh.
 
+    python3 scratch/split_readme.py            # dry run
+    python3 scratch/split_readme.py --apply
+
+The source is pinned to the last commit before the split.
+"""
+from __future__ import annotations
+
+import collections
+import os
+import subprocess
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(REPO)
+SOURCE_COMMIT = "0663233"
+SRC = subprocess.run(["git", "show", f"{SOURCE_COMMIT}:README.md"], capture_output=True,
+                     text=True, check=True).stdout.split("\n")
+
+
+def find(prefix: str, start: int = 0) -> int:
+    """0-based index of the first line at or after `start` that begins with `prefix`."""
+    return next(i for i in range(start, len(SRC)) if SRC[i].startswith(prefix))
+
+
+# Landmarks, found by content rather than line number so a mismatch fails loudly.
+STATUS = find("**Status:**")
+SPINE_RULE = find("## The two-stage spine") - 2          # the `---` above it
+NOTES = find("The code is the state of the engine as of")
+PREREQ = find("### Prerequisites")
+WHAT = find("## What gets built") - 2
+LAYOUT = find("## Repository layout")
+DOCS = find("## Project documents")
+LICENSE = find("## License")
+
+MOVED = [(STATUS, SPINE_RULE), (NOTES, PREREQ)]
+
+STATUS_NEW = """\
 **Status:** 96 of 107 lessons published — **Modules 0–8 are complete**: orientation and
 toolchain, the loop and the pixel, two modules of software rasterizer, SDL_GPU, the refactor into
 an engine with an ECS, advanced rendering, rotation and animation and audio, and physics. **Module
 9 — Professional Polish & Capstone** is next. The [course index](docs/index.html) has the module
 map, every lesson and its hours; what each lesson added to the engine, and the keys and flags
 that show it, is in [CHANGELOG.md](CHANGELOG.md).
+"""
 
----
-
-## The two-stage spine
-
-The course's central pedagogical bet is that you learn the graphics pipeline twice:
-
-1. **Modules 1–3 — a CPU software rasterizer.** You own every pixel. Triangles, the z-buffer,
-   perspective-correct interpolation, clipping, and texturing are all code *you* wrote, so the
-   pipeline becomes intuitive instead of incantational.
-2. **Module 4 onward — SDL_GPU.** SDL3's modern cross-platform GPU API (Vulkan / D3D12 / Metal).
-   Every concept maps back to the software counterpart you already built.
-
-The software rasterizer deliberately targets **the same NDC as SDL_GPU** (+Y up, depth 0..1), so
-moving to the GPU is an *API change, not a math change*.
-
----
-
-## Who this is for
-
-- You can program in **some** language. C++ specifics (RAII, ownership, move semantics,
-  templates, `const`-correctness, translation units) are taught in place, the first time each
-  appears.
-- **No assumed background** in graphics, linear algebra, or calculus. All math is built from
-  zero, geometrically — intuition first, then derivation, then formula, then code.
-- Budget roughly **450–550 hours** across ~107 lessons.
-
-**Exit profile:** implement techniques straight from papers, debug GPU work in RenderDoc, reason
-about frame budgets and cache behaviour, design and defend engine architecture, and read real
-engine codebases without drowning.
-
----
-
-## Reading the course
-
-The lessons are **plain HTML files** — no build step, no server, no npm. Open the index and
-navigate:
-
-```sh
-open docs/index.html          # macOS
-xdg-open docs/index.html      # Linux
-start docs\index.html         # Windows
-```
-
-Styling and page behaviour come from two shared files, `docs/shared/course.css` and
-`docs/shared/course.js`, which every page links. They resolve straight off the filesystem, so
-this works offline with no server — but it does mean **a lesson file is only readable inside the
-`docs/` tree**. Copy one out on its own and it renders unstyled; keep the folder together, or
-just clone the repository.
-
-Three living pages sit alongside the lessons and are updated at every module boundary:
-
-| Page | What it is |
-|---|---|
-| [`docs/index.html`](docs/index.html) | Course home — module map, every lesson, progress |
-| [`docs/conventions.html`](docs/conventions.html) | Handedness, matrices, NDC/depth, winding. **Read before Module 2.** |
-| [`docs/math-toolbox.html`](docs/math-toolbox.html) | Cumulative math appendix, grows as you go |
-| [`docs/cpp-style.html`](docs/cpp-style.html) | The C++ style guide the codebase obeys |
-
-> The "no build step" rule applies to the **tutorial HTML only**. The C++ obviously builds with
-> CMake — see below.
-
----
-
-## Building the code
-
-The engine itself is a normal CMake project. You write the first `CMakeLists.txt` yourself in
-**Module 0**, because CMake is taught from zero rather than handed over as a magic file — so if
-you are following along from the start, ignore the one in this repository until Lesson 0.4 asks
-you to write it.
-
-Once you are past Module 0, the build is the standard incantation everywhere:
-
-```sh
-cmake -S . -B build
-cmake --build build
-```
-
+BUILD_NEW = """\
 The code is the engine as of the most recently published lesson ([STATE.md](STATE.md) says
 which). Since **Lesson 5.1** it is split in two: `engine/` is a static library whose public
 headers live under `engine/include/engine/`, and `demos/` holds the programs built on it.
@@ -116,13 +85,13 @@ MSVC, macOS with Apple Clang — see [`.github/workflows/ci.yml`](.github/workfl
 
 ### Running the demos
 
-Every program lands in `build/demos/` (with MSVC, `build\demos\Debug\`). All of them except
+Every program lands in `build/demos/` (with MSVC, `build\\demos\\Debug\\`). All of them except
 `pong` take `--shot FILE`, which renders one deterministic frame to a PPM with no window and no
 display; that is how the course's characterization tests run them.
 
 ```sh
 ./build/demos/sandbox                  # macOS / Linux
-.\build\demos\Debug\sandbox.exe        # Windows
+.\\build\\demos\\Debug\\sandbox.exe        # Windows
 ```
 
 | Program | Lessons | What it shows |
@@ -153,35 +122,9 @@ display; that is how the course's characterization tests run them.
 
 Each lesson's page has the exact commands and what you should see; [CHANGELOG.md](CHANGELOG.md)
 collects every key and flag in one place.
+"""
 
----
-
----
-
-## What gets built
-
-By the final module the engine has: a documented public C++ API; an SDL_GPU forward **PBR**
-renderer with shadow-mapped lights, HDR, tonemapping and a post-processing stack; skybox and
-image-based lighting; an asset pipeline (images, OBJ, glTF); a handle-based resource system; a
-from-scratch **ECS** with transform hierarchy; skeletal animation; a **rigid-body physics
-engine** (angular dynamics, GJK/EPA, persistent manifolds, a warm-started sequential-impulse
-solver, joints and ragdolls) and a **character controller**; 3D audio; symplectic integration; input mapping; an **ImGui editor** with hierarchy, inspector and gizmos;
-profiling hooks; serialization and a scene format; hot reload; a job system; and a **capstone
-game built solely against the public API**.
-
-Hand-rolled on purpose: the math library (no GLM), rasterizer, OBJ parser, ECS, renderer, asset
-system, allocators, and the whole physics engine — collision, the solver, joints, ragdolls
-and the character controller (Module 8: no Bullet, PhysX or Jolt).
-
-Third-party, each with an explicit "why we don't hand-roll this" justification: `stb_image`,
-`stb_truetype` (6.18 — the decode and the outline rasterization; the atlas packer, the layout
-and the compositing are ours, because those three *are* the subject), Dear ImGui (tooling only
-— never gameplay UI), `cgltf`, SDL_shadercross. One committed asset that is not generated:
-`assets/fonts/Karla-Regular.ttf`, 16.8 kB, SIL Open Font License 1.1, provenance and licence in
-`assets/fonts/OFL.txt`.
-
----
-
+LAYOUT_NEW = """\
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full tree and the reasoning behind it. The short
@@ -210,25 +153,9 @@ docs/_template/          the lesson template, authoring guide and the checkers
 scratch/                 the pages' authoring sources: builders, fragments, figures, pins
 tools/                   not yet: the editor and asset cooker arrive in Module 9
 ```
+"""
 
-`engine/include/engine/ecs/pool.hpp` declares `engine::ecs::pool<T>`, which is **not**
-`engine::pool<T>` from `core/pool.hpp`. Same three arrays, opposite jobs: the core one mints its
-own keys, the ECS one is keyed by an id it did not mint. The namespace keeps them apart, and the
-header comments say so at both ends.
-
-`engine/include/engine/platform/main.hpp` is the one public header **not** reachable through the
-`engine.hpp` umbrella, and the omission is deliberate: including it defines a program's entry
-point, so it belongs in exactly one `.cpp` per program. An umbrella whose promise is "include
-everything, it is harmless" must not be a way to acquire a `main()` by accident.
-
-**The boundary is law, and it is enforced by the include path rather than by discipline.**
-`target_include_directories(engine PUBLIC include PRIVATE src)` means a demo writing
-`#include "gfx/raster.hpp"` — the spelling every file in this repository used through Module 4 —
-does not compile. Modules 0–4 built a single, library-shaped executable; the shape was already
-right, which is why 57 files moved without one of them changing.
-
----
-
+DOCS_NEW = """\
 ## Project documents
 
 | File | Purpose |
@@ -241,7 +168,64 @@ right, which is why 57 files moved without one of them changing.
 | [docs/_template/README.md](docs/_template/README.md) | How a lesson page is authored, built and checked |
 | [PROMPT.md](PROMPT.md) | Prompt log |
 | `memory/` | Dated session summaries |
+"""
 
-## License
+CHANGELOG_HEAD = """\
+# Changelog — the engine, lesson by lesson
 
-MIT — see [LICENSE](LICENSE). Copyright (c) 2026 digster.
+Moved verbatim from README.md on 2026-09-27, when the README became a short front door. Two
+parts, in the order they stood there:
+
+1. **The newest-lesson notes** — the README's opening, as it stood: a status line that stopped
+   being updated at 8.3, the notes for 8.3 and 8.1, and one line that grew by a paragraph per
+   lesson from 8.4 to 8.13. The demo tour covers 1.8 to 6.8 and touches 7.1 and 7.4;
+   the other lessons of 6.9–7.8 never had README notes — their pages are the record.
+2. **The demo tour** — every program, key and flag, and what each one shows, as the lessons
+   added them.
+
+New lessons append their entry to the relevant part; the README keeps only the current status.
+
+---
+
+## Newest-lesson notes
+"""
+
+
+def compose() -> tuple[list[str], list[str]]:
+    readme = (SRC[:STATUS] + STATUS_NEW.split("\n") + SRC[SPINE_RULE:NOTES]
+              + BUILD_NEW.split("\n") + ["---", ""] + SRC[WHAT:LAYOUT]
+              + LAYOUT_NEW.split("\n") + SRC[find("`engine/include/engine/ecs/pool.hpp` declares", LAYOUT):DOCS]
+              + DOCS_NEW.split("\n") + SRC[LICENSE:])
+    changelog = (CHANGELOG_HEAD.split("\n") + SRC[STATUS:SPINE_RULE]
+                 + ["", "---", "", "## The demo tour", ""] + SRC[NOTES:PREREQ])
+    while changelog[-1] == "":
+        changelog.pop()
+    return readme, changelog + [""]
+
+
+def main() -> int:
+    readme, changelog = compose()
+    # Coverage: every non-blank line of the two moved ranges is in CHANGELOG.md, and every
+    # other original line is still in README.md, except the four blocks rewritten above
+    # (status, build prose, layout tree, documents table), which are reported for review.
+    moved = {i for a, b in MOVED for i in range(a, b)}
+    have_c = collections.Counter(changelog)
+    have_r = collections.Counter(readme)
+    lost_moved = [i for i in moved if SRC[i].strip() and have_c[SRC[i]] == 0]
+    dropped = [i for i in range(len(SRC)) if i not in moved and SRC[i].strip()
+               and have_r[SRC[i]] == 0]
+    size = lambda L: sum(len(l) + 1 for l in L) / 1024
+    print(f"README.md: {size(SRC):.0f} KB -> {size(readme):.1f} KB; "
+          f"CHANGELOG.md {size(changelog):.1f} KB; moved lines lost: {len(lost_moved)}")
+    print(f"  kept-range lines replaced by rewritten blocks: {len(dropped)}")
+    for i in dropped:
+        print(f"    {i + 1:5d}  {SRC[i][:96]}")
+    if "--apply" in sys.argv and not lost_moved:
+        open("README.md", "w", encoding="utf-8").write("\n".join(readme))
+        open("CHANGELOG.md", "w", encoding="utf-8").write("\n".join(changelog))
+        print("written")
+    return 1 if lost_moved else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
