@@ -108,7 +108,7 @@ bool fg_texture_desc::matches(const fg_texture_desc& o) const
 {
     return width == o.width && height == o.height && format == o.format
         && samples == o.samples && layers == o.layers && depth == o.depth
-        && sampled == o.sampled;
+        && sampled == o.sampled && is_array() == o.is_array();
 }
 
 std::size_t fg_texture_desc::bytes() const
@@ -680,10 +680,14 @@ bool frame_graph::compile(const gpu_device& dev)
         int slot = -1;
         for (int s = 0; s < pool_size_; ++s)
         {
+            // JUDGED AGAINST WHAT THE SLOT HOLDS. Until the fix after 6.17b this
+            // compared the slot's size, format and samples with the request's
+            // and took layers, depth and sampled FROM THE REQUEST — so they always
+            // "matched", and a request could be handed a texture of another type
+            // or without the usage it asked for. The slot's own descriptor is
+            // recorded when it is created, below.
             if (slot_free_after[s] < r.first_use && pool_[s].valid()
-                && r.desc.matches(fg_texture_desc{pool_[s].width(), pool_[s].height(),
-                                                  pool_[s].format(), pool_[s].samples(),
-                                                  r.desc.layers, r.desc.depth, r.desc.sampled}))
+                && r.desc.matches(pool_desc_[s]))
             {
                 slot = s;
                 break;
@@ -700,8 +704,15 @@ bool frame_graph::compile(const gpu_device& dev)
             }
             slot = pool_size_++;
 
+            if (r.desc.array && !r.desc.depth)
+            {
+                ENGINE_LOG_ERROR(log_gpu, "frame_graph: '%s' asks for a colour ARRAY, which "
+                                 "the pool does not create", r.name);
+                --pool_size_;
+                return false;
+            }
             const bool made = r.desc.depth
-                ? (r.desc.layers > 1
+                ? (r.desc.is_array()
                        ? pool_[slot].create_depth_array(dev, r.desc.format, r.desc.width,
                                                         r.desc.height, r.desc.layers, r.name,
                                                         r.desc.sampled)
@@ -718,6 +729,7 @@ bool frame_graph::compile(const gpu_device& dev)
                 --pool_size_;
                 return false;
             }
+            pool_desc_[slot] = r.desc;
         }
 
         r.pool_slot = slot;
@@ -918,6 +930,12 @@ std::size_t frame_graph::resource_bytes(int res) const
 int frame_graph::pool_slot(int res) const
 {
     return (res >= 0 && res < resource_count_) ? resources_[res].pool_slot : -1;
+}
+
+const fg_texture_desc& frame_graph::pool_desc(int slot) const
+{
+    static const fg_texture_desc k_none{};
+    return (slot >= 0 && slot < pool_size_) ? pool_desc_[slot] : k_none;
 }
 
 int frame_graph::first_use(int res) const

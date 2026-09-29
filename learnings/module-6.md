@@ -1781,7 +1781,9 @@ measurement that disagreed with a claim, and several by an instrument that was i
   rendered correctly. `MTL_DEBUG_LAYER=1` reported it on every draw that used it ("incorrect type
   of texture (MTLTextureType2D) … expect MTLTextureType2DArray"). Correct output is not the same as
   a correct binding; run the GPU harnesses under the validation layer before writing either. The
-  same run found a sibling: the frame graph pools a one-layer depth texture as plain 2D.
+  same run found a sibling: the frame graph pooled a one-layer depth texture as plain 2D — fixed
+  with an `array` flag on `fg_texture_desc`, and fixing it found a pool that judged reuse by the
+  REQUEST's layers/depth/sampled rather than the slot's, so those always "matched".
 
 - **A difference in a figure can be real — check before captioning either way.** The demo's spot
   pool came out bluer with shadows on than off. It looked like the quantiser flipping a borderline

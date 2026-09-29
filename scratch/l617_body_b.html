@@ -242,6 +242,24 @@ pooled                    :    655360 B  (saved 131072)</code></pre>
     loud.
   </p>
 
+  <div class="callout warn">
+    <span class="label">Corrected after Lesson 6.17b</span>
+    <p>
+      The pool as first published had two faults that no picture showed. It created every one-layer
+      depth target as a plain 2D texture — and the sun's shadow slot has been a
+      <code>Texture2DArray</code> since 6.9, so a pooled shadow map rendered correctly and failed
+      Metal's API validation (<code>MTL_DEBUG_LAYER=1</code>) on every draw; this lesson's own
+      harness drew one twice. And reuse compared a slot's size and format with the request's, then
+      took the layers, depth and sampled flags <em>from the request</em>, so those always "matched".
+      <code>fg_texture_desc</code> now has an <code>array</code> flag for a one-layer array, the pool
+      records what each slot was created as and judges reuse against that, and the maintained harness
+      (<code>scratch/verify_617.cpp</code>, not the copy in §13) shows a
+      one-layer array and a 2D texture of the same size landing on separate slots though their
+      lifetimes would let them share. No other number on this page moved; the listings in §13 carry
+      the corrected files.
+    </p>
+  </div>
+
   <div class="callout note">
     <p>
       <strong>The general problem here has a name and it is worth knowing you are not solving it.</strong>

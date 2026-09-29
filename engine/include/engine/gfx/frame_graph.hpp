@@ -149,6 +149,14 @@ struct fg_texture_desc
     /// Array layers. 4 for the cascade map (Lesson 6.9); 1 for everything else.
     Uint32 layers = 1;
 
+    /// Create it as a 2D ARRAY even with one layer. A texture's type has to match
+    /// the slot a shader declares for it, and since 6.9 the sun's shadow slot is a
+    /// `Texture2DArray`: a pooled one-layer shadow map created as a plain 2D
+    /// texture rendered correctly and failed Metal's API validation on every draw
+    /// (the fix after 6.17b). `layers > 1` is always an array; this says so for
+    /// one. Depth targets only — the pool creates no colour arrays, and says so.
+    bool array = false;
+
     /// True for a depth/stencil target, false for a colour target. It selects
     /// which of `gpu_texture`'s two creation functions the pool calls, and the
     /// two produce textures with different usage flags — so it is part of the
@@ -159,6 +167,9 @@ struct fg_texture_desc
     /// (Lesson 6.14), and a depth target that nothing reads should not be, since
     /// the usage flag can cost a different memory layout on some drivers.
     bool sampled = true;
+
+    /// An array texture, however it was asked for.
+    [[nodiscard]] bool is_array() const { return array || layers > 1; }
 
     [[nodiscard]] bool matches(const fg_texture_desc& other) const;
 
@@ -421,6 +432,10 @@ public:
     /// How many pooled textures exist. Grows on demand, never shrinks.
     [[nodiscard]] int pool_size() const { return pool_size_; }
 
+    /// The descriptor a pooled texture was CREATED from — what the slot really
+    /// holds, which reuse is judged against. A default descriptor for a bad slot.
+    [[nodiscard]] const fg_texture_desc& pool_desc(int slot) const;
+
     /// Microseconds the last `compile` took. The whole justification for the
     /// fixed-capacity arrays above, so it is measured rather than assumed.
     [[nodiscard]] double compile_us() const { return compile_us_; }
@@ -482,6 +497,7 @@ private:
     int live_count_ = 0;
 
     gpu_texture pool_[k_max_fg_pool];
+    fg_texture_desc pool_desc_[k_max_fg_pool];   ///< what each slot was created as
     int pool_size_ = 0;
 
     std::size_t naive_bytes_ = 0;

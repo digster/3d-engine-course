@@ -73,6 +73,18 @@ decisions:
            map POOLED by the graph hits the same mismatch — verify_617's pool frame
            reports it twice under validation. Its home is frame_graph.cpp, last listed
            by 6.18; not in the four fixes asked for.
+           FIXED 2026-09-28 (own commit). The files are in fact last listed by 6.17,
+           not 6.18 — check-continuity said so. fg_texture_desc gains `array` (+
+           is_array()): a one-layer depth array. AND a second fault found beside it:
+           pool reuse compared a slot's size/format/samples with the request's and
+           took layers, depth and sampled FROM THE REQUEST, so they always matched;
+           the pool now records each slot's creation descriptor (pool_desc_, public
+           pool_desc()) and judges reuse against it. A colour array request is a
+           named error. verify_617 (now tracked): its pooled shadow desc sets array;
+           a new test shows a 2D and a one-layer array of the same size on separate
+           slots, each created as asked. Validation reports 2 -> 0. All 26 harnesses:
+           no number moved but the new checks. 6.17's page carries the corrected
+           listings and a "Corrected after Lesson 6.17b" callout in §7.3.
         6. OPEN: a spot wider than k_max_spot_shadow_angle (80°). The GPU calls the ring
            beyond the map lit; the CPU clamps to the edge texel — and shadow.cpp's
            comment says that clamp only touches points the cone has zeroed, true only

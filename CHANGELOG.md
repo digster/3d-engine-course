@@ -92,6 +92,12 @@ the type its slot declares (Metal's validation layer had flagged it on every dra
 shadow bias uses `gpu_pcf_reach_texels`, `(r + 1)·√2` — with one PCF tap the old reach left 27–36% of
 a bare ground as acne on the GPU.
 
+**Three more, found while making those (2026-09-28, three commits).** A single sun shadow map drawn
+without cascades (how `sandbox --gpu` draws) had shown no shadow at all since 6.9 — the fallback
+cascade block held a 1 m texel — and now matches the cascaded picture exactly; and the frame graph
+can pool a one-layer depth ARRAY (`fg_texture_desc::array`) and judges reuse by what each pooled
+texture really is.
+
 ---
 
 ## The demo tour
