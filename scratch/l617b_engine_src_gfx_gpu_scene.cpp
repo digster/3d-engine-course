@@ -547,13 +547,25 @@ gpu_scene_renderer::begin_frame(SDL_GPUCommandBuffer* cb,
     // may be anything. The fallback below is a deliberate identity: one cascade,
     // a split past any reachable depth, and `shadow_strength` in the light block
     // is what actually disables the lookup.
+    //
+    // AND IT IS ALSO THE SINGLE-MAP PATH, which is the part the fallback got wrong
+    // for eleven lessons. The lookup reads its texel size and depth range from
+    // THIS block, so a caller with one map and no cascades — `fill_uniforms` plus
+    // `render(..., shadow, sampler)`, the call demos/sandbox makes — needs them
+    // here. The fallback used to hold 1.0 for both: a one-metre texel over a
+    // one-unit depth range made the slope-scaled bias larger than the whole depth
+    // range, and every shadow vanished (verify_617b §L: a box's shadow of 528 to
+    // 1,240 px became 0 at every elevation). The light block already carries the
+    // single map's own numbers, written by `fill_uniforms`; this copies them.
     cascade_uniforms fallback{};
     if (cascades == nullptr)
     {
         fallback.cascade_count = 1.0f;
         fallback.splits = vec4{1e30f, 1e30f, 1e30f, 1e30f};
-        fallback.world_per_texel = vec4{1.0f, 1.0f, 1.0f, 1.0f};
-        fallback.depth_range = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.world_per_texel = vec4{light.shadow_texel, light.shadow_texel,
+                                        light.shadow_texel, light.shadow_texel};
+        fallback.depth_range = vec4{light.shadow_depth_range, light.shadow_depth_range,
+                                    light.shadow_depth_range, light.shadow_depth_range};
         fallback.view_forward = vec4{0.0f, 0.0f, -1.0f, 0.0f};
         for (mat4& m : fallback.light_clip_from_world) { m = light.light_clip_from_world; }
     }

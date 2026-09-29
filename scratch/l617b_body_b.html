@@ -575,6 +575,22 @@
     only a one-tap sun had, and no harness had measured one.
   </p>
 
+  <p>
+    The same rig found something larger on the way, and it is the better lesson of the two. The
+    sun's lookup reads its texel size and depth range from the <em>cascade</em> block, since 6.9. A
+    caller with one map and no cascades — <code>fill_uniforms</code> and then
+    <code>render(…,&nbsp;shadow,&nbsp;sampler)</code>, which is exactly how
+    <code>demos/sandbox</code> draws — gets the block <code>gpu_scene_renderer</code> pushes in their
+    place, and that fallback held 1.0 for both. A one-metre texel over a one-unit depth range makes
+    the slope-scaled bias larger than the whole depth range, so every comparison passes and every
+    shadow vanishes. §L of the harness measured it: a box whose shadow covers 528, 792 and 1,240
+    pixels at three sun elevations with a one-cascade block covered <strong>0</strong> at all three
+    without one. Nothing had failed, because nothing rendered that path and looked; a missing
+    shadow is not an error message. The fallback now copies the single map's own numbers, which
+    <code>fill_uniforms</code> had been writing into the light block all along, and the two pictures
+    are identical to the channel.
+  </p>
+
   <h3>9.2 — The CPU snaps its vertices</h3>
 
   <p>

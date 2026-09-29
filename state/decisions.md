@@ -88,6 +88,12 @@ decisions:
            shadows have been invisible since 6.9; no harness renders that path.
            Likely fix: the fallback copies light.shadow_texel/shadow_depth_range, which
            fill_uniforms already writes. Home: gpu_scene.cpp (last listed by 6.17b).
+           FIXED 2026-09-28 (own commit), exactly so. verify_617b §L (new): the same
+           frame with a one-cascade block and with none — before: 528/792/1,240 px of
+           box shadow vs 0/0/0 at 20/45/63.4°; after: identical, 0 channels differ.
+           All 26 Module 6–7 harnesses: no number moved but timings. 6.17b §9.1 tells
+           it; 46 checks now. demos/sandbox --gpu itself was not looked at (interactive
+           only); §L makes its exact call.
         3. 6.8's HARNESS DOES NOT BUILD AT HEAD: scratch/verify_68.cpp fails in
            engine/math/quat.hpp (a mat3 assigned to a quat), and it, 6.9's and 6.16's
            include <engine/gfx/bounds.hpp>, which 8.4 moved to engine/math/.

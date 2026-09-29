@@ -14,6 +14,7 @@
 // §I  the frame graph: seven passes declared, then a frame that declares none
 // §J  the budget, and what a lamp's shadow costs
 // §K  the sun's reach: §G's finding in the sun's own lookup (the fix after 6.17b)
+// §L  one sun map and no cascade block: the same picture as with one (the second fix)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson's derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -2025,6 +2026,88 @@ void section_k(rig& r)
     s.fs.destroy();
 }
 
+// ===========================================================================
+//  §L — ONE SUN MAP AND NO CASCADES (the second fix after 6.17b)
+// ===========================================================================
+//
+// Since 6.9 the sun's lookup reads its texel size and depth range from the
+// CASCADE block. A caller with one map and no cascades — `gpu_shadow_map` +
+// `fill_uniforms` + `render(..., shadow, sampler)`, which is how demos/sandbox
+// draws — gets whatever `gpu_scene_renderer` pushes in their place. §K's rig
+// found that the box's shadow vanished there. The test: the same frame, with a
+// one-cascade block and without one, must be the same picture.
+
+int differing_channels(const std::vector<float>& a, const std::vector<float>& b)
+{
+    int n = 0;
+    for (std::size_t i = 0; i < a.size() && i < b.size(); ++i)
+    {
+        if (std::fabs(a[i] - b[i]) > 1e-6f) { ++n; }
+    }
+    return n + static_cast<int>(a.size() > b.size() ? a.size() - b.size() : b.size() - a.size());
+}
+
+void section_l(rig& r)
+{
+    section("L  ONE SUN MAP, NO CASCADES — what gpu_scene pushes in their place");
+
+    sun_rig s;
+    const bool ok = s.vs.load(r.gpu, "shadow.vert", engine::shader_stage::vertex)
+                 && s.fs.load(r.gpu, "shadow.frag", engine::shader_stage::fragment)
+                 && s.map.create(r.gpu, s.vs.handle(), s.fs.handle(), sun_rig::k_res,
+                                 r.depth_format);
+    if (!ok) { std::printf("  (sun shadow map did not create)\n"); return; }
+
+    engine::aabb box;
+    box.expand(vec3{-k_ground_half, -0.1f, -k_ground_half});
+    box.expand(vec3{k_ground_half, 1.2f, k_ground_half});
+
+    std::printf("  the box's shadow on the ground, 512 map, default settings:\n");
+    std::printf("  %8s %18s %18s %16s\n", "theta", "one-cascade block", "no cascade block",
+                "channels differ");
+    int least_with = 1 << 30;
+    int worst_gap = 0;
+    int worst_diff = 0;
+    for (const float deg : {20.0f, 45.0f, 63.4f})
+    {
+        const float th = deg * 0.017453293f;
+        const vec3 to_sun = engine::normalised(vec3{std::sin(th) * 0.866f, std::cos(th),
+                                                    std::sin(th) * 0.5f});
+        engine::directional_light sun;
+        sun.direction = -to_sun;
+        const engine::light_camera cam = engine::fit_directional(sun, box, sun_rig::k_res);
+        engine::scene_light_uniforms light = lamps_only_light(vec3{3.0f, 3.0f, 3.0f});
+        light.to_light = to_sun;
+        engine::gpu_shadow_map::fill_uniforms(light, cam, engine::shadow_settings{},
+                                              sun_rig::k_res);
+        const engine::cascade_uniforms casc = one_cascade(cam);
+
+        engine::scene_light_uniforms off = light;
+        off.shadow_strength = 0.0f;
+        const std::vector<float> ref = sun_frame(r, s, cam, off, &casc, true);
+        const std::vector<float> with_block = sun_frame(r, s, cam, light, &casc, true);
+        const std::vector<float> without = sun_frame(r, s, cam, light, nullptr, true);
+        const int n_with = darker(with_block, ref);
+        const int n_without = darker(without, ref);
+        const int diff = differing_channels(with_block, without);
+        std::printf("  %7.1f° %18d %18d %16d\n", static_cast<double>(deg), n_with, n_without, diff);
+        least_with = std::min(least_with, n_with);
+        worst_gap = std::max(worst_gap, std::abs(n_with - n_without));
+        worst_diff = std::max(worst_diff, diff);
+    }
+
+    checkf(least_with > 300,
+           "with a one-cascade block the box casts a shadow at every elevation (at least %d px) "
+           "— the control: this rig can see a shadow", least_with);
+    checkf(worst_gap == 0 && worst_diff == 0,
+           "with NO cascade block, the call demos/sandbox makes, the picture is the same: "
+           "shadow counts differ by %d px, %d channels differ", worst_gap, worst_diff);
+
+    s.map.destroy();
+    s.vs.destroy();
+    s.fs.destroy();
+}
+
 int main()
 {
     std::printf("verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n");
@@ -2043,7 +2126,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf("\n  (no GPU device — §G to §K skipped)\n");
+        std::printf("\n  (no GPU device — §G to §L skipped)\n");
     }
     else
     {
@@ -2052,6 +2135,7 @@ int main()
         section_i(r);
         section_j(r);
         section_k(r);
+        section_l(r);
         r.image.destroy();
     }
     SDL_Quit();

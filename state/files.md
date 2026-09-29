@@ -578,8 +578,8 @@ files:
            6.8's, 6.9's and 6.16's harnesses were repaired to build at HEAD. Its before/ and after_final/ transcripts were
            local evidence and are NOT tracked; the .ppm figure inputs are not either,
            as for every lesson — the SVGs are the tracked product).
-           (44 checks in eleven sections — §K, the sun's reach, added by the fix after
-           the lesson; §D is the golden; §J's timing needs a
+           (46 checks in twelve sections — §K, the sun's reach, and §L, one sun map with
+           no cascade block, added by the fixes after the lesson; §D is the golden; §J's timing needs a
            release libengine.a.)
   scratch/ (8.13, not shipped with the engine): verify_813.cpp,
            build_verify_813.sh, figs_813.py, build_813.py, gen_l813_body_e.py

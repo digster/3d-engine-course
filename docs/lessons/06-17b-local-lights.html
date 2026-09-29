@@ -115,7 +115,7 @@
             <code>scratch/verify_617b.cpp</code> <em>(new)</em></dd>
 
         <dt>Milestone</dt>
-        <dd>The engine has lamps. <strong>44 checks green</strong>, on the GPU and off it; the
+        <dd>The engine has lamps. <strong>46 checks green</strong>, on the GPU and off it; the
             inverse square measured as the same power through spheres of 0.5, 2 and 8 metres to
             2.6&nbsp;×&nbsp;10<sup>−6</sup>; a derived perspective bias with <strong>zero</strong>
             acne and <strong>zero</strong> leaks over 411,075 points judged by ray-casting; CPU and
@@ -4286,6 +4286,22 @@
     only a one-tap sun had, and no harness had measured one.
   </p>
 
+  <p>
+    The same rig found something larger on the way, and it is the better lesson of the two. The
+    sun's lookup reads its texel size and depth range from the <em>cascade</em> block, since 6.9. A
+    caller with one map and no cascades — <code>fill_uniforms</code> and then
+    <code>render(…,&nbsp;shadow,&nbsp;sampler)</code>, which is exactly how
+    <code>demos/sandbox</code> draws — gets the block <code>gpu_scene_renderer</code> pushes in their
+    place, and that fallback held 1.0 for both. A one-metre texel over a one-unit depth range makes
+    the slope-scaled bias larger than the whole depth range, so every comparison passes and every
+    shadow vanishes. §L of the harness measured it: a box whose shadow covers 528, 792 and 1,240
+    pixels at three sun elevations with a one-cascade block covered <strong>0</strong> at all three
+    without one. Nothing had failed, because nothing rendered that path and looked; a missing
+    shadow is not an error message. The fallback now copies the single map's own numbers, which
+    <code>fill_uniforms</code> had been writing into the light block all along, and the two pictures
+    are identical to the channel.
+  </p>
+
   <h3>9.2 — The CPU snaps its vertices</h3>
 
   <p>
@@ -6145,7 +6161,7 @@ if (local_light_count &gt; 0.5f)
   <h2 id="instruments"><span class="num">11</span>The instruments, and the judge that was wrong four times</h2>
 
   <p>
-    <code>verify_617b</code> runs forty-four checks in eleven sections, and each section's shape is 5.3's rule:
+    <code>verify_617b</code> runs forty-six checks in twelve sections, and each section's shape is 5.3's rule:
     a measurement, a claim, and a <strong>control</strong> that proves the measurement could have
     failed. Three instruments carry most of the lesson, and each has a story about being wrong.
   </p>
@@ -7936,14 +7952,15 @@ if (local_light_count &gt; 0.5f)
           <td><code>scene_local_lights</code>; a trailing parameter on both render calls.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
           <td>The renderer's count, three fallbacks, the eight-slot bind with the corrected comment,
-              the storage bind.</td></tr>
+              the storage bind; the sun's cascade fallback carrying a single map's own texel and
+              depth range.</td></tr>
       <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
           <td>Two shadow arrays, the storage buffer, <code>surface_brdf</code> lifted, the lamp
               loop.</td></tr>
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
       <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
-          <td>The harness: forty-four checks in eleven sections.</td></tr>
+          <td>The harness: forty-six checks in twelve sections.</td></tr>
     </tbody>
   </table>
   </div>
@@ -20461,13 +20478,25 @@ gpu_scene_renderer::begin_frame(SDL_GPUCommandBuffer* cb,
     // may be anything. The fallback below is a deliberate identity: one cascade,
     // a split past any reachable depth, and `shadow_strength` in the light block
     // is what actually disables the lookup.
+    //
+    // AND IT IS ALSO THE SINGLE-MAP PATH, which is the part the fallback got wrong
+    // for eleven lessons. The lookup reads its texel size and depth range from
+    // THIS block, so a caller with one map and no cascades — `fill_uniforms` plus
+    // `render(..., shadow, sampler)`, the call demos/sandbox makes — needs them
+    // here. The fallback used to hold 1.0 for both: a one-metre texel over a
+    // one-unit depth range made the slope-scaled bias larger than the whole depth
+    // range, and every shadow vanished (verify_617b §L: a box&#x27;s shadow of 528 to
+    // 1,240 px became 0 at every elevation). The light block already carries the
+    // single map&#x27;s own numbers, written by `fill_uniforms`; this copies them.
     cascade_uniforms fallback{};
     if (cascades == nullptr)
     {
         fallback.cascade_count = 1.0f;
         fallback.splits = vec4{1e30f, 1e30f, 1e30f, 1e30f};
-        fallback.world_per_texel = vec4{1.0f, 1.0f, 1.0f, 1.0f};
-        fallback.depth_range = vec4{1.0f, 1.0f, 1.0f, 1.0f};
+        fallback.world_per_texel = vec4{light.shadow_texel, light.shadow_texel,
+                                        light.shadow_texel, light.shadow_texel};
+        fallback.depth_range = vec4{light.shadow_depth_range, light.shadow_depth_range,
+                                    light.shadow_depth_range, light.shadow_depth_range};
         fallback.view_forward = vec4{0.0f, 0.0f, -1.0f, 0.0f};
         for (mat4&amp; m : fallback.light_clip_from_world) { m = light.light_clip_from_world; }
     }
@@ -23835,6 +23864,7 @@ ENGINE_MAIN(gltf_app)
 // §I  the frame graph: seven passes declared, then a frame that declares none
 // §J  the budget, and what a lamp&#x27;s shadow costs
 // §K  the sun&#x27;s reach: §G&#x27;s finding in the sun&#x27;s own lookup (the fix after 6.17b)
+// §L  one sun map and no cascade block: the same picture as with one (the second fix)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson&#x27;s derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -25846,6 +25876,88 @@ void section_k(rig&amp; r)
     s.fs.destroy();
 }
 
+// ===========================================================================
+//  §L — ONE SUN MAP AND NO CASCADES (the second fix after 6.17b)
+// ===========================================================================
+//
+// Since 6.9 the sun&#x27;s lookup reads its texel size and depth range from the
+// CASCADE block. A caller with one map and no cascades — `gpu_shadow_map` +
+// `fill_uniforms` + `render(..., shadow, sampler)`, which is how demos/sandbox
+// draws — gets whatever `gpu_scene_renderer` pushes in their place. §K&#x27;s rig
+// found that the box&#x27;s shadow vanished there. The test: the same frame, with a
+// one-cascade block and without one, must be the same picture.
+
+int differing_channels(const std::vector&lt;float&gt;&amp; a, const std::vector&lt;float&gt;&amp; b)
+{
+    int n = 0;
+    for (std::size_t i = 0; i &lt; a.size() &amp;&amp; i &lt; b.size(); ++i)
+    {
+        if (std::fabs(a[i] - b[i]) &gt; 1e-6f) { ++n; }
+    }
+    return n + static_cast&lt;int&gt;(a.size() &gt; b.size() ? a.size() - b.size() : b.size() - a.size());
+}
+
+void section_l(rig&amp; r)
+{
+    section(&quot;L  ONE SUN MAP, NO CASCADES — what gpu_scene pushes in their place&quot;);
+
+    sun_rig s;
+    const bool ok = s.vs.load(r.gpu, &quot;shadow.vert&quot;, engine::shader_stage::vertex)
+                 &amp;&amp; s.fs.load(r.gpu, &quot;shadow.frag&quot;, engine::shader_stage::fragment)
+                 &amp;&amp; s.map.create(r.gpu, s.vs.handle(), s.fs.handle(), sun_rig::k_res,
+                                 r.depth_format);
+    if (!ok) { std::printf(&quot;  (sun shadow map did not create)\n&quot;); return; }
+
+    engine::aabb box;
+    box.expand(vec3{-k_ground_half, -0.1f, -k_ground_half});
+    box.expand(vec3{k_ground_half, 1.2f, k_ground_half});
+
+    std::printf(&quot;  the box&#x27;s shadow on the ground, 512 map, default settings:\n&quot;);
+    std::printf(&quot;  %8s %18s %18s %16s\n&quot;, &quot;theta&quot;, &quot;one-cascade block&quot;, &quot;no cascade block&quot;,
+                &quot;channels differ&quot;);
+    int least_with = 1 &lt;&lt; 30;
+    int worst_gap = 0;
+    int worst_diff = 0;
+    for (const float deg : {20.0f, 45.0f, 63.4f})
+    {
+        const float th = deg * 0.017453293f;
+        const vec3 to_sun = engine::normalised(vec3{std::sin(th) * 0.866f, std::cos(th),
+                                                    std::sin(th) * 0.5f});
+        engine::directional_light sun;
+        sun.direction = -to_sun;
+        const engine::light_camera cam = engine::fit_directional(sun, box, sun_rig::k_res);
+        engine::scene_light_uniforms light = lamps_only_light(vec3{3.0f, 3.0f, 3.0f});
+        light.to_light = to_sun;
+        engine::gpu_shadow_map::fill_uniforms(light, cam, engine::shadow_settings{},
+                                              sun_rig::k_res);
+        const engine::cascade_uniforms casc = one_cascade(cam);
+
+        engine::scene_light_uniforms off = light;
+        off.shadow_strength = 0.0f;
+        const std::vector&lt;float&gt; ref = sun_frame(r, s, cam, off, &amp;casc, true);
+        const std::vector&lt;float&gt; with_block = sun_frame(r, s, cam, light, &amp;casc, true);
+        const std::vector&lt;float&gt; without = sun_frame(r, s, cam, light, nullptr, true);
+        const int n_with = darker(with_block, ref);
+        const int n_without = darker(without, ref);
+        const int diff = differing_channels(with_block, without);
+        std::printf(&quot;  %7.1f° %18d %18d %16d\n&quot;, static_cast&lt;double&gt;(deg), n_with, n_without, diff);
+        least_with = std::min(least_with, n_with);
+        worst_gap = std::max(worst_gap, std::abs(n_with - n_without));
+        worst_diff = std::max(worst_diff, diff);
+    }
+
+    checkf(least_with &gt; 300,
+           &quot;with a one-cascade block the box casts a shadow at every elevation (at least %d px) &quot;
+           &quot;— the control: this rig can see a shadow&quot;, least_with);
+    checkf(worst_gap == 0 &amp;&amp; worst_diff == 0,
+           &quot;with NO cascade block, the call demos/sandbox makes, the picture is the same: &quot;
+           &quot;shadow counts differ by %d px, %d channels differ&quot;, worst_gap, worst_diff);
+
+    s.map.destroy();
+    s.vs.destroy();
+    s.fs.destroy();
+}
+
 int main()
 {
     std::printf(&quot;verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n&quot;);
@@ -25864,7 +25976,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf(&quot;\n  (no GPU device — §G to §K skipped)\n&quot;);
+        std::printf(&quot;\n  (no GPU device — §G to §L skipped)\n&quot;);
     }
     else
     {
@@ -25873,6 +25985,7 @@ int main()
         section_i(r);
         section_j(r);
         section_k(r);
+        section_l(r);
         r.image.destroy();
     }
     SDL_Quit();
@@ -25928,7 +26041,7 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
   <h3>Expected result</h3>
 
   <p>
-    The harness ends with <code>44 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    The harness ends with <code>46 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
     prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
     and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
     bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every

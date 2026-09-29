@@ -83,8 +83,8 @@ six MIRRORED cameras into a depth cube array for a point, with a bias carried th
 curve and an axial slope (sin α cos φ / cos θ) that 6.8's tan θ is the on-axis case of. The software
 rasterizer gains guard-band clipping, fixing a Module 3 clamp that moved near-clipped vertices. The
 GPU reads the lamps from its first fragment storage buffer; the frame graph schedules the shadow
-passes, or caches last frame's maps. `verify_617b`: 44 checks (§K, the sun's reach, added by the
-fix after the lesson).
+passes, or caches last frame's maps. `verify_617b`: 46 checks (§K, the sun's reach, and §L, one sun
+map with no cascades, added by the fixes after the lesson).
 
 **Fixes after 6.17b (2026-09-28, four commits).** The 6.8, 6.9 and 6.16 harnesses build at HEAD
 again and 6.5's size checks state today's sizes; 6.8's fallback shadow texture is a one-layer array,

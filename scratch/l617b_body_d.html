@@ -64,14 +64,15 @@
           <td><code>scene_local_lights</code>; a trailing parameter on both render calls.</td></tr>
       <tr><td><code>engine/src/gfx/gpu_scene.cpp</code></td><td>modified</td>
           <td>The renderer's count, three fallbacks, the eight-slot bind with the corrected comment,
-              the storage bind.</td></tr>
+              the storage bind; the sun's cascade fallback carrying a single map's own texel and
+              depth range.</td></tr>
       <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
           <td>Two shadow arrays, the storage buffer, <code>surface_brdf</code> lifted, the lamp
               loop.</td></tr>
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
       <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
-          <td>The harness: forty-four checks in eleven sections.</td></tr>
+          <td>The harness: forty-six checks in twelve sections.</td></tr>
     </tbody>
   </table>
   </div>
@@ -161,7 +162,7 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
   <h3>Expected result</h3>
 
   <p>
-    The harness ends with <code>44 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    The harness ends with <code>46 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
     prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
     and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
     bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every

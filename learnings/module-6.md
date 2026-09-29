@@ -1728,8 +1728,11 @@ measurement that disagreed with a claim, and several by an instrument that was i
   the ground was acne; with the default 3×3, none at any elevation — so "a quarter short" was true
   arithmetic predicting a symptom the default never shows, which is how it survived eleven
   lessons. Fixed with `gpu_pcf_reach_texels`. And the same rig found a single sun map with no
-  cascade block draws NO shadow (the fallback block's 1 m texel inflates the bias) — open, STATE
-  decisions `found-by-617b` item 7.
+  cascade block drew NO shadow at all since 6.9: the fallback cascade block held a 1 m texel and a
+  1.0 depth range, so the bias exceeded the whole depth range (528–1,240 px of box shadow → 0).
+  demos/sandbox draws exactly that way. Fixed by copying the light block's own texel and range
+  (verify_617b §L). A MISSING SHADOW IS NOT AN ERROR MESSAGE: nothing failed for eleven lessons
+  because no harness rendered that path and compared it with one that works.
 
 - **Finite is not small: a clamp that moves geometry.** Near clipping bounds x/w; it does not keep
   it small. A 5 cm lamp near plane over an 8 m floor projects clipped corners ~40,000 px out, and
