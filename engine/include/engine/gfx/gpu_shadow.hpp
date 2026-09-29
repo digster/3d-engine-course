@@ -201,6 +201,8 @@ private:
 struct local_shadow_job
 {
     int light = -1;                 ///< index into the span `prepare` was given
+    /// The kind of SHADOW map this pass renders: `point` for a cube face — every
+    /// point light's, and a spot's wider than `k_max_spot_shadow_angle`.
     local_light_kind kind = local_light_kind::point;
     int face = 0;                   ///< the cube face, 0-5 in SDL order; 0 for a spot
     SDL_GPUTexture* texture = nullptr;   ///< the spot array or the cube array

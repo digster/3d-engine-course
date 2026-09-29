@@ -3001,3 +3001,17 @@ between 6.17 and 6.18).
 to build at HEAD (with 6.9's and 6.16's, same cause); 6.5's size checks; 6.8's fallback shadow
 texture given the type its slot declares; the sun's GPU shadow bias sized for the sampler it
 uses. Committed as the user, with no co-author line. Logged in `memory/2026-09-28.md`.)
+
+---
+
+## 2026-09-28/29 — The three defects found while fixing the four, fixed
+
+> ok, fix these 3 issues and help them commit for me(individual commits for all three).
+
+> Try again
+
+(Three commits, one per defect, each from a failing test: a single sun map drawn without cascades
+showed no shadow (verify_617b §L); the frame graph pooled a one-layer depth texture as plain 2D and
+judged reuse by the request instead of the slot (verify_617); a spot wider than 80° had no shadow
+beyond the cap and now shadows through a cube (verify_617b §M). "Try again" followed a turn that
+stopped before the last commit. Logged in `memory/2026-09-28.md`.)

@@ -15,6 +15,7 @@
 // §J  the budget, and what a lamp's shadow costs
 // §K  the sun's reach: §G's finding in the sun's own lookup (the fix after 6.17b)
 // §L  one sun map and no cascade block: the same picture as with one (the second fix)
+// §M  a spot wider than 80 degrees: shadowed through a cube, as a point (the third fix)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson's derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -2108,6 +2109,136 @@ void section_l(rig& r)
     s.fs.destroy();
 }
 
+// ===========================================================================
+//  §M — A SPOT WIDER THAN ITS SHADOW MAP (the third fix after 6.17b)
+// ===========================================================================
+//
+// `fit_spot` caps a spot's map at `k_max_spot_shadow_angle`, 80 degrees. A spot
+// whose cone is wider lights a ring beyond the map, and the two renderers used
+// to answer for that ring differently: the GPU's lookup called anything outside
+// the map lit, the CPU's clamped to the map's edge texel. Neither is a shadow.
+// The fix shadows such a spot through a CUBE, as a point light, with its cone
+// still doing the masking. The scene: a spot just above the box, aimed nearly
+// level, so the box's shadow on the ground falls across the 80-86 degree ring.
+
+local_light wide_spot()
+{
+    local_light l;
+    l.kind = local_light_kind::spot;
+    l.position = {0.3f, 1.5f, 0.2f};
+    l.direction = engine::normalised(vec3{1.0f, -0.1f, 0.0f});
+    l.inner_angle = 1.20f;    // 68.8 degrees
+    l.outer_angle = 1.50f;    // 85.9 degrees: past the 80-degree cap
+    l.range = 8.0f;
+    l.casts_shadow = true;
+    return l;
+}
+
+void section_m(rig& r)
+{
+    section("M  A SPOT WIDER THAN 80 DEGREES — shadowed through a cube, like a point");
+
+    const local_light wide = wide_spot();
+    const std::vector<local_light> one{wide};
+    std::printf("  outer %.1f°, inner %.1f°; the widest a spot map holds is %.0f°\n",
+                static_cast<double>(wide.outer_angle * 57.29578f),
+                static_cast<double>(wide.inner_angle * 57.29578f),
+                static_cast<double>(engine::k_max_spot_shadow_angle * 57.29578f));
+
+    // How much of the problem this scene exercises: ground points the cone
+    // lights, BEYOND 80 degrees, that the ray says are in shadow.
+    int ring_shadowed = 0;
+    {
+        constexpr int k_grid = 600;
+        const float step = 2.0f * k_ground_half / static_cast<float>(k_grid);
+        for (int i = 0; i < k_grid; ++i)
+        {
+            for (int j = 0; j < k_grid; ++j)
+            {
+                const vec3 p{-k_ground_half + (i + 0.5f) * step, 0.0f,
+                             -k_ground_half + (j + 0.5f) * step};
+                const engine::local_light_sample ls = engine::sample_local_light(wide, p);
+                if (ls.attenuation <= 0.0f) { continue; }
+                const float c = engine::dot(wide.direction, -ls.to_light);
+                if (c < std::cos(engine::k_max_spot_shadow_angle) && occluded(p, wide.position))
+                {
+                    ++ring_shadowed;
+                }
+            }
+        }
+    }
+
+    // ---- The CPU against ray-cast truth ------------------------------------
+    const cpu_scene scene = make_cpu_scene(true);
+    engine::local_shadow_set set;
+    set.settings() = r.settings;
+    set.render(scene.objects, scene.pool, one);
+    const int maps = set.map_count();
+    const float cube_texel = 2.0f / static_cast<float>(set.settings().point_resolution);
+    const shadow_errors e = judge(wide, cube_texel, [&](vec3 p, float n_dot_l) {
+        return set.visibility(0, p, vec3{0.0f, 1.0f, 0.0f}, n_dot_l);
+    });
+    std::printf("  CPU: %d map(s); judged %d, acne %d, leak %d; %d shadowed ground points "
+                "lie beyond 80°\n", maps, e.judged, e.acne, e.leak, ring_shadowed);
+
+    // ---- The GPU against the CPU, pixel for pixel ----------------------------
+    std::vector<engine::gpu_local_light> records(2);
+    (void)r.shadows.prepare(one, records);
+    const int jobs = r.shadows.job_count();
+    const std::vector<float> gpu = render_frame(r, one, true);
+    std::vector<float> vis;
+    const std::vector<float> cpu = cpu_frame(one, r.settings, &vis);
+    const double tol = (r.image.pixel_bytes() == 16u) ? 2e-4 : 2e-3;
+    auto near_edge = [&](int i, int j) {
+        const std::size_t p = static_cast<std::size_t>(j) * k_size + static_cast<std::size_t>(i);
+        const float v = vis[p];
+        if (v > 0.0f && v < 1.0f) { return true; }
+        for (int dj = -2; dj <= 2; ++dj)
+        {
+            for (int di = -2; di <= 2; ++di)
+            {
+                const int qi = i + di;
+                const int qj = j + dj;
+                if (qi < 0 || qj < 0 || qi >= k_size || qj >= k_size) { continue; }
+                if (vis[static_cast<std::size_t>(qj) * k_size + static_cast<std::size_t>(qi)] != v)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    int differ = 0;
+    int far = 0;
+    for (int j = 0; j < k_size; ++j)
+    {
+        for (int i = 0; i < k_size; ++i)
+        {
+            const std::size_t p = static_cast<std::size_t>(j) * k_size + static_cast<std::size_t>(i);
+            double big = 0.0;
+            const double rel = pixel_rel(gpu, cpu, p, &big);
+            if (big < 1e-4 || rel <= tol) { continue; }
+            ++differ;
+            if (!near_edge(i, j)) { ++far; }
+        }
+    }
+    std::printf("  GPU: %d shadow pass(es); against the CPU, %d pixels differ, %d of them "
+                "more than 2 px from a shadow edge\n", jobs, differ, far);
+
+    checkf(ring_shadowed > 200,
+           "the scene exercises the ring: %d ground points beyond 80° are lit by the cone and "
+           "shadowed by the box — the control", ring_shadowed);
+    checkf(maps == engine::k_cube_faces && jobs == engine::k_cube_faces,
+           "both renderers shadow the wide spot through a CUBE: %d CPU maps, %d GPU passes",
+           maps, jobs);
+    checkf(e.acne == 0 && e.leak == 0,
+           "CPU against ray-cast truth: %d acne, %d leaking, of %d judged — the ring "
+           "included", e.acne, e.leak, e.judged);
+    checkf(far == 0,
+           "GPU against CPU: %d pixels differ more than 2 px from a shadow edge (of %d "
+           "differing) — the two renderers agree about the ring", far, differ);
+}
+
 int main()
 {
     std::printf("verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n");
@@ -2126,7 +2257,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf("\n  (no GPU device — §G to §L skipped)\n");
+        std::printf("\n  (no GPU device — §G to §M skipped)\n");
     }
     else
     {
@@ -2136,6 +2267,7 @@ int main()
         section_j(r);
         section_k(r);
         section_l(r);
+        section_m(r);
         r.image.destroy();
     }
     SDL_Quit();

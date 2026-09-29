@@ -429,7 +429,11 @@ float shadow_map::visibility(vec3 world_pos, vec3 geometric_normal, float n_dot_
     // what happens on the 45-degree seams between faces, where the choice was
     // a tie. Rejecting would call those points lit; verify_617b §F found a line
     // of them leaking through a crate's shadow. For a spot the clamp can only
-    // touch points outside the fitted square, where the cone is already zero.
+    // touch points outside the fitted square, where the cone is already zero —
+    // because a spot too wide for the square, past `k_max_spot_shadow_angle`, is
+    // never given a spot map: `shadows_through_cube` sends it to a cube. (Until
+    // the fix after 6.17b it was, and this clamp read the map's edge texel for
+    // the whole ring beyond 80 degrees.)
     // The orthographic path keeps 6.8's rejection, unchanged.
     if (cam_.perspective)
     {
@@ -587,15 +591,20 @@ void local_shadow_set::render(std::span<const scene_object> objects,
     kinds_.resize(lights.size());
     positions_.resize(lights.size());
 
-    // ---- Lay the maps out: one per spot, a block of six per point -----------
+    // ---- Lay the maps out: one per spot, a block of six per cube -----------
+    //
+    // A CUBE is every point light and every spot wider than one map can hold
+    // (`shadows_through_cube`) — the kind recorded here is the SHADOW's, which is
+    // what `visibility` has to know.
     int needed = 0;
     for (std::size_t i = 0; i < lights.size(); ++i)
     {
-        kinds_[i] = lights[i].kind;
+        kinds_[i] = shadows_through_cube(lights[i]) ? local_light_kind::point
+                                                    : local_light_kind::spot;
         positions_[i] = lights[i].position;
         if (!lights[i].casts_shadow) { continue; }
         first_[i] = needed;
-        needed += (lights[i].kind == local_light_kind::spot) ? 1 : k_cube_faces;
+        needed += (kinds_[i] == local_light_kind::spot) ? 1 : k_cube_faces;
     }
 
     // Grow, never shrink below what is in use; a map is re-created only when
@@ -610,7 +619,7 @@ void local_shadow_set::render(std::span<const scene_object> objects,
     {
         if (first_[i] < 0) { continue; }
         const local_light& light = lights[i];
-        const bool spot = (light.kind == local_light_kind::spot);
+        const bool spot = (kinds_[i] == local_light_kind::spot);   // a spot MAP, that is
         const int res = spot ? set_.spot_resolution : set_.point_resolution;
         const int faces = spot ? 1 : k_cube_faces;
 

@@ -33,8 +33,8 @@ decisions:
         lists gpu_scene.cpp whole and rewrote the bind as bind_fragment_samplers
         (eight slots now), whose comment tells the corrected story; the instanced
         path calls the same function and says so. Only frustum.cpp's remains.
-  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE; ALL FOUR WERE FIXED THE SAME
-        DAY IN THEIR OWN COMMITS, AND FIXING THEM FOUND THREE MORE, STILL OPEN.
+  found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE, AND FIXING THEM FOUND THREE
+        MORE; ALL SEVEN WERE FIXED THE SAME DAY, EACH IN ITS OWN COMMIT, TEST FIRST.
         (2026-09-28. The lesson itself fixed none, because an insertion must not move
         another lesson's numbers; the user then asked for the four as separate commits.)
         1. THE SUN'S GPU SHADOW UNDER-REACHED. scene.frag.hlsl's cascade lookup
@@ -89,6 +89,16 @@ decisions:
            beyond the map lit; the CPU clamps to the edge texel — and shadow.cpp's
            comment says that clamp only touches points the cone has zeroed, true only
            up to 80°. Now Exercise 6.17b.5.
+           FIXED 2026-09-28 (own commit), properly rather than quickly: a shadowed
+           spot wider than k_max_spot_shadow_angle is shadowed through a CUBE, from the
+           point budget, with its cone still masking — shadows_through_cube() in
+           shadow.hpp, asked by local_shadow_set and gpu_local_shadows::prepare; the
+           record's shadow_normal.y = 1 selects the shader's cube lookup (by the
+           SHADOW's kind, not the light's). verify_617b §M (new): before, 1 map, 304
+           judged points leaking behind the box, 69 CPU/GPU disagreements > 2 px from
+           an edge; after, 6 maps and 6 passes, 0/0 of 163,128 judged, 0 far. All
+           26 Module 6–7 harnesses unmoved; Metal validation clean. Exercise 6.17b.5
+           is now "skip the faces a wide cone cannot reach" (saves at most 1 of 6).
         7. FOUND WHILE FIXING 1, OPEN — AND THE LARGEST: A SINGLE SUN MAP WITH NO CASCADE
            BLOCK DRAWS NO SHADOW AT ALL. The sun's lookup reads its texel size and depth
            range from the CASCADE block (6.9); when render() gets no cascades,

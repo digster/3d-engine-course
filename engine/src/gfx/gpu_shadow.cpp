@@ -496,7 +496,12 @@ int gpu_local_shadows::prepare(std::span<const local_light> lights,
         const local_light& light = lights[i];
         gpu_local_light g = pack_local_light(light);
 
-        const bool spot = (light.kind == local_light_kind::spot);
+        // THE SHADOW'S KIND, NOT THE LIGHT'S: a spot wider than one map can hold
+        // is shadowed through a cube, from the point budget, exactly as the CPU's
+        // `local_shadow_set` does — one function decides for both
+        // (`shadows_through_cube`, the fix after 6.17b). The light itself, cone
+        // and all, is still a spot; `pack_local_light` said so above.
+        const bool spot = !shadows_through_cube(light);
         const bool budget = spot ? (spot_slot < max_spots_) : (point_slot < max_points_);
         if (light.casts_shadow && !budget) { ++dropped_; }
 
@@ -522,7 +527,9 @@ int gpu_local_shadows::prepare(std::span<const local_light> lights,
                                   static_cast<float>(b.pcf_radius), b.strength};
             g.shadow_bias = vec4{b.constant_bias + quantisation_bias(depth_format::f32),
                                  mode_number(b.bias), b.slope_scale, b.max_slope};
-            g.shadow_normal = vec4{b.normal_scale, 0.0f, 0.0f, 0.0f};
+            // y: 1 when the shadow is a cube, so the shader picks its lookup by
+            // the SHADOW's kind — which, for a wide spot, is not the light's.
+            g.shadow_normal = vec4{b.normal_scale, spot ? 0.0f : 1.0f, 0.0f, 0.0f};
 
             // A spot's lookup projects the fragment through the map's matrix;
             // a point's does not need one (the cube lookup takes a direction,
@@ -533,7 +540,7 @@ int gpu_local_shadows::prepare(std::span<const local_light> lights,
 
                 local_shadow_job job;
                 job.light = static_cast<int>(i);
-                job.kind = light.kind;
+                job.kind = local_light_kind::spot;
                 job.face = 0;
                 job.texture = spots_.handle();
                 job.layer = static_cast<Uint32>(slot);
@@ -547,7 +554,7 @@ int gpu_local_shadows::prepare(std::span<const local_light> lights,
                 {
                     local_shadow_job job;
                     job.light = static_cast<int>(i);
-                    job.kind = light.kind;
+                    job.kind = local_light_kind::point;   // a cube face, whatever the light is
                     job.face = f;
                     job.texture = points_.handle();
                     job.layer = static_cast<Uint32>(k_cube_faces * slot + f);

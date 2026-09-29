@@ -260,6 +260,23 @@ inline constexpr float k_local_shadow_near = 0.05f;
 /// faces) is the right tool instead — which is what a point light is.
 inline constexpr float k_max_spot_shadow_angle = 1.3962634f;
 
+/// **Is this light's shadow a CUBE?** Every point light's is; so is a spot's
+/// whose outer cone is wider than `k_max_spot_shadow_angle`, because no spot map
+/// can hold it. Such a spot is shadowed exactly as a point light is — six faces,
+/// looked up by direction — and its cone still does the masking, so the light
+/// is unchanged and only the shadow's container is.
+///
+/// Until the fix after 6.17b a wide spot got a spot map clamped to 80 degrees,
+/// and the ring beyond it had no shadow at all: the GPU's lookup called it lit,
+/// the CPU's read the map's edge texel. `verify_617b` §M measured 304 ground
+/// points lit that the ray says are behind the box, and 69 pixels on which the
+/// renderers disagreed away from any edge; through a cube, none of either.
+/// Both renderers ask this one function, so they cannot choose differently.
+[[nodiscard]] inline bool shadows_through_cube(const local_light& light)
+{
+    return light.kind == local_light_kind::point || light.outer_angle > k_max_spot_shadow_angle;
+}
+
 /// **A spot light's camera**: a perspective pyramid from the lamp down its axis,
 /// just wide enough to hold the outer cone. Lesson 6.17b.
 ///
@@ -664,9 +681,11 @@ private:
     /// SDL's face order — the order `cube_face` shares with the GPU's layers.
     std::vector<shadow_map> maps_;
 
-    /// Per light: the index of its first map, or -1; its kind; its position.
-    /// Copied from the span at `render`, so a later `visibility` cannot be
-    /// handed a different list than the one the maps were rendered for.
+    /// Per light: the index of its first map, or -1; the kind of its SHADOW; its
+    /// position. Copied from the span at `render`, so a later `visibility` cannot
+    /// be handed a different list than the one the maps were rendered for. The
+    /// shadow's kind is `point` for a spot wider than `k_max_spot_shadow_angle`
+    /// (`shadows_through_cube`), because it is shadowed as one.
     std::vector<int> first_;
     std::vector<local_light_kind> kinds_;
     std::vector<vec3> positions_;

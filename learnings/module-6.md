@@ -1749,6 +1749,12 @@ measurement that disagreed with a claim, and several by an instrument that was i
   directions through it and through `direction_to_cube` and requiring the same texel (1.8e-7).
   The mirror also reverses winding: a shadow pass that culls must flip it for cube faces.
 
+- **A cap is a promise about what happens past it.** `fit_spot` capped a spot's map at 80°, and
+  the page said a wider cone "is a job for a cube" — while the engine gave it the capped map, so
+  the ring beyond 80° had no shadow on either renderer (and a different wrong answer on each). A
+  limit needs a named behaviour on its far side, chosen in one function both callers ask
+  (`shadows_through_cube`), and a test that puts something in the ring (verify_617b §M).
+
 - **Clamp, don't reject, at a face you chose.** 6.8 rejects outside [−1, 1] as "lit"; for a cube
   face chosen by `direction_to_cube` the direction belongs to the face even when rounding puts it a
   hair past −1 on the 45° seams — 54 lit points through a crate's shadow until the rule changed.

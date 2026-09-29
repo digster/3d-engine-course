@@ -57,7 +57,7 @@
 <rect x="302.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
 <text x="100.0" y="209.0" class="xs mono" text-anchor="end">96</text>
 <text x="378.0" y="209.0" class="xs mono" text-anchor="start">shadow_normal</text>
-<text x="484.0" y="209.0" class="xs muted" text-anchor="start">x normal-offset scale; yzw spare</text>
+<text x="484.0" y="209.0" class="xs muted" text-anchor="start">x normal-offset scale; y 1 = cube shadow; zw spare</text>
 <rect x="110.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
 <rect x="174.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
 <rect x="238.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>

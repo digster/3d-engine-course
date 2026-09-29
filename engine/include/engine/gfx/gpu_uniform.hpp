@@ -444,7 +444,8 @@ struct gpu_local_light
     vec4 shadow_bias;     ///<  80 — x constant bias (device); y mode (0 none,
                           ///<        1 constant, 2 slope, 3 normal); z slope
                           ///<        scale; w max slope
-    vec4 shadow_normal;   ///<  96 — x normal-offset scale; yzw spare
+    vec4 shadow_normal;   ///<  96 — x normal-offset scale; y 1 = the shadow is a CUBE
+                          ///<        (points, and spots wider than 80°); zw spare
     vec4 shadow_row[4];   ///< 112 — the spot map's clip_from_world, by ROWS
 };
 

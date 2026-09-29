@@ -1251,7 +1251,10 @@ conventions:
         6.15's k_rules, so both directions of the table cannot disagree). SDL face
         order +X -X +Y -Y +Z -Z; layer = 6*cube + face. look_at builds right =
         forward x up = -u, a rotation, and every face comes out mirrored (0.970 of
-        a face at worst). Depth to read back = perspective_depth(max |component|):
+        a face at worst). Since the fix after 6.17b a CUBE is also the shadow of a
+        spot wider than k_max_spot_shadow_angle (shadows_through_cube, one function
+        for both renderers; the record's shadow_normal.y = 1 tells the shader).
+        Depth to read back = perspective_depth(max |component|):
         no matrix. The mirror reverses winding: a shadow pass that culls must flip
         its cull mode for cube faces (both cull NONE by default).
   guard_band: NEAR-CLIPPED IS FINITE, NOT SMALL: CLIP AT +-7936 px WHEN A POLYGON LEAVES THE BAND, NEVER CLAMP.

@@ -2563,7 +2563,9 @@
               <em>c</em> is layer 6<em>c</em>+<em>f</em>. Each face camera has rows
               (<strong>u</strong>, &minus;<strong>v</strong>, &minus;<strong>major</strong>) from
               <code>cube_face_axes</code>: a <strong>mirror</strong>, determinant &minus;1. Stored
-              depth = <code>perspective_depth(max |component|)</code>.</td>
+              depth = <code>perspective_depth(max |component|)</code>. A cube is every point
+              light&rsquo;s shadow <em>and</em> a spot&rsquo;s wider than 80&deg;
+              (<code>shadows_through_cube</code>, both renderers).</td>
           <td><code>look_at</code> draws every face mirrored: shadows on the wrong side of their
               casters, plausibly.</td>
         </tr>

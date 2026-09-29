@@ -115,7 +115,7 @@
             <code>scratch/verify_617b.cpp</code> <em>(new)</em></dd>
 
         <dt>Milestone</dt>
-        <dd>The engine has lamps. <strong>46 checks green</strong>, on the GPU and off it; the
+        <dd>The engine has lamps. <strong>50 checks green</strong>, on the GPU and off it; the
             inverse square measured as the same power through spheres of 0.5, 2 and 8 metres to
             2.6&nbsp;×&nbsp;10<sup>−6</sup>; a derived perspective bias with <strong>zero</strong>
             acne and <strong>zero</strong> leaks over 411,075 points judged by ray-casting; CPU and
@@ -3566,7 +3566,12 @@
     <li><strong>The far plane is the range, and the cone is capped at 80°.</strong> Nothing beyond the
         range is lit, so nothing beyond it can matter. A spot wider than 80° from its axis is not given
         a spot map: its edge texels would stretch by 1/cos²&nbsp;80° = 33 times, and at 90° without
-        bound. That is a job for a cube, which is what a point light is (§7).</li>
+        bound. That is a job for a cube, which is what a point light is (§7) — and since the fix
+        after this lesson, a shadowed spot that wide is given one: <code>shadows_through_cube</code>
+        sends it to six faces on both renderers, and its cone still does the masking. The first
+        version of this page stopped at the cap, and §M of the harness measured the ring it left
+        unshadowed: 304 ground points lit behind the box, and 69 pixels on which the two renderers
+        disagreed away from any edge. Through a cube, none of either.</li>
   </ul>
 
   <p>
@@ -4101,6 +4106,7 @@
     each kind its own budget — four spots and two points by default, as a depth
     <code>Texture2DArray</code> and a depth <code>TextureCubeArray</code> — and a shadowed lamp past
     its budget is drawn <em>unshadowed</em> with a warning, not dropped (§J: one dropped, slot −1).
+    A spot too wide for a map (§6.2) draws on the point budget, because its shadow is a cube.
   </p>
 
   <div class="callout verify">
@@ -5850,7 +5856,7 @@ cam.view_from_world = mat4{
     <rect x="302.0" y="194.0" width="64.0" height="21.0" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.0" fill-opacity="0.18"/>
     <text x="100.0" y="209.0" class="xs mono" text-anchor="end">96</text>
     <text x="378.0" y="209.0" class="xs mono" text-anchor="start">shadow_normal</text>
-    <text x="484.0" y="209.0" class="xs muted" text-anchor="start">x normal-offset scale; yzw spare</text>
+    <text x="484.0" y="209.0" class="xs muted" text-anchor="start">x normal-offset scale; y 1 = cube shadow; zw spare</text>
     <rect x="110.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
     <rect x="174.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
     <rect x="238.0" y="218.0" width="64.0" height="21.0" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.0" fill-opacity="0.18"/>
@@ -6161,7 +6167,7 @@ if (local_light_count &gt; 0.5f)
   <h2 id="instruments"><span class="num">11</span>The instruments, and the judge that was wrong four times</h2>
 
   <p>
-    <code>verify_617b</code> runs forty-six checks in twelve sections, and each section's shape is 5.3's rule:
+    <code>verify_617b</code> runs fifty checks in thirteen sections, and each section's shape is 5.3's rule:
     a measurement, a claim, and a <strong>control</strong> that proves the measurement could have
     failed. Three instruments carry most of the lesson, and each has a story about being wrong.
   </p>
@@ -7911,8 +7917,8 @@ if (local_light_count &gt; 0.5f)
       <tr><td><code>engine/include/engine/gfx/shadow.hpp</code></td><td>modified</td>
           <td>Perspective <code>light_camera</code>; <code>perspective_depth</code>,
               <code>perspective_slope</code>, the rounding floor; <code>fit_spot</code>,
-              <code>fit_cube_face</code>; <code>local_shadow_settings</code>,
-              <code>local_shadow_set</code>.</td></tr>
+              <code>fit_cube_face</code>; <code>shadows_through_cube</code>;
+              <code>local_shadow_settings</code>, <code>local_shadow_set</code>.</td></tr>
       <tr><td><code>engine/src/gfx/shadow.cpp</code></td><td>modified</td>
           <td>The two fitters, the set, and the perspective branch of <code>visibility</code>.</td></tr>
       <tr><td><code>engine/include/engine/gfx/cubemap.hpp</code></td><td>modified</td>
@@ -7956,11 +7962,11 @@ if (local_light_count &gt; 0.5f)
               depth range.</td></tr>
       <tr><td><code>shaders/scene.frag.hlsl</code></td><td>modified</td>
           <td>Two shadow arrays, the storage buffer, <code>surface_brdf</code> lifted, the lamp
-              loop.</td></tr>
+              loop, each lamp's lookup chosen by its shadow's kind.</td></tr>
       <tr><td><code>demos/gltf_view/main.cpp</code></td><td>modified</td>
           <td><code>--lights</code> and <code>--lamp-shadows</code>.</td></tr>
       <tr><td><code>scratch/verify_617b.cpp</code></td><td>new</td>
-          <td>The harness: forty-six checks in twelve sections.</td></tr>
+          <td>The harness: fifty checks in thirteen sections.</td></tr>
     </tbody>
   </table>
   </div>
@@ -9275,6 +9281,23 @@ inline constexpr float k_local_shadow_near = 0.05f;
 /// faces) is the right tool instead — which is what a point light is.
 inline constexpr float k_max_spot_shadow_angle = 1.3962634f;
 
+/// **Is this light&#x27;s shadow a CUBE?** Every point light&#x27;s is; so is a spot&#x27;s
+/// whose outer cone is wider than `k_max_spot_shadow_angle`, because no spot map
+/// can hold it. Such a spot is shadowed exactly as a point light is — six faces,
+/// looked up by direction — and its cone still does the masking, so the light
+/// is unchanged and only the shadow&#x27;s container is.
+///
+/// Until the fix after 6.17b a wide spot got a spot map clamped to 80 degrees,
+/// and the ring beyond it had no shadow at all: the GPU&#x27;s lookup called it lit,
+/// the CPU&#x27;s read the map&#x27;s edge texel. `verify_617b` §M measured 304 ground
+/// points lit that the ray says are behind the box, and 69 pixels on which the
+/// renderers disagreed away from any edge; through a cube, none of either.
+/// Both renderers ask this one function, so they cannot choose differently.
+[[nodiscard]] inline bool shadows_through_cube(const local_light&amp; light)
+{
+    return light.kind == local_light_kind::point || light.outer_angle &gt; k_max_spot_shadow_angle;
+}
+
 /// **A spot light&#x27;s camera**: a perspective pyramid from the lamp down its axis,
 /// just wide enough to hold the outer cone. Lesson 6.17b.
 ///
@@ -9679,9 +9702,11 @@ private:
     /// SDL&#x27;s face order — the order `cube_face` shares with the GPU&#x27;s layers.
     std::vector&lt;shadow_map&gt; maps_;
 
-    /// Per light: the index of its first map, or -1; its kind; its position.
-    /// Copied from the span at `render`, so a later `visibility` cannot be
-    /// handed a different list than the one the maps were rendered for.
+    /// Per light: the index of its first map, or -1; the kind of its SHADOW; its
+    /// position. Copied from the span at `render`, so a later `visibility` cannot
+    /// be handed a different list than the one the maps were rendered for. The
+    /// shadow&#x27;s kind is `point` for a spot wider than `k_max_spot_shadow_angle`
+    /// (`shadows_through_cube`), because it is shadowed as one.
     std::vector&lt;int&gt; first_;
     std::vector&lt;local_light_kind&gt; kinds_;
     std::vector&lt;vec3&gt; positions_;
@@ -10130,7 +10155,11 @@ float shadow_map::visibility(vec3 world_pos, vec3 geometric_normal, float n_dot_
     // what happens on the 45-degree seams between faces, where the choice was
     // a tie. Rejecting would call those points lit; verify_617b §F found a line
     // of them leaking through a crate&#x27;s shadow. For a spot the clamp can only
-    // touch points outside the fitted square, where the cone is already zero.
+    // touch points outside the fitted square, where the cone is already zero —
+    // because a spot too wide for the square, past `k_max_spot_shadow_angle`, is
+    // never given a spot map: `shadows_through_cube` sends it to a cube. (Until
+    // the fix after 6.17b it was, and this clamp read the map&#x27;s edge texel for
+    // the whole ring beyond 80 degrees.)
     // The orthographic path keeps 6.8&#x27;s rejection, unchanged.
     if (cam_.perspective)
     {
@@ -10288,15 +10317,20 @@ void local_shadow_set::render(std::span&lt;const scene_object&gt; objects,
     kinds_.resize(lights.size());
     positions_.resize(lights.size());
 
-    // ---- Lay the maps out: one per spot, a block of six per point -----------
+    // ---- Lay the maps out: one per spot, a block of six per cube -----------
+    //
+    // A CUBE is every point light and every spot wider than one map can hold
+    // (`shadows_through_cube`) — the kind recorded here is the SHADOW&#x27;s, which is
+    // what `visibility` has to know.
     int needed = 0;
     for (std::size_t i = 0; i &lt; lights.size(); ++i)
     {
-        kinds_[i] = lights[i].kind;
+        kinds_[i] = shadows_through_cube(lights[i]) ? local_light_kind::point
+                                                    : local_light_kind::spot;
         positions_[i] = lights[i].position;
         if (!lights[i].casts_shadow) { continue; }
         first_[i] = needed;
-        needed += (lights[i].kind == local_light_kind::spot) ? 1 : k_cube_faces;
+        needed += (kinds_[i] == local_light_kind::spot) ? 1 : k_cube_faces;
     }
 
     // Grow, never shrink below what is in use; a map is re-created only when
@@ -10311,7 +10345,7 @@ void local_shadow_set::render(std::span&lt;const scene_object&gt; objects,
     {
         if (first_[i] &lt; 0) { continue; }
         const local_light&amp; light = lights[i];
-        const bool spot = (light.kind == local_light_kind::spot);
+        const bool spot = (kinds_[i] == local_light_kind::spot);   // a spot MAP, that is
         const int res = spot ? set_.spot_resolution : set_.point_resolution;
         const int faces = spot ? 1 : k_cube_faces;
 
@@ -16222,7 +16256,8 @@ struct gpu_local_light
     vec4 shadow_bias;     ///&lt;  80 — x constant bias (device); y mode (0 none,
                           ///&lt;        1 constant, 2 slope, 3 normal); z slope
                           ///&lt;        scale; w max slope
-    vec4 shadow_normal;   ///&lt;  96 — x normal-offset scale; yzw spare
+    vec4 shadow_normal;   ///&lt;  96 — x normal-offset scale; y 1 = the shadow is a CUBE
+                          ///&lt;        (points, and spots wider than 80°); zw spare
     vec4 shadow_row[4];   ///&lt; 112 — the spot map&#x27;s clip_from_world, by ROWS
 };
 
@@ -18532,6 +18567,8 @@ private:
 struct local_shadow_job
 {
     int light = -1;                 ///&lt; index into the span `prepare` was given
+    /// The kind of SHADOW map this pass renders: `point` for a cube face — every
+    /// point light&#x27;s, and a spot&#x27;s wider than `k_max_spot_shadow_angle`.
     local_light_kind kind = local_light_kind::point;
     int face = 0;                   ///&lt; the cube face, 0-5 in SDL order; 0 for a spot
     SDL_GPUTexture* texture = nullptr;   ///&lt; the spot array or the cube array
@@ -19163,7 +19200,12 @@ int gpu_local_shadows::prepare(std::span&lt;const local_light&gt; lights,
         const local_light&amp; light = lights[i];
         gpu_local_light g = pack_local_light(light);
 
-        const bool spot = (light.kind == local_light_kind::spot);
+        // THE SHADOW&#x27;S KIND, NOT THE LIGHT&#x27;S: a spot wider than one map can hold
+        // is shadowed through a cube, from the point budget, exactly as the CPU&#x27;s
+        // `local_shadow_set` does — one function decides for both
+        // (`shadows_through_cube`, the fix after 6.17b). The light itself, cone
+        // and all, is still a spot; `pack_local_light` said so above.
+        const bool spot = !shadows_through_cube(light);
         const bool budget = spot ? (spot_slot &lt; max_spots_) : (point_slot &lt; max_points_);
         if (light.casts_shadow &amp;&amp; !budget) { ++dropped_; }
 
@@ -19189,7 +19231,9 @@ int gpu_local_shadows::prepare(std::span&lt;const local_light&gt; lights,
                                   static_cast&lt;float&gt;(b.pcf_radius), b.strength};
             g.shadow_bias = vec4{b.constant_bias + quantisation_bias(depth_format::f32),
                                  mode_number(b.bias), b.slope_scale, b.max_slope};
-            g.shadow_normal = vec4{b.normal_scale, 0.0f, 0.0f, 0.0f};
+            // y: 1 when the shadow is a cube, so the shader picks its lookup by
+            // the SHADOW&#x27;s kind — which, for a wide spot, is not the light&#x27;s.
+            g.shadow_normal = vec4{b.normal_scale, spot ? 0.0f : 1.0f, 0.0f, 0.0f};
 
             // A spot&#x27;s lookup projects the fragment through the map&#x27;s matrix;
             // a point&#x27;s does not need one (the cube lookup takes a direction,
@@ -19200,7 +19244,7 @@ int gpu_local_shadows::prepare(std::span&lt;const local_light&gt; lights,
 
                 local_shadow_job job;
                 job.light = static_cast&lt;int&gt;(i);
-                job.kind = light.kind;
+                job.kind = local_light_kind::spot;
                 job.face = 0;
                 job.texture = spots_.handle();
                 job.layer = static_cast&lt;Uint32&gt;(slot);
@@ -19214,7 +19258,7 @@ int gpu_local_shadows::prepare(std::span&lt;const local_light&gt; lights,
                 {
                     local_shadow_job job;
                     job.light = static_cast&lt;int&gt;(i);
-                    job.kind = light.kind;
+                    job.kind = local_light_kind::point;   // a cube face, whatever the light is
                     job.face = f;
                     job.texture = points_.handle();
                     job.layer = static_cast&lt;Uint32&gt;(k_cube_faces * slot + f);
@@ -21095,7 +21139,7 @@ struct LocalLight
     float4 cone_shadow;      // x cone offset; y slot (-1 none); z near; w far
     float4 shadow_texel;     // x per-metre texel; y 1/resolution; z pcf radius; w strength
     float4 shadow_bias;      // x constant bias; y mode; z slope scale; w max slope
-    float4 shadow_normal;    // x normal-offset scale; yzw spare
+    float4 shadow_normal;    // x normal-offset scale; y 1 = shadow is a cube; zw spare
     float4 shadow_row0;
     float4 shadow_row1;
     float4 shadow_row2;
@@ -21871,8 +21915,11 @@ float3 shade_local_lights(float3 p, float3 n, float3 gn, float3 v, float3 base,
         if (L.cone_shadow.y &gt;= 0.0f)
         {
             const float geo_cos = dot(gn, l);
-            vis = spot ? spot_shadow_visibility(L, p, gn, geo_cos)
-                       : point_shadow_visibility(L, p, gn, geo_cos);
+            // BY THE SHADOW&#x27;S KIND, not the light&#x27;s: a spot wider than one map
+            // can hold (80 degrees) is shadowed through the cube array, as a
+            // point is — `engine::shadows_through_cube`, the fix after 6.17b.
+            vis = (L.shadow_normal.y &gt; 0.5f) ? point_shadow_visibility(L, p, gn, geo_cos)
+                                             : spot_shadow_visibility(L, p, gn, geo_cos);
         }
 
         const float3 e = L.radiance.xyz * (att * n_dot_l * vis);
@@ -23865,6 +23912,7 @@ ENGINE_MAIN(gltf_app)
 // §J  the budget, and what a lamp&#x27;s shadow costs
 // §K  the sun&#x27;s reach: §G&#x27;s finding in the sun&#x27;s own lookup (the fix after 6.17b)
 // §L  one sun map and no cascade block: the same picture as with one (the second fix)
+// §M  a spot wider than 80 degrees: shadowed through a cube, as a point (the third fix)
 //
 // §F AND §G ARE THE TWO THAT MATTER. §F is the lesson&#x27;s derivation made to face
 // a ground truth that shares no code with it: a ray from each ground point to the
@@ -25958,6 +26006,136 @@ void section_l(rig&amp; r)
     s.fs.destroy();
 }
 
+// ===========================================================================
+//  §M — A SPOT WIDER THAN ITS SHADOW MAP (the third fix after 6.17b)
+// ===========================================================================
+//
+// `fit_spot` caps a spot&#x27;s map at `k_max_spot_shadow_angle`, 80 degrees. A spot
+// whose cone is wider lights a ring beyond the map, and the two renderers used
+// to answer for that ring differently: the GPU&#x27;s lookup called anything outside
+// the map lit, the CPU&#x27;s clamped to the map&#x27;s edge texel. Neither is a shadow.
+// The fix shadows such a spot through a CUBE, as a point light, with its cone
+// still doing the masking. The scene: a spot just above the box, aimed nearly
+// level, so the box&#x27;s shadow on the ground falls across the 80-86 degree ring.
+
+local_light wide_spot()
+{
+    local_light l;
+    l.kind = local_light_kind::spot;
+    l.position = {0.3f, 1.5f, 0.2f};
+    l.direction = engine::normalised(vec3{1.0f, -0.1f, 0.0f});
+    l.inner_angle = 1.20f;    // 68.8 degrees
+    l.outer_angle = 1.50f;    // 85.9 degrees: past the 80-degree cap
+    l.range = 8.0f;
+    l.casts_shadow = true;
+    return l;
+}
+
+void section_m(rig&amp; r)
+{
+    section(&quot;M  A SPOT WIDER THAN 80 DEGREES — shadowed through a cube, like a point&quot;);
+
+    const local_light wide = wide_spot();
+    const std::vector&lt;local_light&gt; one{wide};
+    std::printf(&quot;  outer %.1f°, inner %.1f°; the widest a spot map holds is %.0f°\n&quot;,
+                static_cast&lt;double&gt;(wide.outer_angle * 57.29578f),
+                static_cast&lt;double&gt;(wide.inner_angle * 57.29578f),
+                static_cast&lt;double&gt;(engine::k_max_spot_shadow_angle * 57.29578f));
+
+    // How much of the problem this scene exercises: ground points the cone
+    // lights, BEYOND 80 degrees, that the ray says are in shadow.
+    int ring_shadowed = 0;
+    {
+        constexpr int k_grid = 600;
+        const float step = 2.0f * k_ground_half / static_cast&lt;float&gt;(k_grid);
+        for (int i = 0; i &lt; k_grid; ++i)
+        {
+            for (int j = 0; j &lt; k_grid; ++j)
+            {
+                const vec3 p{-k_ground_half + (i + 0.5f) * step, 0.0f,
+                             -k_ground_half + (j + 0.5f) * step};
+                const engine::local_light_sample ls = engine::sample_local_light(wide, p);
+                if (ls.attenuation &lt;= 0.0f) { continue; }
+                const float c = engine::dot(wide.direction, -ls.to_light);
+                if (c &lt; std::cos(engine::k_max_spot_shadow_angle) &amp;&amp; occluded(p, wide.position))
+                {
+                    ++ring_shadowed;
+                }
+            }
+        }
+    }
+
+    // ---- The CPU against ray-cast truth ------------------------------------
+    const cpu_scene scene = make_cpu_scene(true);
+    engine::local_shadow_set set;
+    set.settings() = r.settings;
+    set.render(scene.objects, scene.pool, one);
+    const int maps = set.map_count();
+    const float cube_texel = 2.0f / static_cast&lt;float&gt;(set.settings().point_resolution);
+    const shadow_errors e = judge(wide, cube_texel, [&amp;](vec3 p, float n_dot_l) {
+        return set.visibility(0, p, vec3{0.0f, 1.0f, 0.0f}, n_dot_l);
+    });
+    std::printf(&quot;  CPU: %d map(s); judged %d, acne %d, leak %d; %d shadowed ground points &quot;
+                &quot;lie beyond 80°\n&quot;, maps, e.judged, e.acne, e.leak, ring_shadowed);
+
+    // ---- The GPU against the CPU, pixel for pixel ----------------------------
+    std::vector&lt;engine::gpu_local_light&gt; records(2);
+    (void)r.shadows.prepare(one, records);
+    const int jobs = r.shadows.job_count();
+    const std::vector&lt;float&gt; gpu = render_frame(r, one, true);
+    std::vector&lt;float&gt; vis;
+    const std::vector&lt;float&gt; cpu = cpu_frame(one, r.settings, &amp;vis);
+    const double tol = (r.image.pixel_bytes() == 16u) ? 2e-4 : 2e-3;
+    auto near_edge = [&amp;](int i, int j) {
+        const std::size_t p = static_cast&lt;std::size_t&gt;(j) * k_size + static_cast&lt;std::size_t&gt;(i);
+        const float v = vis[p];
+        if (v &gt; 0.0f &amp;&amp; v &lt; 1.0f) { return true; }
+        for (int dj = -2; dj &lt;= 2; ++dj)
+        {
+            for (int di = -2; di &lt;= 2; ++di)
+            {
+                const int qi = i + di;
+                const int qj = j + dj;
+                if (qi &lt; 0 || qj &lt; 0 || qi &gt;= k_size || qj &gt;= k_size) { continue; }
+                if (vis[static_cast&lt;std::size_t&gt;(qj) * k_size + static_cast&lt;std::size_t&gt;(qi)] != v)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    int differ = 0;
+    int far = 0;
+    for (int j = 0; j &lt; k_size; ++j)
+    {
+        for (int i = 0; i &lt; k_size; ++i)
+        {
+            const std::size_t p = static_cast&lt;std::size_t&gt;(j) * k_size + static_cast&lt;std::size_t&gt;(i);
+            double big = 0.0;
+            const double rel = pixel_rel(gpu, cpu, p, &amp;big);
+            if (big &lt; 1e-4 || rel &lt;= tol) { continue; }
+            ++differ;
+            if (!near_edge(i, j)) { ++far; }
+        }
+    }
+    std::printf(&quot;  GPU: %d shadow pass(es); against the CPU, %d pixels differ, %d of them &quot;
+                &quot;more than 2 px from a shadow edge\n&quot;, jobs, differ, far);
+
+    checkf(ring_shadowed &gt; 200,
+           &quot;the scene exercises the ring: %d ground points beyond 80° are lit by the cone and &quot;
+           &quot;shadowed by the box — the control&quot;, ring_shadowed);
+    checkf(maps == engine::k_cube_faces &amp;&amp; jobs == engine::k_cube_faces,
+           &quot;both renderers shadow the wide spot through a CUBE: %d CPU maps, %d GPU passes&quot;,
+           maps, jobs);
+    checkf(e.acne == 0 &amp;&amp; e.leak == 0,
+           &quot;CPU against ray-cast truth: %d acne, %d leaking, of %d judged — the ring &quot;
+           &quot;included&quot;, e.acne, e.leak, e.judged);
+    checkf(far == 0,
+           &quot;GPU against CPU: %d pixels differ more than 2 px from a shadow edge (of %d &quot;
+           &quot;differing) — the two renderers agree about the ring&quot;, far, differ);
+}
+
 int main()
 {
     std::printf(&quot;verify_617b — Lesson 6.17b: local lights, point and spot, and their shadows\n&quot;);
@@ -25976,7 +26154,7 @@ int main()
     }
     if (!build_rig(r))
     {
-        std::printf(&quot;\n  (no GPU device — §G to §L skipped)\n&quot;);
+        std::printf(&quot;\n  (no GPU device — §G to §M skipped)\n&quot;);
     }
     else
     {
@@ -25986,6 +26164,7 @@ int main()
         section_j(r);
         section_k(r);
         section_l(r);
+        section_m(r);
         r.image.destroy();
     }
     SDL_Quit();
@@ -26041,7 +26220,7 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
   <h3>Expected result</h3>
 
   <p>
-    The harness ends with <code>46 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
+    The harness ends with <code>50 checks, 0 failure(s)</code>. §A–§E need no GPU; from §F onwards it
     prints the device it found (<code>device: metal; colour RGBA32F; depth D32_FLOAT</code> on a Mac)
     and the GPU sections run. The tables to read are §F's four bias policies — 19,502 acne with no
     bias, 0 and 50 for 6.8's formula, 0 and 0 derived — and §G's distance histogram, whose every
@@ -28202,23 +28381,23 @@ ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_617b.sh   # for §J's timin
     to change and not to vanish — the two filters are still different filters.
   </p>
 
-  <h3>5 — A spot wider than its shadow map (engine challenge)</h3>
+  <h3>5 — Skip the faces a wide spot cannot reach (engine challenge)</h3>
   <p>
-    <code>fit_spot</code> caps a spot's shadow camera at 80° from the axis
-    (<code>k_max_spot_shadow_angle</code>, §6.2). Give a spot an outer angle of 85° and look at the
-    ring between 80° and 85°: the cone lights it, and it lies outside the map. Find out what each
-    renderer does there, make them agree, and decide what is right.
+    A spot wider than 80° is shadowed through a cube — <code>shadows_through_cube</code>, six
+    passes — but a cone cannot see every face of one. Skip the passes for faces the cone cannot
+    reach, on both renderers, and then measure what that saves before deciding it was worth it.
   </p>
   <p>
-    <em>Solution sketch:</em> they disagree. The GPU's <code>spot_shadow_visibility</code> rejects
-    anything outside the map as lit; the CPU's perspective branch clamps to the map's edge first —
-    right for a cube face, which owns every direction it is asked about (§7.4), and wrong here,
-    which is why the comment above that clamp, saying it only touches points the cone has already
-    zeroed, holds only up to 80°. The quick fix makes the spot path reject, as the GPU does: a ring
-    of light with no shadow in it. The right fix gives such a spot six faces, as a point light has,
-    and lets its cone do the masking — a point light's shadow under a spot's light. <em>Watch
-    for:</em> the budgets then count a wide spot as a point, and <code>prepare</code> has to say
-    so.
+    <em>Hint:</em> every direction a face owns lies within acos(1/√3) = 54.7° of that face's axis.
+    <em>Solution sketch:</em> by the triangle inequality on the sphere, a face whose axis is more
+    than <em>θ<sub>o</sub></em>&nbsp;+&nbsp;54.7° from the spot's axis owns no direction inside the
+    cone, so its pass can go. The skipped layer is never read: both lamp loops leave before the
+    shadow lookup wherever the cone is zero. Then the honest measurement: with
+    <em>θ<sub>o</sub></em> above 80° the threshold is past 134.7°, so only a face nearly opposite
+    the axis qualifies — one face in six for a spot aimed along an axis, and none for one aimed
+    along a diagonal, whose farthest face axis is 125.3° away. <em>Watch for:</em> the test must use
+    the same outer angle the light's cone uses, or a face the cone does reach is skipped and its
+    shadow disappears — the failure this whole exercise exists to avoid.
   </p>
 
   </div>

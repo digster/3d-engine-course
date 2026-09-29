@@ -172,7 +172,7 @@ struct LocalLight
     float4 cone_shadow;      // x cone offset; y slot (-1 none); z near; w far
     float4 shadow_texel;     // x per-metre texel; y 1/resolution; z pcf radius; w strength
     float4 shadow_bias;      // x constant bias; y mode; z slope scale; w max slope
-    float4 shadow_normal;    // x normal-offset scale; yzw spare
+    float4 shadow_normal;    // x normal-offset scale; y 1 = shadow is a cube; zw spare
     float4 shadow_row0;
     float4 shadow_row1;
     float4 shadow_row2;
@@ -948,8 +948,11 @@ float3 shade_local_lights(float3 p, float3 n, float3 gn, float3 v, float3 base,
         if (L.cone_shadow.y >= 0.0f)
         {
             const float geo_cos = dot(gn, l);
-            vis = spot ? spot_shadow_visibility(L, p, gn, geo_cos)
-                       : point_shadow_visibility(L, p, gn, geo_cos);
+            // BY THE SHADOW'S KIND, not the light's: a spot wider than one map
+            // can hold (80 degrees) is shadowed through the cube array, as a
+            // point is — `engine::shadows_through_cube`, the fix after 6.17b.
+            vis = (L.shadow_normal.y > 0.5f) ? point_shadow_visibility(L, p, gn, geo_cos)
+                                             : spot_shadow_visibility(L, p, gn, geo_cos);
         }
 
         const float3 e = L.radiance.xyz * (att * n_dot_l * vis);

@@ -96,7 +96,8 @@ a bare ground as acne on the GPU.
 without cascades (how `sandbox --gpu` draws) had shown no shadow at all since 6.9 — the fallback
 cascade block held a 1 m texel — and now matches the cascaded picture exactly; and the frame graph
 can pool a one-layer depth ARRAY (`fg_texture_desc::array`) and judges reuse by what each pooled
-texture really is.
+texture really is; and a spot light wider than 80° is shadowed through a cube, as a point light,
+instead of a map that stopped at 80° and left the ring beyond it unshadowed.
 
 ---
 

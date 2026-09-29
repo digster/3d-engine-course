@@ -61,7 +61,12 @@
     <li><strong>The far plane is the range, and the cone is capped at 80°.</strong> Nothing beyond the
         range is lit, so nothing beyond it can matter. A spot wider than 80° from its axis is not given
         a spot map: its edge texels would stretch by 1/cos²&nbsp;80° = 33 times, and at 90° without
-        bound. That is a job for a cube, which is what a point light is (§7).</li>
+        bound. That is a job for a cube, which is what a point light is (§7) — and since the fix
+        after this lesson, a shadowed spot that wide is given one: <code>shadows_through_cube</code>
+        sends it to six faces on both renderers, and its cone still does the masking. The first
+        version of this page stopped at the cap, and §M of the harness measured the ring it left
+        unshadowed: 304 ground points lit behind the box, and 69 pixels on which the two renderers
+        disagreed away from any edge. Through a cube, none of either.</li>
   </ul>
 
   <p>
@@ -431,6 +436,7 @@
     each kind its own budget — four spots and two points by default, as a depth
     <code>Texture2DArray</code> and a depth <code>TextureCubeArray</code> — and a shadowed lamp past
     its budget is drawn <em>unshadowed</em> with a warning, not dropped (§J: one dropped, slot −1).
+    A spot too wide for a map (§6.2) draws on the point budget, because its shadow is a cube.
   </p>
 
   <div class="callout verify">
