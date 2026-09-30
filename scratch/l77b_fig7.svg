@@ -1,0 +1,37 @@
+<svg viewBox="0 0 900 290" role="img" aria-labelledby="l77bf7-t l77bf7-d">
+  <title id="l77bf7-t">Holding a STEP</title>
+  <desc id="l77bf7-d">A step-interpolated translation with keys 0, 1 and 2 at 0, 0.5 and 1 seconds. The imported channel holds each value flat and jumps at the next key, because the importer writes a copy of each value one representable float before the next key time, at 0.49999997 and just below 1. Copying the keys as they are gives a ramp instead, reading 0.5 at a quarter second where the file says 0.</desc>
+  <defs>
+    <marker id="e-i-l77bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="70" y="50" width="490" height="200" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<path d="M 70.00,250.00 L 315.00,150.00 L 560.00,50.00" fill="none" stroke="#e05c5c" stroke-width="1.5" stroke-dasharray="5 4"/>
+<path d="M 70.00,250.00 L 315.00,250.00 L 315.00,150.00 L 560.00,150.00 L 560.00,50.00" fill="none" stroke="#5ac878" stroke-width="2.2"/>
+<circle cx="70.0" cy="250.0" r="4" fill="#5082e6" stroke="none"/>
+<circle cx="315.0" cy="150.0" r="4" fill="#5082e6" stroke="none"/>
+<circle cx="560.0" cy="50.0" r="4" fill="#5082e6" stroke="none"/>
+<circle cx="315.0" cy="250.0" r="3.4" fill="#f0961e" stroke="none"/>
+<circle cx="560.0" cy="150.0" r="3.4" fill="#f0961e" stroke="none"/>
+<text x="62" y="253.0" class="xs mono" text-anchor="end">0</text>
+<text x="62" y="153.0" class="xs mono" text-anchor="end">1</text>
+<text x="62" y="53.0" class="xs mono" text-anchor="end">2</text>
+<text x="70" y="265" class="xs mono" text-anchor="middle">0</text>
+<text x="315.0" y="265" class="xs mono" text-anchor="middle">0.5</text>
+<text x="560" y="265" class="xs mono" text-anchor="middle">1</text>
+<text x="315.0" y="282" class="xs muted" text-anchor="middle">time (s)</text>
+<text x="70" y="24" class="sm" text-anchor="start">a STEP translation: keys 0, 1, 2 at 0, 0.5, 1 s</text>
+<text x="70" y="38" class="xs muted" text-anchor="start">blue: the file's keys   amber: the importer's held keys</text>
+<line x1="590.0" y1="80.0" x2="618.0" y2="80.0" stroke="#5ac878" stroke-width="2.2" fill="none"/>
+<text x="626" y="84" class="xs" text-anchor="start">imported: holds, then jumps</text>
+<line x1="590.0" y1="102.0" x2="618.0" y2="102.0" stroke="#e05c5c" stroke-width="1.5" fill="none" stroke-dasharray="5 4"/>
+<text x="626" y="106" class="xs" text-anchor="start">keys copied: a ramp</text>
+<text x="590" y="146" class="xs" text-anchor="start">the held key is at</text>
+<text x="590" y="162" class="xs mono" text-anchor="start">nextafter(0.5, 0) = 0.49999997</text>
+<text x="590" y="186" class="xs mono" text-anchor="start">x(0.25): imported 0.000, copied 0.500</text>
+<text x="590" y="202" class="xs mono" text-anchor="start">x(0.49999997) 0.000   x(0.5) 1.000</text>
+<text x="590" y="226" class="xs" text-anchor="start">5 keys, 2 of them held</text>
+</svg>

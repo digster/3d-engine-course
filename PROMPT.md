@@ -3033,3 +3033,21 @@ bookkeeping after a usage limit. Logged in `memory/2026-09-29.md`.)
 
 Produced Lesson 6.18b — Compute Shaders: GPU Particles (Module 6, inserted between 6.18 and 7.1;
 Module 6 complete again).
+
+---
+
+## 2026-09-30 — `next` (Lesson 7.7b)
+
+> next
+
+> Try again
+
+> I hit my usage limit while you were working, but it has reset now. Please continue from where
+> you left off.
+
+(The third of the four inserted lessons, written after 8.13 by the authoring guide's §17
+protocol. "Try again" followed a turn that stopped mid-harness, after the 36 checks first passed;
+the second message resumed the bookkeeping after a usage limit. Logged in `memory/2026-09-30.md`.)
+
+Produced Lesson 7.7b — Animated Characters from glTF: Skins and Clips (Module 7, inserted between
+7.7 and 7.8; Module 7 complete again).

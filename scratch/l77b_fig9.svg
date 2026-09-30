@@ -1,0 +1,58 @@
+<svg viewBox="0 0 900 300" role="img" aria-labelledby="l77bf9-t l77bf9-d">
+  <title id="l77bf9-t">Two exports of one motion</title>
+  <desc id="l77bf9-d">A line over the one-second walk showing the largest angle by which any joint differs between the clip imported from Blender's sampled export and the clip imported from its cubic-spline export. It is near zero at the keys, rises between them to peaks of up to 0.916 degrees, and on the frames themselves never exceeds 0.218 degrees — the same amount the two files differ by when evaluated with the specification's formulas alone.</desc>
+  <defs>
+    <marker id="e-i-l77bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<rect x="70" y="60" width="790" height="190" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="70.0" y1="250" x2="70.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="96.33333333333333" y1="250" x2="96.33333333333333" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="122.66666666666666" y1="250" x2="122.66666666666666" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="149.0" y1="250" x2="149.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="175.33333333333331" y1="250" x2="175.33333333333331" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="201.66666666666666" y1="250" x2="201.66666666666666" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="228.0" y1="250" x2="228.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="254.33333333333334" y1="250" x2="254.33333333333334" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="280.66666666666663" y1="250" x2="280.66666666666663" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="307.0" y1="250" x2="307.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="333.3333333333333" y1="250" x2="333.3333333333333" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="359.66666666666663" y1="250" x2="359.66666666666663" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="386.0" y1="250" x2="386.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="412.33333333333337" y1="250" x2="412.33333333333337" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="438.6666666666667" y1="250" x2="438.6666666666667" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="465.0" y1="250" x2="465.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="491.3333333333333" y1="250" x2="491.3333333333333" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="517.6666666666666" y1="250" x2="517.6666666666666" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="544.0" y1="250" x2="544.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="570.3333333333333" y1="250" x2="570.3333333333333" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="596.6666666666666" y1="250" x2="596.6666666666666" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="623.0" y1="250" x2="623.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="649.3333333333333" y1="250" x2="649.3333333333333" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="675.6666666666667" y1="250" x2="675.6666666666667" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="702.0" y1="250" x2="702.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="728.3333333333334" y1="250" x2="728.3333333333334" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="754.6666666666667" y1="250" x2="754.6666666666667" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="781.0" y1="250" x2="781.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="807.3333333333334" y1="250" x2="807.3333333333334" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="833.6666666666666" y1="250" x2="833.6666666666666" y2="254" class="ink-soft" stroke-width="1.0"/>
+<line x1="860.0" y1="250" x2="860.0" y2="254" class="ink-soft" stroke-width="1.0"/>
+<path d="M 70.00,250.00 L 73.29,174.52 L 76.58,115.98 L 79.88,82.86 L 83.17,80.92 L 86.46,93.89 L 89.75,135.35 L 93.04,196.15 L 96.33,230.14 L 99.62,228.74 L 102.92,197.62 L 106.21,181.66 L 109.50,183.26 L 112.79,192.99 L 116.08,217.63 L 119.38,246.17 L 122.67,208.55 L 125.96,218.89 L 129.25,226.36 L 132.54,229.21 L 135.83,228.50 L 139.12,226.64 L 142.42,223.69 L 145.71,221.79 L 149.00,220.40 L 152.29,200.86 L 155.58,185.01 L 158.88,174.44 L 162.17,173.18 L 165.46,177.10 L 168.75,192.44 L 172.04,217.92 L 175.33,250.00 L 178.62,220.08 L 181.92,190.25 L 185.21,175.25 L 188.50,172.92 L 191.79,172.59 L 195.08,196.15 L 198.38,219.64 L 201.67,242.01 L 204.96,227.21 L 208.25,199.93 L 211.54,191.80 L 214.83,183.68 L 218.12,190.05 L 221.42,202.83 L 224.71,220.04 L 228.00,241.24 L 231.29,225.24 L 234.58,211.94 L 237.88,202.69 L 241.17,198.30 L 244.46,204.85 L 247.75,211.40 L 251.04,229.91 L 254.33,241.13 L 257.62,234.35 L 260.92,225.79 L 264.21,217.23 L 267.50,216.69 L 270.79,220.85 L 274.08,227.29 L 277.38,238.65 L 280.67,250.00 L 283.96,219.70 L 287.25,189.40 L 290.54,174.62 L 293.83,170.18 L 297.12,170.86 L 300.42,192.04 L 303.71,213.21 L 307.00,245.31 L 310.29,216.84 L 313.58,189.03 L 316.88,176.33 L 320.17,163.63 L 323.46,176.02 L 326.75,188.43 L 330.04,215.92 L 333.33,244.01 L 336.62,212.45 L 339.92,191.49 L 343.21,170.44 L 346.50,169.76 L 349.79,174.18 L 353.08,188.99 L 356.38,219.44 L 359.67,250.00 L 362.96,226.80 L 366.25,208.14 L 369.54,199.83 L 372.83,199.19 L 376.12,203.11 L 379.42,215.82 L 382.71,230.75 L 386.00,242.56 L 389.29,242.00 L 392.58,228.13 L 395.88,219.61 L 399.17,221.74 L 402.46,223.88 L 405.75,226.02 L 409.04,238.57 L 412.33,243.80 L 415.62,212.26 L 418.92,182.13 L 422.21,161.08 L 425.50,150.02 L 428.79,156.62 L 432.08,170.58 L 435.38,207.49 L 438.67,243.51 L 441.96,180.44 L 445.25,128.30 L 448.54,86.58 L 451.83,78.70 L 455.12,85.21 L 458.42,116.35 L 461.71,176.49 L 465.00,250.00 L 468.29,177.03 L 471.58,117.74 L 474.87,88.07 L 478.17,83.50 L 481.46,93.57 L 484.75,137.93 L 488.04,192.79 L 491.33,228.28 L 494.62,225.59 L 497.92,191.54 L 501.21,180.22 L 504.50,176.14 L 507.79,189.38 L 511.08,212.31 L 514.38,242.25 L 517.67,211.75 L 520.96,227.92 L 524.25,226.21 L 527.54,224.01 L 530.83,221.81 L 534.12,219.61 L 537.42,228.06 L 540.71,228.31 L 544.00,224.90 L 547.29,207.99 L 550.58,196.03 L 553.88,186.41 L 557.17,185.82 L 560.46,189.81 L 563.75,201.53 L 567.04,223.50 L 570.33,250.00 L 573.62,221.52 L 576.92,193.14 L 580.21,179.45 L 583.50,175.50 L 586.79,176.50 L 590.08,197.18 L 593.38,217.79 L 596.67,241.78 L 599.96,219.98 L 603.25,191.83 L 606.54,178.75 L 609.83,165.69 L 613.12,177.91 L 616.42,190.12 L 619.71,217.56 L 623.00,244.85 L 626.29,213.42 L 629.58,192.15 L 632.88,170.87 L 636.17,170.16 L 639.46,174.59 L 642.75,189.38 L 646.04,219.69 L 649.33,250.00 L 652.62,238.56 L 655.92,227.12 L 659.21,220.51 L 662.50,216.73 L 665.79,216.41 L 669.08,224.60 L 672.38,232.80 L 675.67,241.13 L 678.96,227.42 L 682.25,208.41 L 685.54,201.25 L 688.83,194.10 L 692.12,197.82 L 695.42,206.37 L 698.71,218.95 L 702.00,244.94 L 705.29,212.21 L 708.58,194.24 L 711.88,180.69 L 715.17,173.61 L 718.46,181.10 L 721.75,188.60 L 725.04,215.54 L 728.33,243.51 L 731.62,207.63 L 734.92,184.50 L 738.21,161.30 L 741.50,162.99 L 744.79,166.76 L 748.08,183.98 L 751.38,216.95 L 754.67,250.00 L 757.96,222.09 L 761.25,200.70 L 764.54,189.34 L 767.83,189.19 L 771.12,194.08 L 774.42,207.97 L 777.71,226.83 L 781.00,243.42 L 784.29,242.50 L 787.58,239.57 L 790.88,238.07 L 794.17,236.15 L 797.46,234.83 L 800.75,236.89 L 804.04,245.61 L 807.33,243.08 L 810.62,218.14 L 813.92,186.04 L 817.21,163.46 L 820.50,156.20 L 823.79,157.21 L 827.08,176.04 L 830.38,210.12 L 833.67,243.62 L 836.96,183.49 L 840.25,125.53 L 843.54,86.74 L 846.83,76.03 L 850.12,80.00 L 853.42,114.56 L 856.71,174.00 L 860.00,250.00" fill="none" stroke="#9b7ede" stroke-width="1.4"/>
+<line x1="70.0" y1="208.6" x2="860.0" y2="208.6" stroke="#5ac878" stroke-width="1.1" fill="none" stroke-dasharray="4 3"/>
+<text x="64" y="253.0" class="xs mono" text-anchor="end">0</text>
+<text x="64" y="205.5" class="xs mono" text-anchor="end">0.25</text>
+<text x="64" y="158.0" class="xs mono" text-anchor="end">0.5</text>
+<text x="64" y="110.5" class="xs mono" text-anchor="end">0.75</text>
+<text x="64" y="63.0" class="xs mono" text-anchor="end">1</text>
+<text x="70" y="267" class="xs mono" text-anchor="middle">0</text>
+<text x="267.5" y="267" class="xs mono" text-anchor="middle">0.25</text>
+<text x="465.0" y="267" class="xs mono" text-anchor="middle">0.5</text>
+<text x="662.5" y="267" class="xs mono" text-anchor="middle">0.75</text>
+<text x="860" y="267" class="xs mono" text-anchor="middle">1</text>
+<text x="465.0" y="284" class="xs muted" text-anchor="middle">time (s); ticks are Blender's 30 frames</text>
+<text x="70" y="30" class="sm" text-anchor="start">the walk, imported from both exports: the worst joint's disagreement, degrees</text>
+<text x="70" y="46" class="xs muted" text-anchor="start">up to 0.916° between frames; dashed green: 0.218°, the most on any frame — and the files alone, with no importer, differ by exactly that</text>
+</svg>

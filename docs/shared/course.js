@@ -399,6 +399,7 @@
     "7.5": "07-05-slerp.html",
     "7.6": "07-06-skeletal-animation.html",
     "7.7": "07-07-sampling-blending.html",
+    "7.7b": "07-07b-gltf-characters.html",
     "7.8": "07-08-audio.html",
     "8.1": "08-01-integrators.html",
     "8.2": "08-02-forces-and-bodies.html",

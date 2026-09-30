@@ -393,6 +393,30 @@ capabilities:
     purpose — a shared_ptr would put a refcount decrement, and therefore possibly
     a free, on the audio thread.
 
+  - 7.7b THE ENGINE CAN PLAY A CHARACTER IT DID NOT BUILD.
+    108 -> 109 public headers, 74 -> 75 sources (anim/import), one demo (mannequin), one
+    Blender-authored asset. 36 checks green (verify_77b §A-§L), 9 labelled controls.
+    gfx/gltf: gltf_node_desc (every node: parent, TRS read field by field or a matrix via
+    transform_from_affine with out_of_square), gltf_skin_desc (joints as node indices in skin
+    order; inverse_bind EMPTY when absent), gltf_primitive gains node, skin, influence_sets
+    and flattened joints/weights (every paired set; indices via cgltf_accessor_read_uint;
+    carried through with_normals' flat split by follow_flat_split), gltf_sampler_desc /
+    gltf_channel_desc / gltf_animation_desc (raw values, interpolation, a path it does not
+    know leaves the channel with no node), quat_from_xyzw; report: skins, skinned_primitives,
+    max_influence_sets, animations, channels, matrix_nodes, skipped_bad_influences,
+    short_inverse_binds. anim/import: import_settings (tolerance a tenth of reduce's,
+    max_split 64, loops), rig_import_report (skin_joints, joints, ancestors,
+    file_order_breaks, resorted, identity_inverse_binds, bind_vs_rest, worst_out_of_square,
+    skeleton; meshes, vertices, influences[0..4], truncated, worst_dropped, bad_influences,
+    worst_weight_sum, repaired, frozen_vertices; clips, channels, bound, unbound, morph,
+    linear/step/cubic, keys_in/out, split_keys, step_keys, capped, worst_position/rotation/
+    scale, sign_flips, unnormalised_keys), imported_rig (sk, joint_node, meshes,
+    mesh_material, clips), import_rig. The mannequin: 21 nodes, 20 joints (19 + Armature),
+    2,681 vertices in two primitives sharing one skin, walk (1 s) and wave (2 s), 929 keys in
+    and out; within 39.51 um of an independent double-precision spec evaluator; load 0.13-0.18
+    ms, import 0.16-0.23 ms, per frame sample 0.16 us + palette 0.22 us + skin 16.6 us
+    (6.18 ns a vertex), Release. Corrected: k_uniform_scale_tolerance (1e-4 ratio),
+    k_weight_tolerance 0.02 -> 1e-5, out_of_order comments, gltf.hpp's facing sentence.
   - 7.7 THE ENGINE CAN PLAY RECORDED MOTION. `engine::anim::clip` is a function
     from time to pose: per-channel keyframe tracks, cursor-based sampling with a
     binary-search fallback on any jump, correct looping, cross-fading in POSE

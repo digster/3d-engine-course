@@ -86,6 +86,7 @@
 // because the failure it prevents scales with that: a public `engine::anim` the
 // table of contents does not mention reads as an engine with no animation in it.
 #include <engine/anim/clip.hpp>
+#include <engine/anim/import.hpp>
 #include <engine/anim/skeleton.hpp>
 #include <engine/anim/skin.hpp>
 

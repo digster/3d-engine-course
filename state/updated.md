@@ -4,6 +4,33 @@ Moved verbatim from STATE.md's `updated:` block on 2026-09-27, when that file be
 a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in step.
 
 ```text
+updated: 2026-09-30 (after Lesson 7.7b — 99 of 113 lessons published; the THIRD of the four
+         lessons inserted by the post-Module 8 review, placed between 7.7 and 7.8 by the §17
+         protocol; Module 7 is COMPLETE AGAIN: 9 lessons, ~80 h measured. 8 engine/demo/CMake
+         files changed and 3 created (anim/import.hpp/.cpp, demos/mannequin), plus the course's
+         first Blender-authored asset (assets/mannequin.glb from scratch/make_mannequin.py,
+         byte-identical across two Blender runs). 36 checks green (verify_77b §A-§L) against
+         both libraries; the student's post-7.7b tree (replayed from pins) builds offline with
+         0 warnings and its demo shot is byte-identical to the repository's. ADDITIVE, PROVED:
+         41 harnesses (6.1-6.18b, 7.1-7.8, 8.1-8.13) rerun before and after — only timings,
+         timing-derived values, log stamps, one heap pointer and 6.18b's documented GPU races
+         differ; verify_85 and verify_86 fail to compile before AND after (pre-existing).
+         Golden E917C06C, byte-identical. Later pins carried: 40 (7.8's and Module 8's engine
+         CMakeLists, engine.hpp and demos CMakeLists), each page rebuilt and changing by
+         exactly the carried lines; 7.7's next link and Recap bridge and 7.8's prev link
+         re-pointed; 8.13's project tree gained 7.7b's files. Hours 8 -> 12 (the estimator's
+         model on the working-tree diff: 12,851 prose words, 1,447 code + 690 comment lines,
+         5 exercises, raw 12.05); M7 ~76 -> ~80 h, course ~779 -> ~783 h; 0.2's planner cum
+         M7..M9 +4 (561/717/783) and two stale pace sentences it exposed. Corrections in
+         place with marked notes (decisions: found-by-77b): 6.6's facing sentence, 7.6's
+         out-of-order claim and two tolerances, 7.7's exercise hints (2) and (4). Measurements
+         that refused their claims: 7.7's sign flips (0 on Blender's file); the xyzw "180
+         about a diagonal" (111-180, not one rotation — an odd permutation); my first
+         explanation of the two exports' 0.218 deg (Blender's handles ARE at thirds — its
+         exporter normalises each tangent's control point); my Exercise 5 prediction (keys
+         after reduce move 258/276/329, errors barely add); import.cpp's t_d comment
+         (backwards); and a close-up render that could not show 16.9 mm.)
+
 updated: 2026-09-29 (after Lesson 6.18b — 98 of 113 lessons published; the SECOND of the
          four lessons inserted by the post-Module 8 review, placed between 6.18 and 7.1 by the
          §17 protocol, and now the last lesson of Module 6, which is COMPLETE AGAIN: 20

@@ -9946,6 +9946,19 @@ add_executable(rig rig/main.cpp)
 target_link_libraries(rig PRIVATE engine::engine)
 engine_set_warnings(rig)
 
+# ---- mannequin: a character somebody else built -----------------------------
+#
+# Lesson 7.7b. `rig` is a skeleton this repository built for itself; this is one
+# Blender&#x27;s glTF exporter wrote (assets/mannequin.glb, authored by
+# scratch/make_mannequin.py), played through the same four calls. It loads its
+# character through the engine&#x27;s search path, so it needs `engine_use_assets`
+# where `rig` needed nothing — and the software renderer, like `rig`, so that a
+# headless `--shot` of each import bug is the same picture on every machine.
+add_executable(mannequin mannequin/main.cpp)
+target_link_libraries(mannequin PRIVATE engine::engine)
+engine_set_warnings(mannequin)
+engine_use_assets(mannequin)
+
 # ---- plane: the complex plane, drawn ---------------------------------------
 #
 # Lesson 7.3, and the smallest demo in the repository — smaller than `pong`,

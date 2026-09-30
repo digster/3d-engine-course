@@ -33,7 +33,15 @@ add_library(engine STATIC
     # back to) and nothing includes it. Alphabetical order and dependency order
     # agree here by luck rather than by design, which is worth noticing precisely
     # because the list is maintained alphabetically and will not keep agreeing.
+    #
+    # Lesson 7.7b. And now it does not: `import.cpp` turns glTF descriptions into
+    # a skeleton, skinned meshes and clips, so it depends on all three files
+    # around it — and on `gfx/gltf.hpp`, the one arrow in this directory that
+    # points at gfx/ — and alphabetically it lands between two of them. Nothing
+    # breaks, because a static library's sources compile independently and link
+    # as one; the order here is for the reader, and the reader is now told.
     src/anim/clip.cpp
+    src/anim/import.cpp
     src/anim/skeleton.cpp
     src/anim/skin.cpp
     # Lesson 5.5. A new directory rather than another file in gfx/: an asset

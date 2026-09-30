@@ -430,6 +430,19 @@
     triangle. Two wrongs, and the second one hides the first.
   </p>
 
+  <div class="callout warn">
+    <span class="label">Corrected after Lesson 7.7b</span>
+    <p>
+      "Presents its back to you" has the direction backwards, and nothing in this lesson could show it:
+      every asset here is symmetric front to back. A camera looking down −Z sees the surfaces that face
+      +Z — toward it — which is exactly where glTF puts an asset's front, so an unrotated glTF model
+      <em>faces</em> the camera. Lesson 7.7b's mannequin has a face, and its nose is 0.121&nbsp;m on the
+      +Z side of its head (<a href="07-07b-gltf-characters.html#facing">7.7b §11</a>). What really differs
+      is <em>forward</em>: glTF's is +Z and this engine's is −Z, so a character moved along the engine's
+      forward walks backwards. The fix is still a yaw on the object, outside the loader — for that reason.
+    </p>
+  </div>
+
   <div class="callout ok">
     <span class="label">The receipt</span>
     <p><strong><code>engine/src/gfx/gltf.cpp</code> contains zero conversion code.</strong> No

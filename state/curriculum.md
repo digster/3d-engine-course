@@ -724,4 +724,9 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
   frame-graph extension AND a CPU specification of everything the kernels do. M6 ~157 ->
   ~162 h (20 lessons, complete again); course ~774 -> ~779 h; 0.2's planner cum M6..M9
   +5 (481/557/713/779), and its prose ("779", "thirty-six months").
+  7.7b PUBLISHED 2026-09-30 at 12 h (planned 8): the estimator's model priced on the
+  working-tree diff — 12,851 prose words, 1,447 code + 690 comment lines, 5 exercises, raw
+  12.05. M7 ~76 -> ~80 h (9 lessons, complete again); course ~779 -> ~783 h; 0.2's planner
+  cum M7..M9 +4 (561/717/783), and two stale pace sentences ("twenty months" and
+  "thirty-three months", both right for 433 h) corrected to thirty-six months and five years.
 ```

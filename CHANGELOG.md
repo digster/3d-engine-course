@@ -112,6 +112,21 @@ each buffer's `cycle` flag, which the lesson measured breaking a pool two differ
 when set wrong. `blend_add`'s comment no longer calls float addition associative. Module 6 is
 complete again, and has its project tree. `verify_618b`: 71 checks.
 
+**7.7b (inserted after 7.7; written 2026-09-30, after 8.13).** The engine can **play a character it
+did not build**. A mannequin authored in Blender and written by Blender's own glTF exporter
+(`scratch/make_mannequin.py`, `assets/mannequin.glb`) is imported by `anim::import_rig` into 7.6's
+skeleton and skinned meshes and 7.7's clips. The parser now describes every node, skin, influence
+set and animation; the importer carries the non-joint nodes above the joints into the skeleton,
+sorts it parent-first without moving an already-ordered skin, takes the file's inverse binds as data
+(identity when absent), keeps four influences through three index spaces, reads rotations x, y, z,
+w through one function, and converts LINEAR (slerp), STEP and CUBICSPLINE samplers into lerp/nlerp
+keys to a tenth of the reducer's tolerance, measured at seven probes — never the midpoint, where
+nlerp and slerp agree. The character plays within 39.5 µm of an independent double-precision
+evaluation of the specification. Three of 7.6's checks are corrected (an out-of-order joint becomes a
+root, not a one-frame lag; a non-uniform-scale test that flagged Blender's float noise; a weight
+tolerance the specification forbids), and 6.6's "a glTF model presents its back" is corrected — it
+faces the camera. Module 7 is complete again. `verify_77b`: 36 checks.
+
 ---
 
 ## The demo tour
@@ -187,6 +202,13 @@ demo of anything:
 ./build/demos/particles --no-bloom           # the sparks' raw HDR light, no glow
 ./build/demos/particles --shot out.ppm       # one frame, no window, 2.5 s in
 ./build/demos/particles --log gpu=info       # then [G] prints the declared frame graph
+
+# Lesson 7.7b — a character somebody else built
+./build/demos/mannequin                      # the walk; [2] the wave, [Up]/[Down] cross-fade
+./build/demos/mannequin --order-file         # joints in the node array's order: a pile
+./build/demos/mannequin --xyzw --wide        # rotations read w-first: upside down, underground
+./build/demos/mannequin --no-bind            # 7.6's classic bug, on a real character
+./build/demos/mannequin --reduced            # 7.7's reducer on Blender's clips
 ```
 
 `hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a

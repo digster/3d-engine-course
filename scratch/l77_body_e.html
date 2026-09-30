@@ -383,6 +383,17 @@ golden_77: identical=YES</pre>
         <code>sign_flips</code> to be non-zero — real exporters produce them, and finding that it is
         <em>not</em> zero is evidence your importer read the file rather than your own bake.
       </p>
+      <p>
+        <strong>Corrected after Lesson 7.7b</strong>, which did this exercise on a file Blender wrote and
+        found two of the four wrong. (2) Nodes above the joints must <em>not</em> be dropped: a joint's
+        matrix uses its global transform, which includes every ancestor, joint or not — dropping
+        Blender's <code>Armature</code> node, or a converter's 0.01 scale, moves the whole character
+        (<a href="07-07b-gltf-characters.html#skin">7.7b §3.3</a>). (4) A blind copy is not one fixed error:
+        the identity misreads as 180° about <em>z</em>, (½,&nbsp;½,&nbsp;½,&nbsp;½) as itself, and
+        Blender's 748 keys between 111° and 180° (<a href="07-07b-gltf-characters.html#rotations">§7</a>).
+        And its clips had no sign flips at all — the content never passes a half turn
+        (<a href="07-07b-gltf-characters.html#clips">§9.4</a>).
+      </p>
     </li>
   </ol>
 
@@ -436,14 +447,13 @@ golden_77: identical=YES</pre>
   </p>
 
   <p>
-    <strong>Next: Lesson 7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound.</strong> Module 7 closes
-    with the sense this engine has never addressed. SDL3's audio model is a stream you push into and
-    a callback that pulls, with resampling and format conversion handled at the boundary; on top of
-    it goes a small mixer, and on top of that, spatialization — attenuation with distance and panning
-    with direction, which is the first time this course will use a listener's transform for something
-    other than drawing. Two of this lesson's ideas come along unchanged: a sound is an asset and its
-    playhead is not, and an attenuation curve is another lossy reconstruction that has to agree with
-    what plays it back.
+    <strong>Next: Lesson 7.7b — Animated Characters from glTF: Skins and Clips.</strong> Every clip
+    this lesson played was baked by the course from functions it wrote, and every rig was built joint
+    by joint — which proves the sampler and says nothing about content. The next lesson loads a
+    character authored in Blender and written by Blender's exporter, and turns its node tree, its skin
+    and its animation channels into exactly the skeleton, skinned meshes and clips this lesson and 7.6
+    already play. The last exercise above is its sketch, and it tests those four predictions against a
+    real file. Then Lesson 7.8 closes Module 7 with sound.
   </p>
 
   <h2 id="reading">16. Further reading</h2>

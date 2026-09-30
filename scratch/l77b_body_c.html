@@ -1,0 +1,490 @@
+  <!-- =================================================================
+       9 — CLIPS
+       ================================================================= -->
+  <h2 id="clips"><span class="num">9</span>A clip from an animation</h2>
+
+  <p>
+    With the curves converted, a glTF animation becomes one <code>anim::clip</code>: a track per joint,
+    parallel to the skeleton — so the permutation the sort produced is applied to the tracks by
+    construction, which was 7.7's first prediction — and three channels per track. What the file does
+    not say, the importer has to decide, and there are four decisions.
+  </p>
+
+  <h3>9.1 — The duration is not in the file</h3>
+
+  <p>
+    glTF has no duration. The specification says the inputs "are relative to t = 0, defined as the
+    beginning of the parent animations entry" and that outside a sampler's range "output MUST be
+    clamped to the nearest end" — so an animation's natural length is the last input of any of its
+    samplers, and that is what the importer uses. Lesson 7.7 argued that a clip's duration should be
+    <em>authored</em>, because the last key of a walk sampled at 30&nbsp;Hz can land a frame short of
+    the cycle; here the argument arrives from the other side, and Blender answers it. The exporter
+    writes the closing frame — frame 30 of a 30-frame walk, frame 60 of the wave — whose pose repeats
+    the opening one, so the last input <em>is</em> the cycle's length. 7.7's instrument confirms it:
+  </p>
+
+  <pre>  clip walk  1.000 s  keys 520  seam 9.84e-07 deg
+  clip wave  2.000 s  keys 409  seam 7.76e-07 deg</pre>
+
+  <h3>9.2 — Looping is the importer's choice, and the specification clamps</h3>
+
+  <p>
+    glTF "doesn't define any runtime behavior, such as: order of playing, auto-start, loops" (§3.11),
+    so <code>import_settings::loops</code> decides, and defaults to <code>true</code> because the clips
+    this engine plays are cycles. That decision has a consequence at the end of the clip that twice
+    looked like a bug in this lesson. Past the last key the specification <em>clamps</em>; a looping
+    clip <em>wraps</em>. Sampled at exactly <em>t</em>&nbsp;=&nbsp;1&nbsp;s, §3.4's one-second turn
+    returned to rest until the harness imported it with <code>loops = false</code>. And the first draft
+    of the end-to-end check (§13) sampled at 1.013&nbsp;s, compared the wrapped pose with the
+    specification's clamped one, and reported an 11.7&nbsp;mm "error" that was the walk's motion over
+    thirteen milliseconds. Neither was wrong; they were two definitions of what comes after the end.
+  </p>
+
+  <h3>9.3 — What stays still stays where the file put it</h3>
+
+  <p>
+    A channel the animation does not animate is left empty in the track, and 7.7's sampler fills an
+    empty channel with the joint's <code>local_bind</code>. For an imported rig that is the node's own
+    transform — which is exactly what the specification requires: "Non-animated properties MUST keep
+    their values during animation" (§3.11). This is the second reason §5 left <code>local_bind</code>
+    holding the node's transform rather than the bind pose the inverse matrices describe: it is the
+    rest value of every channel no clip touches.
+  </p>
+
+  <h3>9.4 — Sign flips: none, on this content</h3>
+
+  <p>
+    Lesson 7.7's prediction was that a real exporter's clips would contain adjacent rotation keys on
+    opposite halves of the sphere, and that finding some would prove the importer read the file.
+    <code>canonicalise_rotations</code> runs on every imported clip and counts them:
+  </p>
+
+  <pre>  sign flips 0, frozen vertices 0</pre>
+
+  <p>
+    Zero. That is not the exporter canonicalising, as far as this file can tell; it is the content. A
+    sign flip needs a rotation that passes the half-turn from rest, where <em>w</em> changes sign — and
+    the mannequin's keys were authored as Euler angles under 180° and never go near one. The prediction
+    was a claim about exporters, and the measurement can only speak for this file: the count is zero
+    because nothing here could have produced one, which is a reason to keep the counter rather than a
+    reason to remove it.
+  </p>
+
+  <h3>9.5 — 7.7's reducer, on real content</h3>
+
+  <p>
+    An imported clip is exactly as dense as the file, and the file wrote everything — every property of
+    every bone, sampled or held. Lesson 7.7's <code>reduce</code> exists for this, and it takes the
+    importer's clips unchanged:
+  </p>
+
+  <pre>  walk  keys  520 -> 195 (-325), channels 57 -> 14
+          9980 B ->  3828 B, worst playback 0.498 deg
+  wave  keys  409 -> 103 (-306), channels 57 ->  5
+          7876 B ->  2060 B, worst playback 0.494 deg</pre>
+
+  <p>
+    Forty-three of the walk's 57 channels and 52 of the wave's are Blender's constant STEP channels,
+    and the reducer deletes them outright: each one holds a single value that equals the node's rest
+    transform, and 7.7's third stage removes a channel whose one value is the bind value, because the
+    sampler would reproduce it anyway. What is left is the motion — the walk's thirteen turning joints
+    and the hip's bob — within the reducer's half degree. The importer did not reduce by default, and
+    that is deliberate: reduction is lossy and budgeted, and whether to spend the budget is the
+    caller's decision. The demo plays either with <kbd>R</kbd>.
+  </p>
+
+  <!-- =================================================================
+       10 — THE NEUTRAL BONE
+       ================================================================= -->
+  <h2 id="neutral"><span class="num">10</span>The first export: a joint nobody animates</h2>
+
+  <p>
+    The first time the importer ran on the mannequin, its joint table had twenty skin joints, not
+    nineteen. The twentieth was called <code>neutral_bone</code>. It is not in the armature the script
+    builds; it is a child of the <code>Armature</code> node with no animation channel, and twenty-five
+    vertices were weighted to it — all of them at the tip of the nose.
+  </p>
+
+  <p>
+    Blender's automatic weights solve a heat-diffusion problem over the surface from each bone, and on
+    the thin protrusion of the nose the solution for every bone fell below the exporter's threshold.
+    The exporter's response is in its source
+    (<code>io_scene_gltf2/blender/exp/primitive_extract.py</code>): a vertex with no influence above
+    0.0001 is given full weight on "a joint that will be created later", and <code>tree.py</code>
+    creates it — <code>neutral_bone</code>, parented to the armature, appended to the skin. The file is
+    valid. Every weight sums to one. Nothing warns. And the nose tip is rigidly attached to a joint that
+    never moves, so when the head turns, the tip stays behind.
+  </p>
+
+  <p>
+    A check for "a joint named <code>neutral_bone</code>" would find this one exporter's convention and
+    nothing else. The importer measures the general condition instead:
+    <code>frozen_vertices</code> counts the vertices <strong>no clip in the file can move</strong> —
+    every joint they are weighted to is one that no channel changes, directly or through an ancestor.
+    It is not an error in itself; a pack strapped to an unanimated root is frozen correctly. It is a
+    number worth reading, and on the first export it read 25:
+  </p>
+
+  <pre>  unfixed: 20 skin joints, last 'neutral_bone'; frozen vertices 25
+  vertices fully on neutral_bone: 25
+  fixed:   19 skin joints; frozen vertices 0
+  wave: the unfixed face plate lags the fixed by up to 16.9 mm</pre>
+
+  <p>
+    The fix is in the authoring, where a rigger would make it: after automatic weighting, every vertex
+    with no weight above the exporter's threshold is painted onto its nearest bone
+    (<code>weight_the_missed</code> in <code>make_mannequin.py</code>). The first export is kept as
+    <code>scratch/mannequin_unfixed.glb</code>, because without it the check has never seen the thing it
+    checks for. Figure&nbsp;10 is the head from above at the worst moment of the wave, when the head has
+    turned.
+  </p>
+
+  @@FIG_NEUTRAL@@
+
+  <p>
+    Sixteen millimetres is invisible from across a room and obvious in a close-up of a face, which is
+    where faces are looked at. The importer could not have fixed it — the file says, correctly, that
+    those vertices follow a joint that does not move — but it could count it, for the price of one pass
+    over the influences, and the count is how it was found.
+  </p>
+
+  <!-- =================================================================
+       11 — FACING
+       ================================================================= -->
+  <h2 id="facing"><span class="num">11</span>Which way it faces</h2>
+
+  <p>
+    Lesson 6.6 compared glTF's conventions with this engine's and found one difference: "glTF says an
+    asset's front faces +Z; our camera looks down −Z. So a model dropped into the world unrotated
+    presents its back to you." Every asset 6.6 had was symmetric front to back, so nothing could test
+    it. The mannequin has a face plate.
+  </p>
+
+  <pre>  head joint (0.000, 1.620, 0.000), nose tip z = 0.121
+  camera at z = 3 looking down -z: nose 2.879 m away, head 3.000
+  [PASS] J.1 the nose points +z, toward a camera looking down -z</pre>
+
+  <p>
+    The nose is on the +<em>z</em> side of the head, as the specification promises: "+Y as up, +Z as
+    forward, and -X as right; the front of a glTF asset faces +Z" (§3.4). A camera that looks down
+    −<em>z</em> sits on the +<em>z</em> side of whatever it looks at and sees the surfaces facing +<em>z</em>
+    — so the nose is 2.879&nbsp;m from the camera and the centre of the head 3.000. An unrotated glTF
+    character <strong>looks at you</strong>. Figure&nbsp;11 is the geometry; Figures 3 and 12 are the
+    renders, face plate forward.
+  </p>
+
+  @@FIG_FACING@@
+
+  <p>
+    What the two conventions really disagree about is <em>forward</em>. glTF's is +<em>z</em>; this
+    engine's is −<em>z</em>. A character dropped in unrotated faces the camera, and gameplay code that
+    then moves it along the engine's forward walks it backwards, face first toward you while its feet
+    stride away. The fix 6.6 prescribed is still right — a yaw on the entity, outside the loader, which
+    the demo's <kbd>T</kbd> key is — for this reason rather than the one it gave. The sentence is
+    corrected in <code>gltf.hpp</code>, where it lives.
+  </p>
+
+  <!-- =================================================================
+       12 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implement"><span class="num">12</span>Implementation</h2>
+
+  <h3>12.1 — The parser describes; it still decides nothing</h3>
+
+  <p>
+    Lesson 6.6 drew the line this lesson keeps: <code>gfx/gltf.cpp</code> turns bytes into
+    <em>descriptions</em> in the file's own indices, and knows nothing about joints. So the parser grows
+    four description types and four readers, and <code>gfx/</code> still includes nothing from
+    <code>anim/</code>:
+  </p>
+
+  <ul>
+    <li><code>gltf_node_desc</code> — every node, with its parent and its local transform. TRS is read
+        field by field rather than through <code>cgltf_node_transform_local</code>, which would hand
+        back a matrix only to be decomposed again; a node that wrote a <code>matrix</code> goes through
+        7.5's <code>transform_from_affine</code>, and its <code>out_of_square</code> is kept so the
+        importer can check the specification's promise that such a matrix has no shear.</li>
+    <li><code>gltf_skin_desc</code> — the joint list and the inverse binds, read column-major into
+        <code>mat4</code> with no transpose (6.6's coincidence of three layouts, again). An absent
+        accessor leaves the vector empty, which the importer reads as the specification's identity.</li>
+    <li><code>gltf_primitive</code> gains its <code>node</code>, its <code>skin</code> and the flattened
+        <code>joints</code> and <code>weights</code> arrays — every set that pairs up, read by
+        <code>read_influences</code>, with joint indices through <code>cgltf_accessor_read_uint</code> so
+        an index never passes through a float.</li>
+    <li><code>gltf_animation_desc</code> — samplers (times, raw values, interpolation) and channels
+        (node, path, sampler). A path the parser does not recognise leaves the channel with no node,
+        which the specification says to ignore; the obvious default — translation — would animate a
+        position with somebody else's numbers.</li>
+  </ul>
+
+  <p>
+    A file with no skins — every file this engine loaded before this lesson — gets a node table and two
+    empty vectors, and nothing else about its load changes. That is §17's first rule for an inserted
+    lesson, and §13 checks it on every harness in Modules 6 to 8.
+  </p>
+
+  <h3>12.2 — <code>import_rig</code>: skeleton, then meshes, then clips</h3>
+
+  <p>
+    The order is forced: the meshes need the slot-to-joint table the skeleton builds, and the clips need
+    the table and the rest pose. The skeleton's heart is the stable sort from §4.2:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/anim/import.cpp — build_skeleton, the sort</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">    joint_of_node.assign(n_nodes, k_none);
+    std::vector&lt;int&gt; order;
+    std::vector&lt;int&gt; chain;
+    order.reserve(n_nodes);
+    for (int node : skin.joints)
+    {
+        chain.clear();
+        for (int at = node; at &gt;= 0 &amp;&amp; joint_of_node[static_cast&lt;std::size_t&gt;(at)] == k_none
+                            &amp;&amp; chain.size() &lt; n_nodes;
+             at = file.nodes[static_cast&lt;std::size_t&gt;(at)].parent)
+        {
+            chain.push_back(at);
+        }
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+        {
+            joint_of_node[static_cast&lt;std::size_t&gt;(*it)] = static_cast&lt;int&gt;(order.size());
+            order.push_back(*it);
+        }
+    }</code></pre>
+  </figure>
+
+  <p>
+    Iterative rather than recursive, so a file's depth never becomes the loader's stack depth. Then each
+    joint takes its node's transform as <code>local_bind</code>, <code>bake_inverse_binds</code> fills
+    every joint the 7.6 way, and the skin's joints are overwritten with the file's matrices or the
+    identity.
+  </p>
+
+  <p>
+    The meshes loop over each vertex's influences: skip zero weights, count and drop negative ones and
+    out-of-range slots, map slot to joint, <code>stable_sort</code> by weight, keep four, record what was
+    dropped, pad with joint 0 at weight 0 (7.6's rule that an unused slot must still name a valid
+    joint), and finally run 7.6's own <code>normalise_weights</code> — the one repair the importer
+    makes, and it is counted.
+  </p>
+
+  <p>
+    The curves share one routine, <code>fit_interval</code>, a template over the value type with the
+    three things that differ — how the file evaluates, how we interpolate, how far apart two values are
+    — passed in as lambdas. Its search is the whole idea of §8:
+  </p>
+
+  <figure class="listing">
+    <figcaption><span class="path">engine/src/anim/import.cpp — fit_interval, the search</span>
+      <span class="lang" data-lang="cpp">C++</span></figcaption>
+<pre><code class="lang-cpp">    for (; m &lt;= max_split; ++m)
+    {
+        nodes.resize(static_cast&lt;std::size_t&gt;(m) + 1u);
+        for (int i = 0; i &lt;= m; ++i)
+        {
+            nodes[static_cast&lt;std::size_t&gt;(i)] =
+                file_at(k, static_cast&lt;float&gt;(i) / static_cast&lt;float&gt;(m));
+        }
+        err = 0.0f;
+        for (int i = 0; i &lt; m; ++i)
+        {
+            for (int p = 1; p &lt;= k_probes; ++p)
+            {
+                const float f = static_cast&lt;float&gt;(p) / static_cast&lt;float&gt;(k_probes + 1);
+                const float u = (static_cast&lt;float&gt;(i) + f) / static_cast&lt;float&gt;(m);
+                err = std::max(err, dist(ours_at(nodes[static_cast&lt;std::size_t&gt;(i)],
+                                                 nodes[static_cast&lt;std::size_t&gt;(i) + 1u], f),
+                                         file_at(k, u)));
+            }
+        }
+        if (err &lt;= limit) { break; }</code></pre>
+  </figure>
+
+  <div class="callout cpp">
+    <span class="label">C++: a template whose policy arrives as lambdas</span>
+    <p>
+      Lesson 7.7 met its first template, <code>keyframe&lt;T&gt;</code>, as a container of a type that
+      varies. <code>fit_interval</code> is the other common use: an <em>algorithm</em> written once whose
+      steps vary by type. Its parameters <code>FileFn</code>, <code>OurFn</code> and <code>DistFn</code>
+      are deduced from the lambdas at each call, so each call site compiles its own copy with the lambdas
+      inlined — no function pointers, no virtual calls, and no common base class that a
+      <code>vec3</code> and a <code>quat</code> would have to pretend to share. The one type that
+      <em>cannot</em> be deduced, the key's value type, is written explicitly at the call:
+      <code>fit_interval&lt;quat&gt;(…)</code>.
+    </p>
+  </div>
+
+  <p>
+    LINEAR positions and scales skip the search, because they are ours already; LINEAR rotations and
+    every CUBICSPLINE go through it; STEP writes its held key and moves on. After each clip is built,
+    7.7's <code>canonicalise_rotations</code> and <code>validate</code> run on it, and at the end a pass
+    over parents marks every joint some channel moves — its own or an ancestor's — which is all
+    <code>frozen_vertices</code> needs.
+  </p>
+
+  <h3>12.3 — Three corrections to Lesson 7.6's files</h3>
+
+  <p>
+    None of them changes a number any later lesson measured (§13), and each is corrected in place with
+    the story beside it:
+  </p>
+
+  <ul>
+    <li><code>skeleton.hpp</code> and <code>skeleton.cpp</code>: what an out-of-order joint does (§4.3),
+        why an importer writes <code>joint_from_model</code> (§5.1), and
+        <code>k_uniform_scale_tolerance</code> in place of exact equality (§5.4).</li>
+    <li><code>skin.hpp</code>: <code>k_weight_tolerance</code> from 0.02 to 10<sup>−5</sup>, with the
+        specification's rule in place of the argument it replaces (§6.3).</li>
+  </ul>
+
+  <p>
+    The course's rule for a later lesson that fixes an earlier one's code is that the fix ships in the
+    later lesson's listings and the story is told there; Lesson 7.6's page stays an archive of what it
+    shipped. 7.7b is written after Module 8 but sits before it, and no later lesson lists these three
+    files, so this lesson's listings are the ones a student ends with.
+  </p>
+
+  <h3>12.4 — The demo, and the build lists</h3>
+
+  <p>
+    <code>demos/mannequin</code> is <code>demos/rig</code>'s shape with the character replaced by the
+    file: resolve <code>mannequin.glb</code> through the engine's search path, load, import, then
+    sample, blend, palette and skin into two pool meshes each frame. Each import bug from this lesson is
+    built once at start-up as a broken <em>copy</em> of the rig — <code>in_node_order</code> reorders
+    every parallel array with the same permutation and deliberately does not re-sort the parents;
+    <code>swizzled</code> reads every rotation w-first — so a key or a flag switches between them at no
+    cost per frame. It uses the software renderer, as <code>rig</code> does, so a headless
+    <code>--shot</code> is the same picture on every machine.
+  </p>
+
+  <p>
+    <code>engine/CMakeLists.txt</code> gains <code>src/anim/import.cpp</code>, and the comment above the
+    anim group records that 7.7's prediction came true: "Alphabetical order and dependency order agree
+    here by luck … and will not keep agreeing" — <code>import.cpp</code> depends on the files on both
+    sides of it. <code>engine.hpp</code> gains the header, which 5.12's lint would otherwise refuse
+    at configure time; the first attempt carried a trailing comment on the include line, and the lint,
+    which matches whole lines, refused that too.
+  </p>
+
+  <!-- =================================================================
+       13 — INSTRUMENTS
+       ================================================================= -->
+  <h2 id="instruments"><span class="num">13</span>The instruments</h2>
+
+  <p>
+    <code>scratch/verify_77b.cpp</code> is twelve sections, A to L, and every number on this page comes
+    from it or from <code>verify_77b_blender.py</code>. Two kinds of fixture, on purpose: Blender's
+    three files, which test the importer against decisions it did not make; and files built in memory by
+    <code>mini_gltf</code> — about a hundred lines of glTF writing that share nothing with Blender's exporter
+    or with 6.6's generator — because Blender's files are too well behaved to break anything.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">The sections of verify_77b</caption>
+    <thead><tr><th>§</th><th>What it measures</th><th>Control</th></tr></thead>
+    <tbody>
+      <tr><td>A</td><td>Blender's file: counts, orders, residuals, clips</td><td>—</td></tr>
+      <tr><td>B</td><td>the specification's example, at rest and animated</td><td>mesh node applied; ancestor dropped</td></tr>
+      <tr><td>C</td><td>a chain written child-first, with no inverse binds</td><td>inverse binds baked; the unsorted skeleton</td></tr>
+      <tr><td>D</td><td>influences: histogram, sums, six in two sets</td><td>—</td></tr>
+      <tr><td>E</td><td>curves: slerp at seven arcs, STEP, Blender's cubic, two exports</td><td>the midpoint; keys copied; <em>t</em><sub>d</sub> forgotten; the files alone</td></tr>
+      <tr><td>F</td><td>a blind xyzw copy over 748 keys</td><td>—</td></tr>
+      <tr><td>G</td><td>the character end to end against the specification</td><td>no inverse binds</td></tr>
+      <tr><td>H</td><td>the first export's frozen vertices</td><td>the fixed file</td></tr>
+      <tr><td>I</td><td>the two tolerances</td><td>a real 1.5:1 stretch</td></tr>
+      <tr><td>J</td><td>which way the character faces</td><td>—</td></tr>
+      <tr><td>K</td><td>7.7's reducer on the imported clips</td><td>—</td></tr>
+      <tr><td>L</td><td>what importing and playing cost</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>13.1 — End to end, against code that shares nothing</h3>
+
+  <p>
+    Section G is the one the rest lean on. It skins both of the mannequin's meshes at 24 moments of the
+    two clips, twice: through the engine (import, sample, compose, palette, <code>skin_positions</code>),
+    and through a reference written from the specification's text in <em>double</em> precision, with its
+    own 4×4 matrix type, its own sampler (Appendix C's slerp formula, not <code>quat_slerp</code>), its
+    own tree walk (recursion up parent pointers, not a parent-first array), and the file's influences
+    read directly — every set, unnormalised, never through the importer's top-four. The reference also
+    samples inside each clip, having learned §9.2's lesson:
+  </p>
+
+  <pre>  24 poses x 2 meshes: worst vertex 39.51 um from the spec
+  control, inverse binds skipped: worst 1.620 m
+  [PASS] G.1 every vertex within 0.1 mm of the spec's formula
+  [PASS] G.2 control: without inverse binds, metres off</pre>
+
+  <p>
+    Forty micrometres is the importer's 0.05° budget at the end of a limb plus float noise down a
+    chain of eight joints. The control is 7.6's classic bug, and it misses by 1.6&nbsp;metres, so the
+    instrument can tell a broken pipeline from a working one by five orders of magnitude.
+  </p>
+
+  <h3>13.2 — What it costs</h3>
+
+  <pre>  libengine.a built as Release
+  load_gltf 0.178 ms, import_rig 0.226 ms (min of 15)
+  per frame: sample 0.16 us, palette 0.22 us, skin 16.6 us
+  skin_into 6.18 ns a vertex over 2681 vertices</pre>
+
+  <p>
+    Minima over fifteen runs, and they move by about a third between runs of the harness (other runs
+    read 0.125 to 0.136&nbsp;ms and 0.159 to 0.174&nbsp;ms), so read them as sizes rather than as
+    measurements to three figures. Loading and importing the character is under half a millisecond, once. Playing it is
+    about 17&nbsp;µs a frame, a tenth of a percent of a 60&nbsp;Hz frame, and almost all of it is the
+    per-vertex skinning loop Lesson 7.6 wrote — 6.2&nbsp;ns a vertex here; Lesson 7.7's harness put the
+    same loop at 9.1&nbsp;ns on its own fixture, and this lesson did not measure why the two differ. The
+    importer made nothing slower to play: it produces the same types 7.6 and 7.7 always consumed.
+  </p>
+
+  <h3>13.3 — Additive, measured</h3>
+
+  <p>
+    An inserted lesson must not move anything a later lesson measured (the authoring guide's §17). The
+    harnesses of every lesson from 6.1 to 8.13 — forty-one programs — were run before the first edit of
+    this lesson and after the last, and every differing line was read. What moved: timings and ratios
+    of timings, log timestamps, one heap pointer printed as proof that a handle survives a
+    reallocation, and 6.18b's GPU races, which its own page documents as varying from run to run. No
+    count, no position, no check. Two harnesses, 8.5's and 8.6's, fail to compile before and after
+    alike — a later lesson changed a struct under them — and that is recorded for repair rather than
+    fixed here. The golden render is <code>E917C06C</code>, byte-identical.
+  </p>
+
+  <!-- =================================================================
+       14 — LIMITS
+       ================================================================= -->
+  <h2 id="limits"><span class="num">14</span>The ninety-percent picture</h2>
+
+  <p>
+    What the importer does not do, each with the place it would go:
+  </p>
+
+  <ul>
+    <li><strong>Morph targets.</strong> Channels with the <code>weights</code> path are read and
+        counted (<code>morph</code>) and not played; the engine has no blend shapes for them to drive.
+        Faces are where this matters most.</li>
+    <li><strong>Animated nodes that are not in a skeleton</strong> — a prop, a camera, a light — are
+        counted as <code>unbound</code> and dropped. Lesson 5.9's hierarchy could play them; it would
+        take a second, non-skinned importer.</li>
+    <li><strong>One skin, one skeleton.</strong> Two skins over one armature — a body and its clothes,
+        commonly — import as two skeletons with the same joints: correct, and twice the work to pose.
+        Sharing needs the second skin's joints mapped into the first skeleton.</li>
+    <li><strong>Skinning on the GPU.</strong> The palette is exactly what a vertex shader would read
+        from a storage buffer, under 6.18b's rules; the CPU path stays the reference it is held to.
+        Exercise 2.</li>
+    <li><strong>Root motion.</strong> The walk is in place, and 7.7's <code>root_travel</code> is there
+        to measure a clip that is not. Extracting it — moving the entity and subtracting the travel from
+        the pose — is Exercise 3.</li>
+    <li><strong><code>skin.skeleton</code> is ignored</strong>, as the specification allows: it "is not
+        needed for computing skinning transforms".</li>
+    <li><strong>A cubic rotation whose keys change sign</strong> interpolates through a near-zero
+        quaternion exactly as the specification's formula does. The specification forbids exporters to
+        write one, and the importer follows the formula rather than second-guessing it.</li>
+    <li><strong>The 65,536-vertex ceiling</strong> of <code>mesh_data</code>'s 16-bit indices (6.6) still
+        applies per primitive. A production character exceeds it; splitting or widening is 6.6's
+        exercise.</li>
+  </ul>

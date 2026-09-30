@@ -225,9 +225,11 @@ golden_76: identical=YES</pre>
       <tr><td>One vertex draws a spike to a point between the feet</td>
           <td>A vertex with no weight at all collapses to the model origin</td>
           <td><code>skin_report::unweighted</code>. The repair is full weight on one joint</td></tr>
-      <tr><td>One limb lags by a frame, worse the further down the chain, only when moving fast</td>
+      <tr><td>One limb lags by a frame, worse the further down the chain, only when moving fast
+              <em>(corrected after 7.7b: the limb detaches and draws at its own offset from the
+              model's origin)</em></td>
           <td>A joint's parent appears after it in the array, so it composes against last frame's
-              matrix</td>
+              matrix <em>(corrected: <code>compose_pose</code> treats it as a root)</em></td>
           <td>§4.3. <code>skeleton_report::out_of_order</code>. Topologically sort at import</td></tr>
       <tr><td>The silhouette is right and the lighting crawls as the character moves</td>
           <td>Normals skinned as points — the translation column applied</td>

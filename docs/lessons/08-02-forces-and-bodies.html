@@ -6577,6 +6577,7 @@ rigid_body make_kinematic(vec3 position, vec3 velocity)
 // because the failure it prevents scales with that: a public `engine::anim` the
 // table of contents does not mention reads as an engine with no animation in it.
 #include &lt;engine/anim/clip.hpp&gt;
+#include &lt;engine/anim/import.hpp&gt;
 #include &lt;engine/anim/skeleton.hpp&gt;
 #include &lt;engine/anim/skin.hpp&gt;
 
@@ -6787,7 +6788,15 @@ add_library(engine STATIC
     # back to) and nothing includes it. Alphabetical order and dependency order
     # agree here by luck rather than by design, which is worth noticing precisely
     # because the list is maintained alphabetically and will not keep agreeing.
+    #
+    # Lesson 7.7b. And now it does not: `import.cpp` turns glTF descriptions into
+    # a skeleton, skinned meshes and clips, so it depends on all three files
+    # around it — and on `gfx/gltf.hpp`, the one arrow in this directory that
+    # points at gfx/ — and alphabetically it lands between two of them. Nothing
+    # breaks, because a static library&#x27;s sources compile independently and link
+    # as one; the order here is for the reader, and the reader is now told.
     src/anim/clip.cpp
+    src/anim/import.cpp
     src/anim/skeleton.cpp
     src/anim/skin.cpp
     # Lesson 5.5. A new directory rather than another file in gfx/: an asset
@@ -7298,6 +7307,19 @@ engine_set_warnings(gimbal)
 add_executable(rig rig/main.cpp)
 target_link_libraries(rig PRIVATE engine::engine)
 engine_set_warnings(rig)
+
+# ---- mannequin: a character somebody else built -----------------------------
+#
+# Lesson 7.7b. `rig` is a skeleton this repository built for itself; this is one
+# Blender&#x27;s glTF exporter wrote (assets/mannequin.glb, authored by
+# scratch/make_mannequin.py), played through the same four calls. It loads its
+# character through the engine&#x27;s search path, so it needs `engine_use_assets`
+# where `rig` needed nothing — and the software renderer, like `rig`, so that a
+# headless `--shot` of each import bug is the same picture on every machine.
+add_executable(mannequin mannequin/main.cpp)
+target_link_libraries(mannequin PRIVATE engine::engine)
+engine_set_warnings(mannequin)
+engine_use_assets(mannequin)
 
 # ---- plane: the complex plane, drawn ---------------------------------------
 #

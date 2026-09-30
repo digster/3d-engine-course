@@ -1,0 +1,35 @@
+<svg viewBox="0 0 900 360" role="img" aria-labelledby="l77bf11-t l77bf11-d">
+  <title id="l77bf11-t">Which way it faces</title>
+  <desc id="l77bf11-d">A top view with x to the right in red and z down the page in blue. The mannequin's head is a circle at the origin with its nose at z plus 0.121; a camera at z equals 3 looks down minus z toward it, so it sees the face. Text on the right quotes the glTF specification, that the front of an asset faces plus z, and states the consequence: an unrotated character faces the camera, and only its forward direction disagrees with the engine's.</desc>
+  <defs>
+    <marker id="e-i-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-x-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--axis-x)"/></marker></defs>
+<defs><marker id="e-z-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--axis-z)"/></marker></defs>
+<defs><marker id="e-k-l77bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker></defs>
+<text x="30" y="24" class="sm" text-anchor="start">seen from above (+y toward you)</text>
+<line x1="250.00" y1="130.00" x2="340.00" y2="130.00" stroke="var(--axis-x)" stroke-width="1.6" marker-end="url(#e-x-l77bf11)"/>
+<text x="346" y="134" class="xs lbl-x" text-anchor="start">+x</text>
+<line x1="250.00" y1="130.00" x2="250.00" y2="220.00" stroke="var(--axis-z)" stroke-width="1.6" marker-end="url(#e-z-l77bf11)"/>
+<text x="256" y="234" class="xs lbl-z" text-anchor="start">+z</text>
+<circle cx="250" cy="130" r="26" fill="none" stroke="#f0961e" stroke-width="1.8"/>
+<circle cx="250" cy="160" r="7" fill="#5082e6" stroke="none"/>
+<text x="214" y="100" class="xs" text-anchor="end">head</text>
+<text x="234" y="180" class="xs mono" text-anchor="end">nose: z = +0.121</text>
+<path d="M232,346 L268,346 L260,328 L240,328 Z" fill="none" stroke="var(--dia-ink)" stroke-width="1.4"/>
+<line x1="250.00" y1="326.00" x2="250.00" y2="190.00" stroke="var(--dia-ink)" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#e-k-l77bf11)"/>
+<text x="276" y="340" class="xs" text-anchor="start">camera at z = 3, looking down −z</text>
+<text x="470" y="60" class="xs" text-anchor="start">glTF §3.4: “+Y as up, +Z as forward, and -X as right;</text>
+<text x="470" y="76" class="xs" text-anchor="start">the front of a glTF asset faces +Z.”</text>
+<text x="470" y="108" class="xs" text-anchor="start">this engine: world −z is forward, and the camera</text>
+<text x="470" y="124" class="xs" text-anchor="start">looks down −z — at the +z face of whatever it sees</text>
+<text x="470" y="156" class="xs" text-anchor="start">so an unrotated glTF character LOOKS AT YOU:</text>
+<text x="470" y="172" class="xs mono" text-anchor="start">nose 2.879 m from the camera, head centre 3.000</text>
+<text x="470" y="204" class="xs" text-anchor="start">what differs is FORWARD: moved along the engine's</text>
+<text x="470" y="220" class="xs" text-anchor="start">forward, it walks backwards — a yaw fixes that,</text>
+<text x="470" y="236" class="xs" text-anchor="start">on the entity, not in the loader</text>
+</svg>

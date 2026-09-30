@@ -1,0 +1,449 @@
+  <!-- =================================================================
+       15 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">15</span>Complete code listings</h2>
+
+  <p>
+    Every file this lesson created or changed, whole. Three are new engine files' worth of listing —
+    the importer's header and source, and the demo — and seven are changed: the parser's two files, the
+    three Lesson 7.6 files §12.3 corrects, and two build lists. <code>engine/include/engine/engine.hpp</code>
+    and the two <code>CMakeLists.txt</code> files are listed as a student has them <em>at this
+    lesson</em> — after 7.7, before 7.8 — which is not the repository's final text: later lessons add
+    their own lines to all three, and carry this lesson's with them. The authoring script, the
+    Blender-side check and the harness follow. The character itself, <code>assets/mannequin.glb</code>,
+    is binary and is not listed; <code>make_mannequin.py</code> is its source, and running it with Blender
+    reproduces it byte for byte.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/gltf.hpp</code></td><td>modified</td>
+          <td>Node, skin and animation descriptions; influences on a primitive;
+              <code>quat_from_xyzw</code>; 6.6's facing sentence corrected.</td></tr>
+      <tr><td><code>engine/src/gfx/gltf.cpp</code></td><td>modified</td>
+          <td><code>read_influences</code>, <code>follow_flat_split</code>,
+              <code>describe_nodes</code>/<code>_skins</code>/<code>_animations</code>.</td></tr>
+      <tr><td><code>engine/include/engine/anim/import.hpp</code></td><td>new</td>
+          <td><code>import_settings</code>, <code>rig_import_report</code>, <code>imported_rig</code>,
+              <code>import_rig</code>.</td></tr>
+      <tr><td><code>engine/src/anim/import.cpp</code></td><td>new</td>
+          <td>The skeleton's closure and stable sort, the file's inverse binds, influences,
+              the curve fitting, clips, frozen vertices.</td></tr>
+      <tr><td><code>engine/include/engine/anim/skeleton.hpp</code></td><td>modified</td>
+          <td><code>k_uniform_scale_tolerance</code>; the out-of-order and inverse-bind comments
+              corrected.</td></tr>
+      <tr><td><code>engine/src/anim/skeleton.cpp</code></td><td>modified</td>
+          <td><code>validate</code>'s non-uniform test as a ratio against the tolerance.</td></tr>
+      <tr><td><code>engine/include/engine/anim/skin.hpp</code></td><td>modified</td>
+          <td><code>k_weight_tolerance</code> 0.02 → 10<sup>−5</sup>, with the specification's rule.</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>The umbrella lists <code>anim/import.hpp</code>.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td><code>src/anim/import.cpp</code>.</td></tr>
+      <tr><td><code>demos/mannequin/main.cpp</code></td><td>new</td>
+          <td>Blender's character, played; each import bug on a key and a flag.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>mannequin</code> target, with <code>engine_use_assets</code>.</td></tr>
+      <tr><td><code>assets/mannequin.glb</code></td><td>new (binary)</td>
+          <td>The character: 21 nodes, 19 joints, 2,681 vertices, a walk and a wave.</td></tr>
+      <tr><td><code>scratch/make_mannequin.py</code></td><td>new</td>
+          <td>Authors the character in Blender and exports it three ways.</td></tr>
+      <tr><td><code>scratch/verify_77b_blender.py</code></td><td>new</td>
+          <td>The Blender-side checks: §8.4's handles and tangents, and Exercise 4's influence sets.</td></tr>
+      <tr><td><code>scratch/verify_77b_ex5.cpp</code></td><td>new</td>
+          <td>Exercise 5's measurement, and §8's argument for a tenth.</td></tr>
+      <tr><td><code>scratch/verify_77b.cpp</code></td><td>new</td>
+          <td>The harness: twelve sections, 36 checks.</td></tr>
+      <tr><td><code>scratch/build_verify_77b.sh</code></td><td>new</td>
+          <td>Builds and runs it, against a chosen library.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+@@LISTING:engine/include/engine/gfx/gltf.hpp@@
+@@LISTING:engine/src/gfx/gltf.cpp@@
+@@LISTING:engine/include/engine/anim/import.hpp@@
+@@LISTING:engine/src/anim/import.cpp@@
+@@LISTING:engine/include/engine/anim/skeleton.hpp@@
+@@LISTING:engine/src/anim/skeleton.cpp@@
+@@LISTING:engine/include/engine/anim/skin.hpp@@
+@@LISTING:engine/include/engine/engine.hpp@@
+@@LISTING:engine/CMakeLists.txt@@
+@@LISTING:demos/mannequin/main.cpp@@
+@@LISTING:demos/CMakeLists.txt@@
+@@LISTING:scratch/make_mannequin.py@@
+@@LISTING:scratch/verify_77b_blender.py@@
+@@LISTING:scratch/verify_77b_ex5.cpp@@
+@@LISTING:scratch/verify_77b.cpp@@
+@@LISTING:scratch/build_verify_77b.sh@@
+
+  <!-- =================================================================
+       16 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">16</span>Build &amp; run</h2>
+
+  <p>
+    One new translation unit in the engine, a new demo and a new asset. The asset is copied beside the
+    demo by <code>engine_use_assets</code> — as a POST_BUILD step, which matters in §17.
+  </p>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build
+cmake --build build --target mannequin -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --target mannequin --config Debug</code></pre>
+
+  <p>Then the harness, and its timings against a Release library:</p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_77b.sh                          # every check
+cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+ENGINE_BUILD=build-rel ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_77b.sh   # §L</code></pre>
+
+  <p>
+    The harness reads <code>assets/mannequin.glb</code> and two siblings in <code>scratch/</code>, so it
+    runs from the repository root. To rebuild the character itself you need Blender 4.2 or later — it
+    was written and run on 5.1 — and nothing else; without Blender, the committed file is the same
+    bytes:
+  </p>
+
+  <pre><code class="lang-bash">blender --background --factory-startup --python scratch/make_mannequin.py
+# macOS: /Applications/Blender.app/Contents/MacOS/Blender --background ...
+blender --background --factory-startup --python scratch/verify_77b_blender.py</code></pre>
+
+  <p>And the demo:</p>
+
+  <pre><code class="lang-bash">cd build/demos
+./mannequin                               # the walk; [2] the wave, [Up]/[Down] cross-fade
+./mannequin --order-file                  # joints in the node array's order
+./mannequin --xyzw --wide                 # rotations read w-first, camera pulled back
+./mannequin --no-bind                     # 7.6's classic bug, on a real character
+./mannequin --clip wave --time 1.0 --shot out.ppm   # one frame, no window</code></pre>
+
+  <p>
+    Keys: <kbd>1</kbd>/<kbd>2</kbd> choose the walk or the wave, <kbd>Space</kbd> pauses,
+    <kbd>Left</kbd>/<kbd>Right</kbd> scrub, <kbd>Up</kbd>/<kbd>Down</kbd> cross-fade to the other clip,
+    <kbd>O</kbd> <kbd>Q</kbd> <kbd>N</kbd> toggle the three bugs, <kbd>R</kbd> plays the reduced clips,
+    <kbd>K</kbd> hides the skeleton, <kbd>T</kbd> turns the character round.
+  </p>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The harness ends with <code>36 of 36 checks passed</code>, against either library. Every section's
+    numbers are exact except §L's timings, which move by about a third from run to run. A
+    <code>--shot</code> prints three lines and writes the frame:
+  </p>
+
+  <pre>mannequin: Khronos glTF Blender I/O v5.1.18, 21 nodes, 20 joints (19 skin + 1 ancestor)
+mannequin: clip wave t 1.000 s, fade 0.00, clips as imported
+mannequin: 2681 vertices, 5280 triangles drawn, 37 lines</pre>
+
+  <p>
+    The window is 960&nbsp;×&nbsp;540 with a panel. A clay-coloured mannequin walks in place above a
+    floor grid, its dark blue face plate toward you, amber skeleton lines drawn through it and one grey
+    line from the floor to its hips — the <code>Armature</code> node the importer carried in. The panel
+    reads the generator, 21 nodes and 20 joints, <code>resorted 0</code>, a bind-versus-rest residual of
+    about 3&nbsp;×&nbsp;10<sup>−6</sup>, the influence counts, and 929 keys in the file. Press
+    <kbd>O</kbd> and the body falls into a pile at its feet (Figure&nbsp;3); <kbd>Q</kbd> and it
+    vanishes, because it is hanging upside down a metre under the floor (Figure&nbsp;5 — run with
+    <code>--wide</code> to see it); <kbd>N</kbd> and its limbs leave the frame. Press <kbd>2</kbd> for
+    the wave: Figure&nbsp;12.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <!-- =================================================================
+       17 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">17</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfalls">
+
+  <h3>The character collapses into a pile at its own feet</h3>
+  <p>
+    <strong>Symptom:</strong> every part of the body is present and each is roughly the right shape, all
+    of them near the model's origin.<br>
+    <strong>Cause:</strong> joints built in an order where parents come after children — typically the
+    node array's, which Blender writes children first. <code>compose_pose</code> treats each such joint
+    as a root, so it is placed at its local offset from the origin (§4.3).<br>
+    <strong>Fix:</strong> sort parent-first before building anything; check
+    <code>skeleton_report::out_of_order</code> is zero.
+  </p>
+
+  <h3>The character is right but a metre off, or tiny, or lying down</h3>
+  <p>
+    <strong>Symptom:</strong> correctly posed and animated, wrongly placed as a whole.<br>
+    <strong>Cause:</strong> a non-joint node above the skeleton was dropped — the <code>Armature</code>
+    object, or a converter's 0.01 scale or quarter turn — so no joint's global transform includes it
+    (§3.3).<br>
+    <strong>Fix:</strong> carry every ancestor into the skeleton as a joint with no vertices.
+  </p>
+
+  <h3>The character appears twice as far out as it should, or turned</h3>
+  <p>
+    <strong>Symptom:</strong> skinned correctly, then moved by a transform nothing seems to own.<br>
+    <strong>Cause:</strong> the skinned mesh node's own transform applied on top of the joints'. The
+    specification says it MUST be ignored (§3.2).<br>
+    <strong>Fix:</strong> ignore <code>gltf_primitive::world_from_local</code> for a primitive with a
+    skin; place the character with its entity.
+  </p>
+
+  <h3>The character hangs upside down under the floor, every limb folded differently</h3>
+  <p>
+    <strong>Symptom:</strong> nothing is where it should be, and the errors differ from joint to joint.<br>
+    <strong>Cause:</strong> rotations read w, x, y, z. The identity becomes 180° about <em>z</em>, and
+    no single fixed rotation undoes the rest (§7).<br>
+    <strong>Fix:</strong> read every file rotation through one function, <code>quat_from_xyzw</code>.
+  </p>
+
+  <h3>Every vertex collapses toward one point, or the limbs leave the frame</h3>
+  <p>
+    <strong>Symptom:</strong> a correct skeleton and a destroyed mesh.<br>
+    <strong>Cause:</strong> the wrong inverse binds — none at all (7.6's classic bug), or baked from the
+    rest pose for a file that gave none, where the specification says identity (§5.2).<br>
+    <strong>Fix:</strong> use the file's matrices when present and the identity when absent, never
+    anything computed.
+  </p>
+
+  <h3>The body shreds, or each limb moves like its neighbour</h3>
+  <p>
+    <strong>Symptom:</strong> the skeleton poses correctly; the mesh follows the wrong bones.<br>
+    <strong>Cause:</strong> <code>JOINTS_n</code> read as node indices or as joint indices instead of
+    skin slots (§6.1) — or influences not carried through a vertex split when normals were generated
+    (§6.5).<br>
+    <strong>Fix:</strong> map slot → joint through one table built with the skeleton; follow every
+    renumbering of the vertices.
+  </p>
+
+  <h3>A clip snaps back to its first pose at the end</h3>
+  <p>
+    <strong>Symptom:</strong> a one-shot animation plays, then jumps to its start.<br>
+    <strong>Cause:</strong> it was imported as a loop. glTF has no loop flag; past the end the
+    specification clamps and a looping clip wraps (§9.2).<br>
+    <strong>Fix:</strong> <code>import_settings::loops = false</code> for clips that are not cycles.
+  </p>
+
+  <h3>A cubic curve overshoots between its keys</h3>
+  <p>
+    <strong>Symptom:</strong> smooth, and wildly wrong between keys; worse the closer the keys are.<br>
+    <strong>Cause:</strong> the Hermite tangents used without <em>t</em><sub>d</sub>, which makes every
+    tangent 1/<em>t</em><sub>d</sub> times too steep — 40° of overshoot on Blender's four-frame keys
+    (§8.3).<br>
+    <strong>Fix:</strong> multiply both tangents by the interval's length in seconds.
+  </p>
+
+  <h3>A test for the slerp conversion passes, and the playback is still wrong</h3>
+  <p>
+    <strong>Symptom:</strong> nlerp and slerp "agree" in the check and disagree on screen.<br>
+    <strong>Cause:</strong> the check samples the midpoint, where the two are equal by symmetry (§8.1).<br>
+    <strong>Fix:</strong> probe near a fifth and four fifths of the interval, or at several points
+    straddling them.
+  </p>
+
+  <h3>A small patch of the mesh does not move with the rest</h3>
+  <p>
+    <strong>Symptom:</strong> a nose tip, a fingertip or a strap stays still while the joint around it
+    turns.<br>
+    <strong>Cause:</strong> vertices the tool left unweighted, attached by Blender's exporter to its
+    <code>neutral_bone</code>, which nothing animates (§10).<br>
+    <strong>Fix:</strong> read <code>frozen_vertices</code>; paint the vertices onto a bone in the
+    authoring tool.
+  </p>
+
+  <h3>You changed the asset and the demo still shows the old one</h3>
+  <p>
+    <strong>Symptom:</strong> a re-exported <code>mannequin.glb</code> makes no difference.<br>
+    <strong>Cause:</strong> <code>engine_use_assets</code> copies <code>assets/</code> beside the demo
+    as a <em>POST_BUILD</em> step, which runs only when the target relinks. An asset is not a source, so
+    changing one does not relink anything.<br>
+    <strong>Fix:</strong> rebuild after touching the demo, or copy by hand:
+    <code>cmake -E copy_directory assets build/demos/assets</code>.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       18 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">18</span>Exercises</h2>
+
+  <div class="exercises">
+
+  <h3>1 — A joint table for any file (guided)</h3>
+  <p>
+    Write a small program that imports any glTF file's first skin and prints one line per joint: its
+    index, name, parent, skin slot (or "ancestor"), the glTF node, how many vertices carry a non-zero
+    weight on it, and whether any channel of any clip moves it. Run it on the mannequin and on the
+    unfixed export.
+  </p>
+  <p>
+    <em>Solution sketch:</em> everything is already in <code>imported_rig</code> — <code>joint_node</code>
+    gives the node, and the skin slot is the node's position in <code>file.skins[0].joints</code>.
+    Count vertices by walking each mesh's <code>influences</code> and incrementing every joint with a
+    non-zero weight. For "moves", repeat the importer's pass: a joint moves if any clip's track for it
+    has a channel whose keys are not all equal, or if its parent moves. On the unfixed file the line to
+    look for is <code>neutral_bone</code>, with 25 vertices and "no" — the table found §10's defect by
+    printing it, which is the argument for writing one before anything else when a character looks
+    wrong.
+  </p>
+
+  <h3>2 — Skinning on the GPU (engine challenge)</h3>
+  <p>
+    Move <code>skin_positions</code> and <code>skin_directions</code> into a vertex shader: upload the
+    palette each frame to a storage buffer, and give the mesh's vertices their four joint indices and
+    weights as attributes. Hold the result to the CPU's.
+  </p>
+  <p>
+    <em>Solution sketch:</em> Lesson 6.18b's rules decide the layout. A vertex stage reads storage at
+    <code>t[n]</code> in <code>space0</code>, bound with <code>SDL_BindGPUVertexStorageBuffers</code> on a
+    buffer created with <code>GRAPHICS_STORAGE_READ</code>; store each palette matrix as rows of
+    <code>float4</code> (6.17b's light record), so no default matrix packing can transpose it. Joint
+    indices can be <code>uint16</code>×4 in an attribute; weights <code>float4</code>. The palette for
+    the mannequin is 20 × 64 = 1,280 bytes a frame, against the 2,681 × 24 = 64,344 bytes of skinned
+    positions and normals a GPU renderer would have to upload every frame if the skinning stayed on the
+    CPU — the asymmetry 7.6 predicted. For the float contract,
+    compare with the CPU's skinned positions on the same pose: the indices must agree exactly and the
+    positions within a stated tolerance, and fused multiply-adds on the GPU mean "exactly" is the wrong
+    expectation for the floats.
+  </p>
+
+  <h3>3 — Root motion on import (engine challenge)</h3>
+  <p>
+    Author a walk in <code>make_mannequin.py</code> that moves forward — key the hips' location along the
+    character's forward — and make the importer (or a step after it) extract the travel: the entity
+    moves by it each cycle and the pose does not.
+  </p>
+  <p>
+    <em>Solution sketch:</em> 7.7's <code>clip_report::root_travel</code> already measures it — the
+    distance the root moves over a cycle — and excludes roots from the loop seam for exactly this reason.
+    Decide which joint is the root carrier (here the hips, under the <code>Armature</code> ancestor),
+    subtract its horizontal translation at time <em>t</em> from the translation at 0, and feed the
+    difference to the entity. Remember §11: the character's forward in the file is +<em>z</em>, and the
+    engine's is −<em>z</em>, so the travel needs the same yaw the entity has. The trap is the loop wrap —
+    travel must accumulate across cycles rather than jump back.
+  </p>
+
+  <h3>4 — What four influences cost (measurement)</h3>
+  <p>
+    Raise Blender's "Bone Influences" to 8 (<code>export_influence_nb=8</code>) and re-export the
+    mannequin. The exporter still writes a single <code>JOINTS_0</code> set —
+    <code>verify_77b_blender.py</code> prints <code>INFL sets written with the limit at 8: 1</code> —
+    because automatic weights on this body never give a vertex a fifth bone. So first make content that
+    has one, then measure what keeping four costs.
+  </p>
+  <p>
+    <em>Solution sketch:</em> fifth influences appear where several bones meet in a small volume. In
+    <code>make_mannequin.py</code>, smooth the vertex groups after binding
+    (<code>bpy.ops.object.vertex_group_smooth</code> with <code>group_select_mode='ALL'</code>, in weight
+    paint mode — in the background it needs the body active and the mode set explicitly), or thicken
+    the chest's skin radius so the shoulders and neck overlap it. Export at 8, import: the report's
+    <code>truncated</code> and <code>worst_dropped</code> answer the first half. For the second, skin
+    the same file at a few dozen poses twice — through the importer's four, and through §G's reference,
+    which reads every set — and take the largest vertex distance. Write the prediction down before
+    running it: a dropped weight <em>w</em> can move a vertex at most <em>w</em> times the distance
+    between where its dropped joint and its kept joints would put it, so the answer is bounded by
+    something you can compute from the report before you measure.
+  </p>
+
+  <h3>5 — One budget, not two</h3>
+  <p>
+    The importer spends a tenth of the reducer's tolerance and the reducer the rest (§8). Import
+    Blender's cubic export at tolerances of 0.005°, 0.05° and 0.25°, reduce each at 0.5°, and measure
+    the key count and the worst playback error against the file's curve.
+  </p>
+  <p>
+    <em>Solution sketch:</em> <code>scratch/verify_77b_ex5.cpp</code> is one answer. It takes an import
+    at 0.0005° as the exact curve, then imports at each tolerance, reduces with 7.7's defaults and
+    measures both clips at 481 times each:
+  </p>
+  <pre>import at 0.005 deg: 3222 keys, 258 after reduce (capped 0)
+  worst vs exact: imported 0.0048 deg, reduced 0.5013 deg
+import at 0.050 deg: 1227 keys, 276 after reduce (capped 0)
+  worst vs exact: imported 0.0495 deg, reduced 0.5121 deg
+import at 0.250 deg:  723 keys, 329 after reduce (capped 0)
+  worst vs exact: imported 0.2330 deg, reduced 0.5126 deg</pre>
+  <p>
+    The prediction written with this exercise's first draft was the opposite on both counts — that the
+    reduced key count would barely move and the error would grow, because "the two errors add". They can
+    add; here they barely do, because the reducer's worst points and the importer's are not the same
+    points. What the import tolerance decides is how many keys survive reduction: a looser import leaves
+    wiggles that the reducer must keep keys to follow. §8 and <code>import.hpp</code> were corrected to
+    argue for a tenth on that basis.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       19 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">19</span>Recap &amp; next</h2>
+
+  <p>
+    The engine can <strong>play a character it did not build</strong>. Concretely, it gained:
+  </p>
+
+  <ul>
+    <li>A glTF parser that describes the whole file — every node, every skin, every influence set,
+        every animation — in the file's own indices, with one function for a file rotation's
+        component order.</li>
+    <li>An importer that builds a parent-first skeleton from any node order, carries the non-joint
+        nodes above it, and takes the file's inverse binds as data, with the specification's identity
+        when there are none.</li>
+    <li>Influences mapped through three index spaces, kept to four with the loss reported, and held to
+        the specification's weight rule.</li>
+    <li>LINEAR, STEP and CUBICSPLINE samplers converted into clips to a stated tolerance, measured with
+        the sampler's own rule at seven probes.</li>
+    <li>A report that measures the file: how far its rest is from its bind, what was reordered, what
+        was dropped, what no clip can move.</li>
+    <li>A Blender-authored character in <code>assets/</code>, reproducible from a script, and a demo
+        that plays it and each classic import bug.</li>
+  </ul>
+
+  <p>
+    And three things worth carrying that are not code. <strong>A file you did not write is the only
+    real test of a reader.</strong> Every correction in this lesson — 7.6's out-of-order comment, its two
+    tolerances, 6.6's facing, 7.7's predictions — came from data nobody on this course chose.
+    <strong>Ask the tool that made the file.</strong> Twice the first explanation of a number was
+    plausible and wrong, and both times the refutation came from running the producer rather than
+    reasoning about it: Blender's handles are at a third, and its exporter normalises a tangent.
+    <strong>A check that fires on a healthy input is broken.</strong> Twelve of twenty joints flagged by
+    an exact comparison was a false alarm about the check, not the rig.
+  </p>
+
+  <p>
+    Next, <a href="07-08-audio.html">7.8 — SDL3 Audio</a>: the engine can move a character, and the
+    module ends by letting it be heard.
+  </p>
+
+  <!-- =================================================================
+       20 — READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">20</span>Further reading</h2>
+
+  <ul class="reading">
+    <li>The Khronos Group, <a href="https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html">glTF 2.0
+        Specification</a> — §3.5.3 Transformations, §3.7.3 Skins, §3.11 Animations, and Appendix C,
+        the interpolation modes. Every "MUST" quoted in this lesson is there, and so is the example §3.4
+        completes.</li>
+    <li>The Khronos Group, <a href="https://github.com/KhronosGroup/glTF-Tutorials">glTF Tutorials</a>
+        — the skins and animation chapters walk a minimal skinned file by hand, the way this lesson's
+        §3.4 does.</li>
+    <li>The Blender Manual, <a href="https://docs.blender.org/manual/en/latest/addons/import_export/scene_gltf2.html">glTF 2.0</a>
+        — what each export option does, including "Always Sample Animations" and "Bone Influences";
+        and the exporter's source, shipped with Blender under <code>scripts/addons_core/io_scene_gltf2</code>,
+        which this lesson cites three times.</li>
+    <li>Johannes Kuhlmann, <a href="https://github.com/jkuhlmann/cgltf">cgltf</a> — the parser, and the
+        header comments that list what <code>cgltf_validate</code> checks and what it leaves to you.</li>
+    <li>Tomas Akenine-Möller et al., <em>Real-Time Rendering</em> (4th ed.), §4.4 "Vertex Blending" —
+        the skinning formula this lesson's §3.1 recognises in the specification.</li>
+    <li>Jason Gregory, <em>Game Engine Architecture</em> (3rd ed.), the chapter on animation systems —
+        skeletons, poses, clips and the asset pipeline that feeds them, from the engine's side.</li>
+  </ul>

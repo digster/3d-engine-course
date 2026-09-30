@@ -1,0 +1,72 @@
+<svg viewBox="0 0 900 380" role="img" aria-labelledby="l77bf2-t l77bf2-d">
+  <title id="l77bf2-t">The spec's example</title>
+  <desc id="l77bf2-d">Left: the specification's skin example as a node tree. node_0 translates by (0, 1, 0) and is not a joint but is applied; node_1 scales by one half and is joint A; node_2 translates by one unit and is joint B; node_3 and node_4, which carry the mesh, are ignored. The inverse binds are S(2)T(0,-1,0) and S(2)T(-0.5,-1,0). Right: the triangle in the plane, with v0 at (0, 1) and v1 at (0.5, 1); v1's path when node_1 turns 90 degrees, through (0.35355, 1.35355) at t = 0.5 to (0, 1.5) at t = 1; and in red the two wrong answers, (1, 1) if the mesh node were applied and (0, 0) if node_0 were dropped.</desc>
+  <defs>
+    <marker id="e-i-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-r-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-g-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-k-l77bf2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker></defs>
+<rect x="30" y="40" width="180" height="50" rx="3" fill="none" stroke="#5ac878" stroke-width="1.5"/>
+<text x="40" y="57" class="sm mono" text-anchor="start">node_0</text>
+<text x="40" y="71" class="xs mono" text-anchor="start">T (0, 1, 0)</text>
+<text x="40" y="84" class="xs muted" text-anchor="start">not a joint — APPLIED</text>
+<rect x="30" y="108" width="180" height="50" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5"/>
+<text x="40" y="125" class="sm mono" text-anchor="start">node_1</text>
+<text x="40" y="139" class="xs mono" text-anchor="start">S (0.5, 0.5, 0.5)</text>
+<text x="40" y="152" class="xs muted" text-anchor="start">joint A — slot 0</text>
+<rect x="30" y="176" width="180" height="50" rx="3" fill="none" stroke="#f0961e" stroke-width="1.5"/>
+<text x="40" y="193" class="sm mono" text-anchor="start">node_2</text>
+<text x="40" y="207" class="xs mono" text-anchor="start">T (1, 0, 0)</text>
+<text x="40" y="220" class="xs muted" text-anchor="start">joint B — slot 1</text>
+<rect x="250" y="40" width="180" height="50" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<text x="260" y="57" class="sm mono" text-anchor="start">node_3</text>
+<text x="260" y="71" class="xs mono" text-anchor="start">T (1, 0, 0)</text>
+<text x="260" y="84" class="xs muted" text-anchor="start">IGNORED</text>
+<rect x="250" y="108" width="180" height="50" rx="3" fill="none" stroke="#e05c5c" stroke-width="1.5"/>
+<text x="260" y="125" class="sm mono" text-anchor="start">node_4</text>
+<text x="260" y="139" class="xs mono" text-anchor="start">R 180° about y</text>
+<text x="260" y="152" class="xs muted" text-anchor="start">mesh + skin: IGNORED</text>
+<line x1="120.00" y1="90.00" x2="120.00" y2="106.00" stroke="var(--dia-ink)" stroke-width="1.2" marker-end="url(#e-k-l77bf2)"/>
+<line x1="120.00" y1="158.00" x2="120.00" y2="174.00" stroke="var(--dia-ink)" stroke-width="1.2" marker-end="url(#e-k-l77bf2)"/>
+<line x1="340.00" y1="90.00" x2="340.00" y2="106.00" stroke="var(--dia-ink)" stroke-width="1.2" marker-end="url(#e-k-l77bf2)"/>
+<text x="30" y="256" class="xs" text-anchor="start">inverse binds (the file's):</text>
+<text x="30" y="270" class="xs mono" text-anchor="start">A: S(2) T(0, −1, 0)</text>
+<text x="30" y="284" class="xs mono" text-anchor="start">B: S(2) T(−0.5, −1, 0)</text>
+<text x="250" y="190" class="xs" text-anchor="start">The spec: “the transform of the</text>
+<text x="250" y="204" class="xs" text-anchor="start">skinned mesh node MUST be ignored.”</text>
+<text x="250" y="228" class="xs mono" text-anchor="start">jointMatrix = global(joint) · IBM</text>
+<text x="250" y="242" class="xs mono" text-anchor="start">v′ = Σ w · jointMatrix · v</text>
+<rect x="476" y="77.0" width="298.0" height="288.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<line x1="520.0" y1="335.0" x2="715.0" y2="335.0" class="ax-x" stroke-width="1.3"/>
+<line x1="520.0" y1="335.0" x2="520.0" y2="91.99999999999997" class="ax-y" stroke-width="1.3"/>
+<text x="723.0" y="339.0" class="xs lbl-x" text-anchor="start">x</text>
+<text x="512.0" y="95.99999999999997" class="xs lbl-y" text-anchor="end">y</text>
+<line x1="595.0" y1="335.0" x2="595.0" y2="340.0" class="ink-soft" stroke-width="1.0"/>
+<text x="595.0" y="351.0" class="xs mono" text-anchor="middle">0.5</text>
+<line x1="515.0" y1="260.0" x2="520.0" y2="260.0" class="ink-soft" stroke-width="1.0"/>
+<text x="512.0" y="272.0" class="xs mono" text-anchor="end">0.5</text>
+<line x1="670.0" y1="335.0" x2="670.0" y2="340.0" class="ink-soft" stroke-width="1.0"/>
+<text x="670.0" y="351.0" class="xs mono" text-anchor="middle">1</text>
+<line x1="515.0" y1="185.0" x2="520.0" y2="185.0" class="ink-soft" stroke-width="1.0"/>
+<text x="512.0" y="197.0" class="xs mono" text-anchor="end">1</text>
+<path d="M 520.00,185.00 L 595.00,185.00 L 557.50,110.00 Z" fill="none" stroke="#f0961e" stroke-width="1.6"/>
+<text x="526.0" y="201.0" class="xs mono" text-anchor="start">v0 (0, 1)</text>
+<text x="603.0" y="201.0" class="xs mono" text-anchor="start">v1 (0.5, 1)</text>
+<text x="566.5" y="116.0" class="xs mono" text-anchor="start">v2</text>
+<path d="M 595.00,185.00 L 594.71,178.46 L 593.86,171.98 L 592.44,165.59 L 590.48,159.35 L 587.97,153.30 L 584.95,147.50 L 581.44,141.98 L 577.45,136.79 L 573.03,131.97 L 568.21,127.55 L 563.02,123.56 L 557.50,120.05 L 551.70,117.03 L 545.65,114.52 L 539.41,112.56 L 533.02,111.14 L 526.54,110.29 L 520.00,110.00" fill="none" stroke="#5082e6" stroke-width="1.3" stroke-dasharray="4 3"/>
+<circle cx="573.0" cy="132.0" r="3.2" fill="#5082e6" stroke="none"/>
+<text x="583.033008588991" y="127.96699141100893" class="xs mono" text-anchor="start">t = 0.5  (0.35355, 1.35355)</text>
+<circle cx="520.0" cy="110.0" r="3.2" fill="#5082e6" stroke="none"/>
+<text x="528.0" y="96.0" class="xs mono" text-anchor="start">t = 1  (0, 1.5)</text>
+<circle cx="670.0" cy="185.0" r="3.2" fill="#e05c5c" stroke="none"/>
+<text x="678.0" y="177.0" class="xs" text-anchor="start">(1, 1): mesh node</text>
+<text x="678.0" y="190.0" class="xs" text-anchor="start">applied</text>
+<circle cx="520.0" cy="335.0" r="3.2" fill="#e05c5c" stroke="none"/>
+<text x="530.0" y="327.0" class="xs" text-anchor="start">(0, 0): node_0 dropped</text>
+<text x="482" y="69.0" class="xs muted" text-anchor="start">v0, v1 and v2 in the plane z = 0</text>
+</svg>

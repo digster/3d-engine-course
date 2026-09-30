@@ -1,0 +1,550 @@
+  <!-- =================================================================
+       5 — INVERSE BINDS
+       ================================================================= -->
+  <h2 id="binds"><span class="num">5</span>Inverse binds are data</h2>
+
+  <h3>5.1 — Derived in 7.6, primary in a file</h3>
+
+  <p>
+    Lesson 7.6 derived the inverse bind matrices from the bind pose — one forward pass, parent before
+    child, no general inverse anywhere — and then made an argument for never storing them anywhere
+    else: "a field an editor could hand-write would be a field that can disagree with the bind pose
+    beside it". For a skeleton the engine authors, that stands. A file is a skeleton somebody else
+    authored, and in glTF the argument runs the other way. The node transforms are simply
+    <em>the pose the file was saved in</em> — the rest pose if the artist exported at rest, a frame
+    of the walk if they did not — while the inverse bind matrices are the bind, stated once and
+    authoritatively. When the two disagree, the matrices are right and the nodes are merely where the
+    character happens to be standing.
+  </p>
+
+  <p>
+    So <code>import_rig</code> bakes every joint's inverse bind the 7.6 way and then
+    <strong>overwrites the skin's joints with the file's matrices</strong>. The ancestors keep their
+    baked values: no vertex is weighted to them, and baking makes their skinning matrix the identity at
+    rest, which keeps the one number below about the file rather than about joints the file never
+    bound. <code>skeleton.hpp</code>'s comment that the array is "written by
+    <code>bake_inverse_binds</code> and by nothing else" is amended in this lesson to say why that
+    stopped being true.
+  </p>
+
+  <h3>5.2 — Absent is not missing</h3>
+
+  <p>
+    A skin may omit its <code>inverseBindMatrices</code> accessor, and the obvious response — compute
+    them from the rest pose, the way 7.6 would — is wrong. The specification (§5.28.1): "When
+    undefined, each matrix is a 4x4 identity matrix." A file without inverse binds is saying that its
+    mesh is <em>already</em> in each joint's space, not that it forgot. The harness's chain has no
+    accessor, and a vertex at the origin weighted to the tip:
+  </p>
+
+  <pre>  identity IBMs: v0 at y = 3.000 (the tip is at 3)
+  [PASS] C.3 absent IBMs are the identity, not baked
+  control, IBMs baked from rest: v0 at y = 0.000
+  [PASS] C.4 control: baking moves it to the origin</pre>
+
+  <p>
+    With the identity, a vertex at the tip's origin rides the tip, three units up. Baked from the rest
+    pose, the same vertex is carried to the tip's space and back and lands at the model's origin — a
+    character whose every vertex has collapsed onto the point it was modelled around.
+  </p>
+
+  <h3>5.3 — One number for how the file was saved</h3>
+
+  <p>
+    7.6's <code>skeleton_report::worst_bind_residual</code> poses a skeleton at its own rest pose and
+    measures how far each palette matrix is from the identity. On a skeleton the engine baked, it
+    measures float error through the chain. On an imported one it answers a different question with the
+    same arithmetic, because the two factors now come from two different places in the file: <strong>how
+    far the pose the file was saved in is from the pose it was bound in</strong>. It is reported as
+    <code>bind_vs_rest</code>:
+  </p>
+
+  <pre>  bind vs rest 2.894e-06, depth 8, nonuniform binds 0</pre>
+
+  <p>
+    Blender's exporter writes both from the rest pose, and they agree to float noise. A file saved
+    mid-walk would report the walk's angles here — not an error, and not something to fix: the
+    importer uses the matrices either way, and the number tells you the character will not stand in
+    its bind pose when no clip is playing.
+  </p>
+
+  <h3>5.4 — A check that fired on a healthy rig</h3>
+
+  <p>
+    The same line says <code>nonuniform binds 0</code>, and the first run said 12. Lesson 7.6 counted
+    a joint as non-uniformly scaled when its three scale components were not exactly equal — the
+    condition under which the engine's normal rule is wrong by 22.6° at a 1.5:1 stretch. Blender's
+    exporter writes rest scales like (1.0000009, 0.9999996, 1.0000086): float noise from decomposing a
+    matrix, and twelve of twenty joints tripped the exact test. A check that fires on a healthy file
+    teaches its reader to ignore it, which is worse than no check.
+  </p>
+
+  <p>
+    The fix is a tolerance, chosen from two measurements rather than one. The noise is a relative
+    spread of 8.94&nbsp;×&nbsp;10<sup>−6</sup>; the normal error a stretch of that size causes, measured
+    on a 45° normal, is 5.1&nbsp;×&nbsp;10<sup>−4</sup> degrees. The new
+    <code>k_uniform_scale_tolerance</code> is 10<sup>−4</sup> — eleven times the noise, where the
+    normal error would be 5.7&nbsp;×&nbsp;10<sup>−3</sup> degrees, and five thousand times smaller than
+    the 1.5:1 stretch 7.6 worried about, which the control confirms is still counted:
+  </p>
+
+  <pre>  Blender's rest scales: worst relative spread 8.94e-06
+  nonuniform_binds reports 0 of 20 joints
+  [PASS] I.1 float noise in a rest scale is not a non-uniform bind
+  [PASS] I.2 control: a 1.5:1 stretch is still counted
+  normal error: 5.13e-04 deg at Blender's spread, 5.73e-03 at 1e-4</pre>
+
+  <!-- =================================================================
+       6 — INFLUENCES
+       ================================================================= -->
+  <h2 id="influences"><span class="num">6</span>Influences: three index spaces, four slots</h2>
+
+  <h3>6.1 — One vertex, followed</h3>
+
+  <p>
+    <code>JOINTS_0</code> holds, per vertex, four indices "of the joints from the corresponding
+    <code>skin.joints</code> array" (§3.7.3.3) — slots, not nodes. The importer builds one table,
+    slot&nbsp;→&nbsp;joint, when it builds the skeleton, and every vertex goes through it.
+    Figure&nbsp;4 follows vertex 28 of the body, at the top of the legs, through all three spaces.
+  </p>
+
+  @@FIG_INFLUENCES@@
+
+  <p>
+    Three places where an importer mixes up spaces, and each has a signature. Reading the slot as a
+    node index animates each vertex by a joint with an unrelated number — the body shreds. Reading it
+    as our joint index without the table animates it by the joint one place away, because our
+    skeleton has the <code>Armature</code> at index 0 and every skin joint shifted by one — the whole
+    character moves as if every bone's neighbour were driving it. And forgetting to renumber the
+    inverse binds along with the joints pairs each joint with its neighbour's bind, which looks like
+    both.
+  </p>
+
+  <h3>6.2 — More than four</h3>
+
+  <p>
+    Lesson 7.6 fixed four influences per vertex, because four indices and four weights are one GPU
+    register each. glTF allows any number, in sets: "When any of the vertices are influenced by more
+    than four joints, the additional joint and weight information are stored in subsequent sets",
+    <code>JOINTS_1</code> with <code>WEIGHTS_1</code> and so on. The parser reads every set that pairs
+    up; the importer keeps the four largest weights and renormalises, which 7.6 named as the standard
+    step, and reports what it threw away — because the error of dropping a weight <em>w</em> is at most
+    <em>w</em> times the distance between where that joint and the others would put the vertex, so
+    the dropped weight is the number that bounds the damage.
+  </p>
+
+  <p>
+    Blender's default export already keeps four ("Bone influences: 4"), so the mannequin has nothing to
+    drop. The harness builds a triangle with six influences in two sets — 0.3, 0.2, 0.15, 0.1 and
+    0.15, 0.1:
+  </p>
+
+  <pre>  six influences: sets 2, truncated 3, worst dropped 0.10
+  kept joints j0 j1 j2 j4, weights 0.3750 0.2500 0.1875 0.1875</pre>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> Sorted largest first: 0.3 (j0), 0.2 (j1), 0.15 (j2), 0.15 (j4),
+       0.1 (j3), 0.1 (j5). Two weights tie at 0.15; the sort is <code>stable_sort</code>, so j2 keeps
+       its place ahead of j4 because it came first in the file, and the result does not depend on which
+       standard library compiled it. Keep four; the kept sum is 0.8; divide:</p>
+    <p class="mono">0.3/0.8 = 0.375&nbsp;&nbsp;&nbsp;0.2/0.8 = 0.25&nbsp;&nbsp;&nbsp;0.15/0.8 = 0.1875&nbsp;&nbsp;&nbsp;0.15/0.8 = 0.1875</p>
+  </div>
+
+  <h3>6.3 — What a weight sum is allowed to miss by</h3>
+
+  <p>
+    Lesson 7.6's <code>skin.hpp</code> set the tolerance on a weight sum at 0.02 and argued for it:
+    weights stored as normalised bytes, 1/255 a step, "can miss by up to 4/255 = 0.0157 before anyone
+    has done anything wrong". Reading the specification for this lesson refuted the premise. For
+    normalised unsigned bytes and shorts, "their linear sum before normalization <strong>MUST</strong>
+    be 255 or 65535 respectively" — an exporter quantises and then fixes the sum, so a conforming file
+    misses by nothing at all. A byte-weighted vertex one step short is somebody's mistake, and the
+    specification says what it costs: the error "would get multiplied by the joint position". A sum of
+    254/255 pulls a vertex 1/255 of the way toward the model's origin — 7&nbsp;mm at the top of a
+    1.8&nbsp;m character — and 0.02 let it through without a word.
+  </p>
+
+  <p>
+    So <code>k_weight_tolerance</code> is now 10<sup>−5</sup>, placed between the two things a sum can
+    be off by: above float noise (the specification's validator allows 2&nbsp;×&nbsp;10<sup>−7</sup>
+    per non-zero weight, and Blender's worst is 8.57&nbsp;×&nbsp;10<sup>−8</sup>) and below the
+    smallest step a quantised file can miss by, 1/65535&nbsp;=&nbsp;1.5&nbsp;×&nbsp;10<sup>−5</sup>.
+  </p>
+
+  <pre>  worst weight sum error in the file 8.57e-08
+  [PASS] D.1 Blender's weights sum to 1 within 2e-7 x 4
+  byte weights 255/255 and 254/255: unnormalised 1
+  [PASS] I.3 a quantised sum one step short is reported</pre>
+
+  <h3>6.4 — What the character's vertices kept</h3>
+
+  <p>
+    The histogram at the bottom of Figure&nbsp;4 is the whole mannequin: 48.5% of its vertices follow a
+    single joint, 40.8% blend two, 7.4% three and 3.2% four. That is what Blender's automatic weights
+    produce on a body made of tubes — most of the surface belongs to one bone, and blending happens in
+    bands around the joints. It is also the argument for the four-influence limit, measured rather than
+    assumed: on this content nothing needed a fifth.
+  </p>
+
+  <h3>6.5 — A step that renumbers vertices</h3>
+
+  <p>
+    One more thing moves influences, and it is not in the importer. If a primitive has no normals, the
+    parser generates flat ones, and flat normals <em>split vertices</em>: <code>with_normals</code>
+    writes one vertex per triangle corner (Lesson 3.6). Every array it knows about is rebuilt; the
+    influence arrays are the parser's own, so the parser follows the split itself, taking new vertex
+    <em>k</em>'s influences from old vertex <code>indices[k]</code>. Forget it and each corner inherits
+    the influences of whichever vertex used to have its number, and the mesh deforms like shredded
+    paper. Blender always writes normals, so this path never runs on the mannequin; every hand-written
+    file in the harness omits them, so it runs on all of those.
+  </p>
+
+  <!-- =================================================================
+       7 — ROTATIONS
+       ================================================================= -->
+  <h2 id="rotations"><span class="num">7</span>Rotations arrive x, y, z, w</h2>
+
+  <p>
+    "rotation is a unit quaternion value, XYZW, in the local coordinate system, where W is the scalar"
+    (§3.5.3). This engine stores <code>quat{w, v}</code>, scalar first (conventions: quat). The
+    swizzle is one line, and it lives in one function, <code>quat_from_xyzw</code> in
+    <code>gltf.hpp</code>, which both readers of a file rotation call — the parser for node rotations
+    and the importer for animation keys — so there is exactly one place for it to be wrong.
+  </p>
+
+  <h3>7.1 — What a blind copy costs</h3>
+
+  <p>
+    Lesson 7.7's prediction was that copying the four floats straight into a <code>quat</code> "turns
+    into a 180° error about a diagonal axis". Work two cases by hand before measuring. A blind copy puts
+    the file's (<em>x</em>,&nbsp;<em>y</em>,&nbsp;<em>z</em>,&nbsp;<em>w</em>) into
+    (<em>w</em>,&nbsp;<em>x</em>,&nbsp;<em>y</em>,&nbsp;<em>z</em>):
+  </p>
+
+  <div class="worked">
+    <p class="mono">identity&nbsp;&nbsp;file (0, 0, 0, 1) → w = 0, v = (0, 0, 1)&nbsp;&nbsp;&nbsp;= 180° about z<br>
+       (½, ½, ½, ½)&nbsp;file (½, ½, ½, ½) → w = ½, v = (½, ½, ½)&nbsp;= itself: 0° of error</p>
+    <p>
+      The identity becomes a half turn — about <em>z</em>, not a diagonal. And a quaternion whose four
+      components are equal is its own shift, so its error is zero. One misreading, two keys, 180° and 0°:
+      the error is not a fixed rotation.
+    </p>
+  </div>
+
+  <p>
+    That is not a coincidence of two cases, and the reason is short. Moving four components one place
+    along is a cyclic permutation of four things, which is an <em>odd</em> permutation — three swaps —
+    and as a linear map on ℝ<sup>4</sup> it has determinant −1. Multiplying every quaternion by one
+    fixed unit quaternion, on either side, is a rotation of ℝ<sup>4</sup>, with determinant +1. So no
+    fixed rotation composed with the right one reproduces the blind copy; the error depends on the key.
+    Over every rotation key in Blender's file:
+  </p>
+
+  <pre>  748 rotation keys: error min 110.9, median 168.5, max 180.0 deg
+  identity -> 180.0 deg about (0, 0, 1)
+  (1/2,1/2,1/2,1/2) -> error 0.0 deg</pre>
+
+  <p>
+    Never small on this content — the smallest error on any key is 111° — and never the same twice,
+    which is why no "fix-up rotation" applied afterwards can hide it. Figure&nbsp;5 is the result. The
+    first joint in the chain is the <code>Armature</code> node, whose rotation is the identity, so the
+    whole character is turned 180° about <em>z</em> before anything else goes wrong: it hangs upside
+    down, a metre under the floor, with every limb folded by its own unrelated error.
+  </p>
+
+  @@FIG_XYZW@@
+
+  <p>
+    Lesson 7.7's exercise is corrected to match. And one more place a file's rotation is decoded: a
+    rotation may be stored as normalised signed bytes or shorts, which the specification decodes as
+    <code>max(c / 127, −1)</code>. cgltf 1.15 divides without the <code>max</code>, so the one value
+    with no positive twin, −128, reads as −1.0079. A rotation key is renormalised on import anyway, so
+    it changes no picture; the parser clamps it because a decode that disagrees with the specification
+    is a bug report waiting for the asset that finds it.
+  </p>
+
+  <!-- =================================================================
+       8 — CURVES
+       ================================================================= -->
+  <h2 id="curves"><span class="num">8</span>Curves: the file's three, and our one</h2>
+
+  <p>
+    A glTF sampler is a list of key times and a list of values, and an interpolation mode that says
+    what happens between keys (Appendix C): <strong>LINEAR</strong> — which "when targeting a rotation"
+    means spherical linear interpolation, slerp — <strong>STEP</strong>, which holds each key until
+    the next, and <strong>CUBICSPLINE</strong>, a Hermite curve with a tangent on each side of every
+    key. Lesson 7.7's sampler has one rule per field and no modes at all: lerp for position and scale,
+    nlerp for rotation. Only LINEAR on a position or a scale is already ours.
+  </p>
+
+  <p>
+    Rather than teach the sampler three more modes — and every future consumer of a clip with it — the
+    importer converts. Each interval between two file keys is split into the fewest equal pieces for
+    which <em>our</em> interpolation of the file's curve stays within a tolerance of the file's curve
+    itself, and the interior keys are written at the file curve's exact values. The error is measured
+    with the sampler's own rule, which is Lesson 7.7's reducer's principle arriving from the other
+    side.
+  </p>
+
+  <p>
+    The tolerance is <strong>a tenth of the reducer's</strong>: 0.1&nbsp;mm, 0.05° and
+    10<sup>−4</sup> of scale, against <code>reduce</code>'s 1&nbsp;mm, 0.5° and 10<sup>−3</sup>. The two
+    errors <em>can</em> add — the reducer judges the importer's curve, not the file's — and the first
+    argument for a tenth was an error budget split between them. Exercise&nbsp;5 measured it and the
+    argument changed. Importing Blender's cubic walk at 0.005°, 0.05° and 0.25° and then reducing at
+    0.5° ends 0.501°, 0.512° and 0.513° from an exact import: the errors barely add. What moves is the
+    <em>key count</em> after reduction — 258, 276, 329 — because a looser import leaves wiggles the
+    reducer then has to follow. A strict import costs keys before the reducer and saves them after it,
+    and a tenth is where the saving had mostly arrived.
+  </p>
+
+  <h3>8.1 — Measured where the error is, not at the midpoint</h3>
+
+  <p>
+    Before splitting anything the importer has to <em>measure</em> the difference between the file's
+    curve and ours on an interval, and the obvious place to measure is the middle. For the most common
+    case — a LINEAR rotation — the middle is exactly the place where there is nothing to see.
+  </p>
+
+  <p>
+    Put the two keys on the unit sphere of quaternions, an arc <em>Ω</em> apart. Slerp walks the arc at
+    constant speed: at parameter <em>u</em> it is <em>u</em>Ω along. Nlerp walks the straight chord and
+    pushes the result back onto the sphere, and the angle it has covered is the angle of that chord
+    point seen from the centre:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \varphi_{\text{nlerp}}(u) = \operatorname{atan2}\!\big(u \sin\Omega,\; (1-u) + u\cos\Omega\big),
+      \qquad \varphi_{\text{slerp}}(u) = u\,\Omega \]</span>
+    <span class="eq-plain">phi_nlerp(u) = atan2(u sin W, (1 - u) + u cos W);   phi_slerp(u) = u W</span>
+  </div>
+
+  <p>
+    Both paths lie on the same great circle; only the schedule differs. At <em>u</em>&nbsp;=&nbsp;½ the
+    chord point is the midpoint of the chord, which lies on the bisector of the arc, so both are at
+    Ω/2 exactly — the two agree at the one place a single probe would look. The lag peaks near a fifth
+    and four fifths of the way.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A 90° rotation between two keys is a sphere arc of
+       Ω&nbsp;=&nbsp;45° (a quaternion carries the half angle). At <em>u</em>&nbsp;=&nbsp;¼:</p>
+    <p class="mono">φ_nlerp = atan2(0.25 · sin 45°, 0.75 + 0.25 · cos 45°)<br>
+       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= atan2(0.17678, 0.92678) = 10.799°<br>
+       φ_slerp = 0.25 · 45° = 11.250°<br>
+       lag&nbsp;&nbsp;&nbsp;&nbsp;= 0.451° on the sphere = <strong>0.902°</strong> of rotation<br>
+       at u = ½: atan2(0.35355, 0.85355) = 22.500° = ½ · 45°&nbsp;&nbsp;— zero</p>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">Say which degrees</span>
+    <p>
+      Every number on this page is an angle of <em>rotation</em>. Lesson 7.5's table — "0.13 degrees
+      at a 30-degree arc, 4.07 at 90" — is in <em>sphere</em> degrees, the quaternion's half-angle: a
+      30° sphere arc is a 60° rotation, and the harness's 0.2675° of rotation lag at 60° is its 0.134°.
+      The two conventions differ by exactly a factor of two in both columns, which is precisely the kind
+      of difference that survives review.
+    </p>
+  </div>
+
+  <p>
+    So the importer measures at <strong>seven probes</strong> inside every piece — ⅛, ²⁄₈, … ⅞ — which
+    straddle both peaks. The harness keeps the midpoint as a control: it must see nothing, at every arc.
+    Figure&nbsp;6 is the lag and the number of pieces it takes to stay within 0.05°.
+  </p>
+
+  @@FIG_LAG@@
+
+  <pre>  arc   nlerp lag (at u)    at u=.5   pieces  residual
+   15.5   0.0046 deg (0.786)  8.5e-07     1
+   30.0   0.0331 deg (0.788)  1.7e-06     1
+   60.0   0.2675 deg (0.214)  0.0e+00     2
+   90.0   0.9188 deg (0.217)  3.4e-06     3
+  120.0   2.2340 deg (0.223)  3.4e-06     4
+  150.0   4.5140 deg (0.771)  0.0e+00     5
+  179.0   8.0010 deg (0.762)  6.8e-06     6
+  split keys 15, worst residual 0.0323 deg (limit 0.05)
+  [PASS] E.1 every arc is fitted within 0.05 degrees
+  [PASS] E.2 control: at the midpoint nlerp and slerp agree</pre>
+
+  <p>
+    And on Blender's file? The exporter sampled every frame at 30&nbsp;Hz, so adjacent keys are never
+    more than 17.6° apart (the wave's arm, rising), where the lag is 0.0065° — an eighth of the
+    tolerance. Every one of the mannequin's intervals is accepted with one piece: 929 keys in and 929
+    out, worst residual 0.0065°.
+    The machinery exists for files that were <em>not</em> sampled: hand-keyed LINEAR curves with keys
+    far apart, which is exactly the kind of file a runtime format's size budget encourages.
+  </p>
+
+  <h3>8.2 — STEP: one float before the next key</h3>
+
+  <p>
+    A STEP sampler's value is "<em>v</em><sub>t</sub> = <em>v</em><sub>k</sub>" for the whole interval,
+    and then jumps. Our sampler has no step mode, and does not need one. Two keys holding the same value
+    <strong>one representable time apart</strong> are a step, to within the one float between them:
+    the importer writes each key, and when the next key's value differs, a copy of this one at
+    <code>nextafter(t<sub>k+1</sub>, −∞)</code>. Figure&nbsp;7 is the harness's case — a translation
+    keyed 0, 1, 2 at 0, ½ and 1&nbsp;s.
+  </p>
+
+  @@FIG_STEP@@
+
+  <pre>  STEP 0,1,2 at 0, .5, 1 s: keys 5 (2 of them held)
+  x(.25) 0.000   x(.5 - 1 ulp) 0.000   x(.5) 1.000
+  [PASS] E.3 a STEP holds to the float before its next key
+  control, keys copied as-is: x(.25) 0.500
+  [PASS] E.4 control: copied, a STEP becomes a ramp</pre>
+
+  <p>
+    Blender's file has a great deal of STEP in it, and none of it needs a held key. The exporter writes
+    <em>every</em> property of <em>every</em> bone — translation, rotation and scale for nineteen bones,
+    57 channels per animation — and writes the ones that never change as a two-key STEP sampler holding
+    one value. 95 of the file's 114 channels are that. Equal values need no hold, so the importer adds
+    nothing; Lesson 7.7's reducer then deletes them entirely (§9.5).
+  </p>
+
+  <h3>8.3 — CUBICSPLINE, and the <code>t<sub>d</sub></code> nobody reads</h3>
+
+  <p>
+    Each key of a cubic sampler carries three values — an in-tangent <em>a</em>, the value <em>v</em>
+    and an out-tangent <em>b</em> — and the curve on an interval of length
+    <em>t</em><sub>d</sub>&nbsp;=&nbsp;<em>t</em><sub>k+1</sub>&nbsp;−&nbsp;<em>t</em><sub>k</sub> is the
+    Hermite cubic (§C.5):
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ v(u) = (2u^3 - 3u^2 + 1)\,v_k + t_d\,(u^3 - 2u^2 + u)\,b_k + (-2u^3 + 3u^2)\,v_{k+1} + t_d\,(u^3 - u^2)\,a_{k+1} \]</span>
+    <span class="eq-plain">v(u) = (2u^3 - 3u^2 + 1) v_k + t_d (u^3 - 2u^2 + u) b_k + (-2u^3 + 3u^2) v_(k+1) + t_d (u^3 - u^2) a_(k+1)</span>
+  </div>
+
+  <p>
+    The four polynomials are the standard Hermite basis: the first and third blend the two values, the
+    second and fourth add the slopes, and each vanishes where the others need it to. The factor
+    <em>t</em><sub>d</sub> is the part to read twice. The tangents in the file are rates <em>per
+    second</em>; the basis runs over <em>u</em>, which goes from 0 to 1 across the interval whatever its
+    length. A slope per second times seconds per unit of <em>u</em> is a slope per unit of <em>u</em>,
+    and <em>t</em><sub>d</sub> is that conversion.
+  </p>
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> A scalar from 0 to 1 over <em>t</em><sub>d</sub>&nbsp;=&nbsp;0.5&nbsp;s,
+       leaving at slope 2 per second and arriving flat (<em>b</em><sub>k</sub>&nbsp;=&nbsp;2,
+       <em>a</em><sub>k+1</sub>&nbsp;=&nbsp;0). At <em>u</em>&nbsp;=&nbsp;½ the basis is 0.5, 0.125, 0.5,
+       −0.125:</p>
+    <p class="mono">with t_d:&nbsp;&nbsp;&nbsp;&nbsp;0.5·0 + 0.5·0.125·2 + 0.5·1 + 0.5·(−0.125)·0 = 0.625<br>
+       without t_d: 0.5·0 +&nbsp;&nbsp;&nbsp;&nbsp;0.125·2 + 0.5·1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= 0.750</p>
+    <p>
+      Leaving out <em>t</em><sub>d</sub> multiplies every tangent by 1/<em>t</em><sub>d</sub>: twice as
+      steep here, and on the intervals animators actually key — a few frames — far worse.
+    </p>
+  </div>
+
+  <p>
+    For a rotation the specification evaluates the Hermite on the four raw components and then
+    requires that "the interpolated quaternion MUST be normalized". It does not pick the nearer sign
+    first — it tells exporters instead to avoid writing a key that is the negation of the next — and the
+    importer follows the formula exactly, because the point of a reference curve is that it is the
+    specification's.
+  </p>
+
+  <p>
+    Blender writes cubic splines when "Always Sample Animations" is off: each Bezier curve an animator
+    keyed arrives as its keys and their tangents. The authoring script exports the same scene that way
+    as well, and the importer converts it:
+  </p>
+
+  <pre>  Blender, sampling off: 39 cubic channels, 332 keys in
+  -> 1227 keys out (895 split), worst 0.0500 deg / 9.66e-05 m
+  [PASS] E.5 Blender's CUBICSPLINE fitted within tolerance
+  control, tangents without t_d: curve off by 40.25 deg
+  [PASS] E.6 control: forgetting t_d moves the curve by degrees</pre>
+
+  <p>
+    Figure&nbsp;8 is one of those channels, the left thigh during the walk. Blender's keys are four
+    frames apart, <em>t</em><sub>d</sub>&nbsp;=&nbsp;0.133&nbsp;s, so a forgotten <em>t</em><sub>d</sub>
+    makes every tangent 7.5 times too steep, and the curve overshoots between every pair of keys by as
+    much as 40°. (The first draft of the importer's own comment on this said the opposite — that a
+    forgotten <em>t</em><sub>d</sub> "flattens" a short curve. The plot of the mistake is what corrected
+    it: only an interval longer than a second comes out flatter.)
+  </p>
+
+  @@FIG_CUBIC@@
+
+  <p>
+    Nine keys became 61 on that channel, and 332 became 1,227 across the file: cubic curves bend
+    everywhere, and 0.05° is a tight budget for a straight line to follow a bend. That is the price of
+    the tolerance being a tenth of the reducer's, and it is paid back the moment the reducer runs — the
+    reducer exists precisely to merge keys a straight line can already reach.
+  </p>
+
+  <h3>8.4 — Two exports of one motion</h3>
+
+  <p>
+    The authoring script exports the same walk twice: sampled at every frame (the default), and as
+    curves. Same armature, same keys, same Bezier handles — two files that describe one motion. Import
+    both, sample both, and compare every joint, 240 times across the second:
+  </p>
+
+  <pre>  walk, sampled vs curves: worst joint 0.916 deg (on frames 0.218)
+  the same, from the files alone (no importer): 0.218 deg
+  [PASS] E.7 the two exports differ, and by the exporter's amount</pre>
+
+  <p>
+    The prediction written before the run was that the two would agree on the frames, where the sampled
+    export stores Blender's own evaluation, to within the importer's 0.05°. They do not: 0.218° on the
+    frames and 0.916° between them. Before blaming Blender, the harness asks whose disagreement it is by
+    removing the importer altogether: evaluate the curves file with the specification's formula at each
+    frame time and compare with the sampled file's key there. <strong>0.218°, to three decimals.</strong>
+    The two files disagree with each other by exactly the amount the imports do, so the import adds
+    nothing measurable; the difference is in the files. Figure&nbsp;9 shows it over time.
+  </p>
+
+  @@FIG_TWO@@
+
+  <p>
+    So what is Blender doing? The explanation first written here was about Bezier handles: a Blender
+    curve is a Bezier curve in (frame, value) with two-dimensional handles, and it equals a Hermite
+    curve only when every handle sits a third of the way along its interval in time. The walk is keyed
+    at frames 0, 4, 8, 11, 15… — intervals of four and three frames — and the guess was that Blender's
+    automatic handles on a key between unequal intervals are not at a third of either. Asking Blender
+    (<code>scratch/verify_77b_blender.py</code>) refused it: every handle is at 0.333 of its interval,
+    1.333 frames of a four-frame gap and 1.000 of a three. A slope-only conversion of those handles is
+    exact.
+  </p>
+
+  <p>
+    The real mechanism is one line further into the exporter. To carry a tangent from Blender's bone
+    space into the node space glTF wants, the exporter turns it into a <em>control point</em> — the key's
+    value plus one frame of slope — transforms that point the same way it transforms a key, and
+    subtracts the transformed key; its own comment says this "only works for locally linear
+    transformation" and that its author is "not sure that linearity is never broken with quaternions
+    and their normalization". It is broken. A rotation is transformed by
+    <code>transform_rotation</code> (<code>io_scene_gltf2/blender/com/gltf2_blender_math.py</code>),
+    whose first line is <code>rotation.normalize()</code>, and a key plus a slope is not a unit
+    quaternion. Normalising it bends the tangent, by an amount that grows with the slope — so the error
+    appears where a joint turns fastest. The same script evaluates Blender's own curve against two
+    Hermites built from the same keys:
+  </p>
+
+  <pre>TAN shin.R frame 1: linear tangents 0.0000 deg, exporter's 0.1045 deg
+TAN shin.R frame 2: linear tangents 0.0000 deg, exporter's 0.2182 deg
+TAN shin.R frame 3: linear tangents 0.0000 deg, exporter's 0.1558 deg
+TAN worst over four bones, every tenth of a frame: linear 0.0000, exporter 0.2211</pre>
+
+  <p>
+    With the true tangents the Hermite <em>is</em> Blender's curve, to four decimals. With the
+    exporter's normalised ones it misses by 0.1045°, 0.2182° and 0.1558° on frames 1 to 3 of the right
+    shin's bend — and the two files, compared directly, disagree there by 0.103°, 0.216° and 0.157°.
+    That is the whole of the disagreement: the knee sweeping 55° in four frames, a tangent large enough
+    for a normalisation to notice.
+  </p>
+
+  <p>
+    Neither the importer nor the specification is at fault, and neither file is wrong in a way a
+    validator would catch. The lesson is about instruments, twice. The first draft of this check would
+    have reported an importer bug, and the second arm — the files alone — moved the blame to the
+    exporter. The first explanation of the exporter's error was then wrong too, and it took asking the
+    tool that made the file, rather than reasoning about it, to find the line that was. Which export
+    should a game ship? The sampled one is Blender's own evaluation of its curves; the cubic one is
+    smaller in the file, larger once imported, and a fifth of a degree off where joints move fast.
+  </p>

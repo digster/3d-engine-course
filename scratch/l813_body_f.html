@@ -418,14 +418,14 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 ├── shaders/                    HLSL, cross-compiled by SDL_shadercross (4.3) — 32 files
 ├── assets/                     meshes, a texture and a font the demos load
 │   cube.bin  cube.gltf  cube.obj  fonts/Karla-Regular.ttf
-│   fonts/OFL.txt  quirks.obj  shapes.glb  torus.obj  twisted.obj
-│   uv_grid.png
+│   fonts/OFL.txt  mannequin.glb  quirks.obj  shapes.glb  torus.obj
+│   twisted.obj  uv_grid.png
 ├── engine/                     the static library (5.1)
 │   ├── CMakeLists.txt          sources, warnings, the umbrella lint
 │   ├── include/engine/         the public API — the only thing demos may include
 │   │   ├── engine.hpp          the umbrella: every public header
-│   │   ├── anim/               7.5–7.7: skeletons, clips, sampling and blending  (3)
-│   │   │   clip.hpp  skeleton.hpp  skin.hpp
+│   │   ├── anim/               7.6–7.7b: skeletons, clips, blending, glTF import  (4)
+│   │   │   clip.hpp  import.hpp  skeleton.hpp  skin.hpp
 │   │   ├── asset/              5.5: the asset system — images, OBJ, glTF, handles  (2)
 │   │   │   asset_store.hpp  search_path.hpp
 │   │   ├── audio/              7.8: devices, sounds, the mixer  (3)
@@ -473,8 +473,8 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 │   │   └── ui/                 5.11: the ImGui debug UI and debug draw  (1)
 │   │       debug_ui.hpp
 │   └── src/                    the implementations, one directory per include/ one
-│       ├── anim/               (3)
-│       │   clip.cpp  skeleton.cpp  skin.cpp
+│       ├── anim/               (4)
+│       │   clip.cpp  import.cpp  skeleton.cpp  skin.cpp
 │       ├── asset/              (2)
 │       │   asset_store.cpp  search_path.cpp
 │       ├── audio/              (3)
@@ -520,6 +520,7 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 │   ├── integrate/              8.1   three rules on one spring
 │   ├── joints/                 8.11  rods, ropes, sockets, hinges
 │   ├── manifold/               8.7   one contact is not a contact
+│   ├── mannequin/              7.7b  a character Blender built, played
 │   ├── particles/              6.18b sparks the CPU never touches
 │   ├── plane/                  7.3   the complex plane
 │   ├── pong/                   1.8   the Module 1 checkpoint

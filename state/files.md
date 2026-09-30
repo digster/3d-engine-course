@@ -596,6 +596,23 @@ files:
            had no context for a hunk; LATER_PINS: 51 carried), _base618b/ (run_all.sh +
            classify.py across 27 harnesses; before/ and after/ transcripts are local
            evidence, NOT tracked). The student tree at 6.18b is scratch/_t618b (gitignored).
+  scratch/ (7.7b, not shipped with the engine — the third INSERTED lesson):
+           verify_77b.cpp + build_verify_77b.sh (36 checks in twelve sections, §A-§L; mini_gltf
+           writes the hand-built fixtures in memory; §G is an independent double-precision spec
+           evaluator), verify_77b_blender.py (three Blender-side checks: HANDLES, TAN, INFL),
+           verify_77b_ex5.cpp (Exercise 5's measurement), make_mannequin.py (THE AUTHORING
+           SCRIPT: Blender 5.1 headless; writes assets/mannequin.glb and, tracked for the
+           harness, scratch/mannequin_curves.glb (sampling off -> CUBICSPLINE) and
+           scratch/mannequin_unfixed.glb (the first export, the neutral_bone control)),
+           inspect_glb.py (dump a .glb's JSON), figs_77b.py (12 figures), build_77b.py,
+           l77b_body_{a..d}.html, l77b_fig{1..12}.svg, figure DATA l77b_{e_cubic,e_cubic_keys,
+           e_two,f_xyzw,h_nose}.csv and l77b_render_{walk,order,xyzw,wave}.ppm (half-resolution
+           crops made by shots_77b.sh + crop_ppm.py). LISTING PINS l77b_<path>: 11 engine/demo/
+           CMake files + 5 scratch copies.
+           INSERTION TOOLING: make_t77b.py (make_t618b.py's lists; engine.hpp carries with
+           context at 7.7, so insert_includes is unused; LATER_PINS: 40), _base77b/ (run_all.sh
+           + classify.py across 41 harnesses — Module 8 added; before/ and after/ transcripts
+           local evidence, NOT tracked). The student tree at 7.7b is scratch/_t77b (gitignored).
   scratch/ (8.13, not shipped with the engine): verify_813.cpp,
            build_verify_813.sh, figs_813.py, build_813.py, gen_l813_body_e.py
            (one-off: §13's snippets into the STATIC l813_body_e.html),

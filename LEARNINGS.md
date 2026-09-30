@@ -45,8 +45,11 @@ to the list just below.
   under 0.036° in float — use the chord. *module-7: "Cancellation against 1.0…"; module-8:
   "`acos` has a resolution floor, and it is 0.036 degrees".*
 - **Symmetric or hand-picked test data agrees with the code by construction** — convention bugs
-  hide behind it. *module-8: "Convention bugs hide behind symmetric test data",
-  "Hand-picked test data agrees with the code by construction".*
+  hide behind it. 7.7b's Blender-authored file found three shipped claims wrong that no
+  course-written fixture could; and a real file can still be too well-behaved (its skin needed no
+  sort), so keep a hand-built case for every feature it does not exercise. *module-8: "Convention
+  bugs hide behind symmetric test data", "Hand-picked test data agrees with the code by
+  construction"; module-7: "Lesson 7.7b…".*
 
 **Measurement**
 - **Timing loops measure the compiler** unless the whole result is consumed and the input
@@ -64,7 +67,8 @@ to the list just below.
   correctly and blamed a pool; the source (`build/_deps/sdl3-src`) showed a 32 KiB per-push
   overrun. A partial sampler bind was said to unbind other slots from 6.8 onward; the source
   says bindings are per slot and reset at pass end. Read the mechanism before naming it.
-  *module-4, module-6.*
+  7.7b explained Blender's 0.218° as handle geometry; asking Blender refused it — its exporter
+  normalises a tangent's control point. *module-4, module-6, module-7.*
 - **A hint is a claim, and nobody checks a claim until they have to use it** — writing 113
   solution sketches found fifteen wrong statements in published hints and prose. Compute the
   number before writing the sentence. *tooling.*
@@ -104,7 +108,8 @@ to the list just below.
   tooling.*
 
 **Shell and git**
-- **zsh does not word-split an unquoted `$var`** — `set -- $spec` gets one argument. *module-8.*
+- **zsh does not word-split an unquoted `$var`** — `set -- $spec` gets one argument, and in 7.7b
+  `git add -f $NEW` got one enormous pathspec. Use a list file. *module-8, tooling.*
 - **`GIT_INDEX_FILE` leaks into every child `git`, and `git reset` empties a staged index** —
   set it per command, never export it; `git write-tree` before anything risky. *tooling.*
 - **A move script is code** — `sed -i ''` only means "no backup" to BSD sed; a published script
@@ -311,7 +316,7 @@ sub-headings, which are not repeated here.
 - Lesson 6.17b — local lights and their shadows (2026-09-28)
 - Lesson 6.18b — compute shaders and GPU particles (2026-09-29)
 
-### [`learnings/module-7.md`](learnings/module-7.md) — learnings from its lessons (46)
+### [`learnings/module-7.md`](learnings/module-7.md) — learnings from its lessons (47)
 
 - Cancellation against 1.0: the same bug three times in one lesson
 - A one-knob Euler interpolation is a geodesic, so the obvious test measures nothing
@@ -359,6 +364,7 @@ sub-headings, which are not repeated here.
 - Real-time code you cannot call from a test is code you cannot debug
 - A check that greps its own corpus can be broken by writing about it
 - The same fact in three places, and one of them will be missed
+- Lesson 7.7b — a character from a file somebody else wrote (2026-09-30)
 
 ### [`learnings/module-8.md`](learnings/module-8.md) — learnings from its lessons (62)
 
@@ -425,7 +431,7 @@ sub-headings, which are not repeated here.
 - A quaternion's angle wraps at a full turn
 - A zero-byte generated file is a silent regression
 
-### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (21)
+### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (22)
 
 - A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
 - Two correct branches can leave a hole between them (docs tooling)
@@ -448,3 +454,4 @@ sub-headings, which are not repeated here.
 - RLE render panels: crispEdges, and quantisation can hide or invent a difference
 - R1 cannot see a file that is not in the index — stale pins of NEW files pass (6.18b, 2026-09-29)
 - Figure data sampled in array order draws the array's order (6.18b, 2026-09-29)
+- Lesson 7.7b's tooling notes (2026-09-30)

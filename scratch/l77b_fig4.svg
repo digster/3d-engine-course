@@ -1,0 +1,63 @@
+<svg viewBox="0 0 900 374" role="img" aria-labelledby="l77bf4-t l77bf4-d">
+  <title id="l77bf4-t">Three index spaces</title>
+  <desc id="l77bf4-d">Top: one vertex's three influences followed through three index spaces — skin slot 0 is node 18, hips, which is joint 1 of the imported skeleton; slot 13 is node 14, thigh.L, joint 14; slot 16 is node 17, thigh.R, joint 17; weights 0.4284, 0.2883 and 0.2833. Bottom: a histogram of how many non-zero influences each of the 2,681 vertices kept: 1,301 had one, 1,095 two, 199 three and 86 four.</desc>
+  <defs>
+    <marker id="e-i-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-k-l77bf4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">vertex 28 of the body, at the top of the legs:</text>
+<text x="20" y="44" class="xs muted" text-anchor="start">JOINTS_0 (skin slots)</text>
+<text x="250" y="44" class="xs muted" text-anchor="start">skins[0].joints (nodes)</text>
+<text x="480" y="44" class="xs muted" text-anchor="start">our skeleton (joints)</text>
+<text x="710" y="44" class="xs muted" text-anchor="start">WEIGHTS_0</text>
+<rect x="20" y="56" width="170" height="22" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="30" y="71" class="xs mono" text-anchor="start">slot 0</text>
+<line x1="192.00" y1="67.00" x2="246.00" y2="67.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="250" y="56" width="170" height="22" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="260" y="71" class="xs mono" text-anchor="start">node 18  hips</text>
+<line x1="422.00" y1="67.00" x2="476.00" y2="67.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="480" y="56" width="170" height="22" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="490" y="71" class="xs mono" text-anchor="start">joint 1  hips</text>
+<text x="710" y="71" class="xs mono" text-anchor="start">0.4284</text>
+<rect x="20" y="86" width="170" height="22" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="30" y="101" class="xs mono" text-anchor="start">slot 13</text>
+<line x1="192.00" y1="97.00" x2="246.00" y2="97.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="250" y="86" width="170" height="22" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="260" y="101" class="xs mono" text-anchor="start">node 14  thigh.L</text>
+<line x1="422.00" y1="97.00" x2="476.00" y2="97.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="480" y="86" width="170" height="22" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="490" y="101" class="xs mono" text-anchor="start">joint 14  thigh.L</text>
+<text x="710" y="101" class="xs mono" text-anchor="start">0.2883</text>
+<rect x="20" y="116" width="170" height="22" rx="3" fill="none" stroke="#5082e6" stroke-width="1.3"/>
+<text x="30" y="131" class="xs mono" text-anchor="start">slot 16</text>
+<line x1="192.00" y1="127.00" x2="246.00" y2="127.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="250" y="116" width="170" height="22" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="260" y="131" class="xs mono" text-anchor="start">node 17  thigh.R</text>
+<line x1="422.00" y1="127.00" x2="476.00" y2="127.00" stroke="var(--dia-ink)" stroke-width="1.1" marker-end="url(#e-k-l77bf4)"/>
+<rect x="480" y="116" width="170" height="22" rx="3" fill="none" stroke="#f0961e" stroke-width="1.3"/>
+<text x="490" y="131" class="xs mono" text-anchor="start">joint 17  thigh.R</text>
+<text x="710" y="131" class="xs mono" text-anchor="start">0.2833</text>
+<text x="20" y="170" class="xs" text-anchor="start">the fourth slot: joint index 0 with weight 0 — the spec's “SHOULD be set to zero”</text>
+<text x="20" y="200" class="sm" text-anchor="start">what 2,681 vertices kept, by non-zero influences</text>
+<rect x="60" y="230.0" width="90" height="100.0" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="105.0" y="224.0" class="xs mono" text-anchor="middle">1,301  (48.5%)</text>
+<text x="105.0" y="344" class="xs mono" text-anchor="middle">1</text>
+<rect x="180" y="245.8339738662567" width="90" height="84.16602613374327" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="225.0" y="239.8339738662567" class="xs mono" text-anchor="middle">1,095  (40.8%)</text>
+<text x="225.0" y="344" class="xs mono" text-anchor="middle">2</text>
+<rect x="300" y="314.7040737893928" width="90" height="15.295926210607226" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="345.0" y="308.7040737893928" class="xs mono" text-anchor="middle">199  (7.4%)</text>
+<text x="345.0" y="344" class="xs mono" text-anchor="middle">3</text>
+<rect x="420" y="323.38970023059187" width="90" height="6.610299769408147" rx="1" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.85"/>
+<text x="465.0" y="317.38970023059187" class="xs mono" text-anchor="middle">86  (3.2%)</text>
+<text x="465.0" y="344" class="xs mono" text-anchor="middle">4</text>
+<line x1="50" y1="330" x2="540" y2="330" class="ink-soft" stroke-width="1.0"/>
+<text x="285.0" y="360" class="xs muted" text-anchor="middle">influences per vertex</text>
+<text x="560" y="240" class="xs" text-anchor="start">none had more than four: truncated 0</text>
+<text x="560" y="256" class="xs" text-anchor="start">worst |sum − 1| in the file 8.57e-08</text>
+<text x="560" y="272" class="xs muted" text-anchor="start">(the spec's validator allows 2e-7 per weight)</text>
+</svg>

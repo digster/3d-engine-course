@@ -33,6 +33,33 @@ decisions:
         lists gpu_scene.cpp whole and rewrote the bind as bind_fragment_samplers
         (eight slots now), whose comment tells the corrected story; the instanced
         path calls the same function and says so. Only frustum.cpp's remains.
+  found-by-77b: A REAL EXPORTER AND THE SPECIFICATION REFUTED THREE 7.6 CHECKS, ONE 6.6 SENTENCE AND TWO OF 7.7's FOUR PREDICTIONS; ALL CORRECTED IN PLACE, WITH MARKED NOTES ON THE EARLIER PAGES.
+        (2026-09-30.) Found by importing a Blender-authored character and by reading the glTF
+        2.0 specification, and fixed the same session:
+        1. 7.6 skeleton.hpp/.cpp: `out_of_order` "composes against last frame's value — a
+           one-frame lag" — compose_pose's guard makes the child a ROOT on every frame
+           (verify_77b §C). Comments corrected in the 7.7b listings; 7.6's page §4.3 and its
+           pitfalls row carry "Corrected after Lesson 7.7b" notes.
+        2. 7.6 skeleton.cpp: `nonuniform_binds` tested exact equality; Blender's decomposition
+           noise (spread 8.94e-06) tripped 12 of 20 joints. Now a 1e-4 ratio
+           (k_uniform_scale_tolerance, skeleton.hpp); a 1.5:1 stretch still counts (§I).
+        3. 7.6 skin.hpp: k_weight_tolerance 0.02 argued that byte weights "can miss by up to
+           4/255 before anyone has done anything wrong"; the spec says normalised byte/short
+           sums MUST be 255/65535. Now 1e-5 (above float noise 8.57e-08, below 1/65535).
+        4. 6.6 gltf.hpp + page §4 + conventions §6-interop: "a model dropped into the world
+           unrotated presents its BACK" — it FACES a camera looking down -Z (nose z = +0.121,
+           §J); forward differs, not front. Corrected in gltf.hpp's comment and the living
+           Conventions page; 6.6's page carries a callout.
+        5. 7.7 exercise 5's hints: (2) "nodes that are not joints ... must be dropped" (they
+           must be carried: §B moves a metre) and (4) "a 180 deg error about a diagonal axis"
+           plus "expect sign_flips to be non-zero" (111-180 deg, not one rotation; 0 flips on
+           Blender's file). 7.7's page carries a correction paragraph under the exercise.
+        Following 8ff0388's precedent (a marked note on the earlier page, the story told in the
+        later one) — a departure from `shipped-lesson-fixes`' letter, flagged to the user.
+        ALSO FOUND, NOT FIXED: verify_85 and verify_86 do not compile at HEAD (8.7 added
+        `face_fn` to the convex struct; their aggregate initialisers were never updated). And
+        a tooling note: make_t77b.py `carry` is not idempotent — a second run refuses on its
+        first file and writes nothing, which is the safe failure, but run it once.
   found-by-618b: 6.18b CORRECTED ONE SHIPPED CLAIM (blend_add "commutative and associative")
         IN FOUR PLACES, GAVE MODULE 6 THE PROJECT TREE IT NEVER HAD, AND FOUND THE 5.12 LINT
         WAS NEVER CARRIED INTO MODULE 6's PINS. (2026-09-29.)

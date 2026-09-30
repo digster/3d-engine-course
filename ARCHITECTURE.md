@@ -184,6 +184,9 @@ untangled was the one file that had never been given a home: `src/main.cpp`, at 
 │   ├── twisted.obj         # …with one face reversed: 3.4's precondition, violated
 │   ├── quirks.obj          # CRLF, negative indices, mixed corner formats, an n-gon
 │   ├── torus.obj           # 2,304 triangles, written by save_obj from make_torus
+│   ├── mannequin.glb       # 7.7b: authored in Blender by scratch/make_mannequin.py and
+│   │                       #   written by Blender's exporter — the first asset the
+│   │                       #   course did not write the bytes of
 │   └── uv_grid.png         # 4.7: a colour per corner, so ORIENTATION is machine-
 │                           #   readable; gridlines, an arrow, a checkerboard
 ├── tests/                  # unit tests (math first — it is the most testable layer)
@@ -1322,7 +1325,7 @@ chore. What follows is on disk.
 │   │   │                     #   DEVICE — which is what makes the real-time path
 │   │   │                     #   a pure function you can diff
 │   │   ├── anim/           # SKELETONS, THE SURFACES THEY BEND, AND THE
-│   │   │                   #   RECORDED MOTION THAT DRIVES THEM         [7.6-7.7]
+│   │   │                   #   RECORDED MOTION THAT DRIVES THEM        [7.6-7.7b]
 │   │   │   ├── clip.hpp      # keyframe<T>, joint_track, clip, track_cursor,   [7.7]
 │   │   │   │                 #   clip_report; sampling, wrapping, cross-fading,
 │   │   │   │                 #   canonicalising and reduction. A CLIP IS A
@@ -1330,6 +1333,13 @@ chore. What follows is on disk.
 │   │   │   │                 #   the playhead and the search cursor live in the
 │   │   │   │                 #   caller, because a clip is an ASSET and two
 │   │   │   │                 #   characters must be able to play it out of phase
+│   │   │   ├── import.hpp    # import_rig: one glTF skin -> skeleton, skinned  [7.7b]
+│   │   │   │                 #   meshes, clips. The only anim/ file that sees
+│   │   │   │                 #   gfx/ (gltf.hpp's DESCRIPTIONS, never cgltf).
+│   │   │   │                 #   Ancestors carried as joints; a STABLE parent-
+│   │   │   │                 #   first sort; the file's inverse binds (identity
+│   │   │   │                 #   when absent); file curves fitted to a tenth of
+│   │   │   │                 #   reduce's tolerance at seven probes
 │   │   │   ├── skeleton.hpp  # joint, skeleton, skeleton_report; the bind pose,
 │   │   │   │                 #   its inverse, and pose -> palette. A skinning
 │   │   │   │                 #   matrix is model_from_joint(posed) *
@@ -1503,7 +1513,8 @@ chore. What follows is on disk.
 │       │                   #   runs on a thread SDL owns: no allocation, no
 │       │                   #   logging, no unbounded wait, one mutex whose
 │       │                   #   compromise is written down rather than hidden
-│       ├── anim/           # clip.cpp [7.7], skeleton.cpp, skin.cpp          [7.6]
+│       ├── anim/           # clip.cpp [7.7], import.cpp [7.7b], skeleton.cpp,
+│       │                   #   skin.cpp                                    [7.6]
 │       │                   #   A NEW DIRECTORY, and the argument is asset/'s in
 │       │                   #   5.5 and ui/'s in 5.11: animation is not a
 │       │                   #   graphics subsystem. Neither file mentions a
@@ -1744,6 +1755,11 @@ chore. What follows is on disk.
 │   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
+│   ├── mannequin/main.cpp  # A CHARACTER SOMEBODY ELSE BUILT              [7.7b]
+│   │                       #   Blender's export, imported and played through
+│   │                       #   7.6/7.7's four calls; [O] [Q] [N] each build a
+│   │                       #   classic import bug (node order, w-first
+│   │                       #   rotations, no inverse binds) as a broken COPY
 │   ├── particles/main.cpp  # A FOUNTAIN THE CPU NEVER TOUCHES            [6.18b]
 │   │                       #   per fixed step one 144-byte uniform block,
 │   │                       #   per frame one indirect draw whose count the
@@ -2596,6 +2612,20 @@ Built roughly in dependency order — each module's milestone is the next module
   op, and for the same reason: cycling gives you undefined contents, which is only safe when the
   pass overwrites every byte. A compute pass that reads what another compute pass wrote must be a
   separate pass; the end of a pass is the only barrier SDL_GPU provides.
+
+- **A character comes from a file, and the file wins** (Module 7, Lesson 7.7b — an insertion,
+  written after 8.13). The glTF parser still only *describes* (`gfx/gltf.hpp`: every node, skin,
+  influence set and animation, in the file's own indices), and `anim/import.hpp` is the one place
+  that turns descriptions into 7.6's `skeleton` and `skinned_mesh` and 7.7's `clip` — so `anim/`
+  now points at `gfx/`, as `skin.hpp` already did for `mesh_data`, and `gfx/` still points at
+  nothing in `anim/`. Three rules decide it. **Every node above a joint is a joint**, because a
+  joint matrix uses a global transform, so model space is the file's scene space. **The file's
+  inverse binds are data** and win over 7.6's derivation, identity when the file gives none; the
+  node transforms stay in `local_bind` as the value every unanimated channel keeps. **The file's
+  curves are converted, not supported**: LINEAR rotations (slerp), STEP and CUBICSPLINE become
+  lerp/nlerp keys to a stated tolerance, so the sampler, the reducer and every consumer of a clip
+  stayed exactly as 7.7 built them. The asset itself is Blender's, reproducible from a script,
+  because data the engine writes for itself agrees with its reader by construction.
 
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype

@@ -3931,6 +3931,84 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     </p>
   </div>
 
+  <div class="card">
+    <h3>A joint matrix from a file <span class="from">Lesson 7.7b</span></h3>
+    <div class="eq">
+      \[ M_j = G_j\,B_j, \qquad G_j = L_{\text{root}} \cdots L_{\text{parent}(j)}\, L_j \]
+      <span class="eq-plain">A glTF joint matrix is the joint's global transform times its inverse bind; the global transform multiplies every ancestor's local transform, joint or not.</span>
+    </div>
+    <p>
+      The skinning matrix above, with its two factors read from a file: <em>G</em> from the node tree,
+      <em>B</em> from <code>inverseBindMatrices</code> (the identity when the accessor is absent). Every
+      ancestor is in <em>G</em>, so the nodes above the hip must be carried into the skeleton. Worked,
+      on the specification&rsquo;s example: <em>G</em><sub>A</sub> = T(0,1,0)&thinsp;S(0.5) and
+      <em>B</em><sub>A</sub> = S(2)&thinsp;T(0,&minus;1,0) multiply to the identity at rest; drop the
+      non-joint T(0,1,0) and the product is T(0,&minus;1,0) &mdash; every vertex a metre down.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>nlerp against slerp, and where to look <span class="from">Lesson 7.7b</span></h3>
+    <div class="eq">
+      \[ \varphi_{\text{nlerp}}(u) = \operatorname{atan2}\big(u\sin\Omega,\;(1-u) + u\cos\Omega\big), \qquad \varphi_{\text{slerp}}(u) = u\,\Omega \]
+      <span class="eq-plain">On a sphere arc W, nlerp has covered atan2(u sin W, (1 - u) + u cos W) at parameter u, and slerp u W. The rotation error is twice their difference.</span>
+    </div>
+    <p>
+      Both walk the same great circle; only the schedule differs, and it agrees <strong>exactly at
+      u&nbsp;=&nbsp;&frac12;</strong>, where the chord&rsquo;s midpoint lies on the arc&rsquo;s bisector. The
+      lag peaks near u&nbsp;=&nbsp;0.22 and 0.78, so a check must probe there. Worked, for a 90&deg;
+      rotation (&Omega;&nbsp;=&nbsp;45&deg;) at u&nbsp;=&nbsp;&frac14;: atan2(0.17678,&nbsp;0.92678) =
+      10.799&deg; against 11.250&deg;, a lag of 0.451&deg; on the sphere and <strong>0.902&deg;</strong> of
+      rotation; the peak is 0.9188&deg;. Say which degrees: Lesson 7.5&rsquo;s table is in sphere degrees.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>The cubic Hermite, and its <em>t</em><sub>d</sub> <span class="from">Lesson 7.7b</span></h3>
+    <div class="eq">
+      \[ v(u) = (2u^3 - 3u^2 + 1)\,v_k + t_d\,(u^3 - 2u^2 + u)\,b_k + (-2u^3 + 3u^2)\,v_{k+1} + t_d\,(u^3 - u^2)\,a_{k+1} \]
+      <span class="eq-plain">glTF's CUBICSPLINE on an interval of length t_d: two values blended by the first and third basis functions, two per-second tangents scaled by t_d and blended by the second and fourth.</span>
+    </div>
+    <p>
+      The tangents are rates per second and <em>u</em> runs 0 to 1 across the interval, so
+      <em>t</em><sub>d</sub> converts one into the other; leave it out and every tangent is
+      1/<em>t</em><sub>d</sub> times too steep. Worked: 0 to 1 over 0.5&nbsp;s, leaving at slope 2 and
+      arriving flat; at u&nbsp;=&nbsp;&frac12; the basis is 0.5, 0.125, 0.5, &minus;0.125, giving
+      0.5&middot;0.125&middot;2 + 0.5 = <strong>0.625</strong> &mdash; and 0.750 without <em>t</em><sub>d</sub>. A
+      rotation is evaluated on its four raw components and normalised after.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A four-way shift is not a rotation <span class="from">Lesson 7.7b</span></h3>
+    <div class="eq">
+      \[ (x, y, z, w) \mapsto (w', x', y', z') = (x, y, z, w), \qquad \det P_{\text{cycle}} = -1 \]
+      <span class="eq-plain">Reading a file's x, y, z, w as w, x, y, z is a cyclic shift of four components, an odd permutation with determinant -1.</span>
+    </div>
+    <p>
+      Multiplying every quaternion by one fixed unit quaternion, on either side, is a rotation of
+      &#8477;<sup>4</sup> with determinant +1; a cycle of four is three swaps, determinant &minus;1. So a
+      blind copy is not a fixed rotation applied to every key, and no single correction undoes it.
+      Worked: the identity (0,&nbsp;0,&nbsp;0,&nbsp;1) reads as w&nbsp;=&nbsp;0, v&nbsp;=&nbsp;(0,&nbsp;0,&nbsp;1),
+      180&deg; about <em>z</em>; (&frac12;,&nbsp;&frac12;,&nbsp;&frac12;,&nbsp;&frac12;) reads as itself, 0&deg;.
+      On Blender&rsquo;s 748 keys: 110.9&deg; to 180&deg;.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A step, held by one float <span class="from">Lesson 7.7b</span></h3>
+    <div class="eq">
+      \[ (t_k,\, v_k),\; \big(\operatorname{nextafter}(t_{k+1}, -\infty),\, v_k\big),\; (t_{k+1},\, v_{k+1}) \]
+      <span class="eq-plain">A STEP key becomes two linear keys holding its value, the second one representable float before the next key.</span>
+    </div>
+    <p>
+      Linear interpolation between two equal values is constant, and the jump happens across the one
+      float between the held key and the next. Worked: a STEP of 0 then 1 at 0.5&nbsp;s holds 0 at
+      0.49999997 (= nextafter(0.5,&nbsp;0)) and reads 1 at 0.5. Only needed when the value changes; a
+      constant channel needs nothing.
+    </p>
+  </div>
+
   <h2 id="sound"><span class="num">8d</span>Sound: energy, gain and distance</h2>
 
   <p>
@@ -4701,12 +4779,15 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
   </div>
 
   <div class="pending">
-    <b>Module 7 — Rotation and motion.</b> <strong>The composite Euler matrix</strong> ·
+    <b>Module 7 — Rotation and motion.</b> <span class="badge done">complete</span> <strong>The composite Euler matrix</strong> ·
     <strong>intrinsic rotation as conjugation</strong> · <strong>the rate Jacobian, and gimbal
     lock as a determinant</strong> · <strong>the angle between two rotations</strong> ·
     <strong>cancellation against one</strong> (§8c above, all five from 7.1) · axis-angle and
     Rodrigues' formula · <strong>complex numbers as 2D rotation</strong> · quaternions ·
-    slerp · the skinning sum. (Integration, impulses and the Separating Axis Theorem moved to
+    slerp · the skinning sum · <strong>a joint matrix from a file</strong> · <strong>nlerp against
+    slerp, and where to look</strong> · <strong>the cubic Hermite, and its t<sub>d</sub></strong> ·
+    <strong>a four-way shift is not a rotation</strong> · <strong>a step, held by one float</strong>
+    (§8c, all five from 7.7b). (Integration, impulses and the Separating Axis Theorem moved to
     Module 8 with the physics.)
   </div>
 

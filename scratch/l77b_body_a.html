@@ -1,0 +1,432 @@
+  <nav class="lesson-nav" aria-label="Lesson navigation (top)">
+    <a class="prev-l" href="07-07-sampling-blending.html">
+      <span class="dir">← Previous</span>
+      <span class="ttl">7.7 — Sampling and Blending Animations</span>
+    </a>
+    <a class="idx-l" href="../index.html">
+      <span class="dir">Index</span>
+      <span class="ttl">All lessons</span>
+    </a>
+    <a class="next-l" href="07-08-audio.html">
+      <span class="dir">Next →</span>
+      <span class="ttl">7.8 — SDL3 Audio: Streams, Mixing, and 3D Sound</span>
+    </a>
+  </nav>
+
+  <div class="lesson-head">
+    <div class="eyebrow">Module 7 — Motion: Rotation, Animation, Audio · Lesson 7.7b</div>
+    <h1>Animated Characters from glTF: Skins and Clips</h1>
+    <p class="deck">
+      Lessons 7.6 and 7.7 built every part of a character player and fed every part data the course
+      wrote itself: a skeleton laid out joint by joint, a tube weighted by a formula, clips baked from
+      functions. That proves the arithmetic and says nothing about content, because data you write
+      yourself agrees with your code by construction. This lesson loads a character <strong>somebody
+      else's tool wrote</strong> — a mannequin authored in Blender and exported by Blender's glTF
+      exporter — and turns its node tree, its skin, its weights and its animation channels into the
+      skeleton, skinned meshes and clips 7.6 and 7.7 already know how to play. The importer is five
+      hundred lines of translation between index spaces and between curve types, and nearly every
+      line exists because the file did something the engine's own data never had to: a node that is
+      not a joint sitting above the hip, inverse binds that are data rather than something to
+      derive, rotations written x, y, z, w, key frames joined by slerp, held by STEP or bent by
+      cubic Hermite tangents, and — in the first export — twenty-five vertices the exporter quietly
+      attached to a joint it invented. Four predictions Lesson 7.7 made about this lesson are tested
+      and two of them are refused. The character plays within <strong>40 µm</strong> of an
+      independent double-precision evaluation of the specification's own formula.
+    </p>
+
+    <div class="meta">
+      <dl>
+        <dt>Time</dt>
+        <dd>≈ 12 hours</dd>
+
+        <dt>Prereqs</dt>
+        <dd>
+          <a href="06-06-gltf.html">6.6 — glTF 2.0 Loading</a>,
+          <a href="07-05-slerp.html">7.5 — Slerp, and the Storage Swap</a>,
+          <a href="07-06-skeletal-animation.html">7.6 — Skeletal Animation: The Skinning Math</a>,
+          <a href="07-07-sampling-blending.html">7.7 — Sampling and Blending Animations</a>
+        </dd>
+
+        <dt>Files</dt>
+        <dd><code>engine/include/engine/anim/import.hpp</code> <em>(new)</em>,
+            <code>engine/src/anim/import.cpp</code> <em>(new)</em>,
+            <code>engine/include/engine/gfx/gltf.hpp</code>,
+            <code>engine/src/gfx/gltf.cpp</code>,
+            <code>engine/include/engine/anim/skeleton.hpp</code>,
+            <code>engine/src/anim/skeleton.cpp</code>,
+            <code>engine/include/engine/anim/skin.hpp</code>,
+            <code>engine/include/engine/engine.hpp</code>,
+            <code>engine/CMakeLists.txt</code>,
+            <code>demos/mannequin/main.cpp</code> <em>(new)</em>,
+            <code>demos/CMakeLists.txt</code>,
+            <code>assets/mannequin.glb</code> <em>(new, binary)</em>,
+            <code>scratch/make_mannequin.py</code> <em>(new)</em>,
+            <code>scratch/verify_77b_blender.py</code> <em>(new)</em>,
+            <code>scratch/verify_77b_ex5.cpp</code> <em>(new)</em>,
+            <code>scratch/verify_77b.cpp</code> <em>(new)</em>,
+            <code>scratch/build_verify_77b.sh</code> <em>(new)</em></dd>
+
+        <dt>Milestone</dt>
+        <dd>The engine can <strong>play a character it did not build</strong>. <strong>36 checks
+            green</strong>, nine of them controls. Blender's mannequin — 21 nodes, 19 joints and
+            one ancestor, 2,681 vertices in two primitives sharing one skin, a walk and a wave —
+            imports in a quarter of a millisecond and plays within <strong>39.5&nbsp;µm</strong> of
+            the specification's formula evaluated in double precision by code that shares nothing
+            with the engine. The same motion exported as cubic splines imports to within
+            0.05°, and disagrees with the sampled export by <strong>0.218°</strong> — which turns out
+            to be Blender's disagreement with itself. Three checks in Lesson 7.6's files are
+            corrected, because a real exporter and the specification showed they were wrong. Every
+            later harness and the golden render (<code>E917C06C</code>) are unchanged.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <section class="objectives" aria-labelledby="obj-h">
+    <h2 id="obj-h">By the end of this lesson you will be able to…</h2>
+    <ul>
+      <li>…read a glTF skin: say what <code>skins.joints</code>, <code>inverseBindMatrices</code>,
+          <code>JOINTS_n</code> and <code>WEIGHTS_n</code> index, and compute a skinned vertex by hand
+          from the specification's formula.</li>
+      <li>…build a parent-first skeleton from a node tree in any order, carrying the non-joint nodes
+          above it, and say what an unsorted skeleton does to a character — precisely.</li>
+      <li>…treat a file's inverse bind matrices as data, apply the specification's default when they
+          are absent, and measure how far a file's rest pose is from its bind pose.</li>
+      <li>…map per-vertex influences through three index spaces, keep four of any number, and hold a
+          weighting to the specification's rules rather than to a guess.</li>
+      <li>…read rotations in the file's component order, and say what reading them in yours costs.</li>
+      <li>…convert LINEAR, STEP and CUBICSPLINE samplers into this engine's clips to a stated
+          tolerance, and explain why the check must not sit at the midpoint.</li>
+      <li>…find, by measurement, the defects an exporter introduces without a warning — and tell
+          them apart from your own.</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-labelledby="toc-h">
+    <h2 id="toc-h">On this page</h2>
+    <ol>
+      <li><a href="#problem">The problem: a character you did not build</a></li>
+      <li><a href="#intuition">Building intuition: a tree, and three lists that point into it</a></li>
+      <li><a href="#skin">What a glTF skin says</a></li>
+      <li><a href="#skeleton">The skeleton: every node above the joints, parent first</a></li>
+      <li><a href="#binds">Inverse binds are data</a></li>
+      <li><a href="#influences">Influences: three index spaces, four slots</a></li>
+      <li><a href="#rotations">Rotations arrive x, y, z, w</a></li>
+      <li><a href="#curves">Curves: the file's three, and our one</a></li>
+      <li><a href="#clips">A clip from an animation</a></li>
+      <li><a href="#neutral">The first export: a joint nobody animates</a></li>
+      <li><a href="#facing">Which way it faces</a></li>
+      <li><a href="#implement">Implementation</a></li>
+      <li><a href="#instruments">The instruments</a></li>
+      <li><a href="#limits">The ninety-percent picture</a></li>
+      <li><a href="#listings">Complete code listings</a></li>
+      <li><a href="#run">Build &amp; run</a></li>
+      <li><a href="#pitfalls">Common pitfalls &amp; debugging</a></li>
+      <li><a href="#exercises">Exercises</a></li>
+      <li><a href="#recap">Recap &amp; next</a></li>
+      <li><a href="#reading">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================
+       1 — THE PROBLEM
+       ================================================================= -->
+  <h2 id="problem"><span class="num">1</span>The problem: a character you did not build</h2>
+
+  <p>
+    Every skinned thing the engine has drawn so far, the engine built. Lesson 7.6's tube is six joints
+    one unit apart up the <em>y</em> axis, weighted to its two nearest joints by a straight line;
+    Lesson 7.7's clips are functions of time sampled thirty times a second and then reduced. Both
+    lessons measured everything, and both measurements share a weakness that Module&nbsp;8 named after
+    it had cost several sections: <strong>data you write yourself agrees with your code by
+    construction</strong>. The person who wrote the skeleton also wrote the code that reads it; any
+    misunderstanding of what a joint's parent index means is in both, and the two agree.
+  </p>
+
+  <p>
+    A game does not ship characters written by its engine programmers. They come from a modelling
+    tool, through an exporter somebody else wrote, in a format somebody else specified. Every one of
+    those three has made decisions the engine never made for itself — about the order joints are
+    written in, about where the character's transform lives, about how a rotation is written down,
+    about what happens between two keys, about what to do with a vertex nobody weighted. An importer is
+    the place those decisions are met, and the only way to meet them honestly is with a file the
+    engine did not write.
+  </p>
+
+  <p>
+    So this lesson's character is not generated by a script of ours that writes glTF bytes, the way
+    Lesson&nbsp;6.6 wrote its cube. It is <strong>authored in Blender</strong> — a skin modifier grown
+    over a stick figure, nineteen bones, Blender's own automatic weights, a walk and a wave keyed with
+    Blender's default curves — and <strong>exported by Blender's glTF exporter</strong>, with its
+    default settings. The authoring is a script too (<code>scratch/make_mannequin.py</code>), so
+    anyone with Blender can rebuild the file byte for byte; but every decision the importer has to cope
+    with is the exporter's. The file is <code>assets/mannequin.glb</code>, 193,000 bytes.
+  </p>
+
+  <p>
+    Lesson 7.7's last exercise sketched this lesson and made four predictions about it. Stating them
+    here, where they can be wrong:
+  </p>
+
+  <ol>
+    <li>the importer must topologically sort <code>skins.joints</code> and apply the same permutation
+        to the tracks;</li>
+    <li>a channel that targets a node which is not a joint is legal and must be dropped;</li>
+    <li>the duration is not in the file, and is the maximum input time across the samplers;</li>
+    <li>rotations arrive x, y, z, w, and a blind copy "turns into a 180° error about a diagonal
+        axis" — and a real exporter's clips will contain sign flips.</li>
+  </ol>
+
+  <p>
+    The first and third hold. The second is wrong in a way that moves a character a metre (§3.3). The
+    fourth is wrong twice: the error of a blind copy is not a fixed rotation at all (§7), and
+    Blender's exporter produced no sign flips (§9.4). None of that could have been learned from a
+    file the course wrote.
+  </p>
+
+  <!-- =================================================================
+       2 — INTUITION
+       ================================================================= -->
+  <h2 id="intuition"><span class="num">2</span>Building intuition: a tree, and three lists that point into it</h2>
+
+  <p>
+    Lesson 6.6 described a glTF file as a scene rather than a shape: a tree of nodes, each with a
+    local transform, some of them pointing at meshes. That lesson flattened the tree — it multiplied
+    each mesh node's chain of transforms into one matrix and threw the chain away — and said so:
+    "right for a static prop and wrong for anything with a skeleton". A skeleton <em>is</em> that
+    tree. So the first thing to see is that nothing new has been added to the file to make it animated.
+    Everything animated is <strong>a list that points into the tree</strong>:
+  </p>
+
+  <ul>
+    <li><strong>A skin</strong> is a list of node indices, <code>skins[k].joints</code>. Being named
+        there is what makes a node a joint; a node object "does not specify whether it is a joint"
+        (spec §3.7.3.2). The position of a node in this list is its <em>slot</em>.</li>
+    <li><strong>The inverse bind matrices</strong> are a second list, parallel to the first: slot
+        <em>r</em>'s matrix belongs to slot <em>r</em>'s joint.</li>
+    <li><strong>Each vertex's influences</strong> (<code>JOINTS_0</code>, <code>WEIGHTS_0</code>) point
+        into the <em>slots</em>, not into the nodes.</li>
+    <li><strong>Each animation channel</strong> points at a <em>node</em> and a property of it —
+        translation, rotation or scale.</li>
+  </ul>
+
+  <p>
+    Three address books, in other words, each written in a different numbering, and none of them in
+    ours. The engine's skeleton (7.6) has one numbering of its own, and it has a rule the file does not
+    have to obey: a joint's parent must come before it. An importer's job is to build that one
+    numbering and translate every other index into it, all in the same pass. Figure&nbsp;1 is the
+    mannequin's three orders, side by side.
+  </p>
+
+  @@FIG_ORDERS@@
+
+  <p>
+    Look at the first column before reading on. Blender wrote its node array <strong>children
+    first</strong> — the head is node 0 and the <code>Armature</code> object, the root of everything,
+    is node 20 — so every one of the nineteen joints has a parent with a <em>larger</em> index. A
+    loader that built the skeleton by walking the node array would have every parent after its child.
+    The second column is the skin's own list, and there Blender wrote parents first: hips, spine,
+    chest, neck, head, then each arm and each leg from the top down. The third is what the importer
+    builds, and it contains a joint the skin never named.
+  </p>
+
+  <!-- =================================================================
+       3 — THE SKIN
+       ================================================================= -->
+  <h2 id="skin"><span class="num">3</span>What a glTF skin says</h2>
+
+  <h3>3.1 — The formula is Lesson 7.6's</h3>
+
+  <p>
+    The specification defines skinning in words (§3.7.3.3): "a transformation matrix is computed for
+    each joint. Then, the per-vertex transformation matrices are computed as weighted linear sums of
+    the joint transformation matrices", and the inverse bind matrices "MUST be applied before the base
+    node transforms". Written down:
+  </p>
+
+  <div class="eq">
+    <span class="katex-src">\[ \mathbf{v}' \;=\; \sum_i w_i\, \big(G_{j_i}\, B_{j_i}\big)\, \mathbf{v} \]</span>
+    <span class="eq-plain">v' = sum over i of  w_i * (G[j_i] * B[j_i]) * v</span>
+  </div>
+
+  <p>
+    where <em>G</em><sub>j</sub> is joint <em>j</em>'s <strong>global</strong> transform — its local
+    transform multiplied by every ancestor's, up to the root of the scene — and <em>B</em><sub>j</sub>
+    is its inverse bind matrix. That is Lesson 7.6's palette entry exactly:
+    <code>palette[j] = model_from_joint[j] * joint_from_model[j]</code>, "where the joint is now" times
+    "where it was when the mesh was bound to it". The only question is what "model space" means for a
+    file, and the answer falls out of the next two sentences of the specification.
+  </p>
+
+  <h3>3.2 — The mesh node's own transform is ignored</h3>
+
+  <p>
+    A skinned mesh in glTF hangs from a node like any other mesh, and that node has a transform. The
+    specification (§3.7.3.2) is explicit about what happens to it: "Only the joint transforms are
+    applied to the skinned mesh; the transform of the skinned mesh node <strong>MUST</strong> be
+    ignored." The reason is the formula above. A skinned vertex's position is decided entirely by the
+    joints it is bound to — <em>G</em><sub>j</sub> already carries it all the way to the scene's root
+    — so there is nothing left for the mesh node to do. A viewer that applied the node's transform as
+    well would move the character twice.
+  </p>
+
+  <h3>3.3 — The common root, and the nodes above it</h3>
+
+  <p>
+    Here is the sentence prediction&nbsp;(2) overlooked. <em>G</em><sub>j</sub> is a
+    <em>global</em> transform, and a global transform includes every ancestor, whether it is a joint or
+    not: "The global transformation matrix of a node is the product of the global transformation matrix
+    of its parent node and its own local transformation matrix" (§3.5.3). The specification requires
+    that each skin's joints "MUST have a common parent node (direct or indirect) called
+    <em>common root</em>, which may or may not be a joint node itself" — and in Blender's file it is
+    not: the hip's parent is the <code>Armature</code> object, node&nbsp;20, which no skin names.
+    Converters from other tools routinely hang a 0.01 scale or a quarter turn about <em>x</em> on
+    exactly that node.
+  </p>
+
+  <p>
+    So the importer does not drop the nodes above the joints. It <strong>carries them into the
+    skeleton as joints</strong> — joints no vertex is weighted to, whose only job is to be in every
+    joint's chain. With every ancestor carried, the skeleton's roots are the scene's roots, and
+    "model space" in the engine is exactly the file's scene space. A channel that animates the
+    <code>Armature</code> node — Blender will export one if the object itself is keyed — then animates
+    a joint like any other, which is what the file meant.
+  </p>
+
+  <h3>3.4 — The specification's own example, with numbers</h3>
+
+  <p>
+    The specification illustrates the rule with a five-node example and a sentence: "the translation of
+    node_0 and the scale of node_1 are applied while the translation of node_3 and rotation of node_4
+    are ignored". It gives no mesh and no numbers. The harness completes it into a file (§B), and
+    Figure&nbsp;2 is the result.
+  </p>
+
+  @@FIG_SPEC@@
+
+  <div class="worked">
+    <p><strong>Worked example.</strong> Joint A is <code>node_1</code>, under <code>node_0</code>; joint
+       B is <code>node_2</code>, one unit along A's <em>x</em>.</p>
+    <p class="mono">G<sub>A</sub> = T(0,1,0) · S(0.5)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;B<sub>A</sub> = G<sub>A</sub><sup>−1</sup> = S(2) · T(0,−1,0)<br>
+       G<sub>B</sub> = T(0,1,0) · S(0.5) · T(1,0,0)&nbsp;&nbsp;&nbsp;B<sub>B</sub> = G<sub>B</sub><sup>−1</sup> = S(2) · T(−0.5,−1,0)<br>
+       v0 = (0, 1, 0), weighted 1 to A:&nbsp;&nbsp;G<sub>A</sub>B<sub>A</sub>v0 = I · v0 = (0, 1, 0)</p>
+    <p>
+      At rest every palette matrix is the identity and the triangle is exactly where the file put it.
+      Now the two wrong answers. An importer that applied the mesh node's transform,
+      T(1,0,0)&nbsp;·&nbsp;R<sub>y</sub>(180°), sends v0 to (1,&nbsp;1,&nbsp;0) — the rotation fixes a
+      point on the <em>y</em> axis and the translation moves it a metre. An importer that dropped the
+      non-joint <code>node_0</code> computes G<sub>A</sub>&nbsp;=&nbsp;S(0.5), so the palette entry is
+      S(0.5)&nbsp;·&nbsp;S(2)&nbsp;·&nbsp;T(0,−1,0)&nbsp;=&nbsp;T(0,−1,0), and v0 lands at
+      (0,&nbsp;0,&nbsp;0) — a metre under the floor, from a rule that sounded like tidiness.
+    </p>
+    <p class="mono">node_1 turns 90° about z over one second:<br>
+       B<sub>B</sub>v1 = S(2)·((0.5,1,0) − (0.5,1,0)) = (0,0,0)&nbsp;&nbsp;&nbsp;&nbsp;v1 is B's origin<br>
+       t = 1:&nbsp;&nbsp;&nbsp;T(0,1,0)·S(0.5)·R<sub>z</sub>(90°)·(1,0,0) = T(0,1,0)·(0,0.5,0) = (0, 1.5, 0)<br>
+       t = 0.5: (0.5 cos 45°, 1 + 0.5 sin 45°) = (0.35355, 1.35355, 0)</p>
+  </div>
+
+  <p>The engine's answers, from the harness:</p>
+
+  <pre>  rest: v0 (0.000, 1.000, 0.000)  v1 (0.500, 1.000, 0.000)
+  control, mesh node applied: v0 -> (1.000, 1.000, 0.000)
+  control, node_0 dropped: v0 -> (0.000, 0.000, 0.000)
+  t=1    v1 (0.00000, 1.50000)   predicted (0, 1.5)
+  t=0.5  v1 (0.35355, 1.35355)   predicted (0.35355, 1.35355)
+  t=0.25 v1 (0.46183, 1.19160)   spec (0.46194, 1.19134)</pre>
+
+  <p>
+    Two things in that transcript are worth a sentence now and a section later. The quarter-second
+    line is not exact: the specification says a rotation between two keys is <em>slerped</em>, our
+    sampler <em>nlerps</em>, and the importer inserted two keys so that the difference stays under
+    0.05° — at this joint's half-metre lever, 0.28&nbsp;mm (§8.2). And the <code>t=1</code> line needed
+    the importer to be told the clip does not loop. glTF has no loop flag; with the importer's default
+    the time 1&nbsp;s wraps to 0 and v1 is back at rest (§9.2).
+  </p>
+
+  <!-- =================================================================
+       4 — THE SKELETON
+       ================================================================= -->
+  <h2 id="skeleton"><span class="num">4</span>The skeleton: every node above the joints, parent first</h2>
+
+  <h3>4.1 — Which nodes</h3>
+
+  <p>
+    The joints, and every node on the path from each joint up to its scene root. The walk up is the
+    parent pointer the parser records for every node (<code>gltf_node_desc::parent</code>), bounded by
+    the node count so that a malformed file cannot make it loop — cgltf's validator already refuses a
+    cycle, and the bound costs nothing.
+  </p>
+
+  <h3>4.2 — Which order: a sort that moves nothing it does not have to</h3>
+
+  <p>
+    Lesson 7.6 put one requirement on a skeleton — <code>joints[i].parent &lt; i</code> — so that
+    <code>compose_pose</code> could be a single loop with no sorting, and left the sort to "whoever
+    imports a rig", paid once. Any topological order satisfies it. The importer uses a particular one:
+  </p>
+
+  <pre>for each joint, in the skin's order:
+    walk up from it until a node already placed (or the root),
+    and place that chain top-down.</pre>
+
+  <p>
+    Every node is placed after its parent, because a chain is placed from the top. Ancestors land
+    immediately before their first descendant. And a skin that was <em>already</em> parent-first comes
+    out in exactly its own order, because each joint's parent was placed by the time the joint is
+    reached. That last property is the reason for choosing this sort over a textbook one: it makes a
+    number meaningful. <code>rig_import_report::resorted</code> counts the skin joints whose rank among
+    the skin's joints changed, and on a file that needed no sorting it reads zero — so a non-zero value
+    means the exporter really did write children first, rather than that the sort shuffled things
+    for its own reasons. The cost is <em>O</em>(joints&nbsp;×&nbsp;depth) with a small constant; the
+    mannequin's depth is 8.
+  </p>
+
+  <p>The mannequin, and a four-joint chain the harness writes tip first:</p>
+
+  <pre>  skin joints 19; parents AFTER child in node order: 19
+  import ok: 20 joints = 19 skin + 1 ancestor
+  file-order breaks 0, resorted 0
+  root joint 'Armature', identity IBMs no
+  ...
+  file-order breaks 3, resorted 4, identity IBMs yes
+  our order: root lower upper tip</pre>
+
+  <p>
+    On Blender's file the sort does nothing at all. That is the most dangerous kind of result a test
+    can give: an importer that forgot to sort would pass every test run against Blender's output and
+    fail on the first file from a tool that writes children first. The hand-written chain is there so
+    that the sort is tested on a file that needs it — three of its four joints come before their
+    parents in the skin, and after the sort all four have moved.
+  </p>
+
+  <h3>4.3 — What the sort prevents, and a correction to Lesson 7.6</h3>
+
+  <p>
+    Lesson 7.6's <code>skeleton.hpp</code> described what an out-of-order joint does, and the
+    description was vivid: the parent's matrix "has not been written yet when the child reads it, so
+    the child composes against last frame's value — which looks like a one-frame lag that grows with
+    depth". Build a skeleton in a file's child-first order and compose it twice, with a joint turned
+    between the two, and the harness reports:
+  </p>
+
+  <pre>  control, file order: out_of_order 3; tip y 1.000, then 1.000
+  [PASS] C.5 unsorted, the tip is a root at y = 1 on BOTH frames</pre>
+
+  <p>
+    No lag. The tip sits at <em>y</em>&nbsp;=&nbsp;1 — its own one-unit offset, measured from the
+    model's origin — on both frames, and the turn of its grandparent never reaches it. The comment
+    described what an <em>unguarded</em> loop would do. <code>compose_pose</code> has a guard: a parent
+    index at or after the child's is treated as no parent at all, so the child composes as a
+    <strong>root</strong>. The chain is cut, not delayed, and it is cut on every frame. Figure&nbsp;3 is
+    the mannequin built in the node array's order, where nineteen of twenty joints are out of order:
+    every limb is composed as a root at its local offset from the origin, and the character is a pile
+    of parts at its own feet.
+  </p>
+
+  @@FIG_ORDER_RENDER@@
+
+  <p>
+    The comment is corrected in this lesson's <code>skeleton.hpp</code> and <code>skeleton.cpp</code>,
+    with the measurement cited. It is the kind of error that survives because it is plausible and
+    nothing ever exercises it: 7.6's skeletons were always built in order, so the guard's behaviour was
+    never observed until a file arrived that was not.
+  </p>

@@ -7,14 +7,14 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** 98 of 113 lessons published. **Modules 0–6 are complete** — orientation and toolchain,
+**Status:** 99 of 113 lessons published. **Modules 0–7 are complete** — orientation and toolchain,
 the loop and the pixel, two modules of software rasterizer, SDL_GPU, the refactor into an engine
-with an ECS, and advanced rendering — and Modules 7–8 (rotation, animation and audio; physics) are
-complete except for the lessons inserted after the post-Module 8 review. Two of the four have
-landed, [6.17b — local lights and their shadows](docs/lessons/06-17b-local-lights.html) and
-[6.18b — compute shaders and GPU particles](docs/lessons/06-18b-compute-particles.html); glTF skins
-and clips (7.7b) and scene queries (8.14) come next, then **Module 9 — Professional Polish &
-Capstone**. The [course index](docs/index.html) has the module
+with an ECS, advanced rendering, and rotation, animation and audio — and Module 8 (physics) is
+complete except for the last lesson inserted after the post-Module 8 review. Three of the four
+insertions have landed, [6.17b — local lights and their shadows](docs/lessons/06-17b-local-lights.html),
+[6.18b — compute shaders and GPU particles](docs/lessons/06-18b-compute-particles.html) and
+[7.7b — animated characters from glTF](docs/lessons/07-07b-gltf-characters.html); scene queries
+(8.14) come next, then **Module 9 — Professional Polish & Capstone**. The [course index](docs/index.html) has the module
 map, every lesson and its hours; what each lesson added to the engine, and the keys and flags
 that show it, is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -142,6 +142,7 @@ display; that is how the course's characterization tests run them.
 | `gimbal` | 7.1–7.5 | Euler angles, axis-angle, quaternions and slerp on one aircraft |
 | `plane` | 7.3 | Complex numbers rotating the plane |
 | `rig` | 7.6–7.7 | A skinned tube: skinning, then clip sampling and blending |
+| `mannequin` | 7.7b | A character Blender authored and exported, imported from glTF and played; each classic import bug on a key |
 | `audio` | 7.8 | A listener, three emitters and a map: mixing and 3D spatialization |
 | `integrate` | 8.1 | Three integrators on one spring, in phase space |
 | `bodies` | 8.2 | Forces, gravity and linear rigid bodies |

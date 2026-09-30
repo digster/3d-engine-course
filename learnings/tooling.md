@@ -617,3 +617,30 @@ particles the harness met in pool order. The pool is a ring, so pool order is bi
 about. Sampling every second young particle across the whole pool covers every age — fixed in the
 HARNESS, which writes the CSV, not in the figure script. A figure's sample is part of its
 argument; draw it across the quantity the figure is about, not in whatever order memory holds.
+
+## Lesson 7.7b's tooling notes (2026-09-30)
+
+- **Blender headless is a real authoring tool here**: `/Applications/Blender.app/Contents/MacOS/
+  Blender --background --factory-startup --python script.py` builds geometry (skin modifier +
+  subsurf), an armature, bone-heat weights, NLA actions and exports glTF — byte-identical across
+  runs (SHA-256 checked). Blender 5.x keys actions through layers/strips/channelbags, not
+  `action.fcurves`. `Material.use_nodes` warns of removal in 6.0.
+- **`engine_use_assets` copies `assets/` as a POST_BUILD step**, so a changed asset reaches
+  `build/demos/assets/` only when the target relinks. Re-exported files looked unchanged until
+  `cmake -E copy_directory assets build/demos/assets`.
+- **`make_t77b.py carry` is not idempotent.** Run twice, the second run's `git apply` fails on the
+  already-patched pin and the tool exits before writing — the safe failure, but run it once and
+  verify each later pin carries the hunk exactly once (count the added line).
+- **The figure CSS variable is `--dia-ink`, not `--ink`.** A stroke of `var(--ink)` renders nothing
+  (a scale bar and a camera icon vanished); `check-page.js` cannot see a missing stroke.
+- **SVG collapses runs of spaces**, so a table typed as padded text columns runs together — every
+  column needs its own `<text>` and x (again; module-8 records the first time).
+- **zsh did not word-split `$NEW` a second time** (a `git add -f $NEW` got one enormous pathspec and
+  failed harmlessly). Use `--pathspec-from-file` or a list file.
+- **A throwaway index for checkers**: `cp .git/index /tmp/idx; GIT_INDEX_FILE=/tmp/idx git add -f
+  --pathspec-from-file=list; GIT_INDEX_FILE=/tmp/idx python3 check-builders.py` — per command,
+  never exported, and `git write-tree` before and after proves the real index untouched.
+- **Playwright over `python3 -m http.server` caches pages**: a rebuilt page kept its old figure until
+  the URL gained `?v=N`. `check-page.js` reported an overlap that was already fixed.
+- **`estimate-hours.py` prices code from the lesson's commit**, which does not exist while the index
+  row is written; apply its model to `git diff HEAD` plus the new files (as 6.18b did).

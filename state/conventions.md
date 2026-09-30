@@ -5,6 +5,45 @@ a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in s
 
 ```text
 conventions:
+  gltf_rotation: A FILE ROTATION IS x, y, z, w AND BECOMES A quat ONLY THROUGH quat_from_xyzw.
+        7.7b, gfx/gltf.hpp (quat_from_xyzw) + docs/conventions.html §7r. The spec (§3.5.3):
+        "rotation is a unit quaternion value, XYZW ... where W is the scalar"; quat is {w, v}.
+        ONE FUNCTION, called by the parser for node rotations and by anim/import.cpp for every
+        animation key, so the swizzle exists in one place. A blind copy is NOT one fixed error:
+        a four-way cyclic shift is an odd permutation (det -1) and no left/right product with a
+        fixed unit quaternion (det +1) reproduces it — the identity misreads as 180 deg about z,
+        (1/2,1/2,1/2,1/2) as itself, and Blender's 748 keys as 110.9-180 deg (median 168.5).
+        Normalised signed components decode as max(c/127, -1) per the spec; cgltf 1.15 omits
+        the max (-128 -> -1.0079), so the parser clamps.
+  gltf_skeleton: EVERY NODE ABOVE A JOINT IS A JOINT, THE FILE'S INVERSE BINDS WIN, AND ABSENT MEANS IDENTITY.
+        7.7b, anim/import.{hpp,cpp} + docs/conventions.html §7r. A joint matrix is the joint's
+        GLOBAL transform times its inverse bind, and a global includes every ancestor, joint or
+        not — so the ancestors up to the scene root are carried as joints no vertex is weighted
+        to, and model space IS the file's scene space (Blender: the Armature node is joint 0).
+        The skinned mesh node's transform is ignored (spec MUST). Joints are ordered by a STABLE
+        parent-first sort (each skin joint in skin order, ancestors placed top-down before it),
+        so a skin already in order keeps it and `resorted` means something; inverse binds,
+        JOINTS_n (slots -> joints through one table) and tracks move with the same
+        permutation. local_bind = the node's transform (the value every unanimated channel
+        keeps, spec §3.11); joint_from_model = the file's matrices, identity when the accessor
+        is absent (spec §5.28.1), baked for ancestors. `bind_vs_rest` (validate's residual)
+        measures how far the file's rest is from its bind: 2.894e-06 for Blender.
+        UNSORTED, compose_pose treats an out-of-order joint as a ROOT (7.6's comment promised a
+        one-frame lag; corrected).
+  curve_import: A FILE CURVE BECOMES OURS BY SPLITTING TO A TENTH OF reduce's TOLERANCE, JUDGED AT SEVEN PROBES AND NEVER AT THE MIDPOINT.
+        7.7b, anim/import.cpp (fit_interval, convert_vec3, convert_quat). Our sampler lerps
+        positions and scales and nlerps rotations; glTF LINEAR on a rotation is slerp (§C.4),
+        STEP holds, CUBICSPLINE is Hermite. LINEAR T/S are copied; LINEAR R and every cubic
+        interval are split into the fewest equal pieces (<= max_split 64) for which our
+        interpolation is within import_settings::tolerance {1e-4 m, 8.72665e-4 rad (0.05 deg),
+        1e-4} of the file's curve at probes 1/8..7/8 of every piece — nlerp = slerp at the
+        midpoint, the lag peaks near 0.22/0.78. STEP: a copy of each value at nextafter(t_next,
+        -inf) when the value changes. Cubic: tangents x t_d (forgotten, 1/t_d too steep: 40.25
+        deg on Blender's 4-frame keys), rotations Hermite on raw components then normalised, no
+        `nearest`. WHY A TENTH: measured (Exercise 5), import at 0.005/0.05/0.25 deg then reduce
+        at 0.5 ends 0.501/0.512/0.513 deg from exact — errors barely add — but leaves 258/276/329
+        keys; a strict import saves keys after reduction. Duration = last input of any sampler;
+        loops = import_settings::loops (default true); the spec CLAMPS past the end.
   compute_layout: A COMPUTE SHADER'S UNIFORMS ARE b[n] IN space2; READ-ONLY STORAGE IS t[n] IN space0, READ-WRITE IS u[n] IN space1 AND IS BOUND WHEN THE PASS BEGINS.
         6.18b, gpu_compute.{hpp,cpp} + shaders/particles_*.comp.hlsl + docs/conventions.html §7q.
         FIXED BY SDL_GPU (SDL_gpu.h, on SDL_CreateGPUComputePipeline): t[n] space0 holds

@@ -273,9 +273,9 @@ HEAD = """<!DOCTYPE html>
 
 TAIL = """
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
-    <a class="prev-l" href="07-07-sampling-blending.html">
+    <a class="prev-l" href="07-07b-gltf-characters.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">7.7 — Sampling and Blending Animations</span>
+      <span class="ttl">7.7b — Animated Characters from glTF: Skins and Clips</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>

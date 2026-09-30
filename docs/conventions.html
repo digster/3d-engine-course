@@ -83,6 +83,7 @@
           <tr><td><strong><a href="#winding">Winding</a></strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td><td class="mono">3</td></tr>
           <tr><td><strong><a href="#local-lights">Local lights</a></strong></td><td><code>intensity</code> = irradiance at 1&nbsp;m (π at 1&nbsp;m is the sun); <code>direction</code> is travel; cube-face cameras are mirrors, never <code>look_at</code></td><td class="mono">6</td></tr>
           <tr><td><strong><a href="#compute">Compute</a></strong></td><td>Storage records are 16-byte rows; <code>cycle</code> only when a pass overwrites what it writes; a new pass between dependent dispatches; random = a hash of a name</td><td class="mono">6</td></tr>
+          <tr><td><strong><a href="#gltf-skins">Characters from glTF</a></strong></td><td>File rotations through <code>quat_from_xyzw</code> only; every node above a joint is a joint; the file&rsquo;s inverse binds, identity when absent; curves fitted to a tenth of <code>reduce</code>&rsquo;s tolerance, never judged at the midpoint</td><td class="mono">7</td></tr>
           <tr><td><strong><a href="#units">Units</a></strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td><td class="mono">1</td></tr>
           <tr><td><strong><a href="#euler">Euler angles</a></strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td><td class="mono">7</td></tr>
           <tr><td><strong><a href="#quat">Quaternions</a></strong></td><td><code>{w, v}</code>, <code>w</code> first, <code>w = cos(θ/2)</code>; rotate by <code>q v q*</code>; <code>q·p</code> means “do <code>p</code>, then <code>q</code>”</td><td class="mono">7</td></tr>
@@ -135,6 +136,7 @@
       <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
       <li><a href="#local-lights">Local lights &mdash; units, falloff, the cone, and their shadows</a></li>
       <li><a href="#compute">Compute &mdash; the layout, the rows, and when a buffer keeps its contents</a></li>
+      <li><a href="#gltf-skins">Characters from glTF &mdash; the skin, the order, the curves</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
       <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
@@ -2153,9 +2155,9 @@
             <td><strong>agrees</strong> &mdash; a copy, not a transpose</td></tr>
         <tr><td>Distance unit</td><td>metres</td><td>metres (&sect;8)</td>
             <td><strong>agrees</strong></td></tr>
-        <tr><td>Asset facing</td><td>an asset&rsquo;s front faces <strong>+Z</strong></td>
-            <td>the camera looks down <strong>&minus;Z</strong></td>
-            <td><em>differs, and is not a conversion</em></td></tr>
+        <tr><td>Asset facing</td><td>an asset&rsquo;s front faces <strong>+Z</strong>, and +Z is its forward</td>
+            <td>&minus;Z is forward, and the camera looks down <strong>&minus;Z</strong> &mdash; at the +Z face</td>
+            <td><em>forward differs, and is not a conversion</em> (corrected in 7.7b)</td></tr>
         <tr><td>Base colour <strong>factor</strong></td><td><strong>linear</strong></td>
             <td><code>material::tint</code> is sRGB-encoded (6.5)</td>
             <td>convert at <code>load_model</code>, linear &rarr; encoded</td></tr>
@@ -2172,7 +2174,11 @@
   <div class="callout warn">
     <span class="label">The two rows that are not &ldquo;agrees&rdquo;, and what to do about each</span>
     <p><strong>Asset facing is an authoring fact, not a coordinate change.</strong> A glTF model
-       dropped into the world unrotated presents its back. Fix it with a yaw on the object.
+       dropped into the world unrotated <em>faces</em> a camera looking down &minus;Z &mdash; this
+       row said &ldquo;presents its back&rdquo; until Lesson 7.7b&rsquo;s mannequin, the first asset
+       with a face, measured its nose on the +Z side of its head (7.7b &sect;11). What differs is
+       <strong>forward</strong>: glTF&rsquo;s is +Z and ours is &minus;Z, so a character moved along
+       the engine&rsquo;s forward walks backwards. Fix it with a yaw on the object.
        Negating coordinates in the loader would also <em>mirror</em> the geometry, which reverses
        every triangle &mdash; two wrongs, and the second hides the first.</p>
     <p><strong>The uv origin agrees, and that is the trap.</strong> OBJ puts (0,&nbsp;0) at the
@@ -2710,6 +2716,51 @@
        part in ten thousand. A golden image of additive geometry needs a tolerance. Into an 8-bit
        UNORM target the add saturates at 1, which is an error of any size. Lessons 6.18b &sect;9 and &sect;13;
        the corrected comment is on <code>blend_add</code>.</p>
+  </div>
+
+  <h2 id="gltf-skins"><span class="num">7r</span>Characters from glTF &mdash; the skin, the order, the curves</h2>
+
+  <p>
+    Added in Lesson 7.7b. A skinned glTF file is a node tree and three lists that point into it in
+    three different numberings &mdash; <code>skins.joints</code> names nodes, <code>JOINTS_n</code>
+    names slots in that list, and animation channels name nodes again &mdash; and none of them is the
+    skeleton&rsquo;s own. Every row below is a rule for translating one of them, or a choice the file
+    leaves to the reader. The first five are the specification&rsquo;s; the rest are this course&rsquo;s,
+    each with the failure it prevents, measured in 7.7b.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">glTF character import conventions, this course&rsquo;s answer
+        for each, and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Rotation component order</td><td>The file writes x, y, z, w; <code>quat</code> is {w, v}. Every file rotation goes through <code>quat_from_xyzw</code> (<code>gfx/gltf.hpp</code>) and nothing else</td><td>The root&rsquo;s identity becomes 180&deg; about <em>z</em> and the body hangs under the floor; every key is 111&deg; to 180&deg; wrong, and no single rotation undoes it</td></tr>
+        <tr><td>Which nodes are joints</td><td>The skin&rsquo;s joints <strong>and every node above them</strong>, the ancestors carried as joints no vertex is weighted to. Model space is the file&rsquo;s scene space</td><td>A non-joint ancestor&rsquo;s transform is lost: the specification&rsquo;s example sinks a metre</td></tr>
+        <tr><td>The skinned mesh node&rsquo;s transform</td><td>Ignored, as the specification says it MUST be</td><td>The character is moved twice</td></tr>
+        <tr><td>Inverse bind matrices</td><td>The file&rsquo;s are data and overwrite the baked ones; an absent accessor means <strong>identity</strong>; ancestors keep baked ones</td><td>Baking when the file gave none collapses vertices to the model origin</td></tr>
+        <tr><td><code>JOINTS_n</code></td><td>Indices into <code>skins.joints</code> (slots), mapped slot &rarr; joint by one table built with the skeleton</td><td>Read as nodes or as joints: the mesh follows the wrong bones</td></tr>
+        <tr><td>Joint order</td><td>A <strong>stable</strong> parent-first sort: a skin already in order keeps it (<code>resorted</code> = 0), and inverse binds, influences and tracks move with the same permutation</td><td>Unsorted, <code>compose_pose</code> treats each out-of-order joint as a root: limbs at their own offsets from the origin, every frame &mdash; not a lag</td></tr>
+        <tr><td>More than four influences</td><td>Keep the four largest (<code>stable_sort</code>), renormalise, report the largest weight dropped</td><td>&mdash;</td></tr>
+        <tr><td>Weight sums</td><td>Within <code>k_weight_tolerance</code> = 10<sup>&minus;5</sup>: above float noise, below 1/65535. Normalised bytes and shorts MUST sum to exactly 255 or 65535</td><td>A byte sum of 254/255 pulls a vertex 1/255 toward the origin: 7&nbsp;mm at 1.8&nbsp;m</td></tr>
+        <tr><td>Non-uniform bind scale</td><td>A ratio test, <code>largest / smallest &minus; 1 &gt; 10<sup>&minus;4</sup></code></td><td>An exact test flags exporter float noise: 12 of Blender&rsquo;s 20 joints</td></tr>
+        <tr><td>Curves</td><td>LINEAR (slerp for rotations) and CUBICSPLINE converted to lerp/nlerp keys by splitting each interval until seven probes per piece are within <strong>a tenth of <code>reduce</code>&rsquo;s tolerance</strong> (0.1&nbsp;mm, 0.05&deg;, 10<sup>&minus;4</sup>); STEP held by a copy of each value one float before the next key; Hermite tangents &times; <em>t</em><sub>d</sub>; a cubic rotation normalised after</td><td>A midpoint-only check never splits anything (nlerp = slerp there); a forgotten <em>t</em><sub>d</sub> overshoots by 40&deg; on four-frame keys</td></tr>
+        <tr><td>Duration and looping</td><td>Duration = the last input of any sampler; <code>loops</code> is the importer&rsquo;s choice, default true. Past the end the specification <em>clamps</em> and a looping clip <em>wraps</em></td><td>A one-shot clip snaps back to its start</td></tr>
+        <tr><td>Facing</td><td>An unrotated glTF character faces a camera looking down &minus;Z; its forward is +Z, ours &minus;Z &mdash; a yaw on the entity, never in the loader</td><td>Moved along the engine&rsquo;s forward, it walks backwards</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">The file&rsquo;s rest pose is not necessarily its bind pose</span>
+    <p>Node transforms are the pose the file was saved in; the inverse binds are the bind. The importer
+       keeps both &mdash; <code>local_bind</code> is the node transform, because it is the value every
+       unanimated channel keeps (&ldquo;Non-animated properties MUST keep their values&rdquo;), and
+       <code>joint_from_model</code> is the file&rsquo;s matrices &mdash; and reports the distance between
+       them as <code>bind_vs_rest</code>: 2.9&nbsp;&times;&nbsp;10<sup>&minus;6</sup> for Blender, which
+       writes both from the rest pose. Lesson 7.7b &sect;5.</p>
   </div>
 
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
@@ -4404,6 +4455,10 @@
     <table>
       <thead><tr><th>Fact</th><th>Value</th><th>Source</th></tr></thead>
       <tbody>
+        <tr><td>glTF skin rules</td><td>The skinned mesh node&rsquo;s transform MUST be ignored; joints share a common root &ldquo;which may or may not be a joint node itself&rdquo;; an absent <code>inverseBindMatrices</code> means identity matrices; normalised byte/short weights MUST sum to 255/65535 before normalisation</td><td>glTF 2.0 specification &sect;3.7.3.2, &sect;3.7.3.3 and &sect;5.28.1 (registry.khronos.org), read in 7.7b</td></tr>
+        <tr><td>glTF interpolation</td><td>LINEAR on a rotation is slerp (&sect;C.4), which implementations MAY approximate; CUBICSPLINE tangents are scaled by <em>t</em><sub>d</sub> and a rotation is normalised after (&sect;C.5); outside the input range the output MUST be clamped (&sect;3.11)</td><td>glTF 2.0 specification, Appendix C and &sect;3.11, read in 7.7b</td></tr>
+        <tr><td>cgltf&rsquo;s signed-normalised decode</td><td>cgltf 1.15 divides by 127 or 32767 without the specification&rsquo;s <code>max(&hellip;, &minus;1)</code>; &minus;128 reads as &minus;1.0079. The parser clamps</td><td><code>cgltf_component_read_float</code> in <code>cgltf.h</code> at v1.15, read in 7.7b</td></tr>
+        <tr><td>Blender&rsquo;s glTF exporter (5.1)</td><td>Writes the node array children first and <code>skins.joints</code> parent first; writes constant channels as two-key STEP; gives unweighted vertices full weight on an invented <code>neutral_bone</code>; converts Bezier tangents by normalising a control point, off by up to 0.22&deg; where joints turn fast</td><td><code>io_scene_gltf2</code> (<code>primitive_extract.py</code>, <code>tree.py</code>, <code>gltf2_blender_math.py</code>), measured in 7.7b &sect;8.4 and &sect;10</td></tr>
         <tr><td>Compute resource layout</td><td><code>t[n], space0</code> read-only (sampled textures, read-only storage textures, read-only storage buffers); <code>u[n], space1</code> read-write (storage textures, then storage buffers); <code>b[n], space2</code> uniforms. Read-write resources are bound by <code>SDL_BeginGPUComputePass</code></td><td>SDL <code>release-3.4.12</code>: <code>SDL_gpu.h</code>, the comment on <code>SDL_CreateGPUComputePipeline</code>; compiled and run on Metal in 6.18b</td></tr>
         <tr><td>A cycled buffer&rsquo;s contents are undefined</td><td>Measured on Metal: back-to-back submissions with <code>cycle = true</code> rotate through three buffers; a fence wait still returns an empty one; only <code>SDL_WaitForGPUIdle</code> returns the previous contents</td><td><code>SDL_gpu.h</code> on <code>SDL_GPUStorageBufferReadWriteBinding::cycle</code>; <code>verify_618b</code> &sect;I, 2026-09</td></tr>
         <tr><td>No barrier between dispatches in one compute pass</td><td>Vulkan and D3D12 backends record none; Metal&rsquo;s serial encoder orders them anyway (20 of 20 exact)</td><td><code>SDL_gpu.h</code> on <code>SDL_BeginGPUComputePass</code>; the Vulkan and D3D12 backends read in 6.18b &sect;10</td></tr>

@@ -255,6 +255,11 @@ completed:
          is check 9 in docs/_template/check-curriculum.py, added by 7.8, and it
          caught both this and 7.8's own entry on its first run.
          Planned at 5 h, shipped at 6.)
+  - 7.7b Animated Characters from glTF: Skins and Clips   (inserted; written 2026-09-30, after 8.13)
+        (Appended at the time, in lesson order — after 7.7, before 7.8. check-curriculum.py
+         caught the manifest entry, this line, the lesson map and 0.2's planner (M7..M9 +4)
+         before the commit; the planner check led to two stale pace sentences in 0.2's prose,
+         "twenty months" and "thirty-three months" — right for the original 433 h — fixed too.)
   - 7.8  SDL3 Audio: Streams, Mixing, and 3D Sound
         (7.7's TWO dead `next` links repointed in the SOURCES —
          scratch/l77_body_a.html and build_77.py's TAIL — and build_77 rebuilt,
@@ -278,6 +283,9 @@ completed:
          the only edited file anything else includes, and the edit is one
          enumerator plus comments.)
   ===> MODULE 7 COMPLETE <===
+       (2026-09-30: COMPLETE AGAIN at 9 lessons, ~80 h measured, once 7.7b landed. Module 7
+        still has no project tree of its own; that gap belongs to 7.8, its last lesson, and
+        is recorded rather than filled.)
   - 8.1  Integrators: Why One Explodes
   - 8.3  Angular Dynamics: Torque and the Inertia Tensor
         (8.2's dead `next` link repointed in ALL THREE copies — the page,

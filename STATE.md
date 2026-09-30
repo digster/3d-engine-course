@@ -10,14 +10,18 @@ place and never regenerate: a lesson updates `updated:`, `completed:`, `capabili
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-29 (after Lesson 6.18b, written after 8.13 — 98 of 113 lessons published;
-         the second of the four lessons inserted by the post-Module 8 review, placed between
-         6.18 and 7.1, and now the last lesson of Module 6, which is COMPLETE. Compute
-         shaders, a GPU particle system, buffers and compute passes in the frame graph;
-         ~779 h. Per-lesson history: state/updated.md.)
+updated: 2026-09-30 (after Lesson 7.7b, written after 8.13 — 99 of 113 lessons published;
+         the third of the four lessons inserted by the post-Module 8 review, placed between
+         7.7 and 7.8, and Module 7 is COMPLETE again (9 lessons, ~80 h). A Blender-authored
+         character imported from glTF — skins, inverse binds, influences, LINEAR/STEP/
+         CUBICSPLINE clips — into 7.6's skeleton and 7.7's clips; three 7.6 checks corrected;
+         ~783 h. Per-lesson history: state/updated.md.)
 
 conventions:   (headline of each key, verbatim; full text: state/conventions.md;
                the reader's version: docs/conventions.html)
+  gltf_rotation: A FILE ROTATION IS x, y, z, w AND BECOMES A quat ONLY THROUGH quat_from_xyzw.
+  gltf_skeleton: EVERY NODE ABOVE A JOINT IS A JOINT, THE FILE'S INVERSE BINDS WIN, AND ABSENT MEANS IDENTITY.
+  curve_import: A FILE CURVE BECOMES OURS BY SPLITTING TO A TENTH OF reduce's TOLERANCE, JUDGED AT SEVEN PROBES AND NEVER AT THE MIDPOINT.
   compute_layout: A COMPUTE SHADER'S UNIFORMS ARE b[n] IN space2; READ-ONLY STORAGE IS t[n] IN space0, READ-WRITE IS u[n] IN space1 AND IS BOUND WHEN THE PASS BEGINS.
   storage_rows: A STORAGE STRUCT IS 16-BYTE ROWS — EVERY float3 FOLLOWED BY EXACTLY ONE SCALAR, OR A float4 — BECAUSE TWO COMPILERS PAD ANYTHING ELSE TWO WAYS.
   cycle: cycle IS A BUFFER'S LOAD OP: true ONLY FOR A PASS THAT OVERWRITES WHAT IT WRITES; A BUFFER A PASS READS AND WRITES IS NEVER CYCLED.
@@ -111,7 +115,7 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to SCANLINE — what a CPU rasterizer should do, and what every measurement before 4.1 was taken against.
   measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A FEATURE'S.
 
-curriculum: 113 lessons, ~779 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+curriculum: 113 lessons, ~783 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
   M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:20  M7:9  M8:14  M9:13   (the 2026-09-27 counts; this
   line read the 107-lesson shape until 6.18b's session)
   (reshapes and their reasons: state/curriculum.md)
@@ -208,8 +212,9 @@ completed:
   - 7.5  Slerp, and the Storage Swap
   - 7.6  Skeletal Animation: The Skinning Math
   - 7.7  Sampling and Blending Animations
+  - 7.7b Animated Characters from glTF: Skins and Clips   (inserted; written 2026-09-30, after 8.13)
   - 7.8  SDL3 Audio: Streams, Mixing, and 3D Sound
-  ===> MODULE 7 COMPLETE <===
+  ===> MODULE 7 COMPLETE — 9 lessons, ~80 h (measured); complete again after 7.7b. <===
   - 8.1  Integrators: Why One Explodes
   - 8.3  Angular Dynamics: Torque and the Inertia Tensor
   - 8.2  Forces, Gravity, and Linear Rigid Bodies
@@ -225,8 +230,9 @@ completed:
   - 8.13 A Character Controller
   ===> MODULE 8 COMPLETE — 13 lessons, ~72 h. Physics built, none imported. <===
   (2026-09-27: 6.17b, 6.18b, 7.7b and 8.14 were inserted into Modules 6–8. 6.17b landed
-   2026-09-28 and 6.18b 2026-09-29, completing Module 6 again; 7.7b and 8.14 are not written
-   yet, so Modules 7 and 8 read "in progress" in the index until they land.)
+   2026-09-28 and 6.18b 2026-09-29, completing Module 6 again; 7.7b landed 2026-09-30,
+   completing Module 7 again. 8.14 is not written yet, so Module 8 reads "in progress" in
+   the index until it lands.)
 
 capabilities:   (the first headline of each lesson, verbatim; every entry in full:
                  state/capabilities.md)
@@ -242,6 +248,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - 8.2 THE ENGINE HAS BODIES, and can be told what is pushing on what.
   - 8.1 THE ENGINE CAN ADVANCE A STATE THROUGH TIME, and can say whether the step size you chose is one that works.
   - 7.8 THE ENGINE CAN HEAR.
+  - 7.7b THE ENGINE CAN PLAY A CHARACTER IT DID NOT BUILD.
   - 7.7 THE ENGINE CAN PLAY RECORDED MOTION.
   - 7.6 THE ENGINE CAN DEFORM A SURFACE, which is categorically not what 5.9's hierarchy does: that PLACES objects, and t…
   - 7.5 THE ENGINE CAN BLEND TWO ORIENTATIONS, AND IT STORES THEM AS FOUR FLOATS.
@@ -308,6 +315,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - (39 earlier entries, Modules 0-3, predate lesson tags; they close state/capabilities.md)
 
 decisions:   (headlines; full: state/decisions.md)
+  found-by-77b: A REAL EXPORTER AND THE SPECIFICATION REFUTED THREE 7.6 CHECKS, ONE 6.6 SENTENCE AND TWO OF 7.7's FOUR PREDICTIONS; ALL CORRECTED IN PLACE, WITH MARKED NOTES ON THE EARLIER PAGES.
   pending-code-corrections: ONE ENGINE COMMENT IS STILL WRONG (IN frustum.cpp), AND THE NEXT LESSON THAT LISTS IT WHOLE CORRECTS IT. (gpu_scene.cpp's two: corrected by 6.17b.)
   found-by-618b: 6.18b CORRECTED ONE SHIPPED CLAIM (blend_add "commutative and associative") IN FOUR PLACES, GAVE MODULE 6 THE PROJECT TREE IT NEVER HAD, AND FOUND THE 5.12 LINT WAS NEVER CARRIED INTO MODULE 6's PINS.
   found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE, AND FIXING THEM FOUND THREE MORE; ALL SEVEN WERE FIXED THE SAME DAY, EACH IN ITS OWN COMMIT, TEST FIRST.
@@ -320,14 +328,14 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   /: .gitignore, ARCHITECTURE.md, CHANGELOG.md, CLAUDE.md, CMakeLists.txt, LEARNINGS.md, LICENSE,
      PROMPT.md, README.md, STATE.md
   .github/workflows/: ci.yml
-  assets/: cube.bin, cube.gltf, cube.obj, quirks.obj, shapes.glb, torus.obj, twisted.obj,
-     uv_grid.png
+  assets/: cube.bin, cube.gltf, cube.obj, mannequin.glb, quirks.obj, shapes.glb, torus.obj,
+     twisted.obj, uv_grid.png
   assets/fonts/: Karla-Regular.ttf, OFL.txt
   cmake/: EngineHelpers.cmake, Shaders.cmake
   demos/: CMakeLists.txt
   demos/<name>/main.cpp: audio, bodies, broadphase, character, collector, collide, ecs_swarm,
-     epa, gimbal, gjk, gltf_view, hello_cube, impulse, integrate, joints, manifold, particles,
-     plane, pong, ragdoll, rig, sandbox, spin, stack
+     epa, gimbal, gjk, gltf_view, hello_cube, impulse, integrate, joints, manifold, mannequin,
+     particles, plane, pong, ragdoll, rig, sandbox, spin, stack
   demos/common/: demo_scene.cpp, demo_scene.hpp, pong.cpp, pong.hpp
   docs/: conventions.html, cpp-style.html, index.html, math-toolbox.html
   docs/_template/: README.md, apply-shared.py, check-builders.py, check-continuity.py,
@@ -362,7 +370,8 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      06-17b-local-lights.html, 06-18-text-overlay.html, 06-18b-compute-particles.html,
      07-01-euler-angles.html, 07-02-axis-angle.html,
      07-03-complex-numbers.html, 07-04-quaternions.html, 07-05-slerp.html,
-     07-06-skeletal-animation.html, 07-07-sampling-blending.html, 07-08-audio.html,
+     07-06-skeletal-animation.html, 07-07-sampling-blending.html,
+     07-07b-gltf-characters.html, 07-08-audio.html,
      08-01-integrators.html, 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
      08-04-collision-primitives.html, 08-05-gjk.html, 08-06-epa.html,
      08-07-contact-manifolds.html, 08-08-broadphase.html, 08-09-impulse-response.html,
@@ -371,7 +380,7 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   docs/shared/: course.css, course.js
   engine/: CMakeLists.txt
   engine/include/engine/: engine.hpp
-  engine/include/engine/anim/: clip.hpp, skeleton.hpp, skin.hpp
+  engine/include/engine/anim/: clip.hpp, import.hpp, skeleton.hpp, skin.hpp
   engine/include/engine/asset/: asset_store.hpp, search_path.hpp
   engine/include/engine/audio/: mixer.hpp, sound.hpp, spatial.hpp
   engine/include/engine/core/: actions.hpp, assert.hpp, bench.hpp, clock.hpp, fixed_step.hpp,
@@ -394,7 +403,7 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      ragdoll.hpp, rigid_body.hpp, shape.hpp, solver.hpp
   engine/include/engine/platform/: app.hpp, main.hpp, platform.hpp
   engine/include/engine/ui/: debug_ui.hpp
-  engine/src/anim/: clip.cpp, skeleton.cpp, skin.cpp
+  engine/src/anim/: clip.cpp, import.cpp, skeleton.cpp, skin.cpp
   engine/src/asset/: asset_store.cpp, search_path.cpp
   engine/src/audio/: mixer.cpp, sound.cpp, spatial.cpp
   engine/src/core/: actions.cpp, clock.cpp, fixed_step.cpp, input.cpp, log.cpp, profile.cpp
@@ -420,53 +429,43 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      shadow.vert.hlsl, skybox.frag.hlsl, skybox.vert.hlsl, texture_probe.frag.hlsl,
      textured.frag.hlsl, textured.vert.hlsl, tonemap.frag.hlsl, triangle.frag.hlsl,
      triangle.vert.hlsl, uniform_probe.frag.hlsl, uniform_probe.vert.hlsl
-  memory/: 59 dated session logs (memory/YYYY-MM-DD.md)
-  scratch/: 1705 authoring sources, force-added (builders, fragments, figures, pins, harnesses)
+  memory/: 62 dated session logs (memory/YYYY-MM-DD.md)
+  scratch/: 1761 authoring sources, force-added (builders, fragments, figures, pins, harnesses)
   learnings/: foundations.md, module-2.md … module-8.md, tooling.md
   state/: updated.md, conventions.md, curriculum.md, completed.md, capabilities.md, decisions.md, files.md, roadmap.md, README.md
 
 roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLINE.
          (the whole of it: state/roadmap.md)
 
-next: 7.7b — Animated Characters from glTF: Skins and Clips
+next: 8.14 — Scene Queries and a Static Mesh Collider
 
-      THE THIRD OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27); 6.17b
-      landed 2026-09-28 and 6.18b 2026-09-29, and Module 6 is complete again. Then
-      8.14 (scene queries and a static mesh collider), then Module 9 from 9.1
-      Hardening the Build. Modules 7 and 8 read "in progress" until 7.7b and 8.14 land.
-      7.7b sits between 7.7 and 7.8: re-point build_77.py's next (and 7.7's Recap
-      bridge) and build_78.py's prev, and add 7.7b's files to 8.13's tree (§18).
-      7.8 has no module tree of its own (Module 7 never got one): 7.7b is not the
-      module's last lesson, so the gap stays 7.8's — record it, do not fill it here.
+      THE LAST OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27); 6.17b landed
+      2026-09-28, 6.18b 2026-09-29 and 7.7b 2026-09-30, and Modules 6 and 7 are complete
+      again. 8.14 is the last lesson of Module 8 in course order, after 8.13, so it is
+      APPENDED rather than inserted: no later lesson in Modules 1-8 lists its files, and
+      the §17 carry has nothing to reach except Module 9, which is unwritten. It re-points
+      8.13's next (build_813.py + its Recap bridge) and owns Module 8's project tree:
+      8.13's tree moves to (or is repeated on) 8.14's Recap, with 8.14's files added.
+      Then Module 9 from 9.1 Hardening the Build. Module 8 reads "in progress" until 8.14.
 
-      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17 — with two worked
-      examples now (state/decisions.md `found-by-617b` and `found-by-618b`):
-        - scratch/replay_tree.py 7.7 scratch/_t77    the student's tree at 7.7.
-        - scratch/make_t618b.py is the template to copy (make_t77b.py): it handles
-          NEW files (the working tree's text, no later pins) as well as changed ones,
-          and has insert_includes() for an engine.hpp with no context at the base —
-          not needed at 7.7, whose engine.hpp already lists every header.
-        - scratch/_base618b/run_all.sh + classify.py: 27 harnesses (6.1–6.18 with
-          6.17b, 7.1–7.8). ADD 618b to the list for 7.7b's BEFORE run, and take it
-          before the first edit. verify_74's F.4b is a timing threshold (2.99x vs 3x
-          once) and can flake.
-        - Carry every build-list hunk into the later pins (7.8's and Module 8's: ~15
-          engine CMakeLists, ~15 engine.hpp, ~14 demos CMakeLists); prove by delta;
-          rebuild each page and check it changed by exactly the carried lines.
-        - Build the student tree at 7.7b offline (FETCHCONTENT_SOURCE_DIR_* from
-          build/_deps) and run its demo: 6.18b's built with 0 warnings.
+      WHAT 8.14 INHERITS, AND MUST NOT RE-DERIVE:
+        - 8.8's uniform_grid broadphase (the scene query walks it; 8.13 ex. 5 already
+          named a region query on it as the fix for the controller's linear cull, 847 us
+          at 10,000 bodies — standing defect 9 below) and 8.13's shape cast (Newton on a
+          convex distance from GJK's lower bound; `cast` convention).
+        - 8.5-8.6's GJK/EPA, 8.4's shapes; a static triangle-mesh collider needs
+          per-triangle support functions and a BVH or the grid over triangles — measure
+          which, do not assert it.
+        - 7.7b's lesson for any importer: test on data the engine did not write. A level
+          mesh from Blender (scratch/make_mannequin.py shows the headless workflow) is the
+          honest fixture for a static mesh collider.
+        - Standing defect 10 (GJK's certified lower bound is loose by the obstacle's SIZE
+          times its angular error; a 60 m ramp as one box) is a scene-query problem too.
 
-      WHAT 7.7b INHERITS, AND MUST NOT RE-DERIVE:
-        - 6.6's glTF loader (gltf.cpp, the only TU that sees cgltf), 7.6's skinning
-          (a skinning matrix is model_from_model), 7.7's clips (a clip is a function
-          from time to pose, and has no state).
-        - 6.18b's storage-buffer rules if joint palettes go to the GPU: a vertex
-          stage reads storage at t[n], space0, bound with SDL_BindGPUVertexStorageBuffers,
-          with GRAPHICS_STORAGE_READ; records are 16-byte rows (conventions
-          storage_rows), and matrices are stored as ROWS (6.17b's light record), so no
-          default matrix packing can transpose them.
-        - 6.18b's float contract: a GPU skinning path is held to the CPU's exactly on
-          integers (joint indices) and within a stated tolerance on positions.
+      FOUND BY 7.7b AND NOT FIXED (decisions: found-by-77b): verify_85 and verify_86 do
+      not compile at HEAD (8.7 added `face_fn` to the convex struct; their aggregate
+      initialisers were never updated) — 8.14 lists nothing they need, but whoever next
+      runs the 41-harness additivity check should repair them first.
 
       PENDING CODE CORRECTIONS (decisions: pending-code-corrections): frustum.cpp's
       near-plane comment waits for whichever lesson lists it whole.

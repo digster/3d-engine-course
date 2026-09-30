@@ -1,0 +1,78 @@
+<svg viewBox="0 0 900 420.0" role="img" aria-labelledby="l77bf10-t l77bf10-d">
+  <title id="l77bf10-t">The joint nobody animates</title>
+  <desc id="l77bf10-d">A top view of the mannequin's head at the moment of the wave where its turned head is furthest from the rest pose. Grey-brown dots are the head's vertices, identical in both files. Twenty-five nose-tip vertices are drawn twice: green where the fixed file puts them, turned with the head, and red where the first export leaves them, because they were weighted to a joint nothing animates; the two sets are up to 16.9 mm apart.</desc>
+  <defs>
+    <marker id="e-i-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-r-l77bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<path d="M154.8,232.3h0M164.8,93.5h0M272.4,92.4h0M307.3,231.5h0M157.5,252.4h0M151.8,95.9h0M269.9,79.3h0M293.1,266.9h0M161.0,267.5h0M274.4,238.7h0M233.0,245.4h0M191.4,250.4h0M137.3,250.1h0M131.5,244.9h0M135.5,236.2h0M148.5,208.5h0M143.6,162.2h0M145.5,121.8h0M143.9,89.4h0M142.6,86.1h0M154.4,85.5h0M157.8,115.7h0M152.5,150.7h0M151.7,191.6h0M187.1,85.9h0M219.1,82.3h0M250.7,85.7h0M280.4,115.2h0M288.3,151.0h0M318.5,232.4h0M328.6,224.1h0M325.0,225.8h0M304.0,186.6h0M296.0,140.8h0M283.0,102.4h0M244.7,73.3h0M208.8,73.5h0M174.3,83.2h0M280.3,81.9h0M279.7,70.1h0M276.4,71.5h0M313.1,263.1h0M252.3,103.5h0M213.5,106.5h0M175.3,114.3h0M262.1,145.0h0M219.6,150.4h0M177.4,156.9h0M269.7,192.8h0M226.5,199.3h0M183.3,205.0h0M171.0,67.0h0M206.5,55.6h0M244.0,57.0h0M171.4,63.1h0M208.1,52.2h0M246.3,54.4h0M182.4,67.8h0M217.3,61.4h0M252.0,66.1h0M188.6,266.4h0M225.0,294.0h0M257.1,292.4h0M128.9,208.3h0M124.9,163.4h0M129.1,122.3h0M124.2,204.5h0M121.4,160.8h0M126.4,119.8h0M130.4,194.7h0M130.8,152.0h0M138.1,114.3h0M298.6,110.2h0M303.3,99.2h0M299.3,99.0h0M309.4,148.3h0M318.2,138.2h0M314.4,137.5h0M316.1,191.4h0M326.4,182.2h0M322.6,182.4h0M154.8,232.3h0M307.3,231.5h0M157.5,252.4h0M281.4,309.4h0M192.0,318.8h0M293.1,266.9h0M286.3,288.9h0M284.2,302.8h0M263.5,316.0h0M237.3,321.2h0M210.8,321.5h0M182.3,311.5h0M170.2,294.4h0M161.0,267.5h0M291.6,305.2h0M300.7,292.3h0M305.9,267.7h0M274.4,238.7h0M233.0,245.4h0M191.4,250.4h0M166.9,286.1h0M176.3,308.0h0M185.2,317.6h0M137.3,250.1h0M131.5,244.9h0M135.5,236.2h0M318.5,232.4h0M328.6,224.1h0M325.0,225.8h0M149.3,293.6h0M147.1,282.2h0M140.4,276.2h0M144.6,270.7h0M155.4,295.0h0M168.1,310.0h0M157.4,302.1h0M319.6,275.6h0M313.1,263.1h0M325.6,256.8h0M322.7,260.3h0M315.7,283.3h0M303.5,295.7h0M307.9,283.2h0M269.1,313.7h0M273.8,300.5h0M275.8,275.4h0M240.2,319.6h0M240.1,306.7h0M237.9,281.9h0M210.3,320.8h0M205.6,309.4h0M199.2,285.9h0M188.6,266.4h0M194.6,294.3h0M225.0,294.0h0M257.1,292.4h0M204.1,312.8h0M230.7,312.5h0M259.3,308.7h0" fill="none" stroke="#d8b090" stroke-width="3.0" stroke-linecap="round" stroke-opacity="0.8"/>
+<circle cx="203.2" cy="328.6" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="178.1" cy="324.6" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="288.4" cy="345.0" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="260.2" cy="352.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="207.1" cy="356.4" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="178.1" cy="352.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="284.5" cy="317.2" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="260.2" cy="324.6" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="221.3" cy="322.2" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="196.9" cy="320.8" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="243.2" cy="317.8" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="219.1" cy="319.5" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="265.4" cy="316.0" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="241.4" cy="320.8" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="195.2" cy="351.6" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="166.9" cy="346.3" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="190.4" cy="344.6" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="163.1" cy="338.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="193.1" cy="336.5" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="166.9" cy="331.0" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="270.4" cy="351.3" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="241.4" cy="356.5" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="248.5" cy="355.7" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="219.1" cy="357.8" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="226.3" cy="357.5" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="196.9" cy="356.5" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="296.4" cy="322.0" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="271.3" cy="331.0" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="301.3" cy="329.0" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="275.1" cy="338.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="298.6" cy="337.1" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="271.3" cy="346.3" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="273.1" cy="342.0" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="245.4" cy="347.6" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="247.2" cy="346.3" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="219.1" cy="348.2" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="221.0" cy="349.3" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="192.8" cy="347.6" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="273.5" cy="332.9" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="247.1" cy="338.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="245.8" cy="336.8" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="219.1" cy="338.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="218.1" cy="340.7" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="191.1" cy="338.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="270.6" cy="324.2" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="245.4" cy="329.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="244.5" cy="327.3" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="219.1" cy="329.1" r="2.6" fill="#e05c5c" stroke="none"/>
+<circle cx="218.5" cy="331.5" r="2.6" fill="#5ac878" stroke="none"/>
+<circle cx="192.8" cy="329.7" r="2.6" fill="#e05c5c" stroke="none"/>
+<rect x="50" y="30" width="350.0" height="350.0" rx="3" fill="none" stroke="#8f918a" stroke-width="1.0"/>
+<line x1="60.0" y1="400.0" x2="94.9" y2="400.0" stroke="var(--dia-ink)" stroke-width="2.0" fill="none"/>
+<text x="102.90268496836546" y="404.0" class="xs" text-anchor="start">2 cm</text>
+<text x="60" y="22" class="sm" text-anchor="start">the head from above at t = 0.6 s of the wave; the face is at the bottom</text>
+<circle cx="446.0" cy="80.0" r="3" fill="#5ac878" stroke="none"/>
+<text x="458" y="84" class="xs" text-anchor="start">nose-tip vertices, fixed file: turned with the head</text>
+<circle cx="446.0" cy="102.0" r="3" fill="#e05c5c" stroke="none"/>
+<text x="458" y="106" class="xs" text-anchor="start">the same vertices, first export: on neutral_bone</text>
+<path d="M446.0,124.0h0" fill="none" stroke="#d8b090" stroke-width="2.6" stroke-linecap="round" stroke-opacity="0.85"/>
+<text x="458" y="128" class="xs" text-anchor="start">every other head vertex (both files agree)</text>
+<text x="440" y="170" class="xs" text-anchor="start">25 vertices bone heat left unweighted.</text>
+<text x="440" y="186" class="xs" text-anchor="start">Blender's exporter gave them full weight on a</text>
+<text x="440" y="202" class="xs" text-anchor="start">joint it invented and nothing animates.</text>
+<text x="440" y="226" class="xs mono" text-anchor="start">worst lag in the wave: 16.9 mm</text>
+<text x="440" y="242" class="xs mono" text-anchor="start">frozen_vertices: 25 → 0 after the fix</text>
+</svg>

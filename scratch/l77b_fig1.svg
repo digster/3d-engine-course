@@ -1,0 +1,239 @@
+<svg viewBox="0 0 910 405.0" role="img" aria-labelledby="l77bf1-t l77bf1-d">
+  <title id="l77bf1-t">Three orders of one skeleton</title>
+  <desc id="l77bf1-d">Three tables side by side. The first is Blender's node array in index order, 21 nodes from head (0) to Armature (20); every one of the 19 joints is marked because its parent has a larger index — the file writes children first. The second is the skin's joint list, 19 slots from hips to foot.R, every parent in an earlier slot, so the list is already parent-first. The third is the imported skeleton: the Armature node first, as joint 0 with no vertices, then the skin's joints in the skin's own order, 20 joints each with a parent earlier than itself.</desc>
+  <defs>
+    <marker id="e-i-l77bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l77bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l77bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l77bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l77bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="30" y="22" class="sm" text-anchor="start">nodes[] — the file's order</text>
+<text x="30" y="38" class="xs muted" text-anchor="start">index, name, parent index</text>
+<text x="330" y="22" class="sm" text-anchor="start">skins[0].joints — the skin's order</text>
+<text x="330" y="38" class="xs muted" text-anchor="start">slot, node / name, parent's slot</text>
+<text x="630" y="22" class="sm" text-anchor="start">our skeleton — sorted, ancestor carried</text>
+<text x="630" y="38" class="xs muted" text-anchor="start">joint, name, parent joint</text>
+<text x="66" y="64.0" class="xs mono" text-anchor="end">0</text>
+<text x="74" y="64.0" class="xs mono" text-anchor="start">head</text>
+<text x="182" y="64.0" class="xs mono" text-anchor="end">1</text>
+<circle cx="34.0" cy="60.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="79.0" class="xs mono" text-anchor="end">1</text>
+<text x="74" y="79.0" class="xs mono" text-anchor="start">neck</text>
+<text x="182" y="79.0" class="xs mono" text-anchor="end">10</text>
+<circle cx="34.0" cy="75.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="94.0" class="xs mono" text-anchor="end">2</text>
+<text x="74" y="94.0" class="xs mono" text-anchor="start">hand.L</text>
+<text x="182" y="94.0" class="xs mono" text-anchor="end">3</text>
+<circle cx="34.0" cy="90.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="109.0" class="xs mono" text-anchor="end">3</text>
+<text x="74" y="109.0" class="xs mono" text-anchor="start">forearm.L</text>
+<text x="182" y="109.0" class="xs mono" text-anchor="end">4</text>
+<circle cx="34.0" cy="105.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="124.0" class="xs mono" text-anchor="end">4</text>
+<text x="74" y="124.0" class="xs mono" text-anchor="start">upper_arm.L</text>
+<text x="182" y="124.0" class="xs mono" text-anchor="end">5</text>
+<circle cx="34.0" cy="120.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="139.0" class="xs mono" text-anchor="end">5</text>
+<text x="74" y="139.0" class="xs mono" text-anchor="start">shoulder.L</text>
+<text x="182" y="139.0" class="xs mono" text-anchor="end">10</text>
+<circle cx="34.0" cy="135.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="154.0" class="xs mono" text-anchor="end">6</text>
+<text x="74" y="154.0" class="xs mono" text-anchor="start">hand.R</text>
+<text x="182" y="154.0" class="xs mono" text-anchor="end">7</text>
+<circle cx="34.0" cy="150.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="169.0" class="xs mono" text-anchor="end">7</text>
+<text x="74" y="169.0" class="xs mono" text-anchor="start">forearm.R</text>
+<text x="182" y="169.0" class="xs mono" text-anchor="end">8</text>
+<circle cx="34.0" cy="165.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="184.0" class="xs mono" text-anchor="end">8</text>
+<text x="74" y="184.0" class="xs mono" text-anchor="start">upper_arm.R</text>
+<text x="182" y="184.0" class="xs mono" text-anchor="end">9</text>
+<circle cx="34.0" cy="180.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="199.0" class="xs mono" text-anchor="end">9</text>
+<text x="74" y="199.0" class="xs mono" text-anchor="start">shoulder.R</text>
+<text x="182" y="199.0" class="xs mono" text-anchor="end">10</text>
+<circle cx="34.0" cy="195.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="214.0" class="xs mono" text-anchor="end">10</text>
+<text x="74" y="214.0" class="xs mono" text-anchor="start">chest</text>
+<text x="182" y="214.0" class="xs mono" text-anchor="end">11</text>
+<circle cx="34.0" cy="210.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="229.0" class="xs mono" text-anchor="end">11</text>
+<text x="74" y="229.0" class="xs mono" text-anchor="start">spine</text>
+<text x="182" y="229.0" class="xs mono" text-anchor="end">18</text>
+<circle cx="34.0" cy="225.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="244.0" class="xs mono" text-anchor="end">12</text>
+<text x="74" y="244.0" class="xs mono" text-anchor="start">foot.L</text>
+<text x="182" y="244.0" class="xs mono" text-anchor="end">13</text>
+<circle cx="34.0" cy="240.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="259.0" class="xs mono" text-anchor="end">13</text>
+<text x="74" y="259.0" class="xs mono" text-anchor="start">shin.L</text>
+<text x="182" y="259.0" class="xs mono" text-anchor="end">14</text>
+<circle cx="34.0" cy="255.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="274.0" class="xs mono" text-anchor="end">14</text>
+<text x="74" y="274.0" class="xs mono" text-anchor="start">thigh.L</text>
+<text x="182" y="274.0" class="xs mono" text-anchor="end">18</text>
+<circle cx="34.0" cy="270.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="289.0" class="xs mono" text-anchor="end">15</text>
+<text x="74" y="289.0" class="xs mono" text-anchor="start">foot.R</text>
+<text x="182" y="289.0" class="xs mono" text-anchor="end">16</text>
+<circle cx="34.0" cy="285.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="304.0" class="xs mono" text-anchor="end">16</text>
+<text x="74" y="304.0" class="xs mono" text-anchor="start">shin.R</text>
+<text x="182" y="304.0" class="xs mono" text-anchor="end">17</text>
+<circle cx="34.0" cy="300.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="319.0" class="xs mono" text-anchor="end">17</text>
+<text x="74" y="319.0" class="xs mono" text-anchor="start">thigh.R</text>
+<text x="182" y="319.0" class="xs mono" text-anchor="end">18</text>
+<circle cx="34.0" cy="315.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="334.0" class="xs mono" text-anchor="end">18</text>
+<text x="74" y="334.0" class="xs mono" text-anchor="start">hips</text>
+<text x="182" y="334.0" class="xs mono" text-anchor="end">20</text>
+<circle cx="34.0" cy="330.5" r="3.0" fill="#e05c5c" stroke="none"/>
+<text x="66" y="349.0" class="xs mono muted" text-anchor="end">19</text>
+<text x="74" y="349.0" class="xs mono muted" text-anchor="start">body</text>
+<text x="182" y="349.0" class="xs mono muted" text-anchor="end">20</text>
+<text x="66" y="364.0" class="xs mono muted" text-anchor="end">20</text>
+<text x="74" y="364.0" class="xs mono muted" text-anchor="start">Armature</text>
+<text x="182" y="364.0" class="xs mono muted" text-anchor="end">–</text>
+<text x="30" y="389.0" class="xs" text-anchor="start">19 of 19 joints come before their parent</text>
+<text x="366" y="64.0" class="xs mono" text-anchor="end">0</text>
+<text x="374" y="64.0" class="xs mono" text-anchor="start">18  hips</text>
+<text x="482" y="64.0" class="xs mono" text-anchor="end">–</text>
+<circle cx="334.0" cy="60.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="79.0" class="xs mono" text-anchor="end">1</text>
+<text x="374" y="79.0" class="xs mono" text-anchor="start">11  spine</text>
+<text x="482" y="79.0" class="xs mono" text-anchor="end">0</text>
+<circle cx="334.0" cy="75.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="94.0" class="xs mono" text-anchor="end">2</text>
+<text x="374" y="94.0" class="xs mono" text-anchor="start">10  chest</text>
+<text x="482" y="94.0" class="xs mono" text-anchor="end">1</text>
+<circle cx="334.0" cy="90.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="109.0" class="xs mono" text-anchor="end">3</text>
+<text x="374" y="109.0" class="xs mono" text-anchor="start">1  neck</text>
+<text x="482" y="109.0" class="xs mono" text-anchor="end">2</text>
+<circle cx="334.0" cy="105.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="124.0" class="xs mono" text-anchor="end">4</text>
+<text x="374" y="124.0" class="xs mono" text-anchor="start">0  head</text>
+<text x="482" y="124.0" class="xs mono" text-anchor="end">3</text>
+<circle cx="334.0" cy="120.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="139.0" class="xs mono" text-anchor="end">5</text>
+<text x="374" y="139.0" class="xs mono" text-anchor="start">5  shoulder.L</text>
+<text x="482" y="139.0" class="xs mono" text-anchor="end">2</text>
+<circle cx="334.0" cy="135.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="154.0" class="xs mono" text-anchor="end">6</text>
+<text x="374" y="154.0" class="xs mono" text-anchor="start">4  upper_arm.L</text>
+<text x="482" y="154.0" class="xs mono" text-anchor="end">5</text>
+<circle cx="334.0" cy="150.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="169.0" class="xs mono" text-anchor="end">7</text>
+<text x="374" y="169.0" class="xs mono" text-anchor="start">3  forearm.L</text>
+<text x="482" y="169.0" class="xs mono" text-anchor="end">6</text>
+<circle cx="334.0" cy="165.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="184.0" class="xs mono" text-anchor="end">8</text>
+<text x="374" y="184.0" class="xs mono" text-anchor="start">2  hand.L</text>
+<text x="482" y="184.0" class="xs mono" text-anchor="end">7</text>
+<circle cx="334.0" cy="180.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="199.0" class="xs mono" text-anchor="end">9</text>
+<text x="374" y="199.0" class="xs mono" text-anchor="start">9  shoulder.R</text>
+<text x="482" y="199.0" class="xs mono" text-anchor="end">2</text>
+<circle cx="334.0" cy="195.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="214.0" class="xs mono" text-anchor="end">10</text>
+<text x="374" y="214.0" class="xs mono" text-anchor="start">8  upper_arm.R</text>
+<text x="482" y="214.0" class="xs mono" text-anchor="end">9</text>
+<circle cx="334.0" cy="210.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="229.0" class="xs mono" text-anchor="end">11</text>
+<text x="374" y="229.0" class="xs mono" text-anchor="start">7  forearm.R</text>
+<text x="482" y="229.0" class="xs mono" text-anchor="end">10</text>
+<circle cx="334.0" cy="225.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="244.0" class="xs mono" text-anchor="end">12</text>
+<text x="374" y="244.0" class="xs mono" text-anchor="start">6  hand.R</text>
+<text x="482" y="244.0" class="xs mono" text-anchor="end">11</text>
+<circle cx="334.0" cy="240.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="259.0" class="xs mono" text-anchor="end">13</text>
+<text x="374" y="259.0" class="xs mono" text-anchor="start">14  thigh.L</text>
+<text x="482" y="259.0" class="xs mono" text-anchor="end">0</text>
+<circle cx="334.0" cy="255.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="274.0" class="xs mono" text-anchor="end">14</text>
+<text x="374" y="274.0" class="xs mono" text-anchor="start">13  shin.L</text>
+<text x="482" y="274.0" class="xs mono" text-anchor="end">13</text>
+<circle cx="334.0" cy="270.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="289.0" class="xs mono" text-anchor="end">15</text>
+<text x="374" y="289.0" class="xs mono" text-anchor="start">12  foot.L</text>
+<text x="482" y="289.0" class="xs mono" text-anchor="end">14</text>
+<circle cx="334.0" cy="285.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="304.0" class="xs mono" text-anchor="end">16</text>
+<text x="374" y="304.0" class="xs mono" text-anchor="start">17  thigh.R</text>
+<text x="482" y="304.0" class="xs mono" text-anchor="end">0</text>
+<circle cx="334.0" cy="300.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="319.0" class="xs mono" text-anchor="end">17</text>
+<text x="374" y="319.0" class="xs mono" text-anchor="start">16  shin.R</text>
+<text x="482" y="319.0" class="xs mono" text-anchor="end">16</text>
+<circle cx="334.0" cy="315.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="366" y="334.0" class="xs mono" text-anchor="end">18</text>
+<text x="374" y="334.0" class="xs mono" text-anchor="start">15  foot.R</text>
+<text x="482" y="334.0" class="xs mono" text-anchor="end">17</text>
+<circle cx="334.0" cy="330.5" r="3.0" fill="#5ac878" stroke="none"/>
+<text x="330" y="389.0" class="xs" text-anchor="start">already parent-first: the sort moves nothing</text>
+<text x="666" y="64.0" class="xs mono muted" text-anchor="end">0</text>
+<text x="674" y="64.0" class="xs mono muted" text-anchor="start">Armature</text>
+<text x="782" y="64.0" class="xs mono muted" text-anchor="end">–</text>
+<text x="666" y="79.0" class="xs mono" text-anchor="end">1</text>
+<text x="674" y="79.0" class="xs mono" text-anchor="start">hips</text>
+<text x="782" y="79.0" class="xs mono" text-anchor="end">0</text>
+<text x="666" y="94.0" class="xs mono" text-anchor="end">2</text>
+<text x="674" y="94.0" class="xs mono" text-anchor="start">spine</text>
+<text x="782" y="94.0" class="xs mono" text-anchor="end">1</text>
+<text x="666" y="109.0" class="xs mono" text-anchor="end">3</text>
+<text x="674" y="109.0" class="xs mono" text-anchor="start">chest</text>
+<text x="782" y="109.0" class="xs mono" text-anchor="end">2</text>
+<text x="666" y="124.0" class="xs mono" text-anchor="end">4</text>
+<text x="674" y="124.0" class="xs mono" text-anchor="start">neck</text>
+<text x="782" y="124.0" class="xs mono" text-anchor="end">3</text>
+<text x="666" y="139.0" class="xs mono" text-anchor="end">5</text>
+<text x="674" y="139.0" class="xs mono" text-anchor="start">head</text>
+<text x="782" y="139.0" class="xs mono" text-anchor="end">4</text>
+<text x="666" y="154.0" class="xs mono" text-anchor="end">6</text>
+<text x="674" y="154.0" class="xs mono" text-anchor="start">shoulder.L</text>
+<text x="782" y="154.0" class="xs mono" text-anchor="end">3</text>
+<text x="666" y="169.0" class="xs mono" text-anchor="end">7</text>
+<text x="674" y="169.0" class="xs mono" text-anchor="start">upper_arm.L</text>
+<text x="782" y="169.0" class="xs mono" text-anchor="end">6</text>
+<text x="666" y="184.0" class="xs mono" text-anchor="end">8</text>
+<text x="674" y="184.0" class="xs mono" text-anchor="start">forearm.L</text>
+<text x="782" y="184.0" class="xs mono" text-anchor="end">7</text>
+<text x="666" y="199.0" class="xs mono" text-anchor="end">9</text>
+<text x="674" y="199.0" class="xs mono" text-anchor="start">hand.L</text>
+<text x="782" y="199.0" class="xs mono" text-anchor="end">8</text>
+<text x="666" y="214.0" class="xs mono" text-anchor="end">10</text>
+<text x="674" y="214.0" class="xs mono" text-anchor="start">shoulder.R</text>
+<text x="782" y="214.0" class="xs mono" text-anchor="end">3</text>
+<text x="666" y="229.0" class="xs mono" text-anchor="end">11</text>
+<text x="674" y="229.0" class="xs mono" text-anchor="start">upper_arm.R</text>
+<text x="782" y="229.0" class="xs mono" text-anchor="end">10</text>
+<text x="666" y="244.0" class="xs mono" text-anchor="end">12</text>
+<text x="674" y="244.0" class="xs mono" text-anchor="start">forearm.R</text>
+<text x="782" y="244.0" class="xs mono" text-anchor="end">11</text>
+<text x="666" y="259.0" class="xs mono" text-anchor="end">13</text>
+<text x="674" y="259.0" class="xs mono" text-anchor="start">hand.R</text>
+<text x="782" y="259.0" class="xs mono" text-anchor="end">12</text>
+<text x="666" y="274.0" class="xs mono" text-anchor="end">14</text>
+<text x="674" y="274.0" class="xs mono" text-anchor="start">thigh.L</text>
+<text x="782" y="274.0" class="xs mono" text-anchor="end">1</text>
+<text x="666" y="289.0" class="xs mono" text-anchor="end">15</text>
+<text x="674" y="289.0" class="xs mono" text-anchor="start">shin.L</text>
+<text x="782" y="289.0" class="xs mono" text-anchor="end">14</text>
+<text x="666" y="304.0" class="xs mono" text-anchor="end">16</text>
+<text x="674" y="304.0" class="xs mono" text-anchor="start">foot.L</text>
+<text x="782" y="304.0" class="xs mono" text-anchor="end">15</text>
+<text x="666" y="319.0" class="xs mono" text-anchor="end">17</text>
+<text x="674" y="319.0" class="xs mono" text-anchor="start">thigh.R</text>
+<text x="782" y="319.0" class="xs mono" text-anchor="end">1</text>
+<text x="666" y="334.0" class="xs mono" text-anchor="end">18</text>
+<text x="674" y="334.0" class="xs mono" text-anchor="start">shin.R</text>
+<text x="782" y="334.0" class="xs mono" text-anchor="end">17</text>
+<text x="666" y="349.0" class="xs mono" text-anchor="end">19</text>
+<text x="674" y="349.0" class="xs mono" text-anchor="start">foot.R</text>
+<text x="782" y="349.0" class="xs mono" text-anchor="end">18</text>
+<text x="630" y="389.0" class="xs" text-anchor="start">20 joints: joint j's parent is always &lt; j</text>
+<text x="630" y="373.0" class="xs muted" text-anchor="start">joint 0: the ancestor, no vertices</text>
+</svg>

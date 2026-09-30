@@ -329,4 +329,11 @@
       fast, and gets blamed on the animation. <code>skeleton_report::out_of_order</code> counts it,
       and the harness's control swaps two joints and checks that it does.
     </p>
+    <p>
+      <strong>Corrected after Lesson 7.7b:</strong> that is what an <em>unguarded</em> loop would do.
+      <code>compose_pose</code> treats a parent at or after its child as no parent, so the child composes
+      as a <em>root</em> — at its own offset from the model's origin, on every frame. The chain is cut,
+      not delayed; 7.7b measured it on a file written child-first
+      (<a href="07-07b-gltf-characters.html#skeleton">7.7b §4.3</a>).
+    </p>
   </div>

@@ -650,3 +650,73 @@ the file's entire job — would have been told to write 7.7 again.
 when one fact is recorded in *n* places, the probability that all *n* are updated is not high, and
 "be careful" has never once been the answer in this repository. Count the places, then write the
 check that compares them.
+
+## Lesson 7.7b — a character from a file somebody else wrote (2026-09-30)
+
+Written after 8.13, inserted between 7.7 and 7.8. The lesson's whole premise is Module 8's
+hazard — data you write yourself agrees with your reader by construction — so its fixture is a
+mannequin authored in Blender and exported by Blender's glTF exporter. Almost every finding below
+exists only because of that choice.
+
+### Test the reader on a file it did not write, and on one that needs the feature
+
+- **Blender's `skins.joints` is already parent-first while its node array is children-first.** A
+  sort tested only on Blender's file is a sort tested on nothing: `resorted` reads 0. The harness's
+  hand-written child-first chain (`mini_gltf`) is what exercises it. Keep one fixture per exporter
+  AND one per case the exporter happens not to produce.
+- **Blender writes every property of every bone**, constant ones as two-key STEP samplers (95 of the
+  mannequin's 114 channels). Equal STEP values need no held key; 7.7's reducer then deletes them.
+- **An exporter can paper over an authoring failure silently.** Bone heat left 25 nose-tip vertices
+  unweighted and Blender's exporter gave them full weight on an invented `neutral_bone` that nothing
+  animates (`primitive_extract.py`, "Is not assign to any bone"). Valid file, weights sum to 1, no
+  warning. A general count found it — `frozen_vertices`, vertices no clip can move — where a check
+  for the name would have found only this exporter's convention.
+
+### The specification, read, refuted three shipped claims
+
+- **An absent `inverseBindMatrices` means IDENTITY** (§5.28.1), not "bake from the rest pose".
+- **Normalised byte/short weights MUST sum to exactly 255/65535.** 7.6's tolerance of 0.02 was
+  argued from "four quantised weights can miss by 4/255 before anyone did anything wrong", which the
+  spec forbids. Now 1e-5: above float noise (Blender 8.57e-08), below 1/65535.
+- **"A glTF model dropped in unrotated presents its back" (6.6) was backwards**: the front faces +Z,
+  toward a camera looking down −Z. Only an asymmetric asset can test a facing claim; 6.6 had none.
+- The spec says a joint matrix uses the joint's GLOBAL transform, so the non-joint nodes above the hip
+  are part of every joint — 7.7's sketch said to drop channels on non-joint nodes, and dropping the
+  node itself moves the spec's own example a metre.
+
+### Two measurements refused my explanation, not the number
+
+- The sampled and cubic exports of one walk differ by 0.218° on the frames — and so do the two FILES
+  with no importer at all, which cleared the importer. My first explanation (Blender's Bezier handles
+  are not at a third of unequal intervals) was refused by asking Blender: every AUTO_CLAMPED handle
+  sits at 0.333. The real cause, found in `gltf2_blender_math.py`: the exporter carries a tangent as a
+  control point (value + one frame of slope) through `transform_rotation`, whose first line is
+  `rotation.normalize()`. A Hermite with the true tangents reproduces Blender's curve to 0.0000°;
+  with the exporter's, 0.1045/0.2182/0.1558 on shin.R frames 1-3, matching the files. Same lesson as
+  4.6's push crash: **ask the producer (run it, read its source) before naming a cause.**
+- Exercise 5's first-draft sketch predicted that a stricter import would barely change the key count
+  after reduction and that the two errors "add". Measured: 258/276/329 keys and 0.501/0.512/0.513°.
+  The argument for "a tenth" in `import.hpp` was rewritten around keys, not an error budget.
+
+### Instruments
+
+- **nlerp and slerp agree EXACTLY at the midpoint of an arc** — the chord's midpoint lies on the
+  bisector. A single midpoint probe reports zero error at every arc and never splits anything. Probe
+  near 0.22/0.78 (the importer uses seven probes per piece and keeps the midpoint as a control).
+- **Say which degrees.** 7.5's "0.13 at 30, 4.07 at 90" are SPHERE degrees (the half angle); the
+  same numbers in rotation degrees are 0.27 at 60 and 8.0 at 179.
+- **A blind xyzw -> wxyz copy is not one fixed error.** A four-way cyclic shift is an odd permutation
+  (det −1); left/right multiplication by a unit quaternion is det +1. Identity -> 180° about z,
+  (½,½,½,½) -> 0°, Blender's keys 111-180°. 7.7's "180° about a diagonal axis" was a guess.
+- **A forgotten Hermite t_d makes short intervals STEEPER** (tangents × 1/t_d), not flatter — my own
+  first comment had it backwards; the plot of the mistake corrected it (40.25° overshoot).
+- **A check that fired on a healthy rig**: 7.6's exact non-uniform-scale test counted 12 of 20
+  Blender joints on float noise (spread 8.94e-06). A tolerance is chosen from two measurements —
+  the noise, and the size that matters (5.1e-4° vs 22.6° of normal error).
+- **An out-of-order joint is a ROOT, not a one-frame lag.** 7.6's comment described an unguarded
+  loop; `compose_pose` guards `p >= j`. Plausible prose about code nobody exercised survives until
+  data arrives that exercises it.
+- **Past the end, glTF clamps and a looping clip wraps.** The end-to-end check's first draft sampled
+  at t = 1.013 and reported an 11.7 mm "error" that was 13 ms of walking. Sample inside the clip.
+- A 16.9 mm displacement is a few pixels in a close-up render at a metre; the `--close` camera was
+  tried twice and removed. Plot the vertices instead — pick the instrument by the size of the effect.
