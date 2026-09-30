@@ -4,6 +4,31 @@ Moved verbatim from STATE.md's `updated:` block on 2026-09-27, when that file be
 a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in step.
 
 ```text
+updated: 2026-09-29 (after Lesson 6.18b — 98 of 113 lessons published; the SECOND of the
+         four lessons inserted by the post-Module 8 review, placed between 6.18 and 7.1 by the
+         §17 protocol, and now the last lesson of Module 6, which is COMPLETE AGAIN: 20
+         lessons, ~162 h measured. 22 engine/demo/shader/CMake files changed, 13 of them
+         created (the course's first compute kernels); 71 checks green, 0 failures, against a
+         Release libengine.a; the student's post-6.18b tree (replayed from pins) builds
+         offline with 0 warnings and its demo shot matches within atomic-order noise.
+         ADDITIVE, PROVED: 27 harnesses (6.1-6.18 with 6.17b, 7.1-7.8) rerun before/after;
+         only timing lines, timestamps, log interleave and heap pointers differ — and one
+         real regression the rerun caught: verify_617's compile went 8.1 -> 13.5 us when
+         the frame graph learned buffers (per-access helpers at -O0), repaired with a
+         `writes` flag to 7.7-8.7 us. Later pins carried: 51 (Module 7 and 8's engine
+         CMakeLists, engine.hpp, root and demos CMakeLists), each page rebuilt and changing
+         by exactly the carried lines; 6.18's next link and Recap bridge and 7.1's prev link
+         re-pointed. Hours 10 -> 15 (estimate-hours.py on the working-tree diff: 18,590
+         words, 1,860 code + 962 comment lines, 5 exercises, raw 15.04); M6 ~157 -> ~162 h,
+         course ~774 -> ~779 h; 0.2's planner cum M6..M9 +5 (481/557/713/779) and its prose.
+         Out of scope and fixed (decisions: found-by-618b): blend_add's "associative" claim
+         in HEAD and the 6.13/6.14/6.16 pins with a callout on 6.13; Module 6's project tree,
+         which it never had (6.18b §19); 8.13's tree; a stray escape warning in
+         check-builders.py. Found after pinning and fixed before the commit: two header
+         comments edited after `make_t618b.py --pins` left their pins stale (no checker
+         compares a NEW file's pin with the file), and the page's cone median read 0.2466 rad
+         where the arithmetic gives 0.2469 (cos rounded before acos).)
+
 updated: 2026-09-28 (after Lesson 6.17b — 97 of 113 lessons published; the FIRST of the
          four lessons inserted by the post-Module 8 review. Written after 8.13 and placed
          between 6.17 and 6.18 by the authoring guide's §17 protocol, which it is the first

@@ -3562,16 +3562,21 @@ public:
     ///     alpha, so nothing has to agree about whether the source is
     ///     premultiplied — `blend.hpp`&#x27;s whole distinction evaporates, because a
     ///     source that adds light does not also subtract any.
-    ///   * **It is order-independent.** Addition is commutative and associative,
+    ///   * **It is order-independent, up to rounding.** Addition is commutative,
     ///     so additive geometry needs no back-to-front sort — which is why 6.11&#x27;s
     ///     `order_draws` exists for `over` and not for this. That is a real
     ///     property to have, and it is the reason particle systems reach for
-    ///     additive so often.
+    ///     additive so often. (Corrected by Lesson 6.18b: this line said
+    ///     &quot;commutative and associative&quot;, and floating-point addition is not
+    ///     associative. The blender rounds after every add, so the same sparks
+    ///     drawn in another order move the last bits of a half-float target —
+    ///     measured at up to 17 units in the last place. No sort needs to care;
+    ///     a golden-image test does.)
     ///   * **On a float target it does not clip.** The same add into an 8-bit
-    ///     UNORM target saturates at 1 and the operator stops being associative
-    ///     in practice; on `k_hdr_format` it simply accumulates. The bloom&#x27;s
-    ///     upsample chain depends on that, and it is a dependency worth stating,
-    ///     because the same pipeline pointed at the swapchain would be wrong.
+    ///     UNORM target saturates at 1 — an error of any size, not of the last
+    ///     bit; on `k_hdr_format` it simply accumulates. The bloom&#x27;s upsample
+    ///     chain depends on that, and it is a dependency worth stating, because
+    ///     the same pipeline pointed at the swapchain would be wrong.
     pipeline_desc&amp; blend_add();
 
     /// Test depth but do not write it — Lesson 6.11.

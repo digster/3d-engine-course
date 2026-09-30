@@ -1,0 +1,47 @@
+<svg viewBox="0 0 880 330" role="img" aria-labelledby="l618bf10-t l618bf10-d">
+  <title id="l618bf10-t">The lost update</title>
+  <desc id="l618bf10-d">Timelines of two lanes. With a plain read-add-write both read 7 and both write 8, so one increment is lost. With InterlockedAdd the lanes are serialised on the counter and each receives the value it replaced. Measured with a million threads: between 296 and 509 counted against 1,048,576.</desc>
+  <defs>
+    <marker id="e-i-l618bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf10" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Two lanes increment one counter. A read, an add and a write are three steps; an atomic is one.</text>
+<text x="20" y="50" class="xs mono t-bad" text-anchor="start">words[0] = words[0] + 1</text>
+<text x="20" y="76" class="xs" text-anchor="start">lane A</text>
+<rect x="110" y="60" width="86" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="76" class="xs mono" text-anchor="middle">read 7</text>
+<rect x="202" y="60" width="86" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="245" y="76" class="xs mono" text-anchor="middle">add -&gt; 8</text>
+<rect x="294" y="60" width="86" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="337" y="76" class="xs mono" text-anchor="middle">write 8</text>
+<text x="20" y="106" class="xs" text-anchor="start">lane B</text>
+<rect x="110" y="90" width="86" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="106" class="xs mono" text-anchor="middle">read 7</text>
+<rect x="202" y="90" width="86" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="245" y="106" class="xs mono" text-anchor="middle">add -&gt; 8</text>
+<rect x="386" y="90" width="86" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="429" y="106" class="xs mono" text-anchor="middle">write 8</text>
+<text x="110" y="134" class="xs mono t-bad" text-anchor="start">memory: 7 -&gt; 8 -&gt; 8   (two increments, one counted)</text>
+<text x="20" y="170" class="xs mono t-ok" text-anchor="start">InterlockedAdd(words[0], 1, before)</text>
+<text x="20" y="196" class="xs" text-anchor="start">lane A</text>
+<rect x="110" y="180" width="86" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="153" y="196" class="xs mono" text-anchor="middle">7 -&gt; 8</text>
+<text x="20" y="226" class="xs" text-anchor="start">lane B</text>
+<rect x="202" y="210" width="86" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.2"/>
+<text x="245" y="226" class="xs mono" text-anchor="middle">8 -&gt; 9</text>
+<text x="110" y="254" class="xs mono t-ok" text-anchor="start">memory: 7 -&gt; 8 -&gt; 9   (each lane gets what it replaced)</text>
+<rect x="520" y="44" width="340" height="118" rx="3" fill="none" stroke="#8f918a" stroke-width="1.3"/>
+<text x="532" y="64" class="xs muted" text-anchor="start">measured, 1,048,576 threads, one counter</text>
+<text x="532" y="88" class="xs mono t-bad" text-anchor="start">read-add-write      296 to 509</text>
+<text x="532" y="106" class="xs mono t-ok" text-anchor="start">InterlockedAdd      1,048,576</text>
+<text x="532" y="130" class="xs" text-anchor="start">Over 99.9% of the increments lost: the lanes of</text>
+<text x="532" y="144" class="xs" text-anchor="start">a SIMD group read in lock-step and write the same</text>
+<text x="532" y="158" class="xs" text-anchor="start">value, and groups overlap one another.</text>
+<text x="520" y="200" class="xs" text-anchor="start">The value an atomic returns is the lane's</text>
+<text x="520" y="214" class="xs" text-anchor="start">PLACE: no other lane receives it.</text>
+<text x="20" y="300" class="xs" text-anchor="start">The compaction does exactly this with the real pool: 44,915 living particles, 44,915 places taken, and the same count the CPU gets.</text>
+<text x="20" y="318" class="xs muted" text-anchor="start">Fifteen trials counted 296 to 509: which increments are lost is a property of the schedule, and the schedule is not ours.</text>
+</svg>

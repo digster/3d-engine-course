@@ -37,9 +37,9 @@
 <div class="wrap">
 
   <nav class="lesson-nav" aria-label="Lesson navigation (top)">
-    <a class="prev-l" href="06-18-text-overlay.html">
+    <a class="prev-l" href="06-18b-compute-particles.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+      <span class="ttl">6.18b — Compute Shaders: GPU Particles</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>
@@ -4850,6 +4850,7 @@ struct transform
 #include &lt;engine/gfx/mipmap.hpp&gt;
 #include &lt;engine/gfx/obj.hpp&gt;
 #include &lt;engine/gfx/overlay.hpp&gt;
+#include &lt;engine/gfx/particles.hpp&gt;
 #include &lt;engine/gfx/projector.hpp&gt;
 #include &lt;engine/gfx/raster.hpp&gt;
 #include &lt;engine/gfx/renderable.hpp&gt;
@@ -4861,10 +4862,12 @@ struct transform
 
 // ---- Graphics: the GPU side -----------------------------------------------
 #include &lt;engine/gfx/gpu_buffer.hpp&gt;
+#include &lt;engine/gfx/gpu_compute.hpp&gt;
 #include &lt;engine/gfx/gpu_debug.hpp&gt;
 #include &lt;engine/gfx/gpu_device.hpp&gt;
 #include &lt;engine/gfx/gpu_mesh.hpp&gt;
 #include &lt;engine/gfx/gpu_overlay.hpp&gt;
+#include &lt;engine/gfx/gpu_particles.hpp&gt;
 #include &lt;engine/gfx/gpu_pipeline.hpp&gt;
 #include &lt;engine/gfx/gpu_post.hpp&gt;
 #include &lt;engine/gfx/gpu_present.hpp&gt;
@@ -5606,6 +5609,23 @@ add_executable(gltf_view gltf_view/main.cpp)
 target_link_libraries(gltf_view PRIVATE engine::engine)
 engine_set_warnings(gltf_view)
 engine_use_assets(gltf_view)
+
+# ---- particles: Lesson 6.18b&#x27;s GPU particle system -------------------------
+#
+# The first program in the course whose frame is DECLARED through the frame
+# graph (6.17) rather than recorded by hand, and the first whose largest data
+# structure — a pool of 65,536 particles — is created, stepped, counted and drawn
+# without ever being read by the CPU. It links `engine::engine` only, like
+# `hello_cube`: everything it needs is in the public API, which is the claim the
+# lesson&#x27;s compute path is making.
+#
+# `engine_use_assets` for the HUD&#x27;s font; `engine_use_shaders` because the three
+# compute kernels are shaders like any other, copied beside the executable.
+add_executable(particles particles/main.cpp)
+target_link_libraries(particles PRIVATE engine::engine)
+engine_set_warnings(particles)
+engine_use_assets(particles)
+engine_use_shaders(particles)
 
 # ---- ecs_swarm: Lesson 5.8&#x27;s world, built out of components ---------------
 #
@@ -7068,9 +7088,9 @@ verify_71 — Lesson 7.1, Euler angles and their pathologies
   </ul>
 
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
-    <a class="prev-l" href="06-18-text-overlay.html">
+    <a class="prev-l" href="06-18b-compute-particles.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+      <span class="ttl">6.18b — Compute Shaders: GPU Particles</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>

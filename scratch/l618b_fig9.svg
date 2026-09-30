@@ -1,0 +1,50 @@
+<svg viewBox="0 0 880 330" role="img" aria-labelledby="l618bf9-t l618bf9-d">
+  <title id="l618bf9-t">A billboard from two IDs</title>
+  <desc id="l618bf9-d">A chain from SV_InstanceID through the alive list to a particle's slot, and a quad made of two counter-clockwise triangles whose six corners come from a table indexed by SV_VertexID and are placed along the camera's right and up vectors.</desc>
+  <defs>
+    <marker id="e-i-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-x-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker></defs>
+<defs><marker id="e-y-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker></defs>
+<defs><marker id="e-amb-l618bf9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">No vertex buffer: the instance ID finds the particle, the vertex ID finds the corner.</text>
+<rect x="20" y="44" width="128" height="44" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="84" y="62" class="xs mono" text-anchor="middle">SV_InstanceID</text>
+<text x="84" y="78" class="xs muted" text-anchor="middle">e.g. i = 2</text>
+<line x1="150.00" y1="66.00" x2="168.00" y2="66.00" stroke="#f0961e" stroke-width="1.2" marker-end="url(#e-amb-l618bf9)"/>
+<rect x="170" y="44" width="128" height="44" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="234" y="62" class="xs mono" text-anchor="middle">alive[i]</text>
+<text x="234" y="78" class="xs muted" text-anchor="middle">e.g. slot 40,961</text>
+<line x1="300.00" y1="66.00" x2="318.00" y2="66.00" stroke="#f0961e" stroke-width="1.2" marker-end="url(#e-amb-l618bf9)"/>
+<rect x="320" y="44" width="128" height="44" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="384" y="62" class="xs mono" text-anchor="middle">particles[slot]</text>
+<text x="384" y="78" class="xs muted" text-anchor="middle">position, age, life</text>
+<text x="20" y="112" class="xs" text-anchor="start">The list is the compaction's; the count of instances is in the indirect arguments, never on the CPU.</text>
+<rect x="130" y="152" width="140" height="140" rx="0" fill="none" stroke="#8f918a" stroke-width="1.3" stroke-dasharray="3 3"/>
+<path d="M 130.00,292.00 L 270.00,292.00 L 270.00,152.00 Z" fill="none" stroke="#f0961e" stroke-width="1.2"/>
+<path d="M 130.00,292.00 L 270.00,152.00 L 130.00,152.00 Z" fill="none" stroke="#f0961e" stroke-width="1.2" stroke-dasharray="4 2"/>
+<text x="122" y="306" class="xs mono" text-anchor="end">v0, v3</text>
+<text x="278" y="306" class="xs mono" text-anchor="start">v1</text>
+<text x="278" y="146" class="xs mono" text-anchor="start">v2, v4</text>
+<text x="122" y="146" class="xs mono" text-anchor="end">v5</text>
+<line x1="200.00" y1="222.00" x2="263.00" y2="222.00" stroke="#e05c5c" stroke-width="1.6" marker-end="url(#e-x-l618bf9)"/>
+<line x1="200.00" y1="222.00" x2="200.00" y2="159.00" stroke="#5ac878" stroke-width="1.6" marker-end="url(#e-y-l618bf9)"/>
+<text x="278" y="226" class="xs lbl-x" text-anchor="start">right</text>
+<text x="200" y="144" class="xs lbl-y" text-anchor="middle">up</text>
+<text x="200" y="328" class="xs" text-anchor="middle">two counter-clockwise triangles, facing the camera</text>
+<text x="440" y="150" class="xs mono" text-anchor="start">corner = table[v]           (-1,-1) (1,-1) (1,1) (-1,-1) (1,1) (-1,1)</text>
+<text x="440" y="166" class="xs mono" text-anchor="start">right  = row 0 of view_from_world     (what the view maps to +x)</text>
+<text x="440" y="182" class="xs mono" text-anchor="start">up     = row 1 of view_from_world</text>
+<text x="440" y="198" class="xs mono" text-anchor="start">centre = lerp(previous, position, alpha)</text>
+<text x="440" y="214" class="xs mono" text-anchor="start">world  = centre + (right * c.x + up * c.y) * radius</text>
+<text x="440" y="230" class="xs mono" text-anchor="start"></text>
+<text x="440" y="246" class="xs mono" text-anchor="start">worked, the demo's shot: eye (3.7633, 2.3, 6.1382) looking at (0, 1.3, 0)</text>
+<text x="440" y="262" class="xs mono" text-anchor="start">  right = (0.8525, 0, -0.5227)    up = (-0.0719, 0.9905, -0.1173)</text>
+<text x="440" y="278" class="xs mono" text-anchor="start">  view * right = (1, 0, 0) and view * up = (0, 1, 0), as rows must</text>
+<text x="440" y="294" class="xs mono" text-anchor="start">  a spark at (0.10, 1.00, 0.20), radius 0.03, corner v2 = (1, 1):</text>
+<text x="440" y="310" class="xs mono" text-anchor="start">  (0.1234, 1.0297, 0.1808) — computed by the engine's own look_at</text>
+</svg>

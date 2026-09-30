@@ -101,6 +101,7 @@
       <li><a href="#tangent">Tangent space</a></li>
       <li><a href="#shadows">Shadows, and the size of a sampling error</a></li>
       <li><a href="#local-lights">Local lights: distance, the cone, and a depth curve</a></li>
+      <li><a href="#particles">Particles: a cap, a clock, and a stiff term</a></li>
       <li><a href="#performance">Reasoning about cost</a></li>
       <li><a href="#pipelining">Two processors, overlapped</a></li>
       <li><a href="#rotation">Parameterising a rotation</a></li>
@@ -2936,6 +2937,112 @@
     </p>
   </div>
 
+  <h2 id="particles"><span class="num">7i</span>Particles: a cap, a clock, and a stiff term</h2>
+
+  <p>
+    Lesson 6.18b. Six tools, all chosen so that two processors running the same arithmetic get the
+    same answer: two about drawing random quantities without a sequence, two about when and where a
+    particle is born, and two about stepping it &mdash; one that cannot explode, and one that says
+    exactly how far a step falls short.
+  </p>
+
+  <div class="card">
+    <h3>Uniform directions in a cone <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ A(\theta) = 2\pi\,(1 - \cos\theta), \qquad 1 - \cos\theta = u\,(1 - \cos\theta_{\max}), \qquad \sin\theta = \sqrt{h\,(2 - h)},\; h = 1 - \cos\theta \]
+      <span class="eq-plain">The area of a cap of the unit sphere; choosing 1 - cos(theta) as a uniform fraction of the cap's height spreads directions evenly by area; and the sine from h without subtracting a number near one.</span>
+    </div>
+    <p>
+      A ring at angle &theta; has circumference 2&pi;&nbsp;sin&nbsp;&theta;, so drawing &theta;
+      uniformly puts as many directions in the tiny rings near the axis as in the long ones at the rim:
+      a bright core. The cap&rsquo;s area is linear in cos&nbsp;&theta;, so drawing <em>that</em>
+      uniformly is uniform by area; the angle around the axis is &phi; = 2&pi;<em>v</em>. Worked, for a
+      0.35&nbsp;rad cone: the cap height is 1&nbsp;&minus;&nbsp;cos&nbsp;0.35 = 0.0606; the median
+      sample has <em>h</em> = 0.0303, cos&nbsp;&theta; = 0.9697, &theta; = 0.2469&nbsp;rad (14.1&deg;),
+      against 0.175 uniform in angle. sin&nbsp;&theta; = &radic;(0.0303&nbsp;&times;&nbsp;1.9697) =
+      0.2443, with no digit lost to 1&nbsp;&minus;&nbsp;cos&sup2;&theta;.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A float from 24 bits, exactly <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ u = \left\lfloor \frac{x}{2^{8}} \right\rfloor \cdot 2^{-24} \;\in\; \left[0,\; 1 - 2^{-24}\right] \]
+      <span class="eq-plain">A 32-bit hash x becomes a float in [0, 1) by keeping its top 24 bits and multiplying by 2 to the minus 24.</span>
+    </div>
+    <p>
+      A float has a 24-bit significand, so every integer below 2<sup>24</sup> is exact, and
+      multiplying by a power of two changes only the exponent. Nothing rounds, so the CPU and the GPU
+      produce the same float from the same bits &mdash; a million of them, bit for bit, in 6.18b&rsquo;s
+      harness. The tempting <code>x / 4294967295.0f</code> rounds twice and can return exactly 1.0.
+      The bits come from a hash of the particle&rsquo;s serial, <code>pcg_hash(serial ^ seed)</code>,
+      because a hash of a name needs no shared state and no order.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A rate paid out in whole births <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ c \leftarrow c + r\,h, \quad n = \lfloor c \rfloor, \quad c \leftarrow c - n; \qquad t_k = \frac{k + 1 - c_0}{r}, \quad \text{age}_k = h - t_k \]
+      <span class="eq-plain">The carry accumulates rate times step and pays out its whole part; birth k of a step that began with carry c0 happens when the clock crosses k + 1, so it is h - t_k old at the step's end.</span>
+    </div>
+    <p>
+      20,000 a second at 1/60&nbsp;s is 333.33 a step. Truncating loses a third of a birth every step:
+      1,198,800 a minute instead of 1,200,000. The carry pays 333, 333, 334, and over one simulated
+      minute exactly 1,200,000. Placing each birth at its own time removes the shells a step&rsquo;s births
+      form when they all leave together: with <em>c</em><sub>0</sub> = 1/3, birth 0 happens 33.3&nbsp;&micro;s
+      into the step and is 16.63&nbsp;ms old at its end; birth 332 is 33.3&nbsp;&micro;s old.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>A ring indexed by a mask <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ \text{slot}(s) = s \mathbin{\&} (N - 1) = s \bmod N \quad (N = 2^{m}), \qquad \text{no live particle is overwritten} \iff \frac{N}{r} > \ell_{\max} \]
+      <span class="eq-plain">Serial s lives in slot s AND (N - 1), which is s mod N for a power-of-two N; a slot comes round every N / r seconds, which must exceed the longest life.</span>
+    </div>
+    <p>
+      Because 2<sup><em>m</em></sup> divides 2<sup>32</sup>, the mask stays consecutive when the
+      32-bit serial wraps (59.7&nbsp;hours at 20,000 a second); <code>s % 1000</code> jumps from slot
+      295 to 0 there. Worked: 65,536 / 20,000 = 3.28&nbsp;s beats a 3&nbsp;s life and cuts nothing
+      short; 32,768 / 20,000 = 1.64&nbsp;s cuts 76.4% of particles short by 0.685&nbsp;s on average.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Linear drag, stepped implicitly <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ \mathbf{v}' = \mathbf{v} + (\mathbf{g} - k\mathbf{v}')\,h \;\Longrightarrow\; \mathbf{v}' = \frac{\mathbf{v} + \mathbf{g}h}{1 + kh} \]
+      <span class="eq-plain">Evaluating the drag at the new velocity and solving gives a factor 1/(1 + kh), between 0 and 1 for every positive k and h.</span>
+    </div>
+    <p>
+      The explicit step multiplies the velocity by 1&nbsp;&minus;&nbsp;<em>kh</em>, which flips sign
+      past <em>kh</em> = 1 and grows past 2. Worked, <em>k</em> = 150/s at <em>h</em> = 1/60
+      (<em>kh</em> = 2.5), from 1&nbsp;m/s: ten explicit steps give 1.5<sup>10</sup> = 57.67&nbsp;m/s,
+      alternating in sign; ten implicit steps give 3.5<sup>&minus;10</sup> =
+      3.63&nbsp;&times;&nbsp;10<sup>&minus;6</sup>&nbsp;m/s. At <em>k</em> = 0.4/s the two agree to
+      4.4&nbsp;&times;&nbsp;10<sup>&minus;5</sup> a step. It is the simplest implicit step there is:
+      one linear term, solved by one division. Lesson 8.1 compares the integrators properly.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>How far a stepped bounce falls short <span class="from">Lesson 6.18b</span></h3>
+    <div class="eq">
+      \[ y_{\max} = \max_n \sum_{j=1}^{n} (v_0 - j g h)\,h \;\approx\; \frac{v_0^{2}}{2g} - \frac{v_0 h}{2}, \qquad \frac{\Delta y}{y} \approx \frac{g h}{v_0} \]
+      <span class="eq-plain">A semi-implicit step launched upward at v0 peaks half a step's travel below the true height v0^2/2g, a relative shortfall of g h / v0 that grows as the bounce shrinks.</span>
+    </div>
+    <p>
+      The sum is <em>n v</em><sub>0</sub><em>h</em> &minus; <em>gh</em>&sup2;<em>n</em>(<em>n</em>+1)/2,
+      largest near <em>n</em> = <em>v</em><sub>0</sub>/(<em>gh</em>). A bounce with restitution
+      <em>e</em> should keep <em>e</em>&sup2; of the height: 0.2025 at <em>e</em> = 0.45. Worked, from
+      1&nbsp;m: <em>v</em><sub>0</sub> = 0.45&nbsp;&times;&nbsp;&radic;(2&nbsp;&middot;&nbsp;9.81) =
+      1.99&nbsp;m/s, shortfall 9.81&nbsp;&times;&nbsp;(1/60)/1.99 = 8.2%, so
+      0.2025&nbsp;&times;&nbsp;0.918 = 0.186 against a measured 0.1848. The later, slower bounces fall
+      further short (0.172, then 0.103), and a quarter of the step brings them to 0.197, 0.196 and 0.181.
+    </p>
+  </div>
+
   <h2 id="performance"><span class="num">8</span>Reasoning about cost</h2>
 
   <p>
@@ -4586,7 +4693,11 @@ The singular values are sqrt(1 + |sin p|), 1, sqrt(1 - |sin p|).</span>
     transfer function</strong> · the TBN basis · tonemapping curves · spherical harmonics
     for irradiance · <strong>the inverse-square law</strong> · <strong>the range window at its
     edge</strong> · <strong>a cone in cosine, and its solid angle</strong> · <strong>a bias through
-    the depth curve</strong> · <strong>the axial slope</strong> (§7h, all five from 6.17b).
+    the depth curve</strong> · <strong>the axial slope</strong> (§7h, all five from 6.17b) ·
+    <strong>uniform directions in a cone</strong> · <strong>a float from 24 bits, exactly</strong> ·
+    <strong>a rate paid out in whole births</strong> · <strong>a ring indexed by a mask</strong> ·
+    <strong>linear drag, stepped implicitly</strong> · <strong>how far a stepped bounce falls
+    short</strong> (§7i, all six from 6.18b).
   </div>
 
   <div class="pending">

@@ -131,10 +131,17 @@ completed:
          `in progress` with all 18 lessons published, and a dead prereq link
          (`06-01-linear-srgb.html` — the file is `06-01-linear-and-srgb.html`).
          Five catches on one lesson, which is the most it has ever found.)
+  - 6.18b Compute Shaders: GPU Particles   (inserted; written 2026-09-29, after 8.13)
+        (Appended at the time, in lesson order — after 6.18, the lesson it follows — not
+         at the end of the roll. check-curriculum.py caught the missing manifest entry and
+         this line before the commit.)
   ===> MODULE 6 COMPLETE — 18 lessons, ~93 h, the longest module in the course.
        The renderer is modern: linear light, PBR, materials, glTF, normal maps,
        shadows and cascades, mipmaps, transparency, HDR + tonemapping, bloom,
        antialiasing, IBL, culling + instancing, a frame graph, and text. <===
+       (2026-09-29: COMPLETE AGAIN at 20 lessons, ~162 h measured, once the review's two
+        insertions landed — 6.17b's lamps and 6.18b's compute. Its project tree, which the
+        module never had, is on 6.18b's Recap.)
   - 7.1  Euler Angles and Their Pathologies
         (Appended at the time. check-curriculum.py caught 6.18's TWO dead `next`
          links the moment the page existed — exactly what STATE predicted, and

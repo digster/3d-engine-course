@@ -602,6 +602,43 @@ capabilities:
       checks. And the honest half: `discard_write` on a blended target compiles
       happily and derives DONT_CARE. **A frame graph relocates a dataflow claim;
       it does not verify it.**
+  - 6.18b THE ENGINE CAN COMPUTE, AND A SIMULATION CAN LIVE ON THE GPU WITHOUT EVER COMING BACK.
+    105 -> 108 public headers, 71 -> 74 sources, 26 -> 32 shaders (the first four compute
+    kernels). 71 checks green, 0 failures (verify_618b §A-§L, Release libengine.a).
+    gpu_shader: compute_resources + parse_compute_reflection (shadercross's nine keys; a
+    zero thread group is rejected). gpu_compute.{hpp,cpp}: gpu_compute_pipeline::load(dev,
+    name) — code + reflection, SDL_CreateGPUComputePipeline with the reflected thread
+    counts, debug-named; groups_for (ceiling division), groups_for_items.
+    particles.{hpp,cpp}, THE CPU SPECIFICATION: particle (three 16-byte rows, 48 B, offsets
+    static_asserted), is_alive, pcg_hash, unit_float (exact), particle_rng, emitter_settings
+    (a fountain: 0.35 rad cone, 4-7 m/s, 1.5-3 s, 20,000/s, drag 0.4/s, floor e 0.45,
+    friction 0.25), emission_clock (double carry: 333/333/334, 1,200,000 a minute),
+    emission_window, slot_of (serial & mask), birth_age, step_uniforms (144 B: everything
+    the same for every thread computed once), make_step_uniforms, spawn_particle (uniform
+    on the cap; Duff et al.'s ONB built on the CPU), integrate_particle (semi-implicit
+    Euler, implicit drag (v+gh)/(1+kh), a floor with restitution and friction), step_slot,
+    particle_pool, particle_capacity_for (a power of two >= 64).
+    gpu_particles.{hpp,cpp}: particle_draw_uniforms (112 B), particle_compact_uniforms,
+    camera_right/camera_up; gpu_particles owns state (COMPUTE_READ|WRITE|GRAPHICS_READ),
+    alive, args (INDIRECT|COMPUTE_READ|WRITE); record_step, record_clear, record_compact
+    (InterlockedAdd -> alive list + {6, N, 0, 0}), record_draw (ONE
+    SDL_DrawGPUPrimitivesIndirect, no vertex buffer, additive into HDR, depth-tested and
+    unwritten); simulate, count_living, upload_cpu_state (the "before": capacity x 48 B a
+    frame through a cycled stream buffer), set_state.
+    frame_graph LEARNS BUFFERS: fg_buffer, import_buffer, add_compute_pass, read_buffer,
+    write_buffer (cycles), keep_buffer (never), validation (<= 8 read-write slots, unique;
+    a render pass cannot write a buffer; a compute pass has no attachments), execute begins
+    compute passes with the read-write array in slot order, dump prints reads and writes.
+    shaders: particles_step/clear/compact/probe.comp.hlsl; particle.vert (storage read in
+    the vertex stage, a corner table instead of vertices) and particle.frag (soft disc).
+    demo: particles [--shot out.ppm] [--cpu] [--no-bloom] [--count N]; C CPU/GPU, B bloom,
+    Space pauses the emitter, G dumps the frame graph (with --log gpu=info). The first
+    program in the course whose frame is DECLARED; bloom and display stay hand-recorded.
+    WHAT IS MEASURED RATHER THAN CLAIMED: CPU and GPU agree exactly on every integer and
+    within 1.67 um on positions over 10 s; at 1M particles the CPU path costs 3.75 ms of
+    stepping + 6.87 ms of upload = 10.62 ms a frame against 0.39 ms on the GPU; cycle=true
+    breaks the pool two different ways on Metal; clear and compact in ONE pass happens to
+    work on Metal (20/20) and is still wrong on the other backends' reading.
   - 6.17b THE ENGINE HAS LAMPS, AND EACH ONE CAN CAST A SHADOW.
     light.hpp: local_light {kind point|spot, position, direction (of TRAVEL),
     colour, intensity = irradiance at 1 m (default k_reference_irradiance, so a

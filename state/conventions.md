@@ -5,6 +5,60 @@ a compact resume key (CLAUDE.md §9). Append here; keep STATE.md's headline in s
 
 ```text
 conventions:
+  compute_layout: A COMPUTE SHADER'S UNIFORMS ARE b[n] IN space2; READ-ONLY STORAGE IS t[n] IN space0, READ-WRITE IS u[n] IN space1 AND IS BOUND WHEN THE PASS BEGINS.
+        6.18b, gpu_compute.{hpp,cpp} + shaders/particles_*.comp.hlsl + docs/conventions.html §7q.
+        FIXED BY SDL_GPU (SDL_gpu.h, on SDL_CreateGPUComputePipeline): t[n] space0 holds
+        sampled textures, then read-only storage textures, then read-only storage buffers;
+        u[n] space1 read-write storage textures, then read-write storage buffers; b[n]
+        space2 uniform blocks. NOT the graphics stages' spaces (vertex 0/1, fragment 2/3),
+        which a declaration copied from a vertex shader silently inherits. Read-write
+        resources are an ARRAY given to SDL_BeginGPUComputePass, indexed by u slot; read-only
+        buffers via SDL_BindGPUComputeStorageBuffers; uniforms via
+        SDL_PushGPUComputeUniformData. A compute pipeline IS its shader (no SDL_GPUShader
+        object): gpu_compute_pipeline::load reads the code AND shadercross's reflection JSON
+        and takes threadcount_x/y/z from it — never retyped. groups_for(items, per_group) is
+        a ceiling division; a kernel guards `if (id >= count) return;` for the tail.
+  storage_rows: A STORAGE STRUCT IS 16-BYTE ROWS — EVERY float3 FOLLOWED BY EXACTLY ONE SCALAR, OR A float4 — BECAUSE TWO COMPILERS PAD ANYTHING ELSE TWO WAYS.
+        6.18b, particles.hpp (particle: position/age, velocity/life, previous/serial = 48 B,
+        every offset static_asserted) + step_uniforms (nine rows, 144 B). MEASURED:
+        {float3, float3, float} is 28 B with velocity at 12 in C++ (and under HLSL's
+        StructuredBuffer rules), but glslang's SPIR-V puts the members at 0/16/28 with a
+        32 B stride (spirv-dis, verify_618b §A); read through the C++ struct every
+        particle is wrong by a DIFFERENT amount. The row rule makes all three agree by
+        construction; 6.17b's `storage` (every member a float4, matrices as rows) is the
+        special case. DXC's layout not measured here (no DXC on this machine) — CI's
+        Windows job is where it would be.
+  cycle: cycle IS A BUFFER'S LOAD OP: true ONLY FOR A PASS THAT OVERWRITES WHAT IT WRITES; A BUFFER A PASS READS AND WRITES IS NEVER CYCLED.
+        6.18b, gpu_particles.hpp + frame_graph (write_buffer cycles, keep_buffer never).
+        SDL_gpu.h: a cycled buffer's contents are UNDEFINED. MEASURED ON METAL (verify_618b
+        §I, 120 steps, a fresh pool per mode): cycle=false back to back -> 38,284 alive,
+        exactly the CPU; cycle=true back to back -> 667/668 (the pool becomes THREE pools,
+        each advancing every third step); cycle=true with a FENCE wait per step -> 334, one
+        step's births (every step starts empty); cycle=true with SDL_WaitForGPUIdle per
+        step -> 38,284. SDL's Metal backend releases a buffer's references only in a later
+        submit's cleanup or WaitForGPUIdle, so "the GPU is idle" is not what makes it safe.
+        The same rule as a render target's load op (4.7): discard only what you overwrite.
+  gpu_random: A RANDOM NUMBER ON THE GPU IS A HASH OF A NAME (pcg_hash OF A SERIAL, unit_float OF ITS TOP 24 BITS), NEVER THE NEXT VALUE OF A SEQUENCE.
+        6.18b, particles.hpp. particle_rng: state = pcg_hash(serial ^ seed); each draw
+        hashes the state again (Jarzynski & Olano 2020, PCG's output function; constants
+        via Nathan Reed). unit_float(x) = (x >> 8) * 2^-24: exact, in [0, 1 - 2^-24], the
+        same bits on CPU and GPU (1,048,576 of 1,048,576). REFUSED CANDIDATES (§C): an LCG
+        seeded by index — consecutive particles correlate +0.9977, all pairs on one line
+        (128 cells of the square); frac(sin(x) * 43758.5453) — 4,178 distinct values of
+        65,536, correlation 0.4963 past 2^24, and 480,168 of 1,048,576 differ CPU vs GPU,
+        because the GPU's sin is a fast approximation of the CPU's and x 43758 magnifies it.
+  float_contract: A GPU COMPUTATION IS HELD TO ITS CPU SPECIFICATION EXACTLY ON INTEGERS AND DECISIONS, AND WITHIN A STATED TOLERANCE ON FLOATS.
+        6.18b, verify_618b §G. The CPU function (step_slot) is the specification; the
+        kernel mirrors its ORDER OF OPERATIONS and takes every per-step constant from the
+        same uniform block (inv_rate, inv_drag_h, the ONB — computed once on the CPU, so
+        both processors multiply by the same float). EXACT: serials, slots, alive/dead,
+        the count (44,915 = 44,915, zero disagreements at every checkpoint). TOLERANCE:
+        positions within 1.67 um over 10 s (1.38 at 10 s; 44,889 of 44,915 within 1 um;
+        only 5,264 bit-identical). The CPU reference itself moves with the build: debug vs
+        Release differ on 897 of 44,915 (worst 0.596 um), all agreeing on who is alive —
+        the optimiser MAY fuse a multiply-add as the GPU's compiler may (not isolated), so a
+        tolerance is not a concession to the GPU. Additive blending is the same contract
+        one level up: see decisions found-by-618b.1.
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
         7.4, engine/include/engine/math/quat.hpp + docs/conventions.html §8e.
         `struct quat { float w; vec3 v; }` -> in memory w, x, y, z. MOST GPU

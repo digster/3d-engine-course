@@ -1796,3 +1796,88 @@ measurement that disagreed with a claim, and several by an instrument that was i
   colour; the renders said otherwise (R and G down four codes, B unchanged): the bulb's shadow of
   the slab falls across the spot's pool and removes its warm light. The first draft of the caption
   said "the pools are identical".
+
+## Lesson 6.18b — compute shaders and GPU particles (2026-09-29)
+
+Written after 8.13 and inserted between 6.18 and 7.1: the course's first compute kernels. As in
+6.17b, most entries are predictions the harness refused.
+
+- **`cycle` is a buffer's load op, and a fence is not what makes cycling safe.** `SDL_gpu.h` says a
+  cycled buffer's contents are undefined; `verify_618b` §I measured what "undefined" is on Metal,
+  120 steps with one command buffer each and a FRESH pool per mode: `cycle = false` keeps the CPU's
+  38,284 particles; `cycle = true` back to back leaves 667–668 — the pool becomes THREE pools, each
+  advancing every third step; with a fence wait after every step, 334 — every step starts from an
+  empty buffer; with `SDL_WaitForGPUIdle`, 38,284. The draft said cycling only bites a busy GPU. It
+  bites an idle one too, because SDL's Metal backend drops a buffer's references in a LATER submit's
+  cleanup or in WaitForGPUIdle, not when the fence signals. Rule: cycle only what the pass
+  overwrites whole; the frame graph derives it (`write_buffer` cycles, `keep_buffer` never).
+
+- **A probe that reuses state between modes measures the previous mode.** §I's first version ran the
+  four cycle modes on one rig's pool, and two checks failed with serials up to 33,332 — survivors of
+  the mode before. A fresh `gpu_particles` per mode gave the clean table above. Any experiment whose
+  subject is "what was in the buffer" must start each arm from a buffer nobody else has touched.
+
+- **A race that the machine hides is still a race — say which half is observed.** `clear` and
+  `compact` in ONE compute pass: 20 exact counts in 20 trials on Metal, because SDL's Metal encoder
+  runs the dispatches in order. SDL's own header says a dependent dispatch MUST begin a new pass, and
+  the Vulkan and D3D12 backends record no barrier between dispatches of one pass. The page says the
+  race is inferred from the contract and the source, not observed — a harness that cannot show a
+  failure on this machine must not be quoted as showing its absence.
+
+- **Two compilers, two layouts: a storage struct is 16-byte rows.** `{float3, float3, float}` is
+  28 bytes with the second member at 12 in C++ (and in HLSL's StructuredBuffer packing), but glslang's
+  SPIR-V — this toolchain on macOS — puts the members at 0/16/28 with a 32-byte stride (`spirv-dis`).
+  Read through the C++ struct every particle is wrong by a different amount, which looks like a
+  physics bug. Every float3 followed by exactly one scalar makes the layouts agree by construction;
+  DXC's was not measured (no DXC here), and the lesson says so.
+
+- **A GPU random number is a hash of a name, and the popular one is three bugs.** Measured (§C):
+  an LCG seeded by particle index correlates consecutive particles at +0.9977 (every pair on one line
+  through the unit square); `frac(sin(x) * 43758.5453)` has only 4,178 distinct outputs from 65,536
+  inputs, a neighbour correlation of 0.4963 once `float(i)` cannot hold odd integers (past 2^24), and
+  480,168 of 1,048,576 outputs differing between CPU and GPU because the GPU's `sin` is a fast
+  approximation. The draft predicted "half the cells empty" for the sine hash; it fills every cell and
+  fails differently. `pcg_hash(serial ^ seed)` and `unit_float` (top 24 bits × 2^-24) are bit-identical
+  on both processors.
+
+- **There is no bit-exact float reference, even on one processor.** The CPU specification compiled
+  debug and Release disagrees on 897 of 44,915 particles after ten seconds (worst 0.60 µm), while the
+  GPU sits within 1.67 µm of either. So the contract is exact integers and decisions (serials, slots,
+  alive/dead, the count — zero disagreements) and a STATED tolerance on floats. The floor was
+  predicted to be where CPU and GPU part (a particle a few ULPs either side of the plane); it is the
+  opposite — a bounce snaps the height to exactly `ground` on both, discarding accumulated error.
+
+- **A stepped bounce falls short by half a step's travel, and the shortfall grows as it shrinks.**
+  Restitution 0.45 predicts height ratios of e² = 0.2025; §F measured 0.185, 0.172, 0.103. The
+  semi-implicit peak is v0²/2g − v0h/2, a relative shortfall of gh/v0: 8.2% on the first bounce
+  (0.186 predicted, 0.1848 measured). A quarter step gives 0.197, 0.196, 0.181. The draft blamed
+  nothing and expected e² every time.
+
+- **Shells need narrow speeds.** Births all placed at a step's end make the fountain come out in
+  shells one step's travel apart — measured lumpiness 0.912 against 0.213 when births are spread
+  through the step, but only with a narrow speed range. With 4–7 m/s the speeds smear the shells by
+  themselves (0.232 against 0.221). The fix is still right (one multiply-add per birth, and what the
+  physics says); the page shows both.
+
+- **The comment's reason was refused, not the choice.** `emission_clock`'s first comment said a float
+  carry would lose its fraction after 2^24 births. It would not — the clock subtracts its whole part
+  every step, so it never holds more than 334.34 — and over a simulated hour a float and a double carry
+  differ by one birth. The double stays; the comment now states only measured facts.
+
+- **Floating-point additive blending is commutative, not associative.** `blend_add`'s comment (since
+  6.13) said "commutative and associative". §K drew the same sparks in two orders into the half-float
+  HDR target: thousands of the 172,800 channels differ, by up to 17 ULPs, and the total light agrees to
+  1e-4. No sort is needed; a golden image of additive geometry needs a tolerance. Corrected in HEAD and
+  in every pin that lists the file (decisions: found-by-618b).
+
+- **A helper at -O0 can be a measurable regression.** Teaching the frame graph buffers added small
+  per-access helper calls to `compile`; the additivity rerun of 6.17's harness (debug engine) moved
+  compile from 8.1 to 13.5 µs. A `writes` flag stored on the access, and fields packed after `init`,
+  brought it to 7.7–8.7 µs. Only the before/after rerun of an EARLIER lesson's harness could see it.
+
+- **A headless GPU program still needs the video subsystem, and a shot must not depend on wall time.**
+  `particles --shot` claims no window, and SDL still refused the device ("Video subsystem not
+  initialized") until `extra_subsystems` asked for `SDL_INIT_VIDEO`. And the shot's step count varied
+  run to run because the fixed-step accumulator was fed real time during setup: shot mode now skips
+  fixed steps and pre-rolls exactly 150. Two runs of the same binary still differ in 1,703 bytes by at
+  most one code — the atomic order of the alive list decides which spark is drawn last.

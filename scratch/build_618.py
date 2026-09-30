@@ -275,9 +275,9 @@ TAIL = """
       <span class="dir">Index</span>
       <span class="ttl">All lessons</span>
     </a>
-    <a class="next-l" href="07-01-euler-angles.html">
+    <a class="next-l" href="06-18b-compute-particles.html">
       <span class="dir">Next →</span>
-      <span class="ttl">7.1 — Euler Angles and Their Pathologies</span>
+      <span class="ttl">6.18b — Compute Shaders: GPU Particles</span>
     </a>
   </nav>
 

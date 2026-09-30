@@ -1,0 +1,87 @@
+<svg viewBox="0 0 880 380" role="img" aria-labelledby="l618bf13-t l618bf13-d">
+  <title id="l618bf13-t">The particle frame, declared</title>
+  <desc id="l618bf13-d">A grid of the demo's seven passes against its five resources. The three steps keep the particle state and are derived cycle no; the clear writes the arguments with cycle yes; the compaction keeps the arguments and writes the list; the sparks' render pass reads all three buffers and keeps the scene's colour and depth.</desc>
+  <defs>
+    <marker id="e-i-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amb-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<defs><marker id="e-blu-l618bf13" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">What the demo declares, and what the graph derives from it (in amber).</text>
+<rect x="134" y="52" width="94" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="181.0" y="67" class="xs mono" text-anchor="middle">step 0</text>
+<text x="181.0" y="88" class="xs muted" text-anchor="middle">compute</text>
+<rect x="240" y="52" width="94" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="287.0" y="67" class="xs mono" text-anchor="middle">step 1</text>
+<text x="287.0" y="88" class="xs muted" text-anchor="middle">compute</text>
+<rect x="346" y="52" width="94" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="393.0" y="67" class="xs mono" text-anchor="middle">step 2</text>
+<text x="393.0" y="88" class="xs muted" text-anchor="middle">compute</text>
+<rect x="452" y="52" width="94" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="499.0" y="67" class="xs mono" text-anchor="middle">clear args</text>
+<text x="499.0" y="88" class="xs muted" text-anchor="middle">compute</text>
+<rect x="558" y="52" width="94" height="22" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="605.0" y="67" class="xs mono" text-anchor="middle">compact</text>
+<text x="605.0" y="88" class="xs muted" text-anchor="middle">compute</text>
+<rect x="664" y="52" width="94" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="711.0" y="67" class="xs mono" text-anchor="middle">scene</text>
+<text x="711.0" y="88" class="xs muted" text-anchor="middle">render</text>
+<rect x="770" y="52" width="94" height="22" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="817.0" y="67" class="xs mono" text-anchor="middle">sparks</text>
+<text x="817.0" y="88" class="xs muted" text-anchor="middle">render</text>
+<text x="118" y="120" class="xs" text-anchor="end">particle state</text>
+<line x1="128" y1="116" x2="870" y2="116" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="118" y="168" class="xs" text-anchor="end">draw args</text>
+<line x1="128" y1="164" x2="870" y2="164" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="118" y="216" class="xs" text-anchor="end">alive list</text>
+<line x1="128" y1="212" x2="870" y2="212" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="118" y="264" class="xs" text-anchor="end">hdr</text>
+<line x1="128" y1="260" x2="870" y2="260" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="118" y="312" class="xs" text-anchor="end">depth</text>
+<line x1="128" y1="308" x2="870" y2="308" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<rect x="134" y="102" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="181.0" y="114" class="xs mono" text-anchor="middle">keep  @0-&gt;1</text>
+<text x="181.0" y="127" class="xs t-hi" text-anchor="middle">cycle no</text>
+<rect x="240" y="102" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="287.0" y="114" class="xs mono" text-anchor="middle">keep  @1-&gt;2</text>
+<text x="287.0" y="127" class="xs t-hi" text-anchor="middle">cycle no</text>
+<rect x="346" y="102" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="393.0" y="114" class="xs mono" text-anchor="middle">keep  @2-&gt;3</text>
+<text x="393.0" y="127" class="xs t-hi" text-anchor="middle">cycle no</text>
+<rect x="558" y="102" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="605.0" y="114" class="xs mono" text-anchor="middle">read  @3</text>
+<rect x="770" y="102" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="817.0" y="114" class="xs mono" text-anchor="middle">read  @3</text>
+<rect x="452" y="150" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="499.0" y="162" class="xs mono" text-anchor="middle">write @0-&gt;1</text>
+<text x="499.0" y="175" class="xs t-hi" text-anchor="middle">cycle YES</text>
+<rect x="558" y="150" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="605.0" y="162" class="xs mono" text-anchor="middle">keep  @1-&gt;2</text>
+<text x="605.0" y="175" class="xs t-hi" text-anchor="middle">cycle no</text>
+<rect x="770" y="150" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="817.0" y="162" class="xs mono" text-anchor="middle">read  @2</text>
+<text x="817.0" y="175" class="xs t-hi" text-anchor="middle">(indirect)</text>
+<rect x="558" y="198" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="605.0" y="210" class="xs mono" text-anchor="middle">write @0-&gt;1</text>
+<text x="605.0" y="223" class="xs t-hi" text-anchor="middle">cycle YES</text>
+<rect x="770" y="198" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="817.0" y="210" class="xs mono" text-anchor="middle">read  @1</text>
+<rect x="664" y="246" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="711.0" y="258" class="xs mono" text-anchor="middle">clear @0-&gt;1</text>
+<text x="711.0" y="271" class="xs t-hi" text-anchor="middle">STORE</text>
+<rect x="770" y="246" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="817.0" y="258" class="xs mono" text-anchor="middle">keep  @1-&gt;2</text>
+<text x="817.0" y="271" class="xs t-hi" text-anchor="middle">LOAD</text>
+<rect x="664" y="294" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="711.0" y="306" class="xs mono" text-anchor="middle">clear @0-&gt;1</text>
+<text x="711.0" y="319" class="xs t-hi" text-anchor="middle">STORE</text>
+<rect x="770" y="294" width="94" height="30" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.1"/>
+<text x="817.0" y="306" class="xs mono" text-anchor="middle">keep  @1-&gt;2</text>
+<text x="817.0" y="319" class="xs t-hi" text-anchor="middle">LOAD, DONT_CARE</text>
+<text x="20" y="338" class="xs" text-anchor="start">Schedule, from the declarations alone: step 0, step 1, step 2, clear args, compact, scene, sparks. (The harness's frame, without the scene, is the same order.)</text>
+<text x="20" y="354" class="xs" text-anchor="start">hdr is imported (the post stack reads it next), so its last store is STORE; depth is the graph's own, so the sparks' pass ends DONT_CARE.</text>
+<text x="20" y="370" class="xs muted" text-anchor="start">Refused at compile: a render pass that writes a buffer, a compute pass with an attachment, read-write slots with a gap or a repeat.</text>
+</svg>

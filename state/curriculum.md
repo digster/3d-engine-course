@@ -717,4 +717,11 @@ curriculum: 107 lessons, ~510 h, 10 modules   (reshaped 2026-09-08 — see `road
   working-tree diff (the lesson commit is exactly it) — 16,449 prose words, 1,194
   code + 1,030 comment lines, 5 exercises, raw 11.79. M6 ~155 -> ~157 h; course
   ~772 -> ~774 h; 0.2's planner cum M6..M9 +2 (476/552/708/774).
+  6.18b PUBLISHED 2026-09-29 at 15 h (planned 10): estimate-hours.py priced on the
+  working-tree diff, since the lesson commit does not exist when the index is written —
+  18,590 prose words, 1,860 code + 962 comment lines, 5 exercises, raw 15.04. The plan
+  missed by half for the reason Module 8's did: four kernels, two graphics shaders, a
+  frame-graph extension AND a CPU specification of everything the kernels do. M6 ~157 ->
+  ~162 h (20 lessons, complete again); course ~774 -> ~779 h; 0.2's planner cum M6..M9
+  +5 (481/557/713/779), and its prose ("779", "thirty-six months").
 ```

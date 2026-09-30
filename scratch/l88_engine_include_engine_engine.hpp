@@ -181,6 +181,7 @@
 #include <engine/gfx/mipmap.hpp>
 #include <engine/gfx/obj.hpp>
 #include <engine/gfx/overlay.hpp>
+#include <engine/gfx/particles.hpp>
 #include <engine/gfx/projector.hpp>
 #include <engine/gfx/raster.hpp>
 #include <engine/gfx/renderable.hpp>
@@ -192,10 +193,12 @@
 
 // ---- Graphics: the GPU side -----------------------------------------------
 #include <engine/gfx/gpu_buffer.hpp>
+#include <engine/gfx/gpu_compute.hpp>
 #include <engine/gfx/gpu_debug.hpp>
 #include <engine/gfx/gpu_device.hpp>
 #include <engine/gfx/gpu_mesh.hpp>
 #include <engine/gfx/gpu_overlay.hpp>
+#include <engine/gfx/gpu_particles.hpp>
 #include <engine/gfx/gpu_pipeline.hpp>
 #include <engine/gfx/gpu_post.hpp>
 #include <engine/gfx/gpu_present.hpp>

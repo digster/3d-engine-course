@@ -1,0 +1,97 @@
+<svg viewBox="0 0 880 356" role="img" aria-labelledby="l618bf3-t l618bf3-d">
+  <title id="l618bf3-t">The record, laid out</title>
+  <desc id="l618bf3-d">A byte ruler from 0 to 48. The engine's particle and the shader's Particle occupy identical offsets in three 16-byte rows. The tempting struct of two float3s and a float is 28 bytes with velocity at 12 in C++ and under HLSL rules, but 32 bytes with velocity at 16 under the SPIR-V rules this toolchain applies; reading the GPU's bytes through the C++ struct gives velocity (0, 4, 5) and age 6.</desc>
+  <defs>
+    <marker id="e-i-l618bf3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">Three 16-byte rows are laid out the same by every rule; two float3s in a row are not.</text>
+<text x="180" y="50" class="xs muted" text-anchor="end">byte</text>
+<line x1="190.0" y1="54" x2="190.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="190.0" y="50" class="xs mono muted" text-anchor="middle">0</text>
+<line x1="242.0" y1="54" x2="242.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="242.0" y="50" class="xs mono muted" text-anchor="middle">4</text>
+<line x1="294.0" y1="54" x2="294.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="294.0" y="50" class="xs mono muted" text-anchor="middle">8</text>
+<line x1="346.0" y1="54" x2="346.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="346.0" y="50" class="xs mono muted" text-anchor="middle">12</text>
+<line x1="398.0" y1="54" x2="398.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="398.0" y="50" class="xs mono muted" text-anchor="middle">16</text>
+<line x1="450.0" y1="54" x2="450.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="450.0" y="50" class="xs mono muted" text-anchor="middle">20</text>
+<line x1="502.0" y1="54" x2="502.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="502.0" y="50" class="xs mono muted" text-anchor="middle">24</text>
+<line x1="554.0" y1="54" x2="554.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="554.0" y="50" class="xs mono muted" text-anchor="middle">28</text>
+<line x1="606.0" y1="54" x2="606.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="606.0" y="50" class="xs mono muted" text-anchor="middle">32</text>
+<line x1="658.0" y1="54" x2="658.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="658.0" y="50" class="xs mono muted" text-anchor="middle">36</text>
+<line x1="710.0" y1="54" x2="710.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="710.0" y="50" class="xs mono muted" text-anchor="middle">40</text>
+<line x1="762.0" y1="54" x2="762.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="762.0" y="50" class="xs mono muted" text-anchor="middle">44</text>
+<line x1="814.0" y1="54" x2="814.0" y2="318" class="grid" stroke-width="0.6" stroke-dasharray="2 3"/>
+<text x="814.0" y="50" class="xs mono muted" text-anchor="middle">48</text>
+<text x="180" y="80" class="xs" text-anchor="end">engine::particle</text>
+<rect x="190.0" y="64" width="154.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="267.0" y="80" class="xs mono" text-anchor="middle">position</text>
+<rect x="346.0" y="64" width="50.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="371.0" y="80" class="xs mono" text-anchor="middle">age</text>
+<rect x="398.0" y="64" width="154.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="475.0" y="80" class="xs mono" text-anchor="middle">velocity</text>
+<rect x="554.0" y="64" width="50.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="579.0" y="80" class="xs mono" text-anchor="middle">life</text>
+<rect x="606.0" y="64" width="154.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="683.0" y="80" class="xs mono" text-anchor="middle">previous</text>
+<rect x="762.0" y="64" width="50.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="787.0" y="80" class="xs mono" text-anchor="middle">serial</text>
+<text x="180" y="112" class="xs" text-anchor="end">Particle on the GPU</text>
+<rect x="190.0" y="96" width="154.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="267.0" y="112" class="xs mono" text-anchor="middle">position</text>
+<rect x="346.0" y="96" width="50.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="371.0" y="112" class="xs mono" text-anchor="middle">age</text>
+<rect x="398.0" y="96" width="154.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="475.0" y="112" class="xs mono" text-anchor="middle">velocity</text>
+<rect x="554.0" y="96" width="50.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="579.0" y="112" class="xs mono" text-anchor="middle">life</text>
+<rect x="606.0" y="96" width="154.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="683.0" y="112" class="xs mono" text-anchor="middle">previous</text>
+<rect x="762.0" y="96" width="50.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="787.0" y="112" class="xs mono" text-anchor="middle">serial</text>
+<text x="822.0" y="112" class="xs t-ok" text-anchor="start">identical</text>
+<text x="190" y="142" class="xs mono" text-anchor="start">the tempting struct: { float3 position; float3 velocity; float age; }</text>
+<text x="180" y="170" class="xs" text-anchor="end">C++ (vec3, vec3, float)</text>
+<rect x="190.0" y="154" width="154.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="267.0" y="170" class="xs mono" text-anchor="middle">position</text>
+<rect x="346.0" y="154" width="154.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="423.0" y="170" class="xs mono" text-anchor="middle">velocity</text>
+<rect x="502.0" y="154" width="50.0" height="24" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="527.0" y="170" class="xs mono" text-anchor="middle">age</text>
+<text x="822.0" y="170" class="xs t-ok" text-anchor="start">stride 28</text>
+<text x="180" y="202" class="xs" text-anchor="end">GPU, glslang -&gt; SPIR-V</text>
+<rect x="190.0" y="186" width="154.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="267.0" y="202" class="xs mono" text-anchor="middle">position</text>
+<rect x="346.0" y="186" width="50.0" height="24" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.14"/>
+<text x="371.0" y="202" class="xs mono" text-anchor="middle">pad</text>
+<rect x="398.0" y="186" width="154.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="475.0" y="202" class="xs mono" text-anchor="middle">velocity</text>
+<rect x="554.0" y="186" width="50.0" height="24" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="579.0" y="202" class="xs mono" text-anchor="middle">age</text>
+<text x="822.0" y="202" class="xs t-bad" text-anchor="start">stride 32</text>
+<text x="180" y="234" class="xs" text-anchor="end">HLSL rules (DXC -&gt; DXIL)</text>
+<rect x="190.0" y="218" width="154.0" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="267.0" y="234" class="xs mono" text-anchor="middle">position</text>
+<rect x="346.0" y="218" width="154.0" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="423.0" y="234" class="xs mono" text-anchor="middle">velocity</text>
+<rect x="502.0" y="218" width="50.0" height="24" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.3"/>
+<text x="527.0" y="234" class="xs mono" text-anchor="middle">age</text>
+<text x="822.0" y="234" class="xs t-ok" text-anchor="start">stride 28</text>
+<text x="190" y="268" class="xs mono t-bad" text-anchor="start">read the GPU's bytes through C++'s struct  -&gt;  velocity = (0, 4, 5),  age = 6</text>
+<text x="190" y="284" class="xs mono muted" text-anchor="start">the shader wrote velocity = (4, 5, 6) and age = 7</text>
+<text x="20" y="312" class="xs" text-anchor="start">SDL_gpu.h, on storage buffers: “vec3 and vec4 fields are 16-byte aligned.”</text>
+<text x="20" y="330" class="xs muted" text-anchor="start">The same HLSL is 28 bytes a record under one compiler and 32 under another; a row of float3 + one scalar is 16 under both.</text>
+</svg>

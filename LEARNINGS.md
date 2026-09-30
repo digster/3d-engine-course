@@ -29,6 +29,12 @@ to the list just below.
   gate your own macros on `SDL_ASSERT_LEVEL`. *tooling: "Course-infrastructure facts (docs/, 2026-08-26)".*
 - **shadercross has no releases; pin a commit** — and a build without DXC cannot read HLSL.
   *foundations: "SDL_shadercross has no releases — pin a commit".*
+- **Working on this machine is not correct** — twice now the Metal backend hid a contract
+  violation: a 2D texture in an array slot (6.17b, found by `MTL_DEBUG_LAYER=1`) and two dependent
+  dispatches in one compute pass (6.18b, 20 of 20 right). Read `SDL_gpu.h`'s MUST and the other
+  backends' source, and say which half you observed. *module-6: "Lesson 6.17b…", "Lesson 6.18b…".*
+- **`cycle` is a load op** — true only when the pass overwrites every byte; on Metal a wrongly
+  cycled buffer comes back as another buffer even after a fence. *module-6: "Lesson 6.18b…".*
 
 **Numerics**
 - **NaN passes every guard you did not write for it** — `std::clamp` keeps it, it never wins a
@@ -81,6 +87,9 @@ to the list just below.
 - **A checker's file pattern is part of what it checks** — `build_\d+\.py` skipped the first
   b-lesson with a green report. When numbering grows a form, grep every tool that parses it.
   *tooling.*
+- **A checker can only see what is tracked** — continuity's R1 walks `git ls-files`, so a new
+  file's stale pin passes until the commit. Run it through a throwaway index with the new files
+  intent-to-added, and re-pin after the LAST edit. *tooling: "R1 cannot see a file…".*
 
 **Figures and the browser**
 - **CSS beats SVG presentation attributes** — `svg text { fill }` overrides `fill="…"`; theme
@@ -264,7 +273,7 @@ sub-headings, which are not repeated here.
 - The inverse of a product reverses, and the wrong order is not visibly wrong
 - Writing a lesson out of order needs two trees, and the delta is the finding
 
-### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (34)
+### [`learnings/module-6.md`](learnings/module-6.md) — learnings from its lessons (35)
 
 - Colour pipeline facts (Lesson 6.1)
 - Course-infrastructure facts (docs/, Lesson 6.1)
@@ -300,6 +309,7 @@ sub-headings, which are not repeated here.
 - Figure numbers follow page order, and a moved label lands on the next obstacle
 - A rule inherited from a comment outlives the lesson that wrote it — the partial-bind "rule"
 - Lesson 6.17b — local lights and their shadows (2026-09-28)
+- Lesson 6.18b — compute shaders and GPU particles (2026-09-29)
 
 ### [`learnings/module-7.md`](learnings/module-7.md) — learnings from its lessons (46)
 
@@ -415,7 +425,7 @@ sub-headings, which are not repeated here.
 - A quaternion's angle wraps at a full turn
 - A zero-byte generated file is a silent regression
 
-### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (19)
+### [`learnings/tooling.md`](learnings/tooling.md) — the docs pipeline, builders, sweeps and repairs (21)
 
 - A constraint nobody rechecked cost 18% of the docs tree (CSS extraction)
 - Two correct branches can leave a hole between them (docs tooling)
@@ -436,3 +446,5 @@ sub-headings, which are not repeated here.
 - An inserted lesson is written after its successors — replay, carry, prove (6.17b, 2026-09-28)
 - A checker's file pattern is part of what it checks — build_\d+\.py skipped every b-lesson
 - RLE render panels: crispEdges, and quantisation can hide or invent a difference
+- R1 cannot see a file that is not in the index — stale pins of NEW files pass (6.18b, 2026-09-29)
+- Figure data sampled in array order draws the array's order (6.18b, 2026-09-29)

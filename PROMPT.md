@@ -3015,3 +3015,21 @@ showed no shadow (verify_617b §L); the frame graph pooled a one-layer depth tex
 judged reuse by the request instead of the slot (verify_617); a spot wider than 80° had no shadow
 beyond the cap and now shadows through a cube (verify_617b §M). "Try again" followed a turn that
 stopped before the last commit. Logged in `memory/2026-09-28.md`.)
+
+---
+
+## 2026-09-29 — `next` (Lesson 6.18b)
+
+> next
+
+> Try again
+
+> continue
+
+(The second of the four inserted lessons, written after 8.13 by the authoring guide's §17
+protocol. "Try again" followed a harness run whose per-step cycling probe failed two checks —
+the probe reused one pool across modes, and a fresh pool per mode fixed it. "continue" resumed the
+bookkeeping after a usage limit. Logged in `memory/2026-09-29.md`.)
+
+Produced Lesson 6.18b — Compute Shaders: GPU Particles (Module 6, inserted between 6.18 and 7.1;
+Module 6 complete again).

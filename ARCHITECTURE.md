@@ -1413,7 +1413,12 @@ chore. What follows is on disk.
 │   │       │                     #   includes only gpu_device + gpu_texture:
 │   │       │                     #   nothing about a bloom, a shadow or a scene
 │   │       │                     #   reaches this file, which is why culling the
-│   │       │                     #   bloom needs no flag in it
+│   │       │                     #   bloom needs no flag in it. 6.18b ADDED
+│   │       │                     #   BUFFERS AND COMPUTE PASSES: fg_buffer,
+│   │       │                     #   import_buffer, add_compute_pass, read_ /
+│   │       │                     #   write_ / keep_buffer. `cycle` is DERIVED
+│   │       │                     #   (write_buffer: the pass overwrites; keep:
+│   │       │                     #   never), as a load op is for a texture
 │   │       ├── font.hpp          # glyph, kern_pair, font_atlas,               [6.18]
 │   │       │                     #   font_bake_options, font_status, bake_font,
 │   │       │                     #   load_font, next_codepoint, glyph_quad,
@@ -1437,6 +1442,24 @@ chore. What follows is on disk.
 │   │       │                     #   the same reason: the target is the
 │   │       │                     #   swapchain and the swapchain's pass belongs
 │   │       │                     #   to the frame
+│   │       ├── particles.hpp     # particle (three 16-byte rows, 48 B),      [6.18b]
+│   │       │                     #   pcg_hash, unit_float, emitter_settings,
+│   │       │                     #   emission_clock, slot_of, step_uniforms,
+│   │       │                     #   spawn_particle, integrate_particle,
+│   │       │                     #   step_slot, particle_pool. THE CPU
+│   │       │                     #   SPECIFICATION of what the kernels do, order
+│   │       │                     #   of operations included; names NO SDL_GPU
+│   │       │                     #   type, so the harness can hold the GPU to it
+│   │       ├── gpu_compute.hpp   # gpu_compute_pipeline, groups_for.         [6.18b]
+│   │       │                     #   A compute pipeline IS its shader: load()
+│   │       │                     #   reads the code and shadercross's JSON and
+│   │       │                     #   takes the thread counts from it
+│   │       ├── gpu_particles.hpp # gpu_particles: the pool, the alive list,  [6.18b]
+│   │       │                     #   the indirect args, three kernels and a
+│   │       │                     #   draw. record_* functions only — whoever
+│   │       │                     #   BEGINS a compute pass names its read-write
+│   │       │                     #   buffers, so passes belong to the caller
+│   │       │                     #   (the frame graph, or simulate())
 │   │       ├── shadow.hpp        # light_camera, fit_directional, shadow_bias,  [6.8]
 │   │       │                     #   shadow_settings, slope_from_cosine,
 │   │       │                     #   pcf_reach_texels, slope_scaled_bias,
@@ -1449,7 +1472,7 @@ chore. What follows is on disk.
 │   │                             #   texture, a comparison sampler, its own
 │   │                             #   render pass, and fill_uniforms() so the two
 │   │                             #   renderers cannot disagree about a bias
-│   └── src/                # ---- PRIVATE. 71 sources; no demo can name this path ----
+│   └── src/                # ---- PRIVATE. 74 sources; no demo can name this path ----
 │       ├── phys/           # integrate.cpp [8.1], rigid_body.cpp [8.2],
 │       │                   # inertia.cpp [8.3], shape.cpp [8.4],
 │       │                   # collide.cpp [8.4], gjk.cpp [8.5], epa.cpp [8.6],
@@ -1518,7 +1541,12 @@ chore. What follows is on disk.
 │                           #   renderer and the second is entirely SDL_GPU:
 │                           #   collapsing them would put an SDL_GPU dependency
 │                           #   on the software path and end the two-renderer
-│                           #   comparison that 6.18 §11 rests on
+│                           #   comparison that 6.18 §11 rests on.
+│                           #   particles.cpp, gpu_compute.cpp and
+│                           #   gpu_particles.cpp [6.18b] split the same way:
+│                           #   the specification names no GPU type, the
+│                           #   pipeline loader names no particle, and only
+│                           #   the third knows both
 ├── demos/                  # executables; link engine, include ONLY public headers
 │   ├── CMakeLists.txt
 │   ├── common/             # demo_common: CONTENT, shared so nothing is transcribed
@@ -1716,6 +1744,13 @@ chore. What follows is on disk.
 │   │                       #   Uses engine::platform; keeps its own main() ON PURPOSE
 │   ├── pong/main.cpp       # Lesson 1.8's game, on engine::app. 87 code lines,
 │   │                       #   no main, no SDL_Init, no loop                  [5.2]
+│   ├── particles/main.cpp  # A FOUNTAIN THE CPU NEVER TOUCHES            [6.18b]
+│   │                       #   per fixed step one 144-byte uniform block,
+│   │                       #   per frame one indirect draw whose count the
+│   │                       #   CPU never learns; [C] runs the same fountain
+│   │                       #   on the CPU. THE FIRST PROGRAM WHOSE FRAME IS
+│   │                       #   DECLARED to the frame graph (bloom and the
+│   │                       #   display pass stay hand-recorded)
 │   ├── hello_cube/main.cpp # public headers only. THE ACCEPTANCE TEST for the API
 │   └── ecs_swarm/main.cpp  # 154 entities, THREE LEVELS, NO SCANCODES,   [5.8-5.11]
 │                           #   and now DRAWING ITS OWN TREE: 152 debug lines
@@ -2533,6 +2568,34 @@ Built roughly in dependency order — each module's milestone is the next module
   leave ±7,936 px against four guard planes (`clip.hpp`), because `to_pixel`'s ±8,000 clamp moved
   vertices when a 5 cm lamp near plane projected corners 40,000 px out. The guard clip runs only
   when a polygon leaves the band, so no earlier frame changes.
+
+- **A simulation can live on the GPU** (Module 6, Lesson 6.18b — an insertion, written after 8.13).
+  Three layers, each naming less than the one above it. `particles.hpp` is the **specification**: the
+  record, the emitter, the random numbers and one step of one slot, in plain C++ with no SDL_GPU type.
+  `gpu_compute.hpp` loads a kernel and knows nothing of particles. `gpu_particles.hpp` owns the
+  device buffers, the three kernels (step, clear, compact) and the draw, and **records into passes
+  somebody else began** — 6.17's `render_into` shape, made non-negotiable here because SDL names a
+  compute pass's read-write buffers when the pass *begins*.
+
+  **The CPU is the reference, not the fallback.** Each kernel mirrors its C++ function's order of
+  operations, and every number that is the same for every thread — the step's reciprocal rate, the
+  drag factor, the cone's basis — is computed once on the CPU into a 144-byte uniform block, so both
+  processors multiply by the same float. The contract that results is stated rather than hoped for:
+  integers and decisions exactly, positions within a measured tolerance (1.67 µm over ten seconds).
+  Random numbers are hashes of a particle's serial number (PCG), not a sequence, which is what makes
+  the two processors comparable at all.
+
+  **Nothing comes back.** The count of living particles is an atomic into the indirect arguments'
+  instance count, and the draw is `SDL_DrawGPUPrimitivesIndirect` with no vertex buffer: the vertex
+  stage reads the pool and the alive list as storage buffers. The CPU path is kept as the lesson's
+  "before", and is what it costs at scale: at a million particles, 10.6 ms a frame of stepping and
+  upload against 0.39 ms.
+
+  **The frame graph learned buffers**, and with them a second derived flag. A buffer written by
+  `write_buffer` is cycled, one written by `keep_buffer` never is — the same rule as a texture's load
+  op, and for the same reason: cycling gives you undefined contents, which is only safe when the
+  pass overwrites every byte. A compute pass that reads what another compute pass wrote must be a
+  separate pass; the end of a pass is the only barrier SDL_GPU provides.
 
 - **ECS, not a scene tree** (Module 5). Data-oriented storage chosen after demonstrating —
   with cache-line reasoning and measurements — why OOP scene graphs creak at scale. Archetype

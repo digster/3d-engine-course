@@ -391,6 +391,7 @@
     "6.17": "06-17-frame-graph.html",
     "6.17b": "06-17b-local-lights.html",
     "6.18": "06-18-text-overlay.html",
+    "6.18b": "06-18b-compute-particles.html",
     "7.1": "07-01-euler-angles.html",
     "7.2": "07-02-axis-angle.html",
     "7.3": "07-03-complex-numbers.html",

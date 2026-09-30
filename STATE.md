@@ -10,13 +10,19 @@ place and never regenerate: a lesson updates `updated:`, `completed:`, `capabili
 ```STATE
 course: Build a Professional 3D Game Engine (SDL3 + C++20)
 version: 1.0
-updated: 2026-09-28 (after Lesson 6.17b, written after 8.13 — 97 of 113 lessons published;
-         the first of the four lessons inserted by the post-Module 8 review, placed between
-         6.17 and 6.18. Local lights, their shadows, a Module 3 guard-band fix; ~774 h.
-         Per-lesson history: state/updated.md.)
+updated: 2026-09-29 (after Lesson 6.18b, written after 8.13 — 98 of 113 lessons published;
+         the second of the four lessons inserted by the post-Module 8 review, placed between
+         6.18 and 7.1, and now the last lesson of Module 6, which is COMPLETE. Compute
+         shaders, a GPU particle system, buffers and compute passes in the frame graph;
+         ~779 h. Per-lesson history: state/updated.md.)
 
 conventions:   (headline of each key, verbatim; full text: state/conventions.md;
                the reader's version: docs/conventions.html)
+  compute_layout: A COMPUTE SHADER'S UNIFORMS ARE b[n] IN space2; READ-ONLY STORAGE IS t[n] IN space0, READ-WRITE IS u[n] IN space1 AND IS BOUND WHEN THE PASS BEGINS.
+  storage_rows: A STORAGE STRUCT IS 16-BYTE ROWS — EVERY float3 FOLLOWED BY EXACTLY ONE SCALAR, OR A float4 — BECAUSE TWO COMPILERS PAD ANYTHING ELSE TWO WAYS.
+  cycle: cycle IS A BUFFER'S LOAD OP: true ONLY FOR A PASS THAT OVERWRITES WHAT IT WRITES; A BUFFER A PASS READS AND WRITES IS NEVER CYCLED.
+  gpu_random: A RANDOM NUMBER ON THE GPU IS A HASH OF A NAME (pcg_hash OF A SERIAL, unit_float OF ITS TOP 24 BITS), NEVER THE NEXT VALUE OF A SEQUENCE.
+  float_contract: A GPU COMPUTATION IS HELD TO ITS CPU SPECIFICATION EXACTLY ON INTEGERS AND DECISIONS, AND WITHIN A STATED TOLERANCE ON FLOATS.
   quat: w FIRST, w = cos(theta/2), SANDWICH q v conj(q), q*p MEANS "DO p THEN q".
   clip: A CLIP IS A FUNCTION FROM TIME TO POSE, AND IT HAS NO STATE.
   contact: *** THE ARITHMETIC IS IN VELOCITY, AND A COLLISION IS AN EVENT RATHER THAN AN INTERVAL.
@@ -105,8 +111,9 @@ conventions:   (headline of each key, verbatim; full text: state/conventions.md;
   traversal: fill_style::traverse {scanline, quad, quad_debug}, defaulting to SCANLINE — what a CPU rasterizer should do, and what every measurement before 4.1 was taken against.
   measurement: A REFACTOR'S PERFORMANCE CLAIM NEEDS THE SAME CONTROL AS A FEATURE'S.
 
-curriculum: 113 lessons, ~774 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
-  M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:18  M7:8  M8:13  M9:11
+curriculum: 113 lessons, ~779 h (measured; was ~510), 10 modules   (reshaped 2026-09-08 — see `roadmap:`)
+  M0:6  M1:8  M2:12  M3:10  M4:9  M5:12  M6:20  M7:9  M8:14  M9:13   (the 2026-09-27 counts; this
+  line read the 107-lesson shape until 6.18b's session)
   (reshapes and their reasons: state/curriculum.md)
 
 completed:
@@ -192,7 +199,8 @@ completed:
   - 6.17 A Lightweight Frame Graph
   - 6.17b Local Lights: Point and Spot, and Their Shadows   (inserted; written 2026-09-28, after 8.13)
   - 6.18 Text and 2D Overlay Rendering
-  ===> MODULE 6 COMPLETE — 18 lessons, ~93 h, the longest module in the course.
+  - 6.18b Compute Shaders: GPU Particles   (inserted; written 2026-09-29, after 8.13)
+  ===> MODULE 6 COMPLETE — 20 lessons, ~162 h (measured), the longest module in the course.
   - 7.1  Euler Angles and Their Pathologies
   - 7.3  Complex Numbers Rotate the Plane
   - 7.2  Axis-Angle and Rodrigues' Rotation Formula
@@ -217,8 +225,8 @@ completed:
   - 8.13 A Character Controller
   ===> MODULE 8 COMPLETE — 13 lessons, ~72 h. Physics built, none imported. <===
   (2026-09-27: 6.17b, 6.18b, 7.7b and 8.14 were inserted into Modules 6–8. 6.17b landed
-   2026-09-28; the other three are not written yet, so those modules read "in progress" in
-   the index until they land.)
+   2026-09-28 and 6.18b 2026-09-29, completing Module 6 again; 7.7b and 8.14 are not written
+   yet, so Modules 7 and 8 read "in progress" in the index until they land.)
 
 capabilities:   (the first headline of each lesson, verbatim; every entry in full:
                  state/capabilities.md)
@@ -241,6 +249,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
   - 7.3 THE ENGINE CAN COMPOSE A ROTATION BY MULTIPLYING, AND INTERPOLATE ONE.
   - 7.2 THE ENGINE CAN NAME THE SINGLE TURN A ROTATION IS, AND TRAVEL IT.
   - 7.1 THE ENGINE CAN BE TOLD AN ORIENTATION IN THREE NUMBERS.
+  - 6.18b THE ENGINE CAN COMPUTE, AND A SIMULATION CAN LIVE ON THE GPU WITHOUT EVER COMING BACK.
   - 6.18 THE ENGINE CAN SAY SOMETHING.
   - 6.17b THE ENGINE HAS LAMPS, AND EACH ONE CAN CAST A SHADOW.
   - 6.17 THE FRAME IS A DECLARATION, AND FOUR FACTS STOPPED BEING MAINTAINED.
@@ -300,6 +309,7 @@ capabilities:   (the first headline of each lesson, verbatim; every entry in ful
 
 decisions:   (headlines; full: state/decisions.md)
   pending-code-corrections: ONE ENGINE COMMENT IS STILL WRONG (IN frustum.cpp), AND THE NEXT LESSON THAT LISTS IT WHOLE CORRECTS IT. (gpu_scene.cpp's two: corrected by 6.17b.)
+  found-by-618b: 6.18b CORRECTED ONE SHIPPED CLAIM (blend_add "commutative and associative") IN FOUR PLACES, GAVE MODULE 6 THE PROJECT TREE IT NEVER HAD, AND FOUND THE 5.12 LINT WAS NEVER CARRIED INTO MODULE 6's PINS.
   found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE, AND FIXING THEM FOUND THREE MORE; ALL SEVEN WERE FIXED THE SAME DAY, EACH IN ITS OWN COMMIT, TEST FIRST.
   shipped-lesson-fixes: *** A LATER LESSON THAT FIXES AN EARLIER LESSON'S ENGINE CODE SHIPS THE FIX IN ITS OWN LISTINGS AND TELLS THE STORY; THE EARLIER PAGE STAYS AN ARCHIVE OF WHAT SHIPPED.
   quat-swap-deferred: THE FIELD IS CALLED `rotation` AND ONE CALLER DOES NOT PUT A ROTATION IN IT.
@@ -316,8 +326,8 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   cmake/: EngineHelpers.cmake, Shaders.cmake
   demos/: CMakeLists.txt
   demos/<name>/main.cpp: audio, bodies, broadphase, character, collector, collide, ecs_swarm,
-     epa, gimbal, gjk, gltf_view, hello_cube, impulse, integrate, joints, manifold, plane, pong,
-     ragdoll, rig, sandbox, spin, stack
+     epa, gimbal, gjk, gltf_view, hello_cube, impulse, integrate, joints, manifold, particles,
+     plane, pong, ragdoll, rig, sandbox, spin, stack
   demos/common/: demo_scene.cpp, demo_scene.hpp, pong.cpp, pong.hpp
   docs/: conventions.html, cpp-style.html, index.html, math-toolbox.html
   docs/_template/: README.md, apply-shared.py, check-builders.py, check-continuity.py,
@@ -349,7 +359,8 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
      06-09-cascaded-shadows.html, 06-10-mipmaps.html, 06-11-transparency.html,
      06-12-hdr-tonemapping.html, 06-13-bloom-post-stack.html, 06-14-antialiasing.html,
      06-15-skybox-ibl.html, 06-16-frustum-culling.html, 06-17-frame-graph.html,
-     06-17b-local-lights.html, 06-18-text-overlay.html, 07-01-euler-angles.html, 07-02-axis-angle.html,
+     06-17b-local-lights.html, 06-18-text-overlay.html, 06-18b-compute-particles.html,
+     07-01-euler-angles.html, 07-02-axis-angle.html,
      07-03-complex-numbers.html, 07-04-quaternions.html, 07-05-slerp.html,
      07-06-skeletal-animation.html, 07-07-sampling-blending.html, 07-08-audio.html,
      08-01-integrators.html, 08-02-forces-and-bodies.html, 08-03-angular-dynamics.html,
@@ -370,11 +381,11 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   engine/include/engine/gfx/: antialias.hpp, blend.hpp, bloom.hpp, cascade.hpp, clip.hpp,
      colour.hpp, cubemap.hpp, cull.hpp, debug_draw.hpp, debug_lines.hpp, depth_buffer.hpp,
      draw_order.hpp, font.hpp, frame_graph.hpp, framebuffer.hpp, frustum.hpp, gltf.hpp,
-     gpu_buffer.hpp, gpu_debug.hpp, gpu_device.hpp, gpu_mesh.hpp, gpu_overlay.hpp,
-     gpu_pipeline.hpp, gpu_post.hpp, gpu_present.hpp, gpu_scene.hpp, gpu_shader.hpp,
-     gpu_shadow.hpp, gpu_texture.hpp, gpu_uniform.hpp, hdr.hpp, image.hpp, instancing.hpp,
-     light.hpp, material.hpp, mesh.hpp, microfacet.hpp, mipmap.hpp, obj.hpp, overlay.hpp,
-     projector.hpp, raster.hpp, renderable.hpp, scene.hpp, shadow.hpp, soft_renderer.hpp,
+     gpu_buffer.hpp, gpu_compute.hpp, gpu_debug.hpp, gpu_device.hpp, gpu_mesh.hpp,
+     gpu_overlay.hpp, gpu_particles.hpp, gpu_pipeline.hpp, gpu_post.hpp, gpu_present.hpp,
+     gpu_scene.hpp, gpu_shader.hpp, gpu_shadow.hpp, gpu_texture.hpp, gpu_uniform.hpp, hdr.hpp,
+     image.hpp, instancing.hpp, light.hpp, material.hpp, mesh.hpp, microfacet.hpp, mipmap.hpp,
+     obj.hpp, overlay.hpp, particles.hpp, projector.hpp, raster.hpp, renderable.hpp, scene.hpp, shadow.hpp, soft_renderer.hpp,
      texture.hpp, viewport.hpp
   engine/include/engine/math/: axis_angle.hpp, bounds.hpp, complex.hpp, euler.hpp, mat2.hpp,
      mat3.hpp, mat4.hpp, quat.hpp, rotation.hpp, transform.hpp, vec2.hpp, vec3.hpp, vec4.hpp
@@ -389,10 +400,11 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   engine/src/core/: actions.cpp, clock.cpp, fixed_step.cpp, input.cpp, log.cpp, profile.cpp
   engine/src/gfx/: antialias.cpp, blend.cpp, bloom.cpp, cascade.cpp, clip.cpp, colour.cpp,
      cubemap.cpp, debug_draw.cpp, debug_lines.cpp, depth_buffer.cpp, draw_order.cpp, font.cpp,
-     frame_graph.cpp, framebuffer.cpp, frustum.cpp, gltf.cpp, gpu_buffer.cpp, gpu_debug.cpp,
-     gpu_device.cpp, gpu_mesh.cpp, gpu_overlay.cpp, gpu_pipeline.cpp, gpu_post.cpp,
-     gpu_present.cpp, gpu_scene.cpp, gpu_shader.cpp, gpu_shadow.cpp, gpu_texture.cpp, hdr.cpp,
-     image.cpp, instancing.cpp, mesh.cpp, mipmap.cpp, obj.cpp, overlay.cpp, raster.cpp,
+     frame_graph.cpp, framebuffer.cpp, frustum.cpp, gltf.cpp, gpu_buffer.cpp, gpu_compute.cpp,
+     gpu_debug.cpp, gpu_device.cpp, gpu_mesh.cpp, gpu_overlay.cpp, gpu_particles.cpp,
+     gpu_pipeline.cpp, gpu_post.cpp, gpu_present.cpp, gpu_scene.cpp, gpu_shader.cpp,
+     gpu_shadow.cpp, gpu_texture.cpp, hdr.cpp, image.cpp, instancing.cpp, mesh.cpp, mipmap.cpp,
+     obj.cpp, overlay.cpp, particles.cpp, raster.cpp,
      renderable.cpp, shadow.cpp, soft_renderer.cpp, texture.cpp
   engine/src/phys/: broadphase.cpp, cast.cpp, character.cpp, collide.cpp, constraint.cpp,
      epa.cpp, gjk.cpp, inertia.cpp, integrate.cpp, manifold.cpp, ragdoll.cpp, rigid_body.cpp,
@@ -400,55 +412,61 @@ files:   (paths only, from `git ls-files`; commentary: state/files.md)
   engine/src/platform/: app.cpp, platform.cpp
   engine/src/ui/: debug_ui.cpp
   shaders/: bloom_bright.frag.hlsl, bloom_down.frag.hlsl, bloom_up.frag.hlsl,
-     depth_probe.frag.hlsl, depth_probe.vert.hlsl, fullscreen.vert.hlsl, matrix_probe.frag.hlsl,
-     mesh.frag.hlsl, mesh.vert.hlsl, overlay.frag.hlsl, overlay.vert.hlsl, scene.frag.hlsl,
-     scene.vert.hlsl, scene_instanced.vert.hlsl, shadow.frag.hlsl, shadow.vert.hlsl,
-     skybox.frag.hlsl, skybox.vert.hlsl, texture_probe.frag.hlsl, textured.frag.hlsl,
-     textured.vert.hlsl, tonemap.frag.hlsl, triangle.frag.hlsl, triangle.vert.hlsl,
-     uniform_probe.frag.hlsl, uniform_probe.vert.hlsl
+     depth_probe.frag.hlsl, depth_probe.vert.hlsl, fullscreen.vert.hlsl,
+     matrix_probe.frag.hlsl, mesh.frag.hlsl, mesh.vert.hlsl, overlay.frag.hlsl,
+     overlay.vert.hlsl, particle.frag.hlsl, particle.vert.hlsl, particles_clear.comp.hlsl,
+     particles_compact.comp.hlsl, particles_probe.comp.hlsl, particles_step.comp.hlsl,
+     scene.frag.hlsl, scene.vert.hlsl, scene_instanced.vert.hlsl, shadow.frag.hlsl,
+     shadow.vert.hlsl, skybox.frag.hlsl, skybox.vert.hlsl, texture_probe.frag.hlsl,
+     textured.frag.hlsl, textured.vert.hlsl, tonemap.frag.hlsl, triangle.frag.hlsl,
+     triangle.vert.hlsl, uniform_probe.frag.hlsl, uniform_probe.vert.hlsl
   memory/: 59 dated session logs (memory/YYYY-MM-DD.md)
-  scratch/: 1579 authoring sources, force-added (builders, fragments, figures, pins, harnesses)
+  scratch/: 1705 authoring sources, force-added (builders, fragments, figures, pins, harnesses)
   learnings/: foundations.md, module-2.md … module-8.md, tooling.md
   state/: updated.md, conventions.md, curriculum.md, completed.md, capabilities.md, decisions.md, files.md, roadmap.md, README.md
 
 roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLINE.
          (the whole of it: state/roadmap.md)
 
-next: 6.18b — Compute Shaders: GPU Particles
+next: 7.7b — Animated Characters from glTF: Skins and Clips
 
-      THE SECOND OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27); 6.17b
-      landed 2026-09-28. Then 7.7b (glTF skins and clips), 8.14 (scene queries and a
-      static mesh collider), then Module 9 from 9.1 Hardening the Build. Modules 6–8
-      read "in progress" until all four land.
+      THE THIRD OF FOUR INSERTED LESSONS (post-Module 8 review, 2026-09-27); 6.17b
+      landed 2026-09-28 and 6.18b 2026-09-29, and Module 6 is complete again. Then
+      8.14 (scene queries and a static mesh collider), then Module 9 from 9.1
+      Hardening the Build. Modules 7 and 8 read "in progress" until 7.7b and 8.14 land.
+      7.7b sits between 7.7 and 7.8: re-point build_77.py's next (and 7.7's Recap
+      bridge) and build_78.py's prev, and add 7.7b's files to 8.13's tree (§18).
+      7.8 has no module tree of its own (Module 7 never got one): 7.7b is not the
+      module's last lesson, so the gap stays 7.8's — record it, do not fill it here.
 
-      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17 — and 6.17b is now
-      its worked example (state/decisions.md, `found-by-617b`, and state/files.md):
-        - scratch/replay_tree.py N.M     the student's tree at any lesson, from pins.
-        - scratch/make_t617b.py          `tree` (the listings: tree at the previous
-          lesson + the insertion's hunks) and `carry` (the hunks onto every LATER pin),
-          each result PROVED by delta against the working tree. Copy it as
-          make_t618b.py and change CHANGED/LATER_PINS; LATER_PINS for 6.18b are every
-          lNN_ pin, after 6.18b in course order, of a path it changes.
-        - scratch/_base617b/run_all.sh + classify.py   the additivity check: 26
-          harnesses before/after; only timing lines may differ. Take the BEFORE run
-          before the first edit. All 26 build at HEAD since 2026-09-28 (6.8's,
-          6.9's and 6.16's were repaired and are now TRACKED — found-by-617b).
-        - 6.18b sits between 6.18 and 7.1, so re-point build_618.py's next and
-          build_71.py's prev. Update 6.18's module tree if a file is added.
+      AN INSERTION HAS A PROTOCOL — docs/_template/README.md §17 — with two worked
+      examples now (state/decisions.md `found-by-617b` and `found-by-618b`):
+        - scratch/replay_tree.py 7.7 scratch/_t77    the student's tree at 7.7.
+        - scratch/make_t618b.py is the template to copy (make_t77b.py): it handles
+          NEW files (the working tree's text, no later pins) as well as changed ones,
+          and has insert_includes() for an engine.hpp with no context at the base —
+          not needed at 7.7, whose engine.hpp already lists every header.
+        - scratch/_base618b/run_all.sh + classify.py: 27 harnesses (6.1–6.18 with
+          6.17b, 7.1–7.8). ADD 618b to the list for 7.7b's BEFORE run, and take it
+          before the first edit. verify_74's F.4b is a timing threshold (2.99x vs 3x
+          once) and can flake.
+        - Carry every build-list hunk into the later pins (7.8's and Module 8's: ~15
+          engine CMakeLists, ~15 engine.hpp, ~14 demos CMakeLists); prove by delta;
+          rebuild each page and check it changed by exactly the carried lines.
+        - Build the student tree at 7.7b offline (FETCHCONTENT_SOURCE_DIR_* from
+          build/_deps) and run its demo: 6.18b's built with 0 warnings.
 
-      WHAT 6.18b INHERITS, AND MUST NOT RE-DERIVE:
-        - 6.17b's first fragment STORAGE BUFFER (gpu_scene.cpp bind_local_lights):
-          SDL numbers each resource kind from 0 on the C++ side while HLSL puts
-          sampled textures, storage textures, storage buffers in ONE t sequence in
-          space2 (SDL_gpu.h's layout comment). A COMPUTE shader's layout is different
-          again — read SDL_gpu.h's SDL_CreateGPUComputePipeline comment, do not assume.
-        - 6.17b's rule that the renderer, not the caller, sets a list's count; and
-          the identity-element fallbacks (a zeroed one-record buffer) for a declared
-          resource that must be bound even when empty.
-        - 6.17's frame graph: a compute pass writing a buffer the scene pass reads is
-          the graph's first non-texture resource. ⚠ VERIFY whether frame_graph.hpp can
-          express a buffer at all before designing around it.
-        - 4.6 (corrected): pushes are 32 KiB blocks, 4 KiB bound on Vulkan.
+      WHAT 7.7b INHERITS, AND MUST NOT RE-DERIVE:
+        - 6.6's glTF loader (gltf.cpp, the only TU that sees cgltf), 7.6's skinning
+          (a skinning matrix is model_from_model), 7.7's clips (a clip is a function
+          from time to pose, and has no state).
+        - 6.18b's storage-buffer rules if joint palettes go to the GPU: a vertex
+          stage reads storage at t[n], space0, bound with SDL_BindGPUVertexStorageBuffers,
+          with GRAPHICS_STORAGE_READ; records are 16-byte rows (conventions
+          storage_rows), and matrices are stored as ROWS (6.17b's light record), so no
+          default matrix packing can transpose them.
+        - 6.18b's float contract: a GPU skinning path is held to the CPU's exactly on
+          integers (joint indices) and within a stated tolerance on positions.
 
       PENDING CODE CORRECTIONS (decisions: pending-code-corrections): frustum.cpp's
       near-plane comment waits for whichever lesson lists it whole.

@@ -891,4 +891,7 @@ roadmap: RESHAPED 2026-09-08, AFTER TWO EXTERNAL REVIEWS OF THE PUBLISHED OUTLIN
     on them. Totals: 10 modules, 113 lessons, ~772 h (planned rows keep
     placeholder hours; each is measured by estimate-hours.py when it lands).
     Insertion protocol: docs/_template/README.md §17.
+    LANDED: 6.17b 2026-09-28 at 12 h; 6.18b 2026-09-29 at 15 h — Module 6 complete
+    again, the course at ~779 h. Both came in over the placeholder, 6.18b by half: an
+    insertion's plan row should be read as a floor. 7.7b (~8 h) and 8.14 (~11 h) remain.
 ```

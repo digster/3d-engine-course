@@ -99,6 +99,19 @@ can pool a one-layer depth ARRAY (`fg_texture_desc::array`) and judges reuse by 
 texture really is; and a spot light wider than 80° is shadowed through a cube, as a point light,
 instead of a map that stopped at 80° and left the ring beyond it unshadowed.
 
+**6.18b (inserted after 6.18; written 2026-09-29, after 8.13).** The engine can **compute**. A
+`gpu_compute_pipeline` loads a kernel and its reflected thread counts; a `particle` is three 16-byte
+rows, because two shader compilers pad anything else two ways; and a fountain of sparks is created,
+stepped, counted and drawn on the GPU — each per-step constant computed once on the CPU into a
+144-byte uniform block, each random number a PCG hash of the particle's serial, the living listed
+with an atomic and drawn with **one indirect draw whose count the CPU never reads**. `particles.hpp`
+is the specification and the kernels mirror it: integers agree exactly, positions within 1.67 µm
+over ten seconds. At a million sparks the CPU path costs 10.6 ms a frame (3.8 stepping, 6.9
+uploading) against 0.39 ms on the GPU. The frame graph learns buffers and compute passes and derives
+each buffer's `cycle` flag, which the lesson measured breaking a pool two different ways on Metal
+when set wrong. `blend_add`'s comment no longer calls float addition associative. Module 6 is
+complete again, and has its project tree. `verify_618b`: 71 checks.
+
 ---
 
 ## The demo tour
@@ -166,6 +179,14 @@ demo of anything:
 ./build/demos/gltf_view --model torus.obj --bias slope-scaled --pcf 0  # the derived fix
 ./build/demos/gltf_view --model torus.obj --pcf 2                      # a soft edge
 ./build/demos/gltf_view --model torus.obj --shadow 128                 # what resolution buys
+
+# Lesson 6.18b — a simulation that never comes back to the CPU
+./build/demos/particles                      # the fountain, on the GPU; [C] the CPU's turn
+./build/demos/particles --cpu                # start with the CPU simulating and uploading
+./build/demos/particles --count 262144       # a bigger pool (rounded up to a power of two)
+./build/demos/particles --no-bloom           # the sparks' raw HDR light, no glow
+./build/demos/particles --shot out.ppm       # one frame, no window, 2.5 s in
+./build/demos/particles --log gpu=info       # then [G] prints the declared frame graph
 ```
 
 `hello_cube` is the standing acceptance test for the public API: every symbol in it comes from a

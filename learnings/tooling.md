@@ -589,3 +589,31 @@ Two figure lessons from 6.17b's raster panels (`figs_617b.render_panel`):
   streaks; six levels kept them. A full-resolution crop cost 200–470 KB for less of the story.
   And a colour flip between two panels may be the quantiser or may be real (see module-6's
   "A difference in a figure can be real") — read the source pixels before writing the caption.
+
+## R1 cannot see a file that is not in the index — stale pins of NEW files pass (6.18b, 2026-09-29)
+
+`check-continuity.py`'s R1 walks `git ls-files`. A lesson's new files are untracked until the
+commit, so before it R1 compares nothing for them: two of 6.18b's headers had their comments edited
+AFTER `make_t618b.py --pins`, the page embedded the old text, and every checker was green. Found by
+comparing each new file with its pin by hand. Before committing, run R1 with the new files visible
+through a THROWAWAY index — never the real one:
+
+```sh
+cp .git/index "$TMPDIR/tmp.index"
+git ls-files --others --exclude-standard -z -- engine demos shaders cmake CMakeLists.txt \
+  | GIT_INDEX_FILE="$TMPDIR/tmp.index" xargs -0 git add -N
+GIT_INDEX_FILE="$TMPDIR/tmp.index" python3 docs/_template/check-continuity.py
+```
+
+(`xargs -0`, because zsh does not word-split an unquoted `$NEW` — the first attempt passed all
+thirteen paths as one.) And re-pin after the last edit to any listed file, not after the last
+edit you remember.
+
+## Figure data sampled in array order draws the array's order (6.18b, 2026-09-29)
+
+Figure 7 (a side-on scatter of young particles, to show shells) first plotted the first 6,000 young
+particles the harness met in pool order. The pool is a ring, so pool order is birth order: the
+6,000 were one contiguous run of births and covered only part of the age range the figure argues
+about. Sampling every second young particle across the whole pool covers every age — fixed in the
+HARNESS, which writes the CSV, not in the figure script. A figure's sample is part of its
+argument; draw it across the quantity the figure is about, not in whatever order memory holds.

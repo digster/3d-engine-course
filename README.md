@@ -7,13 +7,14 @@ There is no engine to download here and no framework doing the interesting parts
 write the math library, the rasterizer, the ECS, the renderer, the physics, and the editor. By
 the end you have a real engine and a game built on its public API.
 
-**Status:** 97 of 113 lessons published. **Modules 0–5 are complete** — orientation and toolchain,
-the loop and the pixel, two modules of software rasterizer, SDL_GPU, and the refactor into an
-engine with an ECS — and Modules 6–8 (advanced rendering; rotation, animation and audio; physics)
-are complete except for the lessons inserted after the post-Module 8 review. The first,
-[6.17b — local lights and their shadows](docs/lessons/06-17b-local-lights.html), has landed;
-compute shaders (6.18b), glTF skins and clips (7.7b) and scene queries (8.14) come next, then
-**Module 9 — Professional Polish & Capstone**. The [course index](docs/index.html) has the module
+**Status:** 98 of 113 lessons published. **Modules 0–6 are complete** — orientation and toolchain,
+the loop and the pixel, two modules of software rasterizer, SDL_GPU, the refactor into an engine
+with an ECS, and advanced rendering — and Modules 7–8 (rotation, animation and audio; physics) are
+complete except for the lessons inserted after the post-Module 8 review. Two of the four have
+landed, [6.17b — local lights and their shadows](docs/lessons/06-17b-local-lights.html) and
+[6.18b — compute shaders and GPU particles](docs/lessons/06-18b-compute-particles.html); glTF skins
+and clips (7.7b) and scene queries (8.14) come next, then **Module 9 — Professional Polish &
+Capstone**. The [course index](docs/index.html) has the module
 map, every lesson and its hours; what each lesson added to the engine, and the keys and flags
 that show it, is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -137,6 +138,7 @@ display; that is how the course's characterization tests run them.
 | `ecs_swarm` | 5.8–5.11 | The ECS, the transform hierarchy, input actions, debug drawing and ImGui panels |
 | `collector` | 5.12 | The checkpoint game, written only against the public headers |
 | `gltf_view` | 6.6–6.15 | Module 6's renderer: glTF, normal maps, shadows, mipmaps, transparency, HDR, bloom, AA, IBL — one flag each |
+| `particles` | 6.18b | A fountain of sparks created, stepped, counted and drawn on the GPU; <kbd>C</kbd> runs the same fountain on the CPU and shows what that costs |
 | `gimbal` | 7.1–7.5 | Euler angles, axis-angle, quaternions and slerp on one aircraft |
 | `plane` | 7.3 | Complex numbers rotating the plane |
 | `rig` | 7.6–7.7 | A skinned tube: skinning, then clip sampling and blending |

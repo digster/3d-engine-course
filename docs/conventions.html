@@ -82,6 +82,7 @@
           <tr><td><strong><a href="#depth">Depth</a></strong></td><td>Smaller is nearer; clear to 1.0; compare <code>&lt;</code> strictly (<code>LESS</code>); store device depth, <code>f32</code> by default</td><td class="mono">3</td></tr>
           <tr><td><strong><a href="#winding">Winding</a></strong></td><td>CCW = front, cull back — set explicitly on every pipeline</td><td class="mono">3</td></tr>
           <tr><td><strong><a href="#local-lights">Local lights</a></strong></td><td><code>intensity</code> = irradiance at 1&nbsp;m (π at 1&nbsp;m is the sun); <code>direction</code> is travel; cube-face cameras are mirrors, never <code>look_at</code></td><td class="mono">6</td></tr>
+          <tr><td><strong><a href="#compute">Compute</a></strong></td><td>Storage records are 16-byte rows; <code>cycle</code> only when a pass overwrites what it writes; a new pass between dependent dispatches; random = a hash of a name</td><td class="mono">6</td></tr>
           <tr><td><strong><a href="#units">Units</a></strong></td><td>metres, radians, seconds, kilograms; linear colour internally</td><td class="mono">1</td></tr>
           <tr><td><strong><a href="#euler">Euler angles</a></strong></td><td>Intrinsic <code>y-x-z</code> (yaw, pitch, roll), active, right-handed — an interface, never storage</td><td class="mono">7</td></tr>
           <tr><td><strong><a href="#quat">Quaternions</a></strong></td><td><code>{w, v}</code>, <code>w</code> first, <code>w = cos(θ/2)</code>; rotate by <code>q v q*</code>; <code>q·p</code> means “do <code>p</code>, then <code>q</code>”</td><td class="mono">7</td></tr>
@@ -133,6 +134,7 @@
       <li><a href="#transparency">Transparency &mdash; six decisions, four of which draw a picture either way</a></li>
       <li><a href="#hdr">HDR &mdash; where the range lives, and where it stops</a></li>
       <li><a href="#local-lights">Local lights &mdash; units, falloff, the cone, and their shadows</a></li>
+      <li><a href="#compute">Compute &mdash; the layout, the rows, and when a buffer keeps its contents</a></li>
       <li><a href="#units">Units and angles</a></li>
       <li><a href="#euler">Euler angles &mdash; one of twenty-four</a></li>
       <li><a href="#axis-angle">Axis-angle &mdash; one convention, two ambiguities</a></li>
@@ -2605,6 +2607,111 @@
        vertices. &sect;6d&rsquo;s near-plane rule is unchanged. Lesson 6.17b &sect;8.</p>
   </div>
 
+  <h2 id="compute"><span class="num">7q</span>Compute &mdash; the layout, the rows, and when a buffer keeps its contents</h2>
+
+  <p>
+    Added in Lesson 6.18b. A compute shader has no vertex stage to feed it and no attachment to
+    receive it: everything it reads and writes is a resource bound by number, so every number below
+    is a contract between the HLSL and the C++ that nothing checks at compile time. The first two
+    rows are <strong>fixed by SDL_GPU</strong>; the rest are this course&rsquo;s choices, each one
+    the answer to a failure the lesson measured.
+  </p>
+
+  <div class="tbl-scroll">
+    <table>
+      <caption class="visually-hidden">Compute conventions, this course&rsquo;s answer for each,
+        and the symptom of getting it wrong</caption>
+      <thead>
+        <tr><th>Decision</th><th>This course</th><th>Symptom when wrong</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>The register layout</strong> <em>(SDL_GPU)</em></td>
+          <td><code>t[n], space0</code>: sampled textures, then read-only storage textures, then
+              read-only storage buffers. <code>u[n], space1</code>: read-write storage textures,
+              then read-write storage buffers. <code>b[n], space2</code>: uniform blocks. Not the
+              graphics stages&rsquo; spaces (&sect;7g), which a copied declaration silently
+              inherits.</td>
+          <td>A kernel that reads zeros, or writes into a buffer nobody bound.</td>
+        </tr>
+        <tr>
+          <td><strong>Who binds what</strong> <em>(SDL_GPU)</em></td>
+          <td>Read-write buffers and textures are named when the pass <strong>begins</strong>
+              (<code>SDL_BeginGPUComputePass</code>, an array indexed by <code>u</code> slot);
+              read-only ones with <code>SDL_BindGPUComputeStorageBuffers</code>; uniforms with
+              <code>SDL_PushGPUComputeUniformData</code>. Thread counts come from the
+              shader&rsquo;s reflection JSON, never retyped (<code>gpu_compute_pipeline::load</code>).</td>
+          <td>A group size that disagrees with <code>[numthreads]</code>: a tail of items never
+              processed, or processed twice.</td>
+        </tr>
+        <tr>
+          <td><strong>A storage record</strong></td>
+          <td><strong>16-byte rows</strong>: every <code>float3</code> followed by exactly one scalar,
+              or a <code>float4</code>; matrices as rows (&sect;7p). The engine&rsquo;s
+              <code>particle</code> is three rows, 48 bytes, with <code>static_assert</code>s on
+              every offset.</td>
+          <td><code>{float3, float3, float}</code> is 28 bytes in C++ and 32 under the SPIR-V rules
+              this toolchain applies (velocity at 16, not 12): every particle wrong by a different
+              amount.</td>
+        </tr>
+        <tr>
+          <td><strong><code>cycle</code></strong></td>
+          <td>A buffer&rsquo;s <strong>load op</strong>. <code>true</code> only for a pass that
+              overwrites every byte it writes (<code>clear</code>, <code>compact</code>&rsquo;s
+              list); <code>false</code> for anything a pass reads and writes (the pool, the count).
+              The frame graph derives it: <code>write_buffer</code> cycles,
+              <code>keep_buffer</code> does not.</td>
+          <td>Measured on Metal: submitted back to back, one pool becomes three pools, each advancing
+              every third step; with a fence wait after each step, every step starts empty. Only
+              <code>SDL_WaitForGPUIdle</code> hides it.</td>
+        </tr>
+        <tr>
+          <td><strong>Synchronisation</strong></td>
+          <td>The end of a pass is the only barrier. A dispatch that reads what an earlier dispatch
+              wrote goes in a <strong>new pass</strong>, however small the earlier one.</td>
+          <td>Nothing, on Metal (SDL&rsquo;s encoder happens to order them: 20 exact counts in 20
+              trials). On Vulkan and D3D12 SDL records no barrier between dispatches of one pass.</td>
+        </tr>
+        <tr>
+          <td><strong>Random numbers</strong></td>
+          <td>A <strong>hash of a name</strong>: <code>pcg_hash(serial ^ seed)</code>, then each
+              further draw hashes the state; <code>unit_float</code> keeps the top 24 bits times
+              2<sup>&minus;24</sup>, exact on both processors. Never a sequence advanced per
+              thread, never <code>frac(sin(x)&middot;k)</code>.</td>
+          <td>An LCG seeded by index: consecutive particles correlated +0.998, one diagonal line.
+              The sine hash: 4,178 distinct values of 65,536, and different on CPU and GPU.</td>
+        </tr>
+        <tr>
+          <td><strong>CPU and GPU agree</strong></td>
+          <td><strong>Exactly</strong> on integers and decisions (serials, slots, alive or dead,
+              the count); <strong>within a stated tolerance</strong> on floats. For the particle
+              system: 1.67&nbsp;&micro;m over ten seconds.</td>
+          <td>A test that demands bit-identical floats fails on a correct kernel (only 12% of
+              particles are); one that tolerates a wrong count draws the wrong number of things.</td>
+        </tr>
+        <tr>
+          <td><strong>Counting and listing</strong></td>
+          <td><code>InterlockedAdd</code> into the indirect arguments&rsquo; instance count; the
+              returned old value is the particle&rsquo;s index in the alive list. The draw is
+              <code>SDL_DrawGPUPrimitivesIndirect</code> with <code>{6, N, 0, 0}</code>; the CPU never
+              reads <code>N</code>.</td>
+          <td>A plain <code>+=</code>: hundreds of lost updates per million, a different number
+              every run.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <span class="label">And the additive blend</span>
+    <p>Order-independent <em>up to rounding</em>. Floating-point addition commutes and does not
+       associate: the same 45,000 sparks drawn in two orders into a half-float target differ in
+       thousands of channels, by up to 17 units in the last place, with the total light equal to a
+       part in ten thousand. A golden image of additive geometry needs a tolerance. Into an 8-bit
+       UNORM target the add saturates at 1, which is an error of any size. Lessons 6.18b &sect;9 and &sect;13;
+       the corrected comment is on <code>blend_add</code>.</p>
+  </div>
+
   <h2 id="units"><span class="num">8</span>Units and angles</h2>
 
   <div class="tbl-scroll">
@@ -4297,6 +4404,9 @@
     <table>
       <thead><tr><th>Fact</th><th>Value</th><th>Source</th></tr></thead>
       <tbody>
+        <tr><td>Compute resource layout</td><td><code>t[n], space0</code> read-only (sampled textures, read-only storage textures, read-only storage buffers); <code>u[n], space1</code> read-write (storage textures, then storage buffers); <code>b[n], space2</code> uniforms. Read-write resources are bound by <code>SDL_BeginGPUComputePass</code></td><td>SDL <code>release-3.4.12</code>: <code>SDL_gpu.h</code>, the comment on <code>SDL_CreateGPUComputePipeline</code>; compiled and run on Metal in 6.18b</td></tr>
+        <tr><td>A cycled buffer&rsquo;s contents are undefined</td><td>Measured on Metal: back-to-back submissions with <code>cycle = true</code> rotate through three buffers; a fence wait still returns an empty one; only <code>SDL_WaitForGPUIdle</code> returns the previous contents</td><td><code>SDL_gpu.h</code> on <code>SDL_GPUStorageBufferReadWriteBinding::cycle</code>; <code>verify_618b</code> &sect;I, 2026-09</td></tr>
+        <tr><td>No barrier between dispatches in one compute pass</td><td>Vulkan and D3D12 backends record none; Metal&rsquo;s serial encoder orders them anyway (20 of 20 exact)</td><td><code>SDL_gpu.h</code> on <code>SDL_BeginGPUComputePass</code>; the Vulkan and D3D12 backends read in 6.18b &sect;10</td></tr>
         <tr><td>Depth cube arrays in SDL_GPU</td><td><code>SDL_GPU_TEXTURETYPE_CUBE_ARRAY</code> with a depth format, <code>layer_count</code> = 6&nbsp;&times; cubes, one depth target per layer; asked with <code>SDL_GPUTextureSupportsFormat</code> before creating</td><td>SDL <code>release-3.4.12</code>: <code>SDL_gpu.h</code> and each backend&rsquo;s texture creation; run on Metal in 6.17b</td></tr>
         <tr><td>Texture types are validated</td><td>Metal&rsquo;s API validation (<code>MTL_DEBUG_LAYER=1</code>) reports a bound texture whose type differs from the shader&rsquo;s declaration &mdash; a 2D texture in a <code>Texture2DArray</code> slot &mdash; even though it renders correctly. Fallbacks are created with the declared type</td><td>Run in 2026-09 on 6.8&rsquo;s fallback, fixed after 6.17b</td></tr>
         <tr><td>Fragment resource order</td><td>Sampled textures, then storage textures, then storage buffers, in one <code>t</code> sequence in space 2; C++ slots count per kind from 0</td><td><code>SDL_gpu.h</code>, the comment above <code>SDL_CreateGPUShader</code>; MSL output confirms <code>[[buffer(3)]]</code></td></tr>

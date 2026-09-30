@@ -1,0 +1,74 @@
+<svg viewBox="0 0 880 372" role="img" aria-labelledby="l618bf1-t l618bf1-d">
+  <title id="l618bf1-t">What crosses the bus</title>
+  <desc id="l618bf1-d">Two lanes. Before: the CPU steps 65,536 particles and ships 3 MB to the GPU every frame. After: the CPU sends 144 bytes of uniforms per step and the GPU steps, counts and draws. A table gives the costs at four pool sizes; at 1,048,576 the upload alone (6.87 ms) costs more than the CPU step.</desc>
+  <defs>
+    <marker id="e-i-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-cpu-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5082e6"/></marker></defs>
+<defs><marker id="e-gpu-l618bf1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">Who owns the particles decides what crosses the bus every frame.</text>
+<text x="20" y="50" class="xs t-bad" text-anchor="start">BEFORE — the CPU simulates, and the pool is shipped</text>
+<rect x="20" y="62" width="230" height="58" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="135" y="80" class="sm" text-anchor="middle">CPU</text>
+<text x="135" y="96" class="xs" text-anchor="middle">step 65,536 slots</text>
+<text x="135" y="108" class="xs" text-anchor="middle">0.228 ms (Release)</text>
+<rect x="610" y="62" width="250" height="58" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="735" y="80" class="sm" text-anchor="middle">GPU</text>
+<text x="735" y="96" class="xs" text-anchor="middle">count + draw</text>
+<text x="735" y="108" class="xs" text-anchor="middle">(it could not simulate)</text>
+<line x1="254.00" y1="91.00" x2="604.00" y2="91.00" stroke="#5082e6" stroke-width="2.4" marker-end="url(#e-cpu-l618bf1)"/>
+<text x="429" y="71" class="xs" text-anchor="middle">3.00 MB, every frame</text>
+<text x="429" y="83" class="xs" text-anchor="middle">0.569 ms incl. submit</text>
+<text x="20" y="158" class="xs t-ok" text-anchor="start">AFTER — the GPU simulates, and nothing is shipped but the step</text>
+<rect x="20" y="170" width="230" height="58" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="135" y="188" class="sm" text-anchor="middle">CPU</text>
+<text x="135" y="204" class="xs" text-anchor="middle">advance the emission clock</text>
+<text x="135" y="216" class="xs" text-anchor="middle">fill one uniform block</text>
+<rect x="610" y="170" width="250" height="58" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.16"/>
+<text x="735" y="188" class="sm" text-anchor="middle">GPU</text>
+<text x="735" y="204" class="xs" text-anchor="middle">step, count, draw</text>
+<text x="735" y="216" class="xs" text-anchor="middle">0.029 ms per step</text>
+<line x1="254.00" y1="199.00" x2="604.00" y2="199.00" stroke="#f0961e" stroke-width="1.2" marker-end="url(#e-gpu-l618bf1)"/>
+<text x="429" y="191" class="xs" text-anchor="middle">144 B per fixed step</text>
+<line x1="20" y1="256" x2="860" y2="256" class="grid" stroke-width="1.0"/>
+<text x="20" y="272" class="xs muted" text-anchor="start">slots</text>
+<text x="170" y="272" class="xs muted" text-anchor="end">CPU step</text>
+<text x="300" y="272" class="xs muted" text-anchor="end">upload</text>
+<text x="430" y="272" class="xs muted" text-anchor="end">CPU total</text>
+<text x="560" y="272" class="xs muted" text-anchor="end">GPU step</text>
+<text x="690" y="272" class="xs muted" text-anchor="end">of 16.7 ms</text>
+<text x="860" y="272" class="xs muted" text-anchor="end">ratio</text>
+<text x="20" y="290" class="xs mono" text-anchor="start">16,384</text>
+<text x="170" y="290" class="xs mono" text-anchor="end">0.054 ms</text>
+<text x="300" y="290" class="xs mono" text-anchor="end">0.248 ms</text>
+<text x="430" y="290" class="xs mono" text-anchor="end">0.302 ms</text>
+<text x="560" y="290" class="xs mono" text-anchor="end">0.013 ms</text>
+<text x="690" y="290" class="xs mono" text-anchor="end">1.8%</text>
+<text x="860" y="290" class="xs mono" text-anchor="end">23x</text>
+<text x="20" y="306" class="xs mono" text-anchor="start">65,536</text>
+<text x="170" y="306" class="xs mono" text-anchor="end">0.228 ms</text>
+<text x="300" y="306" class="xs mono" text-anchor="end">0.569 ms</text>
+<text x="430" y="306" class="xs mono" text-anchor="end">0.797 ms</text>
+<text x="560" y="306" class="xs mono" text-anchor="end">0.029 ms</text>
+<text x="690" y="306" class="xs mono" text-anchor="end">4.8%</text>
+<text x="860" y="306" class="xs mono" text-anchor="end">27x</text>
+<text x="20" y="322" class="xs mono" text-anchor="start">262,144</text>
+<text x="170" y="322" class="xs mono" text-anchor="end">0.924 ms</text>
+<text x="300" y="322" class="xs mono" text-anchor="end">1.762 ms</text>
+<text x="430" y="322" class="xs mono" text-anchor="end">2.686 ms</text>
+<text x="560" y="322" class="xs mono" text-anchor="end">0.081 ms</text>
+<text x="690" y="322" class="xs mono" text-anchor="end">16.1%</text>
+<text x="860" y="322" class="xs mono" text-anchor="end">33x</text>
+<text x="20" y="338" class="xs mono" text-anchor="start">1,048,576</text>
+<text x="170" y="338" class="xs mono" text-anchor="end">3.752 ms</text>
+<text x="300" y="338" class="xs mono" text-anchor="end">6.866 ms</text>
+<text x="430" y="338" class="xs mono" text-anchor="end">10.617 ms</text>
+<text x="560" y="338" class="xs mono" text-anchor="end">0.394 ms</text>
+<text x="690" y="338" class="xs mono" text-anchor="end">63.7%</text>
+<text x="860" y="338" class="xs mono" text-anchor="end">27x</text>
+<text x="20" y="364" class="xs muted" text-anchor="start">Release library, this course's M-series machine (unified memory: the upload is a copy within one RAM; a discrete GPU pays PCIe as well).</text>
+</svg>

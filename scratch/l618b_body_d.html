@@ -1,0 +1,658 @@
+  <!-- =================================================================
+       15 — LISTINGS
+       ================================================================= -->
+  <h2 id="listings"><span class="num">15</span>Complete code listings</h2>
+
+  <p>
+    Every file this lesson changed or created, in full, as it stands at the end of 6.18b — the tree a
+    student has after 6.18, plus this lesson and nothing later. Thirteen engine, shader and demo files
+    are new and nine change — one of them, <code>gpu_pipeline.hpp</code>, by a single corrected comment
+    (§13.4), which the 6.13, 6.14 and 6.16 listings also carry as an erratum. The harness is the
+    fourteenth new file and the last listing.
+  </p>
+
+  <div class="tbl-scroll">
+  <table class="manifest">
+    <caption>File manifest</caption>
+    <thead>
+      <tr><th>Path</th><th>State</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>engine/include/engine/gfx/particles.hpp</code></td><td>new</td>
+          <td>The specification: <code>particle</code> (three rows), <code>pcg_hash</code>,
+              <code>unit_float</code>, <code>particle_rng</code>, <code>emitter_settings</code>,
+              <code>emission_clock</code>, <code>step_uniforms</code>, <code>step_slot</code>,
+              <code>particle_pool</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/particles.cpp</code></td><td>new</td>
+          <td>The clock, the uniform block, spawn, integrate, the step and the CPU pool.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_compute.hpp</code></td><td>new</td>
+          <td><code>groups_for</code> and <code>gpu_compute_pipeline</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_compute.cpp</code></td><td>new</td>
+          <td>Loading a compute pipeline from code and reflection.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_particles.hpp</code></td><td>new</td>
+          <td><code>particle_draw_uniforms</code>, <code>camera_right</code>/<code>camera_up</code>,
+              and <code>gpu_particles</code>: three buffers, four recordings.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_particles.cpp</code></td><td>new</td>
+          <td>Usage flags, the zeroed pool, the draw pipeline, <code>simulate</code>,
+              <code>count_living</code>, the CPU path's upload.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_shader.hpp</code></td><td>modified</td>
+          <td><code>compute_resources</code> and <code>parse_compute_reflection</code>.</td></tr>
+      <tr><td><code>engine/src/gfx/gpu_shader.cpp</code></td><td>modified</td>
+          <td>The compute parser, beside its graphics twin, on the same scanner.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/frame_graph.hpp</code></td><td>modified</td>
+          <td><code>fg_buffer</code>, buffer uses, <code>import_buffer</code>,
+              <code>add_compute_pass</code>, <code>read_buffer</code>/<code>write_buffer</code>/<code>keep_buffer</code>,
+              <code>ctx.compute</code>/<code>ctx.buffer</code>; the <code>writes</code> flag.</td></tr>
+      <tr><td><code>engine/src/gfx/frame_graph.cpp</code></td><td>modified</td>
+          <td>Derived cycle flags, the pass-kind and slot rules, compute passes in
+              <code>execute</code>, buffers in the dump.</td></tr>
+      <tr><td><code>engine/include/engine/gfx/gpu_pipeline.hpp</code></td><td>modified</td>
+          <td>One comment: <code>blend_add</code> is commutative, not associative (§9.5).</td></tr>
+      <tr><td><code>engine/include/engine/engine.hpp</code></td><td>modified</td>
+          <td>The three new public headers.</td></tr>
+      <tr><td><code>engine/CMakeLists.txt</code></td><td>modified</td>
+          <td>Three new translation units.</td></tr>
+      <tr><td><code>shaders/particles_step.comp.hlsl</code></td><td>new</td>
+          <td>One fixed step: <code>step_slot</code>, transliterated.</td></tr>
+      <tr><td><code>shaders/particles_clear.comp.hlsl</code></td><td>new</td>
+          <td>The draw's arguments := {6, 0, 0, 0}.</td></tr>
+      <tr><td><code>shaders/particles_compact.comp.hlsl</code></td><td>new</td>
+          <td>The alive list and its count, with an atomic.</td></tr>
+      <tr><td><code>shaders/particles_probe.comp.hlsl</code></td><td>new</td>
+          <td>The instrument: layout, hashes, the race, the tail, the sine hash.</td></tr>
+      <tr><td><code>shaders/particle.vert.hlsl</code></td><td>new</td>
+          <td>A billboard per living particle, from two system values and two storage buffers.</td></tr>
+      <tr><td><code>shaders/particle.frag.hlsl</code></td><td>new</td>
+          <td>A soft disc of light, alpha zero.</td></tr>
+      <tr><td><code>CMakeLists.txt</code></td><td>modified</td>
+          <td>Four compute shaders and a vertex/fragment pair.</td></tr>
+      <tr><td><code>demos/particles/main.cpp</code></td><td>new</td>
+          <td>The fountain: fixed steps recorded for the GPU, the frame declared, <code>[C]</code>
+              for the CPU path, <code>--shot</code>.</td></tr>
+      <tr><td><code>demos/CMakeLists.txt</code></td><td>modified</td>
+          <td>The <code>particles</code> target.</td></tr>
+      <tr><td><code>scratch/verify_618b.cpp</code></td><td>new</td>
+          <td>Every number on this page: §A to §L, 71 checks.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The specification, on the CPU:
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/particles.hpp@@
+  @@LISTING:engine/src/gfx/particles.cpp@@
+
+  <p>
+    Compute pipelines, and the reflection they are loaded from:
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/gpu_compute.hpp@@
+  @@LISTING:engine/src/gfx/gpu_compute.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_shader.hpp@@
+  @@LISTING:engine/src/gfx/gpu_shader.cpp@@
+
+  <p>
+    The GPU particle system, and the one corrected comment in the pipeline builder it uses:
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/gpu_particles.hpp@@
+  @@LISTING:engine/src/gfx/gpu_particles.cpp@@
+  @@LISTING:engine/include/engine/gfx/gpu_pipeline.hpp@@
+
+  <p>
+    The frame graph, with buffers and compute passes:
+  </p>
+
+  @@LISTING:engine/include/engine/gfx/frame_graph.hpp@@
+  @@LISTING:engine/src/gfx/frame_graph.cpp@@
+
+  <p>
+    The shaders:
+  </p>
+
+  @@LISTING:shaders/particles_step.comp.hlsl@@
+  @@LISTING:shaders/particles_clear.comp.hlsl@@
+  @@LISTING:shaders/particles_compact.comp.hlsl@@
+  @@LISTING:shaders/particles_probe.comp.hlsl@@
+  @@LISTING:shaders/particle.vert.hlsl@@
+  @@LISTING:shaders/particle.frag.hlsl@@
+
+  <p>
+    The build, the umbrella header, the demo and the harness:
+  </p>
+
+  @@LISTING:engine/CMakeLists.txt@@
+  @@LISTING:engine/include/engine/engine.hpp@@
+  @@LISTING:CMakeLists.txt@@
+  @@LISTING:demos/CMakeLists.txt@@
+  @@LISTING:demos/particles/main.cpp@@
+  @@LISTING:scratch/verify_618b.cpp@@
+
+  <!-- =================================================================
+       16 — BUILD & RUN
+       ================================================================= -->
+  <h2 id="run"><span class="num">16</span>Build &amp; run</h2>
+
+  <p>
+    Three new translation units, four compute shaders and two graphics shaders, and a new demo.
+    <code>add_hlsl_shader</code> has accepted <code>compute</code> as a stage since Lesson 4.3 wrote it
+    in a comment; this is the first time anything passes it. The build compiles each kernel to SPIR-V,
+    MSL and (with a DXC-enabled shadercross) DXIL, plus the nine-number reflection.
+  </p>
+
+  <pre><code class="lang-bash"># Linux / macOS
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+
+# Windows (MSVC)
+cmake -S . -B build
+cmake --build build --config RelWithDebInfo</code></pre>
+
+  <p>Then the harness, and — separately — its timings against a Release library:</p>
+
+  <pre><code class="lang-bash">sh scratch/build_verify_618b.sh                         # every check, as configured
+cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
+cmake --build build-rel --target engine
+ENGINE_BUILD=build-rel ENGINE_CFLAGS="-O2 -DNDEBUG" sh scratch/build_verify_618b.sh   # §L</code></pre>
+
+  <p>
+    §L times <code>particle_pool::step</code>, which lives in <code>libengine.a</code>, and a
+    harness's own <code>-O2</code> never reaches a library it links. The script prints which library
+    it linked and its build type, and §L says in its own output whether its CPU column may be quoted:
+    against the default, unoptimised library the step measures about 21&nbsp;ns a slot, against
+    Release about 3.5.
+  </p>
+
+  <p>And the demo:</p>
+
+  <pre><code class="lang-bash">cd build/demos
+./particles                      # the fountain, simulated on the GPU
+./particles --cpu                # the same fountain, simulated on the CPU and uploaded
+./particles --count 262144       # a bigger pool (rounded up to a power of two)
+./particles --shot out.ppm       # one frame, 2.5 s in, no window
+./particles --log gpu=info       # then press [G]: the frame graph's deduction, printed</code></pre>
+
+  <p>
+    Keys: <code>[C]</code> switches between the GPU and the CPU simulation (each restarts from an empty
+    pool), <code>[B]</code> toggles the bloom, <code>[Space]</code> pauses the emitter so the last sparks
+    can be watched dying, and <code>[G]</code> dumps the frame graph once.
+  </p>
+
+  <h3>Expected result</h3>
+
+  <p>
+    The harness ends with <code>71 checks, 0 failure(s)</code>. It reports the device it found
+    (<code>GPU: driver 'metal'</code> on a Mac) before the device sections; with no GPU it runs §B and
+    §D–§F and skips the rest. Read §G's table — ten seconds of 0 alive/dead disagreements and a worst
+    distance in micrometres — and §I's two six-step traces, which are the most instructive twenty
+    lines in the lesson. The numbers that come from the hardware's scheduling — §H's lost updates, the
+    list's order, the images' last bits, §I's back-to-back count — differ from run to run, and the
+    checks on them are written as bounds.
+  </p>
+
+  <p>
+    The demo opens a 1280&nbsp;×&nbsp;720 window on a dark floor under a cool moonlight. A fountain of
+    warm sparks rises from the floor, white at its core where thousands overlap, cooling to orange as
+    they fall, blooming where they are densest and bouncing into a spray across the floor. A metal torus
+    stands on edge to the right, and the sparks that fall behind it are hidden by it — the depth test —
+    while it hides nothing it should not. The HUD says <code>65536 sparks, simulated on the GPU</code>
+    and that the count never leaves the GPU. Press <code>[C]</code>: the fountain restarts, looks the
+    same, and the HUD now reports a CPU step (about 1.4&nbsp;ms in a default build, 0.23 in Release)
+    and 3.00&nbsp;MB uploaded every frame. <code>--shot</code> produces Figure 16. Two shots are not
+    byte-identical — about 1,700 of 2.76&nbsp;million bytes differ between two runs of the same binary,
+    never by more than one code — because the compaction's order differs (§9.5); a GPU shot and a CPU
+    shot differ by the same amount, not more.
+  </p>
+
+  @@FIG_DEMO@@
+
+  <!-- =================================================================
+       17 — PITFALLS
+       ================================================================= -->
+  <h2 id="pitfalls"><span class="num">17</span>Common pitfalls &amp; debugging</h2>
+
+  <div class="pitfalls">
+
+  <h3>The fountain keeps only its newest sparks, or turns into several fountains taking turns</h3>
+  <p>
+    <strong>Symptom:</strong> a few hundred particles near the emitter and nothing older; or a pool that
+    seems to advance in fits, with particles from several "generations" interleaved.<br>
+    <strong>Cause:</strong> the pool's read-write binding has <code>cycle = true</code>. The step reads
+    what the last step wrote, and a cycled buffer's contents are undefined — SDL hands the pass another
+    internal buffer, empty or holding an older history (§10.2).<br>
+    <strong>Fix:</strong> <code>cycle = false</code> for any buffer a pass reads and writes. Declare it
+    with <code>keep_buffer</code> and the frame graph derives it.
+  </p>
+
+  <h3>Particles fly off in wrong directions at wrong speeds, differently for each one</h3>
+  <p>
+    <strong>Symptom:</strong> every particle is plausible and every one is wrong; the error grows along
+    the buffer.<br>
+    <strong>Cause:</strong> a storage <code>struct</code> with a <code>float3</code> followed by another
+    <code>float3</code>. C++ puts the second at byte 12, the SPIR-V path at 16, so the stride differs
+    and every record after the first is read from the wrong offset (§4.2).<br>
+    <strong>Fix:</strong> rows of <code>float3</code> + one scalar, or <code>float4</code>s; name any
+    padding explicitly on both sides; <code>static_assert</code> every offset in C++ and read one
+    record back from the GPU once.
+  </p>
+
+  <h3>The kernel runs and its uniforms are all zero</h3>
+  <p>
+    <strong>Symptom:</strong> particles spawn at the origin with no velocity, or nothing ever spawns.<br>
+    <strong>Cause:</strong> the <code>cbuffer</code> is declared at <code>b0, space1</code> — a vertex
+    shader's uniform space — or <code>space3</code>. A compute shader's uniforms are
+    <code>b[n], space2</code> (§4.4).<br>
+    <strong>Fix:</strong> <code>register(b0, space2)</code>, and check the reflection:
+    <code>"uniform_buffers": 1</code> is necessary but not sufficient, because a wrong space still
+    reflects a uniform block.
+  </p>
+
+  <h3>The first frame is full of sparks in random places</h3>
+  <p>
+    <strong>Symptom:</strong> a burst of particles everywhere on the first frame, never repeated.<br>
+    <strong>Cause:</strong> the pool was not zeroed. SDL promises nothing about a new buffer's
+    contents, and random ages and lives make some records alive.<br>
+    <strong>Fix:</strong> upload zeros once at creation, as <code>gpu_particles::create</code> does. A
+    zeroed record is dead by construction (§4.1).
+  </p>
+
+  <h3>Nothing is drawn, or everything is drawn twice, on Windows or Linux only</h3>
+  <p>
+    <strong>Symptom:</strong> correct on a Mac; no particles, or a flickering count, on Vulkan or
+    Direct3D&nbsp;12.<br>
+    <strong>Cause:</strong> the clear and the compaction are in one compute pass. Metal's serial encoder
+    orders the two dispatches; Vulkan and D3D12 do not, and the atomics race the clear (§10.1).<br>
+    <strong>Fix:</strong> one pass per dependent dispatch. Declared through the frame graph, a pass that
+    reads a version another pass produced is ordered after it and in its own pass by construction.
+  </p>
+
+  <h3>The count is a few hundred when it should be tens of thousands</h3>
+  <p>
+    <strong>Symptom:</strong> a sparse fountain; the draw's instance count varies wildly frame to
+    frame.<br>
+    <strong>Cause:</strong> the compaction increments with <code>args[1] = args[1] + 1</code>. Lanes
+    read the same value together, and most increments are lost (§9.2: 296 to 509 of 1,048,576).<br>
+    <strong>Fix:</strong> <code>InterlockedAdd(args[1], 1u, place)</code>, and use <code>place</code> as
+    the index into the list.
+  </p>
+
+  <h3>The draw crashes the device or draws nothing, and the buffer looks right</h3>
+  <p>
+    <strong>Symptom:</strong> validation errors naming the indirect buffer, or a device loss.<br>
+    <strong>Cause:</strong> the arguments buffer lacks <code>SDL_GPU_BUFFERUSAGE_INDIRECT</code>, or lacks
+    <code>COMPUTE_STORAGE_READ</code> beside <code>_WRITE</code> for the atomic's read; or
+    <code>first_vertex</code>/<code>first_instance</code> are not zero while the vertex shader uses the
+    built-in IDs.<br>
+    <strong>Fix:</strong> all three usage bits (§9.4), and a clear kernel that writes all four words.
+  </p>
+
+  <h3>The fountain comes out in horizontal layers</h3>
+  <p>
+    <strong>Symptom:</strong> shells a step's travel apart, most visible with a narrow speed range.<br>
+    <strong>Cause:</strong> every birth of a step is spawned at age zero at the emitter.<br>
+    <strong>Fix:</strong> <code>birth_age</code>: each birth advanced by its own age within the step
+    (§6.4).
+  </p>
+
+  <h3>Sparks vanish in mid-air at a fixed height</h3>
+  <p>
+    <strong>Symptom:</strong> the fountain is truncated; its top looks cut off.<br>
+    <strong>Cause:</strong> the ring overwrites living particles — the pool is smaller than
+    <code>rate × longest life</code>.<br>
+    <strong>Fix:</strong> <code>capacity / rate &gt; life_max</code>. At 32,768 slots and 20,000 a second,
+    76.4% of particles died early (§6.3).
+  </p>
+
+  <h3>A streak across the screen at every birth</h3>
+  <p>
+    <strong>Symptom:</strong> thin lines from random points to the emitter, one frame long.<br>
+    <strong>Cause:</strong> a respawned slot keeps the old tenant's <code>previous</code>, and the draw
+    interpolates between two different particles.<br>
+    <strong>Fix:</strong> set <code>previous</code> to the emitter at spawn (§7.5).
+  </p>
+
+  <h3>Sparks pop in and out of view where they cross each other</h3>
+  <p>
+    <strong>Symptom:</strong> dark holes in the fountain that move every frame.<br>
+    <strong>Cause:</strong> the particle pipeline writes depth, so each spark occludes those behind it,
+    and the list's order — which decides who was first — changes every frame.<br>
+    <strong>Fix:</strong> depth test on, depth write off (§8.3).
+  </p>
+
+  <h3><code>SDL_CreateGPUDevice failed: Video subsystem not initialized</code> in a headless shot</h3>
+  <p>
+    <strong>Symptom:</strong> the demo runs in a window and fails with <code>--shot</code>.<br>
+    <strong>Cause:</strong> <code>surface::headless</code> leaves the video subsystem uninitialised, and
+    SDL_GPU needs it with or without a window.<br>
+    <strong>Fix:</strong> <code>.extra_subsystems = SDL_INIT_VIDEO</code> in the <code>app_config</code>
+    for the shot, as the demo does.
+  </p>
+
+  <h3>The frame graph refuses to compile the frame</h3>
+  <p>
+    <strong>Symptom:</strong> <code>compile</code> returns false and the log names a pass.<br>
+    <strong>Cause:</strong> one of §11.1's rules: a render pass declared a buffer write, a compute pass
+    declared an attachment, or a compute pass's read-write slots have a gap or a repeat.<br>
+    <strong>Fix:</strong> the message names the pass and the slot. Slots are the shader's
+    <code>u</code> registers, 0 to <em>n</em>&nbsp;−&nbsp;1.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       18 — EXERCISES
+       ================================================================= -->
+  <h2 id="exercises"><span class="num">18</span>Exercises</h2>
+
+  <div class="exercises">
+
+  <h3>1 — Wind, derived implicitly (guided)</h3>
+  <p>
+    Add a wind velocity <strong>w</strong> to the emitter: linear drag pulls a particle toward the
+    air's velocity rather than toward rest, d<strong>v</strong>/d<em>t</em>&nbsp;=&nbsp;<strong>g</strong>&nbsp;−&nbsp;<em>k</em>(<strong>v</strong>&nbsp;−&nbsp;<strong>w</strong>).
+    Derive the implicit step, add <strong>w</strong> to <code>step_uniforms</code> on both sides without
+    breaking the row rule, and keep §G green.
+  </p>
+  <p>
+    <em>Solution sketch:</em> solving
+    <strong>v</strong>′&nbsp;=&nbsp;<strong>v</strong>&nbsp;+&nbsp;(<strong>g</strong>&nbsp;−&nbsp;<em>k</em>(<strong>v</strong>′&nbsp;−&nbsp;<strong>w</strong>))<em>h</em>
+    gives <strong>v</strong>′&nbsp;=&nbsp;(<strong>v</strong>&nbsp;+&nbsp;(<strong>g</strong>&nbsp;+&nbsp;<em>k</em><strong>w</strong>)<em>h</em>)&nbsp;/&nbsp;(1&nbsp;+&nbsp;<em>kh</em>)
+    — the same factor, with gravity replaced by <strong>g</strong>&nbsp;+&nbsp;<em>k</em><strong>w</strong>. So
+    the cheapest change is not a new row at all: fold <em>k</em><strong>w</strong> into the
+    <code>gravity</code> row on the CPU, in <code>make_step_uniforms</code>, and the kernel does not
+    change. The one catch is the birth's pre-age step, which uses <em>its own</em> drag factor; it
+    must use the same folded acceleration. A particle then drifts toward <strong>w</strong> with time
+    constant 1/<em>k</em> — 2.5&nbsp;s at the demo's <em>k</em>&nbsp;=&nbsp;0.4, so a 3&nbsp;s spark ends
+    about 70% of the way to the wind's speed.
+  </p>
+
+  <h3>2 — A burst (guided)</h3>
+  <p>
+    Make <code>[R]</code> emit 20,000 sparks at once on top of the steady stream. Decide what the
+    burst's births should look like in time, what happens when a burst exceeds the pool, and what the
+    ring does to the sparks already alive.
+  </p>
+  <p>
+    <em>Solution sketch:</em> a burst is one window of <code>count</code> births in one step, advancing
+    the clock's serials by <code>count</code>; <code>emission_clock::advance</code> already caps a
+    window at the capacity, so a burst of 100,000 into 65,536 slots emits 65,536 and says nothing —
+    log it instead. Give the burst <code>inv_rate&nbsp;=&nbsp;0</code> and every birth has age
+    <em>h</em>: born together, which for an explosion is correct, and is exactly the shell §6.4 removed
+    for a steady stream. The ring's price is the real lesson: 20,000 births replace the 20,000 oldest
+    slots, alive or not. With the default fountain those slots hold the sparks born 2.3 to 3.3
+    seconds earlier; a spark born <em>t</em> seconds ago is alive while its life, uniform on
+    [1.5,&nbsp;3], exceeds <em>t</em>, which over that window averages to about 17% — so the burst kills
+    some 3,500 of the fountain's 45,000 sparks early, at the top of their arcs. Compute it for a
+    burst of 40,000, and that is the strongest argument for Exercise 5's dead list.
+  </p>
+
+  <h3>3 — Show the count without a stall (guided)</h3>
+  <p>
+    The HUD in GPU mode says the count never leaves the GPU. Put it on the HUD anyway, without ever
+    waiting for the GPU: read it a few frames late.
+  </p>
+  <p>
+    <em>Solution sketch:</em> after the compaction each frame, record
+    <code>SDL_DownloadFromGPUBuffer</code> of the 16-byte arguments into one of three download transfer
+    buffers, round-robin, and keep the frame's fence from
+    <code>SDL_SubmitGPUCommandBufferAndAcquireFence</code>. At the start of each frame, for any slot whose
+    fence <code>SDL_QueryGPUFence</code> reports signalled, map the buffer, read word 1, and release the
+    fence. The HUD shows a count two or three frames old, and the frame never blocks — which is the
+    general shape of every GPU-to-CPU readback a real engine does (occlusion queries, picking,
+    auto-exposure). Check it against <code>--cpu</code> mode's exact count: in steady state they agree
+    within the births of the frames in between.
+  </p>
+
+  <h3>4 — Collide with the depth buffer (engine challenge)</h3>
+  <p>
+    Make sparks bounce off the torus and anything else the camera can see. In the step kernel, project
+    a particle with the camera's <code>clip_from_world</code>, sample the scene's depth there, and if the
+    particle has passed behind the surface by less than a thickness, reflect its velocity about the
+    surface normal.
+  </p>
+  <p>
+    <em>Solution sketch:</em> the depth must be a <em>sampled</em> texture in a compute pass —
+    bound with <code>SDL_BindGPUComputeSamplers</code>, <code>t0, space0</code> before the read-only
+    buffers — so its format must support sampling (6.8's <code>supported_shadow_format</code> asks),
+    and it must be last frame's depth: this frame's is drawn after the steps. Import it into the frame
+    graph so it is stored, and declare <code>sample</code> on it in each step pass. The normal comes
+    from the depth's neighbours: reconstruct three world positions and cross their differences. Then
+    face the honest limits: a particle behind the torus from the camera's view cannot collide with
+    its back, one off-screen collides with nothing, and a thickness too large makes sparks bounce off
+    the air in front of silhouettes. Screen-space collision is a trick that looks right where the camera
+    is looking, which is why it is popular and why a signed distance field is what replaces it.
+  </p>
+
+  <h3>5 — A dead list instead of a ring (engine challenge)</h3>
+  <p>
+    Replace the ring with the design from Gareth Thomas's GDC&nbsp;2014 talk: a stack of free slot
+    indices. Births pop from it, deaths push to it, and no living particle is ever overwritten. Keep a
+    CPU twin and decide what it can still check.
+  </p>
+  <p>
+    <em>Solution sketch:</em> a <code>dead</code> buffer of indices and a counter, initialised to all
+    slots. The step becomes two kernels in two passes: one that ages and integrates the living and, for
+    each particle that dies, does <code>InterlockedAdd(dead_count, 1, i)</code> and writes its slot to
+    <code>dead[i]</code>; one that runs a thread per birth, does
+    <code>InterlockedAdd(dead_count, -1, j)</code> on a <em>signed</em> counter and spawns into
+    <code>dead[j - 1]</code> if <code>j&nbsp;&gt;&nbsp;0</code> — a birth that finds the stack empty has
+    driven the counter negative, and a later pass must clamp it back to zero, which is a third
+    dependency and a third pass. Which slot a birth lands in now depends on the order of the atomics, so
+    the CPU twin can check the <em>count</em> alive and the <em>multiset</em> of serials alive — both
+    still exact — but no longer slot by slot. Measure the cost against the ring at 65,536 and
+    1,048,576: two atomics per particle per step against none. Then make it cheaper with a wave-level
+    reduction, after the ⚠ VERIFY in §14.
+  </p>
+
+  </div>
+
+  <!-- =================================================================
+       19 — RECAP
+       ================================================================= -->
+  <h2 id="recap"><span class="num">19</span>Recap &amp; next — and Module 6's project tree</h2>
+
+  <p>
+    The engine can compute. A compute pipeline is loaded from code and a nine-number reflection, run as
+    a grid of thread groups whose ragged tail every kernel guards, and handed read-write storage
+    buffers when its pass begins. The particle record is three 16-byte rows because two compilers read
+    anything else two ways — measured, not assumed. Randomness is a hash of a particle's name, PCG's,
+    bit-identical on both processors, where the three popular alternatives are correlated, short of
+    bits, or not even one function. An emitter is a clock that keeps its fraction and a ring that needs
+    no atomics, with each birth placed where it belongs in its step; the step is semi-implicit Euler
+    with implicit drag and a floor whose bounces are as accurate as the step allows; and the particles
+    are drawn as billboards with no vertex buffer, added to the HDR light, tested against the scene.
+  </p>
+
+  <p>
+    The count of the living is produced by an atomic and consumed by an indirect draw without the CPU
+    ever learning it, and the draw's order changes every frame in the last bits and nowhere else. SDL
+    synchronises passes and nothing within them, and <code>cycle</code> turned out to be a buffer's load
+    op — wrong for the pool in every frame, as §I's traces show. The frame graph learned buffers and
+    compute passes, and derives that flag and the read-write bindings from the same declarations it
+    derived load ops from; the demo is the first program whose frame is declared. And the GPU was held
+    to a CPU specification with honest tolerances: exact where the arithmetic is integer, within
+    1.67&nbsp;µm where it is not, and the reference itself no more exact than that across its own
+    builds.
+  </p>
+
+  <h3>Module 6, complete</h3>
+
+  <p>
+    This lesson was inserted after the post-Module 8 review, and it is now the last lesson of Module 6
+    — so the module's summary and project tree, which CLAUDE.md §8 asks every module to end with and
+    which Module 6 never had, are here.
+  </p>
+
+  <div class="tbl-scroll">
+  <table>
+    <caption class="visually-hidden">What each lesson of Module 6 added to the engine</caption>
+    <thead>
+      <tr><th>lesson</th><th>the engine gained</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="06-01-linear-and-srgb.html">6.1</a></td><td>linear light end to end: decode at the input edge, encode once at the output</td></tr>
+      <tr><td><a href="06-02-what-a-brdf-is.html">6.2</a></td><td>radiometry, and Lambert re-understood as a BRDF</td></tr>
+      <tr><td><a href="06-03-microfacet-theory.html">6.3</a></td><td>the microfacet model: distribution, masking–shadowing and Fresnel, each visualised</td></tr>
+      <tr><td><a href="06-04-cook-torrance.html">6.4</a></td><td>Cook–Torrance, assembled from those three terms</td></tr>
+      <tr><td><a href="06-05-material-system.html">6.5</a></td><td>materials that refer to textures by handle, and the per-draw material block</td></tr>
+      <tr><td><a href="06-06-gltf.html">6.6</a></td><td>glTF 2.0 through cgltf, behind the engine's own types</td></tr>
+      <tr><td><a href="06-07-normal-mapping.html">6.7</a></td><td>normal maps and the tangent frame</td></tr>
+      <tr><td><a href="06-08-shadow-mapping.html">6.8</a></td><td>shadow maps on both renderers: bias, acne, PCF</td></tr>
+      <tr><td><a href="06-09-cascaded-shadows.html">6.9</a></td><td>cascades fitted to the camera's frustum</td></tr>
+      <tr><td><a href="06-10-mipmaps.html">6.10</a></td><td>mip chains, level selection, trilinear and anisotropic filtering</td></tr>
+      <tr><td><a href="06-11-transparency.html">6.11</a></td><td>alpha modes, premultiplied blending and draw order</td></tr>
+      <tr><td><a href="06-12-hdr-tonemapping.html">6.12</a></td><td>the float target, exposure and tonemapping</td></tr>
+      <tr><td><a href="06-13-bloom-post-stack.html">6.13</a></td><td>bloom, and the post-processing stack</td></tr>
+      <tr><td><a href="06-14-antialiasing.html">6.14</a></td><td>geometric and shading antialiasing</td></tr>
+      <tr><td><a href="06-15-skybox-ibl.html">6.15</a></td><td>the skybox and image-based lighting</td></tr>
+      <tr><td><a href="06-16-frustum-culling.html">6.16</a></td><td>frustum culling and instanced submission</td></tr>
+      <tr><td><a href="06-17-frame-graph.html">6.17</a></td><td>the frame graph: order, load and store ops, lifetimes, derived</td></tr>
+      <tr><td><a href="06-17b-local-lights.html">6.17b</a></td><td>point and spot lights and their shadows, on both renderers</td></tr>
+      <tr><td><a href="06-18-text-overlay.html">6.18</a></td><td>text: a font atlas and an overlay, on both renderers</td></tr>
+      <tr><td>6.18b</td><td>compute pipelines, a GPU particle system, and buffers in the frame graph</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    That is the renderer the course set out to build: an SDL_GPU forward PBR renderer with shadow-mapped
+    directional, point and spot lights, HDR, tonemapping, bloom in a post-processing stack, a skybox and
+    image-based lighting, antialiasing, culling and instancing, text, and now a compute path — every
+    piece of it held to the software rasterizer the first three modules built, which still draws every
+    picture Module 6 drew. The repository at the end of Module 6, in course order: directories outside
+    Module 6 compactly, and <code>gfx/</code>'s Module 6 files a line each with the lesson that added
+    them.
+  </p>
+
+  <div class="listing">
+    <figcaption><span class="path">the repository after Module 6</span>
+      <span class="lang" data-lang="text">tree</span></figcaption>
+<pre><code class="lang-text">3d-engine-course/
+├── CMakeLists.txt              top level: engine, demos, shaders (0.4, 5.1)
+├── cmake/                      EngineHelpers.cmake  Shaders.cmake
+├── shaders/                    HLSL, cross-compiled by SDL_shadercross (4.3) — 32 files
+│   Module 6 added:             shadow.vert/.frag (6.8)  fullscreen.vert  tonemap.frag (6.12)
+│                               bloom_bright/_down/_up.frag (6.13)  skybox.vert/.frag (6.15)
+│                               scene_instanced.vert (6.16)  overlay.vert/.frag (6.18)
+│                               particles_step/_clear/_compact/_probe.comp  particle.vert/.frag (6.18b)
+├── assets/                     meshes, a texture and a font the demos load
+│   cube.bin  cube.gltf  cube.obj  fonts/Karla-Regular.ttf  fonts/OFL.txt
+│   quirks.obj  shapes.glb  torus.obj  twisted.obj  uv_grid.png
+├── engine/                     the static library (5.1)
+│   ├── CMakeLists.txt          sources and warnings
+│   ├── include/engine/         the public API — the only thing demos may include
+│   │   ├── engine.hpp          the umbrella
+│   │   ├── asset/              5.5  (2)  asset_store.hpp  search_path.hpp
+│   │   ├── core/               Modules 1 and 5  (10)  actions.hpp  assert.hpp  bench.hpp
+│   │   │                       clock.hpp  fixed_step.hpp  handle.hpp  input.hpp  log.hpp
+│   │   │                       pool.hpp  profile.hpp
+│   │   ├── ecs/                5.6–5.9  (6)  camera.hpp  entity.hpp  hierarchy.hpp  pool.hpp
+│   │   │                       registry.hpp  view.hpp
+│   │   ├── gfx/                Modules 2–6  (51)
+│   │   │   microfacet.hpp      6.3   the surface as a distribution of mirrors
+│   │   │   material.hpp        6.5   what a surface is, textures by handle
+│   │   │   cull.hpp            6.5   which faces to throw away
+│   │   │   gltf.hpp            6.6   glTF 2.0, behind the engine's own types
+│   │   │   bounds.hpp          6.8   an axis-aligned box (Module 8 moves it to math/)
+│   │   │   shadow.hpp          6.8   the shadow map; 6.17b the lamps' maps and bias
+│   │   │   gpu_shadow.hpp      6.8   the depth pass on the GPU; 6.17b local shadows
+│   │   │   cascade.hpp         6.9   cascades fitted to the camera
+│   │   │   mipmap.hpp          6.10  mip chains and level selection
+│   │   │   blend.hpp           6.11  what alpha means, and over
+│   │   │   draw_order.hpp      6.11  buckets and back-to-front sorting
+│   │   │   hdr.hpp             6.12  exposure, the tonemap curves, the CPU resolve
+│   │   │   gpu_post.hpp        6.12  the resolve pass; 6.13 the post stack
+│   │   │   bloom.hpp           6.13  the bloom's filters and chain
+│   │   │   antialias.hpp       6.14  coverage and shading prefilters
+│   │   │   cubemap.hpp         6.15  environment maps, irradiance, the split sum
+│   │   │   frustum.hpp         6.16  six planes from clip_from_world
+│   │   │   instancing.hpp      6.16  a culled set grouped into instanced draws
+│   │   │   frame_graph.hpp     6.17  the frame, declared; 6.18b buffers and compute passes
+│   │   │   font.hpp            6.18  stb_truetype, baked to an atlas
+│   │   │   overlay.hpp         6.18  quads for text, composited on the CPU
+│   │   │   gpu_overlay.hpp     6.18  the same quads on the GPU
+│   │   │   particles.hpp       6.18b the particle system's specification, on the CPU
+│   │   │   gpu_compute.hpp     6.18b compute pipelines and group arithmetic
+│   │   │   gpu_particles.hpp   6.18b the particle system on the GPU
+│   │   │   and from Modules 2–5: clip  colour  debug_draw  debug_lines  depth_buffer
+│   │   │   framebuffer  gpu_buffer  gpu_debug  gpu_device  gpu_mesh  gpu_pipeline
+│   │   │   gpu_present  gpu_scene  gpu_shader  gpu_texture  gpu_uniform  image  light
+│   │   │   mesh  obj  projector  raster  renderable  scene  soft_renderer  texture
+│   │   │   viewport  (.hpp)
+│   │   ├── math/               Modules 1–5, header-only  (7)  mat2.hpp  mat3.hpp  mat4.hpp
+│   │   │                       transform.hpp  vec2.hpp  vec3.hpp  vec4.hpp
+│   │   ├── platform/           5.2  (3)  app.hpp  main.hpp  platform.hpp
+│   │   └── ui/                 5.11  (1)  debug_ui.hpp
+│   └── src/                    one .cpp per header that is not header-only
+│       asset/ (2)  core/ (6)  gfx/ (43)  platform/ (2)  ui/ (1)
+├── demos/                      executables: the public API only (5.1)
+│   ├── CMakeLists.txt
+│   ├── collector/              5.12  the Module 5 checkpoint game
+│   ├── common/                 4.6   shared content (demo_scene, pong)
+│   ├── ecs_swarm/              5.8   a world built of components
+│   ├── gltf_view/              6.6   the asset system's acceptance test; the CPU renderer's showcase
+│   ├── hello_cube/             5.1   the smallest program past the boundary
+│   ├── particles/              6.18b sparks the CPU never touches; the first frame declared
+│   ├── pong/                   1.8   the Module 1 checkpoint
+│   └── sandbox/                2.1   every rasterizer demo, and the GPU scene of Modules 4–6
+├── docs/                       this course: index, conventions, math toolbox, lessons (no build step)
+├── scratch/                    harnesses, builders, figures, pins
+├── memory/                     a summary of each session's work
+└── ARCHITECTURE.md  README.md  STATE.md  LEARNINGS.md  PROMPT.md  CLAUDE.md  LICENSE</code></pre>
+  </div>
+
+  <p>
+    <strong>Next: <a href="07-01-euler-angles.html">7.1 — Euler Angles and Their Pathologies</a>.</strong>
+    Module 6 ends here with a renderer that lights, shadows, blooms, writes text and now computes.
+    Everything it has rotated so far — the camera's orbit, the torus standing on edge, a light's cone
+    axis — was rotated by a matrix written down whole or by <code>look_at</code>. Module 7 asks what a
+    rotation <em>is</em>, starting with the three angles everyone reaches for first and the way they
+    fail: two axes that line up, a degree of freedom that disappears, and a camera that cannot turn.
+  </p>
+
+  <!-- =================================================================
+       20 — READING
+       ================================================================= -->
+  <h2 id="reading"><span class="num">20</span>Further reading</h2>
+
+  <ul class="reading">
+    <li>Mark Jarzynski and Marc Olano, <a href="https://jcgt.org/published/0009/03/02/">"Hash Functions
+        for GPU Rendering"</a>, <em>JCGT</em> 9(3), 2020 — a range of hashes measured for quality with
+        TestU01 and for speed on GPUs, and the recommendation this lesson follows. Nathan Reed's
+        <a href="https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/">post on the paper</a>
+        is the short version, with the code.</li>
+    <li>Melissa O'Neill, <a href="https://www.pcg-random.org/">PCG, A Family of Better Random Number
+        Generators</a> — where the output permutation comes from, and why an LCG's low bits need
+        one.</li>
+    <li>Tom Duff et al., <a href="https://jcgt.org/published/0006/01/01/">"Building an Orthonormal
+        Basis, Revisited"</a>, <em>JCGT</em> 6(1), 2017 — the branch-free tangent frame
+        <code>make_step_uniforms</code> uses, and the precision bug in the version it replaced.</li>
+    <li>Gareth Thomas, "Compute-based GPU Particle Systems", GDC 2014 — dead lists, sorting on the
+        GPU and indirect dispatch: the ninety-percent picture's other ten per cent, from AMD.</li>
+    <li>Moonside Games, <a href="https://moonside.games/posts/sdl-gpu-concepts-cycling/">"SDL GPU
+        Concepts: Cycling"</a> — the post <code>SDL_gpu.h</code> itself points to on cycling, and the
+        clearest statement of when it is safe.</li>
+    <li><code>SDL_gpu.h</code> at <code>release-3.4.12</code> — the resource layouts above
+        <code>SDL_CreateGPUComputePipeline</code> and <code>SDL_CreateGPUShader</code>,
+        <code>SDL_BeginGPUComputePass</code>'s note on synchronisation, the buffer usage flags, and
+        <code>SDL_GPUIndirectDrawCommand</code>; rendered on the
+        <a href="https://wiki.libsdl.org/SDL3/CategoryGPU">SDL3 wiki</a>, for example
+        <a href="https://wiki.libsdl.org/SDL3/SDL_BeginGPUComputePass">SDL_BeginGPUComputePass</a> and
+        <a href="https://wiki.libsdl.org/SDL3/SDL_DrawGPUPrimitivesIndirect">SDL_DrawGPUPrimitivesIndirect</a>.</li>
+    <li>SDL's own backends at the same tag — <code>src/gpu/vulkan/SDL_gpu_vulkan.c</code>
+        (<code>VULKAN_EndComputePass</code>), <code>src/gpu/metal/SDL_gpu_metal.m</code>
+        (<code>METAL_INTERNAL_PrepareBufferForWrite</code>, <code>METAL_Submit</code>) — the only place
+        §10's mechanisms are written down.</li>
+    <li>Microsoft, <a href="https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/interlockedadd">InterlockedAdd</a>
+        and <a href="https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sv-dispatchthreadid">SV_DispatchThreadID</a>
+        — the atomic and the thread IDs, in HLSL's own words.</li>
+    <li>Apple, <a href="https://developer.apple.com/documentation/metal/mtldispatchtype">MTLDispatchType</a>
+        — serial and concurrent compute encoders, and why the race of §10.1 does not happen on a Mac.</li>
+    <li>Khronos, <a href="https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples">Vulkan
+        Synchronization Examples</a> — the barriers SDL writes for you, compute-to-compute and
+        compute-to-indirect-draw among them.</li>
+    <li>Glenn Fiedler, <a href="https://gafferongames.com/post/fix_your_timestep/">"Fix Your
+        Timestep!"</a> — the fixed step and interpolation that §2 and §12.6 carry onto the GPU.</li>
+  </ul>

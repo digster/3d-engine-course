@@ -235,9 +235,9 @@ HEAD = """<!DOCTYPE html>
 
 TAIL = """
   <nav class="lesson-nav" aria-label="Lesson navigation (bottom)">
-    <a class="prev-l" href="06-18-text-overlay.html">
+    <a class="prev-l" href="06-18b-compute-particles.html">
       <span class="dir">← Previous</span>
-      <span class="ttl">6.18 — Text and 2D Overlay Rendering</span>
+      <span class="ttl">6.18b — Compute Shaders: GPU Particles</span>
     </a>
     <a class="idx-l" href="../index.html">
       <span class="dir">Index</span>

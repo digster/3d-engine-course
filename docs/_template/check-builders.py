@@ -90,7 +90,7 @@ def builder_key(filename: str) -> tuple[int, int, str] | None:
     Sorting by it makes the report read in course order: build_39 before build_310,
     which a plain string sort gets backwards, and an INSERTED lesson's builder
     (build_617b.py, CLAUDE.md §9's `2.4b` numbering) right after the lesson it follows.
-    Until 6.17b the pattern was `build_\d+\.py`, which skipped every b-lesson
+    Until 6.17b the pattern was `build_\\d+\\.py`, which skipped every b-lesson
     silently — the one failure a checker must not have.
     """
     m = re.fullmatch(r"build_(\d)(\d+)([a-z]?)\.py", filename)

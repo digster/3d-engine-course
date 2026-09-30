@@ -1,0 +1,747 @@
+  <!-- =================================================================
+       9 — COUNTING
+       ================================================================= -->
+  <h2 id="count"><span class="num">9</span>Counting on a GPU</h2>
+
+  <h3>9.1 — The number nobody on the CPU knows</h3>
+
+  <p>
+    The draw of §8 needs one number: how many instances. That is the count of living particles, and
+    it exists nowhere. The ring decides births and the particles' own clocks decide deaths, both on
+    the GPU, so after a step the CPU has no idea how many are alive. It could draw every slot —
+    65,536 instances, the dead ones collapsed to nothing in the vertex shader — and pay for about
+    20,000 wasted billboards a frame. It could read the pool back and count, which is a download of the
+    3&nbsp;MB this lesson exists to stop moving, followed by a stall: the CPU waits for the GPU to
+    finish, and the GPU then waits for the CPU to issue the next frame. Or it could read back only
+    the count, a frame late, and draw last frame's number of particles against this frame's list.
+  </p>
+
+  <p>
+    None of those is necessary, because SDL_GPU, like every modern API, can take a draw's arguments
+    from a <em>buffer</em>. <code>SDL_DrawGPUPrimitivesIndirect(pass, buffer, offset, count)</code>
+    reads an <code>SDL_GPUIndirectDrawCommand</code> — four <code>Uint32</code>s: vertices, instances,
+    first vertex, first instance — from the buffer <em>when the GPU reaches the draw</em>. If a
+    compute pass earlier in the same frame wrote the instance count into that buffer, the draw uses
+    it, and the number was produced, consumed and forgotten on the GPU. The CPU issues a draw whose
+    size it never learns.
+  </p>
+
+  <p>
+    That leaves the problem of producing the count, and a list of the living slots for the vertex
+    shader to index — §2's broken loop.
+  </p>
+
+  <h3>9.2 — The lost update</h3>
+
+  <p>
+    Here is that loop's increment written as a kernel, as literally as possible, in the probe:
+  </p>
+
+  <pre><code class="lang-hlsl">words[0] = words[0] + 1u;   // every thread, once</code></pre>
+
+  <p>
+    Run it with 1,048,576 threads and read <code>words[0]</code> back. Fifteen trials across five
+    runs of the harness counted <strong>between 296 and 509</strong>. Over 99.9% of the increments
+    vanished, and the survivors are a different number each time.
+  </p>
+
+  <p>
+    The line is three operations — read the value, add one, write the result — and nothing stops
+    another thread from reading between the first and the third. Two threads that both read 7 both
+    write 8: two increments, one counted (Figure 10). On a GPU it is worse than on a multicore CPU,
+    because of 4.1's lock-step: the 32 lanes of a SIMD group execute the read <em>together</em>, see
+    the same value, and write the same result, so a whole group contributes one increment at best, and
+    many groups are in flight at once doing the same. The number that survives says how the hardware
+    happened to schedule the groups, which is why it changes from run to run and why it is not a
+    number to reason with.
+  </p>
+
+  <p>
+    The fix is an instruction that performs all three steps as one indivisible operation on the
+    memory itself — an <strong>atomic</strong>:
+  </p>
+
+  <pre><code class="lang-hlsl">uint before;
+InterlockedAdd(words[0], 1u, before);   // before = the value this thread replaced</code></pre>
+
+  <p>
+    With it the count is <strong>1,048,576, every time</strong> (§H). And <code>before</code> is the
+    part that turns a count into a list: each thread receives the value it replaced, which is a number
+    no other thread received. It is this thread's <em>place</em>.
+  </p>
+
+  @@FIG_RACE@@
+
+  <p>
+    Atomics are not free. Every thread in the grid that performs one on the same address is
+    serialised on that address, so a million threads adding to one counter wait on each other a
+    million times. For this lesson's two-thirds-alive pool that is about 45,000 atomics a frame,
+    which the measured compaction absorbs (§L's GPU step includes it). A production system at a
+    million particles reduces it: a SIMD group counts its own survivors with a wave intrinsic and
+    one lane performs a single atomic for the group — thirty-two times fewer. §14 names it and
+    Exercise 5 points at it.
+  </p>
+
+  <h3>9.3 — The compaction</h3>
+
+  <p>
+    So the count and the list come from one kernel, one thread per slot:
+  </p>
+
+  <pre><code class="lang-hlsl">StructuredBuffer&lt;Particle&gt;  particles : register(t0, space0);   // read-only
+RWStructuredBuffer&lt;uint&gt;    args      : register(u0, space1);   // the draw's arguments
+RWStructuredBuffer&lt;uint&gt;    alive     : register(u1, space1);   // the list
+
+[numthreads(64, 1, 1)]
+void main(uint3 id : SV_DispatchThreadID)
+{
+    const uint slot = id.x;
+    if (slot &gt;= capacity) { return; }
+    const Particle p = particles[slot];
+    if (!(p.age &lt; p.life)) { return; }
+    uint place;
+    InterlockedAdd(args[1], 1u, place);   // args[1] is num_instances
+    alive[place] = slot;
+}</code></pre>
+
+  <p>
+    Three things about it. The pool is bound <strong>read-only</strong> — the compaction only looks —
+    so it goes in the <code>t</code> registers and is bound with
+    <code>SDL_BindGPUComputeStorageBuffers</code>, and the buffer needs the
+    <code>COMPUTE_STORAGE_READ</code> usage bit. The counter <em>is</em> the draw's instance count:
+    the atomic adds straight into word 1 of the <code>SDL_GPUIndirectDrawCommand</code>, so there is
+    no second pass to copy it. And the list's length is whatever the count is; nothing past it is ever
+    read, so the rest of the list is garbage and nobody cares.
+  </p>
+
+  <p>
+    Measured against the CPU after §G's ten seconds: the arguments come back as
+    <strong>{6, 44,915, 0, 0}</strong>, and 44,915 is exactly the CPU pool's live count; sorted, the
+    list is exactly the CPU's living slots, each once (§H).
+  </p>
+
+  <h3>9.4 — Somebody has to set the counter to zero</h3>
+
+  <p>
+    The compaction <em>adds</em> to <code>args[1]</code>, so something must set it to zero first —
+    and it cannot be the compaction. Which of its sixty-five thousand threads would do it, and how
+    would the others know it had happened before they started adding? The order in which threads run
+    is not yours to decide. So the reset is its own one-thread kernel,
+    <code>particles_clear.comp</code>, which writes all four words — six vertices, zero instances, and
+    the two zeros SDL_gpu.h insists on: its note on the indirect command says the built-in vertex and
+    instance IDs are only portable when the "first" arguments are zero, and the vertex shader uses
+    both IDs.
+  </p>
+
+  <p>
+    And it runs in <strong>its own compute pass</strong>, which is §10's subject. The buffer holding
+    the arguments needs three usage bits: <code>INDIRECT</code> to be read by the draw, and both
+    <code>COMPUTE_STORAGE_READ</code> and <code>_WRITE</code>, because an atomic reads and writes —
+    SDL's documentation of the buffer usage flags is explicit that, unlike textures, a buffer created
+    with both may be read and written in the same shader.
+  </p>
+
+  @@FIG_COUNT@@
+
+  <h3>9.5 — The order, and the last bits of the picture</h3>
+
+  <p>
+    The list's order is whatever order the hardware served the atomics in. §H compacts one unchanged
+    pool twice: between <strong>44,814 and all 44,915</strong> places held a different slot the second
+    time, across four runs — yet about 98% of neighbouring entries are in ascending order, which is
+    what you would see if each SIMD group's lanes took consecutive places in lane order and only the
+    groups arrived in a different order each time. The draw does not care: the blend is addition, and addition commutes.
+  </p>
+
+  <p>
+    Except in the last bits, which is worth measuring rather than asserting, because 6.13's header
+    for <code>blend_add</code> asserted the opposite. §K draws one pool three times, each after its
+    own compaction, into the 16-bit float HDR target: about <strong>7,000 to 9,000 of 172,800
+    channels</strong> differ between two draws, by at most 8 to 11 units in the last place of a
+    half-float, while the total light agrees to one part in ten thousand (Figure 11's histogram).
+    Floating-point addition is commutative — <em>a</em>&nbsp;+&nbsp;<em>b</em> is always exactly
+    <em>b</em>&nbsp;+&nbsp;<em>a</em> — and it is <strong>not associative</strong>: the blender rounds
+    after every add, so which partial sums are formed decides which roundings happen. Nothing a
+    viewer can see moves. A golden-image test does, which is why the harness's comparisons of the
+    picture are tolerances and its comparisons of the pool are exact. (The header comment is corrected
+    by this lesson; §13 says where.)
+  </p>
+
+  <!-- =================================================================
+       10 — SYNCHRONISATION
+       ================================================================= -->
+  <h2 id="sync"><span class="num">10</span>What SDL synchronises, and <code>cycle</code></h2>
+
+  <h3>10.1 — Between passes: everything. Within a compute pass: nothing.</h3>
+
+  <p>
+    The particle frame is a chain of dependencies: each step reads the step before; the compaction
+    reads the last step and the clear; the draw reads the compaction. On the GPU each arrow is a
+    <em>hazard</em> — the reading work must not start until the writing work's results are visible —
+    and in Vulkan and Direct3D&nbsp;12 somebody must insert a <em>barrier</em> to say so. SDL_GPU inserts
+    them for you, and the rule for where is short: <strong>at pass boundaries</strong>. It tracks which
+    resources each pass uses and how, and when a pass ends it transitions them so the next pass can
+    use them. Reading the backends at 3.4.12 confirms the shape: <code>VULKAN_EndComputePass</code>
+    walks the pass's read-write buffers and textures and transitions each back to its default usage,
+    while <code>VULKAN_DispatchCompute</code> records the dispatch and nothing else;
+    <code>D3D12_DispatchCompute</code> likewise binds and dispatches with no barrier between
+    dispatches.
+  </p>
+
+  <p>
+    SDL_gpu.h states the consequence in capitals under <code>SDL_BeginGPUComputePass</code>: reads and
+    writes in a compute pass are not implicitly synchronised, and work that depends on a previous
+    dispatch's output "MUST end the current compute pass and begin a new one". Hence the particle
+    frame's shape: one compute pass per step, a pass for the clear, a pass for the compaction.
+    Putting the clear and the compaction in one pass would race — the compaction's atomics against the
+    clear's store of zero, in no defined order.
+  </p>
+
+  <p>
+    And on this course's machine it would <strong>work</strong>. §H does exactly the forbidden thing —
+    clear and compact dispatched in one pass — twenty times, and gets the exact count <strong>20
+    times out of 20</strong>. SDL's Metal backend opens a compute pass with
+    <code>computeCommandEncoder</code>, an encoder with Metal's default settings, and on this machine
+    that orders the two dispatches; Apple's <code>MTLDispatchType</code> documentation is where the
+    serial and concurrent kinds are described. So the missing boundary is covered by behaviour SDL
+    never promised. The harness cannot show the race on a Mac and says so; the claim that it exists
+    elsewhere rests on SDL's contract and on the Vulkan and D3D12 source, not on an observation. This is the most dangerous kind of
+    working there is — code that is correct on the machine it was written on and wrong on the other
+    two backends — and it is why the frame graph of §11 derives the pass boundaries rather than
+    trusting anybody to remember them.
+  </p>
+
+  <h3>10.2 — <code>cycle</code>, and what "undefined" costs</h3>
+
+  <p>
+    Lesson 4.5 met <em>cycling</em> as the thing that makes a per-frame upload safe. An SDL_GPU buffer
+    is really a small ring of internal buffers; a write with <code>cycle = true</code> to a buffer
+    that is still <em>bound</em> — referenced by work the GPU may not have finished — rotates to an
+    unbound internal buffer instead of waiting, so this frame's write cannot land on a read last frame
+    has not done yet. The price is in SDL_gpu.h's section on cycling: after a cycle, the resource's
+    data is <em>"considered to be undefined"</em> until it is written again.
+  </p>
+
+  <p>
+    For every buffer the engine had before this lesson, that price was zero: a stream buffer is
+    overwritten whole every frame, so its old contents were dead anyway. The particle pool is the
+    first buffer whose contents <strong>outlive a frame</strong> — each step reads what the last one
+    wrote — and every read-write binding at <code>SDL_BeginGPUComputePass</code> carries a
+    <code>cycle</code> flag. §I sets it to <code>true</code> on the pool and runs 120 steps, one
+    command buffer each:
+  </p>
+
+  <ul>
+    <li><code>cycle = false</code>, submitted back to back: <strong>38,284</strong> alive, exactly the
+        CPU pool.</li>
+    <li><code>cycle = true</code>, back to back: <strong>667 or 668</strong>.</li>
+    <li><code>cycle = true</code> with a fence wait after every step: <strong>334</strong> — exactly
+        one step's births.</li>
+    <li><code>cycle = true</code> with <code>SDL_WaitForGPUIdle</code> after every step:
+        <strong>38,284</strong>, correct.</li>
+  </ul>
+
+  <p>
+    The third line refused a prediction. This section was drafted around the idea that cycling needs a
+    busy GPU — that a fence wait, which proves the previous step finished, would leave nothing bound
+    and nothing to cycle. It does not. Reading SDL's Metal backend explains why in one step: a buffer
+    counts as bound while its <em>reference count</em> is non-zero, a command buffer takes a reference
+    the first time it uses the buffer, and the reference is dropped only when SDL <em>cleans up</em>
+    that command buffer — which <code>METAL_Submit</code> does for completed buffers during a later
+    submit, and <code>SDL_WaitForGPUIdle</code> does for all of them. <code>METAL_WaitForFences</code>
+    waits and cleans nothing. So at the next step's <code>SDL_BeginGPUComputePass</code> the pool is
+    still referenced, and it cycles.
+  </p>
+
+  <p>
+    §I then asks <em>which</em> buffer each cycled step lands on, with a fresh pool and a readback
+    after every step (Figure 12). Submitted back to back, steps 1 to 3 each start from an empty
+    buffer, and then step 4 carries on from <strong>step 1's</strong> buffer — its survivors are
+    serials 0–332 and its own 1,000–1,332 — step 5 from step 2's and step 6 from step 3's: the pool has
+    become <strong>three pools</strong>, each advancing every third step. With a fence wait, every step
+    starts from a buffer holding no live particle at all. Which buffer SDL picks is the backend's
+    business and its timing's, which is precisely what "undefined" means; the harness asserts only
+    that the pool is not the CPU's, and prints the pattern.
+  </p>
+
+  @@FIG_CYCLE@@
+
+  <p>
+    The consequence for a real frame is stronger than the harness makes it look. In the demo, the
+    steps of one frame share one command buffer, so the second step's pass begins while the first
+    step's pass in <em>the same command buffer</em> already holds a reference: <code>cycle = true</code>
+    would cycle within the frame, not merely between frames. There is no frame rate, no machine and
+    no amount of waiting short of idling the device after every pass at which the flag is right for
+    the pool. It is wrong always — and it is right for the argument buffer's clear and for the list,
+    which are overwritten whole. Which is to say: <strong>cycle is a buffer's load op.</strong>
+    <code>cycle = true</code> is DONT_CARE; <code>cycle = false</code> is LOAD. The frame graph already
+    derives a load op from whether a pass reads what it writes, and §11 teaches it to derive this one
+    the same way.
+  </p>
+
+  <!-- =================================================================
+       11 — THE FRAME GRAPH
+       ================================================================= -->
+  <h2 id="graph"><span class="num">11</span>The frame graph learns buffers</h2>
+
+  <h3>11.1 — "The same machinery with a different descriptor"</h3>
+
+  <p>
+    Lesson 6.17's header listed what its graph deliberately did not do, and one line was
+    <em>"NO BUFFERS, ONLY TEXTURES. Every cross-pass resource in this engine is a texture. Buffers
+    would be the same machinery with a different descriptor."</em> The particle system is the first
+    cross-pass buffer, so that sentence can now be checked. It turned out nine-tenths true.
+  </p>
+
+  <p>
+    <strong>What carried over unchanged</strong> is the idea the graph is built on: a resource is a
+    sequence of <em>versions</em>, each produced by exactly one pass. The pool at the start of the frame
+    is <code>state@0</code>; step 0 produces <code>state@1</code> from it; the compaction reads
+    <code>state@3</code>. Ordering (Kahn's algorithm over producer-to-consumer edges), validation (a
+    read of a version nobody produced, two producers of one version, a cycle) and culling (a pass
+    survives if it feeds an imported write) are all functions of versions, and none of them cared that
+    the resource was a buffer. The buffers are <em>imported</em> — the pool outlives the frame, so the
+    graph must not pool it — and an import's version 0 is its real contents, which is exactly "what
+    the last frame left".
+  </p>
+
+  <p>
+    <strong>What did not carry over</strong> is the one-tenth, and both halves of it are the two
+    facts of §4 and §10:
+  </p>
+
+  <ul>
+    <li><strong>A compute pass is begun with its writable buffers.</strong> The graph already begins
+        render passes for their callers, with the attachments they declared; a compute pass must be
+        begun with the read-write buffers it declares, as an array in shader-slot order. So a buffer
+        write declares its <em>slot</em>, and <code>execute</code> builds the array from the
+        declarations exactly as it builds a render pass's colour targets. <code>compile</code> refuses
+        slots with a gap or a repeat, because the array index <em>is</em> the <code>u</code> register
+        and nothing else checks that the two agree.</li>
+    <li><strong>A buffer's load op is <code>cycle</code>.</strong> The graph's three words for a
+        texture write — <code>discard_write</code>, <code>clear</code>, <code>keep</code> — already
+        say whether a pass depends on what was there. For a buffer there are two:
+        <code>write_buffer</code> (overwrites, so <code>cycle = true</code>) and
+        <code>keep_buffer</code> (reads what is there, so <code>cycle = false</code>, and the pass is
+        ordered after the version's producer).</li>
+  </ul>
+
+  <p>
+    Plus the two things SDL_GPU forbids, which the graph now refuses at compile time rather than
+    letting the driver refuse them halfway through a frame: a <strong>render pass that writes a
+    buffer</strong> (graphics stages cannot write storage) and a <strong>compute pass with an
+    attachment</strong>.
+  </p>
+
+  <h3>11.2 — The particle frame, declared</h3>
+
+  <p>
+    The demo's frame, minus the lines that fill in the callbacks' contexts:
+  </p>
+
+  <pre><code class="lang-cpp">const fg_buffer state0 = fg.import_buffer("particle state", pool, pool_bytes);
+const fg_buffer alive0 = fg.import_buffer("alive list", list, list_bytes);
+const fg_buffer args0  = fg.import_buffer("draw args", args, 16);
+
+fg_buffer state = state0;
+for (int k = 0; k &lt; steps; ++k)
+{
+    const int pass = fg.add_compute_pass(names[k], &amp;exec_step, &amp;step_ctx[k]);
+    state = fg.keep_buffer(pass, state, 0);             // read-modify-write
+}
+
+const int clear = fg.add_compute_pass("clear args", &amp;exec_clear, &amp;particles);
+const fg_buffer args1 = fg.write_buffer(clear, args0, 0);          // overwritten
+
+const int compact = fg.add_compute_pass("compact", &amp;exec_compact, &amp;compact_ctx);
+fg.read_buffer(compact, state);
+const fg_buffer args2  = fg.keep_buffer(compact, args1, 0);        // accumulated
+const fg_buffer alive1 = fg.write_buffer(compact, alive0, 1);      // overwritten
+
+const int scene = fg.add_pass("scene", &amp;exec_scene, &amp;scene_ctx);
+const fg_texture hdr1   = fg.clear(scene, hdr0, dark);
+const fg_texture depth1 = fg.clear_depth(scene, depth0, 1.0f);
+
+const int sparks = fg.add_pass("sparks", &amp;exec_sparks, &amp;spark_ctx);
+fg.read_buffer(sparks, state);
+fg.read_buffer(sparks, alive1);
+fg.read_buffer(sparks, args2);                                    // the indirect arguments
+(void)fg.keep(sparks, hdr1);                                      // additive: the scene is an operand
+(void)fg.keep_depth(sparks, depth1);                              // tested, never written</code></pre>
+
+  <p>
+    Nothing there says what runs first, which pass may cycle what, or what array any compute pass is
+    begun with. §J compiles the harness's version of it (three steps and no scene) and reads back the
+    deduction: the schedule is <strong>step 0, step 1, step 2, clear args, compact, particles</strong>,
+    and the derived flags are <strong>cycle no</strong> for every step's pool and for the compaction's
+    arguments, <strong>cycle yes</strong> for the clear's arguments and the compaction's list — the
+    four values §10 argued for, none of them written down. Figure 13 draws the demo's seven passes
+    against its five resources.
+  </p>
+
+  @@FIG_GRAPH@@
+
+  <p>
+    Then §J does what 6.17 did for textures: it records the same frame by hand —
+    <code>gpu_particles::simulate</code> and a hand-begun render pass — and compares. The pool after
+    the declared frame equals the pool after the hand-recorded one <strong>byte for byte</strong>, and
+    both equal the CPU's three steps. The two HDR images differ in the last bits of about 4,000 of
+    172,800 channels, at most 8 to 17 half-float units, with the total light equal to a part in ten
+    thousand — the atomics' order, as §9.5 predicts, and nothing else.
+  </p>
+
+  <p>
+    And the four refusals, each with its control: a render pass that writes a buffer, a compute pass
+    that clears a colour attachment, read-write slots 0 and 2, and two buffers in slot 0 all fail
+    <code>compile</code> with a message naming the pass; slots 0 and 1 compile. One more property falls
+    out of culling with no new code: declare a draw that feeds nothing — into a transient texture no
+    one reads — and the graph culls the draw and <strong>keeps the step</strong>, because the step
+    writes an imported buffer and an import's value outlives the frame. The simulation advances
+    whether or not anybody looks at it, which for a particle system is the right answer.
+  </p>
+
+  <h3>11.3 — A cost the additivity check caught</h3>
+
+  <p>
+    The first version of these changes answered "is this a read?" and "is this imported?" with small
+    helper functions, called in the graph's two innermost loops — <code>producer_of</code> and the
+    two-producer check, both quadratic in passes and in accesses. The harnesses link the engine as
+    the default build compiles it, with no optimisation, where an inline helper is a real call; and
+    6.17's own harness, rerun unchanged for §13's additivity check, reported its steady-state
+    <code>compile</code> at <strong>13.5&nbsp;µs</strong> where it had been <strong>8.1</strong>. The fix
+    stores a one-byte <code>writes</code> flag on each access when it is declared — a load, as cheap as
+    the single comparison it replaced — and repacks the three new fields into four bytes of the record.
+    Rerun: 7.7 to 8.7&nbsp;µs. Nothing about the answer had changed; a frame graph rebuilt every frame
+    is exactly the code where "nothing changed but it is 60% slower" matters.
+  </p>
+
+  <h3>11.4 — Where the graph stops</h3>
+
+  <p>
+    The demo is the first program in the course whose frame is declared rather than recorded — and it
+    declares only part of it. The steps, the clear, the compaction, the scene and the sparks go
+    through the graph; 6.13's bloom and the display pass (the tonemap and 6.18's overlay) are
+    recorded after <code>execute</code>, by hand, exactly as the sandbox records them. The line is
+    where it is because those two already have owners: <code>gpu_post_stack::render_bloom</code>
+    begins its own eleven passes, and the display pass belongs to the swapchain. Declaring them would
+    mean rewriting the post stack's interface, which 6.17's harness did for itself in about sixty lines and
+    which belongs to whoever next changes the post stack — not to a lesson about particles. The HDR
+    target is <em>imported</em>, so the graph stores it for the bloom to read; the depth buffer is the
+    graph's own, and the sparks' pass is the last to touch it, so the graph derives DONT_CARE for it.
+  </p>
+
+  <!-- =================================================================
+       12 — IMPLEMENTATION
+       ================================================================= -->
+  <h2 id="implement"><span class="num">12</span>Implementation</h2>
+
+  <h3>12.1 — The specification: <code>particles.hpp</code></h3>
+
+  <p>
+    Start on the CPU, with no SDL_GPU anywhere: the record, the hash, the clock, the step. Every
+    function has a twin in <code>particles_step.comp.hlsl</code>, and the two are written in the
+    same order of operations, because a floating-point expression is not a mathematical one — a
+    compiler may not rearrange what the source did not arrange, and keeping the texts parallel is what
+    makes the harness's comparison mean "the GPU did what the CPU did" rather than "two similar
+    programs gave similar numbers".
+  </p>
+
+  <p>
+    The uniform block is the file's central idea. <code>step_uniforms</code> is nine 16-byte rows, built
+    once per step by <code>make_step_uniforms</code>, and read unchanged by both the CPU's
+    <code>step_slot</code> and the kernel:
+  </p>
+
+  <pre><code class="lang-cpp">struct step_uniforms
+{
+    vec3 origin{};    float h = 0.0f;                    // row 0
+    vec3 axis{};      float one_minus_cos_cone = 0.0f;   // row 1  (§5.5)
+    vec3 tangent{};   float speed_min = 0.0f;            // row 2  (the cone's frame, computed once)
+    vec3 bitangent{}; float speed_span = 0.0f;           // row 3
+    vec3 gravity{};   float inv_drag_h = 1.0f;           // row 4  (1 / (1 + k h), §7.2)
+    float life_min, life_span, ground, restitution;      // row 5
+    float keep, drag, carry, inv_rate;                   // row 6  (1 − friction; §6.4's clock)
+    Uint32 first, count, mask, seed;                     // row 7  (the emission window)
+    Uint32 capacity, pad0, pad1, pad2;                   // row 8
+};</code></pre>
+
+  <p>
+    Every number in it that is the same for every particle — the cone's cap height and frame, the drag
+    factor, the friction complement — is computed here, once, in C++. So the CPU reference does not
+    compute its own 1/(1&nbsp;+&nbsp;<em>kh</em>): it reads the same float the GPU reads, and a
+    disagreement between the processors can only come from arithmetic that follows. That is also why
+    it is 144 bytes rather than the 80 of the emitter's own fields — and 144 bytes a step is still the
+    CPU's entire contribution.
+  </p>
+
+  <p>
+    <code>step_slot</code> is one thread's work, and the CPU pool is a loop over it:
+  </p>
+
+  <pre><code class="lang-cpp">void step_slot(particle&amp; p, Uint32 slot, const step_uniforms&amp; u)
+{
+    const Uint32 d = (slot - u.first) &amp; u.mask;         // distance round the ring (§6.2)
+    if (d &lt; u.count)
+    {
+        p = spawn_particle(u.first + d, birth_age(d, u.carry, u.inv_rate, u.h), u);
+        return;
+    }
+    if (!is_alive(p)) { return; }                       // dead stays dead, byte for byte
+    p.previous = p.position;                            // §7.5
+    integrate_particle(p, u, u.h, u.inv_drag_h);        // §7.1–7.3
+    p.age = p.age + u.h;
+}</code></pre>
+
+  <p>
+    Dead particles are left exactly as they died, not zeroed — which the harness relies on when it
+    compares whole buffers, and which saves the kernel a store for the one slot in three that is dead.
+  </p>
+
+  <h3>12.2 — The kernel</h3>
+
+  <p>
+    <code>particles_step.comp.hlsl</code> is that function transliterated: the same
+    <code>struct</code> of three rows, the same <code>cbuffer</code> of nine at
+    <code>b0, space2</code>, <code>pcg_hash</code> and <code>unit_float</code> character for character,
+    and a <code>main</code> that is <code>step_slot</code> with the tail check in front. The pool is
+    <code>RWStructuredBuffer&lt;Particle&gt;</code> at <code>u0, space1</code>. Read the two files
+    side by side; the listing is in §15.
+  </p>
+
+  <h3>12.3 — Loading a compute pipeline</h3>
+
+  <p>
+    <code>gpu_compute_pipeline::load</code> follows <code>gpu_shader::load</code> step for step: choose
+    the format this device accepts (MSL here, entry point <code>main0</code>), read the code, read the
+    reflection with the new <code>parse_compute_reflection</code>, refuse to guess if it is not a
+    compute reflection, then fill <code>SDL_GPUComputePipelineCreateInfo</code> — six counts and three
+    thread dimensions, all read from the file — and name the pipeline at creation through
+    <code>SDL_PROP_GPU_COMPUTEPIPELINE_CREATE_NAME_STRING</code>, as 4.9 taught every resource to be
+    named. <code>groups_for_items(n)</code> sizes a dispatch from the pipeline's own
+    <code>threadcount_x</code>, so a kernel whose group size changes cannot be dispatched with the old
+    one.
+  </p>
+
+  <h3>12.4 — <code>gpu_particles</code>: three buffers and four recordings</h3>
+
+  <p>
+    <code>create</code> makes the pool, the list and the arguments with the usage bits §8.2 and §9.4
+    argued for, loads the three kernels by name, builds the draw pipeline — no vertex input, additive,
+    depth-tested without writes — and then <strong>zeroes the pool</strong> with one upload, because
+    SDL_gpu.h promises nothing about a new buffer's contents, and "whatever the allocator last held"
+    is a pool of particles with random ages, some alive, drawn on the first frame at random positions.
+    A zeroed record is a dead particle (§4.1), so the pool starts empty by construction.
+  </p>
+
+  <p>
+    Then four recording functions, one per kind of pass, and none of them begins a pass — the shape
+    6.18's overlay settled on, made non-negotiable here by §4.4: whoever begins a compute pass must
+    know which buffers it writes, so each function's comment says exactly which buffer goes in which
+    slot and whether it may cycle:
+  </p>
+
+  <pre><code class="lang-cpp">void record_step   (cb, compute_pass, const step_uniforms&amp;);   // slot 0: state, cycle = false
+void record_clear  (compute_pass);                              // slot 0: args,  cycle may be true
+void record_compact(cb, compute_pass, SDL_GPUBuffer* state);    // slots: args (false), alive (true)
+void record_draw   (cb, render_pass, const particle_draw_uniforms&amp;, SDL_GPUBuffer* state);</code></pre>
+
+  <p>
+    and <code>simulate</code> / <code>count_living</code>, which begin those passes themselves, for a
+    program with no frame graph and for the harness's hand-recorded control. The draw is one call,
+    <code>SDL_DrawGPUPrimitivesIndirect(pass, args, 0, 1)</code>, after binding the pool and the list
+    to the vertex stage and pushing the camera.
+  </p>
+
+  <h3>12.5 — The frame graph</h3>
+
+  <p>
+    <code>frame_graph.hpp</code> gains <code>fg_buffer</code> — <code>fg_texture</code>'s twin, a
+    different type so a buffer cannot be passed where a texture was meant — and
+    <code>import_buffer</code>, <code>add_compute_pass</code>, <code>read_buffer</code>,
+    <code>write_buffer</code> and <code>keep_buffer</code>. A buffer is a resource slot like any
+    other, with its <code>SDL_GPUBuffer*</code> where a texture keeps its pointer; two new uses,
+    <code>buffer_read</code> and <code>buffer_write</code>, join <code>sample</code>,
+    <code>colour</code> and <code>depth</code>. In <code>compile</code>, the store-op loop derives
+    <code>cycle = (init == discard)</code> for a buffer write and continues, and a new validation
+    block enforces §11.1's rules. In <code>execute</code>, a compute pass gathers its declared writes
+    into an <code>SDL_GPUStorageBufferReadWriteBinding</code> array indexed by slot, begins the pass,
+    and hands the callback <code>ctx.compute</code>. Every texture-only graph takes exactly the path
+    it took before, which §13 checks.
+  </p>
+
+  <h3>12.6 — The demo, and the fixed step on the GPU</h3>
+
+  <p>
+    <code>demos/particles</code> is an <code>engine::app</code> on <code>surface::gpu</code>. The
+    one piece of it worth reading closely is how a fixed step reaches the GPU:
+  </p>
+
+  <pre><code class="lang-cpp">void on_fixed_step(float h) override
+{
+    // (abridged: the listing adds the pause, the --shot guard and the step timer)
+    if (cpu_mode_) { (void)cpu_pool_.step(emitter_, h); return; }   // the "before"
+
+    // No command buffer exists yet, so the step is RECORDED, not run.
+    const emission_window w = clock_.advance(emitter_.rate, h, particles_.capacity());
+    steps_[step_count_++].u = make_step_uniforms(emitter_, w, h, particles_.capacity());
+}</code></pre>
+
+  <p>
+    and <code>on_frame</code> declares one compute pass per recorded step (at most eight — Lesson 1.4's
+    spiral-of-death cap), then the rest of the frame, with <code>alpha</code> in the draw's uniforms.
+    Both paths advance the same emission clock at the same steps, so they emit the same particles at
+    the same times; the CPU path adds one line before the graph, <code>upload_cpu_state</code>, and
+    hands the graph the uploaded buffer instead of the GPU's pool. <code>[C]</code> switches live, and
+    the HUD reports what the CPU path costs.
+  </p>
+
+  <!-- =================================================================
+       13 — INSTRUMENTS
+       ================================================================= -->
+  <h2 id="instruments"><span class="num">13</span>The instruments: two processors held to one specification</h2>
+
+  <h3>13.1 — What must be exact, and what cannot be</h3>
+
+  <p>
+    §G runs the CPU pool and the GPU pool from the same empty state through the same 600 uniform
+    blocks — ten simulated seconds — and compares them particle by particle at seven checkpoints.
+    Before looking, it is worth deciding what "agree" can mean, because the answer is different for
+    different parts of the record.
+  </p>
+
+  <ul>
+    <li><strong>Integers must agree exactly.</strong> Serials, the hash, the emission window, the
+        ring: integer arithmetic has one right answer. After ten seconds <strong>every serial is in
+        the same slot</strong> on both processors, and 1,048,576 hashes match bit for bit.</li>
+    <li><strong>Floats cannot, in general.</strong> The kernel calls <code>sin</code>,
+        <code>cos</code> and <code>sqrt</code>, which the GPU approximates; its compiler may fuse a
+        multiply and an add that C++ rounds twice. After one step, the 333 new particles' lives are
+        identical — a multiply-add of exact values — but only 93 of their 333 velocities are
+        bit-identical, the worst 4 units in the last place.</li>
+    <li><strong>So floats are held to a tolerance, and the tolerance is stated.</strong> After ten
+        seconds, <strong>44,889 of 44,915</strong> live particles are within a micrometre of their
+        twin and the worst is <strong>1.38&nbsp;µm</strong>; the worst at any checkpoint was
+        1.67&nbsp;µm. Only 5,264 — 12% — are bit-identical.</li>
+    <li><strong>Which particles are alive must agree exactly anyway</strong>, because the count
+        drives a draw. It does: <strong>zero</strong> disagreements at every checkpoint, and the GPU's
+        count equals the CPU's, 44,915.</li>
+  </ul>
+
+  @@FIG_AGREE@@
+
+  <p>
+    That last line refused a prediction too, and the refusal is instructive. The expectation was that
+    the floor would be where the two processors part: a particle a few ULPs above the plane on one and
+    a few below on the other bounces a step earlier on one of them, and from then on they are
+    centimetres apart. Over ten seconds, 44,915 living particles and several bounces each, it never
+    happened — no live particle is even a millimetre from its twin. The floor turns out to be a
+    <em>contraction</em>: a bounce sets the height to exactly <code>ground</code> on both processors,
+    so whatever vertical error had accumulated is discarded at every impact. Divergence would need a
+    particle to end a step within a few ULPs of the plane, which is a one-in-millions coincidence per
+    impact.
+  </p>
+
+  <h3>13.2 — Which CPU is the reference?</h3>
+
+  <p>
+    There is a harder question underneath §13.1: the CPU reference is compiled too. The harness links
+    the engine library, and the default build compiles it with no optimisation while a Release build
+    optimises it — and the optimiser may fuse a multiply and an add in the reference exactly as the
+    GPU's compiler may. §G dumps the CPU pool's bytes after ten seconds from each build and compares
+    them: <strong>897 of 44,915</strong> live particles differ between the debug and Release builds of
+    the <em>same C++</em>, the worst by 0.60&nbsp;µm, with no disagreement about which are alive. So a
+    bit-exact float reference does not exist even on one processor unless the compiler is forbidden to
+    contract, and the honest contract for float state is a tolerance: exact integers, exact
+    alive/dead decisions, positions within a stated number of micrometres.
+  </p>
+
+  <h3>13.3 — The budget</h3>
+
+  <p>
+    §L times both paths against a Release library — which the harness's build script insists on
+    naming, because a harness's own <code>-O2</code> never reaches the library it links, and the
+    default library's CPU step is six times slower (21&nbsp;ns a slot against 3.5). The CPU step costs
+    <strong>3.3 to 3.6&nbsp;ns a slot</strong>, flat from 16,384 to a million — the loop streams
+    through memory in order, which is the access pattern a CPU is best at. The upload costs about
+    0.14&nbsp;ms per megabyte plus about 0.14&nbsp;ms of submission; it overtakes the step at every size and reaches 6.87&nbsp;ms at a
+    million. The GPU step, sixty steps in one command buffer so the launch cost is shared, costs
+    <strong>0.31 to 0.79&nbsp;ns a slot</strong> including that launch — the smallest pool pays most
+    per slot because 16,384 particles do not fill the GPU (Figure 15).
+  </p>
+
+  @@FIG_BUDGET@@
+
+  <p>
+    Two honest limits on those numbers. SDL_GPU has no GPU timestamp queries, so the GPU column is
+    wall-clock time around a submit and a fence — an upper bound on the GPU's work, and the reason
+    sixty steps are timed together. And this machine's GPU shares memory with its CPU; on a discrete
+    card the upload also crosses PCIe, which makes the CPU path worse, not better.
+  </p>
+
+  <h3>13.4 — Twenty-seven harnesses that must not move</h3>
+
+  <p>
+    This lesson is inserted into a published sequence, so it must be <em>additive</em>: every
+    measurement a later lesson made must come out the same with it as without it. Before the first
+    edit, every Module 6 and 7 harness — twenty-seven of them, 6.1 to 6.18 with 6.17b, and 7.1 to 7.8
+    — was run and its output kept; after the lesson, they were run again. Every one still exits 0.
+    Every differing line is a timing, a timestamp in a log line, the interleaving of standard output
+    with standard error, or a heap pointer — with one exception, which was a cost rather than a
+    result, and which §11.3 describes and fixed: 6.17's frame-graph compile, 8.1&nbsp;µs before and
+    13.5&nbsp;µs after the first version, 7.7 to 8.7 after the fix. The reference render is still
+    E917C06C.
+  </p>
+
+  <p>
+    And the correction promised in §9.5: the doc comment on <code>pipeline_desc::blend_add</code>
+    said additive blending is order-independent because "addition is commutative and associative".
+    Commutative is right and is all the no-sort argument needs; associative is not, and §K measured
+    what that means. The comment now says so, in the header and in the three earlier lessons' listings
+    that carry it (6.13, 6.14 and 6.16), and 6.13's prose carries a note.
+  </p>
+
+  <!-- =================================================================
+       14 — THE NINETY-PERCENT PICTURE
+       ================================================================= -->
+  <h2 id="limits"><span class="num">14</span>The ninety-percent picture</h2>
+
+  <p>
+    This is a complete GPU particle system of the simplest useful kind. Here is the rest of the
+    field, and what each part would cost this engine.
+  </p>
+
+  <ul>
+    <li><strong>Sorting.</strong> Additive sparks need no sort. Smoke, dust and anything drawn with
+        6.11's <code>over</code> operator do — back to front, per frame, on the GPU, which means a
+        parallel sort (bitonic, or a radix sort) of tens of thousands of keys: another set of compute
+        passes, each depending on the last. Or order-independent transparency, which avoids the sort
+        at the price of memory per pixel.</li>
+    <li><strong>A dead list instead of a ring.</strong> Gareth Thomas's GDC&nbsp;2014 talk describes the
+        design most production systems use: a stack of free slots that births pop and deaths push,
+        so no living particle is ever overwritten and an emitter can burst. It costs two atomics per
+        particle per frame and a CPU reference that can only check counts, not slots (Exercise 5).</li>
+    <li><strong>Wave intrinsics.</strong> §9.2's atomics can be cut thirty-two-fold by counting a
+        SIMD group's survivors with <code>WaveActiveCountBits</code> and one atomic per group. That
+        needs Shader Model 6 wave operations through every hop of this toolchain — HLSL, SPIR-V
+        subgroups, MSL SIMD-group functions — and is left as research: ⚠ VERIFY that glslc and
+        SPIRV-Cross carry them before depending on it.</li>
+    <li><strong>Colliding with the world.</strong> The only thing a particle knows about is one plane.
+        Colliding with the scene's depth buffer — sampling it in the step kernel and bouncing off
+        whatever the camera can see — is cheap and convincing and wrong off-screen (Exercise 4). A
+        signed distance field of the level is right everywhere and costs a 3D texture.</li>
+    <li><strong>Lighting, and sparks as lights.</strong> The sparks emit and are not lit, which suits
+        sparks. Smoke must be lit — 6.17b's lamps through a volume — and a shower of sparks would, in
+        a real scene, light the floor under it: the brightest few thousand as 6.17b's point lights,
+        which is what clustered shading (6.17b §12) exists for.</li>
+    <li><strong>Soft particles.</strong> A billboard crossing the floor is cut by a hard line where it
+        meets the depth buffer. Fading each fragment by its distance to the depth behind it removes the
+        line, and needs the depth buffer as a <em>sampled</em> texture in the draw — a declaration the
+        frame graph already knows how to make.</li>
+    <li><strong>Async compute.</strong> On hardware with a separate compute queue the particle steps
+        could overlap the previous frame's post-processing. SDL_GPU exposes one queue, and 6.17's graph
+        says so in its own header.</li>
+    <li><strong>Indirect dispatch.</strong> The step runs over every slot, dead or alive. A system that
+        steps only the living would dispatch <code>ceil(count / 64)</code> groups — a number only the
+        GPU knows — through <code>SDL_DispatchGPUComputeIndirect</code>, the dispatch twin of §9's
+        indirect draw.</li>
+  </ul>

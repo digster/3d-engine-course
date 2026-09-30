@@ -251,13 +251,30 @@ one pixel in 65,536 — 0.00153% of the frame — contributes 62.8% of the bloom
     <li><strong>Alpha is not in the expression.</strong> <code>ONE, ONE</code> on both colour and
         alpha, so 6.11's entire premultiplied-versus-straight distinction evaporates — a source
         that adds light does not also subtract any.</li>
-    <li><strong>It is order-independent.</strong> Addition commutes, so additive geometry needs no
-        back-to-front sort. That is why <code>order_draws</code> exists for <code>over</code> and
-        not for this, and it is why particle systems reach for additive so often.</li>
+    <li><strong>It is order-independent, up to rounding.</strong> Addition commutes, so additive
+        geometry needs no back-to-front sort. That is why <code>order_draws</code> exists for
+        <code>over</code> and not for this, and it is why particle systems reach for additive so
+        often.</li>
     <li><strong>On a float target it does not clip.</strong> The same add into an 8-bit UNORM target
-        saturates at 1 and stops being associative in practice. The upsample chain depends on that,
-        which makes it a dependency worth stating rather than assuming.</li>
+        saturates at 1 — an error of any size, not of the last bit. The upsample chain depends on
+        that, which makes it a dependency worth stating rather than assuming.</li>
   </ul>
+
+  <div class="callout note">
+    <span class="label">Corrected after Lesson 6.18b</span>
+    <p>
+      This list, and the header comment on <code>blend_add</code>, said the add was
+      order-independent because addition is "commutative and associative", and that a UNORM target
+      "stops being associative in practice" — implying a float one is. Floating-point addition is
+      commutative and <em>not</em> associative: the blender rounds after every add, so the same
+      contributions added in another order can differ in the last bits. Lesson 6.18b measured it,
+      drawing one set of 45,000 additive sparks in two orders into this lesson's half-float target:
+      thousands of channels differed, by up to 17 units in the last place, with the total light
+      equal to a part in ten thousand. The no-sort argument needs only commutativity and stands;
+      a golden-image test of additive geometry needs a tolerance. The comment is corrected in this
+      page's listing too.
+    </p>
+  </div>
 
   <p>
     Using the hardware's blend rather than reading the destination in the shader is not a

@@ -1,0 +1,67 @@
+<svg viewBox="0 0 880 360" role="img" aria-labelledby="l618bf11-t l618bf11-d">
+  <title id="l618bf11-t">Counting without the CPU</title>
+  <desc id="l618bf11-d">A clear pass sets the indirect arguments to six vertices and zero instances; the compaction adds one per living particle with an atomic and writes each slot into the list at the place it received; the draw reads the arguments. A histogram shows that two draws of one state differ by at most eleven half-float units in the last place.</desc>
+  <defs>
+    <marker id="e-i-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<defs><marker id="e-amb-l618bf11" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0961e"/></marker></defs>
+<text x="20" y="22" class="sm" text-anchor="start">The count of the living is produced, consumed and forgotten on the GPU.</text>
+<rect x="20" y="44" width="190" height="64" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="115" y="64" class="sm" text-anchor="middle">clear</text>
+<text x="115" y="82" class="xs mono" text-anchor="middle">args := {6, 0, 0, 0}</text>
+<text x="115" y="98" class="xs muted" text-anchor="middle">one thread, its own pass</text>
+<line x1="212.00" y1="76.00" x2="238.00" y2="76.00" stroke="#f0961e" stroke-width="1.3" marker-end="url(#e-amb-l618bf11)"/>
+<rect x="240" y="44" width="290" height="64" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="385" y="64" class="sm" text-anchor="middle">compact</text>
+<text x="385" y="82" class="xs mono" text-anchor="middle">place = InterlockedAdd(args[1], 1)</text>
+<text x="385" y="98" class="xs mono" text-anchor="middle">alive[place] = slot</text>
+<line x1="532.00" y1="76.00" x2="558.00" y2="76.00" stroke="#f0961e" stroke-width="1.3" marker-end="url(#e-amb-l618bf11)"/>
+<rect x="560" y="44" width="300" height="64" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.18"/>
+<text x="710" y="64" class="sm" text-anchor="middle">draw</text>
+<text x="710" y="82" class="xs mono" text-anchor="middle">SDL_DrawGPUPrimitivesIndirect</text>
+<text x="710" y="98" class="xs muted" text-anchor="middle">6 vertices x args[1] instances</text>
+<text x="20" y="134" class="xs" text-anchor="start">args after compaction: {6, 44,915, 0, 0} — the CPU's count, exactly; the list holds exactly the CPU's 44,915 living slots, once each.</text>
+<text x="20" y="150" class="xs" text-anchor="start">Compacted twice, 44,814 to 44,915 of 44,915 places hold a different slot: the ORDER is the atomics', and it changes every frame.</text>
+<rect x="60" y="186" width="480" height="130" rx="3" fill="none" stroke="#8f918a" stroke-width="1.1"/>
+<rect x="86.0" y="212.0" width="44.0" height="104.0" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="106.0" y="330" class="xs mono muted" text-anchor="middle">1</text>
+<text x="106.0" y="208.0" class="xs mono" text-anchor="middle">6,243</text>
+<rect x="134.0" y="239.0703471371814" width="44.0" height="76.92965286281861" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="154.0" y="330" class="xs mono muted" text-anchor="middle">2</text>
+<text x="154.0" y="235.0703471371814" class="xs mono" text-anchor="middle">641</text>
+<rect x="182.0" y="264.30800856783225" width="44.0" height="51.69199143216774" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="202.0" y="330" class="xs mono muted" text-anchor="middle">3</text>
+<text x="202.0" y="260.30800856783225" class="xs mono" text-anchor="middle">76</text>
+<rect x="230.0" y="285.4766852256321" width="44.0" height="30.523314774367893" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="250.0" y="330" class="xs mono muted" text-anchor="middle">4</text>
+<text x="250.0" y="281.4766852256321" class="xs mono" text-anchor="middle">12</text>
+<rect x="278.0" y="296.8474269216583" width="44.0" height="19.15257307834167" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="298.0" y="330" class="xs mono muted" text-anchor="middle">5</text>
+<text x="298.0" y="292.8474269216583" class="xs mono" text-anchor="middle">4</text>
+<rect x="326.0" y="307.7514357483707" width="44.0" height="8.248564251629322" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="346.0" y="330" class="xs mono muted" text-anchor="middle">6</text>
+<text x="346.0" y="303.7514357483707" class="xs mono" text-anchor="middle">1</text>
+<rect x="374.0" y="307.7514357483707" width="44.0" height="8.248564251629322" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="394.0" y="330" class="xs mono muted" text-anchor="middle">7</text>
+<text x="394.0" y="303.7514357483707" class="xs mono" text-anchor="middle">1</text>
+<rect x="422.0" y="307.7514357483707" width="44.0" height="8.248564251629322" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="442.0" y="330" class="xs mono muted" text-anchor="middle">8</text>
+<text x="442.0" y="303.7514357483707" class="xs mono" text-anchor="middle">1</text>
+<rect x="470.0" y="307.7514357483707" width="44.0" height="8.248564251629322" rx="0" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.5"/>
+<text x="490.0" y="330" class="xs mono muted" text-anchor="middle">9</text>
+<text x="490.0" y="303.7514357483707" class="xs mono" text-anchor="middle">1</text>
+<text x="300.0" y="346" class="xs muted" text-anchor="middle">half-float ULPs between two draws of one state (log scale)</text>
+<text x="580" y="200" class="xs" text-anchor="start">the same pool, drawn after two compactions:</text>
+<text x="580" y="216" class="xs" text-anchor="start">about 7,000 to 9,000 of 172,800 channels</text>
+<text x="580" y="232" class="xs" text-anchor="start">differ, the worst by 8 to 11 half-float ULPs,</text>
+<text x="580" y="248" class="xs" text-anchor="start">and the total light agrees to 1 part in 10^4.</text>
+<text x="580" y="264" class="xs" text-anchor="start"></text>
+<text x="580" y="280" class="xs" text-anchor="start">Addition is commutative in the maths;</text>
+<text x="580" y="296" class="xs" text-anchor="start">sixteen-bit float addition rounds after</text>
+<text x="580" y="312" class="xs" text-anchor="start">every add, so the ORDER moves the last</text>
+<text x="580" y="328" class="xs" text-anchor="start">bits — and moves nothing else.</text>
+</svg>

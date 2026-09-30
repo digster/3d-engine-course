@@ -581,6 +581,21 @@ files:
            (50 checks in thirteen sections — §K the sun's reach, §L one sun map with no
            cascade block, §M a spot wider than 80°, added by the fixes after the lesson; §D is the golden; §J's timing needs a
            release libengine.a.)
+  scratch/ (6.18b, not shipped with the engine — the second INSERTED lesson):
+           verify_618b.cpp + build_verify_618b.sh (71 checks in twelve sections, §A-§L;
+           the script builds and names a RELEASE libengine.a, because the harness's own
+           -O2 never reaches the library), figs_618b.py (16 figures), build_618b.py,
+           l618b_body_{a..d}.html, l618b_fig{1..16}.svg, and the figure DATA, tracked
+           because the figures are regenerated from it: l618b_{budget,c_pairs,e_shells,
+           e_spread,e_wide_shells,e_wide_spread,g_agreement,i_cycled,k_order}.csv and
+           l618b_demo.ppm (the demo's --shot, figure 16). LISTING PINS l618b_<path>: 22
+           engine/shader/demo/CMake files + the harness.
+           INSERTION TOOLING: make_t618b.py (make_t617b.py's successor — NEW files come from
+           the working tree with no later pins; insert_includes() places engine.hpp's
+           includes alphabetically with a line-accounting proof, because at 6.18 that file
+           had no context for a hunk; LATER_PINS: 51 carried), _base618b/ (run_all.sh +
+           classify.py across 27 harnesses; before/ and after/ transcripts are local
+           evidence, NOT tracked). The student tree at 6.18b is scratch/_t618b (gitignored).
   scratch/ (8.13, not shipped with the engine): verify_813.cpp,
            build_verify_813.sh, figs_813.py, build_813.py, gen_l813_body_e.py
            (one-off: §13's snippets into the STATIC l813_body_e.html),

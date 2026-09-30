@@ -5052,6 +5052,7 @@ struct placed_shape
 #include &lt;engine/gfx/mipmap.hpp&gt;
 #include &lt;engine/gfx/obj.hpp&gt;
 #include &lt;engine/gfx/overlay.hpp&gt;
+#include &lt;engine/gfx/particles.hpp&gt;
 #include &lt;engine/gfx/projector.hpp&gt;
 #include &lt;engine/gfx/raster.hpp&gt;
 #include &lt;engine/gfx/renderable.hpp&gt;
@@ -5063,10 +5064,12 @@ struct placed_shape
 
 // ---- Graphics: the GPU side -----------------------------------------------
 #include &lt;engine/gfx/gpu_buffer.hpp&gt;
+#include &lt;engine/gfx/gpu_compute.hpp&gt;
 #include &lt;engine/gfx/gpu_debug.hpp&gt;
 #include &lt;engine/gfx/gpu_device.hpp&gt;
 #include &lt;engine/gfx/gpu_mesh.hpp&gt;
 #include &lt;engine/gfx/gpu_overlay.hpp&gt;
+#include &lt;engine/gfx/gpu_particles.hpp&gt;
 #include &lt;engine/gfx/gpu_pipeline.hpp&gt;
 #include &lt;engine/gfx/gpu_post.hpp&gt;
 #include &lt;engine/gfx/gpu_present.hpp&gt;
@@ -5287,9 +5290,19 @@ add_library(engine STATIC
     src/gfx/overlay.cpp
     src/gfx/gpu_overlay.cpp
     src/gfx/gpu_buffer.cpp
+    # Lesson 6.18b. The GPU as a processor rather than a rasterizer: a compute
+    # pipeline (`gpu_compute.cpp`, which is `gpu_shader.cpp`&#x27;s loader with the
+    # stage decided for it), and the first system in the engine whose state is
+    # created, stepped, counted and drawn without ever reaching the CPU
+    # (`gpu_particles.cpp`). Its specification is `particles.cpp`, further down,
+    # which knows nothing about SDL_GPU — the same split 6.18 made between
+    # `overlay.cpp` and `gpu_overlay.cpp`, and for the same reason: the harness
+    # runs the specification and the kernel side by side and compares them.
+    src/gfx/gpu_compute.cpp
     src/gfx/gpu_debug.cpp
     src/gfx/gpu_device.cpp
     src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_particles.cpp
     # Lesson 6.16. Grouping a culled set into instanced draws. Beside gpu_mesh
     # rather than inside it, because a mesh that knew how many copies of itself
     # exist would be deciding something that belongs to the scene — which is the
@@ -5320,6 +5333,7 @@ add_library(engine STATIC
     src/gfx/mipmap.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
+    src/gfx/particles.cpp                 # 6.18b — the CPU specification
     src/gfx/raster.cpp
     src/gfx/renderable.cpp                # 5.12 — the ECS -&gt; scene_object bridge
     # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
@@ -6539,6 +6553,23 @@ add_executable(gltf_view gltf_view/main.cpp)
 target_link_libraries(gltf_view PRIVATE engine::engine)
 engine_set_warnings(gltf_view)
 engine_use_assets(gltf_view)
+
+# ---- particles: Lesson 6.18b&#x27;s GPU particle system -------------------------
+#
+# The first program in the course whose frame is DECLARED through the frame
+# graph (6.17) rather than recorded by hand, and the first whose largest data
+# structure — a pool of 65,536 particles — is created, stepped, counted and drawn
+# without ever being read by the CPU. It links `engine::engine` only, like
+# `hello_cube`: everything it needs is in the public API, which is the claim the
+# lesson&#x27;s compute path is making.
+#
+# `engine_use_assets` for the HUD&#x27;s font; `engine_use_shaders` because the three
+# compute kernels are shaders like any other, copied beside the executable.
+add_executable(particles particles/main.cpp)
+target_link_libraries(particles PRIVATE engine::engine)
+engine_set_warnings(particles)
+engine_use_assets(particles)
+engine_use_shaders(particles)
 
 # ---- ecs_swarm: Lesson 5.8&#x27;s world, built out of components ---------------
 #
@@ -9688,7 +9719,7 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 <pre><code class="lang-text">3d-engine-course/
 ├── CMakeLists.txt              top level: engine, demos, shaders (0.4, 5.1)
 ├── cmake/                      EngineHelpers.cmake  Shaders.cmake
-├── shaders/                    HLSL, cross-compiled by SDL_shadercross (4.3) — 26 files
+├── shaders/                    HLSL, cross-compiled by SDL_shadercross (4.3) — 32 files
 ├── assets/                     meshes, a texture and a font the demos load
 │   cube.bin  cube.gltf  cube.obj  fonts/Karla-Regular.ttf
 │   fonts/OFL.txt  quirks.obj  shapes.glb  torus.obj  twisted.obj
@@ -9709,19 +9740,18 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 │   │   ├── ecs/                5.6–5.9: the archetype ECS and the transform hierarchy  (6)
 │   │   │   camera.hpp  entity.hpp  hierarchy.hpp  pool.hpp  registry.hpp
 │   │   │   view.hpp
-│   │   ├── gfx/                Modules 2–6: the rasterizer, then SDL_GPU and the renderer  (48)
-│   │   │   antialias.hpp  blend.hpp  bloom.hpp  cascade.hpp  clip.hpp
-│   │   │   colour.hpp  cubemap.hpp  cull.hpp  debug_draw.hpp
-│   │   │   debug_lines.hpp  depth_buffer.hpp  draw_order.hpp  font.hpp
-│   │   │   frame_graph.hpp  framebuffer.hpp  frustum.hpp  gltf.hpp
-│   │   │   gpu_buffer.hpp  gpu_debug.hpp  gpu_device.hpp  gpu_mesh.hpp
-│   │   │   gpu_overlay.hpp  gpu_pipeline.hpp  gpu_post.hpp  gpu_present.hpp
-│   │   │   gpu_scene.hpp  gpu_shader.hpp  gpu_shadow.hpp  gpu_texture.hpp
-│   │   │   gpu_uniform.hpp  hdr.hpp  image.hpp  instancing.hpp  light.hpp
-│   │   │   material.hpp  mesh.hpp  microfacet.hpp  mipmap.hpp  obj.hpp
-│   │   │   overlay.hpp  projector.hpp  raster.hpp  renderable.hpp
-│   │   │   scene.hpp  shadow.hpp  soft_renderer.hpp  texture.hpp
-│   │   │   viewport.hpp
+│   │   ├── gfx/                Modules 2–6: the rasterizer, then SDL_GPU and the renderer  (51)
+│   │   │   antialias.hpp  blend.hpp  bloom.hpp  cascade.hpp  clip.hpp  colour.hpp
+│   │   │   cubemap.hpp  cull.hpp  debug_draw.hpp  debug_lines.hpp
+│   │   │   depth_buffer.hpp  draw_order.hpp  font.hpp  frame_graph.hpp
+│   │   │   framebuffer.hpp  frustum.hpp  gltf.hpp  gpu_buffer.hpp
+│   │   │   gpu_compute.hpp  gpu_debug.hpp  gpu_device.hpp  gpu_mesh.hpp
+│   │   │   gpu_overlay.hpp  gpu_particles.hpp  gpu_pipeline.hpp  gpu_post.hpp
+│   │   │   gpu_present.hpp  gpu_scene.hpp  gpu_shader.hpp  gpu_shadow.hpp
+│   │   │   gpu_texture.hpp  gpu_uniform.hpp  hdr.hpp  image.hpp  instancing.hpp
+│   │   │   light.hpp  material.hpp  mesh.hpp  microfacet.hpp  mipmap.hpp  obj.hpp
+│   │   │   overlay.hpp  particles.hpp  projector.hpp  raster.hpp  renderable.hpp
+│   │   │   scene.hpp  shadow.hpp  soft_renderer.hpp  texture.hpp  viewport.hpp
 │   │   ├── math/               Modules 1–7: vectors, matrices, bounds, rotations — header-only  (13)
 │   │   │   axis_angle.hpp  bounds.hpp  complex.hpp  euler.hpp  mat2.hpp
 │   │   │   mat3.hpp  mat4.hpp  quat.hpp  rotation.hpp  transform.hpp
@@ -9756,16 +9786,16 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 │       ├── core/               (6)
 │       │   actions.cpp  clock.cpp  fixed_step.cpp  input.cpp  log.cpp
 │       │   profile.cpp
-│       ├── gfx/                (40)
-│       │   antialias.cpp  blend.cpp  bloom.cpp  cascade.cpp  clip.cpp
-│       │   colour.cpp  cubemap.cpp  debug_draw.cpp  debug_lines.cpp
-│       │   depth_buffer.cpp  draw_order.cpp  font.cpp  frame_graph.cpp
-│       │   framebuffer.cpp  frustum.cpp  gltf.cpp  gpu_buffer.cpp
-│       │   gpu_debug.cpp  gpu_device.cpp  gpu_mesh.cpp  gpu_overlay.cpp
+│       ├── gfx/                (43)
+│       │   antialias.cpp  blend.cpp  bloom.cpp  cascade.cpp  clip.cpp  colour.cpp
+│       │   cubemap.cpp  debug_draw.cpp  debug_lines.cpp  depth_buffer.cpp
+│       │   draw_order.cpp  font.cpp  frame_graph.cpp  framebuffer.cpp
+│       │   frustum.cpp  gltf.cpp  gpu_buffer.cpp  gpu_compute.cpp  gpu_debug.cpp
+│       │   gpu_device.cpp  gpu_mesh.cpp  gpu_overlay.cpp  gpu_particles.cpp
 │       │   gpu_pipeline.cpp  gpu_post.cpp  gpu_present.cpp  gpu_scene.cpp
-│       │   gpu_shader.cpp  gpu_shadow.cpp  gpu_texture.cpp  hdr.cpp
-│       │   image.cpp  instancing.cpp  mesh.cpp  mipmap.cpp  obj.cpp
-│       │   overlay.cpp  raster.cpp  renderable.cpp  shadow.cpp
+│       │   gpu_shader.cpp  gpu_shadow.cpp  gpu_texture.cpp  hdr.cpp  image.cpp
+│       │   instancing.cpp  mesh.cpp  mipmap.cpp  obj.cpp  overlay.cpp
+│       │   particles.cpp  raster.cpp  renderable.cpp  shadow.cpp
 │       │   soft_renderer.cpp  texture.cpp
 │       ├── phys/               (14)
 │       │   broadphase.cpp  cast.cpp  character.cpp  collide.cpp
@@ -9794,6 +9824,7 @@ sh scratch/build_verify_813.sh --only=bc     # the cast and the corners
 │   ├── integrate/              8.1   three rules on one spring
 │   ├── joints/                 8.11  rods, ropes, sockets, hinges
 │   ├── manifold/               8.7   one contact is not a contact
+│   ├── particles/              6.18b sparks the CPU never touches
 │   ├── plane/                  7.3   the complex plane
 │   ├── pong/                   1.8   the Module 1 checkpoint
 │   ├── ragdoll/                8.12  a skeleton handed to the solver

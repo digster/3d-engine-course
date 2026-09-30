@@ -33,6 +33,35 @@ decisions:
         lists gpu_scene.cpp whole and rewrote the bind as bind_fragment_samplers
         (eight slots now), whose comment tells the corrected story; the instanced
         path calls the same function and says so. Only frustum.cpp's remains.
+  found-by-618b: 6.18b CORRECTED ONE SHIPPED CLAIM (blend_add "commutative and associative")
+        IN FOUR PLACES, GAVE MODULE 6 THE PROJECT TREE IT NEVER HAD, AND FOUND THE 5.12 LINT
+        WAS NEVER CARRIED INTO MODULE 6's PINS. (2026-09-29.)
+        1. blend_add's doc comment (gpu_pipeline.hpp, since 6.13) called the add
+           order-independent because addition is "commutative and associative", and 6.13's
+           page said a UNORM target "stops being associative in practice" — implying a float
+           one is. Floating-point addition does not associate. verify_618b §K drew the same
+           additive sparks in two orders into the half-float HDR target: ~7,000-9,000 of
+           172,800 channels differ, by up to 8-17 ULPs, total light equal within 1e-4. The
+           no-sort argument needs only commutativity and stands; a golden image of additive
+           geometry needs a tolerance. CORRECTED in HEAD and in the 6.13, 6.14 and 6.16 pins
+           (every page that lists the file whole; HEAD was byte-equal to 6.16's pin), with a
+           "Corrected after Lesson 6.18b" callout on 6.13, whose bullet list is reworded.
+           This follows commit 8ff0388's precedent (the pins carry a correction, the page
+           says so), NOT shipped-lesson-fixes' "earlier pins are not edited": that policy is
+           about CODE a later lesson fixes, where the buggy listing is history; a false
+           sentence in a comment is not history worth keeping. Say so if it should be.
+        2. MODULE 6 NEVER HAD A PROJECT TREE (§8: "every module ends with a full annotated
+           project tree"); 6.18 ended the module before the review and did not carry one.
+           6.18b, now the last lesson, carries it on its Recap. 8.13's tree gains 6.18b's
+           files. Module 7 has none either: 7.8 is its last lesson and 7.7b is not, so the
+           gap stays 7.8's (recorded in next:).
+        3. THE 5.12 UMBRELLA LINT (engine.hpp lists every public header, alphabetically,
+           exact lines) was never carried into Module 6's pins: at 6.18 engine.hpp had no
+           context for a unified-diff hunk. make_t618b.py's insert_includes() places each
+           include alphabetically with a line-accounting proof instead. Not fixed in the
+           earlier pins — they build, and the lint runs on HEAD.
+        4. A stray `\d` in check-builders.py's docstring raised a SyntaxWarning on 3.12;
+           escaped.
   found-by-617b: 6.17b FOUND FOUR DEFECTS OUTSIDE ITS SCOPE, AND FIXING THEM FOUND THREE
         MORE; ALL SEVEN WERE FIXED THE SAME DAY, EACH IN ITS OWN COMMIT, TEST FIRST.
         (2026-09-28. The lesson itself fixed none, because an insertion must not move

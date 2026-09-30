@@ -9848,6 +9848,23 @@ target_link_libraries(gltf_view PRIVATE engine::engine)
 engine_set_warnings(gltf_view)
 engine_use_assets(gltf_view)
 
+# ---- particles: Lesson 6.18b&#x27;s GPU particle system -------------------------
+#
+# The first program in the course whose frame is DECLARED through the frame
+# graph (6.17) rather than recorded by hand, and the first whose largest data
+# structure — a pool of 65,536 particles — is created, stepped, counted and drawn
+# without ever being read by the CPU. It links `engine::engine` only, like
+# `hello_cube`: everything it needs is in the public API, which is the claim the
+# lesson&#x27;s compute path is making.
+#
+# `engine_use_assets` for the HUD&#x27;s font; `engine_use_shaders` because the three
+# compute kernels are shaders like any other, copied beside the executable.
+add_executable(particles particles/main.cpp)
+target_link_libraries(particles PRIVATE engine::engine)
+engine_set_warnings(particles)
+engine_use_assets(particles)
+engine_use_shaders(particles)
+
 # ---- ecs_swarm: Lesson 5.8&#x27;s world, built out of components ---------------
 #
 # The acceptance test for the ECS, and the answer to &quot;what is this FOR&quot; at a

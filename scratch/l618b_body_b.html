@@ -1,0 +1,620 @@
+  <!-- =================================================================
+       5 — RANDOMNESS
+       ================================================================= -->
+  <h2 id="random"><span class="num">5</span>Randomness without a sequence</h2>
+
+  <h3>5.1 — Why a generator does not port</h3>
+
+  <p>
+    Every random-number generator you have used is a <em>sequence</em>: a state, and a function that
+    advances it. <code>std::mt19937</code> holds 2.5&nbsp;KB of state; the tiny linear congruential
+    generator <em>Numerical Recipes</em> printed holds 32 bits and advances with
+    <code>x&nbsp;=&nbsp;x&nbsp;·&nbsp;1664525&nbsp;+&nbsp;1013904223</code>. Either way the
+    <em>n</em>-th number depends on the <em>n</em>&nbsp;−&nbsp;1 before it, and a CPU particle system
+    that calls <code>next()</code> in its spawn loop gets a different number for each particle because
+    the calls happen one after another.
+  </p>
+
+  <p>
+    Sixty-five thousand threads do not happen one after another. If they share one generator, every
+    <code>next()</code> is a read-modify-write of the same state — §2's broken counting loop, with
+    randomness as the thing being lost. If each thread keeps its own generator, each generator needs
+    a seed, and the seed must differ per thread; and a seed that is just the thread's index is where
+    the trouble starts.
+  </p>
+
+  <p>
+    The way out is to stop thinking of a random number as the next value of a sequence and start
+    thinking of it as a <strong>hash of a name</strong>. A particle has a name — its serial number,
+    which birth it was — and a function that scrambles 32 bits into 32 bits so thoroughly that
+    neighbouring inputs give unrelated outputs turns that name into as many random numbers as the
+    particle needs. No state is shared, nothing depends on the order the threads run in, and — the
+    property the rest of this lesson leans on — the same name gives the same numbers on any processor
+    that performs the same integer arithmetic, which all of them do exactly.
+  </p>
+
+  <h3>5.2 — Three generators that are not random</h3>
+
+  <p>
+    The question is which scrambling function. §C of the harness measures four candidates by the
+    thing a spark actually uses: <em>pairs</em>. A spark's direction is two draws, so the test is
+    whether the pair of numbers particle <em>i</em> draws, (<em>u</em><sub>2i</sub>,
+    <em>u</em><sub>2i+1</sub>), fills the unit square, and whether particle <em>i</em>'s first number
+    tells you anything about particle <em>i</em>&nbsp;+&nbsp;1's. Figure 4 plots 2,048 pairs from each
+    of three.
+  </p>
+
+  <p>
+    <strong>One LCG step, seeded by the index.</strong> The natural first attempt: seed a tiny
+    generator with the particle's index, take one step, use the result. But an LCG is linear — seed
+    <em>i</em>&nbsp;+&nbsp;1's output is seed <em>i</em>'s plus the constant 1,664,525 — so
+    consecutive particles get numbers that differ by the same amount every time. Measured over 65,536
+    particles: the correlation between neighbours is <strong>+0.9977</strong>, and the pairs reach
+    <strong>128 of 4,096</strong> cells of a 64&nbsp;×&nbsp;64 grid: every pair lies on one
+    diagonal line, because each number is the one before it plus 1,664,525/2<sup>32</sup>. A fountain built on it would emit its sparks in a slowly rotating pattern that looks like
+    a bug in the emitter, not in the random numbers.
+  </p>
+
+  <p>
+    <strong>The shader folklore hash</strong>, <code>fract(sin(x)&nbsp;×&nbsp;43758.5453)</code>, found
+    in thousands of shaders. It fills the square — all 4,096 cells, correlation +0.0014 for small
+    inputs — and it has two defects that no scatter plot at this scale shows. The first is that it
+    has almost no <em>bits</em>. The product <code>sin(x)&nbsp;×&nbsp;43758.5453</code> is up to
+    43,758 in magnitude, and a float keeps 24 significant bits: between 32,768 and 65,536 the gap
+    between representable floats is 2<sup>15&nbsp;−&nbsp;23</sup>&nbsp;=&nbsp;1/256, so
+    <code>fract()</code> of anything in that range is a multiple of 1/256. Most products land above
+    2,048, where the gap is at least 1/4,096 — so the function can only return about four thousand
+    distinct values. Measured: <strong>4,178 distinct outputs from 65,536 inputs</strong>, about
+    twelve bits of randomness where the output format holds twenty-four. The second defect appears
+    for large inputs: above 2<sup>24</sup>, <code>float(i)</code> cannot represent odd integers, so
+    particle <em>i</em> and particle <em>i</em>&nbsp;+&nbsp;1 are the <em>same input</em> half the time,
+    and the neighbour correlation jumps to <strong>+0.4963</strong>. A serial number passes
+    2<sup>24</sup> after fourteen minutes of a 20,000-a-second fountain.
+  </p>
+
+  <p>
+    And a third defect, which only a two-processor harness can see: <strong>it is not one
+    function</strong>. <code>sin</code> on a GPU is a fast approximation, not the correctly-rounded
+    library call of the CPU, and multiplying by 43,758 magnifies the last-bit differences into the
+    visible digits. The probe kernel evaluates the same expression for the first 2<sup>20</sup>
+    integers: <strong>480,168 of 1,048,576 outputs differ</strong> from C++'s, and 1,246 by more
+    than 0.01. A particle system built on it has no CPU reference at all.
+  </p>
+
+  @@FIG_PAIRS@@
+
+  <p>
+    <strong>PCG's hash.</strong> Jarzynski and Olano's "Hash Functions for GPU Rendering" (JCGT
+    2020) measured many candidates for exactly this use and recommended one built from Melissa
+    O'Neill's PCG generator: one LCG step to advance a state, followed by PCG's <em>output
+    permutation</em>, which uses the state's own top bits to choose a shift and so destroys the
+    linearity that ruined the first candidate. The engine's version is four lines of integer
+    arithmetic, identical in C++ and HLSL:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr Uint32 pcg_hash(Uint32 input)
+{
+    const Uint32 state = input * 747796405u + 2891336453u;
+    const Uint32 word = ((state &gt;&gt; ((state &gt;&gt; 28u) + 4u)) ^ state) * 277803737u;
+    return (word &gt;&gt; 22u) ^ word;
+}</code></pre>
+
+  <p>
+    Measured: neighbour correlation <strong>−0.0019</strong>, every one of the 4,096 cells reached,
+    a χ² of 4,198 against 4,095 degrees of freedom, and 65,411 distinct values among 65,536 — which
+    is itself a check, because a perfectly random 24-bit output should collide about
+    65,536²&nbsp;/&nbsp;(2&nbsp;·&nbsp;2<sup>24</sup>)&nbsp;=&nbsp;128 times, leaving 65,408. And the
+    property the whole lesson rests on: run it on the GPU for 1,048,576 consecutive inputs and
+    <strong>every output is identical to C++'s, bit for bit</strong>. Integer multiplication, shifts
+    and exclusive-or have exactly one correct answer, and both processors produce it.
+  </p>
+
+  <h3>5.3 — From bits to a float, exactly</h3>
+
+  <p>
+    A hash gives 32 random bits; a spark wants a number in [0,&nbsp;1). The obvious conversion,
+    <code>float(h)&nbsp;/&nbsp;4294967295.0f</code>, has two roundings in it — 32 bits into a float's
+    24, then a division a GPU compiler is permitted to approximate — and either can make the two
+    processors disagree. The engine takes the top 24 bits instead:
+  </p>
+
+  <pre><code class="lang-cpp">[[nodiscard]] constexpr float unit_float(Uint32 bits)
+{
+    return static_cast&lt;float&gt;(bits &gt;&gt; 8u) * (1.0f / 16777216.0f);
+}</code></pre>
+
+  <p>
+    An integer below 2<sup>24</sup> is represented by a float exactly, and 1/16,777,216 is
+    2<sup>−24</sup>, a power of two, so the multiplication only changes the exponent. There is no
+    rounding anywhere, and the harness confirms it: <strong>the same million floats, bit for
+    bit</strong>, on both processors (§C). The result is a multiple of 2<sup>−24</sup> in
+    [0,&nbsp;1&nbsp;−&nbsp;2<sup>−24</sup>], which is every value a float can hold at that spacing.
+  </p>
+
+  <h3>5.4 — A particle's stream</h3>
+
+  <p>
+    A spark needs four numbers at birth: two for its direction, one for its speed, one for its
+    life span. It gets them by hashing its name once and then hashing the hash:
+  </p>
+
+  <pre><code class="lang-cpp">particle_rng rng(serial, seed);     // state = pcg_hash(serial ^ seed)
+const float u_cos   = rng.next();   // state = pcg_hash(state); return unit_float(state)
+const float u_phi   = rng.next();
+const float u_speed = rng.next();
+const float u_life  = rng.next();</code></pre>
+
+  <p>
+    The emitter's <code>seed</code> selects <em>which</em> fountain — two emitters with different seeds
+    produce unrelated sparks from the same serial numbers — and the <strong>order of the four
+    draws is part of the specification</strong>: the kernel draws them in the same sequence, so the
+    third number means "speed" on both processors. Reorder the lines in one file and the harness
+    reports every particle wrong while every individual function is still correct.
+  </p>
+
+  <h3>5.5 — A direction uniform over a cone</h3>
+
+  <p>
+    The fountain emits into a cone around its axis, half-angle <em>θ</em><sub>max</sub>&nbsp;=&nbsp;0.35
+    radians (20°). "A random direction in the cone" sounds like "a random angle between 0 and
+    <em>θ</em><sub>max</sub> and a random turn around the axis", and that is wrong, for a reason you
+    can see before you compute anything. Look down the cone's axis at the patch of the unit sphere it
+    cuts out — a <em>cap</em> — and draw rings at equal steps of angle. The rings near the rim are
+    long and the ones near the axis are short, because a ring at angle <em>θ</em> has circumference
+    2π&nbsp;sin&nbsp;<em>θ</em>. Choose the angle uniformly and you put as many directions in the tiny
+    innermost ring as in the long outer one: the density per unit area climbs toward the axis.
+    Figure 5, left, shows it: a bright core where a real fountain has none.
+  </p>
+
+  <p>
+    What we want is equal density per unit <em>area</em> of the cap. The area of a strip of the unit
+    sphere between <em>θ</em> and <em>θ</em>&nbsp;+&nbsp;d<em>θ</em>, all the way around, is its
+    circumference times its width, 2π&nbsp;sin&nbsp;<em>θ</em>&nbsp;d<em>θ</em>. Integrate from the
+    axis to <em>θ</em> and the area of the cap is
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ A(\theta) = \int_0^{\theta} 2\pi \sin\theta'\,d\theta' = 2\pi\,(1 - \cos\theta) \]</span>
+    <span class="eq-plain">A(theta) = 2 pi (1 - cos theta)</span></div>
+
+  <p>
+    so the fraction of the whole cap that lies within angle <em>θ</em> is
+    (1&nbsp;−&nbsp;cos&nbsp;<em>θ</em>)&nbsp;/&nbsp;(1&nbsp;−&nbsp;cos&nbsp;<em>θ</em><sub>max</sub>). For
+    the directions to be uniform by area, that fraction must equal a uniform random number
+    <em>u</em>, which gives the recipe directly:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ 1 - \cos\theta = u\,(1 - \cos\theta_{\max}), \qquad \phi = 2\pi v \]</span>
+    <span class="eq-plain">1 - cos(theta) = u * (1 - cos(theta_max)) ;  phi = 2 pi v</span></div>
+
+  <p>
+    — uniform in cos&nbsp;<em>θ</em>, not in <em>θ</em>. A worked number, with the demo's cone: the cap
+    has height 1&nbsp;−&nbsp;cos&nbsp;0.35&nbsp;=&nbsp;0.0606. The median sample, <em>u</em>&nbsp;=&nbsp;0.5,
+    has 1&nbsp;−&nbsp;cos&nbsp;<em>θ</em>&nbsp;=&nbsp;0.0303, so cos&nbsp;<em>θ</em>&nbsp;=&nbsp;0.9697 and
+    <em>θ</em>&nbsp;=&nbsp;0.2469&nbsp;rad (14.1°). Uniform in angle would have put the median at
+    0.175&nbsp;rad: half of all sparks within 10° of the axis instead of within 14°, which is the
+    bright core of Figure 5.
+  </p>
+
+  @@FIG_CAP@@
+
+  <p>
+    Then the sine, and a trap worth naming because it recurs through the rest of the course:
+    sin&nbsp;<em>θ</em> is <code>sqrt(1&nbsp;−&nbsp;cos²θ)</code> on paper and in the obvious code, and for a narrow cone
+    cos&nbsp;<em>θ</em> is close to 1, so the subtraction cancels away most of the digits that
+    mattered. Write <em>h</em>&nbsp;=&nbsp;1&nbsp;−&nbsp;cos&nbsp;<em>θ</em> — which the sampling
+    formula hands you directly, without ever forming cos&nbsp;<em>θ</em> — and
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \sin\theta = \sqrt{1 - (1-h)^2} = \sqrt{h\,(2 - h)} \]</span>
+    <span class="eq-plain">sin(theta) = sqrt(h * (2 - h))</span></div>
+
+  <p>
+    has no subtraction near 1 anywhere. For the median sample: √(0.0303&nbsp;×&nbsp;1.9697)&nbsp;=&nbsp;0.2443.
+    The direction is then assembled in a frame around the axis:
+    <code>tangent&nbsp;·&nbsp;sin&nbsp;θ&nbsp;cos&nbsp;φ&nbsp;+&nbsp;bitangent&nbsp;·&nbsp;sin&nbsp;θ&nbsp;sin&nbsp;φ&nbsp;+&nbsp;axis&nbsp;·&nbsp;cos&nbsp;θ</code>.
+    The tangent and bitangent come from Duff and colleagues' branch-free construction (JCGT 2017),
+    because the textbook one — cross the axis with "up" — divides by zero when the axis
+    <em>is</em> up, which for a fountain is the only axis anybody uses. And they are computed
+    <strong>once, on the CPU</strong>, into the uniform block, because they are the same for every
+    particle; that rule — a number that is the same for every thread is computed once, never
+    sixty-five thousand times — shapes the block in §7.
+  </p>
+
+  <!-- =================================================================
+       6 — EMISSION
+       ================================================================= -->
+  <h2 id="emit"><span class="num">6</span>Emission: a clock and a ring</h2>
+
+  <h3>6.1 — The fraction</h3>
+
+  <p>
+    An emitter emits at a <em>rate</em>, 20,000 particles a second, and the simulation runs in fixed
+    steps of 1/60&nbsp;s, so each step should emit 333.33 particles. Truncate that to 333 and the
+    fountain loses a third of a particle every step — twenty a second, 1,200 a minute, a rate that is
+    silently 0.1% low forever. The fix is a <em>clock</em> that accumulates the rate and pays out
+    whole births, carrying the fraction:
+  </p>
+
+  <pre><code class="lang-cpp">carry_ += rate * h;                  // 0.33 + 333.33 = 333.67
+const double whole = floor(carry_);  // 333 births this step
+carry_ -= whole;                     // 0.67 carried to the next</code></pre>
+
+  <p>
+    and the step pattern becomes 333, 333, 334, repeating. Measured over one simulated minute:
+    <strong>exactly 1,200,000 births</strong> — 333 on 2,400 steps and 334 on 1,200 — against
+    1,198,800 for truncation (§D).
+  </p>
+
+  <p>
+    The clock keeps its fraction in a <code>double</code>, and it is worth being exact about why,
+    because the first version of <code>particles.hpp</code> gave a reason the harness then refused.
+    It said a float accumulator would lose its fractional digits after 2<sup>24</sup> births. It
+    would not: the clock subtracts the whole part every step, so it never holds more than 334.34, and
+    over a simulated hour a float carry and a double carry differ by <strong>one birth</strong>. What
+    actually limits the clock is the step itself: 1/60 is not a float, the nearest one is
+    0.0166666675, and at that step both carries emit 72,000,002 or 72,000,003 particles an hour
+    where the arithmetic says 72,000,000. The double costs eight bytes per emitter and removes the
+    question, and the header now says so.
+  </p>
+
+  <h3>6.2 — A pool is a ring</h3>
+
+  <p>
+    Where do the new particles go? The CPU answer — append to a vector, erase the dead — is exactly
+    what a GPU is bad at: appending needs a shared counter and erasing reshuffles everything. The
+    answer this engine uses needs neither. The pool has a fixed <em>capacity</em>, a power of two,
+    and particle number <em>s</em> — its serial, counting births from zero — lives in slot
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \text{slot}(s) = s \mathbin{\&amp;} (\text{capacity} - 1) \]</span>
+    <span class="eq-plain">slot(s) = s AND (capacity - 1)  — which is s mod capacity, for a power of two</span></div>
+
+  <p>
+    so births walk round the pool like a clock hand, and each new particle replaces whatever was
+    <code>capacity</code> births ago — the oldest particle in the pool, which with a long enough
+    pool is long dead. A step's births are serials <code>first</code> to
+    <code>first&nbsp;+&nbsp;count&nbsp;−&nbsp;1</code>, a contiguous arc of the ring. Figure 6 draws a pool
+    of sixteen where serials 13 to 17 are born: slots 13, 14, 15, 0 and 1.
+  </p>
+
+  <p>
+    The kernel runs one thread per slot, not per birth, and each thread asks: <em>does this step's
+    arc include my slot?</em> Its distance forward from the arc's first slot is
+    <code>(slot&nbsp;−&nbsp;first)&nbsp;&amp;&nbsp;mask</code> — unsigned subtraction wraps, which is
+    exactly "forward round the ring" — and the slot is born this step if that distance is below
+    <code>count</code>. If it is, the thread spawns serial <code>first&nbsp;+&nbsp;d</code>; if not, it
+    steps whatever lives there. <strong>No thread communicates with any other.</strong> That is the
+    whole of why a ring suits a GPU, and why this lesson's emitter needs no atomics at all.
+  </p>
+
+  @@FIG_RING@@
+
+  <h3>6.3 — Why a power of two, and what "long enough" means</h3>
+
+  <p>
+    Serials are 32-bit and they wrap: at 20,000 a second, 2<sup>32</sup> births take
+    <strong>59.7 hours</strong>. With a mask the wrap is invisible — 4,294,967,295 lives in slot 1,023
+    of a 1,024-slot pool and 0 lives in slot 0, consecutive as they should be — because 1,024 divides
+    2<sup>32</sup>. With a pool of 1,000 and <code>s&nbsp;%&nbsp;1000</code> the same two serials land in
+    slots 295 and 0, and the ring's one invariant — the next birth replaces the oldest particle —
+    breaks, once every two and a half days. §D prints both sequences across the wrap; Figure 6's
+    table is that output.
+  </p>
+
+  <p>
+    "Long enough" is a single inequality. A slot comes round every
+    <code>capacity&nbsp;/&nbsp;rate</code> seconds, and a particle that lives longer than that is
+    replaced while still alive. The fountain's longest life is 3&nbsp;s, and
+    65,536&nbsp;/&nbsp;20,000&nbsp;=&nbsp;3.28&nbsp;s, so nothing is cut short: §D runs 200,000 births
+    and counts <strong>zero</strong> live particles overwritten. Halve the pool and a slot comes round
+    every 1.64&nbsp;s: <strong>152,704 of 200,000 particles</strong> — 76.4% — are replaced before
+    their time, losing 0.685&nbsp;s of life on average. It looks like a fountain whose sparks vanish
+    in mid-air at a height that has nothing to do with gravity.
+  </p>
+
+  <div class="callout note">
+    <span class="label">Note</span>
+    <p>
+      The ring's price is that a particle's death is decided twice: by its own clock, and by the
+      ring coming round. The alternative, used by many production systems since Gareth Thomas's
+      GDC&nbsp;2014 talk on compute-based particles, is a <em>dead list</em>: a stack of free slot
+      indices that births pop from and deaths push to, which recycles exactly the dead and nothing
+      else. It needs two atomics per particle per frame and it makes the order of births depend on
+      the order of deaths, which varies run to run — so it has no bit-exact CPU twin. The ring is
+      deterministic, atomic-free and exactly reproducible, which is what a lesson that compares two
+      processors needs. Exercise 5 builds the dead list and measures the difference.
+    </p>
+  </div>
+
+  <h3>6.4 — Births belong somewhere in the step</h3>
+
+  <p>
+    A step of 1/60&nbsp;s emits 333 particles, and it is tempting to give them all age zero at the
+    emitter. Physically they were born at different instants during that sixtieth of a second — the
+    first early, the last just now — and by the end of the step the early ones should already be
+    a little way out. Put them all at the emitter and every step's births travel together as a
+    <em>shell</em>, and shells from successive steps sit one step's travel apart: at 7&nbsp;m/s,
+    11.7&nbsp;cm. The fountain comes out in layers, as if pumped rather than poured.
+  </p>
+
+  <p>
+    Where exactly does birth <em>k</em> belong? The clock held the fraction <em>c</em> when the step
+    began and rises at <code>rate</code> per second, so during the step it reads
+    <em>c</em>&nbsp;+&nbsp;rate&nbsp;·&nbsp;<em>t</em>. Each birth happens as it crosses a whole number:
+    birth 0 when it reaches 1, birth <em>k</em> when it reaches <em>k</em>&nbsp;+&nbsp;1. Solving,
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ t_k = \frac{k + 1 - c}{\text{rate}}, \qquad \text{age}_k = h - t_k = h - (k + 1 - c)\cdot\frac{1}{\text{rate}} \]</span>
+    <span class="eq-plain">t_k = (k + 1 - c) / rate ;  age_k = h - (k + 1 - c) * inv_rate</span></div>
+
+  <p>
+    Worked, for a step that begins with <em>c</em>&nbsp;=&nbsp;1/3 at 20,000 a second: birth 0 happens
+    (1&nbsp;−&nbsp;0.3333)/20,000&nbsp;=&nbsp;33.3&nbsp;µs into the step and is 16.63&nbsp;ms old at its
+    end; birth 332 happens at (333&nbsp;−&nbsp;0.3333)/20,000&nbsp;=&nbsp;16.63&nbsp;ms and is 33.3&nbsp;µs
+    old. The clock reaches 333.67 by the step's end, so there is no birth 333 until next step — the
+    same 333 the clock paid out. The kernel spawns each particle and then advances it by its own age
+    in a single step of that length, so it is where it would be had it really been born then.
+    <code>inv_rate</code> is in the uniform block rather than a division in the kernel, so both
+    processors multiply by the same float.
+  </p>
+
+  <p>
+    That is the theory, and the measurement then refused half of what this section first predicted
+    about it. §E runs
+    the fountain twice — births spread through the step, and all at the step's end — and measures how
+    lumpy the heights of young particles are (the average change between neighbouring 5&nbsp;mm
+    height bins, over the average count). With the demo's own emitter, speeds from 4 to 7&nbsp;m/s,
+    the two came out <strong>0.232 and 0.221</strong>: no shells to speak of either way. The reason is
+    in the speeds. A step's births leave at speeds 3&nbsp;m/s apart, so after <em>t</em> seconds they
+    are spread over 3<em>t</em> metres — wider than the shell spacing by the second step. The spread
+    of speeds erases the shells by itself. Narrow the speeds to 6.9–7.0&nbsp;m/s, as an emitter of
+    identical droplets or tracer rounds would, and the prediction holds: <strong>0.912</strong>
+    against <strong>0.213</strong>. Figure 7 is that case.
+  </p>
+
+  @@FIG_SHELLS@@
+
+  <p>
+    So spreading births through the step is not always visible, and it is still right: it costs one
+    multiply-add per birth, it is what the physics says, and it is the difference between an emitter
+    that works for every speed distribution and one that works for the distribution it was tuned on.
+  </p>
+
+  <!-- =================================================================
+       7 — THE STEP
+       ================================================================= -->
+  <h2 id="step"><span class="num">7</span>The step: semi-implicit Euler, implicit drag, and a floor</h2>
+
+  <h3>7.1 — Velocity first</h3>
+
+  <p>
+    Lesson 1.3 met this integrator in a sidebar: swap the two lines of the obvious update — change the
+    velocity first, then move with the <em>new</em> velocity — and you get <strong>semi-implicit
+    Euler</strong>, which conserves energy far better in anything that oscillates, and which 1.3
+    promised proper treatment in Module 8. Lesson 8.1 will give it that treatment; here it is simply the
+    right default, and the particle step is two lines of it:
+  </p>
+
+  <pre><code class="lang-cpp">p.velocity = (p.velocity + u.gravity * dt) * inv_drag;   // velocity first...
+p.position = p.position + p.velocity * dt;               // ...then move with the new one</code></pre>
+
+  <h3>7.2 — Drag, implicitly</h3>
+
+  <p>
+    Sparks slow down in air, and the simplest model is <em>linear drag</em>: an acceleration opposing
+    the velocity in proportion to it, d<strong>v</strong>/d<em>t</em>&nbsp;=&nbsp;<strong>g</strong>&nbsp;−&nbsp;<em>k</em><strong>v</strong>.
+    The explicit step evaluates the drag at the <em>old</em> velocity:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \mathbf{v}' = \mathbf{v} + (\mathbf{g} - k\mathbf{v})\,h = (1 - kh)\,\mathbf{v} + \mathbf{g}h \]</span>
+    <span class="eq-plain">v' = v + (g - k v) h = (1 - k h) v + g h</span></div>
+
+  <p>
+    and that factor (1&nbsp;−&nbsp;<em>kh</em>) is where it can go wrong. If <em>kh</em> exceeds 1 the factor
+    is negative, so the velocity flips sign every step; if <em>kh</em> exceeds 2 its magnitude exceeds
+    1, and the flipping <em>grows</em>. Evaluate the drag at the <em>new</em> velocity instead — the
+    implicit choice — and solve:
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ \mathbf{v}' = \mathbf{v} + (\mathbf{g} - k\mathbf{v}')\,h \;\Longrightarrow\; \mathbf{v}'\,(1 + kh) = \mathbf{v} + \mathbf{g}h \;\Longrightarrow\; \mathbf{v}' = \frac{\mathbf{v} + \mathbf{g}h}{1 + kh} \]</span>
+    <span class="eq-plain">v' = (v + g h) / (1 + k h)</span></div>
+
+  <p>
+    The factor 1/(1&nbsp;+&nbsp;<em>kh</em>) is between 0 and 1 for every positive <em>k</em> and
+    <em>h</em>: the velocity decays, whatever the step. §F makes the difference concrete with a thick
+    medium, <em>k</em>&nbsp;=&nbsp;150/s, at the engine's step (<em>kh</em>&nbsp;=&nbsp;2.5), starting from
+    1&nbsp;m/s: after ten explicit steps the speed is <strong>57.67&nbsp;m/s</strong>
+    (1.5<sup>10</sup>, alternating in sign); after ten implicit steps it is
+    <strong>3.63&nbsp;×&nbsp;10<sup>−6</sup>&nbsp;m/s</strong> (3.5<sup>−10</sup>). At the demo's
+    <em>k</em>&nbsp;=&nbsp;0.4/s the two agree to 4.4&nbsp;×&nbsp;10<sup>−5</sup> of the velocity per
+    step, so the implicit form costs nothing where the explicit one works and saves you where it
+    does not. The factor for a full step, 1/(1&nbsp;+&nbsp;<em>kh</em>), is the same for every particle,
+    so it too is computed once on the CPU and sent in the uniform block as <code>inv_drag_h</code>;
+    only a birth's pre-age step, whose length varies, computes its own.
+  </p>
+
+  <h3>7.3 — The floor</h3>
+
+  <p>
+    A particle that ends a step below the plane <em>y</em>&nbsp;=&nbsp;<code>ground</code>
+    <em>while moving down</em> bounces:
+  </p>
+
+  <pre><code class="lang-cpp">if (p.position.y &lt; u.ground &amp;&amp; p.velocity.y &lt; 0.0f)
+{
+    p.position.y = u.ground;                          // back onto the surface
+    p.velocity.y = -p.velocity.y * u.restitution;     // the normal speed, reversed and reduced
+    p.velocity.x = p.velocity.x * u.keep;             // the tangential speed, reduced by friction
+    p.velocity.z = p.velocity.z * u.keep;
+}</code></pre>
+
+  <p>
+    Each clause has a reason. <strong>Only while moving down</strong>: a particle that bounced last
+    step may still be below the plane this step on its way back up, and bouncing it again would send
+    it back down through the floor. <strong>Back onto the surface</strong>: a step that overshoots by
+    3&nbsp;cm leaves the particle 3&nbsp;cm under the floor for a frame, and the depth test then hides
+    it — a flicker at every impact. <strong>Normal and tangential separately</strong>: restitution is
+    how much of the speed <em>into</em> the surface survives, friction how much of the speed
+    <em>along</em> it does, and they are different physical things (Lesson 8.9 builds both properly
+    for rigid bodies).
+  </p>
+
+  <p>
+    How much height should a bounce keep? Kinetic energy is ½<em>mv</em>², the height a particle
+    rises to is <em>v</em>²/2<em>g</em>, and the bounce multiplies <em>v</em> by the restitution
+    <em>e</em> — so it multiplies the height by <em>e</em>². At <em>e</em>&nbsp;=&nbsp;0.45 each bounce
+    should keep <strong>0.2025</strong> of the last one's height. §F drops a particle from 1&nbsp;m and
+    measures peaks of 0.1848, 0.0318 and 0.0033&nbsp;m: ratios of 0.185, 0.172 and
+    <strong>0.103</strong>. The prediction held for the first bounce and failed, worse and worse, for
+    the later ones — and the failure has a formula.
+  </p>
+
+  <p>
+    A semi-implicit step launched upward at speed <em>v</em><sub>0</sub> reaches, after <em>n</em>
+    steps, a height of
+    Σ<sub><em>j</em>=1..<em>n</em></sub>&nbsp;(<em>v</em><sub>0</sub>&nbsp;−&nbsp;<em>jgh</em>)<em>h</em>,
+    whose maximum is
+  </p>
+
+  <div class="eq"><span class="katex-src">\[ y_{\max} \approx \frac{v_0^2}{2g} - \frac{v_0 h}{2} \]</span>
+    <span class="eq-plain">y_max ~ v0^2 / (2 g) - v0 h / 2</span></div>
+
+  <p>
+    — the true height less half a step's travel. As a fraction of the true height the shortfall is
+    <em>gh</em>/<em>v</em><sub>0</sub>, which <em>grows as the bounce shrinks</em>. For the first
+    bounce <em>v</em><sub>0</sub>&nbsp;≈&nbsp;0.45&nbsp;×&nbsp;√(2&nbsp;·&nbsp;9.81)&nbsp;=&nbsp;1.99&nbsp;m/s, so
+    the shortfall is 9.81&nbsp;×&nbsp;(1/60)&nbsp;/&nbsp;1.99&nbsp;=&nbsp;8.2%, and 0.2025&nbsp;×&nbsp;(1&nbsp;−&nbsp;0.082)&nbsp;=&nbsp;0.186
+    — within 0.001 of the measured 0.1848. The third bounce is 3&nbsp;mm high and lasts three steps; a step that size
+    cannot resolve it at all. The control that proves the diagnosis is the same drop at a quarter of
+    the step: peaks of 0.1970, 0.0386 and 0.0070, ratios 0.197, 0.196 and 0.181, all moving toward
+    <em>e</em>² (Figure 8). It is the step's error, not a bug — and it is the same first-order error
+    Lesson 1.3 measured for a fall, which is one reason Module 8 spends a lesson on integrators.
+  </p>
+
+  @@FIG_BOUNCE@@
+
+  <h3>7.4 — Why state, and not a formula</h3>
+
+  <p>
+    It is worth asking whether a particle needs a simulation at all, because for a long time GPU
+    particle systems did without one. With gravity and no floor, a particle's position is a closed
+    form, <strong>p</strong>(<em>t</em>)&nbsp;=&nbsp;<strong>p</strong><sub>0</sub>&nbsp;+&nbsp;<strong>v</strong><sub>0</sub><em>t</em>&nbsp;+&nbsp;½<strong>g</strong><em>t</em>²,
+    and a vertex shader can evaluate it from the particle's birth time, direction and speed — all of
+    which are hashes of its serial number. No buffer, no step, no compute. §F confirms it would even
+    be <em>more</em> accurate than the step: after one second the stepped height is 0.0817&nbsp;m off
+    the formula, which is semi-implicit Euler's first-order error <em>ght</em>/2&nbsp;=&nbsp;0.0818&nbsp;m.
+  </p>
+
+  <p>
+    The floor ends that. When a particle bounces depends on where it was, which depends on when it
+    last bounced, and each bounce changes the velocity that decides the next one. That is a history
+    — piecewise, and still solvable for one plane, but the moment the floor is uneven, or the
+    particles collide with the depth buffer (Exercise 4), or a wind field varies over space and
+    time, there is no formula left to evaluate. <strong>State is what you keep when the future
+    depends on the past in a way you cannot write down</strong>, and a compute shader is how you
+    step state on the GPU.
+  </p>
+
+  <h3>7.5 — Between two steps</h3>
+
+  <p>
+    The draw interpolates each particle between <code>previous</code> — its position at the start of
+    the last step — and its current position, with Lesson 1.4's <code>alpha</code>. One detail makes
+    that correct for a ring. When a slot is respawned, <code>previous</code> is set to the emitter,
+    not left holding the old tenant's position. Leave it, and for one frame the new spark is drawn
+    somewhere on the line from where the dead one was to the emitter — a streak across the screen,
+    once per birth, sixty times a second, and indistinguishable from a rendering bug. The rule is
+    the one 1.4 gave for any interpolated state: <code>previous</code> must always be a position of
+    <em>this</em> object.
+  </p>
+
+  <!-- =================================================================
+       8 — DRAWING
+       ================================================================= -->
+  <h2 id="draw"><span class="num">8</span>Drawing without vertices</h2>
+
+  <h3>8.1 — A billboard from two IDs</h3>
+
+  <p>
+    A spark is drawn as a small square that always faces the camera — a <em>billboard</em> — shaded
+    into a soft disc. Every vertex the engine has drawn so far came from a vertex buffer, described
+    field by field to the pipeline in 4.5. A billboard's four corners are not data anybody stored;
+    they are a function of the particle and the camera. So the particle pipeline has <strong>no vertex
+    buffer at all</strong>, and its vertex shader has no inputs. It is invoked six times per instance
+    — two triangles — and it finds everything from its two system values:
+  </p>
+
+  <ul>
+    <li><code>SV_InstanceID</code> says which particle. It indexes the list of living slots (§9),
+        which gives the slot, which indexes the pool.</li>
+    <li><code>SV_VertexID</code> says which corner: an index into a six-entry table of
+        (±1,&nbsp;±1), in counter-clockwise order as seen by the camera — the course's front face
+        (conventions §7), so the default back-face cull keeps them.</li>
+  </ul>
+
+  <p>
+    The corner is then placed in the camera's own plane:
+  </p>
+
+  <pre><code class="lang-hlsl">const float3 centre = lerp(p.previous, p.position, alpha);
+const float3 world  = centre + (right * c.x + up * c.y) * radius;</code></pre>
+
+  <p>
+    where <code>right</code> and <code>up</code> are the camera's axes in world space. They are free:
+    Lesson 2.9 built <code>look_at</code> so that the view matrix's rotation rows <em>are</em> the
+    camera's axes, and a rotation's inverse is its transpose, so row 0 is the world direction the
+    view maps to +<em>x</em> and row 1 the one it maps to +<em>y</em>. Worked, with the demo's shot
+    camera at (3.7633, 2.3, 6.1382) looking at (0,&nbsp;1.3,&nbsp;0): <code>camera_right</code> returns
+    (0.8525,&nbsp;0,&nbsp;−0.5227), <code>camera_up</code> returns (−0.0719,&nbsp;0.9905,&nbsp;−0.1173), and
+    the view matrix maps them to exactly (1,&nbsp;0,&nbsp;0) and (0,&nbsp;1,&nbsp;0) — computed by the engine's
+    own <code>look_at</code>. A spark at (0.10,&nbsp;1.00,&nbsp;0.20) with radius 0.03 puts corner
+    <code>v2</code>, (1,&nbsp;1), at (0.1234,&nbsp;1.0297,&nbsp;0.1808). Figure 9 draws the chain and the quad.
+  </p>
+
+  @@FIG_BILLBOARD@@
+
+  <p>
+    Everything the spark looks like comes from two numbers the pool already holds: its age as a
+    fraction of its life, and its serial. The fraction shrinks it and cools it — white-yellow at birth
+    to deep orange at death, fading on a square so the end is a fade rather than a pop — and a hash
+    of the serial varies its size and brightness between 0.6 and 1.4 of nominal. None of that needs
+    a byte of storage, which is §4's four-byte serial paying for itself.
+  </p>
+
+  <h3>8.2 — Storage buffers in the vertex stage</h3>
+
+  <p>
+    The vertex shader reads two storage buffers — the pool at <code>t0</code> and the list at
+    <code>t1</code>, both in space 0, the vertex stage's texture-and-storage space from §4's table —
+    bound with <code>SDL_BindGPUVertexStorageBuffers</code>. The graphics stages can only
+    <em>read</em> storage, so both are declared <code>StructuredBuffer</code>, not
+    <code>RWStructuredBuffer</code>, and both buffers need the <code>GRAPHICS_STORAGE_READ</code> usage
+    bit in addition to their compute bits. Miss that bit and the bind fails validation; miss a
+    compute bit and the kernel's does. <code>gpu_particles::create</code> argues every bit in a comment,
+    because the usage flags are where most of the ways to get this wrong live.
+  </p>
+
+  <h3>8.3 — Added to the light, tested against the scene</h3>
+
+  <p>
+    Sparks emit light, and light adds, so the pipeline blends with 6.13's
+    <code>blend_add()</code>: <em>destination&nbsp;+=&nbsp;source</em>. That has a consequence that
+    §9 depends on — addition commutes, so the particles can be drawn in any order at all, up to a
+    rounding §9 measures — and it decides where the draw goes: into the <strong>HDR target</strong>, before the
+    tonemap, because a spark is a quantity of light like any other surface (6.12) and because a spark
+    bright enough should bloom (6.13). The overlay of 6.18 went after the tonemap for the opposite
+    reason; the line between scene-referred and display-referred is the one 6.18 drew, and sparks
+    are on the scene side.
+  </p>
+
+  <p>
+    The draw is <strong>tested against the scene's depth and does not write it</strong>. The test hides
+    sparks behind geometry; the write would make each spark hide the ones behind it — and since the
+    list's order changes every frame (§9), <em>which</em> sparks were hidden would change every frame
+    too. That is Lesson 6.11's rule for blended geometry, arrived at from a different direction.
+    §K checks the test with a depth attachment cleared to the device depth of a plane: in front of
+    every spark (2.89&nbsp;m from the camera, the nearest spark being 3.09&nbsp;m out) it leaves
+    <strong>zero</strong> lit pixels; through the fountain's axis at 6&nbsp;m, with 21,611 of 43,248
+    sparks behind it, it leaves <strong>45.9%</strong> of the light — and 9,401 of the 10,329 lit
+    pixels, because nearly every pixel the far half covered, the near half covers too.
+  </p>

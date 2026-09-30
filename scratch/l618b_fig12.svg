@@ -1,0 +1,67 @@
+<svg viewBox="0 0 880 386" role="img" aria-labelledby="l618bf12-t l618bf12-d">
+  <title id="l618bf12-t">cycle, set wrong</title>
+  <desc id="l618bf12-d">Two rows of six steps each with the pool read back after every step. Submitted back to back with cycle true, steps 1 to 3 each start from an empty buffer and steps 4 to 6 continue the buffers of steps 1 to 3, so the pool becomes three pools. With a fence wait after each step every step starts from an empty buffer. Below, 120 steps: cycle false gives the CPU's 38,284 living particles, cycle true gives 668 or 334, and only waiting for the whole device to go idle restores 38,284.</desc>
+  <defs>
+    <marker id="e-i-l618bf12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink)"/></marker>
+    <marker id="e-s-l618bf12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-ink-soft)"/></marker>
+    <marker id="e-h-l618bf12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dia-hi)"/></marker>
+    <marker id="e-b-l618bf12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e05c5c"/></marker>
+    <marker id="e-g-l618bf12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5ac878"/></marker>
+  </defs>
+<text x="20" y="22" class="sm" text-anchor="start">cycle = true on a buffer the next pass READS: each pass is handed an internal buffer whose contents SDL calls undefined.</text>
+<text x="20" y="50" class="xs muted" text-anchor="start">submitted back to back</text>
+<rect x="20" y="58" width="128" height="40" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="84" y="74" class="xs mono" text-anchor="middle">step 1: 333 alive</text>
+<text x="84" y="90" class="xs mono muted" text-anchor="middle">serials 0..332</text>
+<rect x="160" y="58" width="128" height="40" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="224" y="74" class="xs mono" text-anchor="middle">step 2: 333 alive</text>
+<text x="224" y="90" class="xs mono muted" text-anchor="middle">serials 333..665</text>
+<rect x="300" y="58" width="128" height="40" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="364" y="74" class="xs mono" text-anchor="middle">step 3: 334 alive</text>
+<text x="364" y="90" class="xs mono muted" text-anchor="middle">serials 666..999</text>
+<rect x="440" y="58" width="128" height="40" rx="3" fill="#f0961e" stroke="#f0961e" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="504" y="74" class="xs mono" text-anchor="middle">step 4: 666 alive</text>
+<text x="504" y="90" class="xs mono muted" text-anchor="middle">serials 0..1,332</text>
+<rect x="580" y="58" width="128" height="40" rx="3" fill="#9b7ede" stroke="#9b7ede" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="644" y="74" class="xs mono" text-anchor="middle">step 5: 666 alive</text>
+<text x="644" y="90" class="xs mono muted" text-anchor="middle">serials 333..1,665</text>
+<rect x="720" y="58" width="128" height="40" rx="3" fill="#5082e6" stroke="#5082e6" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="784" y="74" class="xs mono" text-anchor="middle">step 6: 668 alive</text>
+<text x="784" y="90" class="xs mono muted" text-anchor="middle">serials 666..1,999</text>
+<text x="20" y="120" class="xs muted" text-anchor="start">a fence wait after each step</text>
+<rect x="20" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="84" y="144" class="xs mono" text-anchor="middle">step 1: 333 alive</text>
+<text x="84" y="160" class="xs mono muted" text-anchor="middle">serials 0..332</text>
+<rect x="160" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="224" y="144" class="xs mono" text-anchor="middle">step 2: 333 alive</text>
+<text x="224" y="160" class="xs mono muted" text-anchor="middle">serials 333..665</text>
+<rect x="300" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="364" y="144" class="xs mono" text-anchor="middle">step 3: 334 alive</text>
+<text x="364" y="160" class="xs mono muted" text-anchor="middle">serials 666..999</text>
+<rect x="440" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="504" y="144" class="xs mono" text-anchor="middle">step 4: 333 alive</text>
+<text x="504" y="160" class="xs mono muted" text-anchor="middle">serials 1,000..1,332</text>
+<rect x="580" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="644" y="144" class="xs mono" text-anchor="middle">step 5: 333 alive</text>
+<text x="644" y="160" class="xs mono muted" text-anchor="middle">serials 1,333..1,665</text>
+<rect x="720" y="128" width="128" height="40" rx="3" fill="#8f918a" stroke="#8f918a" stroke-width="1.2" fill-opacity="0.25"/>
+<text x="784" y="144" class="xs mono" text-anchor="middle">step 6: 334 alive</text>
+<text x="784" y="160" class="xs mono muted" text-anchor="middle">serials 1,666..1,999</text>
+<text x="20" y="186" class="xs mono t-ok" text-anchor="start">the CPU after each step: 333, 666, 1,000, 1,333, 1,666, 2,000 alive</text>
+<text x="20" y="204" class="xs" text-anchor="start">Back to back, the pool became THREE pools (same colour = same internal buffer): step 4 continued step 1's, holding serials 0..332 and 1,000..1,332.</text>
+<text x="20" y="220" class="xs" text-anchor="start">With a fence wait, every step began from a buffer holding no live particle. Which buffer SDL picks is the backend's business; that it is not this one is the contract.</text>
+<text x="20" y="252" class="xs muted" text-anchor="start">120 steps, one command buffer each (the CPU: 38,284 alive)</text>
+<text x="20" y="272" class="xs mono t-ok" text-anchor="start">cycle = false, back to back</text>
+<rect x="330" y="261" width="360.0" height="13" rx="0" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<text x="700" y="272" class="xs mono" text-anchor="start">38,284 alive</text>
+<text x="20" y="292" class="xs mono t-bad" text-anchor="start">cycle = true, back to back</text>
+<rect x="330" y="281" width="6.281475289938355" height="13" rx="0" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.45"/>
+<text x="700" y="292" class="xs mono" text-anchor="start">668 alive</text>
+<text x="20" y="312" class="xs mono t-bad" text-anchor="start">cycle = true, fence wait each step</text>
+<rect x="330" y="301" width="3.1407376449691773" height="13" rx="0" fill="#e05c5c" stroke="#e05c5c" stroke-width="1.2" fill-opacity="0.45"/>
+<text x="700" y="312" class="xs mono" text-anchor="start">334 alive</text>
+<text x="20" y="332" class="xs mono t-ok" text-anchor="start">cycle = true, SDL_WaitForGPUIdle</text>
+<rect x="330" y="321" width="360.0" height="13" rx="0" fill="#5ac878" stroke="#5ac878" stroke-width="1.2" fill-opacity="0.45"/>
+<text x="700" y="332" class="xs mono" text-anchor="start">38,284 alive</text>
+<text x="20" y="376" class="xs muted" text-anchor="start">SDL takes a reference when a command buffer first uses a buffer, and drops it only when that command buffer is cleaned up after completing.</text>
+</svg>

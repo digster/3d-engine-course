@@ -107,9 +107,19 @@ add_library(engine STATIC
     src/gfx/overlay.cpp
     src/gfx/gpu_overlay.cpp
     src/gfx/gpu_buffer.cpp
+    # Lesson 6.18b. The GPU as a processor rather than a rasterizer: a compute
+    # pipeline (`gpu_compute.cpp`, which is `gpu_shader.cpp`'s loader with the
+    # stage decided for it), and the first system in the engine whose state is
+    # created, stepped, counted and drawn without ever reaching the CPU
+    # (`gpu_particles.cpp`). Its specification is `particles.cpp`, further down,
+    # which knows nothing about SDL_GPU — the same split 6.18 made between
+    # `overlay.cpp` and `gpu_overlay.cpp`, and for the same reason: the harness
+    # runs the specification and the kernel side by side and compares them.
+    src/gfx/gpu_compute.cpp
     src/gfx/gpu_debug.cpp
     src/gfx/gpu_device.cpp
     src/gfx/gpu_mesh.cpp
+    src/gfx/gpu_particles.cpp
     # Lesson 6.16. Grouping a culled set into instanced draws. Beside gpu_mesh
     # rather than inside it, because a mesh that knew how many copies of itself
     # exist would be deciding something that belongs to the scene — which is the
@@ -140,6 +150,7 @@ add_library(engine STATIC
     src/gfx/mipmap.cpp
     src/gfx/mesh.cpp
     src/gfx/obj.cpp
+    src/gfx/particles.cpp                 # 6.18b — the CPU specification
     src/gfx/raster.cpp
     src/gfx/renderable.cpp                # 5.12 — the ECS -> scene_object bridge
     # Lesson 6.8. The shadow map, and it gets a translation unit rather than a
